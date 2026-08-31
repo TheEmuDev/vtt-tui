@@ -95,6 +95,13 @@ void grid_draw_token_ghost(Renderer *r, const GridView *g, int tx, int ty,
  * between them, so a multi-tile token reads as one solid piece. */
 void grid_token_area(const GridView *g, int tx, int ty, int size, Rect *out);
 
+/* Column letters along the top and row numbers down the left, outside the
+ * viewport in the gutter the layout reserved for them. `gutter` is how many
+ * columns that is. Labels step to every other column, or every third, when a
+ * zoom is too tight to fit one over every square. */
+void grid_draw_labels(Renderer *r, const Map *m, const GridView *g,
+                      const Theme *th, int gutter, int cx, int cy);
+
 /* Tints a tile rectangle, for visual-mode selection feedback. */
 void grid_draw_tile_region(Renderer *r, const GridView *g, int x0, int y0,
                            int x1, int y1, uint32_t bg);

@@ -453,9 +453,11 @@ static void report_selection(App *a)
 
     const Token *t = &a->map->tokens.v[pl->sel];
     char msg[128];
-    snprintf(msg, sizeof msg, "%.30s (%s) at %d,%d",
+    char at[MAP_COORD_MAX];
+    map_coord_name(t->x, t->y, at, sizeof at);
+    snprintf(msg, sizeof msg, "%.30s (%s) at %s",
              t->label[0] ? t->label : "unlabelled",
-             token_kind_name(t->kind), t->x, t->y);
+             token_kind_name(t->kind), at);
     app_set_status(a, msg);
 }
 
@@ -505,9 +507,11 @@ static void prompt_accept(App *a)
         play_focus(&a->play, placed);
 
         char msg[160];
-        snprintf(msg, sizeof msg, "placed %s %.30s (%dx%d) at %d,%d",
+        char at[MAP_COORD_MAX];
+        map_coord_name(t.x, t.y, at, sizeof at);
+        snprintf(msg, sizeof msg, "placed %s %.30s (%dx%d) at %s",
                  token_kind_name(t.kind), t.label[0] ? t.label : "unlabelled",
-                 t.size, t.size, t.x, t.y);
+                 t.size, t.size, at);
         app_set_status(a, msg);
         return;
     }
@@ -1064,6 +1068,40 @@ static void exec_command(App *a, const char *line)
     }
 
     char msg[96];
+
+    /* A coordinate rather than a verb, checked last so a verb can never lose
+     * to one. Nothing else here has a digit in it, which is what makes a
+     * square unmistakable -- and why the row is required: a bare column
+     * letter would be :e, :w, :x or :q. */
+    int jx = a->ed.cx, jy = a->ed.cy;
+    if (map_coord_parse(verb, &jx, &jy)) {
+        if (a->play.grabbed) {
+            app_set_status(a, "put the creature down before jumping");
+            return;
+        }
+        if (!map_in_bounds(a->map, jx, jy)) {
+            char edge[MAP_COORD_MAX];
+            map_coord_name(a->map->w - 1, a->map->h - 1, edge, sizeof edge);
+            snprintf(msg, sizeof msg, "off the map - it ends at %s", edge);
+            app_set_status(a, msg);
+            return;
+        }
+
+        a->ed.cx = jx;
+        a->ed.cy = jy;
+        /* Centred rather than merely scrolled into view: a jump is for going
+         * somewhere else, and arriving pinned against an edge shows half of
+         * where you went. */
+        grid_center_on(&a->ed.view, a->map, jx, jy);
+        if (a->ed.mode == ED_VISUAL) a->ed.mode = ED_NORMAL;
+
+        char at[MAP_COORD_MAX];
+        map_coord_name(jx, jy, at, sizeof at);
+        snprintf(msg, sizeof msg, "jumped to %s", at);
+        app_set_status(a, msg);
+        return;
+    }
+
     snprintf(msg, sizeof msg, "unknown command: %.40s", verb);
     app_set_status(a, msg);
 }
@@ -1822,8 +1860,10 @@ static void play_key(App *a, Key k)
         play_focus(pl, pasted);
 
         char msg[96];
-        snprintf(msg, sizeof msg, "pasted %.30s at %d,%d",
-                 t.label[0] ? t.label : token_kind_name(t.kind), t.x, t.y);
+        char at[MAP_COORD_MAX];
+        map_coord_name(t.x, t.y, at, sizeof at);
+        snprintf(msg, sizeof msg, "pasted %.30s at %s",
+                 t.label[0] ? t.label : token_kind_name(t.kind), at);
         app_set_status(a, msg);
         break;
     }
@@ -1935,6 +1975,16 @@ void app_key(App *a, Key k)
     if (k.kind == KEY_CHAR && k.mods == 0 && k.ch == '?' &&
         a->ed.mode != ED_COMMAND && !a->pending) {
         help_open(a);
+        return;
+    }
+
+    /* Global like ?, so no mode can be the one without it. The command line
+     * keeps its own # -- it is a character somebody might want to type. */
+    if (k.kind == KEY_CHAR && k.mods == 0 && k.ch == '#' && a->map &&
+        a->ed.mode != ED_COMMAND && !a->pending) {
+        a->ed.labels = !a->ed.labels;
+        ed_layout(&a->ed, a->map, a->rnd->w, a->rnd->h);
+        app_set_status(a, a->ed.labels ? "labels on" : "labels off");
         return;
     }
 

@@ -3733,6 +3733,299 @@ static void test_trail_draw(void)
     map_free(m);
 }
 
+/* ------------------------------------------------------------- coordinates */
+
+static void test_coords(void)
+{
+    char b[MAP_COORD_MAX];
+
+    CASE("columns are letters and rows count from one");
+    map_coord_name(0, 0, b, sizeof b);   CHECK_EQ(strcmp(b, "A1"), 0);
+    map_coord_name(3, 5, b, sizeof b);   CHECK_EQ(strcmp(b, "D6"), 0);
+    map_coord_name(25, 0, b, sizeof b);  CHECK_EQ(strcmp(b, "Z1"), 0);
+
+    /* Bijective base 26: Z is followed by AA, not BA, so no column is
+     * unnamed and none is named twice. */
+    CASE("past Z the columns double up the way a spreadsheet does");
+    map_coord_name(26, 0, b, sizeof b);  CHECK_EQ(strcmp(b, "AA1"), 0);
+    map_coord_name(27, 0, b, sizeof b);  CHECK_EQ(strcmp(b, "AB1"), 0);
+    map_coord_name(51, 0, b, sizeof b);  CHECK_EQ(strcmp(b, "AZ1"), 0);
+    map_coord_name(52, 0, b, sizeof b);  CHECK_EQ(strcmp(b, "BA1"), 0);
+    map_coord_name(701, 0, b, sizeof b); CHECK_EQ(strcmp(b, "ZZ1"), 0);
+    map_coord_name(702, 0, b, sizeof b); CHECK_EQ(strcmp(b, "AAA1"), 0);
+
+    CASE("the largest map the format allows has a name for every square");
+    map_coord_name(MAP_MAX_DIM - 1, MAP_MAX_DIM - 1, b, sizeof b);
+    CHECK(strlen(b) < MAP_COORD_MAX);
+    CHECK_EQ(strcmp(b, "SR512"), 0);
+
+    /* One assertion for the whole sweep: a round trip that fails on every
+     * column would otherwise drown the count it is reported in. */
+    CASE("a square's name reads back as the same square");
+    int bad = 0;
+    for (int x = 0; x < MAP_MAX_DIM && !bad; x++) {
+        for (int y = 0; y < MAP_MAX_DIM; y += 37) {
+            map_coord_name(x, y, b, sizeof b);
+            int px = -1, py = -1;
+            if (!map_coord_parse(b, &px, &py) || px != x || py != y) { bad = 1; break; }
+        }
+    }
+    CHECK_EQ(bad, 0);
+
+    CASE("parsing ignores case");
+    int x = -1, y = -1;
+    CHECK_EQ(map_coord_parse("d6", &x, &y), 1);   CHECK_EQ(x, 3); CHECK_EQ(y, 5);
+    CHECK_EQ(map_coord_parse("D6", &x, &y), 1);   CHECK_EQ(x, 3); CHECK_EQ(y, 5);
+    CHECK_EQ(map_coord_parse("aA12", &x, &y), 1); CHECK_EQ(x, 26); CHECK_EQ(y, 11);
+
+    CASE("a row on its own leaves the column alone");
+    x = 9; y = -1;
+    CHECK_EQ(map_coord_parse("12", &x, &y), 1);
+    CHECK_EQ(x, 9);                                /* untouched */
+    CHECK_EQ(y, 11);
+
+    /* Every : verb is pure letters, so a column with no row would be one.
+     * Requiring the row is what keeps :e, :w, :x and :q meaning what they
+     * always meant. */
+    CASE("a bare column letter is not a coordinate");
+    CHECK_EQ(map_coord_parse("d", &x, &y), 0);
+    CHECK_EQ(map_coord_parse("e", &x, &y), 0);
+    CHECK_EQ(map_coord_parse("w", &x, &y), 0);
+    CHECK_EQ(map_coord_parse("q", &x, &y), 0);
+    CHECK_EQ(map_coord_parse("x", &x, &y), 0);
+
+    CASE("no existing command reads as a coordinate");
+    static const char *const verbs[] = {
+        "w", "write", "wq", "x", "q", "quit", "q!", "e", "edit", "play",
+        "build", "name", "resize", "scale", "metric", "ruleset", "zoom",
+    };
+    for (size_t i = 0; i < sizeof verbs / sizeof *verbs; i++)
+        CHECK_EQ(map_coord_parse(verbs[i], &x, &y), 0);
+
+    CASE("rubbish is not a coordinate");
+    CHECK_EQ(map_coord_parse("", &x, &y), 0);
+    CHECK_EQ(map_coord_parse("d6x", &x, &y), 0);
+    CHECK_EQ(map_coord_parse("6d", &x, &y), 0);
+    CHECK_EQ(map_coord_parse("d 6", &x, &y), 0);
+    CHECK_EQ(map_coord_parse("-4", &x, &y), 0);
+    CHECK_EQ(map_coord_parse("d0", &x, &y), 0);    /* rows count from one */
+    CHECK_EQ(map_coord_parse("abcde1", &x, &y), 0);
+}
+
+static void test_jump(void)
+{
+    Sandbox sb = sandbox_enter("jump");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+
+    char path[600];
+    snprintf(path, sizeof path, "%s/j.vtt", sb.dir);
+    {
+        FILE *f = fopen(path, "w");
+        CHECK(f != NULL);
+        if (f) {
+            fputs("VTT 2\nname Jump\nsize 30 20\nzoom 1\ntiles\n", f);
+            for (int i = 0; i < 20; i++) fputs("..............................\n", f);
+            fclose(f);
+        }
+    }
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+
+    CASE(":d6 goes to column D, row 6");
+    press(&a, ":d6\r");
+    CHECK_EQ(a.ed.cx, 3);
+    CHECK_EQ(a.ed.cy, 5);
+    CHECK(strstr(a.status, "D6") != NULL);
+
+    CASE("case does not matter");
+    press(&a, ":AA3\r");
+    CHECK_EQ(a.ed.cx, 26);
+    CHECK_EQ(a.ed.cy, 2);
+
+    CASE("a row on its own keeps the column, the way vim's :12 keeps yours");
+    press(&a, ":12\r");
+    CHECK_EQ(a.ed.cx, 26);
+    CHECK_EQ(a.ed.cy, 11);
+
+    CASE("the jump centres rather than scrolling the least it can");
+    press(&a, ":a1\r");
+    press(&a, ":z20\r");
+    CHECK_EQ(a.ed.cx, 25);
+    CHECK_EQ(a.ed.cy, 19);
+
+    CASE("off the map says where the map ends");
+    int bx = a.ed.cx, by = a.ed.cy;
+    press(&a, ":zz9\r");
+    CHECK_EQ(a.ed.cx, bx);
+    CHECK_EQ(a.ed.cy, by);
+    CHECK(strstr(a.status, "AD20") != NULL);       /* 30x20 ends at AD20 */
+
+    /* The commands that would have lost to a coordinate. */
+    CASE("a verb still beats anything that looks like a square");
+    press(&a, ":e6\r");
+    CHECK(strstr(a.status, "unknown") == NULL);    /* it is a jump, not an edit */
+    CHECK_EQ(a.ed.cx, 4);
+    CHECK_EQ(a.ed.cy, 5);
+    CHECK_EQ(strcmp(a.map->name, "Jump"), 0);      /* no file was opened */
+
+    press(&a, ":w\r");
+    CHECK(strstr(a.status, "wrote") != NULL);
+    press(&a, ":zoom 2\r");
+    CHECK_EQ(a.ed.view.zoom, 2);
+    press(&a, ":name Renamed\r");
+    CHECK_EQ(strcmp(a.map->name, "Renamed"), 0);
+
+    CASE("a bare column letter is still its command");
+    press(&a, ":d\r");
+    CHECK(strstr(a.status, "unknown command") != NULL);
+
+    CASE("the readouts name squares the same way the jump does");
+    press(&a, ":c4\r");
+    char st[256];
+    ed_status(&a.ed, a.map, st, sizeof st);
+    CHECK(strstr(st, "C4") != NULL);
+    CHECK(strstr(st, "2,3") == NULL);              /* the old x,y is gone */
+
+    /* Jumping the cursor out from under a held creature would leave the two
+     * in different places, so it waits. */
+    CASE("a jump waits while a creature is being carried");
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+    tokens_add(&a.map->tokens, (Token){ 2, 3, 1, TOKEN_ENEMY, "Ogre", { { 0, "" } }, 0 });
+    a.ed.cx = 2; a.ed.cy = 3;
+    press(&a, "\r");
+    CHECK_EQ(a.play.grabbed, 1);
+    press(&a, ":a1\r");
+    CHECK_EQ(a.ed.cx, 2);
+    CHECK(strstr(a.status, "put the creature down") != NULL);
+
+    CASE("and works once it is put down");
+    press(&a, "\r");
+    press(&a, ":a1\r");
+    CHECK_EQ(a.ed.cx, 0);
+    CHECK_EQ(a.ed.cy, 0);
+
+    app_free(&a);
+    rnd_free(&r);
+    unlink(path);
+    sandbox_leave(&sb);
+}
+
+static void test_labels(void)
+{
+    Sandbox sb = sandbox_enter("labels");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+
+    char path[600];
+    snprintf(path, sizeof path, "%s/l.vtt", sb.dir);
+    {
+        FILE *f = fopen(path, "w");
+        if (f) {
+            fputs("VTT 2\nname Lab\nsize 12 8\nzoom 1\ntiles\n", f);
+            for (int i = 0; i < 8; i++) fputs("............\n", f);
+            fclose(f);
+        }
+    }
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+
+    CASE("labels are on to begin with, and take a row and a gutter");
+    CHECK_EQ(a.ed.labels, 1);
+    CHECK(a.ed.view.view.x > 0);
+    CHECK_EQ(a.ed.view.view.y, 2);
+
+    CASE("the letters and numbers are drawn");
+    rnd_begin(&r);
+    app_draw(&a);
+    ByteBuf f;
+    bb_init(&f, 32768);
+    rnd_dump(&r, &f);
+    bb_putc(&f, '\0');
+    CHECK(strstr(f.data, "A   B   C") != NULL);
+    bb_free(&f);
+
+    CASE("# takes them off and gives the room back");
+    int was_x = a.ed.view.view.x, was_y = a.ed.view.view.y;
+    press(&a, "#");
+    CHECK_EQ(a.ed.labels, 0);
+    CHECK_EQ(a.ed.view.view.x, 0);
+    CHECK_EQ(a.ed.view.view.y, 1);
+    CHECK(a.ed.view.view.w > was_x);
+    CHECK(strstr(a.status, "labels off") != NULL);
+
+    rnd_begin(&r);
+    app_draw(&a);
+    bb_init(&f, 32768);
+    rnd_dump(&r, &f);
+    bb_putc(&f, '\0');
+    CHECK(strstr(f.data, "A   B   C") == NULL);
+    bb_free(&f);
+
+    CASE("# puts them back");
+    press(&a, "#");
+    CHECK_EQ(a.ed.labels, 1);
+    CHECK_EQ(a.ed.view.view.x, was_x);
+    CHECK_EQ(a.ed.view.view.y, was_y);
+
+    CASE("play mode gets the same labels");
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+    rnd_begin(&r);
+    app_draw(&a);
+    bb_init(&f, 32768);
+    rnd_dump(&r, &f);
+    bb_putc(&f, '\0');
+    CHECK(strstr(f.data, "A   B   C") != NULL);
+    bb_free(&f);
+
+    /* A jump still lands whether or not the labels are showing. */
+    CASE("a jump works with the labels hidden");
+    press(&a, "#");
+    press(&a, ":e3\r");
+    CHECK_EQ(a.ed.cx, 4);
+    CHECK_EQ(a.ed.cy, 2);
+    press(&a, "#");
+
+    CASE("# on the command line is typed, not swallowed");
+    Key f1 = { KEY_F1, 0, 0 };
+    app_key(&a, f1);
+    press(&a, ":name a#b\r");
+    CHECK_EQ(strcmp(a.map->name, "a#b"), 0);
+    CHECK_EQ(a.ed.labels, 1);
+
+    CASE("every zoom lays labels out without crashing");
+    for (int z = 0; z < ZOOM_COUNT; z++) {
+        char cmd[32];
+        snprintf(cmd, sizeof cmd, ":zoom %d\r", z);
+        press(&a, cmd);
+        for (int w = 24; w <= 120; w += 8) {
+            rnd_resize(&r, w, 20);
+            ed_layout(&a.ed, a.map, r.w, r.h);
+            rnd_begin(&r);
+            app_draw(&a);
+            rnd_flush(&r, NULL);
+        }
+    }
+    CHECK(1);
+
+    app_free(&a);
+    rnd_free(&r);
+    unlink(path);
+    sandbox_leave(&sb);
+}
+
 /* ------------------------------------------------------------------ shapes */
 
 static void test_shapes(void)
@@ -4894,6 +5187,9 @@ int main(void)
         { "focus",    test_play_focus },
         { "tracks",   test_cycle_tracks },
         { "cyclekeys", test_cycle_keys },
+        { "coords",   test_coords },
+        { "jump",     test_jump },
+        { "labels",   test_labels },
         { "shapes",   test_shapes },
         { "circlefill", test_circle_fill },
         { "circlewall", test_circle_walls },

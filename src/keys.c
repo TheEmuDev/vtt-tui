@@ -16,6 +16,8 @@ static const KeyDoc PLAY[] = {
     GROUP("Move"),
     { "h j k l",  "move the cursor, or the creature in hand", NULL, NULL },
     KEY("arrows", "the same"),
+    KEY(":d6",    "jump to a square by its label"),
+    KEY("#",      "column letters and row numbers, on or off"),
     KEY("z",      "centre the view on the cursor"),
     KEY("+ -",    "zoom in and out"),
 
@@ -74,6 +76,8 @@ static const KeyDoc BUILD[] = {
     KEY("0  $",   "first / last column"),
     KEY("gg  G",  "first / last row"),
     KEY("3j",     "any motion takes a count"),
+    KEY(":d6",    "jump to a square by its label  (:6 for a row)"),
+    KEY("#",      "column letters and row numbers, on or off"),
     KEY("ctrl-d", "half a page down    ctrl-u up"),
     KEY("z",      "centre the view    + - zoom"),
 

@@ -10,6 +10,7 @@ void ed_init(Editor *e, const Map *m)
 {
     memset(e, 0, sizeof *e);
     e->mode = ED_NORMAL;
+    e->labels = 1;              /* a coordinate you cannot read is one you cannot jump to */
     e->material = EDGE_WALL;
     e->terrain  = TILE_FLOOR;
     e->view.zoom = iclamp(m->zoom, 0, ZOOM_COUNT - 1);
@@ -17,11 +18,25 @@ void ed_init(Editor *e, const Map *m)
     e->cy = m->h / 2;
 }
 
+int ed_gutter(const Editor *e, const Map *m)
+{
+    if (!e->labels) return 0;
+
+    /* Wide enough for the largest row number, plus a space off the grid. */
+    int digits = 1;
+    for (int n = m->h; n >= 10; n /= 10) digits++;
+    return digits + 1;
+}
+
 void ed_layout(Editor *e, const Map *m, int screen_w, int screen_h)
 {
     /* Title row on top, status and keybinding rows at the bottom; the map
-     * gets everything between. */
-    e->view.view = rect(0, 1, screen_w, imax(1, screen_h - 3));
+     * gets everything between, less a row and a gutter for the labels. */
+    int gut = ed_gutter(e, m);
+    int top = e->labels ? 2 : 1;
+
+    e->view.view = rect(gut, top, imax(1, screen_w - gut),
+                        imax(1, screen_h - top - 2));
     grid_clamp_camera(&e->view, m);
     grid_ensure_visible(&e->view, m, e->cx, e->cy, ED_SCROLLOFF);
 }
@@ -295,6 +310,10 @@ void ed_draw(Renderer *r, const Map *m, const Editor *e, const Theme *th, int as
 {
     PROF_ZONE("editor.draw");
 
+    /* Outside the clip below, because that is the point of them: the labels
+     * live in the gutter the layout kept back. */
+    grid_draw_labels(r, m, &e->view, th, ed_gutter(e, m), e->cx, e->cy);
+
     /* The map scrolls; the chrome around it must not. Everything the grid
      * paints is confined to the viewport rectangle. */
     ClipRect saved = rnd_clip_push(r, e->view.view.x, e->view.view.y,
@@ -348,16 +367,22 @@ void ed_status(const Editor *e, const Map *m, char *buf, size_t bufsz)
     char shape[24];
     shape_note(e, shape, sizeof shape);
 
+    char at[MAP_COORD_MAX];
+
     if (e->mode == ED_WALL) {
-        snprintf(buf, bufsz, "%-7s corner %d,%d  %s  [%s]%s  zoom %d  map %dx%d",
-                 ed_mode_name(e->mode), e->wx, e->wy,
+        /* A corner is named by the square it sits north-west of, which is the
+         * only nearby thing that has a name. */
+        map_coord_name(e->wx, e->wy, at, sizeof at);
+        snprintf(buf, bufsz, "%-7s corner of %s  %s  [%s]%s  zoom %d  map %dx%d",
+                 ed_mode_name(e->mode), at,
                  e->erase ? "ERASE" : (e->pen ? "PEN DOWN" : "pen up"),
                  edge_name(e->material), shape, e->view.zoom, m->w, m->h);
         return;
     }
 
-    snprintf(buf, bufsz, "%-7s tile %d,%d  %s  [%s/%s]%s  zoom %d  map %dx%d",
-             ed_mode_name(e->mode), e->cx, e->cy,
+    map_coord_name(e->cx, e->cy, at, sizeof at);
+    snprintf(buf, bufsz, "%-7s %s  %s  [%s/%s]%s  zoom %d  map %dx%d",
+             ed_mode_name(e->mode), at,
              tile_name(map_tile(m, e->cx, e->cy)),
              edge_name(e->material), tile_name(e->terrain), shape,
              e->view.zoom, m->w, m->h);

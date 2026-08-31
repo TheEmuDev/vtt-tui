@@ -74,13 +74,22 @@ typedef struct {
      * by visual mode and wall mode, since both are anchor-plus-cursor. */
     uint8_t shape;
 
+    /* Column letters above the map and row numbers down its left. On by
+     * default: a coordinate you cannot read is a coordinate you cannot jump
+     * to. A view preference, so it is not saved with the map. */
+    int    labels;
+
     TextPrompt cmd;            /* the `:` line */
 } Editor;
 
 void ed_init(Editor *e, const Map *m);
 
-/* Recomputes the viewport rect and re-clamps the camera. Call on resize. */
+/* Recomputes the viewport rect and re-clamps the camera. Call on resize, and
+ * whenever the labels are switched, since they take a row and a gutter. */
 void ed_layout(Editor *e, const Map *m, int screen_w, int screen_h);
+
+/* Columns reserved down the left for row numbers; 0 with the labels off. */
+int  ed_gutter(const Editor *e, const Map *m);
 
 void ed_move(Editor *e, const Map *m, int dx, int dy, int times);
 void ed_set_zoom(Editor *e, const Map *m, int zoom);

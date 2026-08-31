@@ -20,6 +20,20 @@
 #define MAP_METRIC_DEFAULT 2
 #define MAP_PATH_MAX 512
 
+/* ------------------------------------------------------------ coordinates */
+
+/* Squares are named the way a battle map names them: columns run A, B ... Z,
+ * AA, AB, and rows count from one. The file format stays 0-based x,y -- this
+ * is only what gets said out loud across a table. */
+#define MAP_COORD_MAX 12
+
+void map_coord_name(int x, int y, char *out, size_t outsz);
+
+/* Parses "d6", "AA12", or "6" on its own -- a row with no column, which
+ * leaves *x untouched. Returns 0 when the text is not a coordinate, which a
+ * bare "d" is: a column with no row would collide with :e, :w, :x and :q. */
+int  map_coord_parse(const char *s, int *x, int *y);
+
 /* Terrain is decoration: everything except VOID is part of the map and
  * behaves identically. What difficult ground costs is a ruling between the GM
  * and the players, not something the tool decides. */

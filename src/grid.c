@@ -1,5 +1,8 @@
 #include "grid.h"
 
+#include <stdio.h>
+#include <string.h>
+
 #include "prof.h"
 
 /* Interior sizes. Odd widths keep a true centre cell for tokens and labels.
@@ -439,4 +442,78 @@ void grid_draw_corner_cursor(Renderer *r, const GridView *g, int cx, int cy,
     c->fg   = pen_down ? th->warn : th->accent;
     c->bg   = th->cursor_bg;
     c->attr = ATTR_BOLD;
+}
+
+void grid_draw_labels(Renderer *r, const Map *m, const GridView *g,
+                      const Theme *th, int gutter, int cx, int cy)
+{
+    PROF_ZONE("grid.labels");
+
+    if (gutter <= 0) return;
+
+    int x0, y0, x1, y1;
+    grid_visible_tiles(g, m, &x0, &y0, &x1, &y1);
+
+    Style dim = style(th->dim, th->bg, 0);
+    Style hot = style(th->accent, th->bg, ATTR_BOLD);
+
+    /* Whichever column and row the cursor is on gets the bright label, so
+     * finding where you are is a glance rather than a count. */
+
+    int pw = zoom_pw(g->zoom), ph = zoom_ph(g->zoom);
+    int iw = ZOOM[g->zoom].iw;
+
+    /* One label per column only when one fits. Otherwise every second or
+     * third, the way an axis thins its ticks rather than overprinting. */
+    int widest = 1;
+    for (int tx = x0; tx <= x1; tx++) {
+        char lbl[MAP_COORD_MAX];
+        map_coord_name(tx, 0, lbl, sizeof lbl);
+        int w = (int)strlen(lbl) - 1;              /* drop the row digit */
+        if (w > widest) widest = w;
+    }
+    int step = 1;
+    while (widest + 1 > step * pw) step++;
+
+    int labelrow = g->view.y - 1;
+    ClipRect saved = rnd_clip_push(r, g->view.x, labelrow, g->view.w, 1);
+
+    for (int tx = x0; tx <= x1; tx++) {
+        if (tx % step) continue;
+
+        char full[MAP_COORD_MAX], lbl[MAP_COORD_MAX];
+        map_coord_name(tx, 0, full, sizeof full);
+        size_t n = strlen(full) - 1;               /* the row digit is not wanted */
+        memcpy(lbl, full, n);
+        lbl[n] = '\0';
+
+        int sx, sy;
+        grid_tile_interior(g, tx, 0, &sx, &sy);
+        draw_text(r, sx + (iw - (int)n + 1) / 2, labelrow, lbl, -1,
+                  tx == cx ? hot : dim);
+    }
+    rnd_clip_restore(r, saved);
+
+    /* Row numbers hug the grid rather than the edge of the screen: a map
+     * narrower than the window is centred, and a column of numbers stranded
+     * out on the left belongs to nothing the eye can see. */
+    int gx, gy;
+    grid_tile_interior(g, x0, y0, &gx, &gy);
+    int right = imax(gutter - 2, gx - 3);   /* a space clear of the grid */
+
+    /* Rows are a line tall at every zoom, so they never have to be thinned. */
+    saved = rnd_clip_push(r, 0, g->view.y, right + 1, g->view.h);
+    for (int ty = y0; ty <= y1; ty++) {
+        char num[MAP_COORD_MAX];
+        snprintf(num, sizeof num, "%d", ty + 1);
+
+        int sx, sy;
+        grid_tile_interior(g, x0, ty, &sx, &sy);
+        int w = (int)strlen(num);
+        draw_text(r, right - w + 1, sy + (ZOOM[g->zoom].ih - 1) / 2, num, -1,
+                  ty == cy ? hot : dim);
+    }
+    rnd_clip_restore(r, saved);
+
+    (void)pw; (void)ph;
 }

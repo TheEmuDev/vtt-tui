@@ -1,5 +1,6 @@
 #include "map.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -267,4 +268,57 @@ void map_rect_walls(Map *m, int x0, int y0, int x1, int y1, uint8_t kind)
         map_set_hedge(m, x, y0, kind);
         map_set_hedge(m, x, y1 + 1, kind);
     }
+}
+
+/* ------------------------------------------------------------ coordinates */
+
+void map_coord_name(int x, int y, char *out, size_t outsz)
+{
+    if (!outsz) return;
+
+    /* Bijective base 26, the spreadsheet reading: Z is followed by AA rather
+     * than by BA, so no column label is ever blank or repeated. */
+    char col[8];
+    int  n = 0;
+    for (int v = x + 1; v > 0 && n < (int)sizeof col; v /= 26) {
+        v--;
+        col[n++] = (char)('A' + v % 26);
+    }
+    if (n == 0) col[n++] = '?';       /* a negative column has no name */
+
+    char buf[MAP_COORD_MAX];
+    int  i = 0;
+    while (n > 0 && i < (int)sizeof buf - 1) buf[i++] = col[--n];
+    buf[i] = '\0';
+
+    snprintf(out, outsz, "%s%d", buf, y + 1);
+}
+
+int map_coord_parse(const char *s, int *x, int *y)
+{
+    if (!s || !*s) return 0;
+
+    int col = 0, letters = 0;
+    while ((*s >= 'A' && *s <= 'Z') || (*s >= 'a' && *s <= 'z')) {
+        int v = (*s >= 'a') ? *s - 'a' : *s - 'A';
+        if (letters >= 4) return 0;             /* far past any legal column */
+        col = col * 26 + v + 1;
+        letters++;
+        s++;
+    }
+
+    if (*s < '0' || *s > '9') return 0;         /* the row is not optional */
+
+    long row = 0;
+    while (*s >= '0' && *s <= '9') {
+        row = row * 10 + (*s - '0');
+        if (row > 100000) return 0;
+        s++;
+    }
+    if (*s) return 0;                            /* trailing anything is not a coordinate */
+    if (row < 1) return 0;                       /* rows count from one */
+
+    if (letters) *x = col - 1;
+    *y = (int)row - 1;
+    return 1;
 }

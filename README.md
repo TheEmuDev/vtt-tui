@@ -68,6 +68,11 @@ rare — and a letter shared between build and play means the same thing in both
 
 `F12` toggles the profiler overlay everywhere. `F1` and `F2` switch between build and play.
 
+**Squares are named the way a battle map names them** — columns run `A`, `B` … `Z`, `AA`,
+`AB`, and rows count from one, so the token in the third column of the sixth row is on `C6`.
+That is what every readout says and what `:c6` jumps to. The file format is unchanged: it
+still stores plain 0-based x,y, because that is a format, not something anyone says out loud.
+
 ### Menu and file browser
 
 | key | action |
@@ -105,6 +110,8 @@ Maps are found in the current directory and in `~/.local/share/vtt/maps`.
 | `h` `j` `k` `l`, arrows | move the cursor |
 | `10j` | counts repeat a motion |
 | `0` `$` `gg` `G` | row and column extremes |
+| `:d6` | jump to a square (`:6` for a row, keeping the column) |
+| `#` | column letters and row numbers, on or off |
 | `Ctrl-d` `Ctrl-u` | half-page down / up |
 | `H` `J` `K` `L` | toggle the wall on the west / south / north / east face of the cursor tile |
 | `w` | wall-tracing mode |
@@ -146,6 +153,30 @@ metric because they measure reach — a tower is a tower whatever the movement r
 
 Wall tracing anchors on a lattice corner rather than a square, which is where its cursor
 lives, so its circles sit between squares and come out even across rather than odd.
+
+**Jumping.** `:c6` puts the cursor on `C6` and centres the view there — a jump is for going
+somewhere else, and arriving pinned against an edge shows half of where you went. `:12` moves
+to row 12 and keeps the column, the way vim's `:12` keeps yours.
+
+There is no collision with the `:` commands, and there could not be: every verb is pure
+letters and a square always ends in digits. That is also why the row is required — a bare
+column letter would be `:e`, `:w`, `:x` or `:q`, so `:d` is still an unknown command rather
+than a jump to column D.
+
+**Labels.** `#` turns the column letters and row numbers on and off; they start on, because
+a coordinate you cannot read is a coordinate you cannot jump to. Whichever row and column
+the cursor is on is lit, so finding where you are is a glance rather than a count. Where a
+zoom is too tight to fit a label over every square, they thin out to every second or third
+column the way an axis thins its ticks:
+
+```
+      A   B   C   D   E              A B C D E F G H I J K L M
+    ┌───┬───┬───┬───┬───┐          ┌─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┐
+  1 │   │   │   │   │   │        1 │ │ │ │ │ │ │ │ │ │ │ │ │ │
+    ├───┼───┼───┼───┼───┤          ├─┼─┼─┼─┼─┼─┼─┼─┼─┼─┼─┼─┼─┤
+  2 │   │   │   │[G]│   │        2 │ │ │ │ │ │ │ │ │ │ │ │ │ │
+    └───┴───┴───┴───┴───┘          └─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┘
+```
 
 ### Wall-tracing mode (`w`)
 
@@ -189,6 +220,8 @@ A whole pen-down stroke is one undo step.
 | `Ctrl-w` | toggle wall blocking |
 | `esc` | put down, then take the range overlay off, then deselect |
 | `u`, `Ctrl-r` | undo / redo |
+| `:d6` | jump to a square (`:6` for a row, keeping the column) |
+| `#` | column letters and row numbers, on or off |
 | `?` | every key, in full |
 
 Two prefixes carry a family each, which is what keeps the bar to six hints: `i` inserts

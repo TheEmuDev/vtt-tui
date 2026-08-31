@@ -315,6 +315,8 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
 {
     PROF_ZONE("play.draw");
 
+    grid_draw_labels(r, m, &e->view, th, ed_gutter(e, m), e->cx, e->cy);
+
     ClipRect saved = rnd_clip_push(r, e->view.view.x, e->view.view.y,
                                    e->view.view.w, e->view.view.h);
 
@@ -372,11 +374,14 @@ void play_status(const Play *p, const Map *m, const Editor *e, char *buf, size_t
              * letting a blank map read as a bug. */
             const char *route = p->ntrail ? "" : "  no route";
 
+            char from[MAP_COORD_MAX];
+            map_coord_name(p->origin_x, p->origin_y, from, sizeof from);
+
             snprintf(buf, bufsz,
-                     "MOVING  %.20s %dx%d  %d step%s%s  %g ft from %d,%d  %s",
+                     "MOVING  %.20s %dx%d  %d step%s%s  %g ft from %s  %s",
                      t->label[0] ? t->label : token_kind_name(t->kind),
                      t->size, t->size, p->steps, p->steps == 1 ? "" : "s", route,
-                     units, p->origin_x, p->origin_y, walls);
+                     units, from, walls);
             return;
         }
         /* Spell the markers out here: the map shows their initials, and the
@@ -392,15 +397,21 @@ void play_status(const Play *p, const Map *m, const Editor *e, char *buf, size_t
         if (t->nstatus && off < (int)sizeof marks - 2)
             snprintf(marks + off, sizeof marks - (size_t)off, "]");
 
-        snprintf(buf, bufsz, "PLAY    %.20s (%s %dx%d) at %d,%d%s  %s",
+        char at[MAP_COORD_MAX];
+        map_coord_name(t->x, t->y, at, sizeof at);
+
+        snprintf(buf, bufsz, "PLAY    %.20s (%s %dx%d) at %s%s  %s",
                  t->label[0] ? t->label : "unlabelled",
-                 token_kind_name(t->kind), t->size, t->size, t->x, t->y,
+                 token_kind_name(t->kind), t->size, t->size, at,
                  marks, walls);
         return;
     }
 
-    snprintf(buf, bufsz, "PLAY    tile %d,%d  %s  %d token%s  next size %d  %s",
-             e->cx, e->cy, map_walkable(m, e->cx, e->cy) ? "floor" : "void",
+    char at[MAP_COORD_MAX];
+    map_coord_name(e->cx, e->cy, at, sizeof at);
+
+    snprintf(buf, bufsz, "PLAY    %s  %s  %d token%s  next size %d  %s",
+             at, map_walkable(m, e->cx, e->cy) ? "floor" : "void",
              m->tokens.n, m->tokens.n == 1 ? "" : "s", p->next_size, walls);
 }
 
