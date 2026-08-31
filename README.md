@@ -470,3 +470,7 @@ instrument that quietly adds to the number it displays is worse than no instrume
 ## Design notes
 
 See `docs/PLAN.md` for the architecture.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
