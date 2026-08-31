@@ -1,0 +1,20 @@
+ vtt                                                       F12 profiler 
+                                                                        
+                                                                        
+                                                                        
+          virtual tabletop                                              
+          rules-agnostic battle maps for the terminal                   
+                                                                        
+            ╭─ New map ────────────────────────────────────╮            
+           >│                                              │            
+            │ Ambush                                       │            
+            │                                              │            
+            │ saved as <name>.vtt                          │            
+            ╰─ enter accept   esc cancel ──────────────────╯            
+                                                                        
+                                                                        
+                                                                        
+                                                                        
+                                                                        
+                                                                        
+ j/k move  enter select  q quit                                  ? keys 

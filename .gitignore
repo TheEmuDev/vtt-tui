@@ -1,0 +1,7 @@
+build/
+vtt
+*.o
+*.d
+*.json
+core
+*.core
