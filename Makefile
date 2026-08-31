@@ -50,7 +50,7 @@ DEPS      := $(OBJS:.o=.d)
 LIBSRCS   := $(filter-out $(SRCDIR)/main.c,$(SRCS))
 TESTSRCS  := $(wildcard $(TESTDIR)/*.c)
 
-.PHONY: all debug test bench clean help
+.PHONY: all debug test bench perf clean help
 .DEFAULT_GOAL := all
 
 all: BUILDFLAGS := $(RELFLAGS)
@@ -78,6 +78,11 @@ test:
 bench: all
 	@./$(BIN) --bench $(TESTDIR)/bench.keys
 
+# Every path that costs anything, across a set of scenarios. Regenerates the
+# tables in docs/PERFORMANCE.md -- paste its output there when a row moves.
+perf: all
+	@./tools/perf.sh
+
 clean:
 	@rm -rf $(OBJDIR) $(BIN)
 
@@ -86,6 +91,7 @@ help:
 	@echo "make debug    -Og -g3 with ASan + UBSan"
 	@echo "make test     build and run the unit/golden test suite"
 	@echo "make bench    replay tests/bench.keys and print frame stats"
+	@echo "make perf     measure every path; regenerates docs/PERFORMANCE.md"
 	@echo "make clean    remove build artifacts"
 	@echo "make PROF=0   build with profiling instrumentation compiled out"
 

@@ -513,15 +513,19 @@ blocking: in a terminal stdin and stdout are the same open file description, so 
 stdin non-blocking makes writes to stdout fail with `EAGAIN` under load. The event loop
 polls before each read instead.
 
-Measured with `make bench` on a 200×200 map:
+Idle cost is zero: `poll()` blocks until there is input. Cost follows the *window*, not
+the map — a 200×200 map costs the same at 80×24 as a small one, because every drawing
+path culls to the visible tiles first.
 
-| terminal | frame p50 | cells changed | bytes written |
-|----------|-----------|---------------|---------------|
-| 80×24 | 34 µs | 7 | 110 |
-| 100×30 | 50 µs | 7 | 110 |
-| 200×50 | 146 µs | 7 | 112 |
+| | 80×24 | 200×50 |
+|---|---|---|
+| build, 200×200 map | 37 µs | 156 µs |
+| play, 24 tokens | 39 µs | 137 µs |
+| bytes written per frame | ~210 | ~212 |
 
-Idle cost is zero: `poll()` blocks until there is input.
+**[docs/PERFORMANCE.md](docs/PERFORMANCE.md) has every path measured**, what dominates a
+frame, and the rules for keeping it that way. `make perf` regenerates it, so the numbers
+there are output rather than estimates.
 
 `F12` shows the live overlay — per-zone timings with p50/p99, a frame-time sparkline, and
 the cells-changed and bytes-written counters that predict perceived latency better than
