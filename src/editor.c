@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "prof.h"
+#include "util.h"
 
 void ed_init(Editor *e, const Map *m)
 {
@@ -163,41 +164,95 @@ void ed_wall_step(Editor *e, Map *m, Undo *u, int dx, int dy, int times)
                         iclamp(e->wy, 0, m->h - 1), ED_SCROLLOFF);
 }
 
-void ed_wall_rect(Editor *e, Map *m, Undo *u, int x0, int y0, int x1, int y1,
-                  uint8_t kind)
-{
-    (void)e;
-    if (x0 > x1) { int t = x0; x0 = x1; x1 = t; }
-    if (y0 > y1) { int t = y0; y0 = y1; y1 = t; }
-    if (x0 == x1 || y0 == y1) return;      /* a degenerate rect has no outline */
+/* ---------------------------------------------------------------- shapes */
 
-    undo_begin(u);
-    for (int x = x0; x < x1; x++) {
-        undo_set_hedge(u, m, x, y0, kind);
-        undo_set_hedge(u, m, x, y1, kind);
+EdShape ed_shape(uint8_t kind, int ax, int ay, int bx, int by, int corners)
+{
+    EdShape s;
+    memset(&s, 0, sizeof s);
+    s.kind = kind;
+
+    if (kind != ED_SHAPE_CIRCLE) {
+        s.x0 = imin(ax, bx); s.x1 = imax(ax, bx);
+        s.y0 = imin(ay, by); s.y1 = imax(ay, by);
+        /* Between two corners, not including both: corner 2 to corner 5 spans
+         * the three tiles they enclose, not four. */
+        if (corners) { s.x1--; s.y1--; }
+        return s;
     }
-    for (int y = y0; y < y1; y++) {
-        undo_set_vedge(u, m, x0, y, kind);
-        undo_set_vedge(u, m, x1, y, kind);
+
+    /* Half-tiles throughout: a square's middle is odd, a lattice corner even,
+     * so both anchors and the tile centres they are measured against live in
+     * the same integers. */
+    s.ccx = corners ? 2L * ax : 2L * ax + 1;
+    s.ccy = corners ? 2L * ay : 2L * ay + 1;
+
+    long ex = (corners ? 2L * bx : 2L * bx + 1) - s.ccx;
+    long ey = (corners ? 2L * by : 2L * by + 1) - s.ccy;
+    s.cr2 = ex * ex + ey * ey;
+
+    /* The box only bounds the walk; ed_shape_has is what decides, so a tile
+     * of slack costs a few tests and saves getting the rounding exactly
+     * right in two places. */
+    long rh = 0;
+    while ((rh + 1) * (rh + 1) <= s.cr2) rh++;
+
+    int rt = (int)(rh / 2) + 1;
+    int cx = (int)(s.ccx / 2), cy = (int)(s.ccy / 2);
+    s.x0 = cx - rt; s.x1 = cx + rt;
+    s.y0 = cy - rt; s.y1 = cy + rt;
+    return s;
+}
+
+int ed_shape_has(const EdShape *s, int x, int y)
+{
+    if (x < s->x0 || x > s->x1 || y < s->y0 || y > s->y1) return 0;
+    if (s->kind != ED_SHAPE_CIRCLE) return 1;
+
+    long dx = (2L * x + 1) - s->ccx;
+    long dy = (2L * y + 1) - s->ccy;
+    return dx * dx + dy * dy <= s->cr2;
+}
+
+int ed_shape_radius(const EdShape *s)
+{
+    if (s->kind != ED_SHAPE_CIRCLE) return 0;
+
+    long rh = 0;
+    while ((rh + 1) * (rh + 1) <= s->cr2) rh++;
+    return (int)(rh / 2);
+}
+
+void ed_wall_shape(Map *m, Undo *u, const EdShape *s, uint8_t kind)
+{
+    undo_begin(u);
+    for (int y = s->y0; y <= s->y1; y++) {
+        for (int x = s->x0; x <= s->x1; x++) {
+            if (!ed_shape_has(s, x, y)) continue;
+
+            /* Every face this tile shares with one the shape does not cover.
+             * Walking the region rather than its corners is what lets a
+             * circle be walled at all, and it gives a rectangle exactly the
+             * outline it had before. */
+            if (!ed_shape_has(s, x - 1, y)) undo_set_vedge(u, m, x,     y,     kind);
+            if (!ed_shape_has(s, x + 1, y)) undo_set_vedge(u, m, x + 1, y,     kind);
+            if (!ed_shape_has(s, x, y - 1)) undo_set_hedge(u, m, x,     y,     kind);
+            if (!ed_shape_has(s, x, y + 1)) undo_set_hedge(u, m, x,     y + 1, kind);
+        }
     }
     undo_end(u);
 }
 
 void ed_apply_tiles(Editor *e, Map *m, Undo *u, uint8_t kind)
 {
-    int x0 = e->cx, y0 = e->cy, x1 = e->cx, y1 = e->cy;
-
-    if (e->mode == ED_VISUAL) {
-        x0 = e->anchor_x; y0 = e->anchor_y;
-        x1 = e->cx;       y1 = e->cy;
-        if (x0 > x1) { int t = x0; x0 = x1; x1 = t; }
-        if (y0 > y1) { int t = y0; y0 = y1; y1 = t; }
-    }
+    EdShape s = ed_shape(ED_SHAPE_RECT, e->cx, e->cy, e->cx, e->cy, 0);
+    if (e->mode == ED_VISUAL)
+        s = ed_shape(e->shape, e->anchor_x, e->anchor_y, e->cx, e->cy, 0);
 
     undo_begin(u);
-    for (int y = y0; y <= y1; y++)
-        for (int x = x0; x <= x1; x++)
-            undo_set_tile(u, m, x, y, kind);
+    for (int y = s.y0; y <= s.y1; y++)
+        for (int x = s.x0; x <= s.x1; x++)
+            if (ed_shape_has(&s, x, y)) undo_set_tile(u, m, x, y, kind);
     undo_end(u);
 }
 
@@ -219,6 +274,23 @@ const char *ed_mode_name(EdMode m)
     }
 }
 
+/* Tints the tiles a shape covers. Clipped to what is on screen first, so a
+ * circle with a big radius costs the window rather than the radius. */
+static void draw_shape(Renderer *r, const Map *m, const Editor *e,
+                       const EdShape *s, uint32_t bg)
+{
+    int vx0, vy0, vx1, vy1;
+    grid_visible_tiles(&e->view, m, &vx0, &vy0, &vx1, &vy1);
+
+    int x0 = imax(s->x0, vx0), x1 = imin(s->x1, vx1);
+    int y0 = imax(s->y0, vy0), y1 = imin(s->y1, vy1);
+
+    for (int y = y0; y <= y1; y++)
+        for (int x = x0; x <= x1; x++)
+            if (ed_shape_has(s, x, y))
+                grid_draw_tile_cursor(r, &e->view, x, y, bg);
+}
+
 void ed_draw(Renderer *r, const Map *m, const Editor *e, const Theme *th, int ascii)
 {
     PROF_ZONE("editor.draw");
@@ -230,18 +302,17 @@ void ed_draw(Renderer *r, const Map *m, const Editor *e, const Theme *th, int as
 
     grid_draw(r, m, &e->view, th, ascii, 1);   /* build mode sees secrets */
 
-    if (e->mode == ED_VISUAL)
-        grid_draw_tile_region(r, &e->view, e->anchor_x, e->anchor_y,
-                              e->cx, e->cy, th->sel_bg);
+    if (e->mode == ED_VISUAL) {
+        EdShape s = ed_shape(e->shape, e->anchor_x, e->anchor_y, e->cx, e->cy, 0);
+        draw_shape(r, m, e, &s, th->sel_bg);
+    }
 
     if (e->mode == ED_WALL) {
-        /* Show the rectangle that Enter would lay, so the anchor is not an
+        /* Show the ground Enter would wall around, so the anchor is not an
          * invisible piece of state. */
         if (e->has_anchor) {
-            int x0 = imin(e->ax, e->wx), x1 = imax(e->ax, e->wx);
-            int y0 = imin(e->ay, e->wy), y1 = imax(e->ay, e->wy);
-            if (x1 > x0 && y1 > y0)
-                grid_draw_tile_region(r, &e->view, x0, y0, x1 - 1, y1 - 1, th->sel_bg);
+            EdShape s = ed_shape(e->shape, e->ax, e->ay, e->wx, e->wy, 1);
+            draw_shape(r, m, e, &s, th->sel_bg);
             grid_draw_corner_cursor(r, &e->view, e->ax, e->ay, th, 0);
         }
         grid_draw_corner_cursor(r, &e->view, e->wx, e->wy, th, e->pen);
@@ -252,22 +323,43 @@ void ed_draw(Renderer *r, const Map *m, const Editor *e, const Theme *th, int as
     rnd_clip_restore(r, saved);
 }
 
+/* What the live anchor is drawing. A circle's radius is worth saying: a room
+ * "four across" is the thing being aimed at, and counting tinted squares off
+ * the screen to find it is no way to build a map. */
+static void shape_note(const Editor *e, char *buf, size_t bufsz)
+{
+    buf[0] = '\0';
+
+    int live = (e->mode == ED_VISUAL) || (e->mode == ED_WALL && e->has_anchor);
+    if (!live) return;
+
+    if (e->shape != ED_SHAPE_CIRCLE) { str_lcpy(buf, "  box", bufsz); return; }
+
+    EdShape s = (e->mode == ED_WALL)
+              ? ed_shape(ED_SHAPE_CIRCLE, e->ax, e->ay, e->wx, e->wy, 1)
+              : ed_shape(ED_SHAPE_CIRCLE, e->anchor_x, e->anchor_y, e->cx, e->cy, 0);
+    snprintf(buf, bufsz, "  circle r%d", ed_shape_radius(&s));
+}
+
 void ed_status(const Editor *e, const Map *m, char *buf, size_t bufsz)
 {
     const ZoomLevel *z = &ZOOM[e->view.zoom];
 
+    char shape[24];
+    shape_note(e, shape, sizeof shape);
+
     if (e->mode == ED_WALL) {
-        snprintf(buf, bufsz, "%-7s corner %d,%d  %s  [%s]  zoom %d  map %dx%d",
+        snprintf(buf, bufsz, "%-7s corner %d,%d  %s  [%s]%s  zoom %d  map %dx%d",
                  ed_mode_name(e->mode), e->wx, e->wy,
                  e->erase ? "ERASE" : (e->pen ? "PEN DOWN" : "pen up"),
-                 edge_name(e->material), e->view.zoom, m->w, m->h);
+                 edge_name(e->material), shape, e->view.zoom, m->w, m->h);
         return;
     }
 
-    snprintf(buf, bufsz, "%-7s tile %d,%d  %s  [%s/%s]  zoom %d  map %dx%d",
+    snprintf(buf, bufsz, "%-7s tile %d,%d  %s  [%s/%s]%s  zoom %d  map %dx%d",
              ed_mode_name(e->mode), e->cx, e->cy,
              tile_name(map_tile(m, e->cx, e->cy)),
-             edge_name(e->material), tile_name(e->terrain),
+             edge_name(e->material), tile_name(e->terrain), shape,
              e->view.zoom, m->w, m->h);
     (void)z;
 }

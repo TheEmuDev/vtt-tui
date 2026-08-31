@@ -1097,12 +1097,17 @@ static void wall_key(App *a, Key k)
     }
 
     if (k.kind == KEY_ENTER) {
-        if (!e->has_anchor) { app_set_status(a, "set an anchor with v first"); return; }
-        undo_end(&a->undo);            /* the rectangle is its own step */
-        ed_wall_rect(e, m, &a->undo, e->ax, e->ay, e->wx, e->wy,
-                     e->erase ? EDGE_NONE : EDGE_WALL);
+        if (!e->has_anchor) { app_set_status(a, "set an anchor with v or V first"); return; }
+
+        EdShape s = ed_shape(e->shape, e->ax, e->ay, e->wx, e->wy, 1);
+        undo_end(&a->undo);            /* the shape is its own step */
+        ed_wall_shape(m, &a->undo, &s, e->erase ? EDGE_NONE : EDGE_WALL);
         e->has_anchor = 0;
-        app_set_status(a, e->erase ? "cleared rectangle" : "laid rectangle");
+
+        const char *what = (e->shape == ED_SHAPE_CIRCLE) ? "circle" : "rectangle";
+        char msg[64];
+        snprintf(msg, sizeof msg, "%s %s", e->erase ? "cleared" : "laid", what);
+        app_set_status(a, msg);
         return;
     }
 
@@ -1143,13 +1148,26 @@ static void wall_key(App *a, Key k)
         app_set_status(a, e->erase ? "erasing - movement clears wall" : "laying wall");
         break;
 
-    case 'v':
-        e->has_anchor = !e->has_anchor;
-        e->ax = e->wx;
-        e->ay = e->wy;
-        app_set_status(a, e->has_anchor ? "anchor set - move and press enter"
-                                        : "anchor cleared");
+    case 'v': case 'V': {
+        uint8_t want = (k.ch == 'V') ? ED_SHAPE_CIRCLE : ED_SHAPE_RECT;
+
+        /* The same key twice clears the anchor; the other one changes the
+         * shape and keeps it, the way v and V swap between vim's two visual
+         * modes rather than cancelling each other. */
+        if (e->has_anchor && e->shape == want) {
+            e->has_anchor = 0;
+            app_set_status(a, "anchor cleared");
+            break;
+        }
+
+        if (!e->has_anchor) { e->ax = e->wx; e->ay = e->wy; }
+        e->has_anchor = 1;
+        e->shape      = want;
+        app_set_status(a, want == ED_SHAPE_CIRCLE
+                          ? "circle anchor - move out for the radius, enter to lay"
+                          : "anchor set - move and press enter");
         break;
+    }
 
     case 't': {
         /* Changing what the pen lays starts a new stroke. */
@@ -1335,15 +1353,26 @@ static void editor_key(App *a, Key k)
     case 'g': e->pending_g = 1; break;
     case 'G': e->cy = m->h - 1; grid_ensure_visible(&e->view, m, e->cx, e->cy, ED_SCROLLOFF); break;
 
-    case 'v':
-        if (e->mode == ED_VISUAL) { e->mode = ED_NORMAL; app_set_status(a, ""); }
-        else {
-            e->mode = ED_VISUAL;
-            e->anchor_x = e->cx;
-            e->anchor_y = e->cy;
-            app_set_status(a, "VISUAL - f floor, x clear, esc cancel");
+    case 'v': case 'V': {
+        uint8_t want = (k.ch == 'V') ? ED_SHAPE_CIRCLE : ED_SHAPE_RECT;
+
+        /* The same key twice leaves visual mode; the other one changes the
+         * shape and keeps the anchor, the way v and V swap between vim's two
+         * visual modes rather than cancelling each other. */
+        if (e->mode == ED_VISUAL && e->shape == want) {
+            e->mode = ED_NORMAL;
+            app_set_status(a, "");
+            break;
         }
+
+        if (e->mode != ED_VISUAL) { e->anchor_x = e->cx; e->anchor_y = e->cy; }
+        e->mode  = ED_VISUAL;
+        e->shape = want;
+        app_set_status(a, want == ED_SHAPE_CIRCLE
+                          ? "VISUAL circle - move out for the radius, f paints, x clears"
+                          : "VISUAL - f floor, x clear, esc cancel");
         break;
+    }
 
     case 'f': {
         ed_apply_tiles(e, m, &a->undo, e->terrain);

@@ -23,6 +23,7 @@
 #include "undo.h"
 #include "draw.h"
 #include "keys.h"
+#include "util.h"
 #include "ui.h"
 #include "input.h"
 #include "prof.h"
@@ -1052,7 +1053,8 @@ static void test_editing(void)
     undo_clear(&u);
     Map *q = map_new(8, 8, "rect");
     map_fill_tiles(q, 0, 0, 7, 7, TILE_FLOOR);
-    ed_wall_rect(&t, q, &u, 2, 2, 5, 5, EDGE_WALL);
+    EdShape box = ed_shape(ED_SHAPE_RECT, 2, 2, 5, 5, 1);
+    ed_wall_shape(q, &u, &box, EDGE_WALL);
     for (int x = 2; x < 5; x++) {
         CHECK_EQ(map_hedge(q, x, 2), EDGE_WALL);
         CHECK_EQ(map_hedge(q, x, 5), EDGE_WALL);
@@ -1066,11 +1068,12 @@ static void test_editing(void)
 
     CASE("a degenerate rectangle lays nothing");
     undo_clear(&u);
-    ed_wall_rect(&t, q, &u, 3, 3, 3, 6, EDGE_NONE);
+    EdShape flat = ed_shape(ED_SHAPE_RECT, 3, 3, 3, 6, 1);
+    ed_wall_shape(q, &u, &flat, EDGE_NONE);
     CHECK_EQ(undo_can_undo(&u), 0);
 
     CASE("the rectangle tool also clears");
-    ed_wall_rect(&t, q, &u, 2, 2, 5, 5, EDGE_NONE);
+    ed_wall_shape(q, &u, &box, EDGE_NONE);
     CHECK_EQ(map_hedge(q, 3, 2), EDGE_NONE);
     CHECK_EQ(map_vedge(q, 2, 3), EDGE_NONE);
 
@@ -3730,6 +3733,292 @@ static void test_trail_draw(void)
     map_free(m);
 }
 
+/* ------------------------------------------------------------------ shapes */
+
+static void test_shapes(void)
+{
+    CASE("a rectangle between two tiles includes both ends");
+    EdShape b = ed_shape(ED_SHAPE_RECT, 2, 3, 5, 4, 0);
+    CHECK_EQ(b.x0, 2); CHECK_EQ(b.x1, 5);
+    CHECK_EQ(b.y0, 3); CHECK_EQ(b.y1, 4);
+    CHECK_EQ(ed_shape_has(&b, 2, 3), 1);
+    CHECK_EQ(ed_shape_has(&b, 5, 4), 1);
+    CHECK_EQ(ed_shape_has(&b, 6, 4), 0);
+
+    CASE("a reversed rectangle is the same rectangle");
+    EdShape rev = ed_shape(ED_SHAPE_RECT, 5, 4, 2, 3, 0);
+    CHECK_EQ(rev.x0, b.x0); CHECK_EQ(rev.x1, b.x1);
+    CHECK_EQ(rev.y0, b.y0); CHECK_EQ(rev.y1, b.y1);
+
+    /* Between two corners it spans what they enclose, which is one fewer
+     * tile than a box drawn between two squares. */
+    CASE("a rectangle between two corners spans the tiles they enclose");
+    EdShape c = ed_shape(ED_SHAPE_RECT, 2, 2, 5, 5, 1);
+    CHECK_EQ(c.x0, 2); CHECK_EQ(c.x1, 4);
+    CHECK_EQ(c.y0, 2); CHECK_EQ(c.y1, 4);
+
+    CASE("a circle holds its centre and reaches its cursor");
+    EdShape d = ed_shape(ED_SHAPE_CIRCLE, 10, 10, 14, 10, 0);
+    CHECK_EQ(ed_shape_has(&d, 10, 10), 1);
+    CHECK_EQ(ed_shape_has(&d, 14, 10), 1);      /* the tile that set the radius */
+    CHECK_EQ(ed_shape_has(&d, 15, 10), 0);
+    CHECK_EQ(ed_shape_radius(&d), 4);
+
+    CASE("a circle is round, not the box around it");
+    CHECK_EQ(ed_shape_has(&d, 13, 13), 0);      /* the corner of the box */
+    CHECK_EQ(ed_shape_has(&d, 12, 12), 1);      /* inside the arc */
+
+    CASE("a circle is symmetric about its centre");
+    for (int dy = -5; dy <= 5; dy++)
+        for (int dx = -5; dx <= 5; dx++) {
+            int in = ed_shape_has(&d, 10 + dx, 10 + dy);
+            CHECK_EQ(ed_shape_has(&d, 10 - dx, 10 + dy), in);
+            CHECK_EQ(ed_shape_has(&d, 10 + dx, 10 - dy), in);
+        }
+
+    CASE("a circle of no radius is the one tile");
+    EdShape dot = ed_shape(ED_SHAPE_CIRCLE, 4, 4, 4, 4, 0);
+    CHECK_EQ(ed_shape_has(&dot, 4, 4), 1);
+    CHECK_EQ(ed_shape_has(&dot, 5, 4), 0);
+    CHECK_EQ(ed_shape_radius(&dot), 0);
+
+    /* Wall mode anchors on a lattice corner, so its circles sit between
+     * squares and come out even across rather than odd. */
+    CASE("a circle anchored on a corner is centred on the corner");
+    EdShape w = ed_shape(ED_SHAPE_CIRCLE, 5, 5, 8, 5, 1);
+    CHECK_EQ(ed_shape_has(&w, 4, 4), 1);        /* the four tiles round it */
+    CHECK_EQ(ed_shape_has(&w, 5, 4), 1);
+    CHECK_EQ(ed_shape_has(&w, 4, 5), 1);
+    CHECK_EQ(ed_shape_has(&w, 5, 5), 1);
+    CHECK_EQ(ed_shape_has(&w, 4, 4), ed_shape_has(&w, 5, 5));
+
+    CASE("a circle reaching off the map is clipped, not clamped");
+    EdShape edge = ed_shape(ED_SHAPE_CIRCLE, 1, 1, 6, 1, 0);
+    CHECK_EQ(ed_shape_has(&edge, -3, 1), 1);    /* the shape itself is unbounded */
+    CHECK(edge.x0 < 0);                          /* the map bounds it on use */
+}
+
+static void test_circle_fill(void)
+{
+    Map *m = map_new(20, 20, "circle");
+    Undo u;
+    undo_init(&u);
+
+    Editor e;
+    ed_init(&e, m);
+    ed_layout(&e, m, 80, 24);
+
+    CASE("a visual circle fills a disc, not its bounding box");
+    e.mode = ED_VISUAL;
+    e.shape = ED_SHAPE_CIRCLE;
+    e.anchor_x = 10; e.anchor_y = 10;
+    e.cx = 14; e.cy = 10;
+    ed_apply_tiles(&e, m, &u, TILE_FLOOR);
+    CHECK_EQ(map_tile(m, 10, 10), TILE_FLOOR);
+    CHECK_EQ(map_tile(m, 14, 10), TILE_FLOOR);
+    CHECK_EQ(map_tile(m, 13, 13), TILE_VOID);       /* the box corner */
+    CHECK_EQ(map_tile(m, 15, 10), TILE_VOID);
+
+    CASE("it undoes as one step");
+    CHECK_EQ(undo_undo(&u, m), 1);
+    CHECK_EQ(map_tile(m, 10, 10), TILE_VOID);
+    CHECK_EQ(undo_redo(&u, m), 1);
+
+    /* A circle reaching past the edge should paint what fits rather than
+     * refusing or wrapping. */
+    CASE("a circle overhanging the map paints only what is on it");
+    e.anchor_x = 1; e.anchor_y = 1;
+    e.cx = 5; e.cy = 1;
+    ed_apply_tiles(&e, m, &u, TILE_WATER);
+    CHECK_EQ(map_tile(m, 1, 1), TILE_WATER);
+    CHECK_EQ(map_tile(m, 0, 0), TILE_WATER);
+    CHECK_EQ(map_tile(m, 5, 1), TILE_WATER);
+
+    CASE("a box selection still fills its box");
+    e.shape = ED_SHAPE_RECT;
+    e.anchor_x = 15; e.anchor_y = 15;
+    e.cx = 17; e.cy = 17;
+    ed_apply_tiles(&e, m, &u, TILE_ROUGH);
+    for (int y = 15; y <= 17; y++)
+        for (int x = 15; x <= 17; x++)
+            CHECK_EQ(map_tile(m, x, y), TILE_ROUGH);
+
+    undo_free(&u);
+    map_free(m);
+}
+
+/* The point of a ring of wall is that it encloses. Flooding out from the
+ * middle and finding no way past it is the only test that says so. */
+static int flood_escapes(const Map *m, int sx, int sy, const EdShape *s)
+{
+    int  n    = m->w * m->h;
+    char *seen = xcalloc((size_t)n, 1);
+    int  *q    = xmalloc((size_t)n * sizeof *q);
+    int   head = 0, tail = 0, escaped = 0;
+
+    seen[sy * m->w + sx] = 1;
+    q[tail++] = sy * m->w + sx;
+
+    static const int DX[4] = { 1, -1, 0, 0 };
+    static const int DY[4] = { 0, 0, 1, -1 };
+
+    while (head < tail) {
+        int cur = q[head++];
+        int cx = cur % m->w, cy = cur / m->w;
+        if (!ed_shape_has(s, cx, cy)) { escaped = 1; break; }
+
+        for (int d = 0; d < 4; d++) {
+            int nx = cx + DX[d], ny = cy + DY[d];
+            if (!map_in_bounds(m, nx, ny)) continue;
+            if (seen[ny * m->w + nx]) continue;
+            if (map_blocked(m, cx, cy, DX[d], DY[d])) continue;
+            seen[ny * m->w + nx] = 1;
+            q[tail++] = ny * m->w + nx;
+        }
+    }
+
+    free(seen);
+    free(q);
+    return escaped;
+}
+
+static void test_circle_walls(void)
+{
+    Map *m = map_new(24, 24, "ring");
+    map_fill_tiles(m, 0, 0, 23, 23, TILE_FLOOR);
+
+    Undo u;
+    undo_init(&u);
+
+    CASE("a circle of wall closes all the way round");
+    EdShape s = ed_shape(ED_SHAPE_CIRCLE, 12, 12, 18, 12, 1);
+    ed_wall_shape(m, &u, &s, EDGE_WALL);
+    CHECK_EQ(flood_escapes(m, 11, 11, &s), 0);
+
+    CASE("it walls the boundary and nothing inside it");
+    CHECK_EQ(map_blocked(m, 11, 11, 1, 0), 0);      /* the middle is open */
+    CHECK_EQ(map_blocked(m, 11, 11, 0, 1), 0);
+
+    CASE("a radius of one is still a closed ring");
+    Map *tiny = map_new(9, 9, "tiny");
+    map_fill_tiles(tiny, 0, 0, 8, 8, TILE_FLOOR);
+    Undo tu;
+    undo_init(&tu);
+    EdShape one = ed_shape(ED_SHAPE_CIRCLE, 4, 4, 5, 4, 1);
+    ed_wall_shape(tiny, &tu, &one, EDGE_WALL);
+    CHECK_EQ(flood_escapes(tiny, 3, 3, &one), 0);
+    undo_free(&tu);
+    map_free(tiny);
+
+    CASE("the whole ring undoes as one step");
+    CHECK_EQ(undo_undo(&u, m), 1);
+    CHECK_EQ(flood_escapes(m, 11, 11, &s), 1);      /* open again */
+
+    /* Half a circle drawn off the corner of the map: the arc that fits gets
+     * laid and the rest is dropped, rather than writing past the edge. */
+    CASE("a circle overhanging the map lays the arc that fits");
+    Map *corner = map_new(10, 10, "corner");
+    map_fill_tiles(corner, 0, 0, 9, 9, TILE_FLOOR);
+    Undo cu;
+    undo_init(&cu);
+    EdShape off = ed_shape(ED_SHAPE_CIRCLE, 1, 1, 6, 1, 1);
+    ed_wall_shape(corner, &cu, &off, EDGE_WALL);
+    CHECK_EQ(undo_can_undo(&cu), 1);
+    CHECK_EQ(map_vedge(corner, 6, 1), EDGE_WALL);   /* the east arc is there */
+    undo_free(&cu);
+    map_free(corner);
+
+    CASE("a rectangle of wall closes too, through the same path");
+    undo_clear(&u);
+    EdShape box = ed_shape(ED_SHAPE_RECT, 3, 3, 8, 8, 1);
+    ed_wall_shape(m, &u, &box, EDGE_WALL);
+    CHECK_EQ(flood_escapes(m, 4, 4, &box), 0);
+
+    undo_free(&u);
+    map_free(m);
+}
+
+static void test_shape_keys(void)
+{
+    Sandbox sb = sandbox_enter("shape");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+
+    write_map_file(sb.dir, "m.vtt");
+    char path[600];
+    snprintf(path, sizeof path, "%s/m.vtt", sb.dir);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+
+    CASE("v selects a box, V a circle");
+    press(&a, "v");
+    CHECK_EQ(a.ed.mode, ED_VISUAL);
+    CHECK_EQ(a.ed.shape, ED_SHAPE_RECT);
+    press(&a, "\x1b");
+
+    press(&a, "V");
+    CHECK_EQ(a.ed.mode, ED_VISUAL);
+    CHECK_EQ(a.ed.shape, ED_SHAPE_CIRCLE);
+    CHECK(strstr(a.status, "circle") != NULL);
+
+    /* The way v and V swap between vim's two visual modes: the other key
+     * changes the shape, the same key leaves. */
+    CASE("the other key swaps the shape and keeps the anchor");
+    a.ed.anchor_x = 0; a.ed.anchor_y = 0;
+    press(&a, "v");
+    CHECK_EQ(a.ed.mode, ED_VISUAL);
+    CHECK_EQ(a.ed.shape, ED_SHAPE_RECT);
+    CHECK_EQ(a.ed.anchor_x, 0);
+    CHECK_EQ(a.ed.anchor_y, 0);
+
+    CASE("the same key twice leaves visual mode");
+    press(&a, "v");
+    CHECK_EQ(a.ed.mode, ED_NORMAL);
+    press(&a, "VV");
+    CHECK_EQ(a.ed.mode, ED_NORMAL);
+
+    CASE("the readout names the shape, and a circle's radius");
+    press(&a, "V");
+    a.ed.anchor_x = 0; a.ed.anchor_y = 0;
+    a.ed.cx = 1; a.ed.cy = 0;
+    char st[256];
+    ed_status(&a.ed, a.map, st, sizeof st);
+    CHECK(strstr(st, "circle r1") != NULL);
+    press(&a, "\x1b");
+
+    CASE("wall mode anchors both shapes too");
+    press(&a, "w");
+    CHECK_EQ(a.ed.mode, ED_WALL);
+    press(&a, "V");
+    CHECK_EQ(a.ed.has_anchor, 1);
+    CHECK_EQ(a.ed.shape, ED_SHAPE_CIRCLE);
+    press(&a, "v");
+    CHECK_EQ(a.ed.has_anchor, 1);
+    CHECK_EQ(a.ed.shape, ED_SHAPE_RECT);
+    press(&a, "v");
+    CHECK_EQ(a.ed.has_anchor, 0);
+
+    CASE("enter lays the shape the anchor was dropped with");
+    press(&a, "V");
+    press(&a, "\r");
+    CHECK_EQ(a.ed.has_anchor, 0);
+    CHECK(strstr(a.status, "circle") != NULL);
+
+    CASE("enter with no anchor says which keys set one");
+    press(&a, "\r");
+    CHECK(strstr(a.status, "v or V") != NULL);
+
+    app_free(&a);
+    rnd_free(&r);
+    unlink(path);
+    sandbox_leave(&sb);
+}
+
 /* -------------------------------------------------- key tables and the ? page */
 
 /* The bar and the ? page read the same tables, so the tables themselves are
@@ -4581,6 +4870,10 @@ int main(void)
         { "focus",    test_play_focus },
         { "tracks",   test_cycle_tracks },
         { "cyclekeys", test_cycle_keys },
+        { "shapes",   test_shapes },
+        { "circlefill", test_circle_fill },
+        { "circlewall", test_circle_walls },
+        { "shapekeys", test_shape_keys },
         { "keymaps",  test_keymaps },
         { "keybar",   test_keybar_fits },
         { "help",     test_help_page },

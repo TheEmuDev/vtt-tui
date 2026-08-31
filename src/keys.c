@@ -88,7 +88,7 @@ static const KeyDoc BUILD[] = {
     { "f",        "paint the selected terrain",        NULL, "paint" },
     KEY("x",      "clear to void"),
     KEY("T",      "cycle which terrain f paints"),
-    { "v",        "visual select, to paint a block at once", NULL, NULL },
+    { "v  V",     "select a box / a circle, to paint many at once", NULL, NULL },
 
     GROUP("Undo and elsewhere"),
     KEY("u",      "undo    ctrl-r redo"),
@@ -102,6 +102,7 @@ static const KeyDoc BUILD[] = {
 static const KeyDoc VISUAL[] = {
     GROUP("Visual select"),
     { "h j k l",  "stretch the selection",             "hjkl", "extend" },
+    { "v  V",     "box or circle; a circle is centred where you started", "v/V", "shape" },
     { "f",        "paint the selected terrain over it", NULL, "floor" },
     { "x",        "clear it to void",                  NULL, "clear" },
     { "esc",      "drop the selection",                NULL, "cancel" },
@@ -114,8 +115,8 @@ static const KeyDoc WALL[] = {
     { "space",    "pen up or down",                    NULL, "pen" },
     { "d",        "erase instead of lay",              NULL, "erase" },
     KEY("t",      "cycle which boundary the pen lays"),
-    KEY("v",      "drop an anchor for a rectangle"),
-    { "enter",    "run the rectangle from the anchor", NULL, "rect" },
+    KEY("v  V",   "anchor a rectangle / a circle, then enter"),
+    { "enter",    "wall around the shape from the anchor", NULL, "rect" },
     KEY("u",      "undo    ctrl-r redo"),
     KEY("z",      "centre the view    + - zoom"),
     { "esc",      "drop the anchor, or leave trace mode", NULL, "back" },

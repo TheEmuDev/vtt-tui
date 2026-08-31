@@ -109,7 +109,7 @@ Maps are found in the current directory and in `~/.local/share/vtt/maps`.
 | `H` `J` `K` `L` | toggle the wall on the west / south / north / east face of the cursor tile |
 | `w` | wall-tracing mode |
 | `m` | measure (ruler) |
-| `v` | rectangular selection |
+| `v` `V` | select a box / a circle |
 | `f` `x` | fill selection with floor / clear it to void |
 | `space` | toggle the cursor tile between floor and void |
 | `u`, `Ctrl-r` | undo / redo |
@@ -117,6 +117,35 @@ Maps are found in the current directory and in `~/.local/share/vtt/maps`.
 | `z` | centre the view on the cursor |
 | `:` | command line |
 | `q` | close the map |
+
+**Shapes.** `v` anchors a box and `V` anchors a circle — the pair vim uses for its two
+visual modes, so the other key swaps the shape without losing the anchor and the same key
+twice lets go. A circle is centred where you pressed the key and the cursor sets its radius,
+which the status line reports as `circle r4` so you can aim for a size rather than count
+tinted squares:
+
+```
+    V here, cursor four east            then f, or enter in wall mode
+    ·  ·  ·  ▓  ▓  ▓  ·  ·  ·                  ┌──────┐
+    ·  ▓  ▓  ▓  ▓  ▓  ▓  ▓  ·               ┌──┘      └──┐
+    ▓  ▓  ▓  ▓  ▓  ▓  ▓  ▓  ▓               │            │
+    ·  ▓  ▓  ▓  ◆  ▓  ▓  ▓  ·               │            │
+    ▓  ▓  ▓  ▓  ▓  ▓  ▓  ▓  ▓               │            │
+    ·  ▓  ▓  ▓  ▓  ▓  ▓  ▓  ·               └──┐      ┌──┘
+    ·  ·  ·  ▓  ▓  ▓  ·  ·  ·                  └──────┘
+```
+
+Both shapes work the same way in visual mode and in wall tracing: visual mode paints the
+tiles a shape covers, tracing walls its boundary — every face a covered tile shares with
+one outside it. That is exactly the old rectangle outline for a box, and the only sensible
+reading of a circle of wall.
+
+The radius is measured as a straight line, so a circle is round on every map. This is
+deliberately unlike the [range bands](#range-bands-r), which follow the map's distance
+metric because they measure reach — a tower is a tower whatever the movement rules say.
+
+Wall tracing anchors on a lattice corner rather than a square, which is where its cursor
+lives, so its circles sit between squares and come out even across rather than odd.
 
 ### Wall-tracing mode (`w`)
 
@@ -130,8 +159,8 @@ A whole pen-down stroke is one undo step.
 | `space` | pen up / pen down |
 | `t` | cycle what the pen lays |
 | `d` | erase instead of lay |
-| `v` | set a rectangle anchor (the result is previewed) |
-| `enter` | lay the rectangle outline |
+| `v` `V` | anchor a box / a circle (the result is previewed) |
+| `enter` | wall around the anchored shape |
 | `esc` | clear the anchor, or return to normal mode |
 
 ### Play mode (`F2`)

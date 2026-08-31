@@ -17,6 +17,38 @@ typedef enum {
 
 #define ED_SCROLLOFF 2
 
+/* ---------------------------------------------------------------- shapes */
+
+typedef enum {
+    ED_SHAPE_RECT = 0,
+    ED_SHAPE_CIRCLE,
+} EdShapeKind;
+
+/* The tiles an anchor and a cursor describe: the box between them, or a disc
+ * centred on the anchor and reaching the cursor.
+ *
+ * Held as a test rather than a list. A circle has no corners to walk between,
+ * and the preview, the terrain fill and the wall outline all have to agree
+ * about which tiles are in -- one predicate is how they cannot disagree.
+ *
+ * The centre and radius are in half-tiles, because the two modes anchor in
+ * different places: build mode's cursor sits on a square, wall mode's on a
+ * lattice corner, and doubling lets one test serve both. */
+typedef struct {
+    uint8_t kind;
+    int     x0, y0, x1, y1;   /* bounding box of tiles, inclusive */
+    long    ccx, ccy, cr2;    /* circle centre and radius squared, half-tiles */
+} EdShape;
+
+/* `corners` says the two points are lattice corners rather than squares. A
+ * rectangle then spans the tiles between them rather than including both
+ * ends, and a circle is centred on the corner itself. */
+EdShape ed_shape(uint8_t kind, int ax, int ay, int bx, int by, int corners);
+int     ed_shape_has(const EdShape *s, int x, int y);
+
+/* Radius in whole tiles, for the readout. Zero for a rectangle. */
+int     ed_shape_radius(const EdShape *s);
+
 typedef struct {
     GridView view;
 
@@ -35,8 +67,12 @@ typedef struct {
     uint8_t material;          /* EdgeKind laid by the pen and Shift-HJKL */
     uint8_t terrain;           /* TileKind painted by f and space */
 
-    int    has_anchor;         /* wall mode: a rectangle anchor is set */
-    int    ax, ay;             /* wall-mode rectangle anchor, in corner coords */
+    int    has_anchor;         /* wall mode: an anchor is set */
+    int    ax, ay;             /* wall-mode anchor, in corner coords */
+
+    /* What the anchor draws: a box, or a disc centred on the anchor. Shared
+     * by visual mode and wall mode, since both are anchor-plus-cursor. */
+    uint8_t shape;
 
     TextPrompt cmd;            /* the `:` line */
 } Editor;
@@ -74,9 +110,10 @@ void ed_cycle_terrain(Editor *e);
  * walking its outline. */
 void ed_wall_step(Editor *e, Map *m, Undo *u, int dx, int dy, int times);
 
-/* Lays or clears the wall outline between two lattice corners. */
-void ed_wall_rect(Editor *e, Map *m, Undo *u, int x0, int y0, int x1, int y1,
-                  uint8_t kind);
+/* Lays or clears the boundary of a shape: every face a covered tile shares
+ * with one the shape does not cover. For a rectangle that is exactly its
+ * outline, and it is the only sensible reading of a circle of wall. */
+void ed_wall_shape(Map *m, Undo *u, const EdShape *s, uint8_t kind);
 
 /* Applies a tile kind to the cursor tile, or to the whole selection when
  * visual mode is active. */
