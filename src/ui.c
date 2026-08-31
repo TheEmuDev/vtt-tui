@@ -5,6 +5,20 @@
 
 void ui_keybar(Renderer *r, const Theme *th, const KeyMap *km)
 {
+    ui_keybar_ex(r, th, km, NULL, NULL);
+}
+
+/* The bar label a row shows, which is the table's unless the caller has one
+ * that depends on state the table cannot know. */
+static const char *bar_label(const KeyDoc *d, const char *keys, const char *label)
+{
+    if (keys && label && d->keys && strcmp(d->keys, keys) == 0) return label;
+    return d->bar;
+}
+
+void ui_keybar_ex(Renderer *r, const Theme *th, const KeyMap *km,
+                  const char *keys, const char *label)
+{
     Style bg  = style(th->bar_fg, th->bar_bg, 0);
     Style key = style(th->bar_key, th->bar_bg, ATTR_BOLD);
 
@@ -19,15 +33,16 @@ void ui_keybar(Renderer *r, const Theme *th, const KeyMap *km)
 
     int budget = r->w;
     if (last >= 0) {
-        const KeyDoc *d = &km->rows[last];
+        const KeyDoc *d  = &km->rows[last];
         const char   *ks = d->bar_keys ? d->bar_keys : d->keys;
-        int w = text_width(ks) + 1 + text_width(d->bar);
+        const char   *lb = bar_label(d, keys, label);
+        int w = text_width(ks) + 1 + text_width(lb);
 
         if (w + 2 <= r->w) {
             int x = r->w - w - 1;
             x += draw_text(r, x, y, ks, -1, key);
             x += 1;
-            draw_text(r, x, y, d->bar, -1, bg);
+            draw_text(r, x, y, lb, -1, bg);
             budget = r->w - w - 3;      /* two spaces clear of the pinned one */
         }
     }
@@ -38,12 +53,13 @@ void ui_keybar(Renderer *r, const Theme *th, const KeyMap *km)
         if (!d->bar || i == last) continue;
 
         const char *ks = d->bar_keys ? d->bar_keys : d->keys;
-        int need = text_width(ks) + 1 + text_width(d->bar) + 2;
+        const char *lb = bar_label(d, keys, label);
+        int need = text_width(ks) + 1 + text_width(lb) + 2;
         /* Rather than truncate a hint mid-word, stop cleanly. */
         if (x + need > budget) break;
         x += draw_text(r, x, y, ks, -1, key);
         x += 1;
-        x += draw_text(r, x, y, d->bar, -1, bg);
+        x += draw_text(r, x, y, lb, -1, bg);
         x += 2;
     }
 }

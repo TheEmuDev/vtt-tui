@@ -116,7 +116,7 @@ static const KeyDoc WALL[] = {
     { "d",        "erase instead of lay",              NULL, "erase" },
     KEY("t",      "cycle which boundary the pen lays"),
     KEY("v  V",   "anchor a rectangle / a circle, then enter"),
-    { "enter",    "wall around the shape from the anchor", NULL, "rect" },
+    { "enter",    "wall around the anchored shape",     NULL, "rect" },
     KEY("u",      "undo    ctrl-r redo"),
     KEY("z",      "centre the view    + - zoom"),
     { "esc",      "drop the anchor, or leave trace mode", NULL, "back" },

@@ -160,7 +160,7 @@ A whole pen-down stroke is one undo step.
 | `t` | cycle what the pen lays |
 | `d` | erase instead of lay |
 | `v` `V` | anchor a box / a circle (the result is previewed) |
-| `enter` | wall around the anchored shape |
+| `enter` | wall around the anchored shape — the bar names which |
 | `esc` | clear the anchor, or return to normal mode |
 
 ### Play mode (`F2`)

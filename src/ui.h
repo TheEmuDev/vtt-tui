@@ -14,6 +14,13 @@
  * order. */
 void ui_keybar(Renderer *r, const Theme *th, const KeyMap *km);
 
+/* The same, with one label replaced: the row whose `keys` match takes `label`
+ * instead of the table's. For a hint whose word depends on the mode's state --
+ * what enter would lay, say -- so the bar can say which without the table
+ * having to hold every version of the sentence. */
+void ui_keybar_ex(Renderer *r, const Theme *th, const KeyMap *km,
+                  const char *keys, const char *label);
+
 /* The whole key reference, ? -- a full-screen page listing every map in turn,
  * starting at line `*top`.
  *

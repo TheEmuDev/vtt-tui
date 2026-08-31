@@ -4013,6 +4013,30 @@ static void test_shape_keys(void)
     press(&a, "\r");
     CHECK(strstr(a.status, "v or V") != NULL);
 
+    /* The bar has to name the shape too: v and V chose it a while ago, and
+     * the anchor on screen does not spell out which one it is. */
+    CASE("the trace bar names the shape enter would lay");
+    press(&a, "V");
+    rnd_begin(&r);
+    app_draw(&a);
+    ByteBuf f;
+    bb_init(&f, 16384);
+    rnd_dump(&r, &f);
+    bb_putc(&f, '\0');
+    CHECK(strstr(f.data, "enter circle") != NULL);
+    CHECK(strstr(f.data, "enter rect") == NULL);
+    bb_free(&f);
+
+    press(&a, "v");
+    rnd_begin(&r);
+    app_draw(&a);
+    bb_init(&f, 16384);
+    rnd_dump(&r, &f);
+    bb_putc(&f, '\0');
+    CHECK(strstr(f.data, "enter rect") != NULL);
+    CHECK(strstr(f.data, "enter circle") == NULL);
+    bb_free(&f);
+
     app_free(&a);
     rnd_free(&r);
     unlink(path);

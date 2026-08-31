@@ -2114,7 +2114,10 @@ static void draw_editor(App *a)
 
     switch (a->ed.mode) {
     case ED_WALL: {
-        ui_keybar(r, th, keys_map(KEYS_WALL));
+        /* The bar names the shape enter would lay, since v and V chose it a
+         * while ago and the anchor on screen does not spell it out. */
+        ui_keybar_ex(r, th, keys_map(KEYS_WALL), "enter",
+                     a->ed.shape == ED_SHAPE_CIRCLE ? "circle" : "rect");
         break;
     }
     case ED_VISUAL: {
