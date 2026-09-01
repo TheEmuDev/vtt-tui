@@ -78,6 +78,24 @@ OPEN=$(genmap open    40 25 0 0)      # nothing to resolve: the floor of the cos
 BIG=$(genmap big     200 200 1 0)     # far more map than window
 MOB=$(genmap mob      40 25 0 24)     # 24 tokens, each wearing a marker
 
+# Rooms on a void canvas, which is what a map under construction looks like
+# and the only shape that exercises the void marks.
+VOIDY="$DIR/voidy.vtt"
+awk 'BEGIN {
+    w = 200; h = 200;
+    printf "VTT 2\nname Voidy\nsize %d %d\nzoom 1\ntiles\n", w, h;
+    for (y = 0; y < h; y++) {
+        line = "";
+        for (x = 0; x < w; x++)
+            line = line ((int(x / 17) % 3 && int(y / 13) % 3) ? "." : " ");
+        print line;
+    }
+    print "vedges";
+    for (y = 0; y < h; y++) { s = ""; for (x = 0; x <= w; x++) s = s " "; print s }
+    print "hedges";
+    for (y = 0; y <= h; y++) { s = ""; for (x = 0; x < w; x++) s = s " "; print s }
+}' > "$VOIDY"
+
 LONG=$(awk 'BEGIN{ for (i = 0; i < 60; i++) printf "l" }')
 
 # ------------------------------------------------------------ frame times
@@ -136,6 +154,7 @@ run "build, open"          "$OPEN"   80x24  'jjllkkhh'
 run "build, every edge"    "$WALLED" 80x24  'jjllkkhh'
 run "build, 200x200"       "$BIG"    80x24  'jjllkkhh'
 run "build, 200x200"       "$BIG"    200x50 'jjllkkhh'
+run "build, mostly void"   "$VOIDY"  200x50 'jjllkkhh'
 run "build, tracing"       "$WALLED" 80x24  'wjjllkkhh'
 run "build, circle brush"  "$OPEN"   80x24  'Vlllljjjjhhhhkkkk'
 run "ruler, three legs"    "$WALLED" 80x24  'mlll\rjjj\rll'

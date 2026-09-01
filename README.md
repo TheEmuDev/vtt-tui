@@ -385,6 +385,32 @@ Terrain is decoration: **water, rough, brush, wood and hazard behave exactly lik
 What difficult ground costs is a ruling between you and your players, not something the tool
 decides. Only *void* — the absence of map — is not walkable.
 
+Each kind carries a glyph of its own, so none of them rests on colour alone. Floor is the
+one kind drawn blank, and blank is what floor means — so **void is marked instead**, with a
+single dim dot in the middle of the square:
+
+```
+   ┌───┬───┬───┬───┬───┐          ·   ·   ·   ·   ·   ·
+   │   │   │   │   │   │            ┌───┬───┬───┬───┐
+   ├───┼───┼───┼───┼───┤          · │   │   │   │   │ ·
+   │   │   │ · │   │   │            ├───┼───┼───┼───┤
+   ├───┼───┼───┼───┼───┤          · │   │   │   │   │ ·
+   │   │   │   │   │   │            └───┴───┴───┴───┘
+   └───┴───┴───┴───┴───┘          ·   ·   ·   ·   ·   ·
+     a hole in the floor            a room on a canvas
+```
+
+A shade would have done it in principle, and doesn't in practice: the page is close enough
+to black that a background quiet enough not to shout is one the eye cannot find, and lifting
+the *floor* far enough to see would put rough and wood underneath it. One dot per square is
+legible at any brightness a terminal renders at, and it shows the extent of a map that has
+nothing on it yet.
+
+The dot sits below the grid lines in colour, so it recedes rather than competing, and it is
+one cell rather than a fill — a void square is never more marked than the lattice around it.
+That lattice is unchanged either way: a lone void square keeps the lines its floor
+neighbours draw, because those lines belong to the neighbours.
+
 ### Measurement
 
 One tile is five feet by default. Distance, metric and ruleset are stored per map, since
@@ -519,9 +545,9 @@ path culls to the visible tiles first.
 
 | | 80×24 | 200×50 |
 |---|---|---|
-| build, 200×200 map | 37 µs | 156 µs |
-| play, 24 tokens | 39 µs | 137 µs |
-| bytes written per frame | ~210 | ~212 |
+| build, 200×200 map | 39 µs | 166 µs |
+| play, 24 tokens | 41 µs | 147 µs |
+| bytes written per frame | ~223 | ~228 |
 
 **[docs/PERFORMANCE.md](docs/PERFORMANCE.md) has every path measured**, what dominates a
 frame, and the rules for keeping it that way. `make perf` regenerates it, so the numbers

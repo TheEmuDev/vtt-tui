@@ -18,6 +18,7 @@ const Theme THEME_DARK = {
     .ruler     = RGB(0xE8, 0xD8, 0x9A),
     .ruler_bg  = RGB(0x3A, 0x34, 0x1E),
     .ruler_bad = RGB(0xE0, 0x72, 0x72),
+    .void_mark = RGB(0x2A, 0x2C, 0x34),   /* under the grid lines, so it never competes */
     .range_bg  = RGB(0x1E, 0x30, 0x38),
     .range_dim = RGB(0x22, 0x22, 0x2A),
 
@@ -51,6 +52,11 @@ const Theme THEME_DARK = {
         [TILE_HAZARD] = RGB(0xD8, 0x74, 0x3C),
     },
     .terrain_bg = {
+        /* Floor is the page, and every other terrain is tuned to sit above it.
+         * Void is told apart by a mark rather than a shade: at these
+         * luminances a background dark enough not to shout is a background
+         * nobody can see, and lifting the floor instead would put rough and
+         * wood underneath it. */
         [TILE_VOID]   = RGB(0x0E, 0x0E, 0x12),
         [TILE_FLOOR]  = RGB(0x0E, 0x0E, 0x12),
         [TILE_WATER]  = RGB(0x12, 0x1E, 0x2C),

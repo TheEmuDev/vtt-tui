@@ -12,6 +12,7 @@ typedef struct {
     uint32_t accent;
     uint32_t wall;        /* white lines */
     uint32_t grid;        /* thin grey lines, walkable tiles only */
+    uint32_t void_mark;   /* the dot that says a square is not map */
     uint32_t cursor_bg;
     uint32_t sel_bg;
     uint32_t player;

@@ -696,16 +696,23 @@ static void test_grid(void)
     CASE("the map's outer corner is a light corner glyph");
     CHECK_EQ(rnd_at(&r, 0, 0)->ch, 0x250Cu);        /* ┌ */
 
-    /* Grid lines exist only where a walkable tile touches the boundary. */
-    CASE("void areas draw nothing at all");
+    /* Grid lines exist only where a walkable tile touches the boundary, so a
+     * void area draws no lattice at all -- only the dot per square that says
+     * the square is not map. */
+    CASE("void areas draw their marks and no lattice");
     Map *v = map_new(3, 3, "void");
     rnd_begin(&r);
     grid_draw(&r, v, &g, &THEME_DARK, 0, 1);
-    int drawn = 0;
+    int drawn = 0, marks = 0;
     for (int y = 0; y < 8; y++)
-        for (int x = 0; x < 8; x++)
-            if (rnd_at(&r, x, y)->ch != ' ') drawn++;
-    CHECK_EQ(drawn, 0);
+        for (int x = 0; x < 8; x++) {
+            uint32_t ch = rnd_at(&r, x, y)->ch;
+            if (ch == ' ') continue;
+            drawn++;
+            if (ch == 0x00B7u) marks++;
+        }
+    CHECK_EQ(marks, 9);              /* one per square, and nothing else */
+    CHECK_EQ(drawn, marks);
     map_free(v);
 
     CASE("a map smaller than the viewport is centred");
@@ -2386,15 +2393,20 @@ static void test_terrain(void)
         map_free(t);
     }
 
-    CASE("void draws nothing at all, whatever the palette");
+    CASE("void draws its mark and no terrain, whatever the palette");
     Map *v = map_new(3, 3, "v");
     rnd_begin(&r);
     grid_draw(&r, v, &g, &THEME_DARK, 0, 1);
-    int drawn = 0;
+    int drawn = 0, marks = 0;
     for (int y = 0; y < 8; y++)
-        for (int x = 0; x < 8; x++)
-            if (rnd_at(&r, x, y)->ch != ' ') drawn++;
-    CHECK_EQ(drawn, 0);
+        for (int x = 0; x < 8; x++) {
+            uint32_t ch = rnd_at(&r, x, y)->ch;
+            if (ch == ' ') continue;
+            drawn++;
+            if (ch == 0x00B7u) marks++;
+        }
+    CHECK_EQ(marks, 9);
+    CHECK_EQ(drawn, marks);
     map_free(v);
 
     rnd_free(&r);
@@ -3731,6 +3743,118 @@ static void test_trail_draw(void)
     rnd_free(&r);
     undo_free(&u);
     map_free(m);
+}
+
+/* ---------------------------------------------------------------- terrain */
+
+static void test_void_reads_as_void(void)
+{
+    /* A lone void square keeps the grid lines its floor neighbours draw, so
+     * without a mark of its own it is the same picture as the floor. */
+    Map *m = map_new(9, 5, "hole");
+    map_fill_tiles(m, 0, 0, 8, 4, TILE_FLOOR);
+    map_set_tile(m, 4, 2, TILE_VOID);
+
+    Renderer r;
+    rnd_init(&r);
+    rnd_resize(&r, 60, 20);
+    rnd_set_clear(&r, THEME_DARK.fg, THEME_DARK.bg);
+
+    GridView g;
+    memset(&g, 0, sizeof g);
+    g.zoom = 1;
+    g.view = rect(0, 0, 60, 20);
+
+    rnd_begin(&r);
+    grid_draw(&r, m, &g, &THEME_DARK, 0, 1);
+
+    int hx, hy, fx, fy;
+    grid_tile_interior(&g, 4, 2, &hx, &hy);   /* the hole */
+    grid_tile_interior(&g, 3, 2, &fx, &fy);   /* the floor beside it */
+
+    int mx = hx + ZOOM[g.zoom].iw / 2, my = hy + ZOOM[g.zoom].ih / 2;
+
+    CASE("a void square is marked and the floor beside it is not");
+    CHECK_EQ(rnd_at(&r, mx, my)->ch, 0x00B7u);
+    CHECK_EQ(rnd_at(&r, fx + ZOOM[g.zoom].iw / 2, fy)->ch, ' ');
+
+    /* A shade would have done it too, but not at these luminances: a
+     * background dark enough to stay quiet is one nobody can see. */
+    CASE("it is a mark, not a shade");
+    CHECK_EQ(rnd_at(&r, mx, my)->bg, rnd_at(&r, fx, fy)->bg);
+
+    CASE("one cell, in the middle, not a fill");
+    int marked = 0;
+    for (int j2 = 0; j2 < ZOOM[g.zoom].ih; j2++)
+        for (int i2 = 0; i2 < ZOOM[g.zoom].iw; i2++)
+            if (rnd_at(&r, hx + i2, hy + j2)->ch != ' ') marked++;
+    CHECK_EQ(marked, 1);
+
+    /* It has to recede behind the lattice rather than compete with it. */
+    CASE("the mark is dimmer than the grid lines");
+    CHECK_EQ(rnd_at(&r, mx, my)->fg, THEME_DARK.void_mark);
+    CHECK(THEME_DARK.void_mark < THEME_DARK.grid);
+
+    CASE("the lattice around it is untouched");
+    CHECK(rnd_at(&r, hx - 1, hy)->ch != ' ');
+    CHECK(rnd_at(&r, hx + ZOOM[g.zoom].iw, hy)->ch != ' ');
+
+    CASE("ascii mode marks it too");
+    rnd_begin(&r);
+    grid_draw(&r, m, &g, &THEME_DARK, 1, 1);
+    CHECK_EQ(rnd_at(&r, mx, my)->ch, (uint32_t)'.');
+
+    CASE("every zoom puts the mark inside the square");
+    for (int z = 0; z < ZOOM_COUNT; z++) {
+        g.zoom = z;
+        rnd_begin(&r);
+        grid_draw(&r, m, &g, &THEME_DARK, 0, 1);
+        grid_tile_interior(&g, 4, 2, &hx, &hy);
+        int found = 0;
+        for (int j2 = 0; j2 < ZOOM[z].ih; j2++)
+            for (int i2 = 0; i2 < ZOOM[z].iw; i2++)
+                if (rnd_at(&r, hx + i2, hy + j2)->ch == 0x00B7u) found++;
+        CHECK_EQ(found, 1);
+    }
+
+    rnd_free(&r);
+    map_free(m);
+}
+
+static void test_terrain_palette(void)
+{
+    /* Floor is the page and every other terrain is tuned to sit above it, so
+     * lifting the floor would put rough and wood underneath it. That is why
+     * void is told apart by a mark instead. */
+    CASE("floor is the page, so the palette above it is undisturbed");
+    CHECK_EQ(THEME_DARK.terrain_bg[TILE_FLOOR], THEME_DARK.bg);
+    CHECK_EQ(THEME_DARK.terrain_bg[TILE_VOID], THEME_DARK.bg);
+
+    CASE("every terrain that means something stands off the page");
+    for (int i = 0; i < TILE_COUNT; i++) {
+        if (i == TILE_VOID || i == TILE_FLOOR) continue;
+        CHECK(THEME_DARK.terrain_bg[i] != THEME_DARK.bg);
+    }
+
+    CASE("and off each other");
+    for (int a = 0; a < TILE_COUNT; a++) {
+        if (a == TILE_VOID || a == TILE_FLOOR) continue;
+        for (int b = a + 1; b < TILE_COUNT; b++) {
+            if (b == TILE_VOID || b == TILE_FLOOR) continue;
+            CHECK(THEME_DARK.terrain_bg[a] != THEME_DARK.terrain_bg[b]);
+        }
+    }
+
+    /* Every kind carries a glyph of its own, so none of them rests on colour
+     * alone -- which is what makes the palette survive a terminal that
+     * renders these tints badly. Floor is the one blank kind, and blank is
+     * what floor means. */
+    CASE("floor is the only kind drawn blank");
+    for (int i = 0; i < TILE_COUNT; i++) {
+        uint32_t glyph = grid_terrain_glyph((uint8_t)i, 0);
+        if (i == TILE_FLOOR || i == TILE_VOID) CHECK_EQ(glyph, ' ');
+        else                                   CHECK(glyph != ' ');
+    }
 }
 
 /* ------------------------------------------------------------- coordinates */
@@ -5187,6 +5311,8 @@ int main(void)
         { "focus",    test_play_focus },
         { "tracks",   test_cycle_tracks },
         { "cyclekeys", test_cycle_keys },
+        { "voidlook", test_void_reads_as_void },
+        { "palette",  test_terrain_palette },
         { "coords",   test_coords },
         { "jump",     test_jump },
         { "labels",   test_labels },

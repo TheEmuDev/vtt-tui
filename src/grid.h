@@ -95,6 +95,11 @@ void grid_draw_token_ghost(Renderer *r, const GridView *g, int tx, int ty,
  * between them, so a multi-tile token reads as one solid piece. */
 void grid_token_area(const GridView *g, int tx, int ty, int size, Rect *out);
 
+/* The glyph a terrain is drawn with, so the blank kinds can be identified as
+ * such: void and floor are the only two, which is why those two alone have to
+ * be told apart by their background. */
+uint32_t grid_terrain_glyph(uint8_t kind, int ascii);
+
 /* Column letters along the top and row numbers down the left, outside the
  * viewport in the gutter the layout reserved for them. `gutter` is how many
  * columns that is. Labels step to every other column, or every third, when a

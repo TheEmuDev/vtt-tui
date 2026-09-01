@@ -28,19 +28,20 @@ What the app costs to use. Each scenario replays a keystroke script, a frame per
 
 | scenario             | size   | frame p50 | frame p99 | cells | bytes |
 |----------------------|--------|-----------|-----------|-------|-------|
-| build, open          | 80x24  |    37.2us |    63.2us |    10 |   207 |
-| build, every edge    | 80x24  |    36.0us |    49.7us |    10 |   207 |
-| build, 200x200       | 80x24  |    36.5us |    68.3us |    12 |   209 |
-| build, 200x200       | 200x50 |   155.6us |   194.4us |    12 |   212 |
-| build, tracing       | 80x24  |    36.3us |    41.6us |     2 |   140 |
-| build, circle brush  | 80x24  |    38.9us |    91.8us |    28 |   292 |
-| ruler, three legs    | 80x24  |    34.3us |    38.9us |    11 |    40 |
-| play, 24 tokens      | 80x24  |    39.1us |    80.2us |    19 |   298 |
-| play, 24 tokens      | 200x50 |   137.3us |   173.7us |    36 |   319 |
-| play, carrying       | 80x24  |    36.1us |    42.7us |    29 |   179 |
-| play, range bands    | 80x24  |    44.7us |    90.3us |   163 |   842 |
-| help page            | 80x24  |    42.2us |   123.1us |   532 |  2656 |
-| profiler overlay     | 80x24  |    41.5us |   155.5us |   116 |   741 |
+| build, open          | 80x24  |    37.3us |    52.9us |    10 |   207 |
+| build, every edge    | 80x24  |    36.4us |    54.9us |    10 |   207 |
+| build, 200x200       | 80x24  |    36.3us |    53.5us |    12 |   209 |
+| build, 200x200       | 200x50 |   154.9us |   219.8us |    12 |   212 |
+| build, mostly void   | 200x50 |   143.1us |   199.9us |    20 |   267 |
+| build, tracing       | 80x24  |    36.1us |    51.4us |     2 |   140 |
+| build, circle brush  | 80x24  |    37.9us |    63.4us |    28 |   292 |
+| ruler, three legs    | 80x24  |    33.6us |    63.1us |    11 |    40 |
+| play, 24 tokens      | 80x24  |    39.9us |    70.8us |    19 |   298 |
+| play, 24 tokens      | 200x50 |   137.5us |   190.4us |    36 |   319 |
+| play, carrying       | 80x24  |    36.4us |    58.2us |    29 |   179 |
+| play, range bands    | 80x24  |    47.8us |    94.7us |   163 |   842 |
+| help page            | 80x24  |    40.9us |   112.5us |   532 |  2656 |
+| profiler overlay     | 80x24  |    41.9us |   165.3us |   117 |   753 |
 
 `cells` and `bytes` are what actually reached the terminal. They predict perceived
 latency better than wall-clock does: a frame that recomputes everything but changes ten
@@ -56,30 +57,43 @@ a median near zero and a p99 that says what it costs when it does.
 
 | path             | p50     | p99     | worst   | calls | heaviest scenario      |
 |------------------|---------|---------|---------|-------|------------------------|
-| app.draw         | 115.7us | 202.1us | 285.9us |  3200 | build, 200x200 200x50  |
-| editor.draw      | 108.8us | 194.5us | 273.7us |  3200 | build, 200x200 200x50  |
-| grid.draw        |  97.1us | 171.2us | 237.4us |  3200 | build, 200x200 200x50  |
-| grid.labels      |  11.5us |  22.4us |  47.0us |  3200 | build, 200x200 200x50  |
-| input.key        |   0.1us |   3.8us |  73.2us |  6800 | play, carrying 80x24   |
-| play.draw        |  90.8us | 157.4us | 212.9us |  5595 | play, 24 tokens 200x50 |
-| prof.overlay     |   7.6us | 117.4us | 144.6us |  1000 | profiler overlay 80x24 |
-| range.draw       |   0.0us |  25.2us |  41.9us |  5195 | play, range bands 80x24 |
-| ruler.draw       |   0.7us |   1.4us |  10.7us |  4400 | ruler, three legs 80x24 |
+| app.draw         | 114.4us | 241.5us | 289.4us |  3200 | build, 200x200 200x50  |
+| editor.draw      | 108.2us | 231.6us | 279.1us |  3200 | build, 200x200 200x50  |
+| grid.draw        |  96.7us | 204.2us | 251.6us |  3200 | build, 200x200 200x50  |
+| grid.labels      |  11.4us |  27.5us |  49.4us |  3200 | build, mostly void     |
+| input.key        |   0.1us |   4.0us |  73.7us |  6800 | play, carrying 80x24   |
+| play.draw        |  89.6us | 196.8us | 297.1us |  5595 | play, 24 tokens 200x50 |
+| prof.overlay     |   7.7us | 131.9us | 156.9us |  1000 | profiler overlay 80x24 |
+| range.draw       |   0.0us |  25.5us |  65.1us |  5195 | play, range bands 80x24 |
+| ruler.draw       |   0.7us |   1.8us |  21.8us |  4400 | ruler, three legs 80x24 |
 | trail.draw       |   0.1us |   0.2us |   0.5us |  6795 | play, carrying 80x24   |
-| trail.path       |   0.5us |   5.8us |  12.0us |  1093 | play, carrying 80x24   |
+| trail.path       |   0.6us |   4.8us |  11.2us |  1093 | play, carrying 80x24   |
 
 ### Reading it
 
 **`grid.draw` is the frame.** Roughly 85% of `app.draw` at every size, and it scales
 with the window: it walks the visible tiles, resolving a junction glyph from a four-bit
 incidence mask at every crossing. Walling every edge of the map costs nothing extra
-(36.0µs against 36.9µs open) — the mask is computed either way.
+(36.4µs against 37.3µs open) — the mask is computed either way.
 
 **Everything layered on top is noise by comparison.** The ruler, the movement ribbon and
 the range overlay are each under 2% of a frame. Only the range band reaches 25µs, and
 only for a band with no upper bound, where it shades every visible square.
 
-**`grid.labels` at 11.5µs is the largest optional cost**, about 7% of a wide frame. It
+**Marking void costs nothing where there is no void, and about 8µs at 200×50 where the
+screen is mostly void** — one dot per empty square. The alternative, tinting the floor
+instead, was measured both ways and is the wrong trade in both directions: it costs 3µs
+on a map that is all floor, where marking void is free, and it is invisible anyway,
+because a background dark enough not to shout is one the eye cannot find. Lifting the
+floor far enough to see would also have put rough and wood *underneath* it, which is a
+palette rewrite rather than a tweak.
+
+| 200×50 window | baseline | floor tinted | void marked |
+|---|---|---|---|
+| all floor | 77.6µs | 80.3µs | **77.9µs** |
+| mostly void | 122.0µs | 125.3µs | 130.1µs |
+
+**`grid.labels` at 11.4µs is the largest optional cost**, about 7% of a wide frame. It
 formats a column name per visible column and a row number per visible row. `#` takes it
 to zero and gives back the row and the gutter as well.
 

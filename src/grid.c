@@ -293,18 +293,46 @@ void grid_draw(Renderer *r, const Map *m, const GridView *g, const Theme *th,
     for (int ty = ty0; ty <= ty1; ty++) {
         for (int tx = tx0; tx <= tx1; tx++) {
             uint8_t t = map_tile(m, tx, ty);
-            if (t == TILE_VOID || t >= TILE_COUNT) continue;
+            if (t >= TILE_COUNT) continue;
+
+            /* Void is marked, not shaded. One dim dot in the middle of the
+             * square says "not map" at any brightness a terminal renders at,
+             * where a background dark enough to stay quiet would be a
+             * background nobody could see. One cell rather than the whole
+             * interior, so a field of void reads as graph paper -- and shows
+             * the extent of a map that has nothing on it yet. */
+            if (t == TILE_VOID) {
+                int cx, cy;
+                grid_tile_interior(g, tx, ty, &cx, &cy);
+                draw_cell(r, cx + iw / 2, cy + ih / 2,
+                          ascii ? (uint32_t)'.' : 0x00B7u /* middle dot */,
+                          style(th->void_mark, th->bg, 0));
+                continue;
+            }
 
             uint32_t glyph = ascii ? TERRAIN_LOOK[t].ascii : TERRAIN_LOOK[t].glyph;
             uint32_t bg    = th->terrain_bg[t];
             if (glyph == ' ' && bg == th->bg) continue;   /* nothing to show */
 
-            Style ts = style(th->terrain_fg[t], bg, 0);
-            int   sx, sy;
+            int sx, sy;
             grid_tile_interior(g, tx, ty, &sx, &sy);
-            for (int j = 0; j < ih; j++)
-                for (int i = 0; i < iw; i++)
-                    draw_cell(r, sx + i, sy + j, glyph, ts);
+
+            if (glyph == ' ') {
+                /* A blank terrain is only its colour. Taking the background
+                 * alone leaves the cells holding what they already had, which
+                 * is the difference between tinting the floor and redrawing
+                 * it -- and the floor is most of most maps. */
+                for (int j = 0; j < ih; j++)
+                    for (int i = 0; i < iw; i++) {
+                        Cell *c = rnd_at(r, sx + i, sy + j);
+                        if (c) c->bg = bg;
+                    }
+            } else {
+                Style ts = style(th->terrain_fg[t], bg, 0);
+                for (int j = 0; j < ih; j++)
+                    for (int i = 0; i < iw; i++)
+                        draw_cell(r, sx + i, sy + j, glyph, ts);
+            }
         }
     }
 
@@ -442,6 +470,12 @@ void grid_draw_corner_cursor(Renderer *r, const GridView *g, int cx, int cy,
     c->fg   = pen_down ? th->warn : th->accent;
     c->bg   = th->cursor_bg;
     c->attr = ATTR_BOLD;
+}
+
+uint32_t grid_terrain_glyph(uint8_t kind, int ascii)
+{
+    if (kind >= TILE_COUNT) return ' ';
+    return ascii ? TERRAIN_LOOK[kind].ascii : TERRAIN_LOOK[kind].glyph;
 }
 
 void grid_draw_labels(Renderer *r, const Map *m, const GridView *g,
