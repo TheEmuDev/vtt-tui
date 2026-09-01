@@ -26,9 +26,9 @@ static const KeyDoc PLAY[] = {
     KEY("i e",    "place an enemy"),
     KEY("1 2 3",  "size of the next one, or resize the selected"),
     { "enter",    "pick up the creature here, or put it down", NULL, "grab" },
-    { "d",        "remove it  (x does too)",           "d y p", "edit" },
+    { "d",        "remove it, keeping it to paste  (x does too)", "d y p", "edit" },
     KEY("y",      "yank -- copy it"),
-    KEY("p",      "paste the copy here"),
+    KEY("p",      "put the yanked or removed one here"),
     KEY("c",      "change its label"),
 
     GROUP("Find a creature"),
@@ -48,7 +48,7 @@ static const KeyDoc PLAY[] = {
     KEY("m",      "measure (the ruler)"),
     KEY("r",      "cycle the range-band highlight"),
     KEY("o  O",   "open or close a door / a secret door"),
-    KEY("ctrl-w", "let creatures walk through walls, or stop them"),
+    KEY("ctrl-w", "let creatures through walls and each other, or stop them"),
 
     GROUP("Undo and elsewhere"),
     KEY("u",      "undo    ctrl-r redo"),
@@ -64,7 +64,7 @@ static const KeyDoc PLAY_GRABBED[] = {
     { "h j k l",  "walk it; the ribbon shows the route back", "hjkl", "move" },
     { "enter  esc", "put it down here",                "enter", "drop" },
     { "u",        "take back a step",                  NULL, "undo" },
-    KEY("ctrl-w", "let it walk through walls, or stop it"),
+    KEY("ctrl-w", "let it through walls and creatures, or stop it"),
     { "?",        "this page",                         NULL, "keys" },
 };
 

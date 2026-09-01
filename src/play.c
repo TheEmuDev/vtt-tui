@@ -18,7 +18,8 @@ void play_init(Play *p)
     range_clear(&p->range);
 }
 
-int token_can_move(const Map *m, const Token *t, int dx, int dy, int enforce)
+int token_can_move(const Map *m, const Token *t, int dx, int dy, int enforce,
+                   int except)
 {
     int s  = t->size;
     int nx = t->x + dx;
@@ -27,6 +28,13 @@ int token_can_move(const Map *m, const Token *t, int dx, int dy, int enforce)
     /* The whole footprint has to land on the map. */
     if (nx < 0 || ny < 0 || nx + s > m->w || ny + s > m->h) return 0;
     if (!enforce) return 1;
+
+    /* The other side is a wall you cannot walk through; your own is not.
+     * Standing on an ally is allowed on the way past, which is why this is
+     * about crossing rather than about where you come to rest -- refusing to
+     * be put down is what stops two creatures sharing a square. */
+    uint8_t other = (t->kind == TOKEN_PLAYER) ? TOKEN_ENEMY : TOKEN_PLAYER;
+    if (tokens_overlapping(&m->tokens, nx, ny, s, except, other) >= 0) return 0;
 
     /* Every tile along the leading face must be able to make the crossing;
      * one blocked row is enough to stop the whole token. */
@@ -68,7 +76,7 @@ int play_step(Map *m, Undo *u, Play *p, int dx, int dy)
     if (p->sel < 0 || p->sel >= m->tokens.n) return 0;
 
     Token *t = &m->tokens.v[p->sel];
-    if (!token_can_move(m, t, dx, dy, p->enforce_walls)) return 0;
+    if (!token_can_move(m, t, dx, dy, p->enforce_walls, p->sel)) return 0;
 
     undo_move_token(u, m, p->sel, t->x + dx, t->y + dy);
     p->steps++;
@@ -208,7 +216,8 @@ void play_trail_sync(Play *p, const Map *m)
              * both ways, so either phrasing gives the same answer. */
             probe.x = (int16_t)nx;
             probe.y = (int16_t)ny;
-            if (!token_can_move(m, &probe, -TRAIL_DX[d], -TRAIL_DY[d], p->enforce_walls))
+            if (!token_can_move(m, &probe, -TRAIL_DX[d], -TRAIL_DY[d],
+                                p->enforce_walls, p->sel))
                 continue;
 
             dist[ni] = dist[cur] + 1;
@@ -240,7 +249,8 @@ void play_trail_sync(Play *p, const Map *m)
                  * hop straight through the wall to reach it. */
                 probe.x = (int16_t)cx;
                 probe.y = (int16_t)cy;
-                if (!token_can_move(m, &probe, TRAIL_DX[d], TRAIL_DY[d], p->enforce_walls))
+                if (!token_can_move(m, &probe, TRAIL_DX[d], TRAIL_DY[d],
+                                    p->enforce_walls, p->sel))
                     continue;
 
                 long dev = labs((long)(gx - ox) * (ny - oy) -
@@ -305,9 +315,15 @@ void play_trail_draw(Renderer *r, const Map *m, const GridView *g,
               style(th->trail, th->trail_bg, ATTR_BOLD));
 }
 
-int play_can_place(const Map *m, int tx, int ty, int size)
+int play_can_place(const Map *m, int tx, int ty, int size, int except)
 {
-    return tx >= 0 && ty >= 0 && tx + size <= m->w && ty + size <= m->h;
+    if (tx < 0 || ty < 0 || tx + size > m->w || ty + size > m->h) return 0;
+
+    /* Coming to rest is the strict one. Creatures step through each other on
+     * the way past, but two of them cannot end up sharing a square: a stack
+     * of tokens is a stack you cannot see into. */
+    return tokens_overlapping(&m->tokens, tx, ty, size, except,
+                              TOKEN_ANY_KIND) < 0;
 }
 
 void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,

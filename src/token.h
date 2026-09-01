@@ -50,6 +50,15 @@ void   tokens_remove(TokenList *l, int idx);
  * Searched newest-first so the most recently placed token wins. */
 int    tokens_at(const TokenList *l, int x, int y);
 
+/* The topmost token whose footprint overlaps the size x size block anchored
+ * at (x,y), or -1 when the block is clear. `except` is an index to ignore, so
+ * a token can be asked about a square it is already standing on. `kind` is
+ * TOKEN_ANY_KIND to mean any token, or a TokenKind to look only for those --
+ * a creature can walk past its own side but not through the other one. */
+#define TOKEN_ANY_KIND (-1)
+int    tokens_overlapping(const TokenList *l, int x, int y, int size,
+                          int except, int kind);
+
 const char *token_kind_name(uint8_t kind);
 
 /* A label no other token carries, so pasting a copy of "Goblin" gives you

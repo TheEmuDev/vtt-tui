@@ -202,8 +202,8 @@ A whole pen-down stroke is one undo step.
 | `i p`, `i e` | place a player / an enemy, prompting for a label |
 | `1` `2` `3` | size of the next token, or resize the selected one |
 | `enter` | pick up the token under the cursor / put it down |
-| `d` `x` | remove |
-| `y` `p` | yank a token / paste the copy here |
+| `d` `x` | remove — and keep it, so `p` puts it back |
+| `y` `p` | yank a token / put the yanked one here |
 | `c` | change its label |
 | `t` `T` | next / previous token, any kind |
 | `f` `F` | next / previous **f**riendly — player tokens only |
@@ -217,7 +217,7 @@ A whole pen-down stroke is one undo step.
 | `m` | measure (ruler) |
 | `r` | cycle a range band highlight (see below) |
 | `o` `O` | open or close a door / a secret door on this tile |
-| `Ctrl-w` | toggle wall blocking |
+| `Ctrl-w` | toggle blocking — walls and creatures alike |
 | `esc` | put down, then take the range overlay off, then deselect |
 | `u`, `Ctrl-r` | undo / redo |
 | `:d6` | jump to a square (`:6` for a row, keeping the column) |
@@ -282,10 +282,24 @@ clear before you can type is worse than one you have to retype — and submittin
 line repeats the last search.
 
 **Copying tokens.** `y` copies the token under the cursor and `p` stamps it down at the
-cursor, as often as you like — five goblins is `y` then `P P P P`. Each copy is numbered
+cursor, as often as you like — five goblins is `y` then `p p p p`. Each copy is numbered
 (`Goblin`, `Goblin 2`, `Goblin 3`) so the readout can tell them apart, continuing an
 existing run rather than stacking numbers. A pasted creature arrives with no status
 markers: those describe what is happening to one creature right now, not what it is.
+
+**`d` yanks too**, the way vim's does, so moving a creature across the map is `d` then `p`.
+Its name comes back with it rather than being numbered — the label is free again once the
+token is gone, so the first paste is the original and only a second one is a copy.
+
+**Two creatures cannot share a square.** Placing, pasting and putting down all refuse an
+occupied square and say what is on it. Passing over is a different question, and answered
+differently: **a creature steps through its own side but not through the other one.** An
+ally is somebody you squeeze past; an enemy is a wall. So a held token walks over its
+friends freely and stops dead at a foe — and the route ribbon goes round the foe, because
+it is drawn from the same rule the movement keys obey.
+
+`Ctrl-w` turns all of that off together, walls included. Rules-agnostic means never fighting
+the GM: when the map and the table disagree, the table wins.
 
 **Status markers.** `s a` hangs a marker on a token — a colour and a word, whatever your table
 calls it. The tool attaches no meaning to them. They draw as the first letter of the word,

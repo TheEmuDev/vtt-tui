@@ -46,6 +46,23 @@ int tokens_at(const TokenList *l, int x, int y)
     return -1;
 }
 
+int tokens_overlapping(const TokenList *l, int x, int y, int size,
+                       int except, int kind)
+{
+    for (int i = l->n - 1; i >= 0; i--) {
+        if (i == except) continue;
+
+        const Token *t = &l->v[i];
+        if (kind != TOKEN_ANY_KIND && t->kind != kind) continue;
+
+        /* Two blocks miss each other when either axis does. */
+        if (x + size <= t->x || t->x + t->size <= x) continue;
+        if (y + size <= t->y || t->y + t->size <= y) continue;
+        return i;
+    }
+    return -1;
+}
+
 const char *token_kind_name(uint8_t kind)
 {
     return kind == TOKEN_ENEMY ? "enemy" : "player";

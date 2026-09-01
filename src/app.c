@@ -1490,6 +1490,34 @@ static void editor_key(App *a, Key k)
 
 /* -------------------------------------------------------------- play mode */
 
+/* Putting a creature down is the strict half of the rule: it steps through
+ * its own side on the way past, but two of them cannot come to rest on the
+ * same square. Returns 1 when it was put down. */
+static int play_put_down(App *a, const char *how)
+{
+    Play  *pl = &a->play;
+    Map   *m  = a->map;
+
+    if (pl->sel >= 0 && pl->sel < m->tokens.n && pl->enforce_walls) {
+        const Token *t = &m->tokens.v[pl->sel];
+        int on = tokens_overlapping(&m->tokens, t->x, t->y, t->size, pl->sel,
+                                    TOKEN_ANY_KIND);
+        if (on >= 0) {
+            const Token *u = &m->tokens.v[on];
+            char msg[112];
+            snprintf(msg, sizeof msg, "%.24s is on this square - move off to put down",
+                     u->label[0] ? u->label : token_kind_name(u->kind));
+            app_set_status(a, msg);
+            return 0;
+        }
+    }
+
+    pl->grabbed = 0;
+    pl->ntrail  = 0;
+    app_set_status(a, how);
+    return 1;
+}
+
 /* One of the three cycle keys. `kind` picks the track and the shifted key
  * runs it backwards. */
 static void cycle_track(App *a, int kind, int delta)
@@ -1521,10 +1549,13 @@ static void place_token(App *a, uint8_t kind)
     Editor *e = &a->ed;
     Play   *pl = &a->play;
 
-    if (!play_can_place(a->map, e->cx, e->cy, pl->next_size)) {
+    if (!play_can_place(a->map, e->cx, e->cy, pl->next_size, -1)) {
         char msg[96];
-        snprintf(msg, sizeof msg, "a %dx%d token does not fit here",
-                 pl->next_size, pl->next_size);
+        snprintf(msg, sizeof msg, "no room for a %dx%d here%s",
+                 pl->next_size, pl->next_size,
+                 tokens_overlapping(&a->map->tokens, e->cx, e->cy,
+                                    pl->next_size, -1, TOKEN_ANY_KIND) >= 0
+                     ? " - something is on it" : "");
         app_set_status(a, msg);
         return;
     }
@@ -1691,9 +1722,7 @@ static void play_key(App *a, Key k)
      * down, then take the overlay off, then let go of the creature. */
     if (k.kind == KEY_ESC) {
         if (pl->grabbed) {
-            pl->grabbed = 0;
-            pl->ntrail  = 0;
-            app_set_status(a, "dropped");
+            play_put_down(a, "dropped");
         } else if (pl->range.active) {
             range_clear(&pl->range);
             app_set_status(a, "range overlay off");
@@ -1712,12 +1741,10 @@ static void play_key(App *a, Key k)
 
     if (k.kind == KEY_ENTER) {
         if (pl->grabbed) {
-            pl->grabbed = 0;
-            pl->ntrail  = 0;
             char msg[96];
             snprintf(msg, sizeof msg, "dropped after %d step%s",
                      pl->steps, pl->steps == 1 ? "" : "s");
-            app_set_status(a, msg);
+            play_put_down(a, msg);
             return;
         }
         play_select_at(pl, m, e->cx, e->cy);
@@ -1750,7 +1777,7 @@ static void play_key(App *a, Key k)
          * the next placement will use. */
         if (pl->sel >= 0 && pl->sel < m->tokens.n && !pl->grabbed) {
             Token t = m->tokens.v[pl->sel];
-            if (!play_can_place(m, t.x, t.y, size)) {
+            if (!play_can_place(m, t.x, t.y, size, pl->sel)) {
                 app_set_status(a, "not enough room to grow this token");
                 return;
             }
@@ -1839,8 +1866,11 @@ static void play_key(App *a, Key k)
 
     case 'p': {
         if (!pl->has_yank) { app_set_status(a, "nothing yanked yet - y copies a token"); break; }
-        if (!play_can_place(m, e->cx, e->cy, pl->yank.size)) {
-            app_set_status(a, "the copy does not fit here");
+        if (!play_can_place(m, e->cx, e->cy, pl->yank.size, -1)) {
+            app_set_status(a, tokens_overlapping(&m->tokens, e->cx, e->cy,
+                                                 pl->yank.size, -1, TOKEN_ANY_KIND) >= 0
+                                  ? "something is already here"
+                                  : "the copy does not fit here");
             break;
         }
 
@@ -1901,6 +1931,14 @@ static void play_key(App *a, Key k)
     case 'd': case 'x': {
         int idx = pl->sel >= 0 ? pl->sel : tokens_at(&m->tokens, e->cx, e->cy);
         if (idx < 0) { app_set_status(a, "no token here"); break; }
+
+        /* A delete fills the yank buffer, the way vim's d does, so removing a
+         * creature and putting it somewhere else is d then p. Its name comes
+         * back with it: the label is free again once the token is gone, so
+         * the copy keeps it rather than counting up. */
+        pl->yank     = m->tokens.v[idx];
+        pl->has_yank = 1;
+
         int rx = m->tokens.v[idx].x, ry = m->tokens.v[idx].y;
         undo_begin(&a->undo);
         undo_del_token(&a->undo, m, idx);
@@ -1908,7 +1946,11 @@ static void play_key(App *a, Key k)
         range_token_removed(&pl->range, idx, rx, ry);
         pl->sel     = -1;
         pl->grabbed = 0;
-        app_set_status(a, "removed");
+
+        char msg[80];
+        snprintf(msg, sizeof msg, "removed %.30s - p puts it back",
+                 pl->yank.label[0] ? pl->yank.label : token_kind_name(pl->yank.kind));
+        app_set_status(a, msg);
         break;
     }
 

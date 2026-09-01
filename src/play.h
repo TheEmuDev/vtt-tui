@@ -84,8 +84,14 @@ typedef struct {
 void play_init(Play *p);
 
 /* Can the whole footprint cross in this direction? Every row (or column) of
- * a multi-tile token has to be able to make the crossing, not just one. */
-int  token_can_move(const Map *m, const Token *t, int dx, int dy, int enforce);
+ * a multi-tile token has to be able to make the crossing, not just one.
+ *
+ * Creatures of the same side step through each other -- an ally is somebody
+ * you squeeze past, not a wall -- but the other side is a wall. `except` is
+ * the mover's own index, since a token always overlaps where it already is;
+ * -1 for a token that is not in the list. */
+int  token_can_move(const Map *m, const Token *t, int dx, int dy, int enforce,
+                    int except);
 
 /* Moves the selected token one step, recording it for undo. Returns 1 if it
  * moved. */
@@ -126,8 +132,10 @@ void play_trail_sync(Play *p, const Map *m);
 void play_trail_draw(Renderer *r, const Map *m, const GridView *g,
                      const Play *p, const Theme *th, int ascii);
 
-/* Is there room for a size x size token anchored here? */
-int  play_can_place(const Map *m, int tx, int ty, int size);
+/* Is there room for a size x size token anchored here -- on the map, and on
+ * a square nothing already stands on? `except` is a token to ignore, for
+ * asking whether one can grow where it already is. */
+int  play_can_place(const Map *m, int tx, int ty, int size, int except);
 
 void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
                const Theme *th, int ascii);

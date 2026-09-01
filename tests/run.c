@@ -1182,33 +1182,45 @@ static void test_play(void)
     int bi = undo_add_token(&u, m, big);
     p.sel = bi;
 
-    CHECK_EQ(token_can_move(m, &m->tokens.v[bi], 1, 0, 1), 1);
+    CHECK_EQ(token_can_move(m, &m->tokens.v[bi], 1, 0, 1, bi), 1);
     map_set_vedge(m, 6, 5, EDGE_WALL);        /* the token's lower-right face */
-    CHECK_EQ(token_can_move(m, &m->tokens.v[bi], 1, 0, 1), 0);
+    CHECK_EQ(token_can_move(m, &m->tokens.v[bi], 1, 0, 1, bi), 0);
     CHECK_EQ(play_step(m, &u, &p, 1, 0), 0);
     map_set_vedge(m, 6, 5, EDGE_WALL * 0);
 
-    CHECK_EQ(token_can_move(m, &m->tokens.v[bi], 0, 1, 1), 1);
+    CHECK_EQ(token_can_move(m, &m->tokens.v[bi], 0, 1, 1, bi), 1);
     map_set_hedge(m, 5, 6, EDGE_WALL);        /* below its right-hand column */
-    CHECK_EQ(token_can_move(m, &m->tokens.v[bi], 0, 1, 1), 0);
+    CHECK_EQ(token_can_move(m, &m->tokens.v[bi], 0, 1, 1, bi), 0);
     map_set_hedge(m, 5, 6, EDGE_NONE);
 
     CASE("a big token needs its whole footprint on the map");
     m->tokens.v[bi].x = 10;
-    CHECK_EQ(token_can_move(m, &m->tokens.v[bi], 1, 0, 1), 0);
+    CHECK_EQ(token_can_move(m, &m->tokens.v[bi], 1, 0, 1, bi), 0);
     m->tokens.v[bi].x = 4;
 
     CASE("void tiles stop a token like a wall does");
     map_set_tile(m, 6, 4, TILE_VOID);
-    CHECK_EQ(token_can_move(m, &m->tokens.v[bi], 1, 0, 1), 0);
+    CHECK_EQ(token_can_move(m, &m->tokens.v[bi], 1, 0, 1, bi), 0);
     map_set_tile(m, 6, 4, TILE_FLOOR);
 
     CASE("placement checks the footprint fits");
-    CHECK_EQ(play_can_place(m, 0, 0, 1), 1);
-    CHECK_EQ(play_can_place(m, 11, 9, 1), 1);
-    CHECK_EQ(play_can_place(m, 11, 9, 2), 0);
-    CHECK_EQ(play_can_place(m, 10, 8, 2), 1);
-    CHECK_EQ(play_can_place(m, -1, 0, 1), 0);
+    CHECK_EQ(play_can_place(m, 11, 9, 1, -1), 1);
+    CHECK_EQ(play_can_place(m, 11, 9, 2, -1), 0);
+    CHECK_EQ(play_can_place(m, 10, 8, 2, -1), 1);
+    CHECK_EQ(play_can_place(m, -1, 0, 1, -1), 0);
+
+    /* Aria is parked on 0,0 from the edge test above, and the ogre's 2x2 sits
+     * at 4,4. A stack of tokens is a stack nobody can see into. */
+    CASE("placement also checks the square is free");
+    CHECK_EQ(play_can_place(m, 0, 0, 1, -1), 0);
+    CHECK_EQ(play_can_place(m, 4, 4, 1, -1), 0);
+    CHECK_EQ(play_can_place(m, 5, 5, 1, -1), 0);    /* the far corner of the 2x2 */
+    CHECK_EQ(play_can_place(m, 3, 3, 2, -1), 0);    /* only its corner overlaps */
+    CHECK_EQ(play_can_place(m, 6, 6, 1, -1), 1);
+
+    CASE("a token may grow where it already stands");
+    CHECK_EQ(play_can_place(m, 4, 4, 3, -1), 0);
+    CHECK_EQ(play_can_place(m, 4, 4, 3, bi), 1);
 
     CASE("cycling wraps in both directions");
     p.sel = -1;
@@ -3745,6 +3757,300 @@ static void test_trail_draw(void)
     map_free(m);
 }
 
+/* ------------------------------------------------------------- occupancy */
+
+static void test_overlap(void)
+{
+    TokenList l;
+    memset(&l, 0, sizeof l);
+
+    Token a = { 4, 4, 2, TOKEN_ENEMY,  "Ogre", { { 0, "" } }, 0 };
+    Token b = { 9, 1, 1, TOKEN_PLAYER, "Aria", { { 0, "" } }, 0 };
+    tokens_add(&l, a);
+    tokens_add(&l, b);
+
+    CASE("a block overlaps when both axes do");
+    CHECK_EQ(tokens_overlapping(&l, 4, 4, 1, -1, TOKEN_ANY_KIND), 0);
+    CHECK_EQ(tokens_overlapping(&l, 5, 5, 1, -1, TOKEN_ANY_KIND), 0);
+    CHECK_EQ(tokens_overlapping(&l, 3, 3, 2, -1, TOKEN_ANY_KIND), 0);  /* a corner */
+    CHECK_EQ(tokens_overlapping(&l, 6, 6, 2, -1, TOKEN_ANY_KIND), -1);
+
+    CASE("touching is not overlapping");
+    CHECK_EQ(tokens_overlapping(&l, 6, 4, 1, -1, TOKEN_ANY_KIND), -1);  /* just east */
+    CHECK_EQ(tokens_overlapping(&l, 3, 4, 1, -1, TOKEN_ANY_KIND), -1);  /* just west */
+    CHECK_EQ(tokens_overlapping(&l, 4, 6, 1, -1, TOKEN_ANY_KIND), -1);  /* just south */
+
+    CASE("a token can be asked about the square it is already on");
+    CHECK_EQ(tokens_overlapping(&l, 4, 4, 2, 0, TOKEN_ANY_KIND), -1);
+    CHECK_EQ(tokens_overlapping(&l, 4, 4, 2, 1, TOKEN_ANY_KIND), 0);
+
+    CASE("and about one side at a time");
+    CHECK_EQ(tokens_overlapping(&l, 4, 4, 2, -1, TOKEN_PLAYER), -1);
+    CHECK_EQ(tokens_overlapping(&l, 4, 4, 2, -1, TOKEN_ENEMY), 0);
+    CHECK_EQ(tokens_overlapping(&l, 9, 1, 1, -1, TOKEN_PLAYER), 1);
+    CHECK_EQ(tokens_overlapping(&l, 9, 1, 1, -1, TOKEN_ENEMY), -1);
+
+    tokens_free(&l);
+}
+
+static void test_passing_and_stopping(void)
+{
+    Map *m = map_new(16, 8, "pass");
+    map_fill_tiles(m, 0, 0, 15, 7, TILE_FLOOR);
+
+    Undo u;
+    undo_init(&u);
+    Play p;
+    play_init(&p);
+
+    Token a  = { 2, 2, 1, TOKEN_PLAYER, "Aria", { { 0, "" } }, 0 };
+    Token b  = { 4, 2, 1, TOKEN_PLAYER, "Bram", { { 0, "" } }, 0 };
+    Token og = { 8, 2, 1, TOKEN_ENEMY,  "Ogre", { { 0, "" } }, 0 };
+    int ai = undo_add_token(&u, m, a);
+    undo_add_token(&u, m, b);
+    int oi = undo_add_token(&u, m, og);
+    p.sel = ai;
+
+    /* An ally is somebody you squeeze past, not a wall. */
+    CASE("a creature walks through its own side");
+    CHECK_EQ(token_can_move(m, &m->tokens.v[ai], 1, 0, 1, ai), 1);
+    CHECK_EQ(play_step(m, &u, &p, 1, 0), 1);
+    CHECK_EQ(play_step(m, &u, &p, 1, 0), 1);
+    CHECK_EQ(m->tokens.v[ai].x, 4);                 /* standing on Bram */
+    CHECK_EQ(play_step(m, &u, &p, 1, 0), 1);
+    CHECK_EQ(m->tokens.v[ai].x, 5);                 /* and out the other side */
+
+    CASE("but not through the other one");
+    while (m->tokens.v[ai].x < 7) CHECK_EQ(play_step(m, &u, &p, 1, 0), 1);
+    CHECK_EQ(token_can_move(m, &m->tokens.v[ai], 1, 0, 1, ai), 0);
+    CHECK_EQ(play_step(m, &u, &p, 1, 0), 0);
+    CHECK_EQ(m->tokens.v[ai].x, 7);
+
+    CASE("and the block is mutual");
+    p.sel = oi;
+    CHECK_EQ(token_can_move(m, &m->tokens.v[oi], -1, 0, 1, oi), 0);
+    p.sel = ai;
+
+    /* A big creature is stopped by anything its whole footprint would land
+     * on, not only the square its anchor would. */
+    CASE("a 2x2 is stopped by a token anywhere under its footprint");
+    m->tokens.v[ai].size = 2;
+    m->tokens.v[ai].x = 6; m->tokens.v[ai].y = 1;
+    CHECK_EQ(token_can_move(m, &m->tokens.v[ai], 1, 0, 1, ai), 0);  /* 7,1..8,2 hits 8,2 */
+    m->tokens.v[ai].y = 4;
+    CHECK_EQ(token_can_move(m, &m->tokens.v[ai], 1, 0, 1, ai), 1);  /* clear of it */
+    m->tokens.v[ai].size = 1;
+
+    /* Coming to rest is the strict half: passing over is fine, sharing is not. */
+    CASE("blocking switched off lets a creature through anything");
+    m->tokens.v[ai].x = 7; m->tokens.v[ai].y = 2;
+    p.enforce_walls = 0;
+    CHECK_EQ(token_can_move(m, &m->tokens.v[ai], 1, 0, 0, ai), 1);
+    p.enforce_walls = 1;
+
+    undo_free(&u);
+    map_free(m);
+}
+
+/* The route has to go round what the creature cannot walk through, or the
+ * ribbon would promise a way past an enemy that the movement keys refuse. */
+static void test_route_avoids_enemies(void)
+{
+    Map *m = map_new(9, 5, "route");
+    map_fill_tiles(m, 0, 0, 8, 4, TILE_FLOOR);
+
+    Undo u;
+    undo_init(&u);
+    Play p;
+    play_init(&p);
+
+    Token a = { 0, 2, 1, TOKEN_PLAYER, "Aria", { { 0, "" } }, 0 };
+    int ai = undo_add_token(&u, m, a);
+    for (int y = 1; y <= 3; y++) {
+        Token e = { 4, (int16_t)y, 1, TOKEN_ENEMY, "Line", { { 0, "" } }, 0 };
+        undo_add_token(&u, m, e);
+    }
+    p.sel = ai;
+    play_grab(&p, m);
+
+    /* Walk round the wall of enemies the long way, over the top. */
+    for (int i = 0; i < 2; i++) { undo_begin(&u); play_step(m, &u, &p, 0, -1); undo_end(&u); }
+    for (int i = 0; i < 6; i++) { undo_begin(&u); play_step(m, &u, &p, 1, 0); undo_end(&u); }
+    for (int i = 0; i < 2; i++) { undo_begin(&u); play_step(m, &u, &p, 0, 1); undo_end(&u); }
+    CHECK_EQ(m->tokens.v[ai].x, 6);
+    CHECK_EQ(m->tokens.v[ai].y, 2);
+
+    CASE("the route goes round the enemies, not through them");
+    CHECK(p.ntrail > 0);
+    for (int i = 0; i < p.ntrail; i++)
+        CHECK(!(p.trail[i].x == 4 && p.trail[i].y >= 1 && p.trail[i].y <= 3));
+
+    CASE("so it costs more than the straight line would");
+    CHECK(p.steps > 6);
+
+    undo_free(&u);
+    map_free(m);
+}
+
+static void test_occupancy_keys(void)
+{
+    Sandbox sb = sandbox_enter("occ");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+
+    char path[600];
+    snprintf(path, sizeof path, "%s/o.vtt", sb.dir);
+    {
+        FILE *f = fopen(path, "w");
+        if (f) {
+            fputs("VTT 2\nname Occ\nsize 12 5\nzoom 1\ntiles\n", f);
+            for (int i = 0; i < 5; i++) fputs("............\n", f);
+            fputs("token player 2 2 1 \"Aria\"\ntoken player 5 2 1 \"Bram\"\n"
+                  "token enemy 8 2 1 \"Ogre\"\n", f);
+            fclose(f);
+        }
+    }
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 96, 24);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+    CHECK_EQ(a.map->tokens.n, 3);
+
+    CASE("a copy cannot be pasted onto a creature");
+    press(&a, "f");                        /* Aria */
+    press(&a, "y");
+    press(&a, ":f3\r");                    /* Bram's square */
+    press(&a, "p");
+    CHECK_EQ(a.map->tokens.n, 3);
+    CHECK(strstr(a.status, "already here") != NULL);
+
+    CASE("and lands on the next square over");
+    press(&a, ":g3\r");
+    press(&a, "p");
+    CHECK_EQ(a.map->tokens.n, 4);
+
+    CASE("a new creature cannot be placed onto one either");
+    press(&a, ":f3\r");
+    press(&a, "ip");
+    CHECK_EQ(a.modal, MODAL_NONE);         /* no label prompt: it never got that far */
+    CHECK(strstr(a.status, "something is on it") != NULL);
+    CHECK_EQ(a.map->tokens.n, 4);
+
+    /* Passing over is fine; sharing a square is not. */
+    CASE("a creature may be carried over its own side");
+    press(&a, ":c3\r");
+    press(&a, "\r");
+    CHECK_EQ(a.play.grabbed, 1);
+    press(&a, "lll");
+    CHECK_EQ(a.map->tokens.v[a.play.sel].x, 5);   /* standing on Bram */
+
+    CASE("but not put down on it");
+    press(&a, "\r");
+    CHECK_EQ(a.play.grabbed, 1);
+    CHECK(strstr(a.status, "move off to put down") != NULL);
+
+    CASE("and esc is not a way round that");
+    press(&a, "\x1b");
+    CHECK_EQ(a.play.grabbed, 1);
+
+    /* G3 holds the copy pasted above, so the first clear square is the one
+     * past it. */
+    CASE("carried on to a clear square it goes down");
+    press(&a, "l\r");
+    CHECK_EQ(a.play.grabbed, 1);
+    press(&a, "l\r");
+    CHECK_EQ(a.play.grabbed, 0);
+    CHECK_EQ(a.map->tokens.v[a.play.sel].x, 7);
+
+    /* Ctrl-w is the GM overruling the map, and it overrules this too. */
+    CASE("with blocking off a creature can be put down anywhere");
+    press(&a, "\r");
+    press(&a, "h");
+    CHECK_EQ(a.map->tokens.v[a.play.sel].x, 6);
+    press(&a, "\r");
+    CHECK_EQ(a.play.grabbed, 1);           /* refused, as before */
+    press(&a, "\x17");                     /* ctrl-w */
+    press(&a, "\r");
+    CHECK_EQ(a.play.grabbed, 0);           /* now allowed */
+    press(&a, "\x17");
+
+    app_free(&a);
+    rnd_free(&r);
+    unlink(path);
+    sandbox_leave(&sb);
+}
+
+static void test_delete_yanks(void)
+{
+    Sandbox sb = sandbox_enter("dely");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+
+    char path[600];
+    snprintf(path, sizeof path, "%s/d.vtt", sb.dir);
+    {
+        FILE *f = fopen(path, "w");
+        if (f) {
+            fputs("VTT 2\nname Del\nsize 10 5\nzoom 1\ntiles\n", f);
+            for (int i = 0; i < 5; i++) fputs("..........\n", f);
+            fputs("token enemy 2 2 1 \"Goblin\"\n", f);
+            fclose(f);
+        }
+    }
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 90, 24);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+
+    /* vim's d fills the unnamed register, so d then p is how a creature moves
+     * somewhere else in one go. */
+    CASE("a delete fills the yank buffer");
+    press(&a, "e");
+    press(&a, "d");
+    CHECK_EQ(a.map->tokens.n, 0);
+    CHECK_EQ(a.play.has_yank, 1);
+    CHECK(strstr(a.status, "p puts it back") != NULL);
+
+    CASE("and the name comes back with it, not a numbered copy");
+    press(&a, ":h4\r");
+    press(&a, "p");
+    CHECK_EQ(a.map->tokens.n, 1);
+    CHECK_EQ(strcmp(a.map->tokens.v[0].label, "Goblin"), 0);
+    CHECK_EQ(a.map->tokens.v[0].x, 7);
+    CHECK_EQ(a.map->tokens.v[0].y, 3);
+
+    /* Pasting a second time is a copy of something that is now on the map
+     * again, so this one does get numbered. */
+    CASE("a second paste is a copy and is numbered");
+    press(&a, ":b2\r");
+    press(&a, "p");
+    CHECK_EQ(a.map->tokens.n, 2);
+    CHECK_EQ(strcmp(a.map->tokens.v[1].label, "Goblin 2"), 0);
+
+    CASE("deleting nothing yanks nothing");
+    press(&a, ":j5\r");
+    a.play.sel = -1;
+    int before = a.play.has_yank;
+    press(&a, "d");
+    CHECK(strstr(a.status, "no token here") != NULL);
+    CHECK_EQ(a.play.has_yank, before);
+
+    app_free(&a);
+    rnd_free(&r);
+    unlink(path);
+    sandbox_leave(&sb);
+}
+
 /* ---------------------------------------------------------------- terrain */
 
 static void test_void_reads_as_void(void)
@@ -5311,6 +5617,11 @@ int main(void)
         { "focus",    test_play_focus },
         { "tracks",   test_cycle_tracks },
         { "cyclekeys", test_cycle_keys },
+        { "overlap",  test_overlap },
+        { "passing",  test_passing_and_stopping },
+        { "route",    test_route_avoids_enemies },
+        { "occkeys",  test_occupancy_keys },
+        { "delyank",  test_delete_yanks },
         { "voidlook", test_void_reads_as_void },
         { "palette",  test_terrain_palette },
         { "coords",   test_coords },
