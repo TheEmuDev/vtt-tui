@@ -152,12 +152,13 @@ int play_find(Play *p, const Map *m, const char *needle, int delta)
     return 1;
 }
 
-void play_grab(Play *p, const Map *m)
+void play_grab(Play *p, const Map *m, int undo_depth)
 {
     if (p->sel < 0 || p->sel >= m->tokens.n) return;
 
     const Token *t = &m->tokens.v[p->sel];
-    p->grabbed  = 1;
+    p->grabbed    = 1;
+    p->grab_depth = undo_depth;
     p->origin_x = t->x;
     p->origin_y = t->y;
     p->steps    = 0;

@@ -1490,6 +1490,39 @@ static void editor_key(App *a, Key k)
 
 /* -------------------------------------------------------------- play mode */
 
+/* Esc is a cancel, so the walk is taken back out of the history rather than
+ * answered with a step back to where it began: undo it and there is nothing
+ * there, which is what a cancel means. Only the moves are unwound, so a
+ * marker added part way through the walk survives it.
+ *
+ * The square it set out from is by definition free -- it is the one square
+ * nothing else can have moved onto, since the held creature is the only one
+ * moving -- so a cancel works from on top of an ally, where a drop does not. */
+static void play_cancel_move(App *a)
+{
+    Play *pl = &a->play;
+
+    int back = undo_rewind_moves(&a->undo, a->map, pl->grab_depth, pl->sel);
+    play_trail_sync(pl, a->map);
+
+    pl->grabbed = 0;
+    pl->ntrail  = 0;
+
+    if (pl->sel >= 0 && pl->sel < a->map->tokens.n) {
+        a->ed.cx = a->map->tokens.v[pl->sel].x;
+        a->ed.cy = a->map->tokens.v[pl->sel].y;
+        grid_ensure_visible(&a->ed.view, a->map, a->ed.cx, a->ed.cy, ED_SCROLLOFF);
+    }
+
+    char at[MAP_COORD_MAX];
+    map_coord_name(pl->origin_x, pl->origin_y, at, sizeof at);
+
+    char msg[96];
+    if (back) snprintf(msg, sizeof msg, "cancelled - back to %s", at);
+    else      snprintf(msg, sizeof msg, "put down at %s", at);
+    app_set_status(a, msg);
+}
+
 /* Putting a creature down is the strict half of the rule: it steps through
  * its own side on the way past, but two of them cannot come to rest on the
  * same square. Returns 1 when it was put down. */
@@ -1722,7 +1755,7 @@ static void play_key(App *a, Key k)
      * down, then take the overlay off, then let go of the creature. */
     if (k.kind == KEY_ESC) {
         if (pl->grabbed) {
-            play_put_down(a, "dropped");
+            play_cancel_move(a);
         } else if (pl->range.active) {
             range_clear(&pl->range);
             app_set_status(a, "range overlay off");
@@ -1750,8 +1783,8 @@ static void play_key(App *a, Key k)
         play_select_at(pl, m, e->cx, e->cy);
         if (pl->sel < 0) { app_set_status(a, "no token here"); return; }
 
-        play_grab(pl, m);
-        app_set_status(a, "picked up - hjkl to move, enter to drop");
+        play_grab(pl, m, a->undo.depth);
+        app_set_status(a, "picked up - enter drops, esc cancels");
         return;
     }
 

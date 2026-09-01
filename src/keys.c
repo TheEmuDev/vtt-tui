@@ -62,7 +62,8 @@ static const KeyDoc PLAY[] = {
 static const KeyDoc PLAY_GRABBED[] = {
     GROUP("Carrying a creature"),
     { "h j k l",  "walk it; the ribbon shows the route back", "hjkl", "move" },
-    { "enter  esc", "put it down here",                "enter", "drop" },
+    { "enter",    "put it down here",                  NULL, "drop" },
+    { "esc",      "cancel: back to where it set out from", NULL, "cancel" },
     { "u",        "take back a step",                  NULL, "undo" },
     KEY("ctrl-w", "let it through walls and creatures, or stop it"),
     { "?",        "this page",                         NULL, "keys" },

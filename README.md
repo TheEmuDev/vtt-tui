@@ -263,8 +263,12 @@ off, then back on) has no route to price: the ribbon goes, the readout says `no 
 the count falls back to keystrokes.
 
 One keypress is one undo step, count and all, so `u` walks the creature back a step at a
-time and the route shortens with it. `enter` or `esc` puts the creature down and clears the
-ribbon. A multi-tile token is blocked by a wall anywhere along its leading face.
+time and the route shortens with it. `enter` puts it down where it stands, `esc` puts it
+back where it began; either way the ribbon goes. A multi-tile token is blocked by a wall
+anywhere along its leading face.
+
+Because the square it set out from is the one square nothing else can have moved onto,
+**a cancel always works** — including from on top of an ally, where a drop is refused.
 
 **Finding a creature.** Three tracks, because a GM running a fight wants the next of
 *their own* creatures far more often than the next of anything: `t` walks every token, `f`

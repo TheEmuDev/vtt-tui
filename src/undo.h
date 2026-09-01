@@ -58,7 +58,14 @@ void undo_move_token(Undo *u, Map *m, int idx, int nx, int ny);
  * markers become undoable without an op per field. */
 void undo_edit_token(Undo *u, Map *m, int idx, Token after);
 
-int  undo_undo(Undo *u, Map *m);   /* 1 if a batch was reverted */
+int  undo_undo(Undo *u, Map *m);
+
+/* Unwinds back to `depth`, but only through batches that are nothing but
+ * moves of token `idx`. Stops at anything else, so cancelling a move cannot
+ * quietly swallow an edit made part way through it. Returns how many batches
+ * were undone. This is what makes a cancel leave no trace: the steps are
+ * taken back out of the history rather than answered with a step back. */
+int  undo_rewind_moves(Undo *u, Map *m, int depth, int idx);   /* 1 if a batch was reverted */
 int  undo_redo(Undo *u, Map *m);
 
 static inline int undo_can_undo(const Undo *u) { return u->depth > 0; }

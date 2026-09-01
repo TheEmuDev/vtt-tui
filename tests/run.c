@@ -3506,7 +3506,7 @@ static void test_trail(void)
     p.sel = idx;
 
     CASE("picking a token up marks the tile it stood on");
-    play_grab(&p, m);
+    play_grab(&p, m, 0);
     CHECK_EQ(p.grabbed, 1);
     CHECK_EQ(p.ntrail, 1);
     CHECK_EQ(p.trail[0].x, 2);
@@ -3535,7 +3535,7 @@ static void test_trail(void)
     play_focus(&p, idx);
     m->tokens.v[idx].x = 2;
     m->tokens.v[idx].y = 2;
-    play_grab(&p, m);
+    play_grab(&p, m, 0);
     for (int i = 0; i < 3; i++) {
         undo_begin(&u); play_step(m, &u, &p, 1, 0); undo_end(&u);
         undo_begin(&u); play_step(m, &u, &p, 0, 1); undo_end(&u);
@@ -3571,7 +3571,7 @@ static void test_trail(void)
     Token t2 = { 3, 0, 1, TOKEN_ENEMY, "W", { { 0, "" } }, 0 };
     int wi = undo_add_token(&wu, w, t2);
     wp.sel = wi;
-    play_grab(&wp, w);
+    play_grab(&wp, w, 0);
 
     /* Down the near side, round the end of the wall, back up the far side. */
     for (int i = 0; i < 4; i++) { undo_begin(&wu); play_step(w, &wu, &wp, 0, 1); undo_end(&wu); }
@@ -3639,7 +3639,7 @@ static void test_trail(void)
     play_init(&bp);
     Token bt = { 0, 0, 1, TOKEN_ENEMY, "B", { { 0, "" } }, 0 };
     bp.sel = undo_add_token(&bu, big, bt);
-    play_grab(&bp, big);
+    play_grab(&bp, big, 0);
     big->tokens.v[bp.sel].x = (int16_t)(MAP_MAX_DIM - 1);
     play_trail_sync(&bp, big);
     CHECK_EQ(bp.steps, MAP_MAX_DIM - 1);
@@ -3680,7 +3680,7 @@ static void test_trail_draw(void)
     grid_tile_interior(&g, 2, 2, &sx, &sy);
     CHECK(rnd_at(&r, sx, sy)->bg != THEME_DARK.trail_bg);
 
-    play_grab(&p, m);
+    play_grab(&p, m, 0);
     undo_begin(&u); play_step(m, &u, &p, 1, 0); undo_end(&u);
     undo_begin(&u); play_step(m, &u, &p, 0, 1); undo_end(&u);
 
@@ -3732,7 +3732,7 @@ static void test_trail_draw(void)
     m->tokens.v[idx].size = 2;
     m->tokens.v[idx].x = 5;
     m->tokens.v[idx].y = 5;
-    play_grab(&p, m);
+    play_grab(&p, m, 0);
     undo_begin(&u); play_step(m, &u, &p, 1, 0); undo_end(&u);
     rnd_begin(&r);
     play_trail_draw(&r, m, &g, &p, &THEME_DARK, 0);
@@ -3871,7 +3871,7 @@ static void test_route_avoids_enemies(void)
         undo_add_token(&u, m, e);
     }
     p.sel = ai;
-    play_grab(&p, m);
+    play_grab(&p, m, 0);
 
     /* Walk round the wall of enemies the long way, over the top. */
     for (int i = 0; i < 2; i++) { undo_begin(&u); play_step(m, &u, &p, 0, -1); undo_end(&u); }
@@ -3954,18 +3954,26 @@ static void test_occupancy_keys(void)
     CHECK_EQ(a.play.grabbed, 1);
     CHECK(strstr(a.status, "move off to put down") != NULL);
 
-    CASE("and esc is not a way round that");
+    /* Esc is a cancel rather than a drop, and the square it set out from is
+     * the one square nothing can have moved onto, so it always works -- even
+     * from on top of an ally, where putting down is refused. */
+    CASE("but esc cancels from there, because going back is always possible");
+    int sel = a.play.sel;
     press(&a, "\x1b");
-    CHECK_EQ(a.play.grabbed, 1);
+    CHECK_EQ(a.play.grabbed, 0);
+    CHECK_EQ(a.map->tokens.v[sel].x, 2);        /* back on C3 */
+    CHECK(strstr(a.status, "cancelled") != NULL);
 
     /* G3 holds the copy pasted above, so the first clear square is the one
      * past it. */
     CASE("carried on to a clear square it goes down");
-    press(&a, "l\r");
-    CHECK_EQ(a.play.grabbed, 1);
-    press(&a, "l\r");
+    press(&a, "\r");
+    press(&a, "lll");
+    press(&a, "\r");
+    CHECK_EQ(a.play.grabbed, 1);                /* on Bram, refused */
+    press(&a, "ll\r");
     CHECK_EQ(a.play.grabbed, 0);
-    CHECK_EQ(a.map->tokens.v[a.play.sel].x, 7);
+    CHECK_EQ(a.map->tokens.v[sel].x, 7);
 
     /* Ctrl-w is the GM overruling the map, and it overrules this too. */
     CASE("with blocking off a creature can be put down anywhere");
@@ -3978,6 +3986,109 @@ static void test_occupancy_keys(void)
     press(&a, "\r");
     CHECK_EQ(a.play.grabbed, 0);           /* now allowed */
     press(&a, "\x17");
+
+    CASE("a creature carried nowhere still lets go on esc");
+    press(&a, "\r");
+    CHECK_EQ(a.play.grabbed, 1);
+    press(&a, "\x1b");
+    CHECK_EQ(a.play.grabbed, 0);
+
+    app_free(&a);
+    rnd_free(&r);
+    unlink(path);
+    sandbox_leave(&sb);
+}
+
+static void test_cancel_move(void)
+{
+    Sandbox sb = sandbox_enter("cancel");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+
+    char path[600];
+    snprintf(path, sizeof path, "%s/c.vtt", sb.dir);
+    {
+        FILE *f = fopen(path, "w");
+        if (f) {
+            fputs("VTT 2\nname Cancel\nsize 12 6\nzoom 1\ntiles\n", f);
+            for (int i = 0; i < 6; i++) fputs("............\n", f);
+            fputs("token player 2 2 1 \"Aria\"\n", f);
+            fclose(f);
+        }
+    }
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 96, 24);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+
+    press(&a, "f");
+    int sel = a.play.sel;
+    CHECK_EQ(sel, 0);
+
+    CASE("esc puts a carried creature back where it set out from");
+    press(&a, "\r");
+    press(&a, "lllj");
+    CHECK_EQ(a.map->tokens.v[sel].x, 5);
+    CHECK_EQ(a.map->tokens.v[sel].y, 3);
+    press(&a, "\x1b");
+    CHECK_EQ(a.play.grabbed, 0);
+    CHECK_EQ(a.map->tokens.v[sel].x, 2);
+    CHECK_EQ(a.map->tokens.v[sel].y, 2);
+    CHECK(strstr(a.status, "C3") != NULL);
+
+    CASE("the cursor comes back with it");
+    CHECK_EQ(a.ed.cx, 2);
+    CHECK_EQ(a.ed.cy, 2);
+
+    /* The whole point of unwinding rather than stepping back: a cancelled
+     * move is not in the history at all. */
+    CASE("and the walk leaves no trace behind it");
+    CHECK_EQ(undo_can_undo(&a.undo), 0);
+
+    CASE("the selection survives a cancel; only the carry ends");
+    CHECK_EQ(a.play.sel, sel);
+    CHECK_EQ(a.play.ntrail, 0);
+
+    CASE("enter still commits, and that one does undo");
+    press(&a, "\r");
+    press(&a, "ll");
+    press(&a, "\r");
+    CHECK_EQ(a.play.grabbed, 0);
+    CHECK_EQ(a.map->tokens.v[sel].x, 4);
+    CHECK_EQ(undo_can_undo(&a.undo), 1);
+    press(&a, "u");
+    CHECK_EQ(a.map->tokens.v[sel].x, 3);
+
+    /* An edit made part way through the walk is not part of the walk, so a
+     * cancel must not swallow it. */
+    CASE("a marker added mid-walk survives the cancel");
+    press(&a, "f");
+    press(&a, "\r");
+    press(&a, "ll");
+    press(&a, "saPoisoned\r");
+    CHECK_EQ(a.map->tokens.v[sel].nstatus, 1);
+    press(&a, "ll");
+    press(&a, "\x1b");
+    CHECK_EQ(a.map->tokens.v[sel].nstatus, 1);
+
+    /* Only the steps after the marker unwind -- the ones before it are behind
+     * an edit the rewind will not cross, so the creature stops there. */
+    CASE("it stops unwinding at the edit rather than crossing it");
+    CHECK(a.map->tokens.v[sel].x > 3);
+
+    CASE("cancelling without having moved just lets go");
+    press(&a, "\r");
+    CHECK_EQ(a.play.grabbed, 1);
+    int x = a.map->tokens.v[sel].x;
+    press(&a, "\x1b");
+    CHECK_EQ(a.play.grabbed, 0);
+    CHECK_EQ(a.map->tokens.v[sel].x, x);
+    CHECK(strstr(a.status, "put down") != NULL);
 
     app_free(&a);
     rnd_free(&r);
@@ -5622,6 +5733,7 @@ int main(void)
         { "route",    test_route_avoids_enemies },
         { "occkeys",  test_occupancy_keys },
         { "delyank",  test_delete_yanks },
+        { "cancel",   test_cancel_move },
         { "voidlook", test_void_reads_as_void },
         { "palette",  test_terrain_palette },
         { "coords",   test_coords },

@@ -55,6 +55,11 @@ typedef struct {
     int origin_x, origin_y;
     int steps;           /* squares the route costs, or keystrokes with no route */
 
+    /* How deep the undo log was when the creature was picked up, so esc can
+     * take the walk back out of the history rather than answering it with a
+     * step back. A cancelled move should leave no trace. */
+    int grab_depth;
+
     /* The shortest walkable route from where the creature set out to where it
      * stands now -- not the wandering the cursor did to get there. Recut every
      * time the token lands somewhere new. RulerPt is reused because it is just
@@ -120,8 +125,9 @@ int play_cycle(Play *p, const Map *m, int delta, int kind);
  * A NULL or empty needle repeats the last search. Returns 0 for no match. */
 int play_find(Play *p, const Map *m, const char *needle, int delta);
 
-/* Picks up the selected token, marking the tile it set out from. */
-void play_grab(Play *p, const Map *m);
+/* Picks up the selected token, marking the tile it set out from. `undo_depth`
+ * is the history's depth at that moment, which is where a cancel unwinds to. */
+void play_grab(Play *p, const Map *m, int undo_depth);
 
 /* Recuts the route from the origin to wherever the held token now stands, and
  * prices the move by its length. The trail is derived rather than recorded, so
