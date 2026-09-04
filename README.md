@@ -200,10 +200,11 @@ A whole pen-down stroke is one undo step.
 |-----|--------|
 | `h` `j` `k` `l` | move the cursor, or the held token |
 | `i p`, `i e` | place a player / an enemy, prompting for a label |
-| `1` `2` `3` | size of the next token, or resize the selected one |
-| `enter` | pick up the token under the cursor / put it down |
-| `d` `x` | remove — and keep it, so `p` puts it back |
-| `y` `p` | yank a token / put the yanked one here |
+| `1` `2` `3` | the cursor's size; resizes the selected creature too |
+| `enter` | pick up / put down; under a big cursor, walk what it covers |
+| `v` | select several: a box from here to the cursor |
+| `d` `x` | remove — and keep it (or them), so `p` puts it back |
+| `y` `p` | yank what the cursor or box covers / paste it here |
 | `c` | change its label |
 | `t` `T` | next / previous token, any kind |
 | `f` `F` | next / previous **f**riendly — player tokens only |
@@ -218,7 +219,7 @@ A whole pen-down stroke is one undo step.
 | `r` | cycle a range band highlight (see below) |
 | `o` `O` | open or close a door / a secret door on this tile |
 | `Ctrl-w` | toggle blocking — walls and creatures alike |
-| `esc` | put down, then take the range overlay off, then deselect |
+| `esc` | close the box, cancel the move, range off, deselect — one at a time |
 | `u`, `Ctrl-r` | undo / redo |
 | `:d6` | jump to a square (`:6` for a row, keeping the column) |
 | `#` | column letters and row numbers, on or off |
@@ -230,11 +231,13 @@ the status line names the options; `esc` abandons it. A prefix swallows whatever
 next, so a half-typed command can never turn into a different whole one.
 
 Freeing `p` for paste is the point of `i`: `p` means paste everywhere else, and `P` was an
-odd place for it. The keys that moved — `a` `A` `v` `V` `P` `R` `S` — say where they went
-if you press them out of habit.
+odd place for it. The keys that moved — `a` `A` `V` `P` `R` `S` — say where they went
+if you press them out of habit. (`v` came back: it selects several creatures, below.)
 
-`esc` backs out of one thing at a time, innermost first: put the creature down, take the
-overlay off, let go of the creature.
+`esc` backs out of one thing at a time, innermost first: drop the selection box, cancel the
+move (the creature returns to where it set out), take the overlay off, let go of the
+creature. Esc is a cancel, never a commit — putting a creature down where it stands is
+`enter`.
 
 **Moving a token.** Pick one up with `enter` and it walks with `hjkl`, with a `◆` on the
 square it set out from and a green ribbon along the **shortest walkable route** from there
@@ -280,6 +283,38 @@ anywhere along its leading face.
 
 Because the square it set out from is the one square nothing else can have moved onto,
 **a cancel always works** — including from on top of an ally, where a drop is refused.
+
+**The cursor is the footprint.** `1` `2` `3` set one number: the size the cursor draws,
+which is what the next placement will cover — and a selected creature is resized to it,
+held or not. While a creature is carried the cursor is that creature's own size, whatever
+the size keys were last left on, and putting it down brings back the size that was set.
+Against the map's edge the cursor is clipped rather than clamped: a footprint that shrinks
+against the edge is one that would not fit, said without a message.
+
+A big cursor can cover several creatures, so `enter` under one walks them — the cursor
+holds still, the highlight moves, and the first movement key settles which one you meant:
+the cursor goes to it, takes its size, and the step is made from there. One candidate is
+not a choice, so a plain cursor over a plain creature is picked up exactly as before.
+
+**Selecting several (`v`).** `v` opens a box from the cursor, the same gesture build mode
+uses. Stretching it lights every creature it catches — a big creature merely lapping into
+the box counts, the same reading the cursor uses. Then:
+
+- `enter` carries them all. **They move together, or not at all**: a step blocked for any
+  one of them is refused for the lot, and the members are transparent to each other on the
+  way — without that, a marching column could never move, each blocked by the one in front.
+  One ribbon and one distance label follow the lead creature; `esc` cancels the whole walk,
+  every creature back to where it set out.
+- `y` yanks them all, `d` removes them all and keeps them. `p` stamps the formation back
+  out **in the shape it was copied in**, anchored at the cursor — and it is all or nothing:
+  if any creature has no room, none of them lands, because a paste that half-arrives leaves
+  you reconstructing which half.
+- `v` again, or `esc`, drops the box.
+
+Every selected creature wears a bright ring on the grid lines around it — its own colour,
+not the cursor's blue, so *what is selected* and *where the cursor is* stay two different
+questions. The ring recolours lines that were already drawn, which is why a creature
+standing still while selected costs the renderer nothing at all.
 
 **Finding a creature.** Three tracks, because a GM running a fight wants the next of
 *their own* creatures far more often than the next of anything: `t` walks every token, `f`
@@ -574,9 +609,9 @@ path culls to the visible tiles first.
 
 | | 80×24 | 200×50 |
 |---|---|---|
-| build, 200×200 map | 39 µs | 166 µs |
-| play, 24 tokens | 41 µs | 147 µs |
-| bytes written per frame | ~223 | ~228 |
+| build, 200×200 map | 40 µs | 171 µs |
+| play, 24 tokens | 43 µs | 149 µs |
+| bytes written per frame | ~209 | ~212 |
 
 **[docs/PERFORMANCE.md](docs/PERFORMANCE.md) has every path measured**, what dominates a
 frame, and the rules for keeping it that way. `make perf` regenerates it, so the numbers

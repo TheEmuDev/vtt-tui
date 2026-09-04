@@ -1,5 +1,12 @@
 # VTT — a rules-agnostic virtual tabletop TUI in C
 
+> **This is the founding plan, kept as it was written.** Where it and the code disagree,
+> the code won: the per-frame arena it promises was never needed (the renderer reuses two
+> fixed buffers; the only per-keystroke allocation left is the route search's scratch,
+> which [docs/PERFORMANCE.md](PERFORMANCE.md) tracks), and the feature set has grown well
+> past this document — the README is the living description, PERFORMANCE.md the living
+> numbers.
+
 ## Context
 
 You want a terminal virtual tabletop for running encounters at the table — first with Daggerheart, but the

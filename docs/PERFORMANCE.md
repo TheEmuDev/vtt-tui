@@ -181,16 +181,24 @@ fixing yet; the fix, when it is, is an occupancy grid built once per search rath
 scan per probe.
 
 **`trail.path` is the only search in the app** — a breadth-first sweep from the held
-creature back to where it set out. 1.2µs on a 40×25 map; the worst is a long walk
-across 200×200, and it runs on a keystroke rather than a frame, so it has a thousandfold
-more headroom than the table suggests.
+creature back to where it set out. About 2µs on a 40×25 map; 32µs typical on 200×200
+(129µs worst), and it runs on a keystroke rather than a frame, so even that has a
+hundredfold headroom. Three planned wins live here, none yet taken: keep the two
+map-sized scratch arrays in `Play` instead of malloc/free per keystroke, stamp `dist`
+with a generation counter instead of an O(map) clear, and share the occupancy grid the
+`group.move` note above already names, so a probe stops scanning the token list.
+Together they make the search cost the route rather than the map.
 
 **`prof.overlay` is the most expensive thing here relative to its worth**, which is why
 it reports itself: an instrument that quietly adds to the number it displays is worse
 than no instrument. It is off unless you press F12.
 
-**`input.key`'s 73µs worst** is a keystroke that opened a prompt or ran a search, not a
-cursor move. The median keystroke is 0.1µs.
+**`input.key`'s worst is a carried step**, not a cursor move: the route is recut
+underneath it, so it is `trail.path`'s worst wearing a different name. The median
+keystroke is 0.2µs. On a 200×200 map a carried step measures 32µs p50 and 129µs worst
+(spot measurement, 100 bench loops) — the search's scratch is allocated, zeroed and
+freed per keystroke and every probe scans the token list, which is the planned fix
+recorded above.
 
 ## Working rules
 
