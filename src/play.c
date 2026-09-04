@@ -330,6 +330,8 @@ int play_can_place(const Map *m, int tx, int ty, int size, int except)
 void play_move_label(Renderer *r, const Map *m, const GridView *g,
                      const Play *p, const Theme *th)
 {
+    PROF_ZONE("move.label");
+
     if (!p->grabbed || p->sel < 0 || p->sel >= m->tokens.n) return;
 
     const Token *t = &m->tokens.v[p->sel];

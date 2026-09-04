@@ -28,20 +28,20 @@ What the app costs to use. Each scenario replays a keystroke script, a frame per
 
 | scenario             | size   | frame p50 | frame p99 | cells | bytes |
 |----------------------|--------|-----------|-----------|-------|-------|
-| build, open          | 80x24  |    36.4us |    40.1us |    10 |   207 |
-| build, every edge    | 80x24  |    39.2us |    49.0us |    10 |   207 |
-| build, 200x200       | 80x24  |    35.7us |    47.7us |    12 |   209 |
-| build, 200x200       | 200x50 |   153.9us |   192.6us |    12 |   212 |
-| build, mostly void   | 200x50 |   140.9us |   304.4us |    20 |   267 |
-| build, tracing       | 80x24  |    57.8us |    73.7us |     2 |   140 |
-| build, circle brush  | 80x24  |    38.1us |    75.6us |    28 |   292 |
-| ruler, three legs    | 80x24  |    33.1us |    76.6us |    11 |    40 |
-| play, 24 tokens      | 80x24  |    38.8us |    76.8us |    19 |   298 |
-| play, 24 tokens      | 200x50 |   136.0us |   300.9us |    36 |   319 |
-| play, carrying       | 80x24  |    35.2us |    78.1us |    31 |   192 |
-| play, range bands    | 80x24  |    47.0us |    90.5us |   163 |   842 |
-| help page            | 80x24  |    39.6us |    70.2us |   532 |  2656 |
-| profiler overlay     | 80x24  |    40.6us |   136.8us |   118 |   761 |
+| build, open          | 80x24  |    36.6us |    61.4us |    10 |   207 |
+| build, every edge    | 80x24  |    35.5us |    47.1us |    10 |   207 |
+| build, 200x200       | 80x24  |    35.7us |    40.3us |    12 |   209 |
+| build, 200x200       | 200x50 |   153.1us |   193.0us |    12 |   212 |
+| build, mostly void   | 200x50 |   142.0us |   309.3us |    20 |   267 |
+| build, tracing       | 80x24  |    36.1us |   113.6us |     2 |   140 |
+| build, circle brush  | 80x24  |    37.4us |    43.1us |    28 |   292 |
+| ruler, three legs    | 80x24  |    32.7us |    65.8us |    11 |    40 |
+| play, 24 tokens      | 80x24  |    39.3us |   100.4us |    19 |   298 |
+| play, 24 tokens      | 200x50 |   136.6us |   201.9us |    36 |   319 |
+| play, carrying       | 80x24  |    35.2us |    45.5us |    31 |   199 |
+| play, range bands    | 80x24  |    44.6us |   108.7us |   163 |   842 |
+| help page            | 80x24  |    39.3us |    72.1us |   532 |  2656 |
+| profiler overlay     | 80x24  |    40.4us |   149.6us |   117 |   750 |
 
 `cells` and `bytes` are what actually reached the terminal. They predict perceived
 latency better than wall-clock does: a frame that recomputes everything but changes ten
@@ -57,17 +57,18 @@ a median near zero and a p99 that says what it costs when it does.
 
 | path             | p50     | p99     | worst   | calls | heaviest scenario      |
 |------------------|---------|---------|---------|-------|------------------------|
-| app.draw         | 113.7us | 247.2us | 290.3us |  3200 | build, 200x200 200x50  |
-| editor.draw      | 108.5us | 237.2us | 279.6us |  3200 | build, 200x200 200x50  |
-| grid.draw        |  97.0us | 210.1us | 253.0us |  3200 | build, 200x200 200x50  |
-| grid.labels      |  11.3us |  26.9us |  44.1us |  3200 | build, 200x200 200x50  |
-| input.key        |   0.1us |  10.2us |  72.5us |  6800 | play, carrying 80x24   |
-| play.draw        |  90.0us | 206.2us | 374.8us |  5595 | play, 24 tokens 200x50 |
-| prof.overlay     |   7.0us | 110.6us | 130.2us |  1000 | profiler overlay 80x24 |
-| range.draw       |   0.0us |  27.6us |  58.7us |  5195 | play, range bands 80x24 |
-| ruler.draw       |   0.7us |   1.6us |  10.2us |  4400 | ruler, three legs 80x24 |
-| trail.draw       |   0.1us |   0.2us |   6.1us |  6795 | play, carrying 80x24   |
-| trail.path       |   1.3us |  13.6us |  25.8us |  1009 | play, carrying 80x24   |
+| app.draw         | 113.2us | 242.3us | 285.8us |  3200 | build, 200x200 200x50  |
+| editor.draw      | 108.0us | 232.2us | 275.0us |  3200 | build, 200x200 200x50  |
+| grid.draw        |  96.8us | 207.1us | 257.2us |  3200 | build, 200x200 200x50  |
+| grid.labels      |  11.1us |  26.4us |  43.7us |  3200 | build, mostly void 200x50 |
+| input.key        |   0.1us |  10.3us |  99.9us |  6800 | play, carrying 80x24   |
+| move.label       |   0.0us |   1.1us |  10.5us |  6795 | play, carrying 80x24   |
+| play.draw        |  91.5us | 200.3us | 235.0us |  5595 | play, 24 tokens 200x50 |
+| prof.overlay     |   6.9us | 117.1us | 174.9us |  1000 | profiler overlay 80x24 |
+| range.draw       |   0.0us |  28.6us |  52.7us |  5195 | play, range bands 80x24 |
+| ruler.draw       |   0.7us |   1.9us |  12.0us |  4400 | ruler, three legs 80x24 |
+| trail.draw       |   0.1us |   0.2us |   3.6us |  6795 | play, carrying 80x24   |
+| trail.path       |   1.3us |  13.0us |  24.2us |  1009 | play, carrying 80x24   |
 
 ### Reading it
 
@@ -96,6 +97,11 @@ palette rewrite rather than a tweak.
 **`grid.labels` at 11.4µs is the largest optional cost**, about 7% of a wide frame. It
 formats a column name per visible column and a row number per visible row. `#` takes it
 to zero and gives back the row and the gutter as well.
+
+**The distance label beside a carried creature costs 1µs**, and only in the frames where a
+creature is actually being carried — 36.0µs against 35.0µs, medians of three runs with the
+call in and out. Cells and bytes did not move at all: the distance was taken off the status
+line at the same time, so the same characters change per frame, just somewhere more useful.
 
 **`trail.path` doubled when creatures started blocking each other** — 0.6µs to 1.2µs
 typical, 5µs to 13µs worst — because the search now asks whether each square it probes is
