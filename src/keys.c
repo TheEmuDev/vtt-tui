@@ -61,7 +61,7 @@ static const KeyDoc PLAY[] = {
 
 static const KeyDoc PLAY_GRABBED[] = {
     GROUP("Carrying a creature"),
-    { "h j k l",  "walk it; the ribbon shows the route back", "hjkl", "move" },
+    { "h j k l",  "walk it; the ribbon shows the route, the label how far", "hjkl", "move" },
     { "enter",    "put it down here",                  NULL, "drop" },
     { "esc",      "cancel: back to where it set out from", NULL, "cancel" },
     { "u",        "take back a step",                  NULL, "undo" },

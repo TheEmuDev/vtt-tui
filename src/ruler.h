@@ -21,6 +21,11 @@ typedef enum {
 
 const char *dist_metric_name(DistMetric m);
 
+/* A distance printed the way every readout prints one: trailing ".0" trimmed,
+ * so whole numbers read as whole numbers. Shared so the ruler, the range
+ * overlay and a creature being carried all say a number the same way. */
+void dist_fmt(char *buf, size_t n, double v);
+
 /* Returns -1 when the name matches nothing. */
 int    dist_metric_from_name(const char *name);
 double dist_tiles(DistMetric m, int dx, int dy);

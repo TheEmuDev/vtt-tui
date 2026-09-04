@@ -3999,6 +3999,134 @@ static void test_occupancy_keys(void)
     sandbox_leave(&sb);
 }
 
+/* The number belongs where the eye already is. */
+static void test_move_label(void)
+{
+    Map *m = map_new(20, 9, "label");
+    map_fill_tiles(m, 0, 0, 19, 8, TILE_FLOOR);
+    str_lcpy(m->ruleset, "daggerheart", sizeof m->ruleset);
+
+    Undo u;
+    undo_init(&u);
+    Play p;
+    play_init(&p);
+
+    Renderer r;
+    rnd_init(&r);
+    rnd_resize(&r, 90, 24);
+    rnd_set_clear(&r, THEME_DARK.fg, THEME_DARK.bg);
+
+    Editor e;
+    ed_init(&e, m);
+    e.labels = 0;
+    ed_layout(&e, m, 90, 24);
+
+    Token a = { 3, 4, 1, TOKEN_PLAYER, "Aria", { { 0, "" } }, 0 };
+    int ai = undo_add_token(&u, m, a);
+    p.sel = ai;
+
+    ByteBuf f;
+    #define FRAME() do {                                   \
+        rnd_begin(&r);                                     \
+        play_draw(&r, m, &e, &p, &THEME_DARK, 0);          \
+        bb_init(&f, 32768);                                \
+        rnd_dump(&r, &f);                                  \
+        bb_putc(&f, '\0');                                 \
+    } while (0)
+
+    CASE("nothing is said about a creature standing still");
+    FRAME();
+    CHECK(strstr(f.data, "ft") == NULL);
+    bb_free(&f);
+
+    play_grab(&p, m, 0);
+    FRAME();
+    CHECK(strstr(f.data, "ft") == NULL);      /* picked up, but nowhere yet */
+    bb_free(&f);
+
+    CASE("carried four squares it says how far, and which band");
+    for (int i = 0; i < 4; i++) {
+        undo_begin(&u); play_step(m, &u, &p, 1, 0); undo_end(&u);
+        e.cx = m->tokens.v[ai].x; e.cy = m->tokens.v[ai].y;
+    }
+    FRAME();
+    CHECK(strstr(f.data, "20 ft") != NULL);
+    CHECK(strstr(f.data, "Close") != NULL);
+    bb_free(&f);
+
+    CASE("the band is the one the ruleset would name for that distance");
+    const Ruleset *rs = ruleset_by_name("daggerheart");
+    CHECK(rs != NULL);
+    CHECK_EQ(strcmp(ruleset_band(rs, 20.0), "Close"), 0);
+
+    CASE("one square away is melee");
+    m->tokens.v[ai].x = 4;
+    play_trail_sync(&p, m);
+    FRAME();
+    CHECK(strstr(f.data, "5 ft") != NULL);
+    CHECK(strstr(f.data, "Melee") != NULL);
+    bb_free(&f);
+
+    /* Without a ruleset there is no band to name, so it says the squares
+     * instead -- the thing a GM would otherwise be counting. */
+    CASE("with no ruleset it gives squares and feet");
+    m->ruleset[0] = '\0';
+    m->tokens.v[ai].x = 6;
+    play_trail_sync(&p, m);
+    FRAME();
+    CHECK(strstr(f.data, "3 sq") != NULL);
+    CHECK(strstr(f.data, "15 ft") != NULL);
+    CHECK(strstr(f.data, "Close") == NULL);
+    bb_free(&f);
+    str_lcpy(m->ruleset, "daggerheart", sizeof m->ruleset);
+
+    /* The two rows around a token belong to its status markers, so the label
+     * goes out to the side and they both survive. */
+    CASE("it does not sit on the status marker rows");
+    token_add_status(&m->tokens.v[ai], 0, "Poisoned");
+    token_add_status(&m->tokens.v[ai], 1, "Marked");
+    FRAME();
+    Rect area;
+    grid_token_area(&e.view, m->tokens.v[ai].x, m->tokens.v[ai].y,
+                    m->tokens.v[ai].size, &area);
+    CHECK_EQ(rnd_at(&r, area.x, area.y - 1)->ch, 'P');
+    CHECK_EQ(rnd_at(&r, area.x + 1, area.y - 1)->ch, 'M');
+    bb_free(&f);
+    token_clear_status(&m->tokens.v[ai]);
+
+    /* Against the right-hand edge it flips rather than being eaten by the
+     * clip, the way the ruler's readout does. */
+    CASE("it stays inside the viewport at either edge");
+    for (int x = 0; x < m->w; x++) {
+        m->tokens.v[ai].x = (int16_t)x;
+        p.origin_x = 0; p.origin_y = 4;
+        m->tokens.v[ai].y = 4;
+        play_trail_sync(&p, m);
+
+        rnd_begin(&r);
+        play_draw(&r, m, &e, &p, &THEME_DARK, 0);
+        grid_ensure_visible(&e.view, m, x, 4, ED_SCROLLOFF);
+
+        bb_init(&f, 32768);
+        rnd_dump(&r, &f);
+        bb_putc(&f, '\0');
+        /* Every line has to fit the terminal. Counted in characters rather
+         * than bytes: the frame is mostly box-drawing, three bytes a glyph. */
+        for (const char *l = f.data, *nl; (nl = strchr(l, '\n')); l = nl + 1) {
+            int cols = 0;
+            for (const char *c = l; c < nl; c++)
+                if (((unsigned char)*c & 0xC0) != 0x80) cols++;
+            CHECK(cols <= 90);
+        }
+        bb_free(&f);
+    }
+
+    #undef FRAME
+    rnd_free(&r);
+    undo_free(&u);
+    map_free(m);
+}
+
 static void test_cancel_move(void)
 {
     Sandbox sb = sandbox_enter("cancel");
@@ -5734,6 +5862,7 @@ int main(void)
         { "occkeys",  test_occupancy_keys },
         { "delyank",  test_delete_yanks },
         { "cancel",   test_cancel_move },
+        { "movelabel", test_move_label },
         { "voidlook", test_void_reads_as_void },
         { "palette",  test_terrain_palette },
         { "coords",   test_coords },

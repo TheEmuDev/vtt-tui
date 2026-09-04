@@ -138,6 +138,13 @@ void play_trail_sync(Play *p, const Map *m);
 void play_trail_draw(Renderer *r, const Map *m, const GridView *g,
                      const Play *p, const Theme *th, int ascii);
 
+/* How far a carried creature has come, beside the creature rather than at the
+ * bottom of the screen: while moving, the eye is on the token, and a number
+ * it has to travel for is a number it reads late. Names the range band too
+ * when the map has a ruleset, since that is what the distance is for. */
+void play_move_label(Renderer *r, const Map *m, const GridView *g,
+                     const Play *p, const Theme *th);
+
 /* Is there room for a size x size token anchored here -- on the map, and on
  * a square nothing already stands on? `except` is a token to ignore, for
  * asking whether one can grow where it already is. */

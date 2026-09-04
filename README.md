@@ -244,9 +244,20 @@ to where it now stands:
     ┌───┬───┬───┬───┬───┬───┐
     │ ◆ │▓▓▓│▓▓▓│   │   │   │        ◆  where it set out
     ├───┼───┼───┼───┼───┼───┤        ▓  the route back to it
-    │   │   │▓▓▓│▓▓▓│[O]│   │
+    │   │   │▓▓▓│▓▓▓│[O]│ 20 ft  Close
     ├───┼───┼───┼───┼───┼───┤
 ```
+
+**How far it has come is written beside it**, not at the bottom of the screen: while moving,
+the eye is on the creature, and a number it has to travel for is a number it reads late. It
+names the range band too when the map has a ruleset — `20 ft  Close` — since the band is
+what the distance is *for*. Without one it gives the squares as well as the feet, which is
+the thing you would otherwise be counting: `4 sq  20 ft`.
+
+It sits out to the side rather than above or below, because those two rows belong to the
+creature's [status markers](#play-mode-f2) — a distance covering up a condition would be the
+worse trade. Against the right-hand edge it flips to the other side rather than being cut
+off, the same as the ruler's readout.
 
 The ribbon is the route, not the wandering — walk out six squares and back three and it
 shows the three. It is recut every time the creature lands somewhere new, so it always
@@ -256,11 +267,11 @@ through, and where several routes are equally short the one drawn hugs the strai
 so open floor gives a staircase rather than an L. A multi-tile creature tints its whole
 footprint, showing the ground covered rather than a thread along its top-left corner.
 
-The distance in feet beside the step count is the straight line by the map's metric — what
-a range band cares about — so the two disagree whenever a wall is in the way, which is the
-point of showing both. A creature carried somewhere it could not walk to (blocking switched
-off, then back on) has no route to price: the ribbon goes, the readout says `no route`, and
-the count falls back to keystrokes.
+That distance is the straight line by the map's metric — what a range band cares about —
+while the step count is the route around the walls, so the two disagree whenever a wall is
+in the way, which is the point of showing both. A creature carried somewhere it could not
+walk to (blocking switched off, then back on) has no route to price: the ribbon goes, the
+readout says `no route`, and the count falls back to keystrokes.
 
 One keypress is one undo step, count and all, so `u` walks the creature back a step at a
 time and the route shortens with it. `enter` puts it down where it stands, `esc` puts it

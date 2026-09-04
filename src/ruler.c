@@ -247,8 +247,7 @@ int ruler_sight_blocked(const Ruler *r, const Map *m)
 
 /* ---------------------------------------------------------------- display */
 
-/* Trims a trailing ".0" so whole numbers read as whole numbers. */
-static void fmt_num(char *buf, size_t n, double v)
+void dist_fmt(char *buf, size_t n, double v)
 {
     if (fabs(v - floor(v + 0.5)) < 0.05) snprintf(buf, n, "%.0f", floor(v + 0.5));
     else                                 snprintf(buf, n, "%.1f", v);
@@ -263,8 +262,8 @@ void ruler_status(const Ruler *r, const Map *m, char *buf, size_t bufsz)
     double units = tiles * m->scale_ft;
 
     char t[24], u[24];
-    fmt_num(t, sizeof t, tiles);
-    fmt_num(u, sizeof u, units);
+    dist_fmt(t, sizeof t, tiles);
+    dist_fmt(u, sizeof u, units);
 
     char extra[96];
     extra[0] = '\0';
@@ -328,8 +327,8 @@ void ruler_draw(Renderer *rn, const Map *m, const GridView *g, const Ruler *r,
     double units = tiles * m->scale_ft;
 
     char t[24], u[24], label[64];
-    fmt_num(t, sizeof t, tiles);
-    fmt_num(u, sizeof u, units);
+    dist_fmt(t, sizeof t, tiles);
+    dist_fmt(u, sizeof u, units);
 
     const Ruleset *rs   = ruleset_by_name(m->ruleset);
     const char    *band = ruleset_band(rs, units);

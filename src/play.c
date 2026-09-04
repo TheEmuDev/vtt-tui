@@ -327,6 +327,47 @@ int play_can_place(const Map *m, int tx, int ty, int size, int except)
                               TOKEN_ANY_KIND) < 0;
 }
 
+void play_move_label(Renderer *r, const Map *m, const GridView *g,
+                     const Play *p, const Theme *th)
+{
+    if (!p->grabbed || p->sel < 0 || p->sel >= m->tokens.n) return;
+
+    const Token *t = &m->tokens.v[p->sel];
+    int dx = t->x - p->origin_x, dy = t->y - p->origin_y;
+    if (!dx && !dy) return;              /* nothing to say about no distance */
+
+    double tiles = dist_tiles((DistMetric)m->metric, dx, dy);
+    double units = tiles * m->scale_ft;
+
+    char ft[24], sq[24], label[72];
+    dist_fmt(ft, sizeof ft, units);
+    dist_fmt(sq, sizeof sq, tiles);
+
+    const Ruleset *rs   = ruleset_by_name(m->ruleset);
+    const char    *band = ruleset_band(rs, units);
+    if (band) snprintf(label, sizeof label, " %s ft  %s ", ft, band);
+    else      snprintf(label, sizeof label, " %s sq  %s ft ", sq, ft);
+
+    /* Beside the creature rather than above or below it: those two rows
+     * belong to its status markers, and a distance covering a condition
+     * would be a worse trade than one sitting out to the side. */
+    Rect a;
+    grid_token_area(g, t->x, t->y, t->size, &a);
+
+    int w  = text_width(label);
+    int lx = a.x + a.w + 1;
+    int ly = a.y + a.h / 2;
+
+    /* Keep it inside the viewport, flipping to the other side when there is
+     * no room rather than letting the clip eat it. */
+    if (lx + w > g->view.x + g->view.w) lx = a.x - w - 1;
+    if (lx < g->view.x)                 lx = g->view.x;
+    if (ly < g->view.y)                 ly = g->view.y;
+    if (ly >= g->view.y + g->view.h)    ly = g->view.y + g->view.h - 1;
+
+    draw_text(r, lx, ly, label, w, style(th->bg, th->trail, ATTR_BOLD));
+}
+
 void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
                const Theme *th, int ascii)
 {
@@ -368,6 +409,9 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
      * on top of a token without painting over the box-drawing underneath. */
     grid_draw_tile_marker(r, &e->view, e->cx, e->cy, th->accent);
 
+    /* Over everything, since it is the one thing being read right now. */
+    play_move_label(r, m, &e->view, p, th);
+
     rnd_clip_restore(r, saved);
 }
 
@@ -394,11 +438,15 @@ void play_status(const Play *p, const Map *m, const Editor *e, char *buf, size_t
             char from[MAP_COORD_MAX];
             map_coord_name(p->origin_x, p->origin_y, from, sizeof from);
 
+            /* The distance and its band ride beside the creature now, where
+             * the eye already is; this line keeps what there is no room for
+             * out there. */
+            (void)units;
             snprintf(buf, bufsz,
-                     "MOVING  %.20s %dx%d  %d step%s%s  %g ft from %s  %s",
+                     "MOVING  %.20s %dx%d  %d step%s%s  from %s  %s",
                      t->label[0] ? t->label : token_kind_name(t->kind),
                      t->size, t->size, p->steps, p->steps == 1 ? "" : "s", route,
-                     units, from, walls);
+                     from, walls);
             return;
         }
         /* Spell the markers out here: the map shows their initials, and the
