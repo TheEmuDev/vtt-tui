@@ -66,10 +66,16 @@ void grid_draw(Renderer *r, const Map *m, const GridView *g, const Theme *th,
 /* Highlights the tile the cursor is on. */
 void grid_draw_tile_cursor(Renderer *r, const GridView *g, int tx, int ty, uint32_t bg);
 
-/* Recolours a tile's four boundary corner cells, keeping their glyphs. Marks
- * the cursor on top of a token without painting over the grid underneath. */
-void grid_draw_tile_marker(Renderer *r, const GridView *g, int tx, int ty,
-                           uint32_t fg);
+/* Tints a size x size block of tiles, boundaries between them included, so a
+ * multi-tile cursor reads as one square. Clipped to the map. */
+void grid_draw_cursor_area(Renderer *r, const GridView *g, const Map *m,
+                           int tx, int ty, int size, uint32_t bg);
+
+/* Recolours the four corner cells of a size x size block, keeping their
+ * glyphs. Marks the cursor on top of a token without painting over the grid
+ * underneath. */
+void grid_draw_tile_marker(Renderer *r, const GridView *g, const Map *m,
+                           int tx, int ty, int size, uint32_t fg);
 
 /* Highlights a lattice corner, for the wall-tracing mode. */
 void grid_draw_corner_cursor(Renderer *r, const GridView *g, int cx, int cy,

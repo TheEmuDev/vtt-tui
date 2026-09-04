@@ -437,15 +437,57 @@ void grid_draw_tile_region(Renderer *r, const GridView *g, int x0, int y0,
             grid_draw_tile_cursor(r, g, tx, ty, bg);
 }
 
-void grid_draw_tile_marker(Renderer *r, const GridView *g, int tx, int ty,
-                           uint32_t fg)
+/* Screen area a size x size block of tiles covers, clipped to the map: the
+ * interiors plus the boundaries between them, so a multi-tile cursor reads as
+ * one square rather than as several. Returns 0 when nothing of it is on the
+ * map.
+ *
+ * Clipping rather than clamping is deliberate. A footprint hanging over the
+ * edge is one `play_can_place` would refuse, and a cursor that shrinks against
+ * the edge says so without a message.
+ */
+static int block_area(const GridView *g, const Map *m, int tx, int ty,
+                      int size, Rect *out)
 {
-    int sx, sy;
-    grid_tile_screen(g, tx, ty, &sx, &sy);
-    int pw = zoom_pw(g->zoom), ph = zoom_ph(g->zoom);
+    int x1 = tx + size - 1, y1 = ty + size - 1;
+    if (x1 > m->w - 1) x1 = m->w - 1;
+    if (y1 > m->h - 1) y1 = m->h - 1;
+    if (tx < 0 || ty < 0 || tx > x1 || ty > y1) return 0;
 
-    const int cx[4] = { sx, sx + pw, sx, sx + pw };
-    const int cy[4] = { sy, sy, sy + ph, sy + ph };
+    int sx, sy;
+    grid_tile_interior(g, tx, ty, &sx, &sy);
+
+    out->x = sx;
+    out->y = sy;
+    out->w = (x1 - tx + 1) * zoom_pw(g->zoom) - 1;
+    out->h = (y1 - ty + 1) * zoom_ph(g->zoom) - 1;
+    return 1;
+}
+
+void grid_draw_cursor_area(Renderer *r, const GridView *g, const Map *m,
+                           int tx, int ty, int size, uint32_t bg)
+{
+    Rect a;
+    if (!block_area(g, m, tx, ty, size, &a)) return;
+
+    for (int y = 0; y < a.h; y++) {
+        for (int x = 0; x < a.w; x++) {
+            Cell *c = rnd_at(r, a.x + x, a.y + y);
+            if (c) c->bg = bg;
+        }
+    }
+}
+
+void grid_draw_tile_marker(Renderer *r, const GridView *g, const Map *m,
+                           int tx, int ty, int size, uint32_t fg)
+{
+    Rect a;
+    if (!block_area(g, m, tx, ty, size, &a)) return;
+
+    /* The four corners of the block, which for a single tile are the same
+     * four boundary cells this drew before it learnt about size. */
+    const int cx[4] = { a.x - 1, a.x + a.w, a.x - 1,     a.x + a.w };
+    const int cy[4] = { a.y - 1, a.y - 1,   a.y + a.h,   a.y + a.h };
 
     for (int i = 0; i < 4; i++) {
         Cell *c = rnd_at(r, cx[i], cy[i]);

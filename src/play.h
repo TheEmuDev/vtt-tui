@@ -129,6 +129,13 @@ int play_find(Play *p, const Map *m, const char *needle, int delta);
  * is the history's depth at that moment, which is where a cancel unwinds to. */
 void play_grab(Play *p, const Map *m, int undo_depth);
 
+/* The footprint the cursor covers. What is in hand beats what is set: while a
+ * creature is being carried the cursor is that creature's own size, whatever
+ * the size keys were last left on, so where it will land is never a guess.
+ * The setting is untouched by a pickup, so putting the creature down brings
+ * the cursor back to the size chosen before. */
+uint8_t play_cursor_size(const Play *p, const Map *m);
+
 /* Recuts the route from the origin to wherever the held token now stands, and
  * prices the move by its length. The trail is derived rather than recorded, so
  * anything that moves the token -- a step, an undo, a redo -- is answered by

@@ -3757,6 +3757,139 @@ static void test_trail_draw(void)
     map_free(m);
 }
 
+
+/* ------------------------------------------------------------ cursorsize */
+
+/* The cursor's tinted footprint, measured off the frame rather than trusted
+ * from the code that drew it. */
+static void cursor_extent(const Renderer *r, const Theme *th, int *w, int *h)
+{
+    int x0 = r->w, y0 = r->h, x1 = -1, y1 = -1;
+
+    for (int y = 0; y < r->h; y++) {
+        for (int x = 0; x < r->w; x++) {
+            const Cell *c = rnd_at((Renderer *)r, x, y);
+            if (!c || c->bg != th->cursor_bg) continue;
+            if (x < x0) x0 = x;
+            if (y < y0) y0 = y;
+            if (x > x1) x1 = x;
+            if (y > y1) y1 = y;
+        }
+    }
+
+    *w = (x1 < x0) ? 0 : x1 - x0 + 1;
+    *h = (y1 < y0) ? 0 : y1 - y0 + 1;
+}
+
+static void test_cursor_size(void)
+{
+    Map *m = map_new(12, 9, "cursor");
+    map_fill_tiles(m, 0, 0, 11, 8, TILE_FLOOR);
+
+    Undo u;
+    undo_init(&u);
+    Play p;
+    play_init(&p);
+
+    Renderer r;
+    rnd_init(&r);
+    rnd_resize(&r, 90, 24);
+    rnd_set_clear(&r, THEME_DARK.fg, THEME_DARK.bg);
+
+    Editor e;
+    ed_init(&e, m);
+    e.labels = 0;
+    ed_layout(&e, m, 90, 24);
+    e.cx = 2; e.cy = 2;
+
+    int pw = 0, ph = 0, cw, ch;
+    {   /* One tile's worth, taken from the view rather than hard-coded, so
+         * this says what it means at any zoom. */
+        Rect a;
+        grid_token_area(&e.view, 0, 0, 1, &a);
+        pw = a.w; ph = a.h;
+    }
+
+    #define FRAME() do {                              \
+        rnd_begin(&r);                                \
+        play_draw(&r, m, &e, &p, &THEME_DARK, 0);     \
+    } while (0)
+
+    CASE("with nothing selected the cursor is the size the next token will be");
+    CHECK_EQ(play_cursor_size(&p, m), 1);
+    FRAME();
+    cursor_extent(&r, &THEME_DARK, &cw, &ch);
+    CHECK_EQ(cw, pw);
+    CHECK_EQ(ch, ph);
+
+    p.next_size = 2;
+    CHECK_EQ(play_cursor_size(&p, m), 2);
+    FRAME();
+    cursor_extent(&r, &THEME_DARK, &cw, &ch);
+    CHECK_EQ(cw, 2 * (pw + 1) - 1);
+    CHECK_EQ(ch, 2 * (ph + 1) - 1);
+
+    p.next_size = 3;
+    FRAME();
+    cursor_extent(&r, &THEME_DARK, &cw, &ch);
+    CHECK_EQ(cw, 3 * (pw + 1) - 1);
+    CHECK_EQ(ch, 3 * (ph + 1) - 1);
+
+    /* A footprint hanging off the map is one play_can_place refuses, so the
+     * cursor shows only the squares that are actually there. */
+    CASE("against the edge it is clipped to the map rather than overhanging");
+    e.cx = m->w - 2; e.cy = 2;
+    FRAME();
+    cursor_extent(&r, &THEME_DARK, &cw, &ch);
+    CHECK_EQ(cw, 2 * (pw + 1) - 1);
+    CHECK_EQ(play_can_place(m, e.cx, e.cy, 3, -1), 0);
+
+    e.cx = 2; e.cy = 2;
+    p.next_size = 1;
+
+    CASE("carrying a big creature the cursor is that creature's size");
+    Token big = { 2, 2, 3, TOKEN_ENEMY, "Ogre", { { 0, "" } }, 0 };
+    int bi = undo_add_token(&u, m, big);
+    p.sel = bi;
+    play_grab(&p, m, u.depth);
+
+    CHECK_EQ(play_cursor_size(&p, m), 3);
+    FRAME();
+    cursor_extent(&r, &THEME_DARK, &cw, &ch);
+    CHECK_EQ(cw, 3 * (pw + 1) - 1);
+    CHECK_EQ(ch, 3 * (ph + 1) - 1);
+
+    CASE("the size setting is untouched by the pickup");
+    CHECK_EQ(p.next_size, 1);
+
+    CASE("putting it down returns the cursor to the size that was set");
+    p.grabbed = 0;
+    CHECK_EQ(play_cursor_size(&p, m), 1);
+    FRAME();
+    cursor_extent(&r, &THEME_DARK, &cw, &ch);
+    CHECK_EQ(cw, pw);
+    CHECK_EQ(ch, ph);
+
+    /* The four corner marks belong to the block, not to its top-left tile,
+     * or a big cursor would be marked in one corner and bare in three. */
+    CASE("the corner marks sit on the corners of the whole block");
+    p.sel = -1;
+    p.next_size = 3;
+    e.cx = 1; e.cy = 1;
+    FRAME();
+    Rect blk;
+    grid_token_area(&e.view, 1, 1, 3, &blk);
+    CHECK_EQ(rnd_at(&r, blk.x - 1, blk.y - 1)->fg, THEME_DARK.accent);
+    CHECK_EQ(rnd_at(&r, blk.x + blk.w, blk.y - 1)->fg, THEME_DARK.accent);
+    CHECK_EQ(rnd_at(&r, blk.x - 1, blk.y + blk.h)->fg, THEME_DARK.accent);
+    CHECK_EQ(rnd_at(&r, blk.x + blk.w, blk.y + blk.h)->fg, THEME_DARK.accent);
+
+    #undef FRAME
+    rnd_free(&r);
+    undo_free(&u);
+    map_free(m);
+}
+
 /* ------------------------------------------------------------- occupancy */
 
 static void test_overlap(void)
@@ -5863,6 +5996,7 @@ int main(void)
         { "delyank",  test_delete_yanks },
         { "cancel",   test_cancel_move },
         { "movelabel", test_move_label },
+        { "cursorsize", test_cursor_size },
         { "voidlook", test_void_reads_as_void },
         { "palette",  test_terrain_palette },
         { "coords",   test_coords },

@@ -166,6 +166,13 @@ void play_grab(Play *p, const Map *m, int undo_depth)
     play_trail_sync(p, m);
 }
 
+uint8_t play_cursor_size(const Play *p, const Map *m)
+{
+    if (p->grabbed && p->sel >= 0 && p->sel < m->tokens.n)
+        return m->tokens.v[p->sel].size;
+    return p->next_size;
+}
+
 /* Breadth-first out from where the creature stands, over every tile its whole
  * footprint could occupy, until the tile it set out from is reached. Searching
  * from the destination rather than the origin is what lets the route then be
@@ -398,7 +405,8 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
 
     /* The cursor tint goes under the tokens so a token is never hidden by
      * it; the corner marks below put the cursor back on top. */
-    grid_draw_tile_cursor(r, &e->view, e->cx, e->cy, th->cursor_bg);
+    uint8_t csize = play_cursor_size(p, m);
+    grid_draw_cursor_area(r, &e->view, m, e->cx, e->cy, csize, th->cursor_bg);
 
     for (int i = 0; i < m->tokens.n; i++)
         grid_draw_token(r, &e->view, &m->tokens.v[i], th, i == p->sel, ascii);
@@ -409,7 +417,7 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
 
     /* Recolouring the tile's four boundary corners keeps the cursor visible
      * on top of a token without painting over the box-drawing underneath. */
-    grid_draw_tile_marker(r, &e->view, e->cx, e->cy, th->accent);
+    grid_draw_tile_marker(r, &e->view, m, e->cx, e->cy, csize, th->accent);
 
     /* Over everything, since it is the one thing being read right now. */
     play_move_label(r, m, &e->view, p, th);
