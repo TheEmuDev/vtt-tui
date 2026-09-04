@@ -28,22 +28,22 @@ What the app costs to use. Each scenario replays a keystroke script, a frame per
 
 | scenario             | size   | frame p50 | frame p99 | cells | bytes |
 |----------------------|--------|-----------|-----------|-------|-------|
-| build, open          | 80x24  |    36.7us |    60.5us |    10 |   207 |
-| build, every edge    | 80x24  |    35.7us |    68.0us |    10 |   207 |
-| build, 200x200       | 80x24  |    35.8us |    80.0us |    12 |   209 |
-| build, 200x200       | 200x50 |   153.8us |   181.5us |    12 |   212 |
-| build, mostly void   | 200x50 |   141.6us |   297.4us |    20 |   267 |
-| build, tracing       | 80x24  |    35.5us |    64.8us |     2 |   140 |
-| build, circle brush  | 80x24  |    37.0us |    47.9us |    28 |   292 |
-| ruler, three legs    | 80x24  |    32.9us |    42.6us |    11 |    40 |
-| play, 24 tokens      | 80x24  |    38.5us |    70.6us |    19 |   298 |
-| play, 24 tokens      | 200x50 |   135.2us |   304.7us |    36 |   319 |
-| play, carrying       | 80x24  |    35.3us |    47.0us |    32 |   195 |
-| play, 3x3 cursor     | 80x24  |    41.0us |    65.2us |    40 |   663 |
-| play, choosing       | 80x24  |    36.0us |    39.9us |    13 |   101 |
-| play, range bands    | 80x24  |    43.1us |   124.8us |   163 |   842 |
-| help page            | 80x24  |    39.1us |    71.2us |   532 |  2656 |
-| profiler overlay     | 80x24  |    41.0us |   137.1us |   118 |   756 |
+| build, open          | 80x24  |    36.1us |    52.0us |    10 |   207 |
+| build, every edge    | 80x24  |    35.7us |    77.4us |    10 |   207 |
+| build, 200x200       | 80x24  |    35.8us |    52.4us |    12 |   209 |
+| build, 200x200       | 200x50 |   154.7us |   316.5us |    12 |   212 |
+| build, mostly void   | 200x50 |   140.6us |   308.8us |    20 |   267 |
+| build, tracing       | 80x24  |    42.1us |    86.1us |     2 |   140 |
+| build, circle brush  | 80x24  |    37.1us |    53.1us |    28 |   292 |
+| ruler, three legs    | 80x24  |    32.9us |    58.4us |    11 |    40 |
+| play, 24 tokens      | 80x24  |    39.9us |   113.5us |    19 |   298 |
+| play, 24 tokens      | 200x50 |   134.7us |   182.0us |    36 |   319 |
+| play, carrying       | 80x24  |    34.9us |    64.9us |    33 |   204 |
+| play, 3x3 cursor     | 80x24  |    41.2us |    84.1us |    40 |   663 |
+| play, choosing       | 80x24  |    36.1us |    45.6us |    13 |   101 |
+| play, range bands    | 80x24  |    42.8us |    80.0us |   163 |   845 |
+| help page            | 80x24  |    39.2us |    71.3us |   532 |  2656 |
+| profiler overlay     | 80x24  |    40.6us |   146.2us |   117 |   752 |
 
 `cells` and `bytes` are what actually reached the terminal. They predict perceived
 latency better than wall-clock does: a frame that recomputes everything but changes ten
@@ -59,18 +59,18 @@ a median near zero and a p99 that says what it costs when it does.
 
 | path             | p50     | p99     | worst   | calls | heaviest scenario      |
 |------------------|---------|---------|---------|-------|------------------------|
-| app.draw         | 114.0us | 241.5us | 436.5us |  3200 | build, 200x200 200x50  |
-| editor.draw      | 108.8us | 228.0us | 423.0us |  3200 | build, 200x200 200x50  |
-| grid.draw        |  97.4us | 204.2us | 392.9us |  3200 | build, 200x200 200x50  |
-| grid.labels      |  11.4us |  31.1us |  43.5us |  3200 | build, mostly void 200x50 |
-| input.key        |   0.1us |  10.5us |  65.9us |  6800 | play, carrying 80x24   |
-| move.label       |   0.0us |   1.5us |  20.7us |  6795 | play, carrying 80x24   |
-| play.draw        |  89.5us | 208.3us | 245.2us |  5595 | play, 24 tokens 200x50 |
-| prof.overlay     |   7.1us | 102.1us | 119.0us |  1000 | profiler overlay 80x24 |
-| range.draw       |   0.0us |  30.5us |  61.2us |  5195 | play, range bands 80x24 |
-| ruler.draw       |   0.7us |   1.1us |  10.0us |  4400 | ruler, three legs 80x24 |
-| trail.draw       |   0.1us |   0.2us |  10.6us |  6795 | play, carrying 80x24   |
-| trail.path       |   1.2us |  16.4us |  64.1us |   986 | play, carrying 80x24   |
+| app.draw         | 114.2us | 237.4us | 295.5us |  3200 | build, 200x200 200x50  |
+| editor.draw      | 109.0us | 227.4us | 284.1us |  3200 | build, 200x200 200x50  |
+| grid.draw        |  97.4us | 199.1us | 260.2us |  3200 | build, 200x200 200x50  |
+| grid.labels      |  11.4us |  26.9us |  36.7us |  3200 | build, 200x200 200x50  |
+| input.key        |   0.1us |  10.0us |  70.0us |  6800 | play, carrying 80x24   |
+| move.label       |   0.0us |   1.7us |  11.8us |  6795 | play, carrying 80x24   |
+| play.draw        |  88.9us | 201.2us | 263.1us |  5595 | play, 24 tokens 200x50 |
+| prof.overlay     |   7.0us | 122.0us | 248.5us |  1000 | profiler overlay 80x24 |
+| range.draw       |   0.0us |  26.4us |  45.0us |  5195 | play, range bands 80x24 |
+| ruler.draw       |   0.7us |   1.7us |  12.6us |  4400 | ruler, three legs 80x24 |
+| trail.draw       |   0.1us |   0.2us |  10.5us |  6795 | play, carrying 80x24   |
+| trail.path       |   1.3us |  15.6us |  39.6us |   986 | play, carrying 80x24   |
 
 ### Reading it
 
@@ -104,6 +104,13 @@ to zero and gives back the row and the gutter as well.
 creature is actually being carried — 36.0µs against 35.0µs, medians of three runs with the
 call in and out. Cells and bytes did not move at all: the distance was taken off the status
 line at the same time, so the same characters change per frame, just somewhere more useful.
+
+**The ring around a selected creature costs one cell and nine bytes a frame**, and
+only in the frames where the selection is moving -- 33 cells against 32 on the carrying
+scenario. A ring that sits still is a ring the diff never writes, which is why the cue
+that fixed the contrast problem is also nearly the cheapest one available: it recolours
+grid lines that were already on screen rather than painting anything new. A creature
+standing still while selected costs nothing at all.
 
 **A multi-tile cursor is the most expensive thing a keystroke can switch on**,
 because it paints a block rather than a square. It is opt-in -- the cost arrives with

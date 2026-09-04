@@ -11,6 +11,14 @@ const Theme THEME_DARK = {
     .sel_bg    = RGB(0x2E, 0x28, 0x40),
     .player    = RGB(0x7C, 0xD9, 0x92),
     .enemy     = RGB(0xE0, 0x72, 0x72),
+
+    /* Picked for contrast against the unselected colour, not for prettiness.
+     * Lightening the green by a third moved it 1.19:1, which is nearly no
+     * change at all; these are 1.48:1 and 1.80:1, which is as far as either
+     * hue goes before it stops being green or red. The ring around a selected
+     * creature carries the rest -- see grid_draw_token. */
+    .player_sel = RGB(0xB4, 0xFF, 0xC4),
+    .enemy_sel  = RGB(0xFF, 0xB4, 0xB4),
     .bar_bg    = RGB(0x18, 0x18, 0x1E),
     .bar_fg    = RGB(0x9A, 0x9E, 0xAC),
     .bar_key   = RGB(0xE8, 0xD8, 0x9A),

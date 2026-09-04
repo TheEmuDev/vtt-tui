@@ -194,13 +194,40 @@ void grid_token_area(const GridView *g, int tx, int ty, int size, Rect *out)
 
 /* Brightens a colour towards white by roughly a third, for the selected
  * token, so selection is legible without a second colour to learn. */
-static uint32_t lighten(uint32_t c)
+/* Ring on the lattice around a selected creature, in its own selected colour.
+ *
+ * The fill alone cannot carry selection. A token is a solid patch of colour,
+ * and telling two solid patches apart is a matter of luminance -- but the
+ * player green already sits near the top of that range, so the brightest
+ * green still only reads 1.6:1 against the plain one, well under the 3:1 a
+ * UI element needs. Contrast has to come from somewhere other than the fill,
+ * and the grid lines around the creature are free: they are already drawn, so
+ * this recolours them rather than painting anything new, and against the page
+ * the ring reads at better than 16:1.
+ *
+ * The creature's own colour rather than the cursor's blue, so "what is
+ * selected" and "where the cursor is" stay two different questions. */
+static void draw_select_ring(Renderer *r, const Rect *a, uint32_t fg)
 {
-    unsigned r = (c >> 16) & 0xFFu, g = (c >> 8) & 0xFFu, b = c & 0xFFu;
-    r += (255u - r) / 3u;
-    g += (255u - g) / 3u;
-    b += (255u - b) / 3u;
-    return RGB(r, g, b);
+    int x0 = a->x - 1, x1 = a->x + a->w;
+    int y0 = a->y - 1, y1 = a->y + a->h;
+
+    for (int x = x0; x <= x1; x++) {
+        for (int i = 0; i < 2; i++) {
+            Cell *c = rnd_at(r, x, i ? y1 : y0);
+            if (!c) continue;
+            c->fg    = fg;
+            c->attr |= ATTR_BOLD;
+        }
+    }
+    for (int y = a->y; y < y1; y++) {
+        for (int i = 0; i < 2; i++) {
+            Cell *c = rnd_at(r, i ? x1 : x0, y);
+            if (!c) continue;
+            c->fg    = fg;
+            c->attr |= ATTR_BOLD;
+        }
+    }
 }
 
 /* Is cell (i,j) inside the ellipse inscribed in a w x h box? The threshold is
@@ -222,7 +249,9 @@ void grid_draw_token(Renderer *r, const GridView *g, const Token *t,
 
     int      player = (t->kind != TOKEN_ENEMY);
     uint32_t base   = player ? th->player : th->enemy;
-    if (selected) base = lighten(base);
+    if (selected) base = player ? th->player_sel : th->enemy_sel;
+
+    if (selected) draw_select_ring(r, &a, base);
 
     /* A single-row token has no room for a shape, and colour alone is a poor
      * way to tell a player from an enemy — it fails in --ascii and for a

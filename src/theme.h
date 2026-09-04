@@ -17,6 +17,13 @@ typedef struct {
     uint32_t sel_bg;
     uint32_t player;
     uint32_t enemy;
+
+    /* Selection is a colour of its own rather than the base lightened. Green
+     * sits near the top of the luminance range already, so lightening it can
+     * only move it a few percent -- which is exactly how the selected player
+     * came to be almost indistinguishable from an unselected one. */
+    uint32_t player_sel;
+    uint32_t enemy_sel;
     uint32_t bar_bg;
     uint32_t bar_fg;
     uint32_t bar_key;

@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/stat.h>
@@ -4032,6 +4033,131 @@ static void test_size_keys(void)
     rnd_free(&r);
 }
 
+
+/* ------------------------------------------------------------- selection */
+
+/* Relative luminance, the WCAG definition, so "higher contrast" can be a
+ * number in a test rather than an opinion about a screen. */
+static double luminance(uint32_t c)
+{
+    double ch[3];
+    ch[0] = ((c >> 16) & 0xFFu) / 255.0;
+    ch[1] = ((c >> 8)  & 0xFFu) / 255.0;
+    ch[2] = ( c        & 0xFFu) / 255.0;
+
+    for (int i = 0; i < 3; i++)
+        ch[i] = ch[i] <= 0.04045 ? ch[i] / 12.92
+                                 : pow((ch[i] + 0.055) / 1.055, 2.4);
+
+    return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+}
+
+static double contrast(uint32_t a, uint32_t b)
+{
+    double la = luminance(a), lb = luminance(b);
+    if (la < lb) { double t = la; la = lb; lb = t; }
+    return (la + 0.05) / (lb + 0.05);
+}
+
+static void test_selection_contrast(void)
+{
+    const Theme *th = &THEME_DARK;
+
+    /* Lightening the base by a third -- what this used to do -- put the
+     * selected player at 1.19:1 against the plain one, which is very nearly
+     * no difference at all. */
+    CASE("the selected colours are far enough from the plain ones to see");
+    CHECK(contrast(th->player, th->player_sel) > 1.4);
+    CHECK(contrast(th->enemy,  th->enemy_sel)  > 1.7);
+
+    CASE("and they are still legible against the page");
+    CHECK(contrast(th->player_sel, th->bg) > 10.0);
+    CHECK(contrast(th->enemy_sel,  th->bg) > 10.0);
+
+    /* The fill cannot carry it on its own: green is near the top of the
+     * luminance range, so even white-green tops out under the 3:1 a UI
+     * element wants. The ring is what makes up the difference, and it is
+     * measured against the page rather than against the token. */
+    CASE("the ring is the part that carries the contrast");
+    CHECK(contrast(th->player_sel, th->bg) > 3.0 * contrast(th->player, th->player_sel));
+
+    Map *m = map_new(12, 8, "sel");
+    map_fill_tiles(m, 0, 0, 11, 7, TILE_FLOOR);
+
+    Undo u;
+    undo_init(&u);
+    Play p;
+    play_init(&p);
+
+    Renderer r;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    rnd_set_clear(&r, th->fg, th->bg);
+
+    Editor e;
+    ed_init(&e, m);
+    e.labels = 0;
+    ed_layout(&e, m, 80, 24);
+
+    Token a = { 4, 3, 1, TOKEN_PLAYER, "Aria", { { 0, "" } }, 0 };
+    int ai = undo_add_token(&u, m, a);
+
+    Rect area;
+    grid_token_area(&e.view, 4, 3, 1, &area);
+
+    /* Corners are left out: they are shared with the cursor's own marks, so
+     * asserting on them would be testing two things at once. */
+    #define RING_MID(v) do {                                                   \
+        (v)[0] = rnd_at(&r, area.x, area.y - 1);                               \
+        (v)[1] = rnd_at(&r, area.x, area.y + area.h);                          \
+        (v)[2] = rnd_at(&r, area.x - 1, area.y);                               \
+        (v)[3] = rnd_at(&r, area.x + area.w, area.y);                          \
+    } while (0)
+
+    CASE("an unselected creature has no ring");
+    p.sel = -1;
+    rnd_begin(&r);
+    play_draw(&r, m, &e, &p, th, 0);
+    Cell *ring[4];
+    RING_MID(ring);
+    for (int i = 0; i < 4; i++) {
+        CHECK(ring[i] != NULL);
+        CHECK(ring[i]->fg != th->player_sel);
+    }
+
+    CASE("a selected one is ringed on the grid lines around it");
+    p.sel = ai;
+    e.cx = 0; e.cy = 0;               /* cursor elsewhere: the ring is the
+                                       * only cue left, which is the case
+                                       * that was failing */
+    rnd_begin(&r);
+    play_draw(&r, m, &e, &p, th, 0);
+    RING_MID(ring);
+    for (int i = 0; i < 4; i++) {
+        CHECK(ring[i] != NULL);
+        CHECK_EQ(ring[i]->fg, th->player_sel);
+        CHECK(ring[i]->attr & ATTR_BOLD);
+    }
+
+    CASE("the ring recolours the lattice rather than painting over it");
+    CHECK(ring[2]->ch != ' ');         /* still a box-drawing glyph */
+
+    CASE("an enemy is ringed in its own colour, not the player's");
+    Token b = { 8, 3, 1, TOKEN_ENEMY, "Bram", { { 0, "" } }, 0 };
+    int bi = undo_add_token(&u, m, b);
+    p.sel = bi;
+    grid_token_area(&e.view, 8, 3, 1, &area);
+    rnd_begin(&r);
+    play_draw(&r, m, &e, &p, th, 0);
+    RING_MID(ring);
+    CHECK_EQ(ring[0]->fg, th->enemy_sel);
+
+    #undef RING_MID
+    rnd_free(&r);
+    undo_free(&u);
+    map_free(m);
+}
+
 /* ------------------------------------------------------------ cursorsize */
 
 /* The cursor's tinted footprint, measured off the frame rather than trusted
@@ -6274,6 +6400,7 @@ int main(void)
         { "covering", test_covering },
         { "choosing", test_choosing },
         { "sizekeys", test_size_keys },
+        { "selection", test_selection_contrast },
         { "voidlook", test_void_reads_as_void },
         { "palette",  test_terrain_palette },
         { "coords",   test_coords },
