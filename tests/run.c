@@ -1236,9 +1236,9 @@ static void test_play(void)
     CASE("selecting by tile finds the token under the cursor");
     m->tokens.v[bi].x = 4;
     m->tokens.v[bi].y = 4;
-    play_select_at(&p, m, 5, 5);      /* inside the 2x2 footprint */
+    play_select_at(&p, m, 5, 5, 1);      /* inside the 2x2 footprint */
     CHECK_EQ(p.sel, bi);
-    play_select_at(&p, m, 9, 9);
+    play_select_at(&p, m, 9, 9, 1);
     CHECK_EQ(p.sel, -1);
 
     CASE("moves undo one step at a time");
@@ -3927,6 +3927,111 @@ static void test_choosing(void)
     rnd_free(&r);
 }
 
+
+/* ------------------------------------------------------------- sizekeys */
+
+/* The size keys, the cursor and a selected creature all read one number, and
+ * the cursor reaches everything it covers. Three bugs that were really one:
+ * the cursor and the thing it acts on had drifted apart. */
+static void test_size_keys(void)
+{
+    Renderer r;
+    App      a;
+
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+
+    if (app_open_map(&a, "tests/fixtures/crowd.vtt") != 0) {
+        g_fails++;
+        fprintf(stderr, "  FAIL [sizekeys] could not open tests/fixtures/crowd.vtt\n");
+        rnd_free(&r);
+        return;
+    }
+
+    Map  *m  = a.map;
+    Play *p  = &a.play;
+    int   di = 4;                  /* Dax, alone at (9,2) with room to grow */
+    int   oi = 3;                  /* the 2x2 Ogre spanning (4..5, 6..7)   */
+
+    #define K(c)   do { Key k = { KEY_CHAR,  0, (uint32_t)(c) }; app_key(&a, k); } while (0)
+    #define ENT()  do { Key k = { KEY_ENTER, 0, 0 };             app_key(&a, k); } while (0)
+    #define ESC()  do { Key k = { KEY_ESC,   0, 0 };             app_key(&a, k); } while (0)
+
+    a.screen = SCREEN_PLAY;
+
+    /* Being held used to disqualify a creature from being resized, which made
+     * "this one is Large actually" a put-down-and-pick-up. */
+    CASE("a creature can be resized while it is being carried");
+    a.ed.cx = 9; a.ed.cy = 2;
+    ENT();
+    CHECK_EQ(p->sel, di);
+    CHECK_EQ(p->grabbed, 1);
+
+    K('3');
+    CHECK_EQ(m->tokens.v[di].size, 3);
+    CHECK_EQ(p->grabbed, 1);                  /* still in hand */
+
+    CASE("and the cursor is the new size at once, not after putting it down");
+    CHECK_EQ(play_cursor_size(p, m), 3);
+
+    CASE("the size setting follows, so the cursor matches after the drop too");
+    CHECK_EQ(p->next_size, 3);
+    ENT();
+    CHECK_EQ(p->grabbed, 0);
+    CHECK_EQ(play_cursor_size(p, m), 3);
+
+    CASE("shrinking works the same way");
+    K('1');
+    CHECK_EQ(m->tokens.v[di].size, 1);
+    CHECK_EQ(p->next_size, 1);
+    CHECK_EQ(play_cursor_size(p, m), 1);
+
+    /* A refused resize must not move the setting either, or the cursor would
+     * grow past a creature that did not -- which is the mismatch the whole
+     * change is about. */
+    CASE("a refused resize leaves the setting where it was");
+    ESC();
+    a.ed.cx = 2; a.ed.cy = 2;
+    p->next_size = 1;
+    ENT();                                     /* Aria, boxed in by Bram */
+    CHECK_EQ(p->sel, 0);
+    K('3');
+    CHECK_EQ(m->tokens.v[0].size, 1);
+    CHECK_EQ(p->next_size, 1);
+    CHECK(strstr(a.status, "not enough room") != NULL);
+    ESC();                                     /* let go */
+    ESC();                                     /* and deselect: d prefers the
+                                                * selection over the cursor */
+    CHECK_EQ(p->sel, -1);
+
+    /* A 3x3 cursor at (3,5) covers (3..5, 5..7); the Ogre spans (4..5, 6..7)
+     * and so sits in its lower-right. It used to be invisible to every
+     * command, because the lookup only ever read the cursor's own corner. */
+    CASE("a command reaches a creature merely overlapping a big cursor");
+    p->next_size = 3;
+    a.ed.cx = 3; a.ed.cy = 5;
+    CHECK_EQ(tokens_at(&m->tokens, 3, 5), -1);        /* the old lookup missed */
+    CHECK_EQ(tokens_covered_next(&m->tokens, 3, 5, 3, -1), oi);
+
+    int before = m->tokens.n;
+    K('d');
+    CHECK_EQ(m->tokens.n, before - 1);
+    CHECK_EQ(p->has_yank, 1);
+    CHECK_EQ(strcmp(p->yank.label, "Ogre"), 0);
+
+    CASE("and the corner square alone still finds nothing when the cursor is small");
+    p->next_size = 1;
+    K('p');                                    /* put the Ogre back */
+    CHECK_EQ(m->tokens.n, before);
+
+    #undef K
+    #undef ENT
+    #undef ESC
+    app_free(&a);
+    rnd_free(&r);
+}
+
 /* ------------------------------------------------------------ cursorsize */
 
 /* The cursor's tinted footprint, measured off the frame rather than trusted
@@ -5990,7 +6095,7 @@ static void test_play_focus(void)
     CASE("esc puts a held creature down before touching the overlay");
     a.ed.cx = a.map->tokens.v[0].x;
     a.ed.cy = a.map->tokens.v[0].y;
-    play_select_at(&a.play, a.map, a.ed.cx, a.ed.cy);
+    play_select_at(&a.play, a.map, a.ed.cx, a.ed.cy, 1);
     CHECK_EQ(a.play.sel, 0);
     press(&a, "r");
     CHECK_EQ(a.play.range.active, 1);
@@ -6016,7 +6121,7 @@ static void test_play_focus(void)
     int ntok = a.map->tokens.n;
     a.ed.cx = a.map->tokens.v[0].x;
     a.ed.cy = a.map->tokens.v[0].y;
-    play_select_at(&a.play, a.map, a.ed.cx, a.ed.cy);
+    play_select_at(&a.play, a.map, a.ed.cx, a.ed.cy, 1);
     press(&a, "\r");
     int ox = a.map->tokens.v[0].x;
     int dir = ox > 0 ? -1 : 1;               /* the fixture map is only 2 wide */
@@ -6168,6 +6273,7 @@ int main(void)
         { "cursorsize", test_cursor_size },
         { "covering", test_covering },
         { "choosing", test_choosing },
+        { "sizekeys", test_size_keys },
         { "voidlook", test_void_reads_as_void },
         { "palette",  test_terrain_palette },
         { "coords",   test_coords },

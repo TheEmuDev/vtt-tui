@@ -28,22 +28,22 @@ What the app costs to use. Each scenario replays a keystroke script, a frame per
 
 | scenario             | size   | frame p50 | frame p99 | cells | bytes |
 |----------------------|--------|-----------|-----------|-------|-------|
-| build, open          | 80x24  |    36.2us |    51.1us |    10 |   207 |
-| build, every edge    | 80x24  |    36.1us |    73.4us |    10 |   207 |
-| build, 200x200       | 80x24  |    35.8us |    81.4us |    12 |   209 |
-| build, 200x200       | 200x50 |   154.5us |   197.5us |    12 |   212 |
-| build, mostly void   | 200x50 |   140.2us |   167.2us |    20 |   267 |
-| build, tracing       | 80x24  |    35.3us |    60.9us |     2 |   140 |
-| build, circle brush  | 80x24  |    36.9us |    40.6us |    28 |   292 |
-| ruler, three legs    | 80x24  |    32.7us |    41.7us |    11 |    40 |
-| play, 24 tokens      | 80x24  |    38.6us |    81.1us |    19 |   298 |
-| play, 24 tokens      | 200x50 |   134.0us |   214.9us |    36 |   319 |
-| play, carrying       | 80x24  |    35.0us |    75.6us |    32 |   195 |
-| play, 3x3 cursor     | 80x24  |    45.6us |    82.9us |    40 |   663 |
-| play, choosing       | 80x24  |    36.1us |    42.0us |    13 |   101 |
-| play, range bands    | 80x24  |    43.4us |    84.3us |   163 |   842 |
-| help page            | 80x24  |    39.2us |    70.9us |   532 |  2656 |
-| profiler overlay     | 80x24  |    40.7us |   137.4us |   118 |   759 |
+| build, open          | 80x24  |    36.7us |    60.5us |    10 |   207 |
+| build, every edge    | 80x24  |    35.7us |    68.0us |    10 |   207 |
+| build, 200x200       | 80x24  |    35.8us |    80.0us |    12 |   209 |
+| build, 200x200       | 200x50 |   153.8us |   181.5us |    12 |   212 |
+| build, mostly void   | 200x50 |   141.6us |   297.4us |    20 |   267 |
+| build, tracing       | 80x24  |    35.5us |    64.8us |     2 |   140 |
+| build, circle brush  | 80x24  |    37.0us |    47.9us |    28 |   292 |
+| ruler, three legs    | 80x24  |    32.9us |    42.6us |    11 |    40 |
+| play, 24 tokens      | 80x24  |    38.5us |    70.6us |    19 |   298 |
+| play, 24 tokens      | 200x50 |   135.2us |   304.7us |    36 |   319 |
+| play, carrying       | 80x24  |    35.3us |    47.0us |    32 |   195 |
+| play, 3x3 cursor     | 80x24  |    41.0us |    65.2us |    40 |   663 |
+| play, choosing       | 80x24  |    36.0us |    39.9us |    13 |   101 |
+| play, range bands    | 80x24  |    43.1us |   124.8us |   163 |   842 |
+| help page            | 80x24  |    39.1us |    71.2us |   532 |  2656 |
+| profiler overlay     | 80x24  |    41.0us |   137.1us |   118 |   756 |
 
 `cells` and `bytes` are what actually reached the terminal. They predict perceived
 latency better than wall-clock does: a frame that recomputes everything but changes ten
@@ -59,18 +59,18 @@ a median near zero and a p99 that says what it costs when it does.
 
 | path             | p50     | p99     | worst   | calls | heaviest scenario      |
 |------------------|---------|---------|---------|-------|------------------------|
-| app.draw         | 114.1us | 237.1us | 280.1us |  3200 | build, 200x200 200x50  |
-| editor.draw      | 108.8us | 227.7us | 270.1us |  3200 | build, 200x200 200x50  |
-| grid.draw        |  97.4us | 200.9us | 243.2us |  3200 | build, 200x200 200x50  |
-| grid.labels      |  11.3us |  27.2us |  43.9us |  3200 | build, 200x200 200x50  |
-| input.key        |   0.1us |   9.4us |  73.0us |  6800 | play, carrying 80x24   |
-| move.label       |   0.0us |   1.0us |  25.6us |  6795 | play, carrying 80x24   |
-| play.draw        |  88.9us | 201.1us | 239.8us |  5595 | play, 24 tokens 200x50 |
-| prof.overlay     |   7.1us | 102.8us | 134.8us |  1000 | profiler overlay 80x24 |
-| range.draw       |   0.0us |  25.7us |  44.9us |  5195 | play, range bands 80x24 |
-| ruler.draw       |   0.7us |   1.9us |  13.6us |  4400 | ruler, three legs 80x24 |
-| trail.draw       |   0.1us |   0.2us |   0.5us |  6795 | play, carrying 80x24   |
-| trail.path       |   1.1us |  13.3us |  27.5us |   986 | play, carrying 80x24   |
+| app.draw         | 114.0us | 241.5us | 436.5us |  3200 | build, 200x200 200x50  |
+| editor.draw      | 108.8us | 228.0us | 423.0us |  3200 | build, 200x200 200x50  |
+| grid.draw        |  97.4us | 204.2us | 392.9us |  3200 | build, 200x200 200x50  |
+| grid.labels      |  11.4us |  31.1us |  43.5us |  3200 | build, mostly void 200x50 |
+| input.key        |   0.1us |  10.5us |  65.9us |  6800 | play, carrying 80x24   |
+| move.label       |   0.0us |   1.5us |  20.7us |  6795 | play, carrying 80x24   |
+| play.draw        |  89.5us | 208.3us | 245.2us |  5595 | play, 24 tokens 200x50 |
+| prof.overlay     |   7.1us | 102.1us | 119.0us |  1000 | profiler overlay 80x24 |
+| range.draw       |   0.0us |  30.5us |  61.2us |  5195 | play, range bands 80x24 |
+| ruler.draw       |   0.7us |   1.1us |  10.0us |  4400 | ruler, three legs 80x24 |
+| trail.draw       |   0.1us |   0.2us |  10.6us |  6795 | play, carrying 80x24   |
+| trail.path       |   1.2us |  16.4us |  64.1us |   986 | play, carrying 80x24   |
 
 ### Reading it
 

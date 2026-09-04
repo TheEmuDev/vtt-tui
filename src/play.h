@@ -116,8 +116,10 @@ int  play_step(Map *m, Undo *u, Play *p, int dx, int dy);
  * whoever you were looking at a moment ago. */
 void play_focus(Play *p, int sel);
 
-/* Selects the token under the cursor, or clears the selection. */
-void play_select_at(Play *p, const Map *m, int tx, int ty);
+/* Selects a token the cursor covers, or clears the selection. `size` is the
+ * cursor's footprint: an enlarged cursor reaches every creature under it, not
+ * only the one on its top-left square. */
+void play_select_at(Play *p, const Map *m, int tx, int ty, int size);
 
 /* Cycles the selection through one track: TOKEN_PLAYER, TOKEN_ENEMY, or
  * PLAY_ANY_KIND for the whole list. `delta` is 1 forwards, -1 back. Walking

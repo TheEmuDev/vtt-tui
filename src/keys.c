@@ -24,7 +24,7 @@ static const KeyDoc PLAY[] = {
     GROUP("Creatures"),
     { "i p",      "place a player",                    "i",     "place" },
     KEY("i e",    "place an enemy"),
-    KEY("1 2 3",  "size of the next one, or resize the selected"),
+    KEY("1 2 3",  "the cursor's size; resizes the selected creature too"),
     { "enter",    "pick up or put down; a big cursor walks what it covers",
                                                              NULL,    "grab" },
     { "d",        "remove it, keeping it to paste  (x does too)", "d y p", "edit" },

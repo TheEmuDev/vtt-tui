@@ -39,3 +39,5 @@ hedges
 token player 2 2 1 "Aria"
 token enemy 3 2 1 "Bram"
 token player 4 2 1 "Cara"
+token enemy 4 6 2 "Ogre"
+token player 9 2 1 "Dax"

@@ -1229,6 +1229,16 @@ static void wall_key(App *a, Key k)
 
 /* ------------------------------------------------------------ ruler mode */
 
+/* The creature the cursor is over, reading the whole footprint rather than
+ * the square in its corner. A 3x3 cursor covers nine squares and a creature
+ * standing on any of them is under it, which is the only reading that matches
+ * what the cursor draws. */
+static int token_under_cursor(App *a)
+{
+    return tokens_covered_next(&a->map->tokens, a->ed.cx, a->ed.cy,
+                               play_cursor_size(&a->play, a->map), -1);
+}
+
 /* Starts measuring at the cursor. In play mode the anchor snaps to a token
  * under the cursor, so "how far is the ogre from Aria" is two keystrokes. */
 static void ruler_begin(App *a)
@@ -1237,7 +1247,7 @@ static void ruler_begin(App *a)
     int     x = e->cx, y = e->cy;
 
     if (a->screen == SCREEN_PLAY) {
-        int idx = tokens_at(&a->map->tokens, x, y);
+        int idx = token_under_cursor(a);
         if (idx >= 0) {
             x = a->map->tokens.v[idx].x;
             y = a->map->tokens.v[idx].y;
@@ -1587,12 +1597,12 @@ static void cycle_track(App *a, int kind, int delta)
 }
 
 /* The creature a command acts on: the selection when there is one, otherwise
- * whatever the cursor is standing on. */
+ * whatever the cursor is over. */
 static int play_target_token(App *a)
 {
     Play *pl = &a->play;
     if (pl->sel >= 0 && pl->sel < a->map->tokens.n) return pl->sel;
-    return tokens_at(&a->map->tokens, a->ed.cx, a->ed.cy);
+    return token_under_cursor(a);
 }
 
 static void place_token(App *a, uint8_t kind)
@@ -1870,25 +1880,33 @@ static void play_key(App *a, Key k)
 
     if (k.ch >= '1' && k.ch <= '3') {
         uint8_t size = (uint8_t)(k.ch - '0');
-        /* With a token selected this resizes it; otherwise it sets the size
-         * the next placement will use. */
-        if (pl->sel >= 0 && pl->sel < m->tokens.n && !pl->grabbed) {
-            Token t = m->tokens.v[pl->sel];
-            if (!play_can_place(m, t.x, t.y, size, pl->sel)) {
+
+        /* One number behind all of it: the size keys set it, the cursor shows
+         * it, and a selected creature is resized to it. Being held is not a
+         * reason to refuse -- realising a creature is Large is something that
+         * happens mid-move as often as not. */
+        int idx = (pl->sel >= 0 && pl->sel < m->tokens.n) ? pl->sel : -1;
+
+        if (idx >= 0 && m->tokens.v[idx].size != size) {
+            Token t = m->tokens.v[idx];
+            /* The setting is left alone when the resize is refused, so the
+             * cursor never grows past a creature that did not. */
+            if (!play_can_place(m, t.x, t.y, size, idx)) {
                 app_set_status(a, "not enough room to grow this token");
                 return;
             }
             t.size = size;
             undo_begin(&a->undo);
-            undo_edit_token(&a->undo, m, pl->sel, t);
+            undo_edit_token(&a->undo, m, idx, t);
             undo_end(&a->undo);
-            app_set_status(a, "resized");
-        } else {
-            pl->next_size = size;
-            char msg[64];
-            snprintf(msg, sizeof msg, "next token will be %dx%d", size, size);
-            app_set_status(a, msg);
         }
+
+        pl->next_size = size;
+
+        char msg[64];
+        if (idx >= 0) snprintf(msg, sizeof msg, "%dx%d", size, size);
+        else          snprintf(msg, sizeof msg, "next token will be %dx%d", size, size);
+        app_set_status(a, msg);
         return;
     }
 
@@ -2011,7 +2029,7 @@ static void play_key(App *a, Key k)
         /* Anchored to the selection when there is one, so the highlight
          * follows that creature as it moves. */
         int anchor = (pl->sel >= 0 && pl->sel < m->tokens.n) ? pl->sel : -1;
-        if (anchor < 0) anchor = tokens_at(&m->tokens, e->cx, e->cy);
+        if (anchor < 0) anchor = token_under_cursor(a);
 
         int band = range_cycle(&pl->range, m, anchor, e->cx, e->cy);
         if (band < 0 && !pl->range.active) {
@@ -2026,7 +2044,7 @@ static void play_key(App *a, Key k)
     }
 
     case 'd': case 'x': {
-        int idx = pl->sel >= 0 ? pl->sel : tokens_at(&m->tokens, e->cx, e->cy);
+        int idx = pl->sel >= 0 ? pl->sel : token_under_cursor(a);
         if (idx < 0) { app_set_status(a, "no token here"); break; }
 
         /* A delete fills the yank buffer, the way vim's d does, so removing a
@@ -2053,7 +2071,7 @@ static void play_key(App *a, Key k)
 
     case 'c': {
         if (pl->sel < 0 || pl->sel >= m->tokens.n) {
-            play_select_at(pl, m, e->cx, e->cy);
+            play_select_at(pl, m, e->cx, e->cy, play_cursor_size(pl, m));
             if (pl->sel < 0) { app_set_status(a, "no token here"); break; }
         }
         open_prompt(a, PROMPT_RELABEL, "Change label", "",

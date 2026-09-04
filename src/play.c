@@ -100,9 +100,9 @@ void play_focus(Play *p, int sel)
     p->ntrail   = 0;
 }
 
-void play_select_at(Play *p, const Map *m, int tx, int ty)
+void play_select_at(Play *p, const Map *m, int tx, int ty, int size)
 {
-    play_focus(p, tokens_at(&m->tokens, tx, ty));
+    play_focus(p, tokens_covered_next(&m->tokens, tx, ty, size, -1));
 }
 
 /* Walks the list in ring order from `from`, returning the first index that
