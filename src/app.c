@@ -1551,6 +1551,24 @@ static int play_put_down(App *a, const char *how)
     return 1;
 }
 
+/* Which creature the cursor is currently offering, when it covers more than
+ * one. Says how to take it and how to see the next, since the choice is only
+ * discoverable once you know enter does not drop while it is being made. */
+static void report_choice(App *a)
+{
+    Play *pl = &a->play;
+    if (pl->sel < 0 || pl->sel >= a->map->tokens.n) return;
+
+    const Token *t = &a->map->tokens.v[pl->sel];
+    char at[MAP_COORD_MAX];
+    map_coord_name(t->x, t->y, at, sizeof at);
+
+    char msg[128];
+    snprintf(msg, sizeof msg, "%.24s at %s - enter for the next, move to take it",
+             t->label[0] ? t->label : token_kind_name(t->kind), at);
+    app_set_status(a, msg);
+}
+
 /* One of the three cycle keys. `kind` picks the track and the shifted key
  * runs it backwards. */
 static void cycle_track(App *a, int kind, int delta)
@@ -1727,6 +1745,12 @@ static void play_key(App *a, Key k)
     if (dx || dy) {
         int times = take_count(e);
         if (pl->grabbed) {
+            /* A movement key is what settles which creature was meant. The
+             * cursor goes to it and takes its size before the first step, so
+             * the move is made from where it will actually happen. */
+            int settling = pl->choosing;
+            pl->choosing = 0;
+
             /* One keypress is one undo step, count and all. Without the batch
              * the steps were pushed with no mark closing them, so they were
              * not merely un-undoable: the next u reached straight past them
@@ -1738,8 +1762,13 @@ static void play_key(App *a, Key k)
                 moved++;
             }
             undo_end(&a->undo);
+            /* Being blocked is the more urgent news, so it wins; otherwise
+             * the offer to walk the crowd has to go, since it stopped being
+             * true the moment the choice was settled. */
             if (moved < times)
                 app_set_status(a, pl->enforce_walls ? "blocked" : "edge of the map");
+            else if (settling)
+                app_set_status(a, "picked up - enter drops, esc cancels");
             if (pl->sel >= 0 && pl->sel < m->tokens.n) {
                 e->cx = m->tokens.v[pl->sel].x;
                 e->cy = m->tokens.v[pl->sel].y;
@@ -1754,7 +1783,12 @@ static void play_key(App *a, Key k)
     /* Esc backs out of one thing at a time, innermost first: put the creature
      * down, then take the overlay off, then let go of the creature. */
     if (k.kind == KEY_ESC) {
-        if (pl->grabbed) {
+        if (pl->grabbed && pl->choosing) {
+            /* Nothing has moved and the cursor never left, so there is no
+             * move to cancel -- only a choice to stop making. */
+            play_focus(pl, -1);
+            app_set_status(a, "");
+        } else if (pl->grabbed) {
             play_cancel_move(a);
         } else if (pl->range.active) {
             range_clear(&pl->range);
@@ -1773,6 +1807,22 @@ static void play_key(App *a, Key k)
     }
 
     if (k.kind == KEY_ENTER) {
+        int csize = play_cursor_size(pl, m);
+
+        /* Still choosing: enter walks the creatures the cursor covers rather
+         * than dropping one, because nothing has been committed to yet. */
+        if (pl->grabbed && pl->choosing) {
+            int next = tokens_covered_next(&m->tokens, e->cx, e->cy, csize,
+                                           pl->sel);
+            if (next >= 0 && next != pl->sel) {
+                play_focus(pl, next);
+                play_grab(pl, m, a->undo.depth);
+                pl->choosing = 1;
+            }
+            report_choice(a);
+            return;
+        }
+
         if (pl->grabbed) {
             char msg[96];
             snprintf(msg, sizeof msg, "dropped after %d step%s",
@@ -1780,10 +1830,24 @@ static void play_key(App *a, Key k)
             play_put_down(a, msg);
             return;
         }
-        play_select_at(pl, m, e->cx, e->cy);
-        if (pl->sel < 0) { app_set_status(a, "no token here"); return; }
 
+        int first = tokens_covered_next(&m->tokens, e->cx, e->cy, csize, -1);
+        if (first < 0) { app_set_status(a, "no token here"); return; }
+
+        play_focus(pl, first);
         play_grab(pl, m, a->undo.depth);
+
+        /* One candidate is not a choice, so a plain cursor over a plain
+         * creature behaves exactly as it always did: picked up, cursor on it.
+         * Two or more and the cursor holds still until a movement key says
+         * which was meant. */
+        if (tokens_covered_next(&m->tokens, e->cx, e->cy, csize, first) != first) {
+            pl->choosing = 1;
+            report_choice(a);
+            return;
+        }
+
+        follow_selection(a);
         app_set_status(a, "picked up - enter drops, esc cancels");
         return;
     }

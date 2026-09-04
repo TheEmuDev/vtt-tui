@@ -93,10 +93,11 @@ void play_focus(Play *p, int sel)
     if (p->range.active && p->range.token >= 0 && p->range.token != sel)
         range_clear(&p->range);
 
-    p->sel     = sel;
-    p->grabbed = 0;
-    p->steps   = 0;
-    p->ntrail  = 0;
+    p->sel      = sel;
+    p->grabbed  = 0;
+    p->choosing = 0;
+    p->steps    = 0;
+    p->ntrail   = 0;
 }
 
 void play_select_at(Play *p, const Map *m, int tx, int ty)
@@ -168,7 +169,7 @@ void play_grab(Play *p, const Map *m, int undo_depth)
 
 uint8_t play_cursor_size(const Play *p, const Map *m)
 {
-    if (p->grabbed && p->sel >= 0 && p->sel < m->tokens.n)
+    if (p->grabbed && !p->choosing && p->sel >= 0 && p->sel < m->tokens.n)
         return m->tokens.v[p->sel].size;
     return p->next_size;
 }

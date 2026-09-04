@@ -46,6 +46,25 @@ int tokens_at(const TokenList *l, int x, int y)
     return -1;
 }
 
+int tokens_covered_next(const TokenList *l, int x, int y, int size, int after)
+{
+    if (l->n <= 0) return -1;
+
+    /* From just past the current one, wrapping, so the walk ends back where
+     * it started rather than stopping at the end of the list. */
+    int start = (after >= 0 && after < l->n) ? after + 1 : 0;
+
+    for (int k = 0; k < l->n; k++) {
+        int i = (start + k) % l->n;
+        const Token *t = &l->v[i];
+
+        if (x + size <= t->x || t->x + t->size <= x) continue;
+        if (y + size <= t->y || t->y + t->size <= y) continue;
+        return i;
+    }
+    return -1;
+}
+
 int tokens_overlapping(const TokenList *l, int x, int y, int size,
                        int except, int kind)
 {

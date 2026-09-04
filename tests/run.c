@@ -3758,6 +3758,175 @@ static void test_trail_draw(void)
 }
 
 
+
+/* -------------------------------------------------------------- covering */
+
+static void test_covering(void)
+{
+    Map *m = map_new(14, 10, "cover");
+    map_fill_tiles(m, 0, 0, 13, 9, TILE_FLOOR);
+
+    Undo u;
+    undo_init(&u);
+
+    /* Three creatures in a row, so a 3x3 cursor at (2,2) covers all three and
+     * a 1x1 cursor covers exactly one. */
+    Token a = { 2, 2, 1, TOKEN_PLAYER, "Aria", { { 0, "" } }, 0 };
+    Token b = { 3, 2, 1, TOKEN_ENEMY,  "Bram", { { 0, "" } }, 0 };
+    Token c = { 4, 2, 1, TOKEN_PLAYER, "Cara", { { 0, "" } }, 0 };
+    int ai = undo_add_token(&u, m, a);
+    int bi = undo_add_token(&u, m, b);
+    int ci = undo_add_token(&u, m, c);
+
+    CASE("a 1x1 cursor covers the one creature standing there");
+    CHECK_EQ(tokens_covered_next(&m->tokens, 2, 2, 1, -1), ai);
+    CHECK_EQ(tokens_covered_next(&m->tokens, 2, 2, 1, ai), ai);
+    CHECK_EQ(tokens_covered_next(&m->tokens, 9, 9, 1, -1), -1);
+
+    CASE("a 3x3 cursor covers all three, and enter walks the ring");
+    CHECK_EQ(tokens_covered_next(&m->tokens, 2, 2, 3, -1), ai);
+    CHECK_EQ(tokens_covered_next(&m->tokens, 2, 2, 3, ai), bi);
+    CHECK_EQ(tokens_covered_next(&m->tokens, 2, 2, 3, bi), ci);
+    CHECK_EQ(tokens_covered_next(&m->tokens, 2, 2, 3, ci), ai);   /* wraps */
+
+    CASE("a block covering nothing offers nothing, whatever was chosen before");
+    CHECK_EQ(tokens_covered_next(&m->tokens, 8, 6, 3, bi), -1);
+
+    undo_free(&u);
+    map_free(m);
+}
+
+/* The whole gesture, driven through the key handler the way a GM drives it:
+ * enlarge the cursor, enter to walk the creatures under it, then a movement
+ * key to settle on one. */
+static void test_choosing(void)
+{
+    Renderer r;
+    App      a;
+
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+
+    if (app_open_map(&a, "tests/fixtures/crowd.vtt") != 0) {
+        g_fails++;
+        fprintf(stderr, "  FAIL [choosing] could not open tests/fixtures/crowd.vtt\n");
+        rnd_free(&r);
+        return;
+    }
+
+    Map  *m = a.map;
+    Play *p = &a.play;
+    int   ai = 0, bi = 1, ci = 2;      /* Aria, Bram, Cara, in file order */
+
+    /* The parser turns \r into KEY_ENTER before the app ever sees it, so the
+     * test has to hand over the same key the event loop would. */
+    #define K(c)   do { Key k = { KEY_CHAR,  0, (uint32_t)(c) }; app_key(&a, k); } while (0)
+    #define ENT()  do { Key k = { KEY_ENTER, 0, 0 };             app_key(&a, k); } while (0)
+    #define ESC()  do { Key k = { KEY_ESC,   0, 0 };             app_key(&a, k); } while (0)
+
+    a.screen = SCREEN_PLAY;
+    a.ed.cx = 2; a.ed.cy = 2;
+    p->next_size = 3;
+
+    CASE("enter under a big cursor picks one without moving the cursor");
+    ENT();
+    CHECK_EQ(p->sel, ai);
+    CHECK_EQ(p->grabbed, 1);
+    CHECK_EQ(p->choosing, 1);
+    CHECK_EQ(a.ed.cx, 2);
+    CHECK_EQ(a.ed.cy, 2);
+
+    CASE("and the cursor keeps its own size rather than the creature's");
+    CHECK_EQ(play_cursor_size(p, m), 3);
+
+    CASE("enter again walks to the next, still without moving");
+    ENT();
+    CHECK_EQ(p->sel, bi);
+    CHECK_EQ(p->choosing, 1);
+    CHECK_EQ(a.ed.cx, 2);
+    CHECK_EQ(play_cursor_size(p, m), 3);
+
+    ENT();
+    CHECK_EQ(p->sel, ci);
+    ENT();
+    CHECK_EQ(p->sel, ai);                      /* round again */
+
+    CASE("nothing has moved while the choice is being made");
+    CHECK_EQ(m->tokens.v[ai].x, 2);
+    CHECK_EQ(m->tokens.v[bi].x, 3);
+    CHECK_EQ(m->tokens.v[ci].x, 4);
+
+    CASE("a movement key settles it: the cursor takes the creature and its size");
+    K('j');
+    CHECK_EQ(p->choosing, 0);
+    CHECK_EQ(p->sel, ai);
+    CHECK_EQ(m->tokens.v[ai].y, 3);            /* it moved with the key */
+    CHECK_EQ(a.ed.cx, m->tokens.v[ai].x);
+    CHECK_EQ(a.ed.cy, m->tokens.v[ai].y);
+    CHECK_EQ(play_cursor_size(p, m), 1);
+
+    CASE("the offer to walk the crowd goes when it stops being true");
+    CHECK(strstr(a.status, "enter for the next") == NULL);
+
+    CASE("once settled, enter goes back to meaning put it down");
+    ENT();
+    CHECK_EQ(p->grabbed, 0);
+
+    /* A 1x1 cursor over a lone creature is not a choice, so it behaves the
+     * way it always did: picked up, cursor on it, enter drops. */
+    CASE("one candidate is picked up outright, with no choice to make");
+    p->next_size = 1;
+    a.ed.cx = 3; a.ed.cy = 2;
+    ENT();
+    CHECK_EQ(p->sel, bi);
+    CHECK_EQ(p->grabbed, 1);
+    CHECK_EQ(p->choosing, 0);
+    CHECK_EQ(play_cursor_size(p, m), 1);
+    ENT();
+    CHECK_EQ(p->grabbed, 0);
+
+    CASE("esc while choosing stops choosing and leaves the cursor put");
+    p->next_size = 3;
+    a.ed.cx = 2; a.ed.cy = 2;
+    ENT();
+    CHECK_EQ(p->choosing, 1);
+    ESC();
+    CHECK_EQ(p->grabbed, 0);
+    CHECK_EQ(p->choosing, 0);
+    CHECK_EQ(p->sel, -1);
+    CHECK_EQ(a.ed.cx, 2);
+    CHECK_EQ(a.ed.cy, 2);
+
+    CASE("an empty square under a big cursor still says so");
+    a.ed.cx = 9; a.ed.cy = 6;
+    ENT();
+    CHECK_EQ(p->sel, -1);
+    CHECK_EQ(p->grabbed, 0);
+
+    /* Cancelling has to reach back past the choice as well as the walk, or a
+     * creature picked out of a crowd could not be put back. */
+    CASE("esc after settling still returns the creature to where it set out");
+    a.ed.cx = 2; a.ed.cy = 2;
+    p->next_size = 3;
+    ENT();
+    ENT();                                   /* choose Bram */
+    CHECK_EQ(p->sel, bi);
+    int bx = m->tokens.v[bi].x, by = m->tokens.v[bi].y;
+    K('j'); K('j');
+    CHECK(m->tokens.v[bi].y != by);
+    ESC();
+    CHECK_EQ(m->tokens.v[bi].x, bx);
+    CHECK_EQ(m->tokens.v[bi].y, by);
+    CHECK_EQ(p->grabbed, 0);
+
+    #undef K
+    #undef ENT
+    #undef ESC
+    app_free(&a);
+    rnd_free(&r);
+}
+
 /* ------------------------------------------------------------ cursorsize */
 
 /* The cursor's tinted footprint, measured off the frame rather than trusted
@@ -5997,6 +6166,8 @@ int main(void)
         { "cancel",   test_cancel_move },
         { "movelabel", test_move_label },
         { "cursorsize", test_cursor_size },
+        { "covering", test_covering },
+        { "choosing", test_choosing },
         { "voidlook", test_void_reads_as_void },
         { "palette",  test_terrain_palette },
         { "coords",   test_coords },

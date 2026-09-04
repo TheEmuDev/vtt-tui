@@ -60,6 +60,14 @@ typedef struct {
      * step back. A cancelled move should leave no trace. */
     int grab_depth;
 
+    /* Set when a creature has been picked up but the cursor has not committed
+     * to it. An enlarged cursor can cover several creatures at once, and which
+     * one you meant is a question the cursor cannot answer by itself -- so
+     * enter walks the ones it covers while the cursor holds still, and the
+     * first movement key is what settles it. Until then the cursor keeps its
+     * own size and place, or cycling would drag it around the map. */
+    int choosing;
+
     /* The shortest walkable route from where the creature set out to where it
      * stands now -- not the wandering the cursor did to get there. Recut every
      * time the token lands somewhere new. RulerPt is reused because it is just

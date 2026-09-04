@@ -50,6 +50,13 @@ void   tokens_remove(TokenList *l, int idx);
  * Searched newest-first so the most recently placed token wins. */
 int    tokens_at(const TokenList *l, int x, int y);
 
+/* Walks the ring of tokens a size x size block covers, in list order. `after`
+ * is the one currently chosen and the next one round is returned, so repeated
+ * calls cycle; -1 starts at the beginning. Returns -1 when the block covers
+ * nothing at all, and `after` itself when it covers only that one, which is
+ * how a caller tells "the only candidate" from "one of several". */
+int    tokens_covered_next(const TokenList *l, int x, int y, int size, int after);
+
 /* The topmost token whose footprint overlaps the size x size block anchored
  * at (x,y), or -1 when the block is clear. `except` is an index to ignore, so
  * a token can be asked about a square it is already standing on. `kind` is
