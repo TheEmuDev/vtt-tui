@@ -28,22 +28,32 @@ What the app costs to use. Each scenario replays a keystroke script, a frame per
 
 | scenario             | size   | frame p50 | frame p99 | cells | bytes |
 |----------------------|--------|-----------|-----------|-------|-------|
-| build, open          | 80x24  |    36.1us |    52.0us |    10 |   207 |
-| build, every edge    | 80x24  |    35.7us |    77.4us |    10 |   207 |
-| build, 200x200       | 80x24  |    35.8us |    52.4us |    12 |   209 |
-| build, 200x200       | 200x50 |   154.7us |   316.5us |    12 |   212 |
-| build, mostly void   | 200x50 |   140.6us |   308.8us |    20 |   267 |
-| build, tracing       | 80x24  |    42.1us |    86.1us |     2 |   140 |
-| build, circle brush  | 80x24  |    37.1us |    53.1us |    28 |   292 |
-| ruler, three legs    | 80x24  |    32.9us |    58.4us |    11 |    40 |
-| play, 24 tokens      | 80x24  |    39.9us |   113.5us |    19 |   298 |
-| play, 24 tokens      | 200x50 |   134.7us |   182.0us |    36 |   319 |
-| play, carrying       | 80x24  |    34.9us |    64.9us |    33 |   204 |
-| play, 3x3 cursor     | 80x24  |    41.2us |    84.1us |    40 |   663 |
-| play, choosing       | 80x24  |    36.1us |    45.6us |    13 |   101 |
-| play, range bands    | 80x24  |    42.8us |    80.0us |   163 |   845 |
-| help page            | 80x24  |    39.2us |    71.3us |   532 |  2656 |
-| profiler overlay     | 80x24  |    40.6us |   146.2us |   117 |   752 |
+| build, open          | 80x24  |    40.0us |    49.3us |    10 |   207 |
+| build, every edge    | 80x24  |    39.5us |    77.9us |    10 |   207 |
+| build, 200x200       | 80x24  |    39.6us |    59.4us |    12 |   209 |
+| build, 200x200       | 200x50 |   170.4us |   196.2us |    12 |   212 |
+| build, mostly void   | 200x50 |   156.1us |   324.2us |    20 |   267 |
+| build, tracing       | 80x24  |    39.1us |    52.9us |     2 |   140 |
+| build, circle brush  | 80x24  |    41.2us |    84.5us |    28 |   292 |
+| ruler, three legs    | 80x24  |    36.3us |    46.5us |    11 |    40 |
+| play, 24 tokens      | 80x24  |    43.0us |    52.9us |    19 |   298 |
+| play, 24 tokens      | 200x50 |   149.2us |   163.5us |    36 |   319 |
+| play, carrying       | 80x24  |    42.3us |    88.8us |    33 |   205 |
+| play, 3x3 cursor     | 80x24  |    45.6us |   103.4us |    40 |   663 |
+| play, choosing       | 80x24  |    40.2us |    66.5us |    13 |   101 |
+| play, group box      | 80x24  |    38.9us |    51.0us |    18 |   133 |
+| play, group carry    | 80x24  |    44.4us |    88.7us |    22 |   131 |
+| play, range bands    | 80x24  |    48.4us |   102.9us |   163 |   845 |
+| help page            | 80x24  |    45.4us |   147.7us |   532 |  2656 |
+| profiler overlay     | 80x24  |    45.6us |   160.4us |   118 |   759 |
+
+> Every row in this table is about 10% slower than the one recorded before it, and
+> none of it is the code. The previous binary run through the same harness on the same
+> day reads 40.0us for `build, open` against the current binary's 40.0us, and a direct
+> A/B on one fixture reads 31.0us against 31.0us. The machine's own baseline moved.
+> This is the reason the page says to read the ratios between rows rather than the
+> absolute numbers, and the reason a suspicious row is worth an A/B before it is worth
+> a commit message.
 
 `cells` and `bytes` are what actually reached the terminal. They predict perceived
 latency better than wall-clock does: a frame that recomputes everything but changes ten
@@ -59,18 +69,20 @@ a median near zero and a p99 that says what it costs when it does.
 
 | path             | p50     | p99     | worst   | calls | heaviest scenario      |
 |------------------|---------|---------|---------|-------|------------------------|
-| app.draw         | 114.2us | 237.4us | 295.5us |  3200 | build, 200x200 200x50  |
-| editor.draw      | 109.0us | 227.4us | 284.1us |  3200 | build, 200x200 200x50  |
-| grid.draw        |  97.4us | 199.1us | 260.2us |  3200 | build, 200x200 200x50  |
-| grid.labels      |  11.4us |  26.9us |  36.7us |  3200 | build, 200x200 200x50  |
-| input.key        |   0.1us |  10.0us |  70.0us |  6800 | play, carrying 80x24   |
-| move.label       |   0.0us |   1.7us |  11.8us |  6795 | play, carrying 80x24   |
-| play.draw        |  88.9us | 201.2us | 263.1us |  5595 | play, 24 tokens 200x50 |
-| prof.overlay     |   7.0us | 122.0us | 248.5us |  1000 | profiler overlay 80x24 |
-| range.draw       |   0.0us |  26.4us |  45.0us |  5195 | play, range bands 80x24 |
-| ruler.draw       |   0.7us |   1.7us |  12.6us |  4400 | ruler, three legs 80x24 |
-| trail.draw       |   0.1us |   0.2us |  10.5us |  6795 | play, carrying 80x24   |
-| trail.path       |   1.3us |  15.6us |  39.6us |   986 | play, carrying 80x24   |
+| app.draw         | 125.9us | 264.4us | 332.5us |  3200 | build, 200x200 200x50  |
+| editor.draw      | 119.8us | 253.7us | 320.3us |  3200 | build, 200x200 200x50  |
+| grid.draw        | 107.0us | 223.6us | 301.5us |  3200 | build, 200x200 200x50  |
+| grid.labels      |  12.7us |  29.7us |  41.0us |  3200 | build, mostly void 200x50 |
+| group.box        |   0.1us |   0.2us |   7.2us |   400 | play, group carry 80x24 |
+| group.move       |   0.1us |   2.0us | 142.8us |  3200 | play, carrying 80x24   |
+| input.key        |   0.2us |  16.8us | 148.1us |  6800 | play, carrying 80x24   |
+| move.label       |   0.0us |   1.9us |   6.7us |  6795 | play, carrying 80x24   |
+| play.draw        |  98.3us | 218.8us | 450.2us |  5595 | play, 24 tokens 200x50 |
+| prof.overlay     |   8.5us | 126.6us | 156.0us |  1000 | profiler overlay 80x24 |
+| range.draw       |   0.0us |  28.5us |  45.1us |  5195 | play, range bands 80x24 |
+| ruler.draw       |   0.8us |   1.9us |   5.5us |  4400 | ruler, three legs 80x24 |
+| trail.draw       |   0.1us |   0.3us |   0.9us |  6795 | play, carrying 80x24   |
+| trail.path       |   1.9us |  24.7us |  37.6us |   986 | play, carrying 80x24   |
 
 ### Reading it
 
@@ -104,6 +116,28 @@ to zero and gives back the row and the gutter as well.
 creature is actually being carried — 36.0µs against 35.0µs, medians of three runs with the
 call in and out. Cells and bytes did not move at all: the distance was taken off the status
 line at the same time, so the same characters change per frame, just somewhere more useful.
+
+**Selecting several creatures is cheaper than selecting one**, which is not a typo:
+`play, group box` writes 18 cells and 133 bytes against `play, 24 tokens`' 19 and 298.
+The box holds still while it is being stretched, and a frame where only the box edge
+and a ring or two change is a frame with almost nothing to write. Carrying the group
+is 22 cells and 131 bytes -- the creatures move, so their rings move with them, but
+three creatures walking abreast redraw barely more than one does, because the ribbon
+and the label are drawn once for the group rather than once each.
+
+`group.move` is the whole formation's move: the check for every member, then the
+steps. **0.1us typical and 2.0us at p99** for the sizes a table plays at. It is
+O(members x tokens x members), because each member asks the token list whether
+anything is in its way and each of those asks walks the group to see if the answer is
+one of its own. At the 32-creature cap on a crowded map that is tens of thousands of
+comparisons on a keystroke -- still microseconds, and the same shape as `trail.path`
+below. The fix, if it ever earns one, is the same occupancy grid.
+
+`group.box` is the enumeration behind enter, y and d: **0.2us at p99** over a
+24-creature map. The membership test that runs per token per frame while the box is
+open is deliberately *not* instrumented. It was, briefly, and at one zone per token
+per frame it fired 143,880 times in a perf run and cost more than the rectangle test
+it was measuring -- the same objection this page makes to `prof.overlay`.
 
 **The ring around a selected creature costs one cell and nine bytes a frame**, and
 only in the frames where the selection is moving -- 33 cells against 32 on the carrying

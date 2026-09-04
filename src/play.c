@@ -21,6 +21,13 @@ void play_init(Play *p)
 int token_can_move(const Map *m, const Token *t, int dx, int dy, int enforce,
                    int except)
 {
+    return token_can_move_set(m, t, dx, dy, enforce, &except,
+                              except >= 0 ? 1 : 0);
+}
+
+int token_can_move_set(const Map *m, const Token *t, int dx, int dy,
+                       int enforce, const int *skip, int nskip)
+{
     int s  = t->size;
     int nx = t->x + dx;
     int ny = t->y + dy;
@@ -34,7 +41,8 @@ int token_can_move(const Map *m, const Token *t, int dx, int dy, int enforce,
      * about crossing rather than about where you come to rest -- refusing to
      * be put down is what stops two creatures sharing a square. */
     uint8_t other = (t->kind == TOKEN_PLAYER) ? TOKEN_ENEMY : TOKEN_PLAYER;
-    if (tokens_overlapping(&m->tokens, nx, ny, s, except, other) >= 0) return 0;
+    if (tokens_overlapping_set(&m->tokens, nx, ny, s, skip, nskip, other) >= 0)
+        return 0;
 
     /* Every tile along the leading face must be able to make the crossing;
      * one blocked row is enough to stop the whole token. */
@@ -73,12 +81,19 @@ static const int TRAIL_DY[4] = {  0,  0,  1, -1 };
 
 int play_step(Map *m, Undo *u, Play *p, int dx, int dy)
 {
-    if (p->sel < 0 || p->sel >= m->tokens.n) return 0;
+    {
+        /* Scoped to the check and the move alone. Recutting the ribbon is
+         * trail.path's own row, and a zone that swallowed it would report
+         * the same microseconds twice. */
+        PROF_ZONE("group.move");
 
-    Token *t = &m->tokens.v[p->sel];
-    if (!token_can_move(m, t, dx, dy, p->enforce_walls, p->sel)) return 0;
+        if (!play_group_can_move(m, p, dx, dy)) return 0;
 
-    undo_move_token(u, m, p->sel, t->x + dx, t->y + dy);
+        for (int i = 0; i < p->ngroup; i++) {
+            const Token *t = &m->tokens.v[p->group[i]];
+            undo_move_token(u, m, p->group[i], t->x + dx, t->y + dy);
+        }
+    }
     p->steps++;
     play_trail_sync(p, m);
     return 1;
@@ -98,6 +113,69 @@ void play_focus(Play *p, int sel)
     p->choosing = 0;
     p->steps    = 0;
     p->ntrail   = 0;
+
+    p->group[0] = sel;
+    p->ngroup   = (sel >= 0) ? 1 : 0;
+}
+
+void play_focus_group(Play *p, const int *idx, int n)
+{
+    if (n > PLAY_GROUP_MAX) n = PLAY_GROUP_MAX;
+
+    /* Through play_focus so everything that hangs off the selection -- the
+     * grab, the trail, the range overlay -- is cleared exactly once. */
+    play_focus(p, n > 0 ? idx[0] : -1);
+
+    for (int i = 0; i < n; i++) p->group[i] = idx[i];
+    p->ngroup = n;
+}
+
+int play_in_group(const Play *p, int idx)
+{
+    for (int i = 0; i < p->ngroup; i++)
+        if (p->group[i] == idx) return 1;
+    return 0;
+}
+
+/* Meets the box rather than sits wholly inside it, so a big creature lapping
+ * into it is caught -- the same reading the cursor uses for the square it is
+ * standing on. Shared with the drawing so the ring and the pickup cannot
+ * disagree about what is in the box. */
+static int box_meets(const Token *t, int ax, int ay, int bx, int by)
+{
+    if (ax > bx) { int v = ax; ax = bx; bx = v; }
+    if (ay > by) { int v = ay; ay = by; by = v; }
+
+    if (t->x > bx || t->x + t->size - 1 < ax) return 0;
+    if (t->y > by || t->y + t->size - 1 < ay) return 0;
+    return 1;
+}
+
+int play_box_tokens(const Map *m, int ax, int ay, int bx, int by,
+                    int *out, int max)
+{
+    PROF_ZONE("group.box");
+
+    int n = 0;
+    for (int i = 0; i < m->tokens.n; i++) {
+        if (!box_meets(&m->tokens.v[i], ax, ay, bx, by)) continue;
+        if (n < max) out[n] = i;
+        n++;
+    }
+    return n;
+}
+
+int play_group_can_move(const Map *m, const Play *p, int dx, int dy)
+{
+    if (p->ngroup <= 0) return 0;
+
+    for (int i = 0; i < p->ngroup; i++) {
+        if (p->group[i] < 0 || p->group[i] >= m->tokens.n) return 0;
+        if (!token_can_move_set(m, &m->tokens.v[p->group[i]], dx, dy,
+                                p->enforce_walls, p->group, p->ngroup))
+            return 0;
+    }
+    return 1;
 }
 
 void play_select_at(Play *p, const Map *m, int tx, int ty, int size)
@@ -225,8 +303,8 @@ void play_trail_sync(Play *p, const Map *m)
              * both ways, so either phrasing gives the same answer. */
             probe.x = (int16_t)nx;
             probe.y = (int16_t)ny;
-            if (!token_can_move(m, &probe, -TRAIL_DX[d], -TRAIL_DY[d],
-                                p->enforce_walls, p->sel))
+            if (!token_can_move_set(m, &probe, -TRAIL_DX[d], -TRAIL_DY[d],
+                                    p->enforce_walls, p->group, p->ngroup))
                 continue;
 
             dist[ni] = dist[cur] + 1;
@@ -258,8 +336,8 @@ void play_trail_sync(Play *p, const Map *m)
                  * hop straight through the wall to reach it. */
                 probe.x = (int16_t)cx;
                 probe.y = (int16_t)cy;
-                if (!token_can_move(m, &probe, TRAIL_DX[d], TRAIL_DY[d],
-                                    p->enforce_walls, p->sel))
+                if (!token_can_move_set(m, &probe, TRAIL_DX[d], TRAIL_DY[d],
+                                        p->enforce_walls, p->group, p->ngroup))
                     continue;
 
                 long dev = labs((long)(gx - ox) * (ny - oy) -
@@ -326,13 +404,19 @@ void play_trail_draw(Renderer *r, const Map *m, const GridView *g,
 
 int play_can_place(const Map *m, int tx, int ty, int size, int except)
 {
+    return play_can_place_set(m, tx, ty, size, &except, except >= 0 ? 1 : 0);
+}
+
+int play_can_place_set(const Map *m, int tx, int ty, int size,
+                       const int *skip, int nskip)
+{
     if (tx < 0 || ty < 0 || tx + size > m->w || ty + size > m->h) return 0;
 
     /* Coming to rest is the strict one. Creatures step through each other on
      * the way past, but two of them cannot end up sharing a square: a stack
      * of tokens is a stack you cannot see into. */
-    return tokens_overlapping(&m->tokens, tx, ty, size, except,
-                              TOKEN_ANY_KIND) < 0;
+    return tokens_overlapping_set(&m->tokens, tx, ty, size, skip, nskip,
+                                  TOKEN_ANY_KIND) < 0;
 }
 
 void play_move_label(Renderer *r, const Map *m, const GridView *g,
@@ -360,17 +444,29 @@ void play_move_label(Renderer *r, const Map *m, const GridView *g,
 
     /* Beside the creature rather than above or below it: those two rows
      * belong to its status markers, and a distance covering a condition
-     * would be a worse trade than one sitting out to the side. */
-    Rect a;
-    grid_token_area(g, t->x, t->y, t->size, &a);
+     * would be a worse trade than one sitting out to the side.
+     *
+     * Beside the whole group, not just the primary, or a label placed off
+     * one creature's right edge lands squarely on the next one along. */
+    int lo = t->x, hi = t->x + t->size - 1;
+    for (int i = 0; i < p->ngroup; i++) {
+        const Token *o = &m->tokens.v[p->group[i]];
+        if (o->x < lo)                lo = o->x;
+        if (o->x + o->size - 1 > hi)  hi = o->x + o->size - 1;
+    }
+
+    Rect a, right, left;
+    grid_token_area(g, t->x, t->y, t->size, &a);   /* the row it sits on */
+    grid_token_area(g, hi, t->y, 1, &right);
+    grid_token_area(g, lo, t->y, 1, &left);
 
     int w  = text_width(label);
-    int lx = a.x + a.w + 1;
+    int lx = right.x + right.w + 1;
     int ly = a.y + a.h / 2;
 
     /* Keep it inside the viewport, flipping to the other side when there is
      * no room rather than letting the clip eat it. */
-    if (lx + w > g->view.x + g->view.w) lx = a.x - w - 1;
+    if (lx + w > g->view.x + g->view.w) lx = left.x - w - 1;
     if (lx < g->view.x)                 lx = g->view.x;
     if (ly < g->view.y)                 ly = g->view.y;
     if (ly >= g->view.y + g->view.h)    ly = g->view.y + g->view.h - 1;
@@ -393,6 +489,13 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
     /* Under everything else, so tokens standing in it stay readable. */
     range_draw(r, m, &e->view, &p->range, th);
 
+    /* The box, under the creatures it is picking out. Tinted the same way
+     * build mode tints its visual selection, so the gesture reads as the same
+     * gesture in both modes. */
+    if (p->visual)
+        grid_draw_tile_region(r, &e->view, p->anchor_x, p->anchor_y,
+                              e->cx, e->cy, th->sel_bg);
+
     /* The outline first, then the trail over it: the trail tints backgrounds
      * without touching glyphs, so the outline survives, and its own origin
      * mark lands on top where the two would otherwise both claim one cell. */
@@ -409,8 +512,20 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
     uint8_t csize = play_cursor_size(p, m);
     grid_draw_cursor_area(r, &e->view, m, e->cx, e->cy, csize, th->cursor_bg);
 
-    for (int i = 0; i < m->tokens.n; i++)
-        grid_draw_token(r, &e->view, &m->tokens.v[i], th, i == p->sel, ascii);
+    /* Everything in the group is ringed, not just the primary: a formation
+     * you cannot see the extent of is one you will move by accident. While
+     * the box is open the ring is live, so the box shows what it has caught
+     * before you commit to it rather than after. */
+    for (int i = 0; i < m->tokens.n; i++) {
+        /* Deliberately not wrapped in a zone: it is one rectangle test per
+         * token, and at one PROF_ZONE per token per frame the instrument cost
+         * more than the thing it was measuring. group.box measures the
+         * enumeration on the keystroke paths instead. */
+        int lit = p->visual ? box_meets(&m->tokens.v[i], p->anchor_x,
+                                        p->anchor_y, e->cx, e->cy)
+                            : play_in_group(p, i);
+        grid_draw_token(r, &e->view, &m->tokens.v[i], th, lit, ascii);
+    }
 
     /* After every token, so a marker is never buried under the next one. */
     for (int i = 0; i < m->tokens.n; i++)

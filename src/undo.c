@@ -246,23 +246,29 @@ int undo_undo(Undo *u, Map *m)
 }
 
 /* Is every op in this batch a move of that one token? */
-static int batch_is_moves_of(const Undo *u, int b, int idx)
+static int batch_is_moves_of(const Undo *u, int b, const int *idx, int nidx)
 {
     int lo = u->marks[b], hi = batch_end((Undo *)u, b);
     if (lo >= hi) return 0;
 
-    for (int i = lo; i < hi; i++)
-        if (u->ops[i].kind != OP_TOKEN_MOVE || u->ops[i].x != idx) return 0;
+    for (int i = lo; i < hi; i++) {
+        if (u->ops[i].kind != OP_TOKEN_MOVE) return 0;
+
+        int mine = 0;
+        for (int j = 0; j < nidx; j++)
+            if (u->ops[i].x == idx[j]) { mine = 1; break; }
+        if (!mine) return 0;
+    }
     return 1;
 }
 
-int undo_rewind_moves(Undo *u, Map *m, int depth, int idx)
+int undo_rewind_moves(Undo *u, Map *m, int depth, const int *idx, int nidx)
 {
     if (u->open) undo_end(u);
     if (depth < 0) depth = 0;
 
     int undone = 0;
-    while (u->depth > depth && batch_is_moves_of(u, u->depth - 1, idx)) {
+    while (u->depth > depth && batch_is_moves_of(u, u->depth - 1, idx, nidx)) {
         undo_undo(u, m);
         undone++;
     }

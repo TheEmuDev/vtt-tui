@@ -66,6 +66,12 @@ int    tokens_covered_next(const TokenList *l, int x, int y, int size, int after
 int    tokens_overlapping(const TokenList *l, int x, int y, int size,
                           int except, int kind);
 
+/* The same search skipping a set of indices rather than one. Creatures moving
+ * as a group step through each other, so every member has to be transparent to
+ * every other member's check, not only to its own. `skip` may be NULL. */
+int    tokens_overlapping_set(const TokenList *l, int x, int y, int size,
+                              const int *skip, int nskip, int kind);
+
 const char *token_kind_name(uint8_t kind);
 
 /* A label no other token carries, so pasting a copy of "Goblin" gives you

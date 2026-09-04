@@ -1146,7 +1146,7 @@ static void test_play(void)
     int ai = undo_add_token(&u, m, a);
 
     CASE("a 1x1 token moves freely on open floor");
-    p.sel = ai;
+    play_focus(&p, ai);
     CHECK_EQ(play_step(m, &u, &p, 1, 0), 1);
     CHECK_EQ(m->tokens.v[ai].x, 3);
     CHECK_EQ(p.steps, 1);
@@ -1181,8 +1181,7 @@ static void test_play(void)
     CASE("a 2x2 token is blocked by a wall on any part of its face");
     Token big = { 4, 4, 2, TOKEN_ENEMY, "Ogre" };
     int bi = undo_add_token(&u, m, big);
-    p.sel = bi;
-
+    play_focus(&p, bi);
     CHECK_EQ(token_can_move(m, &m->tokens.v[bi], 1, 0, 1, bi), 1);
     map_set_vedge(m, 6, 5, EDGE_WALL);        /* the token's lower-right face */
     CHECK_EQ(token_can_move(m, &m->tokens.v[bi], 1, 0, 1, bi), 0);
@@ -1224,7 +1223,7 @@ static void test_play(void)
     CHECK_EQ(play_can_place(m, 4, 4, 3, bi), 1);
 
     CASE("cycling wraps in both directions");
-    p.sel = -1;
+    play_focus(&p, -1);
     play_cycle(&p, m, 1, PLAY_ANY_KIND);
     CHECK_EQ(p.sel, 0);
     play_cycle(&p, m, 1, PLAY_ANY_KIND);
@@ -1243,7 +1242,7 @@ static void test_play(void)
     CHECK_EQ(p.sel, -1);
 
     CASE("moves undo one step at a time");
-    p.sel = ai;
+    play_focus(&p, ai);
     m->tokens.v[ai].x = 5;
     m->tokens.v[ai].y = 5;
     undo_clear(&u);
@@ -1256,7 +1255,7 @@ static void test_play(void)
     CHECK_EQ(m->tokens.v[ai].x, 5);
 
     CASE("stepping with nothing selected does nothing");
-    p.sel = -1;
+    play_focus(&p, -1);
     CHECK_EQ(play_step(m, &u, &p, 1, 0), 0);
 
     undo_free(&u);
@@ -3478,7 +3477,7 @@ static void test_clear_status_keys(void)
     CHECK(strstr(a.status, "no markers") != NULL);
 
     CASE("s d away from any token says so");
-    a.play.sel = -1;
+    play_focus(&a.play, -1);
     a.ed.cx = 1; a.ed.cy = 1;
     press(&a, "sd");
     CHECK_EQ(a.modal, MODAL_NONE);
@@ -3504,8 +3503,7 @@ static void test_trail(void)
 
     Token g = { 2, 2, 1, TOKEN_ENEMY, "Goblin", { { 0, "" } }, 0 };
     int idx = undo_add_token(&u, m, g);
-    p.sel = idx;
-
+    play_focus(&p, idx);
     CASE("picking a token up marks the tile it stood on");
     play_grab(&p, m, 0);
     CHECK_EQ(p.grabbed, 1);
@@ -3571,7 +3569,7 @@ static void test_trail(void)
     play_init(&wp);
     Token t2 = { 3, 0, 1, TOKEN_ENEMY, "W", { { 0, "" } }, 0 };
     int wi = undo_add_token(&wu, w, t2);
-    wp.sel = wi;
+    play_focus(&wp, wi);
     play_grab(&wp, w, 0);
 
     /* Down the near side, round the end of the wall, back up the far side. */
@@ -3639,7 +3637,7 @@ static void test_trail(void)
     Play bp;
     play_init(&bp);
     Token bt = { 0, 0, 1, TOKEN_ENEMY, "B", { { 0, "" } }, 0 };
-    bp.sel = undo_add_token(&bu, big, bt);
+    play_focus(&bp, undo_add_token(&bu, big, bt));
     play_grab(&bp, big, 0);
     big->tokens.v[bp.sel].x = (int16_t)(MAP_MAX_DIM - 1);
     play_trail_sync(&bp, big);
@@ -3672,8 +3670,7 @@ static void test_trail_draw(void)
 
     Token t = { 2, 2, 1, TOKEN_ENEMY, "G", { { 0, "" } }, 0 };
     int idx = undo_add_token(&u, m, t);
-    p.sel = idx;
-
+    play_focus(&p, idx);
     CASE("nothing is drawn while no token is held");
     rnd_begin(&r);
     play_trail_draw(&r, m, &g, &p, &THEME_DARK, 0);
@@ -4018,8 +4015,8 @@ static void test_size_keys(void)
     int before = m->tokens.n;
     K('d');
     CHECK_EQ(m->tokens.n, before - 1);
-    CHECK_EQ(p->has_yank, 1);
-    CHECK_EQ(strcmp(p->yank.label, "Ogre"), 0);
+    CHECK_EQ(p->nyank, 1);
+    CHECK_EQ(strcmp(p->yank[0].label, "Ogre"), 0);
 
     CASE("and the corner square alone still finds nothing when the cursor is small");
     p->next_size = 1;
@@ -4115,7 +4112,7 @@ static void test_selection_contrast(void)
     } while (0)
 
     CASE("an unselected creature has no ring");
-    p.sel = -1;
+    play_focus(&p, -1);
     rnd_begin(&r);
     play_draw(&r, m, &e, &p, th, 0);
     Cell *ring[4];
@@ -4126,7 +4123,7 @@ static void test_selection_contrast(void)
     }
 
     CASE("a selected one is ringed on the grid lines around it");
-    p.sel = ai;
+    play_focus(&p, ai);
     e.cx = 0; e.cy = 0;               /* cursor elsewhere: the ring is the
                                        * only cue left, which is the case
                                        * that was failing */
@@ -4145,7 +4142,7 @@ static void test_selection_contrast(void)
     CASE("an enemy is ringed in its own colour, not the player's");
     Token b = { 8, 3, 1, TOKEN_ENEMY, "Bram", { { 0, "" } }, 0 };
     int bi = undo_add_token(&u, m, b);
-    p.sel = bi;
+    play_focus(&p, bi);
     grid_token_area(&e.view, 8, 3, 1, &area);
     rnd_begin(&r);
     play_draw(&r, m, &e, &p, th, 0);
@@ -4156,6 +4153,208 @@ static void test_selection_contrast(void)
     rnd_free(&r);
     undo_free(&u);
     map_free(m);
+}
+
+
+/* ---------------------------------------------------------------- group */
+
+/* Selecting several creatures with v and acting on them as one. The fixture
+ * has Aria, Bram and Cara abreast at (2..4, 2), a 2x2 Ogre at (4..5, 6..7)
+ * and Dax alone at (9,2). */
+static void test_group(void)
+{
+    Renderer r;
+    App      a;
+
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+
+    if (app_open_map(&a, "tests/fixtures/crowd.vtt") != 0) {
+        g_fails++;
+        fprintf(stderr, "  FAIL [group] could not open tests/fixtures/crowd.vtt\n");
+        rnd_free(&r);
+        return;
+    }
+
+    Map  *m = a.map;
+    Play *p = &a.play;
+
+    #define K(c)   do { Key k = { KEY_CHAR,  0, (uint32_t)(c) }; app_key(&a, k); } while (0)
+    #define ENT()  do { Key k = { KEY_ENTER, 0, 0 };             app_key(&a, k); } while (0)
+    #define ESC()  do { Key k = { KEY_ESC,   0, 0 };             app_key(&a, k); } while (0)
+
+    a.screen = SCREEN_PLAY;
+
+    CASE("the box catches every creature whose footprint meets it");
+    int idx[PLAY_GROUP_MAX];
+    CHECK_EQ(play_box_tokens(m, 2, 2, 4, 2, idx, PLAY_GROUP_MAX), 3);
+    CHECK_EQ(idx[0], 0); CHECK_EQ(idx[1], 1); CHECK_EQ(idx[2], 2);
+
+    /* A creature only lapping into the box counts, the same reading the
+     * cursor uses for the square it stands on. */
+    CASE("a big creature lapping into the box is caught, not missed");
+    CHECK_EQ(play_box_tokens(m, 5, 7, 6, 8, idx, PLAY_GROUP_MAX), 1);
+    CHECK_EQ(idx[0], 3);                       /* the 2x2 Ogre */
+
+    CASE("an empty box catches nothing");
+    CHECK_EQ(play_box_tokens(m, 11, 8, 13, 9, idx, PLAY_GROUP_MAX), 0);
+
+    CASE("v opens a box and enter carries everything in it");
+    a.ed.cx = 2; a.ed.cy = 2;
+    K('v');
+    CHECK_EQ(p->visual, 1);
+    K('l'); K('l');                            /* out to Cara */
+    CHECK_EQ(a.ed.cx, 4);
+    ENT();
+    CHECK_EQ(p->visual, 0);
+    CHECK_EQ(p->grabbed, 1);
+    CHECK_EQ(p->ngroup, 3);
+    CHECK_EQ(p->sel, 0);                       /* the primary is group[0] */
+
+    CASE("they walk together");
+    K('j');
+    CHECK_EQ(m->tokens.v[0].y, 3);
+    CHECK_EQ(m->tokens.v[1].y, 3);
+    CHECK_EQ(m->tokens.v[2].y, 3);
+
+    /* Without transparency inside the group a column could never move at
+     * all: each creature is blocked by the one in front of it. */
+    CASE("the group is transparent to itself, so a packed line can move");
+    K('l');
+    CHECK_EQ(m->tokens.v[0].x, 3);
+    CHECK_EQ(m->tokens.v[1].x, 4);
+    CHECK_EQ(m->tokens.v[2].x, 5);
+
+    CASE("esc cancels the whole walk, not just the primary's");
+    ESC();
+    CHECK_EQ(m->tokens.v[0].x, 2); CHECK_EQ(m->tokens.v[0].y, 2);
+    CHECK_EQ(m->tokens.v[1].x, 3); CHECK_EQ(m->tokens.v[1].y, 2);
+    CHECK_EQ(m->tokens.v[2].x, 4); CHECK_EQ(m->tokens.v[2].y, 2);
+
+    CASE("the group survives the cancel, so it can be walked again");
+    CHECK_EQ(p->ngroup, 3);
+    CHECK_EQ(p->grabbed, 0);
+
+    /* Blocked for one is blocked for all: a formation that half-moves is not
+     * a formation. Dax at (9,2) is an outsider standing in Cara's way. */
+    CASE("blocked for one is blocked for all");
+    a.ed.cx = 6; a.ed.cy = 2;
+    ESC();                                     /* clear the group */
+    CHECK_EQ(p->ngroup, 0);
+
+    /* An enemy, because same-kind creatures step through each other on the
+     * way past -- only the other side is a wall. */
+    m->tokens.v[4].kind = TOKEN_ENEMY;
+    m->tokens.v[4].x = 5; m->tokens.v[4].y = 2;
+    a.ed.cx = 2; a.ed.cy = 2;
+    K('v'); K('l'); K('l'); ENT();
+    CHECK_EQ(p->ngroup, 3);
+    K('l');
+    CHECK_EQ(m->tokens.v[0].x, 2);             /* nobody moved */
+    CHECK_EQ(m->tokens.v[1].x, 3);
+    CHECK_EQ(m->tokens.v[2].x, 4);
+    CHECK(strstr(a.status, "blocked") != NULL);
+
+    CASE("the direction that is clear for all still works");
+    K('j');
+    CHECK_EQ(m->tokens.v[0].y, 3);
+    CHECK_EQ(m->tokens.v[2].y, 3);
+    ESC();
+    ESC();
+
+    #undef K
+    #undef ENT
+    #undef ESC
+    app_free(&a);
+    rnd_free(&r);
+}
+
+/* Yank, delete and paste over a whole formation. */
+static void test_group_yank(void)
+{
+    Renderer r;
+    App      a;
+
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+
+    if (app_open_map(&a, "tests/fixtures/crowd.vtt") != 0) {
+        g_fails++;
+        fprintf(stderr, "  FAIL [groupyank] could not open the fixture\n");
+        rnd_free(&r);
+        return;
+    }
+
+    Map  *m = a.map;
+    Play *p = &a.play;
+
+    #define K(c)   do { Key k = { KEY_CHAR,  0, (uint32_t)(c) }; app_key(&a, k); } while (0)
+    #define ESC()  do { Key k = { KEY_ESC,   0, 0 };             app_key(&a, k); } while (0)
+
+    a.screen = SCREEN_PLAY;
+    int before = m->tokens.n;
+
+    CASE("y takes everything in the box");
+    a.ed.cx = 2; a.ed.cy = 2;
+    K('v'); K('l'); K('l');
+    K('y');
+    CHECK_EQ(p->nyank, 3);
+    CHECK_EQ(p->visual, 0);                    /* the box closes behind it */
+    CHECK_EQ(m->tokens.n, before);             /* a yank removes nothing */
+    CHECK(strstr(a.status, "3 creatures") != NULL);
+
+    CASE("paste stamps the formation out in the shape it was copied in");
+    a.ed.cx = 2; a.ed.cy = 4;                  /* clear ground */
+    K('p');
+    CHECK_EQ(m->tokens.n, before + 3);
+    CHECK_EQ(m->tokens.v[before + 0].x, 2);
+    CHECK_EQ(m->tokens.v[before + 1].x, 3);
+    CHECK_EQ(m->tokens.v[before + 2].x, 4);
+    CHECK_EQ(m->tokens.v[before + 0].y, 4);
+    CHECK_EQ(m->tokens.v[before + 2].y, 4);
+
+    CASE("the copies are the new selection, ready to be walked off");
+    CHECK_EQ(p->ngroup, 3);
+
+    /* All or nothing: a paste that half-arrives leaves the GM working out
+     * which half. The 2x2 Ogre at (4..5, 6..7) is in the way of the third. */
+    CASE("a paste is refused outright when one creature has no room");
+    int n_before = m->tokens.n;
+    ESC();
+    a.ed.cx = 2; a.ed.cy = 6;                  /* the 2x2 Ogre owns (4,6) */
+    K('p');
+    CHECK_EQ(m->tokens.n, n_before);           /* not one of them landed */
+    CHECK(strstr(a.status, "formation") != NULL ||
+          strstr(a.status, "in the way") != NULL);
+
+    CASE("d removes the whole box and keeps it to paste");
+    a.ed.cx = 2; a.ed.cy = 4;
+    K('v'); K('l'); K('l');
+    K('d');
+    CHECK_EQ(m->tokens.n, n_before - 3);
+    CHECK_EQ(p->nyank, 3);
+    CHECK_EQ(p->ngroup, 0);
+    CHECK(strstr(a.status, "removed 3 creatures") != NULL);
+
+    CASE("and p puts them all back");
+    a.ed.cx = 2; a.ed.cy = 4;
+    K('p');
+    CHECK_EQ(m->tokens.n, n_before);
+
+    CASE("one creature in a box is still just one creature");
+    ESC();
+    a.ed.cx = 9; a.ed.cy = 2;
+    K('v');
+    K('y');
+    CHECK_EQ(p->nyank, 1);
+    CHECK(strstr(a.status, "Dax") != NULL);
+
+    #undef K
+    #undef ESC
+    app_free(&a);
+    rnd_free(&r);
 }
 
 /* ------------------------------------------------------------ cursorsize */
@@ -4250,7 +4449,7 @@ static void test_cursor_size(void)
     CASE("carrying a big creature the cursor is that creature's size");
     Token big = { 2, 2, 3, TOKEN_ENEMY, "Ogre", { { 0, "" } }, 0 };
     int bi = undo_add_token(&u, m, big);
-    p.sel = bi;
+    play_focus(&p, bi);
     play_grab(&p, m, u.depth);
 
     CHECK_EQ(play_cursor_size(&p, m), 3);
@@ -4273,7 +4472,7 @@ static void test_cursor_size(void)
     /* The four corner marks belong to the block, not to its top-left tile,
      * or a big cursor would be marked in one corner and bare in three. */
     CASE("the corner marks sit on the corners of the whole block");
-    p.sel = -1;
+    play_focus(&p, -1);
     p.next_size = 3;
     e.cx = 1; e.cy = 1;
     FRAME();
@@ -4342,8 +4541,7 @@ static void test_passing_and_stopping(void)
     int ai = undo_add_token(&u, m, a);
     undo_add_token(&u, m, b);
     int oi = undo_add_token(&u, m, og);
-    p.sel = ai;
-
+    play_focus(&p, ai);
     /* An ally is somebody you squeeze past, not a wall. */
     CASE("a creature walks through its own side");
     CHECK_EQ(token_can_move(m, &m->tokens.v[ai], 1, 0, 1, ai), 1);
@@ -4360,10 +4558,9 @@ static void test_passing_and_stopping(void)
     CHECK_EQ(m->tokens.v[ai].x, 7);
 
     CASE("and the block is mutual");
-    p.sel = oi;
+    play_focus(&p, oi);
     CHECK_EQ(token_can_move(m, &m->tokens.v[oi], -1, 0, 1, oi), 0);
-    p.sel = ai;
-
+    play_focus(&p, ai);
     /* A big creature is stopped by anything its whole footprint would land
      * on, not only the square its anchor would. */
     CASE("a 2x2 is stopped by a token anywhere under its footprint");
@@ -4403,7 +4600,7 @@ static void test_route_avoids_enemies(void)
         Token e = { 4, (int16_t)y, 1, TOKEN_ENEMY, "Line", { { 0, "" } }, 0 };
         undo_add_token(&u, m, e);
     }
-    p.sel = ai;
+    play_focus(&p, ai);
     play_grab(&p, m, 0);
 
     /* Walk round the wall of enemies the long way, over the top. */
@@ -4556,8 +4753,7 @@ static void test_move_label(void)
 
     Token a = { 3, 4, 1, TOKEN_PLAYER, "Aria", { { 0, "" } }, 0 };
     int ai = undo_add_token(&u, m, a);
-    p.sel = ai;
-
+    play_focus(&p, ai);
     ByteBuf f;
     #define FRAME() do {                                   \
         rnd_begin(&r);                                     \
@@ -4790,7 +4986,7 @@ static void test_delete_yanks(void)
     press(&a, "e");
     press(&a, "d");
     CHECK_EQ(a.map->tokens.n, 0);
-    CHECK_EQ(a.play.has_yank, 1);
+    CHECK_EQ(a.play.nyank, 1);
     CHECK(strstr(a.status, "p puts it back") != NULL);
 
     CASE("and the name comes back with it, not a numbered copy");
@@ -4811,11 +5007,11 @@ static void test_delete_yanks(void)
 
     CASE("deleting nothing yanks nothing");
     press(&a, ":j5\r");
-    a.play.sel = -1;
-    int before = a.play.has_yank;
+    play_focus(&a.play, -1);
+    int before = a.play.nyank;
     press(&a, "d");
     CHECK(strstr(a.status, "no token here") != NULL);
-    CHECK_EQ(a.play.has_yank, before);
+    CHECK_EQ(a.play.nyank, before);
 
     app_free(&a);
     rnd_free(&r);
@@ -5849,7 +6045,7 @@ static void test_play_remap(void)
      * half-typed command turning into a different whole one is the worst
      * thing a prefix can do. */
     CASE("a prefix swallows a key that means something on its own");
-    a.play.sel = -1;
+    play_focus(&a.play, -1);
     press(&a, "it");
     CHECK_EQ(a.play.sel, -1);              /* t did not cycle */
     CHECK(strstr(a.status, "i wants") != NULL);
@@ -5946,7 +6142,7 @@ static void test_cycle_tracks(void)
     tokens_add(&m->tokens, d);
 
     CASE("the all track visits every token in order and wraps");
-    p.sel = -1;
+    play_focus(&p, -1);
     const int all[] = { 0, 1, 2, 3, 0 };
     for (int i = 0; i < 5; i++) {
         CHECK_EQ(play_cycle(&p, m, 1, PLAY_ANY_KIND), 1);
@@ -5954,7 +6150,7 @@ static void test_cycle_tracks(void)
     }
 
     CASE("the player track skips the enemies");
-    p.sel = -1;
+    play_focus(&p, -1);
     CHECK_EQ(play_cycle(&p, m, 1, TOKEN_PLAYER), 1);
     CHECK_EQ(p.sel, 0);
     CHECK_EQ(play_cycle(&p, m, 1, TOKEN_PLAYER), 1);
@@ -5963,14 +6159,14 @@ static void test_cycle_tracks(void)
     CHECK_EQ(p.sel, 0);          /* wrapped past both enemies */
 
     CASE("the enemy track skips the players");
-    p.sel = -1;
+    play_focus(&p, -1);
     CHECK_EQ(play_cycle(&p, m, 1, TOKEN_ENEMY), 1);
     CHECK_EQ(p.sel, 1);
     CHECK_EQ(play_cycle(&p, m, 1, TOKEN_ENEMY), 1);
     CHECK_EQ(p.sel, 3);
 
     CASE("shift runs a track backwards");
-    p.sel = -1;
+    play_focus(&p, -1);
     CHECK_EQ(play_cycle(&p, m, -1, TOKEN_ENEMY), 1);
     CHECK_EQ(p.sel, 3);
     CHECK_EQ(play_cycle(&p, m, -1, TOKEN_ENEMY), 1);
@@ -5991,38 +6187,38 @@ static void test_cycle_tracks(void)
     tokens_add(&only->tokens, b);
     Play q;
     play_init(&q);
-    q.sel = 0;
+    play_focus(&q, 0);
     CHECK_EQ(play_cycle(&q, only, 1, TOKEN_PLAYER), 0);
     CHECK_EQ(q.sel, 0);
     map_free(only);
 
     CASE("a track of one comes back round to itself");
-    p.sel = 0;
+    play_focus(&p, 0);
     CHECK_EQ(play_cycle(&p, m, 1, TOKEN_PLAYER), 1);
     CHECK_EQ(p.sel, 2);
 
     /* ------------------------------------------------------------ search */
 
     CASE("a search finds a label by any part of it, in any case");
-    p.sel = -1;
+    play_focus(&p, -1);
     CHECK_EQ(play_find(&p, m, "gob", 1), 1);
     CHECK_EQ(p.sel, 3);
-    p.sel = -1;
+    play_focus(&p, -1);
     CHECK_EQ(play_find(&p, m, "ARI", 1), 1);
     CHECK_EQ(p.sel, 0);
-    p.sel = -1;
+    play_focus(&p, -1);
     CHECK_EQ(play_find(&p, m, "ra", 1), 1);   /* Bram, mid-label */
     CHECK_EQ(p.sel, 2);
 
     CASE("a search that matches nothing leaves the selection alone");
-    p.sel = 1;
+    play_focus(&p, 1);
     CHECK_EQ(play_find(&p, m, "dragon", 1), 0);
     CHECK_EQ(p.sel, 1);
 
     CASE("repeating walks the matches and wraps, both ways");
     Token e2 = { 8, 0, 1, TOKEN_ENEMY, "Goblin 2", { { 0, "" } }, 0 };
     tokens_add(&m->tokens, e2);
-    p.sel = -1;
+    play_focus(&p, -1);
     CHECK_EQ(play_find(&p, m, "goblin", 1), 1);
     CHECK_EQ(p.sel, 3);
     CHECK_EQ(play_find(&p, m, NULL, 1), 1);
@@ -6033,7 +6229,7 @@ static void test_cycle_tracks(void)
     CHECK_EQ(p.sel, 4);
 
     CASE("an empty needle repeats the last search rather than matching all");
-    p.sel = -1;
+    play_focus(&p, -1);
     CHECK_EQ(play_find(&p, m, "", 1), 1);
     CHECK_EQ(p.sel, 3);
     CHECK_EQ(strcmp(p.search, "goblin"), 0);
@@ -6043,7 +6239,7 @@ static void test_cycle_tracks(void)
     CASE("an unlabelled token matches nothing");
     Token bare = { 10, 0, 1, TOKEN_ENEMY, "", { { 0, "" } }, 0 };
     tokens_add(&m->tokens, bare);
-    p.sel = -1;
+    play_focus(&p, -1);
     CHECK_EQ(play_find(&p, m, "z", 1), 0);
 
     CASE("searching with nothing ever searched for finds nothing");
@@ -6401,6 +6597,8 @@ int main(void)
         { "choosing", test_choosing },
         { "sizekeys", test_size_keys },
         { "selection", test_selection_contrast },
+        { "group", test_group },
+        { "groupyank", test_group_yank },
         { "voidlook", test_void_reads_as_void },
         { "palette",  test_terrain_palette },
         { "coords",   test_coords },

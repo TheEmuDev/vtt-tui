@@ -29,7 +29,8 @@ static const KeyDoc PLAY[] = {
                                                              NULL,    "grab" },
     { "d",        "remove it, keeping it to paste  (x does too)", "d y p", "edit" },
     KEY("y",      "yank -- copy it"),
-    KEY("p",      "put the yanked or removed one here"),
+    KEY("p",      "put what was yanked or removed here"),
+    { "v",        "select several: a box from here to the cursor", NULL, "select" },
     KEY("c",      "change its label"),
 
     GROUP("Find a creature"),
@@ -38,7 +39,10 @@ static const KeyDoc PLAY[] = {
     KEY("e  E",   "next / previous enemy"),
     KEY("tab",    "the same as t, shift-tab as T"),
     KEY("/",      "find a token by part of its label"),
-    { "n  N",     "next / previous match",             "/",     "find" },
+    /* Off the bar to make room for v: the bar holds six, and a new gesture
+     * nobody has met yet earns its place over a search that t/f/e mostly
+     * stands in for. ? still lists it. */
+    KEY("n  N",   "next / previous match"),
 
     GROUP("Status markers"),
     KEY("s a",    "add a marker: a colour and a word"),
@@ -60,9 +64,19 @@ static const KeyDoc PLAY[] = {
     { "?",        "this page",                         NULL,    "keys" },
 };
 
+static const KeyDoc PLAY_VISUAL[] = {
+    GROUP("Selecting several"),
+    { "h j k l",  "stretch the box; it lights what it catches", "hjkl", "extend" },
+    { "enter",    "carry everything in it -- they move as one", NULL, "carry" },
+    { "y",        "yank them all",                     NULL,    "yank" },
+    { "d",        "remove them all, keeping them to paste  (x too)", NULL, "remove" },
+    { "v  esc",   "drop the box",                      "esc",   "cancel" },
+    { "?",        "this page",                         NULL,    "keys" },
+};
+
 static const KeyDoc PLAY_GRABBED[] = {
     GROUP("Carrying a creature"),
-    { "h j k l",  "walk it; the ribbon shows the route, the label how far", "hjkl", "move" },
+    { "h j k l",  "walk it; a group walks together, or not at all", "hjkl", "move" },
     { "enter",    "put it down here",                  NULL, "drop" },
     { "esc",      "cancel: back to where it set out from", NULL, "cancel" },
     { "u",        "take back a step",                  NULL, "undo" },
@@ -173,6 +187,7 @@ static const KeyDoc MENU[] = {
 
 static const KeyMap MAPS[KEYS_COUNT] = {
     MAP(KEYS_PLAY,         "Play mode",           PLAY),
+    MAP(KEYS_PLAY_VISUAL,  "Play mode, selecting", PLAY_VISUAL),
     MAP(KEYS_PLAY_GRABBED, "Play mode, carrying", PLAY_GRABBED),
     MAP(KEYS_BUILD,        "Build mode",          BUILD),
     MAP(KEYS_VISUAL,       "Build mode, visual",  VISUAL),

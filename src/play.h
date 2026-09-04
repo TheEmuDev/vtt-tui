@@ -49,6 +49,11 @@ void range_status(const RangeOverlay *ro, const Map *m, char *buf, size_t bufsz)
  * the screen anyway. */
 #define PLAY_TRAIL_MAX 256
 
+/* Creatures that can be selected and moved as one. A fixed array in keeping
+ * with the trail above: no allocation on a keystroke path, and a box holding
+ * more than this says so rather than quietly moving a subset. */
+#define PLAY_GROUP_MAX 32
+
 typedef struct {
     int sel;             /* selected token index, -1 for none */
     int grabbed;         /* the selection is being moved */
@@ -81,9 +86,23 @@ typedef struct {
 
     uint8_t next_size;   /* footprint for the next token placed */
 
-    /* The yank buffer, so a creature can be stamped down repeatedly. */
-    Token   yank;
-    int     has_yank;
+    /* Everything selected, low index first, and sel is group[0]. One array
+     * rather than a lone index beside a list of extras: a single creature is
+     * a group of one, so the single path and the group path are the same
+     * code and cannot drift. Empty exactly when sel is -1. */
+    int     group[PLAY_GROUP_MAX];
+    int     ngroup;
+
+    /* A box being drawn from (anchor_x, anchor_y) to the cursor. Membership
+     * is read off the box while it is open and frozen when it is acted on. */
+    int     visual;
+    int     anchor_x, anchor_y;
+
+    /* The yank buffer, so a creature -- or a formation -- can be stamped down
+     * repeatedly. Positions are kept as they were; paste reads the offsets
+     * from the group's own bounding box. */
+    Token   yank[PLAY_GROUP_MAX];
+    int     nyank;
 
     uint8_t status_color;   /* colour the next marker will use */
 
@@ -106,6 +125,13 @@ void play_init(Play *p);
 int  token_can_move(const Map *m, const Token *t, int dx, int dy, int enforce,
                     int except);
 
+/* The same question with a set of creatures treated as transparent. A group
+ * moving together has to be able to step through itself -- without that, a
+ * column could never move at all, since every creature is blocked by the one
+ * in front of it. */
+int  token_can_move_set(const Map *m, const Token *t, int dx, int dy,
+                        int enforce, const int *skip, int nskip);
+
 /* Moves the selected token one step, recording it for undo. Returns 1 if it
  * moved. */
 int  play_step(Map *m, Undo *u, Play *p, int dx, int dy);
@@ -115,6 +141,22 @@ int  play_step(Map *m, Undo *u, Play *p, int dx, int dy);
  * grab, the trail, the range overlay -- cannot be left behind pointing at
  * whoever you were looking at a moment ago. */
 void play_focus(Play *p, int sel);
+
+/* Selects several creatures at once. `n` is clamped to PLAY_GROUP_MAX; the
+ * caller is expected to have refused a larger box already. */
+void play_focus_group(Play *p, const int *idx, int n);
+
+int  play_in_group(const Play *p, int idx);
+
+/* The creatures whose footprints meet the box between two tiles, low index
+ * first. Returns how many there are even when that is more than `max`, so a
+ * caller can tell "full" from "too many". */
+int  play_box_tokens(const Map *m, int ax, int ay, int bx, int by,
+                     int *out, int max);
+
+/* Can every creature in the group make this step? Blocked for one is blocked
+ * for all: a formation that half-moves is not a formation. */
+int  play_group_can_move(const Map *m, const Play *p, int dx, int dy);
 
 /* Selects a token the cursor covers, or clears the selection. `size` is the
  * cursor's footprint: an enlarged cursor reaches every creature under it, not
@@ -166,6 +208,11 @@ void play_move_label(Renderer *r, const Map *m, const GridView *g,
  * a square nothing already stands on? `except` is a token to ignore, for
  * asking whether one can grow where it already is. */
 int  play_can_place(const Map *m, int tx, int ty, int size, int except);
+
+/* Coming to rest with a set of creatures treated as transparent, for putting
+ * a whole group down at once. */
+int  play_can_place_set(const Map *m, int tx, int ty, int size,
+                        const int *skip, int nskip);
 
 void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
                const Theme *th, int ascii);

@@ -17,4 +17,4 @@
   8 |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   |   
     |---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---|   
  PLAY    I5  floor  2 to~ play mode - i places, enter grabs, ? for keys 
- i place  enter grab  d y p edit  t/f/e cycle  / find            ? keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle          ? keys 

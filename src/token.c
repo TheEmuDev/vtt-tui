@@ -65,11 +65,14 @@ int tokens_covered_next(const TokenList *l, int x, int y, int size, int after)
     return -1;
 }
 
-int tokens_overlapping(const TokenList *l, int x, int y, int size,
-                       int except, int kind)
+int tokens_overlapping_set(const TokenList *l, int x, int y, int size,
+                           const int *skip, int nskip, int kind)
 {
     for (int i = l->n - 1; i >= 0; i--) {
-        if (i == except) continue;
+        int skipped = 0;
+        for (int j = 0; j < nskip; j++)
+            if (skip[j] == i) { skipped = 1; break; }
+        if (skipped) continue;
 
         const Token *t = &l->v[i];
         if (kind != TOKEN_ANY_KIND && t->kind != kind) continue;
@@ -80,6 +83,13 @@ int tokens_overlapping(const TokenList *l, int x, int y, int size,
         return i;
     }
     return -1;
+}
+
+int tokens_overlapping(const TokenList *l, int x, int y, int size,
+                       int except, int kind)
+{
+    return tokens_overlapping_set(l, x, y, size, &except, except >= 0 ? 1 : 0,
+                                  kind);
 }
 
 const char *token_kind_name(uint8_t kind)
