@@ -74,6 +74,13 @@ typedef struct {
      * by visual mode and wall mode, since both are anchor-plus-cursor. */
     uint8_t shape;
 
+    /* The brush: how much ground the cursor is. f, space and x paint its
+     * whole footprint and H J K L wall its whole face, so at 3 the cursor is
+     * a 3x3 stamp. A view-and-tool preference like `labels`, deliberately
+     * separate from play mode's token size: a big paint brush should not
+     * make the next creature Large. */
+    uint8_t brush;
+
     /* Column letters above the map and row numbers down its left. On by
      * default: a coordinate you cannot read is a coordinate you cannot jump
      * to. A view preference, so it is not saved with the map. */

@@ -11,6 +11,7 @@ void ed_init(Editor *e, const Map *m)
     memset(e, 0, sizeof *e);
     e->mode = ED_NORMAL;
     e->labels = 1;              /* a coordinate you cannot read is one you cannot jump to */
+    e->brush  = 1;
     e->material = EDGE_WALL;
     e->terrain  = TILE_FLOOR;
     e->view.zoom = iclamp(m->zoom, 0, ZOOM_COUNT - 1);
@@ -99,23 +100,39 @@ void ed_cycle_terrain(Editor *e)
 
 void ed_toggle_edge(Editor *e, Map *m, Undo *u, int dx, int dy)
 {
-    int     x = e->cx, y = e->cy;
-    uint8_t cur, want = e->material;
+    int x = e->cx, y = e->cy;
+
+    /* The face belongs to the brush's whole footprint, clipped to the map
+     * the same way the cursor draws it, so a 3x3 brush walls three edges in
+     * one press and a brush hanging over the map edge walls the part that
+     * exists. */
+    int bw = imin((int)e->brush, m->w - x);
+    int bh = imin((int)e->brush, m->h - y);
+    if (bw < 1 || bh < 1) return;
+
+    /* One edge of the face for each row (or column) of the brush. */
+    int n  = (dx != 0) ? bh : bw;
+    int ex = (dx > 0) ? x + bw : x;      /* the east or west boundary column */
+    int ey = (dy > 0) ? y + bh : y;      /* the south or north boundary row  */
 
     /* Pressing the same face twice takes it away again, so one key both
-     * places and removes. */
-    if (dx > 0)      cur = map_vedge(m, x + 1, y);
-    else if (dx < 0) cur = map_vedge(m, x, y);
-    else if (dy > 0) cur = map_hedge(m, x, y + 1);
-    else             cur = map_hedge(m, x, y);
-
-    uint8_t next = (cur == want) ? (uint8_t)EDGE_NONE : want;
+     * places and removes. A face is only "already this material" when every
+     * edge of it is, so a partly built face is completed rather than
+     * dismantled. At brush 1 this is exactly the old single-edge toggle. */
+    uint8_t want = e->material;
+    int     all  = 1;
+    for (int i = 0; i < n; i++) {
+        uint8_t cur = (dx != 0) ? map_vedge(m, ex, y + i)
+                                : map_hedge(m, x + i, ey);
+        if (cur != want) { all = 0; break; }
+    }
+    uint8_t next = all ? (uint8_t)EDGE_NONE : want;
 
     undo_begin(u);
-    if (dx > 0)      undo_set_vedge(u, m, x + 1, y, next);
-    else if (dx < 0) undo_set_vedge(u, m, x, y, next);
-    else if (dy > 0) undo_set_hedge(u, m, x, y + 1, next);
-    else             undo_set_hedge(u, m, x, y, next);
+    for (int i = 0; i < n; i++) {
+        if (dx != 0) undo_set_vedge(u, m, ex, y + i, next);
+        else         undo_set_hedge(u, m, x + i, ey, next);
+    }
     undo_end(u);
 }
 
@@ -260,7 +277,10 @@ void ed_wall_shape(Map *m, Undo *u, const EdShape *s, uint8_t kind)
 
 void ed_apply_tiles(Editor *e, Map *m, Undo *u, uint8_t kind)
 {
-    EdShape s = ed_shape(ED_SHAPE_RECT, e->cx, e->cy, e->cx, e->cy, 0);
+    /* The brush's whole footprint; undo_set_tile drops the part hanging off
+     * the map, which is also the part the cursor does not draw. */
+    EdShape s = ed_shape(ED_SHAPE_RECT, e->cx, e->cy,
+                         e->cx + e->brush - 1, e->cy + e->brush - 1, 0);
     if (e->mode == ED_VISUAL)
         s = ed_shape(e->shape, e->anchor_x, e->anchor_y, e->cx, e->cy, 0);
 
@@ -337,7 +357,12 @@ void ed_draw(Renderer *r, const Map *m, const Editor *e, const Theme *th, int as
         grid_draw_corner_cursor(r, &e->view, e->wx, e->wy, th, e->pen);
     }
     else
-        grid_draw_tile_cursor(r, &e->view, e->cx, e->cy, th->cursor_bg);
+        /* The tinted footprint alone -- unlike play mode there is nothing
+         * standing on the ground here for the cursor to be lost behind, and
+         * the corner marks it wears there cost half again the bytes of an
+         * idle build frame. */
+        grid_draw_cursor_area(r, &e->view, m, e->cx, e->cy, e->brush,
+                              th->cursor_bg);
 
     rnd_clip_restore(r, saved);
 }
@@ -378,10 +403,14 @@ void ed_status(const Editor *e, const Map *m, char *buf, size_t bufsz)
         return;
     }
 
+    char brush[16] = "";
+    if (e->brush > 1)
+        snprintf(brush, sizeof brush, "  brush %dx%d", e->brush, e->brush);
+
     map_coord_name(e->cx, e->cy, at, sizeof at);
-    snprintf(buf, bufsz, "%-7s %s  %s  [%s/%s]%s  zoom %d  map %dx%d",
+    snprintf(buf, bufsz, "%-7s %s  %s  [%s/%s]%s%s  zoom %d  map %dx%d",
              ed_mode_name(e->mode), at,
              tile_name(map_tile(m, e->cx, e->cy)),
-             edge_name(e->material), tile_name(e->terrain), shape,
+             edge_name(e->material), tile_name(e->terrain), brush, shape,
              e->view.zoom, m->w, m->h);
 }

@@ -930,9 +930,29 @@ static void browser_key(App *a, Key k)
 }
 
 /* Digits build a count prefix, exactly as in vim: 10j moves ten tiles. */
+/* The size key, shared by both modes so it cannot drift: b cycles up, B
+ * cycles back, and a count names the size outright -- 2b is 2x2 without
+ * cycling past it. */
+static uint8_t size_key(int count, uint8_t cur, int delta)
+{
+    if (count) return (uint8_t)iclamp(count, 1, 3);
+    if (delta > 0) return (uint8_t)(cur % 3 + 1);
+    return (uint8_t)(cur == 1 ? 3 : cur - 1);
+}
+
 static int take_count(Editor *e)
 {
     int c = e->count ? e->count : 1;
+    e->count = 0;
+    return c;
+}
+
+/* Like take_count, but 0 when no count was typed: a motion with no count
+ * means once, while a size key with no count means cycle -- the two callers
+ * disagree about what silence means. */
+static int take_count_raw(Editor *e)
+{
+    int c = e->count;
     e->count = 0;
     return c;
 }
@@ -1397,6 +1417,14 @@ static void editor_key(App *a, Key k)
     case 'L': ed_toggle_edge(e, m, &a->undo,  1,  0); break;
     case 'K': ed_toggle_edge(e, m, &a->undo,  0, -1); break;
     case 'J': ed_toggle_edge(e, m, &a->undo,  0,  1); break;
+
+    case 'b': case 'B': {
+        e->brush = size_key(take_count_raw(e), e->brush, k.ch == 'b' ? 1 : -1);
+        char msg[32];
+        snprintf(msg, sizeof msg, "brush %dx%d", e->brush, e->brush);
+        app_set_status(a, msg);
+        break;
+    }
 
     case '0': e->cx = 0;        grid_ensure_visible(&e->view, m, e->cx, e->cy, ED_SCROLLOFF); break;
     case '$': e->cx = m->w - 1; grid_ensure_visible(&e->view, m, e->cx, e->cy, ED_SCROLLOFF); break;
@@ -1961,14 +1989,23 @@ static void play_key(App *a, Key k)
 
     if (k.kind != KEY_CHAR || k.mods != 0) return;
 
-    if (k.ch >= '1' && k.ch <= '3') {
-        uint8_t size = (uint8_t)(k.ch - '0');
+    /* Counts, the same as build mode: 3l walks three squares whichever mode
+     * you are in. This is what freed 1 2 3 from being size keys -- the size
+     * lives on b now, in both modes, and a count names it (2b). */
+    if (k.ch >= '1' && k.ch <= '9') { e->count = e->count * 10 + (int)(k.ch - '0'); return; }
+    if (k.ch == '0' && e->count)    { e->count *= 10; return; }
 
-        /* One number behind all of it: the size keys set it, the cursor shows
+    if (k.ch == 'b' || k.ch == 'B') {
+        /* One number behind all of it: the size key sets it, the cursor shows
          * it, and a selected creature is resized to it. Being held is not a
          * reason to refuse -- realising a creature is Large is something that
-         * happens mid-move as often as not. */
+         * happens mid-move as often as not. Cycling starts from the creature
+         * being looked at when there is one, so b on a selected creature
+         * always means "the next size up from what it is". */
         int idx = (pl->sel >= 0 && pl->sel < m->tokens.n) ? pl->sel : -1;
+
+        uint8_t base = idx >= 0 ? m->tokens.v[idx].size : pl->next_size;
+        uint8_t size = size_key(take_count_raw(e), base, k.ch == 'b' ? 1 : -1);
 
         if (idx >= 0 && m->tokens.v[idx].size != size) {
             Token t = m->tokens.v[idx];

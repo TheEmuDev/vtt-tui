@@ -118,6 +118,7 @@ Maps are found in the current directory and in `~/.local/share/vtt/maps`.
 | `m` | measure (ruler) |
 | `v` `V` | select a box / a circle |
 | `f` `x` | fill selection with floor / clear it to void |
+| `b` `B` | brush size, 1×1 → 2×2 → 3×3 — `2b` names it |
 | `space` | toggle the cursor tile between floor and void |
 | `u`, `Ctrl-r` | undo / redo |
 | `+` `-` | zoom in / out |
@@ -200,7 +201,8 @@ A whole pen-down stroke is one undo step.
 |-----|--------|
 | `h` `j` `k` `l` | move the cursor, or the held token |
 | `i p`, `i e` | place a player / an enemy, prompting for a label |
-| `1` `2` `3` | the cursor's size; resizes the selected creature too |
+| `b` `B` | the cursor's size, cycled — `2b` names it; resizes the selected creature too |
+| `3l` | counts repeat a motion, the same as build mode |
 | `enter` | pick up / put down; under a big cursor, walk what it covers |
 | `v` | select several: a box from here to the cursor |
 | `d` `x` | remove — and keep it (or them), so `p` puts it back |
@@ -284,12 +286,22 @@ anywhere along its leading face.
 Because the square it set out from is the one square nothing else can have moved onto,
 **a cancel always works** — including from on top of an ally, where a drop is refused.
 
-**The cursor is the footprint.** `1` `2` `3` set one number: the size the cursor draws,
-which is what the next placement will cover — and a selected creature is resized to it,
-held or not. While a creature is carried the cursor is that creature's own size, whatever
-the size keys were last left on, and putting it down brings back the size that was set.
-Against the map's edge the cursor is clipped rather than clamped: a footprint that shrinks
-against the edge is one that would not fit, said without a message.
+**The cursor is the footprint, and `b` is its size in both modes.** `b` cycles 1×1 →
+2×2 → 3×3, `B` cycles back, and a count names the size outright — `2b` is 2×2 without
+cycling past it. (`1` `2` `3` could not be the size keys: digits are count prefixes, and
+`2j` has to mean two squares down in build and play alike.) In play mode the number is
+what the next placement will cover, and a selected creature is resized to it — `b` on a
+selected creature cycles up from the size it already is. While a creature is carried the
+cursor is that creature's own size, and putting it down brings back the size that was
+set. Against the map's edge the cursor is clipped rather than clamped: a footprint that
+shrinks against the edge is one that would not fit, said without a message.
+
+**In build mode the same cursor is the brush.** `f`, `space` and `x` paint, toggle and
+clear its whole footprint in one undo step, and `H` `J` `K` `L` wall its whole face —
+one, two or three edges in a press. A face is only cleared when every edge of it is
+already the material, so a partly built wall is completed rather than dismantled. The
+brush is a build-mode setting of its own: painting with a 3×3 brush does not make the
+next creature Large.
 
 A big cursor can cover several creatures, so `enter` under one walks them — the cursor
 holds still, the highlight moves, and the first movement key settles which one you meant:

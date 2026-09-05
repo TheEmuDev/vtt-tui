@@ -28,25 +28,26 @@ What the app costs to use. Each scenario replays a keystroke script, a frame per
 
 | scenario             | size   | frame p50 | frame p99 | cells | bytes |
 |----------------------|--------|-----------|-----------|-------|-------|
-| build, open          | 80x24  |    33.2us |    76.3us |    10 |   207 |
-| build, every edge    | 80x24  |    29.0us |    43.5us |    10 |   207 |
-| build, 200x200       | 80x24  |    29.1us |    33.5us |    12 |   209 |
-| build, 200x200       | 200x50 |   121.4us |   154.4us |    12 |   212 |
-| build, mostly void   | 200x50 |   102.7us |   209.2us |    20 |   267 |
-| build, tracing       | 80x24  |    28.8us |    35.3us |     2 |   140 |
-| build, circle brush  | 80x24  |    30.0us |    44.1us |    28 |   292 |
-| ruler, three legs    | 80x24  |    25.7us |    38.6us |    11 |    40 |
-| play, 24 tokens      | 80x24  |    31.6us |    34.5us |    19 |   298 |
-| play, 24 tokens      | 200x50 |   101.5us |   112.6us |    36 |   319 |
-| play, carrying       | 80x24  |    27.6us |    59.0us |    33 |   205 |
-| play, carry 200x200  | 80x24  |    28.3us |    64.9us |    22 |   136 |
-| play, 3x3 cursor     | 80x24  |    35.6us |    65.3us |    40 |   663 |
-| play, choosing       | 80x24  |    28.5us |    40.7us |    13 |   101 |
-| play, group box      | 80x24  |    27.7us |    55.3us |    18 |   133 |
-| play, group carry    | 80x24  |    27.2us |    31.7us |    22 |   131 |
-| play, range bands    | 80x24  |    39.2us |    98.0us |   163 |   845 |
-| help page            | 80x24  |    39.9us |   103.6us |   532 |  2656 |
-| profiler overlay     | 80x24  |    34.0us |   132.7us |   118 |   760 |
+| build, open          | 80x24  |    32.2us |    69.0us |    10 |   207 |
+| build, every edge    | 80x24  |    29.0us |    42.8us |    10 |   207 |
+| build, 200x200       | 80x24  |    29.0us |    38.6us |    12 |   209 |
+| build, 200x200       | 200x50 |   120.7us |   261.3us |    12 |   212 |
+| build, mostly void   | 200x50 |   104.4us |   193.9us |    20 |   267 |
+| build, tracing       | 80x24  |    28.8us |    65.7us |     2 |   140 |
+| build, circle brush  | 80x24  |    31.1us |    67.7us |    28 |   292 |
+| build, 3x3 brush     | 80x24  |    25.8us |    40.5us |    18 |   128 |
+| ruler, three legs    | 80x24  |    25.8us |    58.5us |    11 |    40 |
+| play, 24 tokens      | 80x24  |    31.7us |    55.5us |    19 |   298 |
+| play, 24 tokens      | 200x50 |   101.0us |   129.8us |    36 |   319 |
+| play, carrying       | 80x24  |    28.7us |    85.6us |    33 |   205 |
+| play, carry 200x200  | 80x24  |    28.1us |    40.1us |    22 |   136 |
+| play, 3x3 cursor     | 80x24  |    35.0us |    57.8us |    37 |   620 |
+| play, choosing       | 80x24  |    28.6us |    40.7us |    12 |    95 |
+| play, group box      | 80x24  |    27.7us |    52.2us |    18 |   133 |
+| play, group carry    | 80x24  |    34.8us |    82.7us |    22 |   131 |
+| play, range bands    | 80x24  |    36.2us |    77.6us |   163 |   845 |
+| help page            | 80x24  |    39.6us |    77.0us |   544 |  2699 |
+| profiler overlay     | 80x24  |    33.9us |   137.5us |   115 |   736 |
 
 > The machine's own baseline drifts: one recording of this table sat ~10% above its
 > neighbours on every row, and none of it was the code -- the previous binary run
@@ -69,20 +70,20 @@ a median near zero and a p99 that says what it costs when it does.
 
 | path             | p50     | p99     | worst   | calls | heaviest scenario      |
 |------------------|---------|---------|---------|-------|------------------------|
-| app.draw         | 106.3us | 220.4us | 312.8us |  3200 | build, 200x200 200x50  |
-| editor.draw      | 101.1us | 209.2us | 290.3us |  3200 | build, 200x200 200x50  |
-| grid.draw        |  93.2us | 191.6us | 272.6us |  3200 | build, 200x200 200x50  |
-| grid.labels      |   7.7us |  18.8us |  55.7us |  3200 | build, 200x200 200x50  |
-| group.box        |   0.1us |   0.2us |   0.2us |   400 | play, group carry 80x24 |
-| group.move       |   0.2us |   3.3us |  59.5us |  6400 | play, carry 200x200 80x24 |
-| input.key        |   1.2us |  19.7us | 115.8us | 10000 | play, carry 200x200 80x24 |
-| move.label       |   0.8us |   1.7us |  12.4us |  9995 | play, carry 200x200 80x24 |
-| play.draw        |  80.3us | 174.2us | 253.5us |  5595 | play, 24 tokens 200x50 |
-| prof.overlay     |   7.3us |  96.6us | 125.2us |  1000 | profiler overlay 80x24 |
-| range.draw       |   0.0us |  28.3us |  51.2us |  5195 | play, range bands 80x24 |
-| ruler.draw       |   0.7us |   1.6us |  17.0us |  4400 | ruler, three legs 80x24 |
-| trail.draw       |   0.1us |   0.3us |   9.9us |  9995 | play, carry 200x200 80x24 |
-| trail.path       |   4.3us |  20.1us | 111.7us |  6231 | play, carry 200x200 80x24 |
+| app.draw         | 105.7us | 210.5us | 250.5us |  3200 | build, 200x200 200x50  |
+| editor.draw      | 100.4us | 200.7us | 239.6us |  3200 | build, 200x200 200x50  |
+| grid.draw        |  92.6us | 182.6us | 211.5us |  3200 | build, 200x200 200x50  |
+| grid.labels      |   7.5us |  23.4us |  57.8us |  3200 | build, mostly void 200x50 |
+| group.box        |   0.1us |   0.2us |   0.3us |   400 | play, group carry 80x24 |
+| group.move       |   0.2us |   3.7us |  69.2us |  6400 | play, carry 200x200 80x24 |
+| input.key        |   1.3us |  23.7us | 100.5us | 10000 | play, carry 200x200 80x24 |
+| move.label       |   0.8us |   2.1us |  12.8us |  9995 | play, carry 200x200 80x24 |
+| play.draw        |  80.2us | 182.5us | 243.3us |  5595 | play, 24 tokens 200x50 |
+| prof.overlay     |   7.3us | 133.8us | 164.8us |  1000 | profiler overlay 80x24 |
+| range.draw       |   0.0us |  26.6us |  53.2us |  5195 | play, range bands 80x24 |
+| ruler.draw       |   0.7us |   1.7us |  12.7us |  4400 | ruler, three legs 80x24 |
+| trail.draw       |   0.1us |   0.4us |   4.1us |  9995 | play, carry 200x200 80x24 |
+| trail.path       |   4.4us |  25.8us |  96.4us |  6231 | play, carry 200x200 80x24 |
 
 ### Reading it
 
@@ -157,6 +158,13 @@ scenario. A ring that sits still is a ring the diff never writes, which is why t
 that fixed the contrast problem is also nearly the cheapest one available: it recolours
 grid lines that were already on screen rather than painting anything new. A creature
 standing still while selected costs nothing at all.
+
+**Build mode's brush rides the same footprint cursor** and costs less than an idle
+build frame -- 18 cells and 128 bytes on the `build, 3x3 brush` scenario -- because the
+painting itself is keystroke work that was always O(area), and the tint barely moves
+between frames. The corner marks the play cursor wears were deliberately left off it:
+they measured at half again the bytes of an idle build frame, for a cursor that has no
+tokens to be lost behind.
 
 **A multi-tile cursor is the most expensive thing a keystroke can switch on**,
 because it paints a block rather than a square. It is opt-in -- the cost arrives with

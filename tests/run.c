@@ -3978,7 +3978,7 @@ static void test_size_keys(void)
     CHECK_EQ(p->sel, di);
     CHECK_EQ(p->grabbed, 1);
 
-    K('3');
+    K('3'); K('b');                          /* a count names the size */
     CHECK_EQ(m->tokens.v[di].size, 3);
     CHECK_EQ(p->grabbed, 1);                  /* still in hand */
 
@@ -3992,7 +3992,7 @@ static void test_size_keys(void)
     CHECK_EQ(play_cursor_size(p, m), 3);
 
     CASE("shrinking works the same way");
-    K('1');
+    K('1'); K('b');
     CHECK_EQ(m->tokens.v[di].size, 1);
     CHECK_EQ(p->next_size, 1);
     CHECK_EQ(play_cursor_size(p, m), 1);
@@ -4006,7 +4006,7 @@ static void test_size_keys(void)
     p->next_size = 1;
     ENT();                                     /* Aria, boxed in by Bram */
     CHECK_EQ(p->sel, 0);
-    K('3');
+    K('3'); K('b');
     CHECK_EQ(m->tokens.v[0].size, 1);
     CHECK_EQ(p->next_size, 1);
     CHECK(strstr(a.status, "not enough room") != NULL);
@@ -4365,6 +4365,146 @@ static void test_group_yank(void)
 
     #undef K
     #undef ESC
+    app_free(&a);
+    rnd_free(&r);
+}
+
+
+/* ---------------------------------------------------------------- brush */
+
+/* The sized cursor in build mode, and the size key both modes now share. */
+static void test_brush(void)
+{
+    Renderer r;
+    App      a;
+
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+
+    if (app_open_map(&a, "tests/fixtures/crowd.vtt") != 0) {
+        g_fails++;
+        fprintf(stderr, "  FAIL [brush] could not open tests/fixtures/crowd.vtt\n");
+        rnd_free(&r);
+        return;
+    }
+
+    Map    *m = a.map;
+    Editor *e = &a.ed;
+
+    #define K(c) do { Key k = { KEY_CHAR, 0, (uint32_t)(c) }; app_key(&a, k); } while (0)
+
+    a.screen = SCREEN_EDITOR;
+    e->mode  = ED_NORMAL;
+
+    CASE("b cycles the brush and wraps; B cycles back; a count names it");
+    CHECK_EQ(e->brush, 1);
+    K('b'); CHECK_EQ(e->brush, 2);
+    K('b'); CHECK_EQ(e->brush, 3);
+    K('b'); CHECK_EQ(e->brush, 1);
+    K('B'); CHECK_EQ(e->brush, 3);
+    K('2'); K('b'); CHECK_EQ(e->brush, 2);
+    K('9'); K('b'); CHECK_EQ(e->brush, 3);   /* clamped to the largest */
+
+    CASE("counts on motions survive the size key taking b");
+    e->cx = 2; e->cy = 2;
+    K('3'); K('j');
+    CHECK_EQ(e->cy, 5);
+    K('1'); K('0'); K('l');                  /* 10l: multi-digit still works */
+    CHECK_EQ(e->cx, 12);
+
+    CASE("f paints the brush's whole footprint, as one undo step");
+    K('2'); K('b');
+    e->cx = 6; e->cy = 6;
+    map_fill_tiles(m, 0, 0, m->w - 1, m->h - 1, TILE_VOID);
+    e->terrain = TILE_FLOOR;
+    K('f');
+    CHECK_EQ(map_tile(m, 6, 6), TILE_FLOOR);
+    CHECK_EQ(map_tile(m, 7, 7), TILE_FLOOR);
+    CHECK_EQ(map_tile(m, 8, 8), TILE_VOID);  /* outside the 2x2 */
+    K('u');
+    CHECK_EQ(map_tile(m, 6, 6), TILE_VOID);  /* one step took all four */
+
+    CASE("a brush hanging over the edge paints the part that exists");
+    e->cx = m->w - 1; e->cy = 6;
+    K('3'); K('b');
+    K('f');
+    CHECK_EQ(map_tile(m, m->w - 1, 6), TILE_FLOOR);
+    CHECK_EQ(map_tile(m, m->w - 1, 8), TILE_FLOOR);
+
+    CASE("L walls the brush's whole east face");
+    e->cx = 3; e->cy = 3;
+    CHECK_EQ(e->brush, 3);
+    K('L');
+    CHECK_EQ(map_vedge(m, 6, 3), EDGE_WALL);
+    CHECK_EQ(map_vedge(m, 6, 4), EDGE_WALL);
+    CHECK_EQ(map_vedge(m, 6, 5), EDGE_WALL);
+    CHECK_EQ(map_vedge(m, 6, 2), EDGE_NONE);  /* the face, not the column */
+    CHECK_EQ(map_vedge(m, 6, 6), EDGE_NONE);
+
+    CASE("the same key again takes the whole face away");
+    K('L');
+    CHECK_EQ(map_vedge(m, 6, 3), EDGE_NONE);
+    CHECK_EQ(map_vedge(m, 6, 5), EDGE_NONE);
+
+    CASE("a partly built face is completed rather than dismantled");
+    map_set_vedge(m, 6, 4, EDGE_WALL);
+    K('L');
+    CHECK_EQ(map_vedge(m, 6, 3), EDGE_WALL);
+    CHECK_EQ(map_vedge(m, 6, 4), EDGE_WALL);
+    CHECK_EQ(map_vedge(m, 6, 5), EDGE_WALL);
+
+    CASE("one press of a face is one undo step, whatever the brush");
+    K('u');
+    CHECK_EQ(map_vedge(m, 6, 3), EDGE_NONE);
+    CHECK_EQ(map_vedge(m, 6, 4), EDGE_WALL);  /* the hand-laid edge survives:
+                                               * undo takes back the press,
+                                               * not the wall it built on */
+
+    CASE("K walls the north face, J the south, H the west");
+    map_rect_walls(m, 0, 0, m->w - 1, m->h - 1, EDGE_NONE);
+    e->cx = 3; e->cy = 3;
+    K('K');
+    CHECK_EQ(map_hedge(m, 3, 3), EDGE_WALL);
+    CHECK_EQ(map_hedge(m, 5, 3), EDGE_WALL);
+    K('J');
+    CHECK_EQ(map_hedge(m, 3, 6), EDGE_WALL);
+    K('H');
+    CHECK_EQ(map_vedge(m, 3, 3), EDGE_WALL);
+    CHECK_EQ(map_vedge(m, 3, 5), EDGE_WALL);
+
+    CASE("space clears the brush's footprint back to void together");
+    map_fill_tiles(m, 0, 0, m->w - 1, m->h - 1, TILE_FLOOR);
+    e->cx = 6; e->cy = 6;
+    K(' ');
+    CHECK_EQ(map_tile(m, 6, 6), TILE_VOID);
+    CHECK_EQ(map_tile(m, 8, 8), TILE_VOID);
+    CHECK_EQ(map_tile(m, 9, 9), TILE_FLOOR);
+
+    CASE("the visual box ignores the brush -- its own two corners rule");
+    K('v');
+    CHECK_EQ(e->mode, ED_VISUAL);
+    Key esc = { KEY_ESC, 0, 0 };
+    app_key(&a, esc);
+    CHECK_EQ(e->mode, ED_NORMAL);
+
+    CASE("play mode: the same digits are counts and the same b is the size");
+    a.screen = SCREEN_PLAY;
+    play_focus(&a.play, -1);
+    a.ed.cx = 2; a.ed.cy = 2;
+    K('3'); K('l');
+    CHECK_EQ(a.ed.cx, 5);
+    K('2'); K('b');
+    CHECK_EQ(a.play.next_size, 2);
+
+    CASE("b on a selected creature cycles up from the size it already is");
+    play_focus(&a.play, 3);                    /* the 2x2 Ogre */
+    K('b');
+    CHECK_EQ(m->tokens.v[3].size, 3);
+    K('b');                                    /* wraps past the top */
+    CHECK_EQ(m->tokens.v[3].size, 1);
+
+    #undef K
     app_free(&a);
     rnd_free(&r);
 }
@@ -6611,6 +6751,7 @@ int main(void)
         { "selection", test_selection_contrast },
         { "group", test_group },
         { "groupyank", test_group_yank },
+        { "brush", test_brush },
         { "voidlook", test_void_reads_as_void },
         { "palette",  test_terrain_palette },
         { "coords",   test_coords },
