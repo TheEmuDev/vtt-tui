@@ -344,6 +344,14 @@ void grid_draw(Renderer *r, const Map *m, const GridView *g, const Theme *th,
     int cy0 = iclamp(fdiv(g->cam_y, ph) - 1, 0, m->h);
     int cy1 = iclamp(fdiv(g->cam_y + g->view.h, ph) + 1, 0, m->h);
 
+    /* The segment north of a corner is the one south of the corner above it,
+     * so a one-row cache carries the vertical segments down the way `w`
+     * below carries the horizontal ones across: two lookups per corner
+     * instead of three, in the loop that is most of every frame. Static
+     * because the widest possible corner row is small and fixed. */
+    static Seg vrow[MAP_MAX_DIM + 1];
+    for (int cx = cx0; cx <= cx1; cx++) vrow[cx - cx0] = vseg(m, cx, cy0 - 1);
+
     for (int cy = cy0; cy <= cy1; cy++) {
         /* The segment west of a corner is the one east of its neighbour, so
          * carrying it across the row halves the horizontal lookups. */
@@ -353,9 +361,10 @@ void grid_draw(Renderer *r, const Map *m, const GridView *g, const Theme *th,
             int sx, sy;
             grid_tile_screen(g, cx, cy, &sx, &sy);
 
-            Seg n = vseg(m, cx, cy - 1);
+            Seg n = vrow[cx - cx0];
             Seg sg = vseg(m, cx, cy);
             Seg e = hseg(m, cx, cy);
+            vrow[cx - cx0] = sg;
 
             unsigned any = 0, solid = 0;
             if (n.level)  { any |= JN; if (n.level == 2) solid |= JN; }
@@ -540,13 +549,14 @@ void grid_draw_labels(Renderer *r, const Map *m, const GridView *g,
     int iw = ZOOM[g->zoom].iw;
 
     /* One label per column only when one fits. Otherwise every second or
-     * third, the way an axis thins its ticks rather than overprinting. */
-    int widest = 1;
-    for (int tx = x0; tx <= x1; tx++) {
+     * third, the way an axis thins its ticks rather than overprinting.
+     * Column names lengthen monotonically -- bijective base 26 -- so the
+     * widest visible label is simply the rightmost column's. */
+    int widest;
+    {
         char lbl[MAP_COORD_MAX];
-        map_coord_name(tx, 0, lbl, sizeof lbl);
-        int w = (int)strlen(lbl) - 1;              /* drop the row digit */
-        if (w > widest) widest = w;
+        map_coord_name(x1, 0, lbl, sizeof lbl);
+        widest = imax(1, (int)strlen(lbl) - 1);    /* drop the row digit */
     }
     int step = 1;
     while (widest + 1 > step * pw) step++;

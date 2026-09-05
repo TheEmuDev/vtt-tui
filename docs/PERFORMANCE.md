@@ -28,25 +28,25 @@ What the app costs to use. Each scenario replays a keystroke script, a frame per
 
 | scenario             | size   | frame p50 | frame p99 | cells | bytes |
 |----------------------|--------|-----------|-----------|-------|-------|
-| build, open          | 80x24  |    31.8us |    50.7us |    10 |   207 |
-| build, every edge    | 80x24  |    31.2us |    56.6us |    10 |   207 |
-| build, 200x200       | 80x24  |    35.0us |    96.1us |    12 |   209 |
-| build, 200x200       | 200x50 |   128.9us |   217.3us |    12 |   212 |
-| build, mostly void   | 200x50 |   115.7us |   157.6us |    20 |   267 |
-| build, tracing       | 80x24  |    31.0us |    44.1us |     2 |   140 |
-| build, circle brush  | 80x24  |    34.2us |    40.4us |    28 |   292 |
-| ruler, three legs    | 80x24  |    27.8us |    39.5us |    11 |    40 |
-| play, 24 tokens      | 80x24  |    34.9us |    39.6us |    19 |   298 |
-| play, 24 tokens      | 200x50 |   111.0us |   166.7us |    36 |   319 |
-| play, carrying       | 80x24  |    30.5us |    55.7us |    33 |   205 |
-| play, carry 200x200  | 80x24  |    31.2us |    53.3us |    22 |   136 |
-| play, 3x3 cursor     | 80x24  |    39.4us |    44.6us |    40 |   663 |
-| play, choosing       | 80x24  |    31.3us |    56.2us |    13 |   101 |
-| play, group box      | 80x24  |    30.3us |    41.8us |    18 |   133 |
-| play, group carry    | 80x24  |    30.7us |    63.1us |    22 |   131 |
-| play, range bands    | 80x24  |    52.1us |   158.0us |   163 |   845 |
-| help page            | 80x24  |    38.8us |    83.0us |   532 |  2656 |
-| profiler overlay     | 80x24  |    36.0us |   135.5us |   116 |   744 |
+| build, open          | 80x24  |    33.2us |    76.3us |    10 |   207 |
+| build, every edge    | 80x24  |    29.0us |    43.5us |    10 |   207 |
+| build, 200x200       | 80x24  |    29.1us |    33.5us |    12 |   209 |
+| build, 200x200       | 200x50 |   121.4us |   154.4us |    12 |   212 |
+| build, mostly void   | 200x50 |   102.7us |   209.2us |    20 |   267 |
+| build, tracing       | 80x24  |    28.8us |    35.3us |     2 |   140 |
+| build, circle brush  | 80x24  |    30.0us |    44.1us |    28 |   292 |
+| ruler, three legs    | 80x24  |    25.7us |    38.6us |    11 |    40 |
+| play, 24 tokens      | 80x24  |    31.6us |    34.5us |    19 |   298 |
+| play, 24 tokens      | 200x50 |   101.5us |   112.6us |    36 |   319 |
+| play, carrying       | 80x24  |    27.6us |    59.0us |    33 |   205 |
+| play, carry 200x200  | 80x24  |    28.3us |    64.9us |    22 |   136 |
+| play, 3x3 cursor     | 80x24  |    35.6us |    65.3us |    40 |   663 |
+| play, choosing       | 80x24  |    28.5us |    40.7us |    13 |   101 |
+| play, group box      | 80x24  |    27.7us |    55.3us |    18 |   133 |
+| play, group carry    | 80x24  |    27.2us |    31.7us |    22 |   131 |
+| play, range bands    | 80x24  |    39.2us |    98.0us |   163 |   845 |
+| help page            | 80x24  |    39.9us |   103.6us |   532 |  2656 |
+| profiler overlay     | 80x24  |    34.0us |   132.7us |   118 |   760 |
 
 > The machine's own baseline drifts: one recording of this table sat ~10% above its
 > neighbours on every row, and none of it was the code -- the previous binary run
@@ -69,20 +69,20 @@ a median near zero and a p99 that says what it costs when it does.
 
 | path             | p50     | p99     | worst   | calls | heaviest scenario      |
 |------------------|---------|---------|---------|-------|------------------------|
-| app.draw         | 113.5us | 237.9us | 317.4us |  3200 | build, 200x200 200x50  |
-| editor.draw      | 108.4us | 227.0us | 305.6us |  3200 | build, 200x200 200x50  |
-| grid.draw        |  96.8us | 199.4us | 282.7us |  3200 | build, 200x200 200x50  |
-| grid.labels      |  11.5us |  26.8us |  45.5us |  3200 | build, 200x200 200x50  |
-| group.box        |   0.1us |   0.2us |   0.4us |   400 | play, group carry 80x24 |
-| group.move       |   0.2us |   4.3us |  71.4us |  6400 | play, carry 200x200 80x24 |
-| input.key        |   1.2us |  20.3us | 204.0us | 10000 | play, carry 200x200 80x24 |
-| move.label       |   0.8us |   2.0us |  18.4us |  9995 | play, carry 200x200 80x24 |
-| play.draw        |  89.7us | 200.1us | 248.4us |  5595 | play, 24 tokens 200x50 |
-| prof.overlay     |   7.6us | 121.3us | 155.7us |  1000 | profiler overlay 80x24 |
-| range.draw       |   0.0us |  27.6us |  54.0us |  5195 | play, range bands 80x24 |
-| ruler.draw       |   0.7us |   1.7us |  11.3us |  4400 | ruler, three legs 80x24 |
-| trail.draw       |   0.1us |   0.4us |  16.0us |  9995 | play, carry 200x200 80x24 |
-| trail.path       |   4.3us |  20.6us | 202.7us |  6231 | play, carry 200x200 80x24 |
+| app.draw         | 106.3us | 220.4us | 312.8us |  3200 | build, 200x200 200x50  |
+| editor.draw      | 101.1us | 209.2us | 290.3us |  3200 | build, 200x200 200x50  |
+| grid.draw        |  93.2us | 191.6us | 272.6us |  3200 | build, 200x200 200x50  |
+| grid.labels      |   7.7us |  18.8us |  55.7us |  3200 | build, 200x200 200x50  |
+| group.box        |   0.1us |   0.2us |   0.2us |   400 | play, group carry 80x24 |
+| group.move       |   0.2us |   3.3us |  59.5us |  6400 | play, carry 200x200 80x24 |
+| input.key        |   1.2us |  19.7us | 115.8us | 10000 | play, carry 200x200 80x24 |
+| move.label       |   0.8us |   1.7us |  12.4us |  9995 | play, carry 200x200 80x24 |
+| play.draw        |  80.3us | 174.2us | 253.5us |  5595 | play, 24 tokens 200x50 |
+| prof.overlay     |   7.3us |  96.6us | 125.2us |  1000 | profiler overlay 80x24 |
+| range.draw       |   0.0us |  28.3us |  51.2us |  5195 | play, range bands 80x24 |
+| ruler.draw       |   0.7us |   1.6us |  17.0us |  4400 | ruler, three legs 80x24 |
+| trail.draw       |   0.1us |   0.3us |   9.9us |  9995 | play, carry 200x200 80x24 |
+| trail.path       |   4.3us |  20.1us | 111.7us |  6231 | play, carry 200x200 80x24 |
 
 ### Reading it
 
@@ -96,8 +96,10 @@ that scaled with the window without being culled by it.
 
 **`grid.draw` is the frame.** Roughly 85% of `app.draw` at every size, and it scales
 with the window: it walks the visible tiles, resolving a junction glyph from a four-bit
-incidence mask at every crossing. Walling every edge of the map costs nothing extra
-(36.4µs against 37.3µs open) — the mask is computed either way.
+incidence mask at every crossing. Walling every edge of the map costs nothing extra —
+the mask is computed either way. A one-row cache now carries the vertical segments down
+the way the horizontal ones were already carried across, two lookups per corner instead
+of three: 100.0µs → 92.3µs at 200×50, medians of three runs.
 
 **Everything layered on top is noise by comparison.** The ruler, the movement ribbon and
 the range overlay are each under 2% of a frame. Only the range band reaches 25µs, and
@@ -116,9 +118,11 @@ palette rewrite rather than a tweak.
 | all floor | 77.6µs | 80.3µs | **77.9µs** |
 | mostly void | 122.0µs | 125.3µs | 130.1µs |
 
-**`grid.labels` at 11.4µs is the largest optional cost**, about 7% of a wide frame. It
-formats a column name per visible column and a row number per visible row. `#` takes it
-to zero and gives back the row and the gutter as well.
+**`grid.labels` at 7.7µs is the largest optional cost**, about 6% of a wide frame. It
+was 11.4µs until the "widest visible label" question stopped formatting every visible
+column per frame: bijective base-26 names lengthen monotonically, so the widest is
+simply the rightmost column's. `#` takes the whole cost to zero and gives back the row
+and the gutter as well.
 
 **The distance label beside a carried creature costs 1µs**, and only in the frames where a
 creature is actually being carried — 36.0µs against 35.0µs, medians of three runs with the
