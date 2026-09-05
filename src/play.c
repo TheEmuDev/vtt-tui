@@ -154,10 +154,7 @@ static int box_meets(const Token *t, int ax, int ay, int bx, int by)
 {
     if (ax > bx) { int v = ax; ax = bx; bx = v; }
     if (ay > by) { int v = ay; ay = by; by = v; }
-
-    if (t->x > bx || t->x + t->size - 1 < ax) return 0;
-    if (t->y > by || t->y + t->size - 1 < ay) return 0;
-    return 1;
+    return token_meets(t, ax, ay, bx - ax + 1, by - ay + 1);
 }
 
 int play_box_tokens(const Map *m, int ax, int ay, int bx, int by,
@@ -633,26 +630,16 @@ void play_status(const Play *p, const Map *m, const Editor *e, char *buf, size_t
     if (p->sel >= 0 && p->sel < m->tokens.n) {
         const Token *t = &m->tokens.v[p->sel];
         if (p->grabbed) {
-            /* What the move costs and how far it went answer different
-             * questions: one is the route walked around the walls, the other
-             * is the straight line a range band cares about. Show both rather
-             * than making the GM convert. */
-            double tiles = dist_tiles((DistMetric)m->metric,
-                                      t->x - p->origin_x, t->y - p->origin_y);
-            double units = tiles * m->scale_ft;
-
             /* With no walkable route the count is keystrokes rather than the
              * cost of a move, and the ribbon is missing; say so rather than
-             * letting a blank map read as a bug. */
+             * letting a blank map read as a bug. The distance and its band
+             * ride beside the creature, where the eye already is; this line
+             * keeps what there is no room for out there. */
             const char *route = p->ntrail ? "" : "  no route";
 
             char from[MAP_COORD_MAX];
             map_coord_name(p->origin_x, p->origin_y, from, sizeof from);
 
-            /* The distance and its band ride beside the creature now, where
-             * the eye already is; this line keeps what there is no room for
-             * out there. */
-            (void)units;
             snprintf(buf, bufsz,
                      "MOVING  %.20s %dx%d  %d step%s%s  from %s  %s",
                      t->label[0] ? t->label : token_kind_name(t->kind),

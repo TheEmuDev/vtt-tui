@@ -63,6 +63,17 @@ int    tokens_covered_next(const TokenList *l, int x, int y, int size, int after
  * TOKEN_ANY_KIND to mean any token, or a TokenKind to look only for those --
  * a creature can walk past its own side but not through the other one. */
 #define TOKEN_ANY_KIND (-1)
+
+/* Does this token's footprint meet a w x h block at (x,y)? Two blocks miss
+ * each other when either axis does. The one overlap test in the codebase:
+ * the searches, the ring walk and the visual box all lean on it, so they
+ * cannot disagree about what "covers" means. */
+static inline int token_meets(const Token *t, int x, int y, int w, int h)
+{
+    if (x + w <= t->x || t->x + t->size <= x) return 0;
+    if (y + h <= t->y || t->y + t->size <= y) return 0;
+    return 1;
+}
 int    tokens_overlapping(const TokenList *l, int x, int y, int size,
                           int except, int kind);
 

@@ -56,11 +56,7 @@ int tokens_covered_next(const TokenList *l, int x, int y, int size, int after)
 
     for (int k = 0; k < l->n; k++) {
         int i = (start + k) % l->n;
-        const Token *t = &l->v[i];
-
-        if (x + size <= t->x || t->x + t->size <= x) continue;
-        if (y + size <= t->y || t->y + t->size <= y) continue;
-        return i;
+        if (token_meets(&l->v[i], x, y, size, size)) return i;
     }
     return -1;
 }
@@ -76,10 +72,7 @@ int tokens_overlapping_set(const TokenList *l, int x, int y, int size,
 
         const Token *t = &l->v[i];
         if (kind != TOKEN_ANY_KIND && t->kind != kind) continue;
-
-        /* Two blocks miss each other when either axis does. */
-        if (x + size <= t->x || t->x + t->size <= x) continue;
-        if (y + size <= t->y || t->y + t->size <= y) continue;
+        if (!token_meets(t, x, y, size, size)) continue;
         return i;
     }
     return -1;

@@ -1520,12 +1520,7 @@ static void play_cancel_move(App *a)
 
     pl->grabbed = 0;
     pl->ntrail  = 0;
-
-    if (pl->sel >= 0 && pl->sel < a->map->tokens.n) {
-        a->ed.cx = a->map->tokens.v[pl->sel].x;
-        a->ed.cy = a->map->tokens.v[pl->sel].y;
-        grid_ensure_visible(&a->ed.view, a->map, a->ed.cx, a->ed.cy, ED_SCROLLOFF);
-    }
+    follow_selection(a);
 
     char at[MAP_COORD_MAX];
     map_coord_name(pl->origin_x, pl->origin_y, at, sizeof at);
@@ -1838,11 +1833,7 @@ static void play_key(App *a, Key k)
                 app_set_status(a, pl->enforce_walls ? "blocked" : "edge of the map");
             else if (settling)
                 app_set_status(a, "picked up - enter drops, esc cancels");
-            if (pl->sel >= 0 && pl->sel < m->tokens.n) {
-                e->cx = m->tokens.v[pl->sel].x;
-                e->cy = m->tokens.v[pl->sel].y;
-                grid_ensure_visible(&e->view, m, e->cx, e->cy, ED_SCROLLOFF);
-            }
+            follow_selection(a);
         } else {
             ed_move(e, m, dx, dy, times);
         }

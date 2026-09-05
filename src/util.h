@@ -15,24 +15,6 @@ void *xmalloc(size_t n);
 void *xcalloc(size_t n, size_t sz);
 void *xrealloc(void *p, size_t n);
 
-/* ----------------------------------------------------------------- arena */
-
-/* Bump allocator. The renderer and per-frame work allocate from here so no
- * malloc ever happens on the hot path; arena_reset() is the whole teardown. */
-typedef struct {
-    uint8_t *base;
-    size_t   cap;
-    size_t   used;
-    size_t   peak;
-} Arena;
-
-void  arena_init(Arena *a, size_t cap);
-void *arena_alloc(Arena *a, size_t n, size_t align);
-void  arena_reset(Arena *a);
-void  arena_free(Arena *a);
-
-#define ARENA_NEW(a, T, n) ((T *)arena_alloc((a), sizeof(T) * (size_t)(n), _Alignof(T)))
-
 /* -------------------------------------------------------------- byte buf */
 
 /* Growable byte buffer. One of these accumulates an entire frame's escape

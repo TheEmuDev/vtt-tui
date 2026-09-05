@@ -345,20 +345,6 @@ static void test_draw(void)
 
 static void test_util(void)
 {
-    CASE("arena alignment and reset");
-    Arena a;
-    arena_init(&a, 4096);
-    char *p1 = ARENA_NEW(&a, char, 3);
-    uint64_t *p2 = ARENA_NEW(&a, uint64_t, 4);
-    CHECK(p1 != NULL);
-    CHECK_EQ((uintptr_t)p2 % _Alignof(uint64_t), 0);
-    size_t used = a.used;
-    CHECK(used >= 3 + 32);
-    arena_reset(&a);
-    CHECK_EQ(a.used, 0);
-    CHECK_EQ(a.peak, used);
-    arena_free(&a);
-
     CASE("byte buffer growth and integer formatting");
     ByteBuf b;
     bb_init(&b, 4);

@@ -362,8 +362,6 @@ static void shape_note(const Editor *e, char *buf, size_t bufsz)
 
 void ed_status(const Editor *e, const Map *m, char *buf, size_t bufsz)
 {
-    const ZoomLevel *z = &ZOOM[e->view.zoom];
-
     char shape[24];
     shape_note(e, shape, sizeof shape);
 
@@ -386,5 +384,4 @@ void ed_status(const Editor *e, const Map *m, char *buf, size_t bufsz)
              tile_name(map_tile(m, e->cx, e->cy)),
              edge_name(e->material), tile_name(e->terrain), shape,
              e->view.zoom, m->w, m->h);
-    (void)z;
 }

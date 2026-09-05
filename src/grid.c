@@ -536,7 +536,7 @@ void grid_draw_labels(Renderer *r, const Map *m, const GridView *g,
     /* Whichever column and row the cursor is on gets the bright label, so
      * finding where you are is a glance rather than a count. */
 
-    int pw = zoom_pw(g->zoom), ph = zoom_ph(g->zoom);
+    int pw = zoom_pw(g->zoom);
     int iw = ZOOM[g->zoom].iw;
 
     /* One label per column only when one fits. Otherwise every second or
@@ -590,6 +590,4 @@ void grid_draw_labels(Renderer *r, const Map *m, const GridView *g,
                   ty == cy ? hot : dim);
     }
     rnd_clip_restore(r, saved);
-
-    (void)pw; (void)ph;
 }

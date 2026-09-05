@@ -39,35 +39,6 @@ void *xrealloc(void *p, size_t n)
     return q;
 }
 
-/* ----------------------------------------------------------------- arena */
-
-void arena_init(Arena *a, size_t cap)
-{
-    a->base = xmalloc(cap);
-    a->cap  = cap;
-    a->used = 0;
-    a->peak = 0;
-}
-
-void *arena_alloc(Arena *a, size_t n, size_t align)
-{
-    size_t off = (a->used + align - 1) & ~(align - 1);
-    if (off + n > a->cap)
-        die("arena exhausted: need %zu, have %zu", off + n, a->cap);
-    a->used = off + n;
-    if (a->used > a->peak) a->peak = a->used;
-    return a->base + off;
-}
-
-void arena_reset(Arena *a) { a->used = 0; }
-
-void arena_free(Arena *a)
-{
-    free(a->base);
-    a->base = NULL;
-    a->cap = a->used = a->peak = 0;
-}
-
 /* -------------------------------------------------------------- byte buf */
 
 void bb_init(ByteBuf *b, size_t cap)
