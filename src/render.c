@@ -149,8 +149,20 @@ void rnd_flush(Renderer *r, Term *t)
     int      attr_valid = 0;
 
     for (int y = 0; y < r->h; y++) {
+        /* Whole clean rows are skipped in one comparison. memcmp may read
+         * the padding bytes, which is sound because every Cell descends from
+         * BLANK by struct copy and is only ever mutated field by field, so
+         * the padding is zero everywhere -- a test pins that invariant. A
+         * typical frame changes two or three rows of a 50-row window, and
+         * this is what makes the other 47 cost one SIMD sweep each. */
+        size_t row = (size_t)y * (size_t)r->w;
+        if (!r->force_full &&
+            memcmp(&r->back[row], &r->front[row],
+                   (size_t)r->w * sizeof(Cell)) == 0)
+            continue;
+
         for (int x = 0; x < r->w; x++) {
-            size_t      i = (size_t)y * (size_t)r->w + (size_t)x;
+            size_t      i = row + (size_t)x;
             const Cell *b = &r->back[i];
 
             /* Second half of a wide glyph: the preceding cell already moved
@@ -212,7 +224,14 @@ void rnd_flush(Renderer *r, Term *t)
      * something else happens to overwrite them. Repaint from scratch instead,
      * which costs one frame and self-heals. */
     if (delivered) {
-        memcpy(r->front, r->back, r->ncells * sizeof(Cell));
+        /* The delivered frame becomes the front by swapping pointers rather
+         * than copying 16 bytes a cell: whatever stale contents the old
+         * front leaves in the new back are gone the moment rnd_begin clears
+         * it. On a short write nothing swaps, so front keeps meaning what
+         * the terminal actually received. */
+        Cell *swap = r->front;
+        r->front = r->back;
+        r->back  = swap;
         r->force_full = 0;
     } else {
         r->force_full = 1;

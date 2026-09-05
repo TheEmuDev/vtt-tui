@@ -261,6 +261,32 @@ static void test_render(void)
     CHECK_EQ(r.cells_changed, 1);
     CHECK(r.bytes_written < 40);
 
+    /* The flush skips clean rows with memcmp, which reads the padding
+     * bytes. That is only sound while every cell's padding is zero -- cells
+     * descend from BLANK by struct copy and are mutated field by field -- so
+     * this pins the invariant the comparison rests on. */
+    CASE("cell padding is zero everywhere, in both buffers");
+    rnd_begin(&r);
+    draw_text(&r, 3, 2, "padding", -1, style(RGB(1,2,3), RGB(4,5,6), ATTR_BOLD));
+    draw_cell(&r, 8, 4, 0x4E16u /* a wide glyph and its continuation */, s);
+    rnd_flush(&r, NULL);
+    for (size_t ci = 0; ci < r.ncells; ci++)
+        for (int b = 0; b < 3; b++) {
+            CHECK_EQ(r.front[ci]._pad[b], 0);
+            CHECK_EQ(r.back[ci]._pad[b], 0);
+        }
+
+    CASE("a swap-heavy sequence still diffs correctly");
+    rnd_begin(&r);
+    draw_text(&r, 0, 0, "tock", -1, s);
+    rnd_flush(&r, NULL);                 /* prime: clear the padding frame */
+    for (int f = 0; f < 5; f++) {
+        rnd_begin(&r);
+        draw_text(&r, 0, 0, f % 2 ? "tock" : "tick", -1, s);
+        rnd_flush(&r, NULL);
+        CHECK_EQ(r.cells_changed, 1u);   /* only the i/o cell flips */
+    }
+
     CASE("clipping at the screen edge is silent");
     rnd_begin(&r);
     draw_text(&r, 38, 9, "overflowing", -1, s);
