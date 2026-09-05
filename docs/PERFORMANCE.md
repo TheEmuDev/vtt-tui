@@ -28,32 +28,32 @@ What the app costs to use. Each scenario replays a keystroke script, a frame per
 
 | scenario             | size   | frame p50 | frame p99 | cells | bytes |
 |----------------------|--------|-----------|-----------|-------|-------|
-| build, open          | 80x24  |    40.0us |    49.3us |    10 |   207 |
-| build, every edge    | 80x24  |    39.5us |    77.9us |    10 |   207 |
-| build, 200x200       | 80x24  |    39.6us |    59.4us |    12 |   209 |
-| build, 200x200       | 200x50 |   170.4us |   196.2us |    12 |   212 |
-| build, mostly void   | 200x50 |   156.1us |   324.2us |    20 |   267 |
-| build, tracing       | 80x24  |    39.1us |    52.9us |     2 |   140 |
-| build, circle brush  | 80x24  |    41.2us |    84.5us |    28 |   292 |
-| ruler, three legs    | 80x24  |    36.3us |    46.5us |    11 |    40 |
-| play, 24 tokens      | 80x24  |    43.0us |    52.9us |    19 |   298 |
-| play, 24 tokens      | 200x50 |   149.2us |   163.5us |    36 |   319 |
-| play, carrying       | 80x24  |    42.3us |    88.8us |    33 |   205 |
-| play, 3x3 cursor     | 80x24  |    45.6us |   103.4us |    40 |   663 |
-| play, choosing       | 80x24  |    40.2us |    66.5us |    13 |   101 |
-| play, group box      | 80x24  |    38.9us |    51.0us |    18 |   133 |
-| play, group carry    | 80x24  |    44.4us |    88.7us |    22 |   131 |
-| play, range bands    | 80x24  |    48.4us |   102.9us |   163 |   845 |
-| help page            | 80x24  |    45.4us |   147.7us |   532 |  2656 |
-| profiler overlay     | 80x24  |    45.6us |   160.4us |   118 |   759 |
+| build, open          | 80x24  |    36.0us |    66.3us |    10 |   207 |
+| build, every edge    | 80x24  |    35.5us |    46.5us |    10 |   207 |
+| build, 200x200       | 80x24  |    35.7us |    68.0us |    12 |   209 |
+| build, 200x200       | 200x50 |   153.6us |   213.2us |    12 |   212 |
+| build, mostly void   | 200x50 |   140.9us |   177.0us |    20 |   267 |
+| build, tracing       | 80x24  |    35.3us |    68.8us |     2 |   140 |
+| build, circle brush  | 80x24  |    37.4us |    73.9us |    28 |   292 |
+| ruler, three legs    | 80x24  |    32.7us |    51.8us |    11 |    40 |
+| play, 24 tokens      | 80x24  |    38.6us |    77.3us |    19 |   298 |
+| play, 24 tokens      | 200x50 |   134.5us |   279.0us |    36 |   319 |
+| play, carrying       | 80x24  |    38.6us |    84.7us |    33 |   205 |
+| play, carry 200x200  | 80x24  |    35.8us |    82.0us |    22 |   136 |
+| play, 3x3 cursor     | 80x24  |    41.0us |    66.8us |    40 |   663 |
+| play, choosing       | 80x24  |    36.1us |    40.3us |    13 |   101 |
+| play, group box      | 80x24  |    35.1us |    67.9us |    18 |   133 |
+| play, group carry    | 80x24  |    39.2us |    97.9us |    22 |   131 |
+| play, range bands    | 80x24  |    43.3us |    83.7us |   163 |   845 |
+| help page            | 80x24  |    40.7us |    79.6us |   532 |  2656 |
+| profiler overlay     | 80x24  |    41.6us |   136.2us |   118 |   755 |
 
-> Every row in this table is about 10% slower than the one recorded before it, and
-> none of it is the code. The previous binary run through the same harness on the same
-> day reads 40.0us for `build, open` against the current binary's 40.0us, and a direct
-> A/B on one fixture reads 31.0us against 31.0us. The machine's own baseline moved.
-> This is the reason the page says to read the ratios between rows rather than the
-> absolute numbers, and the reason a suspicious row is worth an A/B before it is worth
-> a commit message.
+> The machine's own baseline drifts: one recording of this table sat ~10% above its
+> neighbours on every row, and none of it was the code -- the previous binary run
+> through the same harness on the same day read identically (40.0us against 40.0us on
+> `build, open`; 31.0us against 31.0us in a direct A/B). This is the reason the page
+> says to read the ratios between rows rather than the absolute numbers, and the
+> reason a suspicious row is worth an A/B before it is worth a commit message.
 
 `cells` and `bytes` are what actually reached the terminal. They predict perceived
 latency better than wall-clock does: a frame that recomputes everything but changes ten
@@ -69,20 +69,20 @@ a median near zero and a p99 that says what it costs when it does.
 
 | path             | p50     | p99     | worst   | calls | heaviest scenario      |
 |------------------|---------|---------|---------|-------|------------------------|
-| app.draw         | 125.9us | 264.4us | 332.5us |  3200 | build, 200x200 200x50  |
-| editor.draw      | 119.8us | 253.7us | 320.3us |  3200 | build, 200x200 200x50  |
-| grid.draw        | 107.0us | 223.6us | 301.5us |  3200 | build, 200x200 200x50  |
-| grid.labels      |  12.7us |  29.7us |  41.0us |  3200 | build, mostly void 200x50 |
-| group.box        |   0.1us |   0.2us |   7.2us |   400 | play, group carry 80x24 |
-| group.move       |   0.1us |   2.0us | 142.8us |  3200 | play, carrying 80x24   |
-| input.key        |   0.2us |  16.8us | 148.1us |  6800 | play, carrying 80x24   |
-| move.label       |   0.0us |   1.9us |   6.7us |  6795 | play, carrying 80x24   |
-| play.draw        |  98.3us | 218.8us | 450.2us |  5595 | play, 24 tokens 200x50 |
-| prof.overlay     |   8.5us | 126.6us | 156.0us |  1000 | profiler overlay 80x24 |
-| range.draw       |   0.0us |  28.5us |  45.1us |  5195 | play, range bands 80x24 |
-| ruler.draw       |   0.8us |   1.9us |   5.5us |  4400 | ruler, three legs 80x24 |
-| trail.draw       |   0.1us |   0.3us |   0.9us |  6795 | play, carrying 80x24   |
-| trail.path       |   1.9us |  24.7us |  37.6us |   986 | play, carrying 80x24   |
+| app.draw         | 113.8us | 242.7us | 327.2us |  3200 | build, 200x200 200x50  |
+| editor.draw      | 108.3us | 229.8us | 313.5us |  3200 | build, 200x200 200x50  |
+| grid.draw        |  96.7us | 205.4us | 280.2us |  3200 | build, 200x200 200x50  |
+| grid.labels      |  11.4us |  27.4us |  55.9us |  3200 | build, 200x200 200x50  |
+| group.box        |   0.1us |   0.3us |   0.6us |   400 | play, group carry 80x24 |
+| group.move       |   0.2us |   5.1us |  72.0us |  6400 | play, carry 200x200 80x24 |
+| input.key        |   1.4us |  27.5us |  98.3us | 10000 | play, carry 200x200 80x24 |
+| move.label       |   0.8us |   2.4us |  21.8us |  9995 | play, carry 200x200 80x24 |
+| play.draw        |  89.0us | 206.1us | 350.3us |  5595 | play, 24 tokens 200x50 |
+| prof.overlay     |   7.4us | 118.6us | 140.8us |  1000 | profiler overlay 80x24 |
+| range.draw       |   0.0us |  26.4us |  71.5us |  5195 | play, range bands 80x24 |
+| ruler.draw       |   0.7us |   2.0us |  19.4us |  4400 | ruler, three legs 80x24 |
+| trail.draw       |   0.1us |   0.5us |   3.6us |  9995 | play, carry 200x200 80x24 |
+| trail.path       |   4.4us |  29.0us |  94.1us |  6231 | play, carry 200x200 80x24 |
 
 ### Reading it
 
@@ -173,32 +173,28 @@ covers, so between one press and the next almost nothing on screen changes. Only
 selection highlight moves, and that is two token bodies. The walk itself is a scan of
 the token list per press, on a keystroke rather than a frame, and does not register.
 
-**`trail.path` doubled when creatures started blocking each other** — 0.6µs to 1.2µs
-typical, 5µs to 13µs worst — because the search now asks whether each square it probes is
-occupied, and that ask is a walk of the token list. The shape is O(area x tokens), so it
-grows with both a long route and a crowded map. At 13µs on a keystroke it is not worth
-fixing yet; the fix, when it is, is an occupancy grid built once per search rather than a
-scan per probe.
+**The route search costs the route now, not the map.** It used to malloc, zero and
+free two map-sized arrays per keystroke, and ask the token list about every square it
+probed — O(map × tokens) however short the walk. Three changes took that apart: the
+scratch is kept across searches, the search restores it by touching only what it
+touched (every reached cell is in its own queue), and the blockers are painted into an
+occupancy grid once per search so a probe reads cells instead of scanning tokens.
+Measured on a 200×200 carry, 100 bench loops each way: **32.4µs → 1.4µs p50, 76.9µs →
+5.7µs p99, per keystroke** — and the median carried keystroke (`input.key`) went from
+25.9µs to 0.8µs. The `play, carry 200x200` scenario keeps it measured.
 
 **`trail.path` is the only search in the app** — a breadth-first sweep from the held
-creature back to where it set out. About 2µs on a 40×25 map; 32µs typical on 200×200
-(129µs worst), and it runs on a keystroke rather than a frame, so even that has a
-hundredfold headroom. Three planned wins live here, none yet taken: keep the two
-map-sized scratch arrays in `Play` instead of malloc/free per keystroke, stamp `dist`
-with a generation counter instead of an O(map) clear, and share the occupancy grid the
-`group.move` note above already names, so a probe stops scanning the token list.
-Together they make the search cost the route rather than the map.
+creature back to where it set out, and after the rework above its cost follows the
+route: about 2µs beside a short walk on any map size, with the long walks in the p99.
+It runs on a keystroke rather than a frame, so even its worst has hundredfold headroom.
 
 **`prof.overlay` is the most expensive thing here relative to its worth**, which is why
 it reports itself: an instrument that quietly adds to the number it displays is worse
 than no instrument. It is off unless you press F12.
 
 **`input.key`'s worst is a carried step**, not a cursor move: the route is recut
-underneath it, so it is `trail.path`'s worst wearing a different name. The median
-keystroke is 0.2µs. On a 200×200 map a carried step measures 32µs p50 and 129µs worst
-(spot measurement, 100 bench loops) — the search's scratch is allocated, zeroed and
-freed per keystroke and every probe scans the token list, which is the planned fix
-recorded above.
+underneath it, so it is `trail.path`'s worst wearing a different name. A bare cursor
+keystroke is 0.2µs.
 
 ## Working rules
 

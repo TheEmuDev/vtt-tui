@@ -77,6 +77,7 @@ WALLED=$(genmap walled 40 25 1 0)     # every edge walled: junction worst case
 OPEN=$(genmap open    40 25 0 0)      # nothing to resolve: the floor of the cost
 BIG=$(genmap big     200 200 1 0)     # far more map than window
 MOB=$(genmap mob      40 25 0 24)     # 24 tokens, each wearing a marker
+BIGMOB=$(genmap bigmob 200 200 0 24)  # the route search's worst case: big and crowded
 
 # Rooms on a void canvas, which is what a map under construction looks like
 # and the only shape that exercises the void marks.
@@ -161,6 +162,7 @@ run "ruler, three legs"    "$WALLED" 80x24  'mlll\rjjj\rll'
 run "play, 24 tokens"      "$MOB"    80x24  ':play\rjjllkkhh'
 run "play, 24 tokens"      "$MOB"    200x50 ':play\rjjllkkhh'
 run "play, carrying"       "$MOB"    80x24  ':play\rt\rlllljjjj\r'
+run "play, carry 200x200"  "$BIGMOB" 80x24  ':play\rt\rlllllllljjjjjjjj\r'
 run "play, 3x3 cursor"     "$MOB"    80x24  ':play\r3llllhhhh'
 run "play, choosing"       "$MOB"    80x24  ':play\r3\r\r\r\rjjjj'
 run "play, group box"      "$MOB"    80x24  ':play\rvlllljjjj'

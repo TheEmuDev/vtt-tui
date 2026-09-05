@@ -25,6 +25,30 @@ int token_can_move(const Map *m, const Token *t, int dx, int dy, int enforce,
                               except >= 0 ? 1 : 0);
 }
 
+/* Every tile along the leading face must be able to make the crossing; one
+ * blocked row is enough to stop the whole token. Factored out so the live
+ * movement check and the search's occupancy fast path below ask the walls
+ * exactly the same question and cannot drift. */
+static int walls_allow(const Map *m, const Token *t, int dx, int dy)
+{
+    int s = t->size;
+
+    if (dx > 0) {
+        for (int y = t->y; y < t->y + s; y++)
+            if (map_blocked(m, t->x + s - 1, y, 1, 0)) return 0;
+    } else if (dx < 0) {
+        for (int y = t->y; y < t->y + s; y++)
+            if (map_blocked(m, t->x, y, -1, 0)) return 0;
+    } else if (dy > 0) {
+        for (int x = t->x; x < t->x + s; x++)
+            if (map_blocked(m, x, t->y + s - 1, 0, 1)) return 0;
+    } else if (dy < 0) {
+        for (int x = t->x; x < t->x + s; x++)
+            if (map_blocked(m, x, t->y, 0, -1)) return 0;
+    }
+    return 1;
+}
+
 int token_can_move_set(const Map *m, const Token *t, int dx, int dy,
                        int enforce, const int *skip, int nskip)
 {
@@ -44,22 +68,7 @@ int token_can_move_set(const Map *m, const Token *t, int dx, int dy,
     if (tokens_overlapping_set(&m->tokens, nx, ny, s, skip, nskip, other) >= 0)
         return 0;
 
-    /* Every tile along the leading face must be able to make the crossing;
-     * one blocked row is enough to stop the whole token. */
-    if (dx > 0) {
-        for (int y = t->y; y < t->y + s; y++)
-            if (map_blocked(m, t->x + s - 1, y, 1, 0)) return 0;
-    } else if (dx < 0) {
-        for (int y = t->y; y < t->y + s; y++)
-            if (map_blocked(m, t->x, y, -1, 0)) return 0;
-    } else if (dy > 0) {
-        for (int x = t->x; x < t->x + s; x++)
-            if (map_blocked(m, x, t->y + s - 1, 0, 1)) return 0;
-    } else if (dy < 0) {
-        for (int x = t->x; x < t->x + s; x++)
-            if (map_blocked(m, x, t->y, 0, -1)) return 0;
-    }
-    return 1;
+    return walls_allow(m, t, dx, dy);
 }
 
 static void trail_push(Play *p, int x, int y)
@@ -252,6 +261,79 @@ uint8_t play_cursor_size(const Play *p, const Map *m)
     return p->next_size;
 }
 
+/* Scratch for the route search, kept across calls: a keystroke used to pay
+ * malloc, an O(map) clear and free for two map-sized arrays every step of a
+ * carry. One app, one thread, one search at a time, so file scope is the
+ * honest lifetime; it grows to the largest map seen (2.5MB at 512x512) and is
+ * reclaimed by process exit.
+ *
+ * The resting state is the invariant that makes this sound: between searches
+ * `trail_dist` is all -1 and `trail_occ` all zero. A search restores it by
+ * touching only what it touched -- every reached cell is in the queue, and
+ * the blockers are repainted with zero -- so the cost per keystroke is the
+ * route and the token list, never the map. */
+static int     *trail_dist;
+static int     *trail_queue;
+static uint8_t *trail_occ;
+static size_t   trail_cap;
+
+static void trail_scratch(size_t n)
+{
+    if (n <= trail_cap) return;
+
+    free(trail_dist);
+    free(trail_queue);
+    free(trail_occ);
+    trail_dist  = xmalloc(n * sizeof *trail_dist);
+    trail_queue = xmalloc(n * sizeof *trail_queue);
+    trail_occ   = xmalloc(n);
+
+    /* Every byte set is -1 in two's complement, which TRAIL_UNREACHED is. */
+    memset(trail_dist, 0xFF, n * sizeof *trail_dist);
+    memset(trail_occ, 0, n);
+    trail_cap = n;
+}
+
+/* Paints (or unpaints) every square a blocker stands on, so the thousands of
+ * probes below read cells instead of scanning the token list. The blockers
+ * are exactly the set token_can_move_set would scan for: the other side
+ * only, less the group itself. Clipped to the map defensively -- a token
+ * cannot legally overhang it, but a corrupt file must not write past the
+ * grid. */
+static void trail_paint_blockers(const Play *p, const Map *m, uint8_t other,
+                                 uint8_t val)
+{
+    for (int i = 0; i < m->tokens.n; i++) {
+        const Token *b = &m->tokens.v[i];
+        if (b->kind != other || play_in_group(p, i)) continue;
+
+        int x0 = imax(b->x, 0), x1 = imin(b->x + b->size, m->w);
+        int y0 = imax(b->y, 0), y1 = imin(b->y + b->size, m->h);
+        for (int y = y0; y < y1; y++)
+            for (int x = x0; x < x1; x++)
+                trail_occ[(size_t)y * (size_t)m->w + (size_t)x] = val;
+    }
+}
+
+/* The question token_can_move_set answers, with the token scan replaced by
+ * the occupancy grid built for this search. */
+static int probe_can_move(const Map *m, const Token *t, int dx, int dy,
+                          int enforce)
+{
+    int s  = t->size;
+    int nx = t->x + dx;
+    int ny = t->y + dy;
+
+    if (nx < 0 || ny < 0 || nx + s > m->w || ny + s > m->h) return 0;
+    if (!enforce) return 1;
+
+    for (int y = ny; y < ny + s; y++)
+        for (int x = nx; x < nx + s; x++)
+            if (trail_occ[(size_t)y * (size_t)m->w + (size_t)x]) return 0;
+
+    return walls_allow(m, t, dx, dy);
+}
+
 /* Breadth-first out from where the creature stands, over every tile its whole
  * footprint could occupy, until the tile it set out from is reached. Searching
  * from the destination rather than the origin is what lets the route then be
@@ -273,11 +355,13 @@ void play_trail_sync(Play *p, const Map *m)
     if (!map_in_bounds(m, ox, oy)) return;
     if (ox == gx && oy == gy) { trail_push(p, ox, oy); p->steps = 0; return; }
 
-    size_t n     = (size_t)m->w * (size_t)m->h;
-    int   *dist  = xmalloc(n * sizeof *dist);
-    int   *queue = xmalloc(n * sizeof *queue);
+    size_t n = (size_t)m->w * (size_t)m->h;
+    trail_scratch(n);
+    int *dist  = trail_dist;
+    int *queue = trail_queue;
 
-    for (size_t i = 0; i < n; i++) dist[i] = TRAIL_UNREACHED;
+    uint8_t other = (tok->kind == TOKEN_PLAYER) ? TOKEN_ENEMY : TOKEN_PLAYER;
+    trail_paint_blockers(p, m, other, 1);
 
     int head = 0, tail = 0;
     dist[(size_t)gy * (size_t)m->w + (size_t)gx] = 0;
@@ -303,8 +387,8 @@ void play_trail_sync(Play *p, const Map *m)
              * both ways, so either phrasing gives the same answer. */
             probe.x = (int16_t)nx;
             probe.y = (int16_t)ny;
-            if (!token_can_move_set(m, &probe, -TRAIL_DX[d], -TRAIL_DY[d],
-                                    p->enforce_walls, p->group, p->ngroup))
+            if (!probe_can_move(m, &probe, -TRAIL_DX[d], -TRAIL_DY[d],
+                                p->enforce_walls))
                 continue;
 
             dist[ni] = dist[cur] + 1;
@@ -336,8 +420,8 @@ void play_trail_sync(Play *p, const Map *m)
                  * hop straight through the wall to reach it. */
                 probe.x = (int16_t)cx;
                 probe.y = (int16_t)cy;
-                if (!token_can_move_set(m, &probe, TRAIL_DX[d], TRAIL_DY[d],
-                                        p->enforce_walls, p->group, p->ngroup))
+                if (!probe_can_move(m, &probe, TRAIL_DX[d], TRAIL_DY[d],
+                                    p->enforce_walls))
                     continue;
 
                 long dev = labs((long)(gx - ox) * (ny - oy) -
@@ -358,8 +442,9 @@ void play_trail_sync(Play *p, const Map *m)
      * keystroke count is the only honest number left, so it stands. */
     if (reach != TRAIL_UNREACHED) p->steps = reach;
 
-    free(dist);
-    free(queue);
+    /* Back to the resting state, touching only what the search touched. */
+    for (int i = 0; i < tail; i++) dist[queue[i]] = TRAIL_UNREACHED;
+    trail_paint_blockers(p, m, other, 0);
 }
 
 void play_trail_draw(Renderer *r, const Map *m, const GridView *g,
