@@ -3,8 +3,9 @@
 A rules-agnostic virtual tabletop for the terminal.
 
 Build an encounter map in a vim-like keyboard editor, then flip to play mode and run the
-fight on it with labeled player and enemy tokens. The tool knows nothing about any specific
-ruleset — it is a grid, walls, and tokens.
+fight on it with labeled player and enemy tokens. The core knows nothing about any specific
+ruleset — it is a grid, walls, and tokens — and a map can *name* one to switch on the
+rules-aware readouts, such as range bands. See [Rulesets](#rulesets).
 
 Written in C11 with **zero dependencies**: libc plus POSIX (`termios`, `poll`, `dirent`)
 and `-lm` for one square root. No ncurses, no terminfo. ANSI escape sequences are emitted
@@ -255,8 +256,8 @@ to where it now stands:
 
 **How far it has come is written beside it**, not at the bottom of the screen: while moving,
 the eye is on the creature, and a number it has to travel for is a number it reads late. It
-names the range band too when the map has a ruleset — `20 ft  Close` — since the band is
-what the distance is *for*. Without one it gives the squares as well as the feet, which is
+names the range band too when the map has a [ruleset](#rulesets) — `20 ft  Close` — since
+the band is what the distance is *for*. Without one it gives the squares as well as the feet, which is
 the thing you would otherwise be counting: `4 sq  20 ft`.
 
 It sits out to the side rather than above or below, because those two rows belong to the
@@ -403,8 +404,8 @@ in the status bar.
 | `m` | re-anchor here |
 | `esc` | done |
 
-The readout gives length in tiles, the distance in feet, the range band if a ruleset is
-set, and whether a wall breaks the line:
+The readout gives length in tiles, the distance in feet, the range band if a
+[ruleset](#rulesets) is set, and whether a wall breaks the line:
 
 ```
 RULER   6 tiles  30 ft  Close  sight blocked  [chebyshev]
@@ -417,9 +418,9 @@ walkable — you can see across a pit you cannot walk over.
 
 For effects that catch everything in range rather than a single target. `r` highlights every
 square within one band of the selected token — or of the cursor, if nothing is selected —
-and cycles Melee → Very Close → Close → Far → Very Far → off. The anchor is fixed when you
-switch it on, so flipping through bands afterwards doesn't drag it along with the cursor.
-It follows the creature it is anchored to as that creature moves.
+and cycles through the map's ruleset bands from nearest to farthest, then off. The anchor
+is fixed when you switch it on, so flipping through bands afterwards doesn't drag it along
+with the cursor. It follows the creature it is anchored to as that creature moves.
 
 `esc` takes it off without cycling all the way round. So does moving the focus: an overlay
 anchored to a creature goes when you tab to another one, because a highlight still sitting
@@ -434,9 +435,11 @@ caught, which also catches anyone scrolled off screen:
 Close (30 ft, 6 sq) from Aria - 3 in range: Ogre, Goblin*, Bram   * no line of sight
 ```
 
+(the example is [Daggerheart](#daggerheart)'s *Close* band)
+
 The highlighted shape follows the distance metric — an octagon under the default 5-10-5,
-a square under `chebyshev`. It needs a ruleset for its bands; `:ruleset daggerheart` sets
-one. Sight uses the same test as the ruler, so the two never disagree about the same line.
+a square under `chebyshev`. It needs a ruleset for its bands — see [Rulesets](#rulesets).
+Sight uses the same test as the ruler, so the two never disagree about the same line.
 
 ### Boundaries and terrain
 
@@ -489,8 +492,9 @@ neighbours draw, because those lines belong to the neighbours.
 
 ### Measurement
 
-One tile is five feet by default. Distance, metric and ruleset are stored per map, since
-they belong to the game being played rather than to the session.
+One tile is five feet by default. Distance and metric are stored per map, like the
+[ruleset](#rulesets), since they belong to the game being played rather than to the
+session.
 
 | metric | 4x3 offset | notes |
 |--------|-----------|-------|
@@ -503,8 +507,32 @@ they belong to the game being played rather than to the session.
 keeping every reading a whole number of squares. `chebyshev` is a square cheaper on long
 diagonals, which can pull a target into a nearer band than the fiction would put it in.
 
-Range bands come from a named ruleset. `none` reports plain distances; `daggerheart` adds
-Melee / Very Close / Close / Far / Very Far.
+### Rulesets
+
+The core is rules-agnostic and stays that way: movement, walls, terrain, tokens, the
+ruler and every distance work identically whatever the table is playing, and the tool
+decides no costs and enforces no rules. On top of that sit a few **rules-aware**
+features that need to know what game the map is for, and those switch on when the map
+names its ruleset:
+
+```
+:ruleset daggerheart
+```
+
+Naming a ruleset gives the map its **range bands** — the `r` [overlay](#range-bands-r)
+cycles through them, and the ruler and the moving-creature readout name the band a
+distance falls in (`20 ft  Close`) instead of leaving the conversion to you. The setting
+is stored per map, because it belongs to the game being played rather than to the
+session. `none` is the default: every readout reports plain squares and feet, and `r`
+says how to turn bands on.
+
+A ruleset is a table of named thresholds, nothing more — the tool still attaches no
+meaning to a band, enforces nothing, and never spends a creature's movement for it.
+Supported: `none`, `daggerheart`.
+
+#### Daggerheart
+
+`:ruleset daggerheart` adds the five bands: Melee, Very Close, Close, Far, Very Far.
 
 The Daggerheart SRD describes each band twice — a fiction distance in feet, and an estimate
 for a physical battle map — and the two do not agree (Far is "about 30–100 feet" in the
@@ -541,7 +569,7 @@ and are a quick guide for the GM — the readout is the same kind of aid.
 | `:zoom N` | set the zoom level, 0–3 |
 | `:scale N` | feet per tile (default 5) |
 | `:metric NAME` | `chebyshev`, `euclidean`, `alt` or `manhattan` |
-| `:ruleset NAME` | `none` or `daggerheart` |
+| `:ruleset NAME` | switch the rules-aware readouts — see [Rulesets](#rulesets) |
 | `:play` `:build` | switch mode |
 
 ## Zoom
