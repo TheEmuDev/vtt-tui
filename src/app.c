@@ -2216,15 +2216,10 @@ static void play_key(App *a, Key k)
         int anchor = (pl->sel >= 0 && pl->sel < m->tokens.n) ? pl->sel : -1;
         if (anchor < 0) anchor = token_under_cursor(a);
 
-        int band = range_cycle(&pl->range, m, anchor, e->cx, e->cy);
-        if (band < 0 && !pl->range.active) {
-            const Ruleset *rs = ruleset_by_name(m->ruleset);
-            app_set_status(a, (rs && rs->bands)
-                               ? "range overlay off"
-                               : "no range bands - set one with :ruleset");
-        } else {
-            a->status[0] = '\0';
-        }
+        int band = range_cycle(&pl->range, m, anchor, e->cx, e->cy,
+                               take_count_raw(e));
+        if (band < 0 && !pl->range.active) app_set_status(a, "range overlay off");
+        else                               a->status[0] = '\0';
         break;
     }
 

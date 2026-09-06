@@ -150,7 +150,7 @@ one outside it. That is exactly the old rectangle outline for a box, and the onl
 reading of a circle of wall.
 
 The radius is measured as a straight line, so a circle is round on every map. This is
-deliberately unlike the [range bands](#range-bands-r), which follow the map's distance
+deliberately unlike the [range highlight](#range-highlight-r), which follow the map's distance
 metric because they measure reach — a tower is a tower whatever the movement rules say.
 
 Wall tracing anchors on a lattice corner rather than a square, which is where its cursor
@@ -219,7 +219,7 @@ A whole pen-down stroke is one undo step.
 | `s c` | change the colour the next marker will use |
 | `s d` | take a marker off (asks which, when there is more than one) |
 | `m` | measure (ruler) |
-| `r` | cycle a range band highlight (see below) |
+| `r` | the range highlight: bands, or 5 ft a press (see below) |
 | `o` `O` | open or close a door / a secret door on this tile |
 | `Ctrl-w` | toggle blocking — walls and creatures alike |
 | `esc` | close the box, cancel the move, range off, deselect — one at a time |
@@ -414,13 +414,22 @@ RULER   6 tiles  30 ft  Close  sight blocked  [chebyshev]
 Sight is measured from the anchor straight to the far end and ignores whether the ground is
 walkable — you can see across a pit you cannot walk over.
 
-### Range bands (`r`)
+### Range highlight (`r`)
 
-For effects that catch everything in range rather than a single target. `r` highlights every
-square within one band of the selected token — or of the cursor, if nothing is selected —
-and cycles through the map's ruleset bands from nearest to farthest, then off. The anchor
-is fixed when you switch it on, so flipping through bands afterwards doesn't drag it along
-with the cursor. It follows the creature it is anchored to as that creature moves.
+For effects that catch everything in range rather than a single target. `r` highlights
+every square within reach of the selected token — or of the cursor, if nothing is
+selected. The anchor is fixed when you switch it on, so later presses only change the
+reach rather than dragging the highlight along with the cursor, and it follows the
+creature it is anchored to as that creature moves.
+
+What a press means depends on the map's [ruleset](#rulesets):
+
+- **Without one** — most games say "creatures within 50 ft" rather than naming bands —
+  each `r` grows the reach by one square's worth (5 ft at the default scale), and a count
+  names it outright: `20r` is a 100 ft radius, `esc` takes it off. It never cycles off
+  the end, because there is no end.
+- **With one**, `r` cycles the ruleset's named bands from nearest to farthest, then off,
+  and a count names a band outright (`2r` is the second).
 
 `esc` takes it off without cycling all the way round. So does moving the focus: an overlay
 anchored to a creature goes when you tab to another one, because a highlight still sitting
@@ -519,12 +528,13 @@ names its ruleset:
 :ruleset daggerheart
 ```
 
-Naming a ruleset gives the map its **range bands** — the `r` [overlay](#range-bands-r)
+Naming a ruleset gives the map its **range bands** — the `r` [overlay](#range-highlight-r)
 cycles through them, and the ruler and the moving-creature readout name the band a
 distance falls in (`20 ft  Close`) instead of leaving the conversion to you. The setting
 is stored per map, because it belongs to the game being played rather than to the
-session. `none` is the default: every readout reports plain squares and feet, and `r`
-says how to turn bands on.
+session. `none` is the default: every readout reports plain squares and feet, and the
+`r` overlay is a plain radius grown 5 ft at a time, which is how most games phrase
+reach anyway.
 
 A ruleset is a table of named thresholds, nothing more — the tool still attaches no
 meaning to a band, enforces nothing, and never spends a creature's movement for it.

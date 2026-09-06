@@ -2150,38 +2150,67 @@ static void test_range(void)
     const Ruleset *rs = ruleset_by_name("daggerheart");
     CHECK(rs != NULL);
     for (int i = 0; i < rs->nbands; i++) {
-        CHECK_EQ(range_cycle(&ro, m, -1, 10, 7), i);
+        CHECK_EQ(range_cycle(&ro, m, -1, 10, 7, 0), i);
         CHECK_EQ(ro.active, 1);
         CHECK_EQ(ro.band, i);
     }
-    CHECK_EQ(range_cycle(&ro, m, -1, 10, 7), -1);
+    CHECK_EQ(range_cycle(&ro, m, -1, 10, 7, 0), -1);
     CHECK_EQ(ro.active, 0);
 
     /* The anchor is taken once, on the way in, so walking the cursor away
      * while flipping through bands does not drag the highlight with it. */
     CASE("cycling does not move the anchor");
     range_clear(&ro);
-    range_cycle(&ro, m, -1, 10, 7);
-    range_cycle(&ro, m, -1, 2, 2);
-    range_cycle(&ro, m, -1, 18, 13);
+    range_cycle(&ro, m, -1, 10, 7, 0);
+    range_cycle(&ro, m, -1, 2, 2, 0);
+    range_cycle(&ro, m, -1, 18, 13, 0);
     int ax, ay, as;
     range_anchor(&ro, m, &ax, &ay, &as);
     CHECK_EQ(ax, 10);
     CHECK_EQ(ay, 7);
     CHECK_EQ(as, 1);
 
-    CASE("without a ruleset there are no bands to show");
-    Map *plain = map_new(10, 10, "plain");
+    /* Most games say "creatures within 50 ft" rather than naming bands, so
+     * a map with no ruleset still gets an overlay: a plain radius, one
+     * square's worth of reach per press. */
+    CASE("without a ruleset, r grows a radius a square at a time");
+    Map *plain = map_new(30, 30, "plain");
+    map_fill_tiles(plain, 0, 0, 29, 29, TILE_FLOOR);
     RangeOverlay bare;
     range_clear(&bare);
-    CHECK_EQ(range_cycle(&bare, plain, -1, 5, 5), -1);
-    CHECK_EQ(bare.active, 0);
+    CHECK_EQ(range_cycle(&bare, plain, -1, 5, 5, 0), 1);
+    CHECK_EQ(bare.active, 1);
+    CHECK_EQ(range_cycle(&bare, plain, -1, 5, 5, 0), 2);
+    CHECK_EQ(bare.radius, 2);
+
+    CASE("the radius is squares of the map's scale, and contains agrees");
+    CHECK_EQ(range_units_to(&bare, plain, 7, 5), 2 * plain->scale_ft);
+    CHECK_EQ(range_contains(&bare, plain, 7, 5), 1);   /* 2 sq: the edge */
+    CHECK_EQ(range_contains(&bare, plain, 8, 5), 0);   /* 3 sq: outside */
+
+    CASE("a count names the radius outright, so 20r is 100 ft");
+    CHECK_EQ(range_cycle(&bare, plain, -1, 5, 5, 20), 20);
+    CHECK_EQ(bare.radius, 20);
+    CHECK_EQ(range_contains(&bare, plain, 25, 5), 1);
+    CHECK_EQ(range_contains(&bare, plain, 26, 5), 0);
+
+    CASE("the radius overlay never cycles itself off -- esc is how it goes");
+    for (int i = 0; i < 40; i++) range_cycle(&bare, plain, -1, 5, 5, 0);
+    CHECK_EQ(bare.active, 1);
+    CHECK_EQ(bare.radius, 60);
+
+    CASE("its status leads with the reach, having no band name to lead with");
+    char rbuf[192];
+    range_status(&bare, plain, rbuf, sizeof rbuf);
+    CHECK(strstr(rbuf, "Range (300 ft, 60 sq)") != NULL);
+
+    range_clear(&bare);
     map_free(plain);
 
     /* Melee is one square, so exactly the eight neighbours and the anchor. */
     CASE("Melee covers the anchor and its neighbours, and nothing else");
     range_clear(&ro);
-    range_cycle(&ro, m, -1, 10, 7);          /* band 0: Melee */
+    range_cycle(&ro, m, -1, 10, 7, 0);          /* band 0: Melee */
     int inside = 0;
     for (int y = 0; y < m->h; y++)
         for (int x = 0; x < m->w; x++)
@@ -2235,7 +2264,7 @@ static void test_range(void)
     Token big = { 10, 7, 3, TOKEN_ENEMY, "Troll" };
     int bi = tokens_add(&m->tokens, big);
     range_clear(&ro);
-    range_cycle(&ro, m, bi, 0, 0);            /* Melee, anchored to the troll */
+    range_cycle(&ro, m, bi, 0, 0, 0);            /* Melee, anchored to the troll */
     range_anchor(&ro, m, &ax, &ay, &as);
     CHECK_EQ(ax, 10);
     CHECK_EQ(as, 3);
@@ -2261,7 +2290,7 @@ static void test_range(void)
 
     CASE("removing an earlier token keeps the anchor on the same creature");
     range_clear(&ro);
-    range_cycle(&ro, m, 3, 0, 0);
+    range_cycle(&ro, m, 3, 0, 0, 0);
     range_token_removed(&ro, 1, 0, 0);
     CHECK_EQ(ro.token, 2);
     range_token_removed(&ro, 5, 0, 0);        /* a later one changes nothing */
@@ -2278,7 +2307,7 @@ static void test_range_sight(void)
 
     RangeOverlay ro;
     range_clear(&ro);
-    range_cycle(&ro, m, -1, 5, 5);
+    range_cycle(&ro, m, -1, 5, 5, 0);
     ro.band = 2;                               /* Close, 6 squares */
 
     CASE("open ground is all in range and all visible");
@@ -6031,7 +6060,7 @@ static void test_help_page(void)
     CHECK(build == NULL || play < build);      /* build is further down, if visible */
 
     CASE("keys the bar had no room for are on the page");
-    CHECK(strstr(f.data, "range-band") == NULL);   /* below the fold at 24 rows */
+    CHECK(strstr(f.data, "cycle the bands") == NULL);   /* below the fold at 24 rows */
     bb_free(&f);
 
     rnd_resize(&r, 90, 60);
@@ -6040,7 +6069,7 @@ static void test_help_page(void)
     bb_init(&f, 65536);
     rnd_dump(&r, &f);
     bb_putc(&f, '\0');
-    CHECK(strstr(f.data, "range-band") != NULL);
+    CHECK(strstr(f.data, "cycle the bands") != NULL);
     CHECK(strstr(f.data, "s a") != NULL);
     CHECK(strstr(f.data, "s d") != NULL);
     bb_free(&f);
@@ -6063,7 +6092,7 @@ static void test_help_page(void)
     rnd_dump(&r, &f);
     bb_putc(&f, '\0');
     CHECK(strcmp(top.data, f.data) != 0);
-    CHECK(strstr(f.data, "range-band") != NULL);
+    CHECK(strstr(f.data, "cycle the bands") != NULL);
     bb_free(&top);
     bb_free(&f);
     press(&a, "g");

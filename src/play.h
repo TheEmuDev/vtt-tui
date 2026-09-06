@@ -13,6 +13,7 @@
 typedef struct {
     int active;
     int band;          /* index into the current ruleset's band list */
+    int radius;        /* squares, for a map with no bands to cycle */
     int token;         /* token the anchor follows, or -1 for a bare tile */
     int ax, ay;        /* anchor tile, used when token is -1 */
 } RangeOverlay;
@@ -24,11 +25,17 @@ void range_clear(RangeOverlay *ro);
  * put as a bare tile when the creature it followed is the one that went. */
 void range_token_removed(RangeOverlay *ro, int removed, int x, int y);
 
-/* Cycles off -> first band -> ... -> last band -> off. The anchor is fixed
- * when the overlay is switched on, so later cycling only changes the reach.
- * Returns the new band index, or -1 when it switched off or the map has no
- * ruleset to take bands from. */
-int  range_cycle(RangeOverlay *ro, const Map *m, int anchor_token, int cx, int cy);
+/* With a ruleset: off -> first band -> ... -> last band -> off, and a count
+ * names a band outright (2r is the second). Without one, most games say
+ * "creatures within 50 ft" rather than naming bands, so the overlay is a
+ * plain radius instead: a square's worth of reach per press -- 5 ft at the
+ * default scale -- or named outright by a count, so 20r is 100 ft. A radius
+ * never cycles off the end, because there is no end; esc takes it off.
+ * The anchor is fixed when the overlay is switched on, so later presses only
+ * change the reach. Returns the new band index or radius, or -1 when it
+ * switched off. */
+int  range_cycle(RangeOverlay *ro, const Map *m, int anchor_token, int cx, int cy,
+                 int count);
 
 /* Where the overlay measures from. Follows the token when it has one, so the
  * highlight moves with the creature. */

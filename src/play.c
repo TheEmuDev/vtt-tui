@@ -697,26 +697,53 @@ void range_token_removed(RangeOverlay *ro, int removed, int x, int y)
     }
 }
 
-int range_cycle(RangeOverlay *ro, const Map *m, int anchor_token, int cx, int cy)
+/* What the overlay reaches, in the map's units, or a negative number when it
+ * has nothing valid to show. Bands come from the ruleset; without one the
+ * reach is the radius the r key has grown, a square's worth at a time. */
+static double range_reach_ft(const RangeOverlay *ro, const Map *m)
+{
+    if (!ro->active) return -1.0;
+
+    const Ruleset *rs = ruleset_by_name(m->ruleset);
+    if (rs && rs->bands) {
+        if (ro->band >= rs->nbands) return -1.0;
+        return rs->bands[ro->band].max;
+    }
+    if (ro->radius <= 0) return -1.0;
+    return ro->radius * m->scale_ft;
+}
+
+int range_cycle(RangeOverlay *ro, const Map *m, int anchor_token, int cx, int cy,
+                int count)
 {
     const Ruleset *rs = ruleset_by_name(m->ruleset);
-    if (!rs || !rs->bands || rs->nbands == 0) {
-        range_clear(ro);
-        return -1;
-    }
 
+    /* The anchor is fixed on the way in, so later presses only change the
+     * reach rather than dragging the highlight along with the cursor. */
     if (!ro->active) {
-        /* The anchor is fixed on the way in, so cycling through the bands
-         * afterwards does not drag it along with the cursor. */
         ro->active = 1;
         ro->band   = 0;
+        ro->radius = 0;
         ro->token  = anchor_token;
         ro->ax     = cx;
         ro->ay     = cy;
-        return ro->band;
+    } else if (!count && (!rs || !rs->bands)) {
+        ro->radius++;
+    } else if (!count) {
+        ro->band++;
     }
 
-    ro->band++;
+    /* No bands to cycle: most games say "creatures within 50 ft" rather
+     * than naming bands, so the overlay is a plain radius -- a square's
+     * worth of reach per press, or named outright by a count, so 20r is
+     * 100 ft at the default scale. It never cycles off the end, because
+     * there is no end; esc takes it off. */
+    if (!rs || !rs->bands || rs->nbands == 0) {
+        ro->radius = count > 0 ? count : imax(ro->radius, 1);
+        return ro->radius;
+    }
+
+    if (count > 0) ro->band = iclamp(count, 1, rs->nbands) - 1;
     if (ro->band >= rs->nbands) {
         range_clear(ro);
         return -1;
@@ -768,10 +795,9 @@ double range_units_to(const RangeOverlay *ro, const Map *m, int tx, int ty)
 
 int range_contains(const RangeOverlay *ro, const Map *m, int tx, int ty)
 {
-    if (!ro->active) return 0;
-    const Ruleset *rs = ruleset_by_name(m->ruleset);
-    if (!rs || !rs->bands || ro->band >= rs->nbands) return 0;
-    return range_units_to(ro, m, tx, ty) <= rs->bands[ro->band].max;
+    double reach = range_reach_ft(ro, m);
+    if (reach < 0) return 0;
+    return range_units_to(ro, m, tx, ty) <= reach;
 }
 
 /* Distance between two footprints, plus the pair of squares that achieves it,
@@ -801,11 +827,8 @@ void range_draw(Renderer *r, const Map *m, const GridView *g,
 {
     PROF_ZONE("range.draw");
 
-    if (!ro->active) return;
-
-    const Ruleset *rs = ruleset_by_name(m->ruleset);
-    if (!rs || !rs->bands || ro->band >= rs->nbands) return;
-    double reach = rs->bands[ro->band].max;
+    double reach = range_reach_ft(ro, m);
+    if (reach < 0) return;
 
     int ax, ay, asize;
     range_anchor(ro, m, &ax, &ay, &asize);
@@ -835,23 +858,29 @@ void range_draw(Renderer *r, const Map *m, const GridView *g,
 
 void range_status(const RangeOverlay *ro, const Map *m, char *buf, size_t bufsz)
 {
-    if (!ro->active) { buf[0] = '\0'; return; }
+    double reachft = range_reach_ft(ro, m);
+    if (reachft < 0) { buf[0] = '\0'; return; }
 
     const Ruleset *rs = ruleset_by_name(m->ruleset);
-    if (!rs || !rs->bands || ro->band >= rs->nbands) { buf[0] = '\0'; return; }
-
-    const RangeBand *band = &rs->bands[ro->band];
     int ax, ay, asize;
     range_anchor(ro, m, &ax, &ay, &asize);
 
-    /* What the highlight is measuring, in both the units and the squares. */
+    /* What the highlight is measuring, in both the units and the squares.
+     * A band has a name to lead with; a plain radius is just its reach. */
+    const char *name = "Range";
     char reach[48];
-    if (band->max >= 1e30)
-        snprintf(reach, sizeof reach, "beyond %s",
-                 ro->band > 0 ? rs->bands[ro->band - 1].name : "melee");
-    else
-        snprintf(reach, sizeof reach, "%g ft, %g sq", band->max,
-                 m->scale_ft > 0 ? band->max / m->scale_ft : 0.0);
+    if (rs && rs->bands) {
+        const RangeBand *band = &rs->bands[ro->band];
+        name = band->name;
+        if (band->max >= 1e30)
+            snprintf(reach, sizeof reach, "beyond %s",
+                     ro->band > 0 ? rs->bands[ro->band - 1].name : "melee");
+        else
+            snprintf(reach, sizeof reach, "%g ft, %g sq", band->max,
+                     m->scale_ft > 0 ? band->max / m->scale_ft : 0.0);
+    } else {
+        snprintf(reach, sizeof reach, "%g ft, %d sq", reachft, ro->radius);
+    }
 
     char from[40] = "here";
     if (ro->token >= 0 && ro->token < m->tokens.n) {
@@ -873,7 +902,7 @@ void range_status(const RangeOverlay *ro, const Map *m, char *buf, size_t bufsz)
         int    sx = ax, sy = ay, dx = t->x, dy = t->y;
         double d  = token_dist((DistMetric)m->metric, ax, ay, asize, t,
                                &sx, &sy, &dx, &dy) * m->scale_ft;
-        if (d > band->max) continue;
+        if (d > reachft) continue;
 
         count++;
         int blocked = sight_blocked(m, sx, sy, dx, dy);
@@ -887,7 +916,7 @@ void range_status(const RangeOverlay *ro, const Map *m, char *buf, size_t bufsz)
     }
 
     snprintf(buf, bufsz, "%s (%s) from %s - %d in range%s%s%s",
-             band->name, reach, from, count,
+             name, reach, from, count,
              count ? ": " : "", names,
              hidden ? "   * no line of sight" : "");
 }

@@ -53,7 +53,7 @@ static const KeyDoc PLAY[] = {
 
     GROUP("Tools"),
     KEY("m",      "measure (the ruler)"),
-    KEY("r",      "cycle the range-band highlight"),
+    KEY("r",      "range: cycle the bands, or grow a square a press (20r)"),
     KEY("o  O",   "open or close a door / a secret door"),
     KEY("ctrl-w", "let creatures through walls and each other, or stop them"),
 
