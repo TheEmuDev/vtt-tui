@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #define TOKEN_LABEL_MAX 32
 #define TOKEN_SIZE_MAX  3
@@ -72,6 +73,20 @@ static inline int token_meets(const Token *t, int x, int y, int w, int h)
 {
     if (x + w <= t->x || t->x + t->size <= x) return 0;
     if (y + h <= t->y || t->y + t->size <= y) return 0;
+    return 1;
+}
+
+/* Field-wise, so padding and whatever sits past a label's NUL cannot make
+ * two equal tokens look different (or be relied on to look the same). */
+static inline int token_equal(const Token *a, const Token *b)
+{
+    if (a->x != b->x || a->y != b->y || a->size != b->size || a->kind != b->kind)
+        return 0;
+    if (strcmp(a->label, b->label) != 0 || a->nstatus != b->nstatus) return 0;
+    for (int i = 0; i < a->nstatus; i++)
+        if (a->status[i].color != b->status[i].color ||
+            strcmp(a->status[i].label, b->status[i].label) != 0)
+            return 0;
     return 1;
 }
 int    tokens_overlapping(const TokenList *l, int x, int y, int size,

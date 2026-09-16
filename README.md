@@ -659,8 +659,8 @@ path culls to the visible tiles first.
 
 | | 80×24 | 200×50 |
 |---|---|---|
-| build, 200×200 map | 40 µs | 171 µs |
-| play, 24 tokens | 43 µs | 149 µs |
+| build, 200×200 map | 32 µs | 121 µs |
+| play, 24 tokens | 32 µs | 101 µs |
 | bytes written per frame | ~209 | ~212 |
 
 **[docs/PERFORMANCE.md](docs/PERFORMANCE.md) has every path measured**, what dominates a
@@ -672,6 +672,11 @@ the cells-changed and bytes-written counters that predict perceived latency bett
 wall-clock alone. The overlay reports its own cost as a `prof.overlay` zone, since an
 instrument that quietly adds to the number it displays is worse than no instrument.
 `--trace out.json` writes a Chrome Tracing profile for perfetto.
+
+Undo history is bounded rather than endless: the log keeps about four full fills of the
+largest map (a million single-cell changes) and drops its oldest steps past that, so a
+long session of painting cannot grow without limit. Each step costs 20 bytes; the tokens
+a step adds, removes or edits are kept alongside it.
 
 ## Design notes
 

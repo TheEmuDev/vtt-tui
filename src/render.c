@@ -13,7 +13,7 @@ void rnd_init(Renderer *r)
 {
     memset(r, 0, sizeof *r);
     r->clear_cell = BLANK;
-    bb_init(&r->out, 64 * 1024);
+    bb_init(&r->out, (size_t)64 * 1024);
     r->force_full = 1;
 }
 

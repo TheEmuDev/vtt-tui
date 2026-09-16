@@ -292,7 +292,7 @@ int ui_prompt_key(TextPrompt *p, Key k)
     case KEY_BACKSPACE: {
         if (p->cursor == 0) return 0;
         int start = prev_char_start(p->buf, p->cursor);
-        memmove(p->buf + start, p->buf + p->cursor, (size_t)(p->len - p->cursor + 1));
+        memmove(p->buf + start, p->buf + p->cursor, (size_t)p->len - (size_t)p->cursor + 1);
         p->len -= p->cursor - start;
         p->cursor = start;
         return 0;
@@ -300,7 +300,7 @@ int ui_prompt_key(TextPrompt *p, Key k)
     case KEY_DELETE: {
         if (p->cursor >= p->len) return 0;
         int end = next_char_start(p->buf, p->len, p->cursor);
-        memmove(p->buf + p->cursor, p->buf + end, (size_t)(p->len - end + 1));
+        memmove(p->buf + p->cursor, p->buf + end, (size_t)p->len - (size_t)end + 1);
         p->len -= end - p->cursor;
         return 0;
     }
@@ -318,7 +318,7 @@ int ui_prompt_key(TextPrompt *p, Key k)
             int e = p->cursor;
             while (e > 0 && p->buf[e - 1] == ' ') e--;
             while (e > 0 && p->buf[e - 1] != ' ') e--;
-            memmove(p->buf + e, p->buf + p->cursor, (size_t)(p->len - p->cursor + 1));
+            memmove(p->buf + e, p->buf + p->cursor, (size_t)p->len - (size_t)p->cursor + 1);
             p->len -= p->cursor - e;
             p->cursor = e;
         }
@@ -330,7 +330,7 @@ int ui_prompt_key(TextPrompt *p, Key k)
     int  n = utf8_encode(k.ch, enc);
     if (n <= 0 || p->len + n >= UI_PROMPT_MAX) return 0;
 
-    memmove(p->buf + p->cursor + n, p->buf + p->cursor, (size_t)(p->len - p->cursor + 1));
+    memmove(p->buf + p->cursor + n, p->buf + p->cursor, (size_t)p->len - (size_t)p->cursor + 1);
     memcpy(p->buf + p->cursor, enc, (size_t)n);
     p->len    += n;
     p->cursor += n;

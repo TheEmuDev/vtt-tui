@@ -16,7 +16,7 @@
 /* Upper bound on bytes taken from the terminal in one pass of the event
  * loop, so a flood of input can never postpone the redraw indefinitely. Far
  * larger than any burst a held key produces. */
-#define INPUT_DRAIN_MAX (64 * 1024)
+#define INPUT_DRAIN_MAX ((size_t)64 * 1024)
 
 typedef struct {
     const char *trace_path;

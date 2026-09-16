@@ -7,7 +7,7 @@
 
 /* ---------------------------------------------------------------- errors */
 
-void die(const char *fmt, ...)
+_Noreturn void die(const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);

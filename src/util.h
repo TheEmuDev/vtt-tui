@@ -6,7 +6,7 @@
 
 /* ---------------------------------------------------------------- errors */
 
-void die(const char *fmt, ...);
+_Noreturn void die(const char *fmt, ...);
 
 /* Allocation wrappers that abort rather than return NULL. The app has no
  * meaningful recovery path for OOM, and checking every call site costs more

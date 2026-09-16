@@ -104,10 +104,17 @@ int mapio_save(Map *m, const char *path, char *err, size_t errsz)
 /* ------------------------------------------------------------------ load */
 
 /* Reads one line without its newline. Returns -1 at EOF. */
+/* One line per call, however long it is: what does not fit the buffer is
+ * discarded rather than handed back as a line of its own, so an oversized
+ * record cannot desynchronise the ones after it. */
 static int read_line(FILE *f, char *buf, size_t bufsz)
 {
     if (!fgets(buf, (int)bufsz, f)) return -1;
     size_t n = strlen(buf);
+    if (n && buf[n - 1] != '\n') {
+        int c;
+        while ((c = fgetc(f)) != EOF && c != '\n') { }
+    }
     while (n && (buf[n - 1] == '\n' || buf[n - 1] == '\r')) buf[--n] = '\0';
     return (int)n;
 }

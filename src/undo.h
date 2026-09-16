@@ -13,14 +13,30 @@ typedef enum {
     OP_TOKEN_EDIT,
 } OpKind;
 
+/* One op is one cell or one token changing. Tile ops dominate -- a brush
+ * fill across a 200x200 map records 40,000 of them -- so the op is kept to
+ * 20 bytes and token payloads live in a side array the log owns: an add or
+ * delete uses one slot, an edit two (before, after), a move none. */
 typedef struct {
     uint8_t kind;
     int16_t x, y;        /* cell coords; for token ops, x is the token index */
-    uint8_t before, after;
-    int16_t nx, ny;      /* destination for OP_TOKEN_MOVE */
-    Token   token;       /* payload for add/delete; the 'before' of an edit */
-    Token   token2;      /* the 'after' of an edit */
+    union {
+        struct { uint8_t before, after; };       /* tile and edge ops */
+        struct { int16_t ox, oy, nx, ny; };      /* OP_TOKEN_MOVE: from, to */
+    };
+    int32_t tok;         /* first slot in Undo.toks this op owns; every op
+                            records it so truncating the ops truncates the
+                            tokens too */
 } Op;
+
+/* The history is bounded. Past UNDO_MAX_OPS the oldest batches are dropped
+ * until the log is back under UNDO_TRIM_TO, so the memmove that closes the
+ * gap runs once per quarter-log of new ops rather than once per keystroke.
+ * The cap is four fills of the largest map (512x512 is 262,144 ops a fill),
+ * a little over 20 MB at the very worst and nothing at all in normal use;
+ * before the payloads moved out of the op, one such fill alone was 60 MB. */
+#define UNDO_MAX_OPS (4 * MAP_MAX_DIM * MAP_MAX_DIM)
+#define UNDO_TRIM_TO (UNDO_MAX_OPS - UNDO_MAX_OPS / 4)
 
 /* A flat op array plus batch boundaries: filling a rectangle or tracing a
  * wall run records many ops but undoes as one step, which is what a user
@@ -29,12 +45,17 @@ typedef struct {
     Op  *ops;
     int  nops, cap_ops;
 
+    Token *toks;         /* token payloads, in op order */
+    int    ntoks, cap_toks;
+
     int *marks;          /* marks[i] = index of the first op of batch i */
     int  nmarks, cap_marks;
 
     int  depth;          /* batches currently applied; the redo boundary */
     int  open;           /* a batch is being built */
     int  started;        /* the open batch has recorded at least one op */
+    int  trimmed;        /* batches dropped from the front so far (for tests
+                            and the profiler; never consulted by the log) */
 } Undo;
 
 void undo_init(Undo *u);

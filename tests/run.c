@@ -971,6 +971,83 @@ static void test_undo(void)
     CHECK_EQ(undo_can_undo(&u), 0);
     CHECK_EQ(undo_undo(&u, m), 0);
 
+    /* A full-map fill is 40,000 ops, so the op has to stay small: the token
+     * payloads live in the side array, not in every op. */
+    CASE("an op is 20 bytes and token ops own side-array slots");
+    CHECK(sizeof(Op) <= 20);
+    undo_clear(&u);
+    CHECK_EQ(u.ntoks, 0);
+    undo_begin(&u); undo_set_tile(&u, m, 0, 0, TILE_VOID); undo_end(&u);
+    CHECK_EQ(u.ntoks, 0);                                   /* a cell op: none */
+    Token e1 = { 5, 5, 1, TOKEN_ENEMY, "Ogre" };
+    undo_begin(&u); int ei = undo_add_token(&u, m, e1); undo_end(&u);
+    CHECK_EQ(u.ntoks, 1);                                   /* add: one */
+    Token e2 = e1; str_lcpy(e2.label, "Troll", sizeof e2.label);
+    undo_begin(&u); undo_edit_token(&u, m, ei, e2); undo_end(&u);
+    CHECK_EQ(u.ntoks, 3);                                   /* edit: two */
+    undo_begin(&u); undo_move_token(&u, m, ei, 6, 6); undo_end(&u);
+    CHECK_EQ(u.ntoks, 3);                                   /* move: none */
+    undo_undo(&u, m); undo_undo(&u, m);
+    CHECK_EQ(strcmp(m->tokens.v[ei].label, "Ogre"), 0);
+    undo_redo(&u, m);
+    CHECK_EQ(strcmp(m->tokens.v[ei].label, "Troll"), 0);
+
+    CASE("truncating the redo tail reclaims its token slots");
+    undo_undo(&u, m); undo_undo(&u, m);                     /* back before the add */
+    CHECK_EQ(m->tokens.n, 0);
+    undo_begin(&u); undo_set_tile(&u, m, 1, 0, TILE_VOID); undo_end(&u);
+    CHECK_EQ(u.ntoks, 0);
+    CHECK_EQ(undo_can_redo(&u), 0);
+
+    /* Equality is by field: a token copied and a token built by hand differ
+     * in padding and in what follows the label's NUL, and are still equal. */
+    CASE("an edit that changes nothing is judged by fields, not bytes");
+    undo_clear(&u);
+    Token f1 = { 2, 2, 1, TOKEN_PLAYER, "Aria" };
+    undo_begin(&u); int fi = undo_add_token(&u, m, f1); undo_end(&u);
+    Token f2;
+    memset(&f2, 0x5a, sizeof f2);                           /* garbage everywhere */
+    f2.x = 2; f2.y = 2; f2.size = 1; f2.kind = TOKEN_PLAYER; f2.nstatus = 0;
+    str_lcpy(f2.label, "Aria", sizeof f2.label);
+    int marks_before = u.nmarks;
+    undo_begin(&u); undo_edit_token(&u, m, fi, f2); undo_end(&u);
+    CHECK_EQ(u.nmarks, marks_before);
+
+    /* The log is bounded: past the cap the oldest batches go, the newest
+     * stay usable, and the token slots follow the ops. Each fill of the
+     * largest map is one batch of MAP_MAX_DIM^2 ops, so this takes five. */
+    CASE("the history is capped and trims from the oldest end");
+    undo_clear(&u);
+    Map *big = map_new(MAP_MAX_DIM, MAP_MAX_DIM, "cap");
+    Token g1 = { 0, 0, 1, TOKEN_PLAYER, "Keep" };
+    undo_begin(&u); undo_add_token(&u, big, g1); undo_end(&u);     /* batch 0 */
+    int fills = 0;
+    while (u.trimmed == 0) {                                /* one fill per batch */
+        uint8_t kind = fills % 2 ? TILE_VOID : TILE_FLOOR;
+        undo_begin(&u);
+        for (int y = 0; y < big->h; y++)
+            for (int x = 0; x < big->w; x++) undo_set_tile(&u, big, x, y, kind);
+        undo_end(&u);
+        fills++;
+    }
+    CHECK(u.nops <= UNDO_TRIM_TO);
+    CHECK(u.nops > UNDO_TRIM_TO / 2);                       /* not emptied */
+    CHECK_EQ(u.ntoks, 0);                                   /* the add went with batch 0 */
+    CHECK_EQ(u.depth, u.nmarks);
+    CHECK(u.nmarks >= 1);
+    Token g2 = { 3, 3, 1, TOKEN_ENEMY, "New" };
+    undo_begin(&u); undo_add_token(&u, big, g2); undo_end(&u);
+    CHECK_EQ(u.ntoks, 1);
+    CHECK_EQ(u.ops[u.nops - 1].tok, 0);
+    int last = fills % 2 ? TILE_VOID : TILE_FLOOR;          /* what the newest fill painted over */
+    CHECK_EQ(undo_undo(&u, big), 1);                        /* the add */
+    CHECK_EQ(big->tokens.n, 1);
+    CHECK_EQ(undo_undo(&u, big), 1);                        /* the newest fill */
+    CHECK_EQ(map_tile(big, 7, 7), last);
+    while (undo_undo(&u, big)) { }
+    CHECK_EQ(big->tokens.n, 1);                             /* "Keep" is history, not undone */
+    map_free(big);
+
     undo_free(&u);
     map_free(m);
 }

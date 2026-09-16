@@ -43,6 +43,8 @@ double dist_tiles(DistMetric m, int dx, int dy)
 
     switch (m) {
     case DIST_EUCLIDEAN: return sqrt((double)ax * ax + (double)ay * ay);
+    /* 5-10-5: every second diagonal costs an extra square, so the integer
+     * halving is the rule itself, not a rounding. */
     case DIST_ALT_DIAG:  return (double)hi + (double)(lo / 2);
     case DIST_MANHATTAN: return (double)(ax + ay);
     case DIST_CHEBYSHEV:
