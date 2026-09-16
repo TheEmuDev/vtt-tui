@@ -36,11 +36,12 @@ mkdir -p "$XDG_DATA_HOME"
 
 TAB=$(printf '\t')
 
-# genmap NAME W H WALLS [TOKENS]
+# genmap NAME W H WALLS [TOKENS] [RULESET]
 #   WALLS=1 puts a wall on every edge, the worst case for junction glyphs:
-#   every crossing has to be resolved rather than skipped.
+#   every crossing has to be resolved rather than skipped. RULESET defaults
+#   to daggerheart; "none" writes no ruleset line, so r grows a radius.
 genmap() {
-    _n=$1 _w=$2 _h=$3 _walls=$4 _tok=${5:-0}
+    _n=$1 _w=$2 _h=$3 _walls=$4 _tok=${5:-0} _rs=${6:-daggerheart}
     _f="$DIR/$_n.vtt"
 
     _row=$(awk "BEGIN{ for(i=0;i<$_w;i++) printf \".\" }")
@@ -53,8 +54,9 @@ genmap() {
     fi
 
     {
-        printf 'VTT 2\nname %s\nsize %d %d\nzoom 1\nruleset daggerheart\ntiles\n' \
-               "$_n" "$_w" "$_h"
+        printf 'VTT 2\nname %s\nsize %d %d\nzoom 1\n' "$_n" "$_w" "$_h"
+        [ "$_rs" = none ] || printf 'ruleset %s\n' "$_rs"
+        printf 'tiles\n'
         i=0; while [ $i -lt "$_h" ]; do echo "$_row"; i=$((i + 1)); done
         echo vedges
         i=0; while [ $i -lt "$_h" ]; do echo "$_v"; i=$((i + 1)); done
@@ -78,6 +80,7 @@ OPEN=$(genmap open    40 25 0 0)      # nothing to resolve: the floor of the cos
 BIG=$(genmap big     200 200 1 0)     # far more map than window
 MOB=$(genmap mob      40 25 0 24)     # 24 tokens, each wearing a marker
 BIGMOB=$(genmap bigmob 200 200 0 24)  # the route search's worst case: big and crowded
+PLAIN=$(genmap plain   40 25 0 24 none) # no ruleset: r is a radius, not a band
 
 # Rooms on a void canvas, which is what a map under construction looks like
 # and the only shape that exercises the void marks.
@@ -171,6 +174,7 @@ run "play, choosing"       "$MOB"    80x24  ':play\r3b\r\r\r\rjjjj'
 run "play, group box"      "$MOB"    80x24  ':play\rvlllljjjj'
 run "play, group carry"    "$MOB"    80x24  ':play\rvlljj\rjjjjllll'
 run "play, range bands"    "$MOB"    80x24  ':play\rtrrrrrr'
+run "play, range radius"   "$PLAIN"  80x24  ':play\rt20r'
 run "help page"            "$WALLED" 80x24  '?jjjj'
 run "profiler overlay"     "$WALLED" 80x24  '\e[24~jjll'
 

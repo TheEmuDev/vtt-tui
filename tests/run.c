@@ -2271,6 +2271,25 @@ static void test_range(void)
     CHECK_EQ(range_contains(&bare, plain, 25, 5), 1);
     CHECK_EQ(range_contains(&bare, plain, 26, 5), 0);
 
+    CASE("a negative count is no count, and the radius is capped");
+    CHECK_EQ(range_cycle(&bare, plain, -1, 5, 5, -7), 21);
+    CHECK_EQ(range_cycle(&bare, plain, -1, 5, 5, 1000000), RANGE_RADIUS_MAX);
+    CHECK_EQ(range_cycle(&bare, plain, -1, 5, 5, 0), RANGE_RADIUS_MAX);
+    CHECK_EQ(range_cycle(&bare, plain, -1, 5, 5, 20), 20);   /* back to 20 for what follows */
+
+    /* With bands, a count names one -- 2r is the second -- from off or
+     * while active, and a count past the last names the last rather than
+     * switching the overlay off. */
+    CASE("with bands, a count names a band, and too big a count the last");
+    range_clear(&ro);
+    CHECK_EQ(range_cycle(&ro, m, -1, 10, 7, 2), 1);
+    CHECK_EQ(ro.active, 1);
+    CHECK_EQ(range_cycle(&ro, m, -1, 10, 7, 1), 0);
+    CHECK_EQ(range_cycle(&ro, m, -1, 10, 7, 99), rs->nbands - 1);
+    CHECK_EQ(ro.active, 1);
+    CHECK_EQ(range_cycle(&ro, m, -1, 10, 7, 0), -1);   /* the bare press past it: off */
+    CHECK_EQ(ro.active, 0);
+
     CASE("the radius overlay never cycles itself off -- esc is how it goes");
     for (int i = 0; i < 40; i++) range_cycle(&bare, plain, -1, 5, 5, 0);
     CHECK_EQ(bare.active, 1);
@@ -6334,6 +6353,21 @@ static void test_play_remap(void)
     press(&a, "R");
     CHECK_EQ(a.play.range.active, 0);
     CHECK(strstr(a.status, "now r") != NULL);
+
+    /* The overlay's band index or radius only means something against the
+     * ruleset it was set under, so changing the ruleset takes it off rather
+     * than leaving a highlight that reads as something else. */
+    CASE("2r names the second band, and :ruleset takes the overlay off");
+    press(&a, "2r");
+    CHECK_EQ(a.play.range.active, 1);
+    CHECK_EQ(a.play.range.band, 1);
+    press(&a, ":ruleset none\r");
+    CHECK_EQ(a.play.range.active, 0);
+    press(&a, "20r");
+    CHECK_EQ(a.play.range.active, 1);
+    CHECK_EQ(a.play.range.radius, 20);
+    press(&a, ":ruleset daggerheart\r");
+    CHECK_EQ(a.play.range.active, 0);
 
     CASE("s a adds a marker, s c colours, s d drops");
     press(&a, "t");

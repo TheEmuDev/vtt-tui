@@ -29,6 +29,7 @@ directly.
 make           # release (-O2)
 make debug     # -Og -g3 with ASan + UBSan
 make test      # unit and golden-frame tests
+make fuzz      # libFuzzer on the map loader for a minute (clang); FUZZ_SECONDS=600 for longer
 make bench     # deterministic keystroke replay + frame statistics
 ./vtt          # run
 ```
@@ -150,8 +151,8 @@ one outside it. That is exactly the old rectangle outline for a box, and the onl
 reading of a circle of wall.
 
 The radius is measured as a straight line, so a circle is round on every map. This is
-deliberately unlike the [range highlight](#range-highlight-r), which follow the map's distance
-metric because they measure reach — a tower is a tower whatever the movement rules say.
+deliberately unlike the [range highlight](#range-highlight-r), which follows the map's distance
+metric because it measures reach — a tower is a tower whatever the movement rules say.
 
 Wall tracing anchors on a lattice corner rather than a square, which is where its cursor
 lives, so its circles sit between squares and come out even across rather than odd.
@@ -219,7 +220,7 @@ A whole pen-down stroke is one undo step.
 | `s c` | change the colour the next marker will use |
 | `s d` | take a marker off (asks which, when there is more than one) |
 | `m` | measure (ruler) |
-| `r` | the range highlight: bands, or 5 ft a press (see below) |
+| `r` | the range highlight: bands, or a square's worth a press (see below) |
 | `o` `O` | open or close a door / a secret door on this tile |
 | `Ctrl-w` | toggle blocking — walls and creatures alike |
 | `esc` | close the box, cancel the move, range off, deselect — one at a time |
@@ -447,7 +448,8 @@ Close (30 ft, 6 sq) from Aria - 3 in range: Ogre, Goblin*, Bram   * no line of s
 (the example is [Daggerheart](#daggerheart)'s *Close* band)
 
 The highlighted shape follows the distance metric — an octagon under the default 5-10-5,
-a square under `chebyshev`. It needs a ruleset for its bands — see [Rulesets](#rulesets).
+a square under `chebyshev`. Its bands come from the [ruleset](#rulesets); without one it
+is a plain radius.
 Sight uses the same test as the ruler, so the two never disagree about the same line.
 
 ### Boundaries and terrain
@@ -533,7 +535,8 @@ cycles through them, and the ruler and the moving-creature readout name the band
 distance falls in (`20 ft  Close`) instead of leaving the conversion to you. The setting
 is stored per map, because it belongs to the game being played rather than to the
 session. `none` is the default: every readout reports plain squares and feet, and the
-`r` overlay is a plain radius grown 5 ft at a time, which is how most games phrase
+`r` overlay is a plain radius grown a square's worth at a time (5 ft at the default
+scale), which is how most games phrase
 reach anyway.
 
 A ruleset is a table of named thresholds, nothing more — the tool still attaches no

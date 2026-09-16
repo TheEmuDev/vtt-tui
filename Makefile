@@ -48,9 +48,9 @@ DEPS      := $(OBJS:.o=.d)
 
 # Test binary links every unit except main.c, plus the test harness.
 LIBSRCS   := $(filter-out $(SRCDIR)/main.c,$(SRCS))
-TESTSRCS  := $(wildcard $(TESTDIR)/*.c)
+TESTSRCS  := $(filter-out $(TESTDIR)/fuzz_%.c,$(wildcard $(TESTDIR)/*.c))
 
-.PHONY: all debug test bench perf clean help
+.PHONY: all debug test bench perf fuzz clean help
 .DEFAULT_GOAL := all
 
 all: BUILDFLAGS := $(RELFLAGS)
@@ -82,6 +82,15 @@ bench: all
 # tables in docs/PERFORMANCE.md -- paste its output there when a row moves.
 perf: all
 	@./tools/perf.sh
+
+# Fuzzes the map loader with libFuzzer (clang only). The corpus is a scratch
+# copy of the fixtures so libFuzzer's additions do not land in the tree.
+FUZZ_SECONDS ?= 60
+fuzz:
+	@mkdir -p $(OBJDIR)/fuzz-corpus && cp $(TESTDIR)/fixtures/*.vtt $(OBJDIR)/fuzz-corpus/
+	clang $(BASEFLAGS) -O1 -g -DVTT_PROF=0 -fsanitize=fuzzer,address,undefined \
+	    $(LIBSRCS) $(TESTDIR)/fuzz_mapio.c -o $(OBJDIR)/fuzz-mapio $(LDLIBS)
+	$(OBJDIR)/fuzz-mapio -max_total_time=$(FUZZ_SECONDS) -max_len=65536 $(OBJDIR)/fuzz-corpus
 
 clean:
 	@rm -rf $(OBJDIR) $(BIN)

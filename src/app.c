@@ -973,7 +973,7 @@ static void wall_key(App *a, Key k)
     }
     if (k.kind != KEY_CHAR || k.mods != 0) return;
 
-    if (k.ch >= '1' && k.ch <= '9') { e->count = e->count * 10 + (int)(k.ch - '0'); return; }
+    if (k.ch >= '1' && k.ch <= '9') { count_digit(e, k.ch); return; }
 
     switch (k.ch) {
     case 'h': ed_wall_step(e, m, &a->undo, -1,  0, take_count(e)); break;
@@ -1118,7 +1118,7 @@ int app_ruler_key(App *a, Key k)
 
     if (k.kind != KEY_CHAR || k.mods != 0) return 1;
 
-    if (k.ch >= '1' && k.ch <= '9') { e->count = e->count * 10 + (int)(k.ch - '0'); return 1; }
+    if (k.ch >= '1' && k.ch <= '9') { count_digit(e, k.ch); return 1; }
 
     switch (k.ch) {
     case 'm': app_ruler_begin(a); break;
@@ -1193,7 +1193,7 @@ static void editor_key(App *a, Key k)
         return;
     }
 
-    if (k.ch >= '1' && k.ch <= '9') { e->count = e->count * 10 + (int)(k.ch - '0'); return; }
+    if (k.ch >= '1' && k.ch <= '9') { count_digit(e, k.ch); return; }
     if (k.ch == '0' && e->count)    { e->count *= 10; return; }
 
     switch (k.ch) {

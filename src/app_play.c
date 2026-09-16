@@ -278,7 +278,7 @@ static const char *retired_key(uint32_t ch)
     case 'a': case 'A': return "a is gone - t and T walk every token";
     case 'V':           return "V is now v - select several creatures";
     case 'P':           return "P is now p - paste";
-    case 'R':           return "R is now r - range bands";
+    case 'R':           return "R is now r - the range highlight";
     case 'S':           return "S is now s c - marker colour";
     default:            return NULL;
     }
@@ -467,7 +467,7 @@ void app_play_key(App *a, Key k)
     /* Counts, the same as build mode: 3l walks three squares whichever mode
      * you are in. This is what freed 1 2 3 from being size keys -- the size
      * lives on b now, in both modes, and a count names it (2b). */
-    if (k.ch >= '1' && k.ch <= '9') { e->count = e->count * 10 + (int)(k.ch - '0'); return; }
+    if (k.ch >= '1' && k.ch <= '9') { count_digit(e, k.ch); return; }
     if (k.ch == '0' && e->count)    { e->count *= 10; return; }
 
     if (k.ch == 'b' || k.ch == 'B') {
@@ -693,7 +693,7 @@ void app_play_key(App *a, Key k)
 
         int band = range_cycle(&pl->range, m, anchor, e->cx, e->cy,
                                take_count_raw(e));
-        if (band < 0 && !pl->range.active) app_set_status(a, "range overlay off");
+        if (band < 0) app_set_status(a, "range overlay off");
         else                               a->status[0] = '\0';
         break;
     }

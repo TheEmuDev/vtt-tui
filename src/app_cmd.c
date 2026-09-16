@@ -124,6 +124,9 @@ void app_exec_command(App *a, const char *line)
         }
         str_lcpy(m->ruleset, strcmp(rs->name, "none") ? rs->name : "", sizeof m->ruleset);
         m->modified = 1;
+        /* The overlay's reach is read against the ruleset, so a band index
+         * or a radius from the old one would mean something else now. */
+        range_clear(&a->play.range);
         char msg[128];
         snprintf(msg, sizeof msg, "ruleset: %s%s", rs->name,
                  rs->verified ? "" : " (range bands unverified)");

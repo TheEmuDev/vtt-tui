@@ -8,8 +8,9 @@
 #include "ruler.h"
 #include "undo.h"
 
-/* Highlights every tile within one range band of an anchor, for effects that
- * catch everything in range rather than a single target. */
+/* Highlights every tile within reach of an anchor -- one of the ruleset's
+ * bands, or a plain radius on a map without one -- for effects that catch
+ * everything in range rather than a single target. */
 typedef struct {
     int active;
     int band;          /* index into the current ruleset's band list */
@@ -17,6 +18,10 @@ typedef struct {
     int token;         /* token the anchor follows, or -1 for a bare tile */
     int ax, ay;        /* anchor tile, used when token is -1 */
 } RangeOverlay;
+
+/* A radius can be named by a count, so it is capped: twice the largest map
+ * edge reaches every square of any map from anywhere on it. */
+#define RANGE_RADIUS_MAX (2 * MAP_MAX_DIM)
 
 void range_clear(RangeOverlay *ro);
 

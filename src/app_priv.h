@@ -7,7 +7,15 @@
 
 #include "app.h"
 
-/* Digits build a count prefix, exactly as in vim: 10j moves ten tiles. */
+/* Digits build a count prefix, exactly as in vim: 10j moves ten tiles. The
+ * cap keeps a held key from wrapping the int, and nothing takes a count
+ * that large anyway. */
+#define COUNT_MAX 9999
+static inline void count_digit(Editor *e, uint32_t ch)
+{
+    e->count = imin(e->count * 10 + (int)(ch - '0'), COUNT_MAX);
+}
+
 /* The size key, shared by both modes so it cannot drift: b cycles up, B
  * cycles back, and a count names the size outright -- 2b is 2x2 without
  * cycling past it. */
