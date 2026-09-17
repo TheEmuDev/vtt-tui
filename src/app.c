@@ -28,6 +28,7 @@ void app_init(App *a, Term *t, Renderer *r)
     a->dirty   = 1;
     a->pending_token = -1;
     undo_init(&a->undo);
+    slog_init(&a->slog);
 
     /* The frame clear paints the theme background, so no screen-sized fill
      * is needed at the top of any draw. */
@@ -41,12 +42,21 @@ void app_free(App *a)
     free(a->entries);
     a->entries = NULL;
     undo_free(&a->undo);
+    slog_close(&a->slog);
 }
 
 void app_set_status(App *a, const char *msg)
 {
     str_lcpy(a->status, msg, sizeof a->status);
     a->dirty = 1;
+}
+
+/* For the things that happened, as opposed to the things the app has to
+ * say: the status line shows it and the session log, when on, keeps it. */
+void app_note(App *a, const char *msg)
+{
+    app_set_status(a, msg);
+    slog_write(&a->slog, msg);
 }
 
 static void show_message(App *a, const char *title, const char *body)
@@ -68,6 +78,7 @@ int app_open_map(App *a, const char *path)
         return -1;
     }
 
+    slog_close(&a->slog);
     map_free(a->map);
     a->map = m;
     undo_clear(&a->undo);          /* history does not survive a new map */
@@ -99,6 +110,7 @@ static void app_new_map(App *a, const char *name, int w, int h)
     mapio_resolve_path(name, path, sizeof path);
     str_lcpy(m->path, path, sizeof m->path);
 
+    slog_close(&a->slog);
     map_free(a->map);
     a->map = m;
     undo_clear(&a->undo);
@@ -512,7 +524,7 @@ static void prompt_accept(App *a)
         snprintf(msg, sizeof msg, "placed %s %.30s (%dx%d) at %s",
                  token_kind_name(t.kind), t.label[0] ? t.label : "unlabelled",
                  t.size, t.size, at);
-        app_set_status(a, msg);
+        app_note(a, msg);
         return;
     }
     case PROMPT_RELABEL: {
@@ -521,11 +533,16 @@ static void prompt_accept(App *a)
 
         /* Through the undo log, so a mistyped name is one u away. */
         Token t = a->map->tokens.v[pl->sel];
+        char was[TOKEN_LABEL_MAX];
+        str_lcpy(was, t.label, sizeof was);
         str_lcpy(t.label, text, sizeof t.label);
         undo_begin(&a->undo);
         undo_edit_token(&a->undo, a->map, pl->sel, t);
         undo_end(&a->undo);
-        app_set_status(a, "relabelled");
+        char msg[96];
+        snprintf(msg, sizeof msg, "relabelled %.30s to %.30s",
+                 was[0] ? was : token_kind_name(t.kind), t.label);
+        app_note(a, msg);
         return;
     }
     case PROMPT_STATUS_LABEL: {
@@ -547,9 +564,10 @@ static void prompt_accept(App *a)
         undo_end(&a->undo);
 
         char msg[96];
-        snprintf(msg, sizeof msg, "%s marker: %.30s",
-                 status_color_name(a->play.status_color), text);
-        app_set_status(a, msg);
+        snprintf(msg, sizeof msg, "%s marker on %.24s: %.30s",
+                 status_color_name(a->play.status_color),
+                 t.label[0] ? t.label : token_kind_name(t.kind), text);
+        app_note(a, msg);
         return;
     }
     case PROMPT_TOKEN_SEARCH: {
@@ -633,7 +651,7 @@ void app_clear_token_status(App *a, int idx, int which)
     undo_begin(&a->undo);
     undo_edit_token(&a->undo, m, idx, t);
     undo_end(&a->undo);
-    app_set_status(a, msg);
+    app_note(a, msg);
 }
 
 /* ------------------------------------------------------------- key page */
@@ -782,9 +800,7 @@ static int modal_key(App *a, Key k)
         if (k.kind == KEY_CHAR && (k.ch == 'y' || k.ch == 'Y')) {
             a->modal = MODAL_NONE;
             if (discard) {
-                map_free(a->map);
-                a->map    = NULL;
-                a->screen = SCREEN_MENU;
+                app_close_map(a);
                 app_set_status(a, "discarded unsaved changes");
             } else {
                 a->running = 0;
@@ -801,6 +817,17 @@ static int modal_key(App *a, Key k)
 }
 
 /* Leaving a map with unsaved work must ask first. */
+/* The one way a map is put down: the log is a session with one map, so it
+ * closes here and nowhere else. */
+void app_close_map(App *a)
+{
+    slog_close(&a->slog);
+    map_free(a->map);
+    a->map = NULL;
+    undo_clear(&a->undo);
+    a->screen = SCREEN_MENU;
+}
+
 void app_leave_map(App *a)
 {
     if (a->map && a->map->modified) {
@@ -810,9 +837,7 @@ void app_leave_map(App *a)
                  "%s has unsaved changes. Discard them?", a->map->name);
         return;
     }
-    map_free(a->map);
-    a->map    = NULL;
-    a->screen = SCREEN_MENU;
+    app_close_map(a);
 }
 
 static void app_request_quit(App *a)

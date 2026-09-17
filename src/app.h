@@ -7,6 +7,7 @@
 #include "mapio.h"
 #include "play.h"
 #include "ruler.h"
+#include "slog.h"
 #include "render.h"
 #include "term.h"
 #include "theme.h"
@@ -74,6 +75,9 @@ typedef struct {
      * the same history as wall edits in build mode. */
     Undo    undo;
 
+    /* The session log, off until :log. */
+    SessionLog slog;
+
     TextPrompt prompt;
     PromptWhat prompt_what;
     char       pending_name[MAP_NAME_MAX];
@@ -111,6 +115,7 @@ void app_free(App *a);
 void app_key(App *a, Key k);
 void app_draw(App *a);
 void app_set_status(App *a, const char *msg);
+void app_note(App *a, const char *msg);     /* status line + session log */
 
 /* Opens a map by path, replacing whatever is loaded. Returns 0 on success
  * and leaves a message modal up on failure. */

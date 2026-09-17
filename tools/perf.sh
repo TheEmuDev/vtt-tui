@@ -175,6 +175,8 @@ run "play, group box"      "$MOB"    80x24  ':play\rvlllljjjj'
 run "play, group carry"    "$MOB"    80x24  ':play\rvlljj\rjjjjllll'
 run "play, range bands"    "$MOB"    80x24  ':play\rtrrrrrr'
 run "play, range radius"   "$PLAIN"  80x24  ':play\rt20r'
+run "play, logging"        "$MOB"    80x24  ':play\r:log on\rt\rlllljjjj\r'
+run "play, rolling"        "$MOB"    80x24  ':play\r:roll 2d6+3\r:roll +1\r'
 run "help page"            "$WALLED" 80x24  '?jjjj'
 run "profiler overlay"     "$WALLED" 80x24  '\e[24~jjll'
 

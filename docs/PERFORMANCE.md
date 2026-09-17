@@ -24,33 +24,36 @@ Two properties matter more than any single figure:
 ## Frame times
 
 What the app costs to use. Each scenario replays a keystroke script, a frame per key,
-400 times.
+400 times. Every figure is the median of three such runs, row by row: a single run
+reliably has one row spiking somewhere, and never the same one twice.
 
 | scenario             | size   | frame p50 | frame p99 | cells | bytes |
 |----------------------|--------|-----------|-----------|-------|-------|
-| build, open          | 80x24  |    28.9us |    41.0us |    10 |   207 |
-| build, every edge    | 80x24  |    29.1us |    42.8us |    10 |   207 |
-| build, 200x200       | 80x24  |    29.1us |    62.1us |    12 |   209 |
-| build, 200x200       | 200x50 |   121.4us |   195.4us |    12 |   212 |
-| build, mostly void   | 200x50 |   103.0us |   135.7us |    20 |   267 |
-| build, tracing       | 80x24  |    28.7us |    40.2us |     2 |   140 |
-| build, circle brush  | 80x24  |    30.4us |    44.7us |    28 |   292 |
-| build, 3x3 brush     | 80x24  |    26.1us |    43.4us |    18 |   128 |
-| build, fill+undo 200 | 80x24  |    26.1us |    88.7us |   303 |  3398 |
-| build, fill history  | 80x24  |    28.2us |   172.1us |   335 |  4145 |
-| ruler, three legs    | 80x24  |    25.7us |    38.6us |    11 |    40 |
-| play, 24 tokens      | 80x24  |    31.7us |    48.2us |    19 |   298 |
-| play, 24 tokens      | 200x50 |   102.1us |   170.4us |    36 |   319 |
-| play, carrying       | 80x24  |    29.0us |    67.7us |    33 |   205 |
-| play, carry 200x200  | 80x24  |    28.1us |    51.9us |    22 |   136 |
-| play, 3x3 cursor     | 80x24  |    35.0us |    50.4us |    37 |   620 |
-| play, choosing       | 80x24  |    28.6us |    43.5us |    12 |    95 |
-| play, group box      | 80x24  |    27.7us |    42.9us |    18 |   133 |
-| play, group carry    | 80x24  |    27.4us |    43.7us |    22 |   131 |
-| play, range bands    | 80x24  |    36.7us |    79.6us |   163 |   845 |
-| play, range radius   | 80x24  |    55.9us |   117.3us |   169 |   958 |
-| help page            | 80x24  |    40.0us |    87.1us |   544 |  2699 |
-| profiler overlay     | 80x24  |    33.9us |   145.8us |   117 |   756 |
+| build, open          | 80x24  |    32.1us |    71.1us |    10 |   207 |
+| build, every edge    | 80x24  |    29.2us |    42.3us |    10 |   207 |
+| build, 200x200       | 80x24  |    29.3us |    40.8us |    12 |   209 |
+| build, 200x200       | 200x50 |   130.4us |   279.1us |    12 |   212 |
+| build, mostly void   | 200x50 |   102.9us |   148.4us |    20 |   267 |
+| build, tracing       | 80x24  |    28.9us |    39.8us |     2 |   140 |
+| build, circle brush  | 80x24  |    32.1us |    58.7us |    28 |   292 |
+| build, 3x3 brush     | 80x24  |    25.9us |    34.1us |    18 |   128 |
+| build, fill+undo 200 | 80x24  |    29.2us |    99.6us |   303 |  3398 |
+| build, fill history  | 80x24  |    29.6us |   212.1us |   335 |  4145 |
+| ruler, three legs    | 80x24  |    26.5us |    60.0us |    11 |    40 |
+| play, 24 tokens      | 80x24  |    32.2us |    70.0us |    19 |   298 |
+| play, 24 tokens      | 200x50 |   102.4us |   141.3us |    36 |   319 |
+| play, carrying       | 80x24  |    33.6us |    77.1us |    33 |   205 |
+| play, carry 200x200  | 80x24  |    28.3us |    50.8us |    22 |   136 |
+| play, 3x3 cursor     | 80x24  |    35.0us |    51.0us |    37 |   620 |
+| play, choosing       | 80x24  |    29.1us |    56.0us |    12 |    95 |
+| play, group box      | 80x24  |    28.1us |    62.2us |    18 |   133 |
+| play, group carry    | 80x24  |    28.2us |    63.2us |    22 |   131 |
+| play, range bands    | 80x24  |    37.3us |    93.3us |   163 |   845 |
+| play, range radius   | 80x24  |    56.8us |    87.3us |   169 |   958 |
+| play, logging        | 80x24  |    28.4us |    65.0us |    31 |   198 |
+| play, rolling        | 80x24  |    29.9us |    45.1us |    23 |   189 |
+| help page            | 80x24  |    39.7us |   109.5us |   544 |  2699 |
+| profiler overlay     | 80x24  |    33.9us |   150.0us |   116 |   745 |
 
 > The machine's own baseline drifts: one recording of this table sat ~10% above its
 > neighbours on every row, and none of it was the code -- the previous binary run
@@ -73,23 +76,24 @@ a median near zero and a p99 that says what it costs when it does.
 
 | path             | p50     | p99     | worst   | calls | heaviest scenario      |
 |------------------|---------|---------|---------|-------|------------------------|
-| app.draw         | 105.7us | 200.7us | 254.6us |  3200 | build, 200x200 200x50  |
-| editor.draw      | 100.5us | 191.3us | 243.6us |  3200 | build, 200x200 200x50  |
-| grid.draw        |  92.6us | 176.1us | 227.3us |  3200 | build, 200x200 200x50  |
-| grid.labels      |   7.8us |  17.2us |  39.2us |  3200 | build, 200x200 200x50  |
-| group.box        |   0.1us |   0.2us |   0.5us |   400 | play, group carry 80x24 |
-| group.move       |   0.2us |   1.1us |  71.0us |  6400 | play, carry 200x200 80x24 |
-| input.key        |   0.1us | 724.7us | 11133.2us | 14400 | build, fill history 80x24 |
-| move.label       |   0.8us |   3.1us |  20.0us |  9995 | play, carry 200x200 80x24 |
-| play.draw        |  80.7us | 124.9us | 230.3us |  5595 | play, 24 tokens 200x50 |
-| prof.overlay     |   7.2us | 107.0us | 134.2us |  1000 | profiler overlay 80x24 |
-| range.draw       |  20.7us |  36.7us |  60.0us |  3995 | play, range radius 80x24 |
-| range.status     |   4.9us |  10.1us |  29.5us |  2794 | play, range radius 80x24 |
-| ruler.draw       |   0.7us |   1.0us |  11.3us |  4400 | ruler, three legs 80x24 |
-| trail.draw       |   0.2us |   0.6us |  12.3us |  9995 | play, carry 200x200 80x24 |
-| trail.path       |   4.6us |  31.3us | 165.7us |  6231 | play, carry 200x200 80x24 |
-| undo.step        | 181.8us | 229.1us | 382.2us |  1200 | build, fill+undo 200 80x24 |
-| undo.trim        | 4872.9us | 10691.9us | 10691.9us |    97 | build, fill history 80x24 |
+| app.draw         | 105.9us | 235.6us | 291.1us |  3200 | build, 200x200 200x50  |
+| editor.draw      | 100.7us | 223.4us | 257.1us |  3200 | build, 200x200 200x50  |
+| grid.draw        |  93.1us | 205.7us | 239.9us |  3200 | build, 200x200 200x50  |
+| grid.labels      |   7.5us |  21.1us |  43.6us |  3200 | build, mostly void 200x50 |
+| group.box        |   0.1us |   0.2us |   0.3us |   400 | play, group carry 80x24 |
+| group.move       |   0.2us |   0.6us | 100.5us |  3200 | play, logging 80x24    |
+| input.key        |   0.0us | 683.5us | 9393.5us | 14400 | build, fill history 80x24 |
+| log.write        |   2.5us |  20.1us |  23.1us |   253 | play, logging 80x24    |
+| move.label       |   0.8us |   2.4us |  13.8us |  9995 | play, carry 200x200 80x24 |
+| play.draw        |  80.3us | 187.8us | 280.1us |  5595 | play, 24 tokens 200x50 |
+| prof.overlay     |   7.1us | 134.5us | 197.8us |  1000 | profiler overlay 80x24 |
+| range.draw       |  21.0us |  41.5us |  97.6us |  3995 | play, range radius 80x24 |
+| range.status     |   2.2us |  12.7us |  29.4us |  2000 | play, range bands 80x24 |
+| ruler.draw       |   0.7us |   2.1us |  23.1us |  4400 | ruler, three legs 80x24 |
+| trail.draw       |   0.1us |   0.5us |   9.4us |  9995 | play, carry 200x200 80x24 |
+| trail.path       |   4.3us |  26.9us | 130.9us |  6231 | play, carry 200x200 80x24 |
+| undo.step        | 181.6us | 369.9us | 477.5us |  1200 | build, fill+undo 200 80x24 |
+| undo.trim        | 4439.2us | 8837.3us | 8837.3us |    97 | build, fill history 80x24 |
 
 ### Reading it
 
@@ -161,6 +165,14 @@ of them gets a line-of-sight trace: `range.draw` at 21µs is that, and `range.st
 scenario reads cheaper only because it spends most of its frames on the near bands; its
 *Very Far* frames cost the same. The radius itself is free, and `:scale` cannot make it
 dearer -- reach is compared in feet, tiles are still counted in tiles.
+
+**The session log costs a line, once per thing that happened.** `log.write` is a
+`strftime`, an `fprintf` and an `fflush`: 2-3µs, and only on the keystroke that put a
+creature down or rolled the dice, never per frame. The flush is deliberate -- the log is
+for the crash as much as the recap -- and it is why the figure is microseconds rather than
+nanoseconds; buffering would save nothing anyone could feel and lose the last line when it
+mattered. With the log off the call is a null check. Dice are cheaper still: `play,
+rolling` is two `:roll` commands a loop and reads as the cost of typing them.
 
 `group.move` is the whole formation's move: the check for every member, then the
 steps. **0.1us typical and 2.0us at p99** for the sizes a table plays at. It is

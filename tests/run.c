@@ -13,6 +13,7 @@
 #include <unistd.h>
 
 #include "app.h"
+#include "dice.h"
 #include "editor.h"
 #include "grid.h"
 #include "map.h"
@@ -6830,6 +6831,286 @@ static void test_status_draw(void)
     map_free(m);
 }
 
+
+/* --------------------------------------------------------------- dice */
+
+static void test_dice(void)
+{
+    CASE("a seed makes the dice repeatable");
+    dice_seed(42);
+    int first[8];
+    for (int i = 0; i < 8; i++) first[i] = dice_one(20);
+    dice_seed(42);
+    int same = 1;
+    for (int i = 0; i < 8; i++) if (dice_one(20) != first[i]) same = 0;
+    CHECK_EQ(same, 1);
+
+    CASE("every face comes up, and nothing off the die does");
+    dice_seed(7);
+    int seen[7] = { 0 };
+    int off = 0;
+    for (int i = 0; i < 6000; i++) {
+        int v = dice_one(6);
+        if (v < 1 || v > 6) off++; else seen[v]++;
+    }
+    CHECK_EQ(off, 0);
+    for (int f = 1; f <= 6; f++) CHECK(seen[f] > 800);   /* ~1000 each */
+    CHECK_EQ(dice_one(1), 1);
+    CHECK_EQ(dice_one(0), 1);
+
+    CASE("an expression is the sum of its dice and constants");
+    DiceResult r;
+    char err[64];
+    dice_seed(3);
+    CHECK_EQ(dice_roll_expr("2d6+3", &r, err, sizeof err), 0);
+    CHECK_EQ(r.nrolls, 2);
+    CHECK_EQ(r.total, r.rolls[0] + r.rolls[1] + 3);
+    CHECK_EQ(dice_roll_expr(" 4d6 + 1d4 - 1 ", &r, err, sizeof err), 0);
+    CHECK_EQ(r.nrolls, 5);
+    int sum = -1;
+    for (int i = 0; i < 5; i++) sum += r.rolls[i];
+    CHECK_EQ(r.total, sum);
+    CHECK_EQ(dice_roll_expr("d20", &r, err, sizeof err), 0);   /* a bare d is one die */
+    CHECK_EQ(r.nrolls, 1);
+    CHECK_EQ(dice_roll_expr("-d4+10", &r, err, sizeof err), 0);
+    CHECK(r.total >= 6 && r.total <= 9);
+    CHECK_EQ(dice_roll_expr("5", &r, err, sizeof err), 0);
+    CHECK_EQ(r.total, 5);
+    CHECK_EQ(r.nrolls, 0);
+
+    CASE("what is not an expression says why");
+    CHECK_EQ(dice_roll_expr("", &r, err, sizeof err), -1);
+    CHECK_EQ(dice_roll_expr("d", &r, err, sizeof err), -1);
+    CHECK(strstr(err, "sides") != NULL);
+    CHECK_EQ(dice_roll_expr("0d6", &r, err, sizeof err), -1);
+    CHECK_EQ(dice_roll_expr("101d6", &r, err, sizeof err), -1);
+    CHECK_EQ(dice_roll_expr("2d1", &r, err, sizeof err), -1);
+    CHECK_EQ(dice_roll_expr("2d1001", &r, err, sizeof err), -1);
+    CHECK_EQ(dice_roll_expr("2d6+", &r, err, sizeof err), -1);
+    CHECK_EQ(dice_roll_expr("2d6 3", &r, err, sizeof err), -1);
+    CHECK_EQ(dice_roll_expr("abc", &r, err, sizeof err), -1);
+    CHECK_EQ(dice_roll_expr("1d6+1d6+1d6+1d6+1d6+1d6+1d6+1d6+1d6", &r, err, sizeof err), -1);
+
+    CASE("the readout shows the expression, the total and each die");
+    r.total = 9; r.nrolls = 2; r.rolls[0] = 4; r.rolls[1] = 2;
+    char buf[160];
+    dice_format("2d6 + 3", &r, buf, sizeof buf);
+    CHECK_EQ(strcmp(buf, "2d6+3 = 9  [4 2]"), 0);
+    r.nrolls = 0; r.total = 5;
+    dice_format("5", &r, buf, sizeof buf);
+    CHECK_EQ(strcmp(buf, "5 = 5"), 0);
+    CHECK_EQ(dice_roll_expr("100d6", &r, err, sizeof err), 0);
+    CHECK_EQ(r.nrolls, 100);
+    dice_format("100d6", &r, buf, sizeof buf);
+    CHECK(strstr(buf, "...]") != NULL);                     /* past the 64 kept */
+
+    /* Daggerheart: two d12s, Hope and Fear, read against each other. */
+    CASE("duality reads Hope, Fear, or a critical when the dice match");
+    CHECK_EQ(strcmp(dice_duality_verdict(9, 6), "with Hope"), 0);
+    CHECK_EQ(strcmp(dice_duality_verdict(3, 11), "with Fear"), 0);
+    CHECK_EQ(strcmp(dice_duality_verdict(7, 7), "critical success"), 0);
+    DualityRoll d;
+    dice_seed(11);
+    dice_duality(2, &d);
+    CHECK(d.hope >= 1 && d.hope <= 12);
+    CHECK(d.fear >= 1 && d.fear <= 12);
+    CHECK_EQ(d.total, d.hope + d.fear + 2);
+    d.hope = 9; d.fear = 6; d.mod = 2; d.total = 17;
+    dice_duality_format(&d, buf, sizeof buf);
+    CHECK_EQ(strcmp(buf, "Duality +2 = 17 with Hope  [hope 9, fear 6]"), 0);
+    d.hope = 7; d.fear = 7; d.mod = 0; d.total = 14;
+    dice_duality_format(&d, buf, sizeof buf);
+    CHECK_EQ(strcmp(buf, "Duality = 14 critical success  [hope 7, fear 7]"), 0);
+}
+
+/* Reads a whole file; NULL when it cannot. */
+static char *slurp(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) return NULL;
+    char  *buf = xmalloc(65536);
+    size_t n   = fread(buf, 1, 65535, f);
+    fclose(f);
+    buf[n] = '\0';
+    return buf;
+}
+
+static int count_lines(const char *s)
+{
+    int n = 0;
+    for (; *s; s++) if (*s == '\n') n++;
+    return n;
+}
+
+static void test_session_log(void)
+{
+    Sandbox sb = sandbox_enter("slog");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+
+    write_map_file(sb.dir, "fight.vtt");
+    char path[600], logpath[600];
+    snprintf(path, sizeof path, "%s/fight.vtt", sb.dir);
+    snprintf(logpath, sizeof logpath, "%s/fight.log", sb.dir);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+
+    CASE("off by default, and nothing is written while it is");
+    CHECK_EQ(slog_on(&a.slog), 0);
+    a.ed.cx = 0; a.ed.cy = 0;
+    press(&a, "ipAria\r");                    /* place a player at a1 */
+    CHECK_EQ(a.map->tokens.n, 1);
+    press(&a, "\rl\r");                       /* pick up, a step, drop */
+    CHECK(strstr(a.status, "dropped after 1 step") != NULL);
+    CHECK(slurp(logpath) == NULL);
+
+    CASE(":log turns it on beside the map, with a header naming it");
+    press(&a, ":log\r");
+    CHECK_EQ(slog_on(&a.slog), 1);
+    CHECK(strstr(a.status, "logging to") != NULL);
+    CHECK(strstr(a.status, "fight.log") != NULL);
+    char *text = slurp(logpath);
+    CHECK(text != NULL);
+    if (text) {
+        CHECK(strstr(text, "log on:") != NULL);
+        CHECK(strstr(text, a.map->name) != NULL);
+        free(text);
+    }
+
+    CASE("what happens is written, timestamped, one line each");
+    press(&a, "\rh\r");                        /* pick up, a step back, drop */
+    press(&a, ":roll 2d6+3\r");
+    text = slurp(logpath);
+    CHECK(text != NULL);
+    if (text) {
+        CHECK(strstr(text, "] dropped after 1 step") != NULL);
+        CHECK(strstr(text, "] 2d6+3 = ") != NULL);
+        CHECK_EQ(count_lines(text), 3);         /* header + 2 events */
+        CHECK(text[0] == '-');
+        CHECK(strchr(text, '[') != NULL && strchr(text, '[')[3] == ':');   /* [HH:MM:SS] */
+        free(text);
+    }
+
+    CASE("hints and errors stay off the log");
+    press(&a, ":roll nonsense\r");
+    CHECK(strstr(a.status, ":roll -") != NULL);
+    press(&a, "i");                             /* a prefix waiting: a hint */
+    press(&a, "\x1b");
+    text = slurp(logpath);
+    if (text) { CHECK_EQ(count_lines(text), 3); free(text); }
+
+    CASE("a second :log turns it off and says where the file is");
+    press(&a, ":log\r");
+    CHECK_EQ(slog_on(&a.slog), 0);
+    CHECK(strstr(a.status, "log off") != NULL);
+    text = slurp(logpath);
+    if (text) { CHECK(strstr(text, "log off ---") != NULL); free(text); }
+    press(&a, ":roll d6\r");
+    text = slurp(logpath);
+    if (text) { CHECK_EQ(count_lines(text), 4); free(text); }   /* nothing after the footer */
+
+    CASE(":log on/off and :log path are explicit");
+    press(&a, ":log off\r");
+    CHECK(strstr(a.status, "already off") != NULL);
+    char other[600];
+    snprintf(other, sizeof other, "%s/elsewhere.log", sb.dir);
+    press(&a, ":log ");
+    press(&a, other);
+    press(&a, "\r");
+    CHECK_EQ(slog_on(&a.slog), 1);
+    CHECK_EQ(strcmp(a.slog.path, other), 0);
+    press(&a, ":log on\r");                     /* moves to the default path */
+    CHECK_EQ(strcmp(a.slog.path, logpath), 0);
+    press(&a, ":log on\r");
+    CHECK(strstr(a.status, "already logging") != NULL);
+
+    CASE("closing the map closes the log");
+    press(&a, ":q!\r");
+    CHECK_EQ(slog_on(&a.slog), 0);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
+static void test_roll_command(void)
+{
+    Sandbox sb = sandbox_enter("roll");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+
+    write_map_file(sb.dir, "fight.vtt");
+    char path[600];
+    snprintf(path, sizeof path, "%s/fight.vtt", sb.dir);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    dice_seed(5);
+
+    CASE(":roll takes an expression on any map");
+    press(&a, ":roll 2d6+3\r");
+    CHECK(strstr(a.status, "2d6+3 = ") != NULL);
+    press(&a, ":roll 2d12\r");
+    CHECK(strstr(a.status, "2d12 = ") != NULL);
+    CHECK(strstr(a.status, "Hope") == NULL);    /* plain dice carry no verdict */
+
+    CASE("without a ruleset there is no action roll to be bare about");
+    a.map->ruleset[0] = '\0';
+    press(&a, ":roll\r");
+    CHECK(strstr(a.status, "roll what") != NULL);
+    press(&a, ":roll +2\r");
+    CHECK(strstr(a.status, "needs a ruleset") != NULL);
+
+    CASE("duality can be asked for by name anywhere");
+    press(&a, ":roll duality +1\r");
+    CHECK(strstr(a.status, "Duality +1 = ") != NULL);
+    CHECK(strstr(a.status, "[hope ") != NULL);
+
+    /* The rules-aware part: under Daggerheart a bare roll is the duality
+     * roll -- two d12s, Hope and Fear -- and a modifier rides on it. */
+    CASE("under daggerheart a bare :roll is the duality roll");
+    press(&a, ":ruleset daggerheart\r");
+    press(&a, ":roll\r");
+    CHECK(strstr(a.status, "Duality = ") != NULL);
+    int verdict = strstr(a.status, "with Hope") != NULL || strstr(a.status, "with Fear") != NULL
+               || strstr(a.status, "critical success") != NULL;
+    CHECK_EQ(verdict, 1);
+    press(&a, ":roll +3\r");
+    CHECK(strstr(a.status, "Duality +3 = ") != NULL);
+    press(&a, ":roll -1\r");
+    CHECK(strstr(a.status, "Duality -1 = ") != NULL);
+    press(&a, ":roll +x\r");
+    CHECK(strstr(a.status, "modifier is a number") != NULL);
+    press(&a, ":roll 2d12\r");                  /* an expression is still plain dice */
+    CHECK(strstr(a.status, "2d12 = ") != NULL);
+    CHECK(strstr(a.status, "Duality") == NULL);
+
+    CASE("the total is the dice plus the modifier");
+    dice_seed(9);
+    DualityRoll d;
+    dice_duality(3, &d);
+    dice_seed(9);
+    press(&a, ":roll +3\r");
+    char want[32];
+    snprintf(want, sizeof want, "= %d ", d.total);
+    CHECK(strstr(a.status, want) != NULL);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
 int main(void)
 {
     prof_init();
@@ -6846,6 +7127,9 @@ int main(void)
         { "grid",   test_grid },
         { "editor", test_editor },
         { "undo",   test_undo },
+        { "dice",   test_dice },
+        { "slog",   test_session_log },
+        { "roll",   test_roll_command },
         { "editing", test_editing },
         { "play",   test_play },
         { "tokendraw", test_token_draw },

@@ -6,6 +6,7 @@
 #include <unistd.h>
 
 #include "app.h"
+#include "dice.h"
 #include "draw.h"
 #include "input.h"
 #include "prof.h"
@@ -27,6 +28,8 @@ typedef struct {
     int         bench_loops;
     int         width, height;      /* headless geometry */
     const char *map_path;           /* positional argument */
+    uint64_t    seed;
+    int         seeded;
 } Options;
 
 static void usage(void)
@@ -41,6 +44,7 @@ static void usage(void)
         "  --bench-loops N    repetitions for --bench (default 50)\n"
         "  --dump-frame       render one frame as plain text to stdout and exit\n"
         "  --size WxH         geometry for headless modes (default 80x24)\n"
+        "  --seed N           seed the dice, for a repeatable session or script\n"
         "  -h, --help         this message\n",
         stdout);
 }
@@ -61,6 +65,10 @@ static int parse_args(Options *o, int argc, char **argv)
         else if (!strcmp(a, "--script") && i + 1 < argc) o->script_path = argv[++i];
         else if (!strcmp(a, "--bench")  && i + 1 < argc) { o->bench = 1; o->script_path = argv[++i]; }
         else if (!strcmp(a, "--bench-loops") && i + 1 < argc) o->bench_loops = atoi(argv[++i]);
+        else if (!strcmp(a, "--seed") && i + 1 < argc) {
+            o->seed = strtoull(argv[++i], NULL, 10);
+            o->seeded = 1;
+        }
         else if (!strcmp(a, "--size") && i + 1 < argc) {
             if (sscanf(argv[++i], "%dx%d", &o->width, &o->height) != 2)
                 die("bad --size (expected WxH)");
@@ -378,6 +386,7 @@ int main(int argc, char **argv)
 
     draw_set_ascii(o.ascii);
     prof_init();
+    if (o.seeded) dice_seed(o.seed); else dice_seed_random();
     if (o.trace_path && prof_trace_open(o.trace_path) < 0)
         fprintf(stderr, "vtt: could not start trace buffer\n");
 

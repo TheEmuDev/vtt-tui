@@ -518,6 +518,48 @@ session.
 keeping every reading a whole number of squares. `chebyshev` is a square cheaper on long
 diagonals, which can pull a target into a nearer band than the fiction would put it in.
 
+### Dice (`:roll`)
+
+```
+:roll 2d6+3          2d6+3 = 9  [4 2]
+:roll d20            d20 = 17  [17]
+:roll 4d6 + 1d4 - 1  4d6+1d4-1 = 15  [3 6 2 4 1]
+```
+
+Any sum of dice groups and constants, up to a hundred dice of up to a thousand sides a
+group. The dice are reported one by one so nobody has to take the total on trust. The
+generator is seeded from the OS; `--seed N` makes a session repeatable.
+
+A bare `:roll`, or a bare modifier like `:roll +2`, is the ruleset's *action roll* — the
+one a system means by "roll" with nothing else said. Without a ruleset there is no such
+thing and `:roll` asks for an expression. [Daggerheart](#daggerheart)'s is the duality
+roll, described there.
+
+Rolls go to the [session log](#session-log-log) when it is on.
+
+### Session log (`:log`)
+
+`:log` starts a plain-text record of the things that happened at the table, and a second
+`:log` stops it. `:log on`, `:log off` and `:log path/to/file.log` say so exactly. By default
+the log sits beside the map as `name.log`, or in the map directory when the map has never
+been saved.
+
+```
+--- 2026-09-16 19:02:11  log on: Crypt ---
+[19:02:40] placed enemy Ogre (2x2) at h6
+[19:03:05] dropped after 4 steps
+[19:03:22] red marker on Aria: Poisoned
+[19:03:40] 2d6+3 = 9  [4 2]
+[19:04:01] Duality +2 = 17 with Hope  [hope 9, fear 6]
+[19:04:15] undo
+--- 19:20:03  log off ---
+```
+
+What is logged is what changed: creatures placed, put down, removed, pasted, relabelled,
+markers added and cleared, doors, rolls, ruleset changes, and undo and redo. Errors, hints
+and the things the app says about itself stay on the status line. Every line is flushed
+as it is written, so a crash loses nothing, and closing the map closes the log.
+
 ### Rulesets
 
 The core is rules-agnostic and stays that way: movement, walls, terrain, tokens, the
@@ -569,6 +611,19 @@ the cursor can reach is on the map by definition.
 The SRD is explicit that these ranges "aren't intended to be precisely measured during play"
 and are a quick guide for the GM — the readout is the same kind of aid.
 
+**Duality dice.** Under this ruleset a bare `:roll`, or `:roll +2`, is the action roll: two
+d12s, one for Hope and one for Fear, plus the modifier. The readout gives the total and
+which die was higher — *with Hope*, *with Fear*, or *critical success* when they match —
+and both dice, so the table can see them:
+
+```
+:roll +2             Duality +2 = 17 with Hope  [hope 9, fear 6]
+:roll                Duality = 14 critical success  [hope 7, fear 7]
+```
+
+`:roll duality +2` asks for the same roll on any map, and `:roll 2d12+2` is two plain d12s
+with no verdict, ruleset or not.
+
 ### Commands
 
 | command | action |
@@ -583,6 +638,8 @@ and are a quick guide for the GM — the readout is the same kind of aid.
 | `:scale N` | feet per tile (default 5) |
 | `:metric NAME` | `chebyshev`, `euclidean`, `alt` or `manhattan` |
 | `:ruleset NAME` | switch the rules-aware readouts — see [Rulesets](#rulesets) |
+| `:roll 2d6+3` | roll dice — see [Dice](#dice-roll) |
+| `:log` | the session log, on or off — see [Session log](#session-log-log) |
 | `:play` `:build` | switch mode |
 
 ## Zoom
@@ -662,8 +719,8 @@ path culls to the visible tiles first.
 
 | | 80×24 | 200×50 |
 |---|---|---|
-| build, 200×200 map | 32 µs | 121 µs |
-| play, 24 tokens | 32 µs | 101 µs |
+| build, 200×200 map | 29 µs | 130 µs |
+| play, 24 tokens | 32 µs | 102 µs |
 | bytes written per frame | ~209 | ~212 |
 
 **[docs/PERFORMANCE.md](docs/PERFORMANCE.md) has every path measured**, what dominates a

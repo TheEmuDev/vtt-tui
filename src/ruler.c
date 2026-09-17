@@ -83,9 +83,9 @@ static const RangeBand DAGGERHEART_BANDS[] = {
 };
 
 static const Ruleset RULESETS[] = {
-    { "none",        NULL, 0, 1 },
+    { "none",        NULL, 0, 1, NULL },
     { "daggerheart", DAGGERHEART_BANDS,
-      (int)(sizeof DAGGERHEART_BANDS / sizeof *DAGGERHEART_BANDS), 1 },
+      (int)(sizeof DAGGERHEART_BANDS / sizeof *DAGGERHEART_BANDS), 1, "duality" },
 };
 
 #define NRULESETS ((int)(sizeof RULESETS / sizeof *RULESETS))

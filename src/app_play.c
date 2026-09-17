@@ -31,7 +31,7 @@ static void play_cancel_move(App *a)
     char msg[96];
     if (back) snprintf(msg, sizeof msg, "cancelled - back to %s", at);
     else      snprintf(msg, sizeof msg, "put down at %s", at);
-    app_set_status(a, msg);
+    app_note(a, msg);
 }
 
 /* Putting a creature down is the strict half of the rule: it steps through
@@ -66,7 +66,7 @@ static int play_put_down(App *a, const char *how)
 
     pl->grabbed = 0;
     pl->ntrail  = 0;
-    app_set_status(a, how);
+    app_note(a, how);
     return 1;
 }
 
@@ -450,7 +450,7 @@ void app_play_key(App *a, Key k)
 
     if (k.kind == KEY_CHAR && (k.mods & MOD_CTRL)) {
         if (k.ch == 'r') {
-            if (undo_redo(&a->undo, m)) { play_trail_sync(pl, m); app_set_status(a, "redo"); }
+            if (undo_redo(&a->undo, m)) { play_trail_sync(pl, m); app_note(a, "redo"); }
             return;
         }
         if (k.ch == 'w') {
@@ -668,7 +668,7 @@ void app_play_key(App *a, Key k)
                      at);
         else
             snprintf(msg, sizeof msg, "pasted %d creatures at %s", pl->nyank, at);
-        app_set_status(a, msg);
+        app_note(a, msg);
     paste_done:
         break;
     }
@@ -681,7 +681,7 @@ void app_play_key(App *a, Key k)
                         n, secret ? "secret door" : "door", n == 1 ? "" : "s");
         else   snprintf(msg, sizeof msg, "no %s on this tile",
                         secret ? "secret doors" : "doors");
-        app_set_status(a, msg);
+        app_note(a, msg);
         break;
     }
 
@@ -731,7 +731,7 @@ void app_play_key(App *a, Key k)
         char msg[80];
         snprintf(msg, sizeof msg, "removed %s - p puts %s back",
                  what, n == 1 ? "it" : "them");
-        app_set_status(a, msg);
+        app_note(a, msg);
         break;
     }
 
@@ -759,7 +759,7 @@ void app_play_key(App *a, Key k)
                 pl->range.ax = ax;
                 pl->range.ay = ay;
             }
-            app_set_status(a, "undo");
+            app_note(a, "undo");
         } else {
             app_set_status(a, "nothing to undo");
         }

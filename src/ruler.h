@@ -46,6 +46,10 @@ typedef struct {
     /* Cleared while the thresholds are placeholders, so the readout can say
      * so rather than quietly reporting a number nobody checked. */
     int              verified;
+    /* What a bare :roll means under this ruleset -- "duality" for
+     * Daggerheart's two d12s -- or NULL when it has no action roll and
+     * :roll wants an expression. */
+    const char      *action_roll;
 } Ruleset;
 
 const Ruleset *ruleset_by_name(const char *name);   /* NULL if unknown */

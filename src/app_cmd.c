@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "dice.h"
+
 /* --------------------------------------------------------- command line */
 
 void app_exec_command(App *a, const char *line)
@@ -31,20 +33,12 @@ void app_exec_command(App *a, const char *line)
         char path[MAP_PATH_MAX];
         if (m->path[0]) str_lcpy(path, m->path, sizeof path);
         else mapio_resolve_path(m->name, path, sizeof path);
-        if (app_save_map(a, path) == 0) {
-            map_free(a->map);
-            a->map = NULL;
-            undo_clear(&a->undo);
-            a->screen = SCREEN_MENU;
-        }
+        if (app_save_map(a, path) == 0) app_close_map(a);
         return;
     }
     if (!strcmp(verb, "q") || !strcmp(verb, "quit")) { app_leave_map(a); return; }
     if (!strcmp(verb, "q!")) {
-        map_free(a->map);
-        a->map = NULL;
-        undo_clear(&a->undo);
-        a->screen = SCREEN_MENU;
+        app_close_map(a);
         app_set_status(a, "closed without saving");
         return;
     }
@@ -130,6 +124,87 @@ void app_exec_command(App *a, const char *line)
         char msg[128];
         snprintf(msg, sizeof msg, "ruleset: %s%s", rs->name,
                  rs->verified ? "" : " (range bands unverified)");
+        app_note(a, msg);
+        return;
+    }
+    if (!strcmp(verb, "roll")) {
+        /* A bare roll, or a bare modifier, is the ruleset's action roll;
+         * "duality" asks for Daggerheart's two d12s by name on any map;
+         * anything else is an expression, rules or no rules. */
+        const Ruleset *rs = ruleset_by_name(m->ruleset);
+        const char *p = rest;
+        int   mod = 0, bare = 0;
+        size_t plen = strlen(p);
+        if (plen >= 7 && !strncmp(p, "duality", 7) &&
+            (plen == 7 || p[7] == ' ' || p[7] == '+' || p[7] == '-')) {
+            p += 7;
+            bare = 1;
+        } else if (!*p || p[0] == '+' || p[0] == '-') {
+            bare = 1;
+            if (!rs || !rs->action_roll) {
+                app_set_status(a, *p ? "a bare modifier needs a ruleset with an action roll - :roll 2d6+3"
+                                     : "roll what? :roll 2d6+3, or :roll +2 under a ruleset with an action roll");
+                return;
+            }
+        }
+        char msg[160];
+        if (bare) {
+            while (*p == ' ') p++;
+            if (*p) {
+                char *end;
+                long v = strtol(p, &end, 10);
+                while (*end == ' ') end++;
+                if (end == p || *end || v < -99 || v > 99) {
+                    app_set_status(a, "the modifier is a number, -99 to +99");
+                    return;
+                }
+                mod = (int)v;
+            }
+            DualityRoll d;
+            dice_duality(mod, &d);
+            dice_duality_format(&d, msg, sizeof msg);
+        } else {
+            DiceResult r;
+            char err[64];
+            if (dice_roll_expr(p, &r, err, sizeof err) != 0) {
+                snprintf(msg, sizeof msg, ":roll - %s", err);
+                app_set_status(a, msg);
+                return;
+            }
+            dice_format(p, &r, msg, sizeof msg);
+        }
+        app_note(a, msg);
+        return;
+    }
+    if (!strcmp(verb, "log")) {
+        /* :log toggles; on/off say which; anything else is a file. */
+        SessionLog *l = &a->slog;
+        int want;
+        char path[MAP_PATH_MAX];
+        if (!*rest)                 { want = !slog_on(l); slog_default_path(m, path, sizeof path); }
+        else if (!strcmp(rest, "on"))  { want = 1; slog_default_path(m, path, sizeof path); }
+        else if (!strcmp(rest, "off")) { want = 0; path[0] = '\0'; }
+        else                        { want = 1; str_lcpy(path, rest, sizeof path); }
+
+        char msg[MAP_PATH_MAX + 32];
+        if (!want) {
+            if (!slog_on(l)) { app_set_status(a, "the log is already off"); return; }
+            snprintf(msg, sizeof msg, "log off - %s", l->path);
+            slog_close(l);
+            app_set_status(a, msg);
+            return;
+        }
+        if (slog_on(l) && !strcmp(l->path, path)) {
+            snprintf(msg, sizeof msg, "already logging to %s", path);
+            app_set_status(a, msg);
+            return;
+        }
+        char err[128];
+        if (slog_open(l, path, m->name, err, sizeof err) != 0) {
+            app_set_status(a, err);
+            return;
+        }
+        snprintf(msg, sizeof msg, "logging to %s", path);
         app_set_status(a, msg);
         return;
     }
