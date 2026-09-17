@@ -2291,6 +2291,115 @@ static void test_range(void)
     CHECK_EQ(range_cycle(&ro, m, -1, 10, 7, 0), -1);   /* the bare press past it: off */
     CHECK_EQ(ro.active, 0);
 
+    /* ------------------------------------------------------ templates */
+
+    /* The shapes point at the cursor. Anchor at k11 (10,10), reach six
+     * squares, default 5-10-5 metric. */
+    CASE("a cone is as wide as it is far, and points at the cursor");
+    RangeOverlay tp;
+    range_clear(&tp);
+    range_cycle(&tp, plain, -1, 10, 10, 6);
+    CHECK_EQ(range_cycle_shape(&tp, 2), RANGE_CONE);
+    range_set_aim(&tp, 10, 10);
+    CHECK_EQ(range_aimed(&tp, plain), 0);              /* on the origin: nowhere to point */
+    CHECK_EQ(range_contains(&tp, plain, 11, 10), 0);
+    char tbuf[256];
+    range_status(&tp, plain, tbuf, sizeof tbuf);
+    CHECK(strstr(tbuf, "Cone (30 ft, 6 sq)") != NULL);
+    CHECK(strstr(tbuf, "aim") != NULL);
+
+    range_set_aim(&tp, 20, 10);                         /* east */
+    CHECK_EQ(range_aimed(&tp, plain), 1);
+    CHECK_EQ(range_contains(&tp, plain, 11, 10), 1);
+    CHECK_EQ(range_contains(&tp, plain, 11, 11), 0);   /* one out, one off: too wide */
+    CHECK_EQ(range_contains(&tp, plain, 13, 11), 1);
+    CHECK_EQ(range_contains(&tp, plain, 13, 9), 1);
+    CHECK_EQ(range_contains(&tp, plain, 15, 12), 1);
+    CHECK_EQ(range_contains(&tp, plain, 16, 10), 1);   /* six out: the edge */
+    CHECK_EQ(range_contains(&tp, plain, 17, 10), 0);   /* seven: past the reach */
+    CHECK_EQ(range_contains(&tp, plain, 9, 10), 0);    /* behind */
+    CHECK_EQ(range_contains(&tp, plain, 10, 10), 0);   /* the origin itself */
+    range_set_aim(&tp, 10, 2);                          /* swing it north */
+    CHECK_EQ(range_contains(&tp, plain, 10, 7), 1);
+    CHECK_EQ(range_contains(&tp, plain, 13, 10), 0);
+
+    CASE("a line is one square wide, straight or diagonal");
+    range_cycle_shape(&tp, 3);
+    range_set_aim(&tp, 20, 10);
+    for (int x = 11; x <= 16; x++) CHECK_EQ(range_contains(&tp, plain, x, 10), 1);
+    CHECK_EQ(range_contains(&tp, plain, 17, 10), 0);
+    CHECK_EQ(range_contains(&tp, plain, 12, 11), 0);
+    CHECK_EQ(range_contains(&tp, plain, 9, 10), 0);
+    range_set_aim(&tp, 20, 20);
+    CHECK_EQ(range_contains(&tp, plain, 11, 11), 1);
+    CHECK_EQ(range_contains(&tp, plain, 12, 12), 1);
+    CHECK_EQ(range_contains(&tp, plain, 12, 11), 0);
+
+    CASE("a square has a side the length of the reach, against the origin");
+    range_cycle_shape(&tp, 4);
+    range_cycle(&tp, plain, -1, 10, 10, 3);
+    range_set_aim(&tp, 20, 10);                         /* east: x 11..13, y 9..11 */
+    CHECK_EQ(range_contains(&tp, plain, 11, 9), 1);
+    CHECK_EQ(range_contains(&tp, plain, 13, 11), 1);   /* the far corner counts */
+    CHECK_EQ(range_contains(&tp, plain, 14, 10), 0);
+    CHECK_EQ(range_contains(&tp, plain, 11, 8), 0);
+    CHECK_EQ(range_contains(&tp, plain, 10, 10), 0);
+    range_set_aim(&tp, 11, 2);                          /* mostly north: x 9..11, y 7..9 */
+    CHECK_EQ(range_contains(&tp, plain, 9, 7), 1);
+    CHECK_EQ(range_contains(&tp, plain, 11, 9), 1);
+    CHECK_EQ(range_contains(&tp, plain, 11, 10), 0);
+    /* An even side cannot centre on one square: it leans with the cursor. */
+    range_cycle(&tp, plain, -1, 10, 10, 2);
+    range_set_aim(&tp, 20, 12);                         /* east, leaning south */
+    CHECK_EQ(range_contains(&tp, plain, 11, 10), 1);
+    CHECK_EQ(range_contains(&tp, plain, 12, 11), 1);
+    CHECK_EQ(range_contains(&tp, plain, 11, 9), 0);
+    range_set_aim(&tp, 20, 8);                          /* east, leaning north */
+    CHECK_EQ(range_contains(&tp, plain, 11, 9), 1);
+    CHECK_EQ(range_contains(&tp, plain, 11, 11), 0);
+
+    CASE("a creature is caught when any of its squares is, and the status names the shape");
+    Token ogre2 = { 12, 10, 2, TOKEN_ENEMY, "Ogre" };  /* 12..13 x 10..11 */
+    Token bat = { 12, 14, 1, TOKEN_ENEMY, "Bat" };
+    tokens_add(&plain->tokens, ogre2);
+    tokens_add(&plain->tokens, bat);
+    range_cycle_shape(&tp, 3);
+    range_cycle(&tp, plain, -1, 10, 10, 6);
+    range_set_aim(&tp, 20, 10);
+    range_status(&tp, plain, tbuf, sizeof tbuf);
+    CHECK(strstr(tbuf, "Line (30 ft, 6 sq)") != NULL);
+    CHECK(strstr(tbuf, "1 in range: Ogre") != NULL);
+    plain->tokens.n = 0;
+
+    CASE("with bands the shape rides on the band, and a 2x2 origin centres a square");
+    RangeOverlay bs;
+    range_clear(&bs);
+    Token giant = { 4, 4, 2, TOKEN_PLAYER, "Giant" };
+    int gi = tokens_add(&m->tokens, giant);
+    range_cycle(&bs, m, gi, 4, 4, 2);                   /* Very Close: 15 ft, 3 sq */
+    range_cycle_shape(&bs, 2);
+    range_set_aim(&bs, 12, 4);
+    range_status(&bs, m, tbuf, sizeof tbuf);
+    CHECK(strstr(tbuf, "Very Close cone (15 ft, 3 sq) from Giant") != NULL);
+    range_cycle_shape(&bs, 4);
+    range_cycle(&bs, m, gi, 4, 4, 1);                   /* Melee: a side of one... */
+    range_cycle(&bs, m, gi, 4, 4, 0);                   /* ...then Very Close: three */
+    range_set_aim(&bs, 12, 5);
+    CHECK_EQ(range_contains(&bs, m, 6, 3), 0);
+    CHECK_EQ(range_contains(&bs, m, 6, 4), 1);          /* rows 4..6: the lean is south */
+    CHECK_EQ(range_contains(&bs, m, 8, 6), 1);
+    CHECK_EQ(range_contains(&bs, m, 9, 5), 0);
+    m->tokens.n = gi;
+
+    CASE("switching off keeps the shape; clearing resets it");
+    range_off(&tp);
+    CHECK_EQ(tp.active, 0);
+    CHECK_EQ(tp.shape, RANGE_LINE);
+    range_clear(&tp);
+    CHECK_EQ(tp.shape, RANGE_CIRCLE);
+    CHECK_EQ(range_cycle_shape(&tp, 99), RANGE_SQUARE);  /* past the last names the last */
+    CHECK_EQ(range_cycle_shape(&tp, 0), RANGE_CIRCLE);
+
     CASE("the radius overlay never cycles itself off -- esc is how it goes");
     for (int i = 0; i < 40; i++) range_cycle(&bare, plain, -1, 5, 5, 0);
     CHECK_EQ(bare.active, 1);
@@ -6351,9 +6460,27 @@ static void test_play_remap(void)
     press(&a, "r");
     CHECK_EQ(a.play.range.active, 1);
     press(&a, "\x1b");
-    press(&a, "R");
     CHECK_EQ(a.play.range.active, 0);
-    CHECK(strstr(a.status, "now r") != NULL);
+
+    /* R came back, as v did: the capital of a tool's key changes the tool's
+     * variant, the way M changes the ruler's metric. */
+    CASE("R cycles the range shape, a count names one, and esc keeps it");
+    press(&a, "R");
+    CHECK_EQ(a.play.range.shape, RANGE_CONE);
+    CHECK(strstr(a.status, "range shape: cone") != NULL);
+    CHECK_EQ(a.play.range.active, 0);           /* a setting: it shows nothing itself */
+    press(&a, "4R");
+    CHECK_EQ(a.play.range.shape, RANGE_SQUARE);
+    press(&a, "R");
+    CHECK_EQ(a.play.range.shape, RANGE_CIRCLE);  /* wraps */
+    press(&a, "3R");
+    press(&a, "r");
+    CHECK_EQ(a.play.range.active, 1);
+    CHECK_EQ(a.play.range.shape, RANGE_LINE);
+    press(&a, "\x1b");
+    CHECK_EQ(a.play.range.active, 0);
+    CHECK_EQ(a.play.range.shape, RANGE_LINE);
+    press(&a, "1R");
 
     /* The overlay's band index or radius only means something against the
      * ruleset it was set under, so changing the ruleset takes it off rather

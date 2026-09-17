@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <math.h>
+
 #include "prof.h"
 #include "ruler.h"
 #include "token.h"
@@ -115,7 +117,7 @@ void play_focus(Play *p, int sel)
      * around whoever you were looking at a moment ago is worse than none at
      * all. One anchored to a bare tile belongs to nobody and stays put. */
     if (p->range.active && p->range.token >= 0 && p->range.token != sel)
-        range_clear(&p->range);
+        range_off(&p->range);
 
     p->sel      = sel;
     p->grabbed  = 0;
@@ -682,6 +684,33 @@ void play_status(const Play *p, const Map *m, const Editor *e, char *buf, size_t
 
 void range_clear(RangeOverlay *ro) { memset(ro, 0, sizeof *ro); ro->token = -1; }
 
+void range_off(RangeOverlay *ro)
+{
+    int shape = ro->shape;
+    range_clear(ro);
+    ro->shape = shape;
+}
+
+static const char *const SHAPE_NAMES[RANGE_SHAPE_COUNT] = { "circle", "cone", "line", "square" };
+
+const char *range_shape_name(int shape)
+{
+    return shape >= 0 && shape < RANGE_SHAPE_COUNT ? SHAPE_NAMES[shape] : SHAPE_NAMES[0];
+}
+
+int range_cycle_shape(RangeOverlay *ro, int count)
+{
+    if (count > 0) ro->shape = iclamp(count, 1, RANGE_SHAPE_COUNT) - 1;
+    else           ro->shape = (ro->shape + 1) % RANGE_SHAPE_COUNT;
+    return ro->shape;
+}
+
+void range_set_aim(RangeOverlay *ro, int cx, int cy)
+{
+    ro->aimx = cx;
+    ro->aimy = cy;
+}
+
 void range_token_removed(RangeOverlay *ro, int removed, int x, int y)
 {
     if (!ro->active || ro->token < 0) return;
@@ -759,7 +788,7 @@ int range_cycle(RangeOverlay *ro, const Map *m, int anchor_token, int cx, int cy
     /* A count names a band; past the last one it names the last. */
     if (count > 0) ro->band = iclamp(count, 1, rs->nbands) - 1;
     if (ro->band >= rs->nbands) {
-        range_clear(ro);
+        range_off(ro);
         return -1;
     }
     return ro->band;
@@ -807,33 +836,103 @@ double range_units_to(const RangeOverlay *ro, const Map *m, int tx, int ty)
            * m->scale_ft;
 }
 
-int range_contains(const RangeOverlay *ro, const Map *m, int tx, int ty)
+/* Everything a coverage test needs, worked out once per frame rather than
+ * once per tile: where the reach starts, how far it goes, which way it
+ * points, and for a square the box itself. */
+typedef struct {
+    int        shape, aimed;
+    int        ax, ay, asize;
+    double     reach;            /* in the map's units; 1e30 for a band with no end */
+    double     scale;
+    DistMetric metric;
+    double     ox, oy;           /* the origin: centre of the anchor's footprint */
+    double     ux, uy;           /* unit vector from the origin to the cursor */
+    int        x0, y0, x1, y1;   /* RANGE_SQUARE: the box, inclusive */
+} RangeGeom;
+
+static int range_geom(const RangeOverlay *ro, const Map *m, const Ruleset **rs, RangeGeom *g)
 {
-    double reach = range_reach_ft(ro, m, NULL);
-    if (reach < 0) return 0;
-    return range_units_to(ro, m, tx, ty) <= reach;
+    memset(g, 0, sizeof *g);
+    g->reach = range_reach_ft(ro, m, rs);
+    if (g->reach < 0) return 0;
+
+    range_anchor(ro, m, &g->ax, &g->ay, &g->asize);
+    g->shape  = ro->shape;
+    g->scale  = m->scale_ft;
+    g->metric = (DistMetric)m->metric;
+    g->ox     = g->ax + g->asize / 2.0;
+    g->oy     = g->ay + g->asize / 2.0;
+
+    /* Pointing at the origin's own footprint is pointing nowhere. */
+    int inside = ro->aimx >= g->ax && ro->aimx < g->ax + g->asize &&
+                 ro->aimy >= g->ay && ro->aimy < g->ay + g->asize;
+    double dx = ro->aimx + 0.5 - g->ox, dy = ro->aimy + 0.5 - g->oy;
+    double len = sqrt(dx * dx + dy * dy);
+    g->aimed = g->shape == RANGE_CIRCLE || (!inside && len > 0);
+    if (g->shape == RANGE_CIRCLE || !g->aimed) return 1;
+    g->ux = dx / len;
+    g->uy = dy / len;
+
+    if (g->shape == RANGE_SQUARE) {
+        /* A side of as many squares as the reach, its near face against the
+         * footprint, centred on it. An even side cannot centre on an odd
+         * footprint, so the spare half-square goes the way the cursor leans. */
+        double tiles = g->scale > 0 ? g->reach / g->scale : 1.0;
+        int    side  = tiles >= RANGE_RADIUS_MAX ? RANGE_RADIUS_MAX : (int)lround(tiles);
+        if (side < 1) side = 1;
+
+        int horiz = fabs(dx) >= fabs(dy);
+        int a0    = horiz ? g->ax : g->ay;            /* along the axis */
+        int c2    = 2 * (horiz ? g->ay : g->ax) + g->asize;   /* across it, doubled */
+        double lean = horiz ? dy : dx;
+
+        int lo = (horiz ? dx : dy) >= 0 ? a0 + g->asize : a0 - side;
+        int s2 = c2 - side;
+        if (s2 & 1) s2 += lean >= 0 ? 1 : -1;
+        int across = s2 / 2;                          /* even by now, so exact */
+
+        if (horiz) { g->x0 = lo; g->x1 = lo + side - 1; g->y0 = across; g->y1 = across + side - 1; }
+        else       { g->y0 = lo; g->y1 = lo + side - 1; g->x0 = across; g->x1 = across + side - 1; }
+    }
+    return 1;
 }
 
-/* Distance between two footprints, plus the pair of squares that achieves it,
- * so a token's reach is measured edge to edge rather than corner to corner. */
-static double token_dist(DistMetric metric, int ax, int ay, int asize,
-                         const Token *t, int *sx, int *sy, int *dx, int *dy)
+/* Is this tile in the area? Reports the anchor square nearest it either
+ * way, which is where sight to it is traced from. */
+static int geom_covers(const RangeGeom *g, int tx, int ty, int *nx, int *ny)
 {
-    double best = 1e30;
-    for (int y = t->y; y < t->y + t->size; y++) {
-        for (int x = t->x; x < t->x + t->size; x++) {
-            int    fx = ax, fy = ay;
-            double d  = footprint_dist(metric, ax, ay, asize, x, y, &fx, &fy);
-            if (d < best) {
-                best = d;
-                if (sx) *sx = fx;
-                if (sy) *sy = fy;
-                if (dx) *dx = x;
-                if (dy) *dy = y;
-            }
-        }
-    }
-    return best;
+    double d = footprint_dist(g->metric, g->ax, g->ay, g->asize, tx, ty, nx, ny) * g->scale;
+
+    /* A square is a box, not a distance: its far corners are further than
+     * its side, and they are still in it. */
+    if (g->shape == RANGE_SQUARE)
+        return g->aimed && tx >= g->x0 && tx <= g->x1 && ty >= g->y0 && ty <= g->y1;
+
+    if (d > g->reach) return 0;
+    if (g->shape == RANGE_CIRCLE) return 1;
+    if (!g->aimed) return 0;
+
+    /* Tile centres against the aim: how far along it, how far off it. */
+    double vx = tx + 0.5 - g->ox, vy = ty + 0.5 - g->oy;
+    double along = vx * g->ux + vy * g->uy;
+    double off   = fabs(vx * g->uy - vy * g->ux);
+    if (along <= 0) return 0;
+
+    if (g->shape == RANGE_CONE) return off <= 0.5 * along + 1e-9;
+    return off <= 0.5 + 1e-9;                          /* RANGE_LINE */
+}
+
+int range_aimed(const RangeOverlay *ro, const Map *m)
+{
+    RangeGeom g;
+    return range_geom(ro, m, NULL, &g) ? g.aimed : 1;
+}
+
+int range_contains(const RangeOverlay *ro, const Map *m, int tx, int ty)
+{
+    RangeGeom g;
+    if (!range_geom(ro, m, NULL, &g)) return 0;
+    return geom_covers(&g, tx, ty, NULL, NULL);
 }
 
 void range_draw(Renderer *r, const Map *m, const GridView *g,
@@ -841,26 +940,23 @@ void range_draw(Renderer *r, const Map *m, const GridView *g,
 {
     PROF_ZONE("range.draw");
 
-    double reach = range_reach_ft(ro, m, NULL);
-    if (reach < 0) return;
-
-    int ax, ay, asize;
-    range_anchor(ro, m, &ax, &ay, &asize);
+    RangeGeom geo;
+    if (!range_geom(ro, m, NULL, &geo)) return;
 
     /* Only the tiles that can actually appear on screen are considered. A
      * band with no upper bound covers the whole map, and shading it tile by
      * tile would otherwise scale with the map rather than the window. */
     int x0, y0, x1, y1;
     grid_visible_tiles(g, m, &x0, &y0, &x1, &y1);
-
-    DistMetric metric = (DistMetric)m->metric;
+    if (geo.shape == RANGE_SQUARE && geo.aimed) {
+        x0 = imax(x0, geo.x0); x1 = imin(x1, geo.x1);
+        y0 = imax(y0, geo.y0); y1 = imin(y1, geo.y1);
+    }
 
     for (int ty = y0; ty <= y1; ty++) {
         for (int tx = x0; tx <= x1; tx++) {
-            int    nx = ax, ny = ay;
-            double d  = footprint_dist(metric, ax, ay, asize, tx, ty, &nx, &ny)
-                        * m->scale_ft;
-            if (d > reach) continue;
+            int nx = geo.ax, ny = geo.ay;
+            if (!geom_covers(&geo, tx, ty, &nx, &ny)) continue;
 
             /* In range but with no line to it: you cannot target what you
              * cannot see, so it gets the dimmer shade. */
@@ -874,24 +970,31 @@ void range_status(const RangeOverlay *ro, const Map *m, char *buf, size_t bufsz)
 {
     PROF_ZONE("range.status");
     const Ruleset *rs = NULL;
-    double reachft = range_reach_ft(ro, m, &rs);
-    if (reachft < 0) { buf[0] = '\0'; return; }
-
-    int ax, ay, asize;
-    range_anchor(ro, m, &ax, &ay, &asize);
+    RangeGeom geo;
+    if (!range_geom(ro, m, &rs, &geo)) { buf[0] = '\0'; return; }
 
     /* What the highlight is measuring, in both the units and the squares,
      * printed the way every other readout prints a distance. A band has a
-     * name to lead with; a plain radius is just its reach. */
-    const char *name = rs ? rs->bands[ro->band].name : "Range";
+     * name to lead with; a plain radius is just its reach; a shape other
+     * than the circle says so. */
+    char name[48];
+    if (geo.shape == RANGE_CIRCLE)
+        snprintf(name, sizeof name, "%s", rs ? rs->bands[ro->band].name : "Range");
+    else if (rs)
+        snprintf(name, sizeof name, "%s %s", rs->bands[ro->band].name, range_shape_name(geo.shape));
+    else {
+        snprintf(name, sizeof name, "%s", range_shape_name(geo.shape));
+        name[0] = (char)(name[0] - 'a' + 'A');
+    }
+
     char reach[64];
-    if (reachft >= 1e30) {
+    if (geo.reach >= 1e30) {
         snprintf(reach, sizeof reach, "beyond %s",
                  ro->band > 0 ? rs->bands[ro->band - 1].name : "melee");
     } else {
         char ft[24], sq[24];
-        dist_fmt(ft, sizeof ft, reachft);
-        dist_fmt(sq, sizeof sq, m->scale_ft > 0 ? reachft / m->scale_ft : 0.0);
+        dist_fmt(ft, sizeof ft, geo.reach);
+        dist_fmt(sq, sizeof sq, m->scale_ft > 0 ? geo.reach / m->scale_ft : 0.0);
         snprintf(reach, sizeof reach, "%s ft, %s sq", ft, sq);
     }
 
@@ -902,8 +1005,14 @@ void range_status(const RangeOverlay *ro, const Map *m, char *buf, size_t bufsz)
                  t->label[0] ? t->label : token_kind_name(t->kind));
     }
 
+    if (!geo.aimed) {
+        snprintf(buf, bufsz, "%s (%s) from %s - move the cursor to aim it", name, reach, from);
+        return;
+    }
+
     /* Naming them catches the ones scrolled off screen, which the highlight
-     * cannot. A trailing * marks a target with no line of sight. */
+     * cannot. A creature is caught when any of its squares is; sight is
+     * traced to the nearest of those. A trailing * marks no line of sight. */
     char names[128];
     int  off = 0, count = 0, hidden = 0;
     names[0] = '\0';
@@ -912,10 +1021,18 @@ void range_status(const RangeOverlay *ro, const Map *m, char *buf, size_t bufsz)
         if (i == ro->token) continue;
         const Token *t = &m->tokens.v[i];
 
-        int    sx = ax, sy = ay, dx = t->x, dy = t->y;
-        double d  = token_dist((DistMetric)m->metric, ax, ay, asize, t,
-                               &sx, &sy, &dx, &dy) * m->scale_ft;
-        if (d > reachft) continue;
+        int    caught = 0, sx = geo.ax, sy = geo.ay, dx = t->x, dy = t->y;
+        double best = 1e30;
+        for (int y = t->y; y < t->y + t->size; y++) {
+            for (int x = t->x; x < t->x + t->size; x++) {
+                int nx = geo.ax, ny = geo.ay;
+                if (!geom_covers(&geo, x, y, &nx, &ny)) continue;
+                double d = dist_tiles(geo.metric, x - nx, y - ny);
+                if (d < best) { best = d; sx = nx; sy = ny; dx = x; dy = y; }
+                caught = 1;
+            }
+        }
+        if (!caught) continue;
 
         count++;
         int blocked = sight_blocked(m, sx, sy, dx, dy);

@@ -24,36 +24,42 @@ Two properties matter more than any single figure:
 ## Frame times
 
 What the app costs to use. Each scenario replays a keystroke script, a frame per key,
-400 times. Every figure is the median of three such runs, row by row: a single run
-reliably has one row spiking somewhere, and never the same one twice.
+400 times. Every figure is the median of three such runs, row by row
+(`tools/median.py`): a single run reliably has one row spiking somewhere, and never the
+same one twice. The runs want the machine to themselves -- editing a file while one was
+in flight was enough to lift the play rows by a fifth, and an A/B against the previous
+binary is what showed it was the machine and not the code.
 
 | scenario             | size   | frame p50 | frame p99 | cells | bytes |
 |----------------------|--------|-----------|-----------|-------|-------|
-| build, open          | 80x24  |    32.1us |    71.1us |    10 |   207 |
-| build, every edge    | 80x24  |    29.2us |    42.3us |    10 |   207 |
-| build, 200x200       | 80x24  |    29.3us |    40.8us |    12 |   209 |
-| build, 200x200       | 200x50 |   130.4us |   279.1us |    12 |   212 |
-| build, mostly void   | 200x50 |   102.9us |   148.4us |    20 |   267 |
-| build, tracing       | 80x24  |    28.9us |    39.8us |     2 |   140 |
-| build, circle brush  | 80x24  |    32.1us |    58.7us |    28 |   292 |
-| build, 3x3 brush     | 80x24  |    25.9us |    34.1us |    18 |   128 |
-| build, fill+undo 200 | 80x24  |    29.2us |    99.6us |   303 |  3398 |
-| build, fill history  | 80x24  |    29.6us |   212.1us |   335 |  4145 |
-| ruler, three legs    | 80x24  |    26.5us |    60.0us |    11 |    40 |
-| play, 24 tokens      | 80x24  |    32.2us |    70.0us |    19 |   298 |
-| play, 24 tokens      | 200x50 |   102.4us |   141.3us |    36 |   319 |
-| play, carrying       | 80x24  |    33.6us |    77.1us |    33 |   205 |
-| play, carry 200x200  | 80x24  |    28.3us |    50.8us |    22 |   136 |
-| play, 3x3 cursor     | 80x24  |    35.0us |    51.0us |    37 |   620 |
-| play, choosing       | 80x24  |    29.1us |    56.0us |    12 |    95 |
-| play, group box      | 80x24  |    28.1us |    62.2us |    18 |   133 |
-| play, group carry    | 80x24  |    28.2us |    63.2us |    22 |   131 |
-| play, range bands    | 80x24  |    37.3us |    93.3us |   163 |   845 |
-| play, range radius   | 80x24  |    56.8us |    87.3us |   169 |   958 |
-| play, logging        | 80x24  |    28.4us |    65.0us |    31 |   198 |
-| play, rolling        | 80x24  |    29.9us |    45.1us |    23 |   189 |
-| help page            | 80x24  |    39.7us |   109.5us |   544 |  2699 |
-| profiler overlay     | 80x24  |    33.9us |   150.0us |   116 |   745 |
+| build, open          | 80x24  |    29.2us |    40.6us |    10 |   207 |
+| build, every edge    | 80x24  |    29.2us |    42.2us |    10 |   207 |
+| build, 200x200       | 80x24  |    29.4us |    41.4us |    12 |   209 |
+| build, 200x200       | 200x50 |   121.1us |   222.8us |    12 |   212 |
+| build, mostly void   | 200x50 |   103.0us |   130.3us |    20 |   267 |
+| build, tracing       | 80x24  |    29.0us |    40.0us |     2 |   140 |
+| build, circle brush  | 80x24  |    30.4us |    42.7us |    28 |   292 |
+| build, 3x3 brush     | 80x24  |    26.2us |    51.9us |    18 |   128 |
+| build, fill+undo 200 | 80x24  |    26.6us |    91.3us |   303 |  3398 |
+| build, fill history  | 80x24  |    27.5us |   106.0us |   335 |  4145 |
+| ruler, three legs    | 80x24  |    25.8us |    40.2us |    11 |    40 |
+| play, 24 tokens      | 80x24  |    31.8us |    43.7us |    19 |   298 |
+| play, 24 tokens      | 200x50 |   101.5us |   125.8us |    36 |   319 |
+| play, carrying       | 80x24  |    27.8us |    49.0us |    33 |   205 |
+| play, carry 200x200  | 80x24  |    28.5us |    38.3us |    22 |   136 |
+| play, 3x3 cursor     | 80x24  |    35.1us |    64.2us |    37 |   620 |
+| play, choosing       | 80x24  |    28.7us |    35.3us |    12 |    95 |
+| play, group box      | 80x24  |    39.0us |    71.0us |    18 |   133 |
+| play, group carry    | 80x24  |    27.7us |    41.2us |    22 |   131 |
+| play, range bands    | 80x24  |    37.5us |    77.6us |   163 |   845 |
+| play, range radius   | 80x24  |    58.4us |    96.9us |   169 |   958 |
+| play, range cone     | 80x24  |    35.5us |    79.5us |    60 |   654 |
+| play, range line     | 80x24  |    34.6us |    76.8us |    55 |   620 |
+| play, range square   | 80x24  |    34.2us |    81.4us |    63 |   669 |
+| play, logging        | 80x24  |    27.8us |    53.3us |    31 |   198 |
+| play, rolling        | 80x24  |    29.7us |    41.3us |    23 |   191 |
+| help page            | 80x24  |    40.1us |    74.5us |   544 |  2699 |
+| profiler overlay     | 80x24  |    34.0us |   132.9us |   117 |   752 |
 
 > The machine's own baseline drifts: one recording of this table sat ~10% above its
 > neighbours on every row, and none of it was the code -- the previous binary run
@@ -76,24 +82,24 @@ a median near zero and a p99 that says what it costs when it does.
 
 | path             | p50     | p99     | worst   | calls | heaviest scenario      |
 |------------------|---------|---------|---------|-------|------------------------|
-| app.draw         | 105.9us | 235.6us | 291.1us |  3200 | build, 200x200 200x50  |
-| editor.draw      | 100.7us | 223.4us | 257.1us |  3200 | build, 200x200 200x50  |
-| grid.draw        |  93.1us | 205.7us | 239.9us |  3200 | build, 200x200 200x50  |
-| grid.labels      |   7.5us |  21.1us |  43.6us |  3200 | build, mostly void 200x50 |
-| group.box        |   0.1us |   0.2us |   0.3us |   400 | play, group carry 80x24 |
-| group.move       |   0.2us |   0.6us | 100.5us |  3200 | play, logging 80x24    |
-| input.key        |   0.0us | 683.5us | 9393.5us | 14400 | build, fill history 80x24 |
-| log.write        |   2.5us |  20.1us |  23.1us |   253 | play, logging 80x24    |
-| move.label       |   0.8us |   2.4us |  13.8us |  9995 | play, carry 200x200 80x24 |
-| play.draw        |  80.3us | 187.8us | 280.1us |  5595 | play, 24 tokens 200x50 |
-| prof.overlay     |   7.1us | 134.5us | 197.8us |  1000 | profiler overlay 80x24 |
-| range.draw       |  21.0us |  41.5us |  97.6us |  3995 | play, range radius 80x24 |
-| range.status     |   2.2us |  12.7us |  29.4us |  2000 | play, range bands 80x24 |
-| ruler.draw       |   0.7us |   2.1us |  23.1us |  4400 | ruler, three legs 80x24 |
-| trail.draw       |   0.1us |   0.5us |   9.4us |  9995 | play, carry 200x200 80x24 |
-| trail.path       |   4.3us |  26.9us | 130.9us |  6231 | play, carry 200x200 80x24 |
-| undo.step        | 181.6us | 369.9us | 477.5us |  1200 | build, fill+undo 200 80x24 |
-| undo.trim        | 4439.2us | 8837.3us | 8837.3us |    97 | build, fill history 80x24 |
+| app.draw         | 105.8us | 242.7us | 270.8us |  3200 | build, mostly void 200x50 |
+| editor.draw      | 100.4us | 230.7us | 259.0us |  3200 | build, mostly void 200x50 |
+| grid.draw        |  92.8us | 213.9us | 243.8us |  3200 | build, mostly void 200x50 |
+| grid.labels      |   7.5us |  18.4us |  36.7us |  3200 | build, mostly void 200x50 |
+| group.box        |   0.1us |   0.1us |   0.2us |   400 | play, group carry 80x24 |
+| group.move       |   0.1us |   0.5us |  10.3us |  3200 | play, logging 80x24    |
+| input.key        |   0.0us | 413.6us | 5679.9us | 14400 | build, fill history 80x24 |
+| log.write        |   2.0us |  10.4us |  15.7us |   253 | play, logging 80x24    |
+| move.label       |   0.8us |   1.8us |  12.7us |  9995 | play, carry 200x200 80x24 |
+| play.draw        |  80.2us | 129.7us | 200.8us |  5595 | play, 24 tokens 200x50 |
+| prof.overlay     |   7.0us | 109.1us | 141.4us |  1000 | profiler overlay 80x24 |
+| range.draw       |  21.9us |  39.2us |  77.0us |  3995 | play, range radius 80x24 |
+| range.status     |   5.0us |  11.3us |  25.3us |  2794 | play, range radius 80x24 |
+| ruler.draw       |   0.7us |   1.2us |  10.0us |  4400 | ruler, three legs 80x24 |
+| trail.draw       |   0.1us |   0.5us |  10.4us |  9995 | play, carry 200x200 80x24 |
+| trail.path       |   4.3us |  19.7us |  98.7us |  6231 | play, carry 200x200 80x24 |
+| undo.step        | 181.5us | 278.5us | 379.4us |  1200 | build, fill+undo 200 80x24 |
+| undo.trim        | 4317.6us | 5065.7us | 5065.7us |    97 | build, fill history 80x24 |
 
 ### Reading it
 
@@ -165,6 +171,15 @@ of them gets a line-of-sight trace: `range.draw` at 21µs is that, and `range.st
 scenario reads cheaper only because it spends most of its frames on the near bands; its
 *Very Far* frames cost the same. The radius itself is free, and `:scale` cannot make it
 dearer -- reach is compared in feet, tiles are still counted in tiles.
+
+**A template costs less than the circle it is cut from.** Cone, line and square test the
+same visible tiles the circle does and then turn most of them away, so they shade fewer
+squares and trace fewer sight lines: 34-36µs a frame at six squares of reach against the
+circle's 38µs for its bands. The geometry is worked out once per frame -- origin, aim
+vector, the square's box -- and the per-tile test is a dot and a cross product. Aiming is
+free: the template reads the cursor after each key rather than owning any keys of its own.
+With the overlay off the whole path is one early return, which is why an A/B of `play, 24
+tokens` against the binary from before templates reads 31.7µs on both.
 
 **The session log costs a line, once per thing that happened.** `log.write` is a
 `strftime`, an `fprintf` and an `fflush`: 2-3µs, and only on the keystroke that put a
@@ -273,6 +288,7 @@ keystroke is 0.2µs.
 | | |
 |---|---|
 | `make perf` | regenerates every table on this page |
+| `tools/median.py a b c` | the per-row median of several `make perf` outputs, which is what is published |
 | `make bench` | one scenario, quick |
 | `F12` | live overlay: per-zone p50/p99, a frame-time sparkline, cells and bytes |
 | `--trace out.json` | Chrome Tracing profile, every occurrence of every zone; open in perfetto |

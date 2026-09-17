@@ -1439,7 +1439,11 @@ void app_key(App *a, Key k)
     case SCREEN_MENU:    menu_key(a, k); break;
     case SCREEN_BROWSER: browser_key(a, k); break;
     case SCREEN_EDITOR:  editor_key(a, k); break;
-    case SCREEN_PLAY:    app_play_key(a, k); break;
+    case SCREEN_PLAY:
+        app_play_key(a, k);
+        /* The range template points at the cursor, wherever that key left it. */
+        if (a->map) range_set_aim(&a->play.range, a->ed.cx, a->ed.cy);
+        break;
     case SCREEN_HELP:    break;               /* handled above */
     }
 }

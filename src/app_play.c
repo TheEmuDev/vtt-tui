@@ -278,7 +278,6 @@ static const char *retired_key(uint32_t ch)
     case 'a': case 'A': return "a is gone - t and T walk every token";
     case 'V':           return "V is now v - select several creatures";
     case 'P':           return "P is now p - paste";
-    case 'R':           return "R is now r - the range highlight";
     case 'S':           return "S is now s c - marker colour";
     default:            return NULL;
     }
@@ -362,7 +361,7 @@ void app_play_key(App *a, Key k)
         } else if (pl->grabbed) {
             play_cancel_move(a);
         } else if (pl->range.active) {
-            range_clear(&pl->range);
+            range_off(&pl->range);
             app_set_status(a, "range overlay off");
         } else {
             play_focus(pl, -1);
@@ -695,6 +694,22 @@ void app_play_key(App *a, Key k)
                                take_count_raw(e));
         if (band < 0) app_set_status(a, "range overlay off");
         else                               a->status[0] = '\0';
+        break;
+    }
+
+    /* The capital changes the tool's variant, as M does the ruler's metric:
+     * the shape is a setting, kept while the overlay is off, and a count
+     * names one outright the way 2b names a size. */
+    case 'R': {
+        int shape = range_cycle_shape(&pl->range, take_count_raw(e));
+        char msg[96];
+        if (shape == RANGE_CIRCLE)
+            snprintf(msg, sizeof msg, "range shape: circle%s",
+                     pl->range.active ? "" : " - r shows it");
+        else
+            snprintf(msg, sizeof msg, "range shape: %s - %s", range_shape_name(shape),
+                     pl->range.active ? "the cursor aims it" : "r shows it, the cursor aims it");
+        app_set_status(a, msg);
         break;
     }
 

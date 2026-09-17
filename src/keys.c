@@ -54,6 +54,7 @@ static const KeyDoc PLAY[] = {
     GROUP("Tools"),
     KEY("m",      "measure (the ruler)"),
     KEY("r",      "range: cycle the bands, or grow a square a press (20r)"),
+    KEY("R",      "its shape: circle, cone, line, square (2R names one); the cursor aims"),
     KEY("o  O",   "open or close a door / a secret door"),
     KEY("ctrl-w", "let creatures through walls and each other, or stop them"),
 

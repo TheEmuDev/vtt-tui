@@ -11,19 +11,55 @@
 /* Highlights every tile within reach of an anchor -- one of the ruleset's
  * bands, or a plain radius on a map without one -- for effects that catch
  * everything in range rather than a single target. */
+/* The area the reach is laid out as. A circle needs nothing more; the other
+ * three point somewhere, and where they point is the cursor -- move it and
+ * the template swings round, the way the ruler's far end follows it.
+ *
+ *   cone    as wide at any point as it is far from the origin
+ *   line    one square wide
+ *   square  a side as long as the reach, its near face against the origin,
+ *           lying along whichever axis the cursor is further out on
+ *
+ * All of it is geometry, none of it rules: a game that words its cone
+ * differently still gets the nearest honest picture of one. */
+typedef enum {
+    RANGE_CIRCLE = 0,
+    RANGE_CONE,
+    RANGE_LINE,
+    RANGE_SQUARE,
+    RANGE_SHAPE_COUNT
+} RangeShape;
+
 typedef struct {
     int active;
     int band;          /* index into the current ruleset's band list */
     int radius;        /* squares, for a map with no bands to cycle */
     int token;         /* token the anchor follows, or -1 for a bare tile */
     int ax, ay;        /* anchor tile, used when token is -1 */
+    int shape;         /* RangeShape; a setting, so switching off keeps it */
+    int aimx, aimy;    /* the tile the template points at: the cursor */
 } RangeOverlay;
 
 /* A radius can be named by a count, so it is capped: twice the largest map
  * edge reaches every square of any map from anywhere on it. */
 #define RANGE_RADIUS_MAX (2 * MAP_MAX_DIM)
 
+/* range_clear resets everything; range_off switches the overlay off and
+ * keeps the shape, which is a setting like the cursor's size. */
 void range_clear(RangeOverlay *ro);
+void range_off(RangeOverlay *ro);
+
+/* R: the next shape, or the one a count names (2R is the cone). */
+int         range_cycle_shape(RangeOverlay *ro, int count);
+const char *range_shape_name(int shape);
+
+/* Tells the overlay where the cursor is. Called after every play-mode key,
+ * so the template never points at where the cursor used to be. */
+void range_set_aim(RangeOverlay *ro, int cx, int cy);
+
+/* 0 when a shape that needs pointing has nothing to point at yet: the
+ * cursor is still on the origin. A circle is always aimed. */
+int  range_aimed(const RangeOverlay *ro, const Map *m);
 
 /* Keeps the anchor pointing at the same creature after a token is removed,
  * since the list is an array and later indices shift down. The overlay stays
