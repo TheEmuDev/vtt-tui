@@ -148,6 +148,7 @@ void app_exec_command(App *a, const char *line)
             }
         }
         char msg[160];
+        DualitySpans sp = { 0, 0, 0, 0 };
         if (bare) {
             while (*p == ' ') p++;
             if (*p) {
@@ -162,7 +163,7 @@ void app_exec_command(App *a, const char *line)
             }
             DualityRoll d;
             dice_duality(mod, &d);
-            dice_duality_format(&d, msg, sizeof msg);
+            dice_duality_format(&d, msg, sizeof msg, &sp);
         } else {
             DiceResult r;
             char err[64];
@@ -174,6 +175,10 @@ void app_exec_command(App *a, const char *line)
             dice_format(p, &r, msg, sizeof msg);
         }
         app_note(a, msg);
+        if (sp.hope_len) {
+            app_status_span(a, sp.hope_at, sp.hope_len, a->th->hope);
+            app_status_span(a, sp.fear_at, sp.fear_len, a->th->fear);
+        }
         return;
     }
     if (!strcmp(verb, "log")) {

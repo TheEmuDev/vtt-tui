@@ -57,6 +57,12 @@ typedef struct {
 
     char status[160];
 
+    /* Stretches of the status message drawn in a colour of their own -- the
+     * two duality dice. Byte offsets into status; cleared with every new
+     * message, so a span can never outlive the text it was measured on. */
+    struct { int at, len; uint32_t fg; } status_span[2];
+    int nstatus_span;
+
     ListState menu;
 
     MapEntry *entries;
@@ -116,6 +122,7 @@ void app_key(App *a, Key k);
 void app_draw(App *a);
 void app_set_status(App *a, const char *msg);
 void app_note(App *a, const char *msg);     /* status line + session log */
+void app_status_span(App *a, int at, int len, uint32_t fg);   /* colour part of it */
 
 /* Opens a map by path, replacing whatever is loaded. Returns 0 on success
  * and leaves a message modal up on failure. */

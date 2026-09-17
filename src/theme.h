@@ -33,6 +33,11 @@ typedef struct {
     uint32_t ruler_bad;   /* the line when sight is broken */
     uint32_t range_bg;    /* ground within the chosen range band */
     uint32_t range_dim;   /* in range, but with no line to it */
+    /* Daggerheart's duality dice: the Hope die reads gold and the Fear die
+     * purple, the colours the game's own dice come in. They differ in
+     * luminance as well as hue, so they stay apart without colour vision. */
+    uint32_t hope;
+    uint32_t fear;
     uint32_t trail;       /* the mark on the tile a held token set out from */
     uint32_t trail_bg;    /* ground a held token has walked over */
 

@@ -174,10 +174,24 @@ const char *dice_duality_verdict(int hope, int fear)
     return hope > fear ? "with Hope" : "with Fear";
 }
 
-void dice_duality_format(const DualityRoll *d, char *buf, size_t bufsz)
+void dice_duality_format(const DualityRoll *d, char *buf, size_t bufsz, DualitySpans *spans)
 {
     char mod[16] = "";
     if (d->mod) snprintf(mod, sizeof mod, " %+d", d->mod);
-    snprintf(buf, bufsz, "Duality%s = %d %s  [hope %d, fear %d]",
-             mod, d->total, dice_duality_verdict(d->hope, d->fear), d->hope, d->fear);
+
+    /* Built in three pieces so the offsets of the two numbers fall out of
+     * the lengths rather than being searched for afterwards. */
+    char head[96], hope[8], fear[8];
+    int hl = snprintf(head, sizeof head, "Duality%s = %d %s  [hope ",
+                      mod, d->total, dice_duality_verdict(d->hope, d->fear));
+    int pl = snprintf(hope, sizeof hope, "%d", d->hope);
+    int fl = snprintf(fear, sizeof fear, "%d", d->fear);
+    snprintf(buf, bufsz, "%s%s, fear %s]", head, hope, fear);
+
+    if (spans) {
+        spans->hope_at  = hl;
+        spans->hope_len = pl;
+        spans->fear_at  = hl + pl + (int)sizeof ", fear " - 1;
+        spans->fear_len = fl;
+    }
 }

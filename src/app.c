@@ -48,7 +48,46 @@ void app_free(App *a)
 void app_set_status(App *a, const char *msg)
 {
     str_lcpy(a->status, msg, sizeof a->status);
+    a->nstatus_span = 0;
     a->dirty = 1;
+}
+
+void app_status_span(App *a, int at, int len, uint32_t fg)
+{
+    int max = (int)(sizeof a->status_span / sizeof *a->status_span);
+    if (a->nstatus_span >= max || at < 0 || len <= 0) return;
+    if (at + len > (int)strlen(a->status)) return;
+    a->status_span[a->nstatus_span].at  = at;
+    a->status_span[a->nstatus_span].len = len;
+    a->status_span[a->nstatus_span].fg  = fg;
+    a->nstatus_span++;
+}
+
+/* The status message, then its coloured spans over the top. A span is drawn
+ * only when all of it survived the ellipsis; half a number in gold would be
+ * a different number. */
+static void draw_status_msg(App *a, int x, int y, int maxw)
+{
+    Renderer    *r  = a->rnd;
+    const Theme *th = a->th;
+
+    draw_text_ellipsis(r, x, y, a->status, maxw, style(th->dim, th->bg, 0));
+
+    int cut = text_width(a->status) > maxw;
+    for (int i = 0; i < a->nstatus_span; i++) {
+        char pre[sizeof a->status];
+        int  at = a->status_span[i].at, len = a->status_span[i].len;
+        memcpy(pre, a->status, (size_t)at);
+        pre[at] = '\0';
+        int col = text_width(pre);
+        if (col + len > maxw - (cut ? 1 : 0)) continue;
+
+        char word[16];
+        if (len >= (int)sizeof word) continue;
+        memcpy(word, a->status + at, (size_t)len);
+        word[len] = '\0';
+        draw_text(r, x + col, y, word, len, style(a->status_span[i].fg, th->bg, 0));
+    }
 }
 
 /* For the things that happened, as opposed to the things the app has to
@@ -1431,7 +1470,7 @@ static void draw_status_line(App *a)
     int          y  = r->h - 2;
 
     draw_fill(r, rect(0, y, r->w, 1), ' ', style(th->bar_fg, th->bg, 0));
-    draw_text_ellipsis(r, 1, y, a->status, r->w - 2, style(th->dim, th->bg, 0));
+    draw_status_msg(a, 1, y, r->w - 2);
 }
 
 static void draw_menu(App *a)
@@ -1531,9 +1570,7 @@ static void draw_editor(App *a)
 
     draw_text_ellipsis(r, 1, sy, status, imax(0, r->w - msg_w - 3),
                        style(th->fg, th->bg, 0));
-    if (msg_w > 0)
-        draw_text_ellipsis(r, r->w - msg_w - 1, sy, a->status, msg_w,
-                           style(th->dim, th->bg, 0));
+    if (msg_w > 0) draw_status_msg(a, r->w - msg_w - 1, sy, msg_w);
 
     if (a->ruler.active && a->ed.mode != ED_COMMAND) {
         ui_keybar(r, th, keys_map(KEYS_RULER));

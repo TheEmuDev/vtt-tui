@@ -49,7 +49,11 @@ void dice_duality(int mod, DualityRoll *out);
  * the rule is tested without a seed. */
 const char *dice_duality_verdict(int hope, int fear);
 
-/* "Duality +2 = 17 with Hope  [hope 9, fear 6]" */
-void dice_duality_format(const DualityRoll *d, char *buf, size_t bufsz);
+/* Where the two dice landed in the formatted text, as byte offsets, so a
+ * caller that can draw in colour knows which digits are which. */
+typedef struct { int hope_at, hope_len, fear_at, fear_len; } DualitySpans;
+
+/* "Duality +2 = 17 with Hope  [hope 9, fear 6]". spans may be NULL. */
+void dice_duality_format(const DualityRoll *d, char *buf, size_t bufsz, DualitySpans *spans);
 
 #endif /* VTT_DICE_H */

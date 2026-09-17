@@ -6916,10 +6916,10 @@ static void test_dice(void)
     CHECK(d.fear >= 1 && d.fear <= 12);
     CHECK_EQ(d.total, d.hope + d.fear + 2);
     d.hope = 9; d.fear = 6; d.mod = 2; d.total = 17;
-    dice_duality_format(&d, buf, sizeof buf);
+    dice_duality_format(&d, buf, sizeof buf, NULL);
     CHECK_EQ(strcmp(buf, "Duality +2 = 17 with Hope  [hope 9, fear 6]"), 0);
     d.hope = 7; d.fear = 7; d.mod = 0; d.total = 14;
-    dice_duality_format(&d, buf, sizeof buf);
+    dice_duality_format(&d, buf, sizeof buf, NULL);
     CHECK_EQ(strcmp(buf, "Duality = 14 critical success  [hope 7, fear 7]"), 0);
 }
 
@@ -7095,6 +7095,40 @@ static void test_roll_command(void)
     press(&a, ":roll 2d12\r");                  /* an expression is still plain dice */
     CHECK(strstr(a.status, "2d12 = ") != NULL);
     CHECK(strstr(a.status, "Duality") == NULL);
+
+    /* Gold for Hope and purple for Fear, on the digits themselves. The log
+     * and the status text stay plain; only the drawing knows about colour. */
+    CASE("the hope die is drawn gold and the fear die purple");
+    {
+        DualityRoll dr = { 12, 3, 2, 17 };
+        DualitySpans sp;
+        char text[96];
+        dice_duality_format(&dr, text, sizeof text, &sp);
+        CHECK_EQ(strncmp(text + sp.hope_at, "12", 2), 0);
+        CHECK_EQ(sp.hope_len, 2);
+        CHECK_EQ(strncmp(text + sp.fear_at, "3]", 2), 0);
+        CHECK_EQ(sp.fear_len, 1);
+
+        press(&a, ":roll +2\r");
+        CHECK_EQ(a.nstatus_span, 2);
+        rnd_begin(&r);
+        app_draw(&a);
+        int gold = 0, purple = 0;
+        for (int x = 0; x < r.w; x++) {
+            const Cell *c = &r.back[(size_t)(r.h - 2) * (size_t)r.w + (size_t)x];
+            if (c->fg == a.th->hope && c->ch >= '0' && c->ch <= '9') gold++;
+            if (c->fg == a.th->fear && c->ch >= '0' && c->ch <= '9') purple++;
+        }
+        CHECK(gold >= 1 && gold <= 2);
+        CHECK(purple >= 1 && purple <= 2);
+
+        press(&a, ":roll 2d6\r");                /* plain dice: no colour left behind */
+        CHECK_EQ(a.nstatus_span, 0);
+
+        CHECK(contrast(a.th->hope, a.th->bg) > 7.0);
+        CHECK(contrast(a.th->fear, a.th->bg) > 5.0);
+        CHECK(contrast(a.th->hope, a.th->fear) > 1.8);   /* apart without hue */
+    }
 
     CASE("the total is the dice plus the modifier");
     dice_seed(9);

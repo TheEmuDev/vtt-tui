@@ -621,6 +621,10 @@ and both dice, so the table can see them:
 :roll                Duality = 14 critical success  [hope 7, fear 7]
 ```
 
+The two dice are coloured where they are printed — the Hope die gold, the Fear die
+purple, as the game's own dice are — and chosen to differ in brightness too, so they stay
+apart without colour vision. The session log keeps them as plain text.
+
 `:roll duality +2` asks for the same roll on any map, and `:roll 2d12+2` is two plain d12s
 with no verdict, ruleset or not.
 
