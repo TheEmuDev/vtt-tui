@@ -1009,6 +1009,7 @@ static void test_undo(void)
     Token f2;
     memset(&f2, 0x5a, sizeof f2);                           /* garbage everywhere */
     f2.x = 2; f2.y = 2; f2.size = 1; f2.kind = TOKEN_PLAYER; f2.nstatus = 0;
+    f2.turn = 0;                                            /* init stays garbage: not in the order */
     str_lcpy(f2.label, "Aria", sizeof f2.label);
     int marks_before = u.nmarks;
     undo_begin(&u); undo_edit_token(&u, m, fi, f2); undo_end(&u);
@@ -6298,7 +6299,7 @@ static void test_help_page(void)
     rnd_dump(&r, &f);
     bb_putc(&f, '\0');
     CHECK(strcmp(top.data, f.data) != 0);
-    CHECK(strstr(f.data, "cycle the bands") != NULL);
+    CHECK(strstr(f.data, "next / previous turn") != NULL);   /* below the first fold */
     bb_free(&top);
     bb_free(&f);
     press(&a, "g");
@@ -7272,6 +7273,411 @@ static void test_roll_command(void)
     sandbox_leave(&sb);
 }
 
+
+/* ---------------------------------------------------------- turn order */
+
+static void test_turns(void)
+{
+    Map *m = map_new(12, 8, "turns");
+    map_fill_tiles(m, 0, 0, 11, 7, TILE_FLOOR);
+    Undo u;
+    undo_init(&u);
+
+    Token aria = { 1, 1, 1, TOKEN_PLAYER, "Aria" };
+    Token ogre = { 5, 1, 2, TOKEN_ENEMY,  "Ogre" };
+    Token bram = { 1, 3, 1, TOKEN_PLAYER, "Bram" };
+    Token dax  = { 1, 5, 1, TOKEN_PLAYER, "Dax" };
+    Token eel  = { 8, 5, 1, TOKEN_ENEMY,  "Eel" };
+    tokens_add(&m->tokens, aria);   /* 0 */
+    tokens_add(&m->tokens, ogre);   /* 1 */
+    tokens_add(&m->tokens, bram);   /* 2 */
+    tokens_add(&m->tokens, dax);    /* 3 */
+    tokens_add(&m->tokens, eel);    /* 4 */
+
+    /* Nobody has rolled initiative: the walk is the list, exactly as the
+     * cycle keys always went. */
+    CASE("with no fight the walk is list order, either way, per kind");
+    CHECK_EQ(turn_count(m), 0);
+    CHECK_EQ(turn_acting(m), -1);
+    CHECK_EQ(turn_walk(m, -1, 1, TOKEN_ANY_KIND), 0);
+    CHECK_EQ(turn_walk(m, 0, 1, TOKEN_ANY_KIND), 1);
+    CHECK_EQ(turn_walk(m, 4, 1, TOKEN_ANY_KIND), 0);           /* wraps */
+    CHECK_EQ(turn_walk(m, 0, -1, TOKEN_ANY_KIND), 4);
+    CHECK_EQ(turn_walk(m, 1, 1, TOKEN_ENEMY), 4);
+    CHECK_EQ(turn_walk(m, 3, 1, TOKEN_PLAYER), 0);
+    CHECK_EQ(turn_advance(m, &u, 1), TURN_NO_ORDER);
+    char buf[200];
+    turn_status(m, buf, sizeof buf);
+    CHECK_EQ(buf[0], '\0');
+
+    CASE("joining gives a creature a number; highest first, ties by who was placed first");
+    turn_join(m, &u, 2, 15);
+    turn_join(m, &u, 1, 15);
+    turn_join(m, &u, 0, 18);
+    CHECK_EQ(turn_count(m), 3);
+    CHECK_EQ(turn_walk(m, -1, 1, TOKEN_ANY_KIND), 0);           /* Aria 18 */
+    CHECK_EQ(turn_walk(m, 0, 1, TOKEN_ANY_KIND), 1);            /* Ogre 15, placed before... */
+    CHECK_EQ(turn_walk(m, 1, 1, TOKEN_ANY_KIND), 2);            /* ...Bram 15 */
+    CHECK_EQ(turn_walk(m, 2, 1, TOKEN_ANY_KIND), 3);            /* then those not in it */
+    CHECK_EQ(turn_walk(m, 4, 1, TOKEN_ANY_KIND), 0);
+    CHECK_EQ(turn_walk(m, 0, 1, TOKEN_PLAYER), 2);              /* the friendly track skips the ogre */
+    CHECK_EQ(turn_walk(m, 0, -1, TOKEN_ANY_KIND), 4);
+    turn_status(m, buf, sizeof buf);
+    CHECK(strstr(buf, "3 in the order") != NULL);
+
+    CASE("the number can change, and the order with it");
+    turn_join(m, &u, 2, 20);                                    /* Bram jumps the queue */
+    CHECK_EQ(turn_walk(m, -1, 1, TOKEN_ANY_KIND), 2);
+    turn_join(m, &u, 2, 15);
+    CHECK_EQ(turn_walk(m, -1, 1, TOKEN_ANY_KIND), 0);
+
+    CASE("the first advance starts round 1 at the top; a lap is a new round");
+    CHECK_EQ(turn_advance(m, &u, 1), 0);
+    CHECK_EQ(m->round, 1);
+    CHECK_EQ(turn_acting(m), 0);
+    CHECK_EQ(turn_advance(m, &u, 1), 1);
+    CHECK_EQ(turn_advance(m, &u, 1), 2);
+    CHECK_EQ(m->round, 1);
+    CHECK_EQ(turn_advance(m, &u, 1), 0);
+    CHECK_EQ(m->round, 2);
+    int acting = 0;
+    for (int i = 0; i < m->tokens.n; i++) if (m->tokens.v[i].turn & TURN_ACTING) acting++;
+    CHECK_EQ(acting, 1);
+
+    CASE("the readouts name the round, the actor and who is next");
+    turn_status(m, buf, sizeof buf);
+    CHECK_EQ(strcmp(buf, "Round 2 - Aria's turn, then Ogre, Bram"), 0);
+    turn_list(m, buf, sizeof buf);
+    CHECK_EQ(strcmp(buf, "Round 2: Aria 18*, Ogre 15, Bram 15"), 0);
+
+    CASE("stepping back unwinds the lap, and stops at the start of the fight");
+    CHECK_EQ(turn_advance(m, &u, -1), 2);
+    CHECK_EQ(m->round, 1);
+    CHECK_EQ(turn_advance(m, &u, -2), 0);
+    CHECK_EQ(turn_advance(m, &u, -1), TURN_AT_START);
+    CHECK_EQ(turn_acting(m), 0);
+    CHECK_EQ(m->round, 1);
+    CHECK_EQ(turn_advance(m, &u, 2), 2);
+    CHECK_EQ(turn_advance(m, &u, -5), TURN_AT_START);           /* all or nothing */
+    CHECK_EQ(turn_acting(m), 2);
+
+    CASE("a count moves several places, laps and all");
+    CHECK_EQ(turn_advance(m, &u, 4), 0);                        /* Bram -> Aria, Ogre, Bram, Aria */
+    CHECK_EQ(m->round, 3);
+
+    CASE("an advance is one undo step, round included");
+    CHECK_EQ(turn_advance(m, &u, 1), 1);
+    CHECK_EQ(undo_undo(&u, m), 1);
+    CHECK_EQ(turn_acting(m), 0);
+    CHECK_EQ(m->round, 3);
+    CHECK_EQ(undo_undo(&u, m), 1);                              /* the count-of-four advance */
+    CHECK_EQ(turn_acting(m), 2);
+    CHECK_EQ(m->round, 1);
+    CHECK_EQ(undo_redo(&u, m), 1);
+    CHECK_EQ(turn_acting(m), 0);
+    CHECK_EQ(m->round, 3);
+
+    /* A game that passes a spotlight needs only this half. */
+    CASE("the turn can be handed to anyone, in the order or not");
+    turn_take(m, &u, 3);                                        /* Dax: not in the order */
+    CHECK_EQ(turn_acting(m), 3);
+    CHECK_EQ(m->tokens.v[0].turn & TURN_ACTING, 0);
+    turn_status(m, buf, sizeof buf);
+    CHECK_EQ(strcmp(buf, "Round 3 - Dax's turn"), 0);
+    CHECK_EQ(turn_advance(m, &u, -1), TURN_AT_START);           /* no place to step back from */
+    CHECK_EQ(turn_advance(m, &u, 1), 0);                        /* on from an outsider: the top */
+    CHECK_EQ(m->round, 3);                                      /* and not a lap */
+    turn_take(m, &u, 2);
+    CHECK_EQ(turn_advance(m, &u, 1), 0);                        /* from Bram, the last: a lap */
+    CHECK_EQ(m->round, 4);
+
+    CASE("leaving the order on your own turn passes it on first");
+    turn_take(m, &u, 1);
+    turn_leave(m, &u, 1);
+    CHECK_EQ(m->tokens.v[1].turn, 0);
+    CHECK_EQ(turn_acting(m), 2);
+    CHECK_EQ(turn_count(m), 2);
+    CHECK_EQ(undo_undo(&u, m), 1);                              /* one step back: all of it */
+    CHECK_EQ(turn_acting(m), 1);
+    CHECK_EQ(turn_count(m), 3);
+
+    CASE("removing the actor passes the turn, in the same undo step");
+    turn_take(m, &u, 2);                                        /* Bram, last in the order */
+    int round_before = m->round;
+    undo_begin(&u);
+    turn_before_remove(m, &u, 2);
+    undo_del_token(&u, m, 2);
+    turn_settle(m, &u);
+    undo_end(&u);
+    CHECK_EQ(m->tokens.n, 4);
+    CHECK_EQ(turn_acting(m), 0);                                /* round the corner to Aria */
+    CHECK_EQ(m->round, round_before + 1);
+    CHECK_EQ(undo_undo(&u, m), 1);
+    CHECK_EQ(m->tokens.n, 5);
+    CHECK_EQ(turn_acting(m), 2);
+    CHECK_EQ(m->round, round_before);
+    CHECK_EQ(strcmp(m->tokens.v[2].label, "Bram"), 0);
+    CHECK_EQ(m->tokens.v[2].init, 15);
+
+    CASE("the last one out ends the fight");
+    Map *solo = map_new(4, 4, "solo");
+    tokens_add(&solo->tokens, aria);
+    Undo su;
+    undo_init(&su);
+    turn_join(solo, &su, 0, 10);
+    CHECK_EQ(turn_advance(solo, &su, 1), 0);
+    CHECK_EQ(turn_advance(solo, &su, 1), 0);                    /* alone: every turn is a lap */
+    CHECK_EQ(solo->round, 2);
+    turn_status(solo, buf, sizeof buf);
+    CHECK_EQ(strcmp(buf, "Round 2 - Aria's turn"), 0);
+    turn_leave(solo, &su, 0);
+    CHECK_EQ(turn_acting(solo), -1);
+    CHECK_EQ(solo->round, 0);
+    undo_free(&su);
+    map_free(solo);
+
+    CASE("ending the fight clears everyone, and is one step to take back");
+    CHECK_EQ(turn_clear(m, &u), 3);
+    CHECK_EQ(turn_count(m), 0);
+    CHECK_EQ(turn_acting(m), -1);
+    CHECK_EQ(m->round, 0);
+    CHECK_EQ(undo_undo(&u, m), 1);
+    CHECK_EQ(turn_count(m), 3);
+    CHECK_EQ(turn_acting(m), 2);
+    CHECK_EQ(m->round, round_before);
+
+    /* A fight is combat state, like the markers version 3 was for: a file
+     * that holds one says 4 so an older build refuses it instead of quietly
+     * dropping whose turn it is. A map with no fight still says 3. */
+    CASE("a fight round-trips through the file, as version 4");
+    turn_take(m, &u, 3);                                        /* an outsider holds the turn */
+    char path[128], err[128];
+    snprintf(path, sizeof path, "/tmp/vtt-turns-%ld.vtt", (long)getpid());
+    CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+    char *text = slurp(path);
+    CHECK(text != NULL);
+    if (text) {
+        CHECK_EQ(strncmp(text, "VTT 4\n", 6), 0);
+        CHECK(strstr(text, "tokenturn 18\n") != NULL);
+        CHECK(strstr(text, "tokenturn - acting\n") != NULL);
+        char want[32];
+        snprintf(want, sizeof want, "round %d\n", m->round);
+        CHECK(strstr(text, want) != NULL);
+        free(text);
+    }
+    Map *back = mapio_load(path, err, sizeof err);
+    CHECK(back != NULL);
+    if (back) {
+        CHECK_EQ(back->round, m->round);
+        CHECK_EQ(back->tokens.n, m->tokens.n);
+        for (int i = 0; i < m->tokens.n && i < back->tokens.n; i++)
+            CHECK_EQ(token_equal(&back->tokens.v[i], &m->tokens.v[i]), 1);
+        map_free(back);
+    }
+
+    CASE("a map with no fight is still written as version 3");
+    turn_clear(m, &u);
+    CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+    text = slurp(path);
+    if (text) {
+        CHECK_EQ(strncmp(text, "VTT 3\n", 6), 0);
+        CHECK(strstr(text, "tokenturn") == NULL);
+        CHECK(strstr(text, "round") == NULL);
+        free(text);
+    }
+
+    CASE("a file claiming two actors loads with one");
+    FILE *f = fopen(path, "w");
+    CHECK(f != NULL);
+    if (f) {
+        fputs("VTT 4\nname x\nsize 2 2\nzoom 1\ntiles\n..\n..\nvedges\n   \n   \nhedges\n  \n  \n  \n"
+              "token player 0 0 1 \"A\"\ntokenturn 12 acting\n"
+              "token enemy 1 0 1 \"B\"\ntokenturn 9 acting\n"
+              "token enemy 1 1 1 \"C\"\ntokenturn nonsense\nround 5\n", f);
+        fclose(f);
+        back = mapio_load(path, err, sizeof err);
+        CHECK(back != NULL);
+        if (back) {
+            CHECK_EQ(turn_acting(back), 0);
+            CHECK_EQ(back->tokens.v[1].turn, TURN_IN);
+            CHECK_EQ(back->tokens.v[2].turn, 0);                /* a bad number joins nothing */
+            CHECK_EQ(back->round, 5);
+            map_free(back);
+        }
+    }
+    unlink(path);
+
+    undo_free(&u);
+    map_free(m);
+}
+
+static void test_turn_keys(void)
+{
+    Sandbox sb = sandbox_enter("turnkeys");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+
+    write_map_file(sb.dir, "fight.vtt");
+    char path[600];
+    snprintf(path, sizeof path, "%s/fight.vtt", sb.dir);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 24);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+
+    a.ed.cx = 0; a.ed.cy = 0; press(&a, "ipAria\r");    /* 0 */
+    a.ed.cx = 1; a.ed.cy = 0; press(&a, "ieOgre\r");    /* 1 */
+    a.ed.cx = 0; a.ed.cy = 1; press(&a, "ipBram\r");    /* 2 */
+    CHECK_EQ(a.map->tokens.n, 3);
+
+    CASE("a with no order says how to make one; a and A are no longer retired");
+    press(&a, "a");
+    CHECK(strstr(a.status, "no turn order") != NULL);
+    CHECK(strstr(a.status, "s i") != NULL);
+    press(&a, "A");
+    CHECK(strstr(a.status, "gone") == NULL);
+
+    CASE("s i prompts for a number and puts the creature in the order");
+    press(&a, "si");                                     /* Bram is still selected */
+    CHECK_EQ(a.modal, MODAL_PROMPT);
+    CHECK_EQ(a.prompt_what, PROMPT_INITIATIVE);
+    press(&a, "9\r");
+    CHECK_EQ(a.map->tokens.v[2].turn, TURN_IN);
+    CHECK_EQ(a.map->tokens.v[2].init, 9);
+    CHECK(strstr(a.status, "Bram joins the turn order at 9") != NULL);
+    play_focus(&a.play, 0); press(&a, "si18\r");
+    play_focus(&a.play, 1); press(&a, "si12\r");
+    press(&a, "sinope\r");
+    CHECK(strstr(a.status, "initiative is a number") != NULL);
+    CHECK_EQ(a.map->tokens.v[1].init, 12);
+    press(&a, "si");                                     /* the prompt opens on the old number */
+    CHECK_EQ(strcmp(a.prompt.buf, "12"), 0);
+    press(&a, "\x1b");
+
+    CASE("t, f and e walk in turn order once there is one");
+    play_focus(&a.play, -1);
+    press(&a, "t"); CHECK_EQ(a.play.sel, 0);             /* Aria 18 */
+    press(&a, "t"); CHECK_EQ(a.play.sel, 1);             /* Ogre 12 */
+    press(&a, "t"); CHECK_EQ(a.play.sel, 2);             /* Bram 9 */
+    press(&a, "T"); CHECK_EQ(a.play.sel, 1);
+    press(&a, "f"); CHECK_EQ(a.play.sel, 2);
+    press(&a, "f"); CHECK_EQ(a.play.sel, 0);
+    CHECK_EQ(turn_acting(a.map), -1);                    /* looking is free: nobody's turn yet */
+
+    CASE("a moves the fight on, selects whoever is up, and says so up top");
+    press(&a, "a");
+    CHECK_EQ(turn_acting(a.map), 0);
+    CHECK_EQ(a.play.sel, 0);
+    CHECK_EQ(a.map->round, 1);
+    CHECK(strstr(a.status, "round 1 - Aria's turn") != NULL);
+    press(&a, "2a");
+    CHECK_EQ(turn_acting(a.map), 2);
+    CHECK_EQ(a.play.sel, 2);
+    press(&a, "a");
+    CHECK_EQ(a.map->round, 2);
+    rnd_begin(&r);
+    app_draw(&a);
+    ByteBuf frame;
+    bb_init(&frame, 32768);
+    rnd_dump(&r, &frame);
+    bb_putc(&frame, '\0');
+    CHECK(strstr(frame.data, "Round 2 - Aria's turn, then Ogre, Bram") != NULL);
+    bb_free(&frame);
+
+    CASE("the actor wears the turn colour above and below");
+    int bars = 0;
+    for (size_t i = 0; i < r.ncells; i++) if (r.back[i].fg == a.th->turn) bars++;
+    CHECK(bars >= 6);
+    CHECK(contrast(a.th->turn, a.th->bg) > 10.0);
+
+    CASE("A steps back, u takes an advance back, and the start is the start");
+    press(&a, "A");
+    CHECK_EQ(turn_acting(a.map), 2);
+    CHECK_EQ(a.map->round, 1);
+    press(&a, "a");
+    press(&a, "u");
+    CHECK_EQ(turn_acting(a.map), 2);
+    CHECK_EQ(a.map->round, 1);
+    press(&a, "9A");
+    CHECK(strstr(a.status, "start of the fight") != NULL);
+    CHECK_EQ(turn_acting(a.map), 2);
+
+    CASE("s t hands the turn over out of order");
+    play_focus(&a.play, 1);
+    press(&a, "st");
+    CHECK_EQ(turn_acting(a.map), 1);
+    CHECK(strstr(a.status, "Ogre takes the turn") != NULL);
+
+    CASE("the turn cannot move while a creature is in hand");
+    a.ed.cx = 1; a.ed.cy = 0;                            /* the cursor, not just the focus */
+    press(&a, "\r");                                     /* pick the ogre up */
+    CHECK_EQ(a.play.sel, 1);
+    CHECK_EQ(a.play.grabbed, 1);
+    press(&a, "a");
+    CHECK(strstr(a.status, "put it down first") != NULL);
+    CHECK_EQ(turn_acting(a.map), 1);
+    press(&a, "\x1b");
+
+    CASE("removing the actor passes the turn; u brings both back");
+    press(&a, "d");
+    CHECK_EQ(a.map->tokens.n, 2);
+    CHECK_EQ(turn_acting(a.map), 1);                     /* Bram, who was next, now index 1 */
+    CHECK_EQ(strcmp(a.map->tokens.v[1].label, "Bram"), 0);
+    press(&a, "u");
+    CHECK_EQ(a.map->tokens.n, 3);
+    CHECK_EQ(turn_acting(a.map), 1);
+    CHECK_EQ(strcmp(a.map->tokens.v[1].label, "Ogre"), 0);
+
+    CASE("a copy keeps its number and never the turn");
+    a.ed.cx = 1; a.ed.cy = 0;
+    play_focus(&a.play, 1);
+    press(&a, "y");
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "p");
+    CHECK_EQ(a.map->tokens.n, 4);
+    CHECK_EQ(a.map->tokens.v[3].turn, TURN_IN);
+    CHECK_EQ(a.map->tokens.v[3].init, 12);
+    int actors = 0;
+    for (int i = 0; i < a.map->tokens.n; i++) if (a.map->tokens.v[i].turn & TURN_ACTING) actors++;
+    CHECK_EQ(actors, 1);
+
+    CASE("a blank answer to s i leaves the order");
+    play_focus(&a.play, 3);
+    press(&a, "si\025\r");                               /* ctrl-u clears the old number */
+    CHECK_EQ(a.map->tokens.v[3].turn, 0);
+    CHECK(strstr(a.status, "leaves the turn order") != NULL);
+
+    CASE(":turns reads the order out, :turns off ends the fight, u undoes that too");
+    press(&a, ":turns\r");
+    CHECK(strstr(a.status, "Aria 18, Ogre 12*, Bram 9") != NULL);
+    press(&a, ":turns off\r");
+    CHECK_EQ(turn_count(a.map), 0);
+    CHECK_EQ(a.map->round, 0);
+    CHECK(strstr(a.status, "the fight is over") != NULL);
+    press(&a, ":turns off\r");
+    CHECK(strstr(a.status, "no fight to end") != NULL);
+    press(&a, ":turns\r");
+    CHECK(strstr(a.status, "no turn order") != NULL);
+    press(&a, "u");
+    CHECK_EQ(turn_count(a.map), 3);
+    CHECK_EQ(turn_acting(a.map), 1);
+
+    CASE("the s prefix lists its new members");
+    press(&a, "s");
+    CHECK(strstr(a.status, "initiative") != NULL);
+    press(&a, "z");
+    CHECK(strstr(a.status, "i initiative") != NULL);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
 int main(void)
 {
     prof_init();
@@ -7288,6 +7694,8 @@ int main(void)
         { "grid",   test_grid },
         { "editor", test_editor },
         { "undo",   test_undo },
+        { "turns",  test_turns },
+        { "turnkeys", test_turn_keys },
         { "dice",   test_dice },
         { "slog",   test_session_log },
         { "roll",   test_roll_command },

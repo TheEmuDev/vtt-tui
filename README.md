@@ -84,7 +84,8 @@ next one does too:
    `2R` the cone. A bare press cycles; past the end a count names the last.
 4. **Lowercase is the tool, the capital is its variant.** `m` measures and `M` changes the
    metric; `r` is the range and `R` its shape; `v` and `V` are the two selections; `b` and
-   `B`, `t` and `T` run the same cycle both ways. A capital never starts something unrelated.
+   `B`, `t` and `T`, `a` and `A` run the same cycle both ways. A capital never starts
+   something unrelated.
 5. **A family gets a prefix, not a row of keys.** `i p` `i e`, `s a` `s c` `s d`. The
    prefix alone lists its options; `esc` abandons it; it swallows the next key whatever it is.
 6. **The cursor is the pointer.** Whatever needs a place or a direction reads the cursor —
@@ -235,7 +236,7 @@ A whole pen-down stroke is one undo step.
 | `d` `x` | remove — and keep it (or them), so `p` puts it back |
 | `y` `p` | yank what the cursor or box covers / paste it here |
 | `c` | change its label |
-| `t` `T` | next / previous token, any kind |
+| `t` `T` | next / previous token, any kind — in turn order once there is one |
 | `f` `F` | next / previous **f**riendly — player tokens only |
 | `e` `E` | next / previous **e**nemy |
 | `tab`, `shift-tab` | the same as `t` / `T` |
@@ -244,6 +245,9 @@ A whole pen-down stroke is one undo step.
 | `s a` | add a status marker (prompts for a word) |
 | `s c` | change the colour the next marker will use |
 | `s d` | take a marker off (asks which, when there is more than one) |
+| `a` `A` | next / previous turn — `3a` moves three on (see [Turn order](#turn-order-a)) |
+| `s i` | initiative: a number puts the creature in the turn order, a blank takes it out |
+| `s t` | hand the turn to this creature, whether or not it is in the order |
 | `m` | measure (ruler) |
 | `r` | the range highlight: bands, or a square's worth a press (see below) |
 | `R` | its shape — circle, cone, line, square; `2R` names one; the cursor aims it |
@@ -256,14 +260,15 @@ A whole pen-down stroke is one undo step.
 | `?` | every key, in full |
 
 Two prefixes carry a family each, which is what keeps the bar to six hints: `i` inserts
-(`i p`, `i e`) and `s` is for status markers (`s a`, `s c`, `s d`). Press either alone and
+(`i p`, `i e`) and `s` is for a creature's state — its markers (`s a`, `s c`, `s d`) and its place in the
+fight (`s i`, `s t`). Press either alone and
 the status line names the options; `esc` abandons it. A prefix swallows whatever comes
 next, so a half-typed command can never turn into a different whole one.
 
 Freeing `p` for paste is the point of `i`: `p` means paste everywhere else, and `P` was an
-odd place for it. The keys that moved — `a` `A` `V` `P` `S` — say where they went
-if you press them out of habit. (Two came back with new work: `v` selects several
-creatures, and `R` is the range highlight's shape.)
+odd place for it. The keys that moved — `V` `P` `S` — say where they went if you press
+them out of habit. (Three came back with new work: `v` selects several creatures, `R` is
+the range highlight's shape, and `a` moves the turn on.)
 
 `esc` backs out of one thing at a time, innermost first: drop the selection box, cancel the
 move (the creature returns to where it set out), take the overlay off, let go of the
@@ -365,6 +370,11 @@ where you were looking. The cursor follows the selection and the view scrolls to
 selection you cannot see is no use for finding a creature — and the status line names what
 you landed on. A track with nothing in it leaves the selection alone, so pressing the wrong
 one of three keys costs nothing.
+
+Once there is a [turn order](#turn-order-a), all three walk it: `t` visits the creatures in
+the order they will act, the ones not in the fight after them, and `f` and `e` do the same
+for their side. With no order it is the list, as it always was. Looking stays free either
+way — these keys move the selection and nothing else; moving the *turn* is `a`.
 
 `/` searches labels: any part, any case, so `gob` finds `Goblin 3`. It walks on from the
 current selection, and `n` / `N` repeat the search forwards and back without retyping it.
@@ -572,6 +582,47 @@ session.
 keeping every reading a whole number of squares. `chebyshev` is a square cheaper on long
 diagonals, which can pull a target into a nearer band than the fiction would put it in.
 
+### Turn order (`a`)
+
+Whose turn it is, for any game that takes turns. There are no rules in it: a creature in
+the order has a number, the highest acts first, ties go to whoever was placed on the map
+first, and going past the last starts a new round.
+
+| key | what it does |
+|-----|--------------|
+| `s i` | asks for the selected creature's number. A number joins the order, or moves within it; a blank answer leaves |
+| `a` `A` | next / previous turn. `3a` moves three on. The view goes to whoever is up, and they become the selection |
+| `s t` | hands the turn to the selected creature, out of order, or with no order at all |
+| `:turns` | reads the whole order out; `:turns off` ends the fight |
+
+`a` is the fourth pair shaped like `t` `T`, `f` `F` and `e` `E`, and the odd one out in
+one respect: those look, this one acts. The turn passes, the round counts up, the session
+log records it, and it is in the undo history — so `u` takes back an advance made by
+mistake, round and all, and `A` is for deliberately going back. Neither will move the turn
+while a creature is in hand.
+
+The title bar carries the fight, because it is true of the whole table rather than of
+whatever is selected:
+
+```
+ crypt [+]    Round 2 - Ogre's turn, then Aria, Bram                              PLAY
+```
+
+On the map the creature whose turn it is has the grid line above and below it lit, where a
+selected one has all four sides lit in its own colour. The two marks share a creature
+without hiding each other, which matters because advancing the turn selects whoever it
+went to: the sides say *selected*, the bars say *acting*.
+
+The order is not a list kept beside the creatures. It is the numbers on them, sorted, so
+everything that already handles a creature handles its place in the fight: delete one and
+`p` puts it back in the order where it was; copy one and the copy has the same number but
+never the turn; remove the creature whose turn it is and the turn passes to the next, in the
+same undo step. It is saved with the map.
+
+**Games with no initiative** use `s t` alone. Hand the turn to whoever the table agrees is
+up and the title bar and the bars on the map follow it; nobody needs a number, and `a` is
+never pressed. [Daggerheart](#daggerheart) plays this way.
+
 ### Dice (`:roll`)
 
 ```
@@ -662,6 +713,10 @@ same fictional distance. There is no *Out of Range* band: the book defines it as
 bounds of the conflict, which is a call about the scene rather than a distance, and anything
 the cursor can reach is on the map by definition.
 
+**The spotlight.** Daggerheart has no initiative: the spotlight passes to whoever the
+fiction points at. `s t` is that — it hands the [turn](#turn-order-a) to the selected
+creature with no numbers involved, and the title bar says whose spotlight it is.
+
 The SRD is explicit that these ranges "aren't intended to be precisely measured during play"
 and are a quick guide for the GM — the readout is the same kind of aid.
 
@@ -696,6 +751,7 @@ with no verdict, ruleset or not.
 | `:scale N` | feet per tile (default 5) |
 | `:metric NAME` | `chebyshev`, `euclidean`, `alt` or `manhattan` |
 | `:ruleset NAME` | switch the rules-aware readouts — see [Rulesets](#rulesets) |
+| `:turns` | read the [turn order](#turn-order-a) out; `:turns off` ends the fight |
 | `:roll 2d6+3` | roll dice — see [Dice](#dice-roll) |
 | `:log` | the session log, on or off — see [Session log](#session-log-log) |
 | `:play` `:build` | switch mode |
@@ -720,7 +776,7 @@ short lines are treated as trailing blanks, so an editor that strips trailing wh
 cannot corrupt a map.
 
 ```
-VTT 3
+VTT 4
 name Goblin Ambush
 size 16 9
 zoom 1
@@ -732,11 +788,16 @@ vedges          # w+1 chars per row
 hedges          # w chars per row, h+1 rows
 token player 2 2 1 "Aria"
 tokenstatus red "Poisoned"
+tokenturn 18 acting
 token enemy 10 4 2 "Ogre"
+tokenturn 12
+round 2
 ```
 
 A `tokenstatus` line hangs a marker on the token above it, so the attachment needs no index
-to go wrong.
+to go wrong. A `tokenturn` line does the same for the [turn order](#turn-order-a): the
+creature's number, then `acting` if the turn is its. `tokenturn - acting` is a creature
+holding the turn from outside the order.
 
 | terrain | char | | boundary | char |
 |---------|------|-|----------|------|
@@ -751,8 +812,10 @@ to go wrong.
 Version 2 added terrain and the boundary kinds. A version 1 reader would take a closed door
 for an opening and water for a hole, so it refuses the file rather than misreading a sealed
 room as open. Version 3 added status markers: an older reader would ignore those lines and
-silently drop them, losing combat state from a saved fight, so it refuses too. Each version
-still loads everything older, and an unrecognised character reads as empty rather than
+silently drop them, losing combat state from a saved fight, so it refuses too. Version 4
+added the turn order, for the same reason — but only a map with a fight in it says 4. One
+without is still written as version 3, which says everything it needs to and stays
+loadable by the builds that came before. Each version still loads everything older, and an unrecognised character reads as empty rather than
 failing the load.
 
 ## Performance

@@ -11,6 +11,7 @@ typedef enum {
     OP_TOKEN_DEL,
     OP_TOKEN_MOVE,
     OP_TOKEN_EDIT,
+    OP_ROUND,            /* the fight's round counter: x before, y after */
 } OpKind;
 
 /* One op is one cell or one token changing. Tile ops dominate -- a brush
@@ -78,6 +79,9 @@ void undo_move_token(Undo *u, Map *m, int idx, int nx, int ny);
 /* Replaces a token wholesale, which is how relabelling, resizing and status
  * markers become undoable without an op per field. */
 void undo_edit_token(Undo *u, Map *m, int idx, Token after);
+
+/* The round counter, so stepping a turn back with u puts the round back too. */
+void undo_set_round(Undo *u, Map *m, int round);
 
 int  undo_undo(Undo *u, Map *m);
 

@@ -35,7 +35,17 @@ typedef struct {
 
     Status  status[TOKEN_STATUS_MAX];
     uint8_t nstatus;
+
+    /* The turn order lives on the creatures rather than in a list beside
+     * them: the order is these numbers sorted, so deleting, pasting, undoing
+     * and saving a creature carry its place along with no index to patch.
+     * Rules-agnostic on purpose -- init is just a number, highest first. */
+    uint8_t turn;       /* TURN_IN | TURN_ACTING */
+    int16_t init;       /* meaningful only with TURN_IN */
 } Token;
+
+#define TURN_IN     0x01u   /* has a place in the order */
+#define TURN_ACTING 0x02u   /* it is this creature's turn; at most one */
 
 typedef struct {
     Token *v;
@@ -83,6 +93,7 @@ static inline int token_equal(const Token *a, const Token *b)
     if (a->x != b->x || a->y != b->y || a->size != b->size || a->kind != b->kind)
         return 0;
     if (strcmp(a->label, b->label) != 0 || a->nstatus != b->nstatus) return 0;
+    if (a->turn != b->turn || ((a->turn & TURN_IN) && a->init != b->init)) return 0;
     for (int i = 0; i < a->nstatus; i++)
         if (a->status[i].color != b->status[i].color ||
             strcmp(a->status[i].label, b->status[i].label) != 0)

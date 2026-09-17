@@ -233,6 +233,28 @@ static void draw_select_ring(Renderer *r, const Rect *a, uint32_t fg)
     }
 }
 
+/* Whose turn it is: the lattice above and below the creature, recoloured the
+ * way the selection ring recolours all four sides. Two bars rather than a
+ * second ring so the two marks can share a creature -- which they usually
+ * do, since advancing the turn selects whoever it went to -- with the sides
+ * saying "selected" and the bars saying "acting". Drawn after the ring, so
+ * the bars win the corners. Nothing is painted over: a wall there stays a
+ * wall, in another colour. */
+static void draw_turn_bars(Renderer *r, const Rect *a, uint32_t fg)
+{
+    int x0 = a->x - 1, x1 = a->x + a->w;
+    int y0 = a->y - 1, y1 = a->y + a->h;
+
+    for (int x = x0; x <= x1; x++) {
+        for (int i = 0; i < 2; i++) {
+            Cell *c = rnd_at(r, x, i ? y1 : y0);
+            if (!c) continue;
+            c->fg    = fg;
+            c->attr |= ATTR_BOLD;
+        }
+    }
+}
+
 /* Is cell (i,j) inside the ellipse inscribed in a w x h box? The threshold is
  * below 1 so that a 3x3 token loses its four corners and reads as a circle
  * rather than as a square. */
@@ -255,6 +277,7 @@ void grid_draw_token(Renderer *r, const GridView *g, const Token *t,
     if (selected) base = player ? th->player_sel : th->enemy_sel;
 
     if (selected) draw_select_ring(r, &a, base);
+    if (t->turn & TURN_ACTING) draw_turn_bars(r, &a, th->turn);
 
     /* A single-row token has no room for a shape, and colour alone is a poor
      * way to tell a player from an enemy — it fails in --ascii and for a

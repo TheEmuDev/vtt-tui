@@ -36,12 +36,13 @@ mkdir -p "$XDG_DATA_HOME"
 
 TAB=$(printf '\t')
 
-# genmap NAME W H WALLS [TOKENS] [RULESET]
+# genmap NAME W H WALLS [TOKENS] [RULESET] [TURNS]
 #   WALLS=1 puts a wall on every edge, the worst case for junction glyphs:
 #   every crossing has to be resolved rather than skipped. RULESET defaults
 #   to daggerheart; "none" writes no ruleset line, so r grows a radius.
+#   TURNS=1 gives every token a place in the turn order.
 genmap() {
-    _n=$1 _w=$2 _h=$3 _walls=$4 _tok=${5:-0} _rs=${6:-daggerheart}
+    _n=$1 _w=$2 _h=$3 _walls=$4 _tok=${5:-0} _rs=${6:-daggerheart} _turns=${7:-0}
     _f="$DIR/$_n.vtt"
 
     _row=$(awk "BEGIN{ for(i=0;i<$_w;i++) printf \".\" }")
@@ -54,7 +55,8 @@ genmap() {
     fi
 
     {
-        printf 'VTT 2\nname %s\nsize %d %d\nzoom 1\n' "$_n" "$_w" "$_h"
+        if [ "$_turns" = 1 ]; then _ver=4; else _ver=2; fi
+        printf 'VTT %d\nname %s\nsize %d %d\nzoom 1\n' "$_ver" "$_n" "$_w" "$_h"
         [ "$_rs" = none ] || printf 'ruleset %s\n' "$_rs"
         printf 'tiles\n'
         i=0; while [ $i -lt "$_h" ]; do echo "$_row"; i=$((i + 1)); done
@@ -69,6 +71,7 @@ genmap() {
             printf 'token %s %d %d 1 "Mob %d"\n' "$_k" \
                    $((i * 3 % (_w - 2) + 1)) $((i * 5 % (_h - 2) + 1)) "$i"
             printf 'tokenstatus red "Poisoned"\n'
+            [ "$_turns" = 1 ] && printf 'tokenturn %d\n' $((i * 7 % 20 + 1))
             i=$((i + 1))
         done
     } > "$_f"
@@ -81,6 +84,7 @@ BIG=$(genmap big     200 200 1 0)     # far more map than window
 MOB=$(genmap mob      40 25 0 24)     # 24 tokens, each wearing a marker
 BIGMOB=$(genmap bigmob 200 200 0 24)  # the route search's worst case: big and crowded
 PLAIN=$(genmap plain   40 25 0 24 none) # no ruleset: r is a radius, not a band
+FIGHT=$(genmap fight   40 25 0 24 daggerheart 1)  # all 24 in the turn order
 
 # Rooms on a void canvas, which is what a map under construction looks like
 # and the only shape that exercises the void marks.
@@ -178,6 +182,8 @@ run "play, range radius"   "$PLAIN"  80x24  ':play\rt20r'
 run "play, range cone"     "$PLAIN"  80x24  ':play\rt2R6rllllhhhh'
 run "play, range line"     "$PLAIN"  80x24  ':play\rt3R6rllllhhhh'
 run "play, range square"   "$PLAIN"  80x24  ':play\rt4R6rllllhhhh'
+run "play, turn order"     "$FIGHT"  80x24  ':play\r8a8A'
+run "play, fight cycling"  "$FIGHT"  80x24  ':play\rttttTTTT'
 run "play, logging"        "$MOB"    80x24  ':play\r:log on\rt\rlllljjjj\r'
 run "play, rolling"        "$MOB"    80x24  ':play\r:roll 2d6+3\r:roll +1\r'
 run "help page"            "$WALLED" 80x24  '?jjjj'

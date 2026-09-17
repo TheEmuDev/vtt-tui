@@ -92,6 +92,7 @@ typedef struct {
     char path[MAP_PATH_MAX];
     int  zoom;              /* preferred zoom level, persisted with the map */
     int  modified;          /* unsaved changes */
+    int  round;             /* of the fight; 0 when there is none */
 
     /* Measurement settings travel with the encounter, since they belong to
      * the game being played rather than to the session. */

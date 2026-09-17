@@ -181,6 +181,21 @@ void app_exec_command(App *a, const char *line)
         }
         return;
     }
+    if (!strcmp(verb, "turns")) {
+        /* Bare, it reads the order out; "off" ends the fight. */
+        char msg[160];
+        if (!*rest) {
+            turn_list(m, msg, sizeof msg);
+            app_set_status(a, msg);
+            return;
+        }
+        if (strcmp(rest, "off") != 0) { app_set_status(a, ":turns lists the order, :turns off ends the fight"); return; }
+        if (turn_count(m) == 0 && turn_acting(m) < 0) { app_set_status(a, "there is no fight to end"); return; }
+        int had = turn_clear(m, &a->undo);
+        snprintf(msg, sizeof msg, "the fight is over - %d left the turn order", had);
+        app_note(a, msg);
+        return;
+    }
     if (!strcmp(verb, "log")) {
         /* :log toggles; on/off say which; anything else is a file. */
         SessionLog *l = &a->slog;

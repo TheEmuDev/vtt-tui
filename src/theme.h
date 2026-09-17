@@ -38,6 +38,7 @@ typedef struct {
      * luminance as well as hue, so they stay apart without colour vision. */
     uint32_t hope;
     uint32_t fear;
+    uint32_t turn;        /* the bars above and below whoever's turn it is */
     uint32_t trail;       /* the mark on the tile a held token set out from */
     uint32_t trail_bg;    /* ground a held token has walked over */
 

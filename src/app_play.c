@@ -136,7 +136,12 @@ static void yank_group(App *a, const int *idx, int n)
     Play *pl = &a->play;
     if (n > PLAY_GROUP_MAX) n = PLAY_GROUP_MAX;
 
-    for (int i = 0; i < n; i++) pl->yank[i] = a->map->tokens.v[idx[i]];
+    for (int i = 0; i < n; i++) {
+        pl->yank[i] = a->map->tokens.v[idx[i]];
+        /* A copy keeps its place in the order but never the turn itself:
+         * there is one turn, and the original has it. */
+        pl->yank[i].turn &= (uint8_t)~TURN_ACTING;
+    }
     pl->nyank = n;
 }
 
@@ -242,6 +247,39 @@ static void status_drop(App *a)
 /* A prefix swallows whatever comes next: a half-typed command must never turn
  * into a different whole one. Both prefixes announce their options in the
  * status line, which is how they stay discoverable without the bar growing. */
+/* s i: the selected creature's place in the turn order. */
+static void turn_prompt(App *a)
+{
+    int idx = play_target_token(a);
+    if (idx < 0) { app_set_status(a, "no token here to put in the turn order"); return; }
+
+    const Token *t = &a->map->tokens.v[idx];
+    a->pending_token = idx;
+
+    char title[64], initial[16] = "";
+    snprintf(title, sizeof title, "Initiative for %.20s",
+             t->label[0] ? t->label : token_kind_name(t->kind));
+    if (t->turn & TURN_IN) snprintf(initial, sizeof initial, "%d", t->init);
+    app_open_prompt(a, PROMPT_INITIATIVE, title,
+                    "highest acts first; blank takes it out of the order", initial);
+}
+
+/* s t: hand it the turn, whether or not it is in the order -- which is all a
+ * game that passes a spotlight instead of rolling initiative needs. */
+static void turn_hand_over(App *a)
+{
+    int idx = play_target_token(a);
+    if (idx < 0) { app_set_status(a, "no token here to hand the turn to"); return; }
+
+    turn_take(a->map, &a->undo, idx);
+
+    const Token *t = &a->map->tokens.v[idx];
+    char msg[96];
+    snprintf(msg, sizeof msg, "%.30s takes the turn",
+             t->label[0] ? t->label : token_kind_name(t->kind));
+    app_note(a, msg);
+}
+
 static int pending_key(App *a, Key k)
 {
     uint32_t pre = a->pending;
@@ -264,7 +302,9 @@ static int pending_key(App *a, Key k)
         if (k.ch == 'a') { status_add(a);    return 1; }
         if (k.ch == 'c') { status_colour(a); return 1; }
         if (k.ch == 'd') { status_drop(a);   return 1; }
-        app_set_status(a, "s wants a to add, c for colour, d to drop");
+        if (k.ch == 'i') { turn_prompt(a);   return 1; }
+        if (k.ch == 't') { turn_hand_over(a); return 1; }
+        app_set_status(a, "s wants a add, c colour, d drop, i initiative, t take the turn");
         return 1;
     }
     return 1;
@@ -275,7 +315,6 @@ static int pending_key(App *a, Key k)
 static const char *retired_key(uint32_t ch)
 {
     switch (ch) {
-    case 'a': case 'A': return "a is gone - t and T walk every token";
     case 'V':           return "V is now v - select several creatures";
     case 'P':           return "P is now p - paste";
     case 'S':           return "S is now s c - marker colour";
@@ -528,7 +567,7 @@ void app_play_key(App *a, Key k)
 
     case 's':
         a->pending = 's';
-        app_set_status(a, "s    a add marker    c colour    d drop");
+        app_set_status(a, "s    a add marker    c colour    d drop    i initiative    t take the turn");
         break;
 
     case '/': {
@@ -697,6 +736,32 @@ void app_play_key(App *a, Key k)
         break;
     }
 
+    /* The fourth pair shaped like t/T, f/F and e/E -- but where those only
+     * look, this one moves the fight on: the turn passes, the round counts,
+     * it is in the undo history, and the view goes to whoever is up. */
+    case 'a': case 'A': {
+        if (pl->grabbed) { app_set_status(a, "put it down first - enter drops, esc cancels"); break; }
+
+        int n   = take_count(e);
+        int got = turn_advance(m, &a->undo, k.ch == 'a' ? n : -n);
+        if (got == TURN_NO_ORDER) {
+            app_set_status(a, "no turn order - s i gives the selected creature a place in it");
+            break;
+        }
+        if (got == TURN_AT_START) { app_set_status(a, "this is the start of the fight"); break; }
+
+        pl->visual = 0;
+        play_focus(pl, got);
+        app_follow_selection(a);
+
+        const Token *t = &m->tokens.v[got];
+        char msg[96];
+        snprintf(msg, sizeof msg, "round %d - %.30s's turn", m->round,
+                 t->label[0] ? t->label : token_kind_name(t->kind));
+        app_note(a, msg);
+        break;
+    }
+
     /* The capital changes the tool's variant, as M does the ruler's metric:
      * the shape is a setting, kept while the overlay is off, and a count
      * names one outright the way 2b names a size. */
@@ -735,9 +800,11 @@ void app_play_key(App *a, Key k)
         undo_begin(&a->undo);
         for (int i = n - 1; i >= 0; i--) {
             int rx = m->tokens.v[idx[i]].x, ry = m->tokens.v[idx[i]].y;
+            turn_before_remove(m, &a->undo, idx[i]);   /* its turn passes on first */
             undo_del_token(&a->undo, m, idx[i]);
             range_token_removed(&pl->range, idx[i], rx, ry);
         }
+        turn_settle(m, &a->undo);
         undo_end(&a->undo);
 
         play_focus(pl, -1);

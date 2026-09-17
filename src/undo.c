@@ -219,6 +219,19 @@ void undo_edit_token(Undo *u, Map *m, int idx, Token after)
     m->modified = 1;
 }
 
+void undo_set_round(Undo *u, Map *m, int round)
+{
+    round = iclamp(round, 0, INT16_MAX);
+    if (m->round == round) return;
+
+    Op *o = push(u);
+    o->kind = OP_ROUND;
+    o->x    = (int16_t)m->round;
+    o->y    = (int16_t)round;
+    m->round    = round;
+    m->modified = 1;
+}
+
 /* Re-inserts a token at a specific index so undoing a delete restores the
  * ordering that hit-testing depends on. */
 static void token_insert_at(TokenList *l, int idx, Token t)
@@ -256,6 +269,9 @@ static void apply(const Undo *u, Map *m, const Op *o, int forward)
     case OP_TOKEN_EDIT:
         if (o->x >= 0 && o->x < m->tokens.n)
             m->tokens.v[o->x] = forward ? tok[1] : tok[0];
+        break;
+    case OP_ROUND:
+        m->round = forward ? o->y : o->x;
         break;
     case OP_TOKEN_MOVE:
         if (o->x >= 0 && o->x < m->tokens.n) {

@@ -584,6 +584,38 @@ static void prompt_accept(App *a)
         app_note(a, msg);
         return;
     }
+    case PROMPT_INITIATIVE: {
+        int idx = a->pending_token;
+        a->pending_token = -1;
+        if (idx < 0 || idx >= a->map->tokens.n) return;
+
+        const Token *t   = &a->map->tokens.v[idx];
+        const char  *who = t->label[0] ? t->label : token_kind_name(t->kind);
+        char msg[96];
+
+        /* A number joins the order, or moves within it; a blank leaves. */
+        const char *p = text;
+        while (*p == ' ') p++;
+        if (!*p) {
+            if (!(t->turn & TURN_IN)) { app_set_status(a, "cancelled: it was not in the turn order"); return; }
+            snprintf(msg, sizeof msg, "%.30s leaves the turn order", who);
+            turn_leave(a->map, &a->undo, idx);
+            app_note(a, msg);
+            return;
+        }
+        char *end;
+        long  v = strtol(p, &end, 10);
+        while (*end == ' ') end++;
+        if (end == p || *end || v < -999 || v > 999) {
+            app_set_status(a, "initiative is a number, -999 to 999");
+            return;
+        }
+        snprintf(msg, sizeof msg, "%.30s %s the turn order at %ld", who,
+                 (t->turn & TURN_IN) ? "moves in" : "joins", v);
+        turn_join(a->map, &a->undo, idx, (int)v);
+        app_note(a, msg);
+        return;
+    }
     case PROMPT_STATUS_LABEL: {
         int idx = a->pending_token;
         a->pending_token = -1;
@@ -1538,8 +1570,13 @@ static void draw_editor(App *a)
 
     ed_layout(&a->ed, m, r->w, r->h);
 
-    char left[192];
-    snprintf(left, sizeof left, "%s%s", m->name, m->modified ? " [+]" : "");
+    /* The fight rides in the title bar: it is true for the whole table, not
+     * for whatever happens to be selected, so it does not belong on the
+     * status line that describes the selection. */
+    char left[192], fight[128] = "";
+    if (a->screen == SCREEN_PLAY) turn_status(m, fight, sizeof fight);
+    snprintf(left, sizeof left, "%s%s%s%s", m->name, m->modified ? " [+]" : "",
+             fight[0] ? "    " : "", fight);
     ui_titlebar(r, th, left, a->screen == SCREEN_PLAY ? "PLAY" : "BUILD");
 
     int playing = (a->screen == SCREEN_PLAY);

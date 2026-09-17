@@ -36,7 +36,7 @@ static const KeyDoc PLAY[] = {
     KEY("c",      "change its label"),
 
     GROUP("Find a creature"),
-    { "t  T",     "next / previous token, any kind",   "t/f/e", "cycle" },
+    { "t  T",     "next / previous token -- in turn order once there is one", "t/f/e", "cycle" },
     KEY("f  F",   "next / previous friendly"),
     KEY("e  E",   "next / previous enemy"),
     KEY("tab",    "the same as t, shift-tab as T"),
@@ -45,6 +45,12 @@ static const KeyDoc PLAY[] = {
      * nobody has met yet earns its place over a search that t/f/e mostly
      * stands in for. ? still lists it. */
     KEY("n  N",   "next / previous match"),
+
+    GROUP("Turn order"),
+    KEY("a  A",   "next / previous turn; 3a moves three on; a new lap is a new round"),
+    KEY("s i",    "initiative: a number joins the order, blank leaves it"),
+    KEY("s t",    "hand the turn to this creature, in the order or not"),
+    KEY(":turns", "the whole order on one line    :turns off ends the fight"),
 
     GROUP("Status markers"),
     KEY("s a",    "add a marker: a colour and a word"),

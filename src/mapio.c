@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include "ruler.h"
+#include "turn.h"
 #include "util.h"
 
 /* v2 added terrain kinds and door/window/secret boundaries. A v1 reader would
@@ -19,7 +20,13 @@
  * v3 added status markers on tokens. An older reader would ignore those lines
  * and silently drop them, which loses combat state from a saved fight, so it
  * refuses too. Each version still loads everything older. */
-#define FORMAT_VERSION 3
+#define FORMAT_VERSION 4
+
+/* Version 4 added the turn order. A map with no fight in it is still written
+ * as version 3, which says everything it needs and stays loadable by the
+ * builds that came before; one with a fight says 4, so that an older reader
+ * refuses it rather than dropping whose turn it is on the floor. */
+#define FORMAT_BEFORE_TURNS 3
 
 /* ------------------------------------------------------------------ save */
 
@@ -49,7 +56,9 @@ int mapio_save(Map *m, const char *path, char *err, size_t errsz)
         return -1;
     }
 
-    fprintf(f, "VTT %d\n", FORMAT_VERSION);
+    int fight = m->round > 0;
+    for (int i = 0; i < m->tokens.n && !fight; i++) fight = m->tokens.v[i].turn != 0;
+    fprintf(f, "VTT %d\n", fight ? FORMAT_VERSION : FORMAT_BEFORE_TURNS);
     fprintf(f, "name %s\n", m->name);
     fprintf(f, "size %d %d\n", m->w, m->h);
     fprintf(f, "zoom %d\n", m->zoom);
@@ -79,7 +88,17 @@ int mapio_save(Map *m, const char *path, char *err, size_t errsz)
         for (int j = 0; j < t->nstatus; j++)
             fprintf(f, "tokenstatus %s \"%s\"\n",
                     status_color_name(t->status[j].color), t->status[j].label);
+
+        /* Its place in the turn order, the same way: "tokenturn 15",
+         * "tokenturn 15 acting", or "tokenturn - acting" for a creature
+         * holding the turn from outside the order. */
+        if (t->turn) {
+            if (t->turn & TURN_IN) fprintf(f, "tokenturn %d", t->init);
+            else                   fputs("tokenturn -", f);
+            fputs((t->turn & TURN_ACTING) ? " acting\n" : "\n", f);
+        }
     }
+    if (m->round > 0) fprintf(f, "round %d\n", m->round);
 
     int ok = (fflush(f) == 0);
     if (ok) ok = (fsync(fileno(f)) == 0) || errno == EINVAL;   /* pipes are fine */
@@ -173,6 +192,25 @@ static int parse_status_line(Map *m, const char *line)
     parse_quoted(consumed > 0 ? line + consumed : NULL, label, sizeof label);
 
     token_add_status(&m->tokens.v[m->tokens.n - 1], (uint8_t)c, label);
+    return 0;
+}
+
+static int parse_turn_line(Map *m, const char *line)
+{
+    if (m->tokens.n == 0) return -1;
+
+    char init[16] = { 0 }, flag[16] = { 0 };
+    if (sscanf(line, "tokenturn %15s %15s", init, flag) < 1) return -1;
+
+    Token *t = &m->tokens.v[m->tokens.n - 1];
+    if (strcmp(init, "-") != 0) {
+        char *end;
+        long  v = strtol(init, &end, 10);
+        if (end == init || *end) return -1;
+        t->init  = (int16_t)(v < -999 ? -999 : v > 999 ? 999 : v);
+        t->turn |= TURN_IN;
+    }
+    if (!strcmp(flag, "acting")) t->turn |= TURN_ACTING;
     return 0;
 }
 
@@ -282,10 +320,16 @@ Map *mapio_load(const char *path, char *err, size_t errsz)
             parse_token_line(m, line);
         } else if (!strncmp(line, "tokenstatus ", 12)) {
             parse_status_line(m, line);
+        } else if (!strncmp(line, "tokenturn ", 10)) {
+            parse_turn_line(m, line);
+        } else if (!strncmp(line, "round ", 6)) {
+            int round = 0;
+            if (sscanf(line, "round %d", &round) == 1) m->round = iclamp(round, 0, INT16_MAX);
         }
         /* Unknown lines are ignored so a newer writer stays loadable. */
     }
     fclose(f);
+    turn_sanitize(m);
 
     str_lcpy(m->path, path, sizeof m->path);
     m->modified = 0;

@@ -8,6 +8,7 @@
 
 #include "prof.h"
 #include "ruler.h"
+#include "turn.h"
 #include "token.h"
 #include "util.h"
 
@@ -220,7 +221,10 @@ int play_cycle(Play *p, const Map *m, int delta, int kind)
 {
     if (m->tokens.n == 0) { play_focus(p, -1); return 0; }
 
-    int idx = scan_tokens(m, p->sel, delta, kind, NULL);
+    /* In turn order once there is one, and in list order until then --
+     * turn_walk is the same walk either way, so nothing changes for a map
+     * where nobody has rolled initiative. */
+    int idx = turn_walk(m, p->sel, delta, kind);
     if (idx < 0) return 0;
 
     play_focus(p, idx);
@@ -988,7 +992,7 @@ void range_status(const RangeOverlay *ro, const Map *m, char *buf, size_t bufsz)
     }
 
     char reach[64];
-    if (geo.reach >= 1e30) {
+    if (rs && geo.reach >= 1e30) {                 /* only a band has no far edge */
         snprintf(reach, sizeof reach, "beyond %s",
                  ro->band > 0 ? rs->bands[ro->band - 1].name : "melee");
     } else {

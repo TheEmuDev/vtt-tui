@@ -11,6 +11,7 @@
 #include "render.h"
 #include "term.h"
 #include "theme.h"
+#include "turn.h"
 #include "ui.h"
 #include "undo.h"
 
@@ -42,6 +43,7 @@ typedef enum {
     PROMPT_RENAME_MAP,
     PROMPT_DUPLICATE_MAP,
     PROMPT_STATUS_LABEL,
+    PROMPT_INITIATIVE,
     PROMPT_TOKEN_SEARCH,
 } PromptWhat;
 
