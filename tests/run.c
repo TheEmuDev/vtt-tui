@@ -8243,6 +8243,105 @@ static void test_net_server(void)
     rnd_free(&r);
 }
 
+
+static void test_serve_commands(void)
+{
+    Sandbox sb = sandbox_enter("serve");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+
+    write_map_file(sb.dir, "fight.vtt");
+    char path[600];
+    snprintf(path, sizeof path, "%s/fight.vtt", sb.dir);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+
+    CASE(":serve opens the remote view and says where");
+    CHECK_EQ(net_active(&a.net), 0);
+    press(&a, ":serve\r");
+    CHECK_EQ(net_active(&a.net), 1);
+    CHECK(strstr(a.status, "serving at http://") != NULL);
+    CHECK(strstr(a.status, "/?k=") != NULL);
+    press(&a, ":serve\r");
+    CHECK(strstr(a.status, "0 clients") != NULL);
+
+    CASE("a watcher that connects is counted, and sees the play frame");
+    int w = net_connect(a.net.port);
+    CHECK(w >= 0);
+    CHECK_EQ((int)write(w, "VTT1\n", 5), 5);
+    WireCatch c;
+    memset(&c, 0, sizeof c);
+    WireDec d;
+    wire_dec_init(&d, &WC_SINK, &c);
+    /* the app draws its frame through the same hooks main uses */
+    rnd_begin(&r); app_draw(&a); net_frame_begin(&a.net); rnd_flush(&r, NULL); net_frame_end(&a.net, 0);
+    CHECK_EQ(net_recv_until(&a.net, w, &d, &c, 1, 0), 0);
+    CHECK_EQ(c.w, 80);
+    press(&a, ":serve\r");
+    CHECK(strstr(a.status, "1 client") != NULL);
+
+    CASE("leaving play mode freezes the mirror; coming back sends it whole");
+    Key f1 = { KEY_F1, 0, 0 };
+    app_key(&a, f1);
+    net_set_live(&a.net, a.screen == SCREEN_PLAY);
+    rnd_begin(&r); app_draw(&a); net_frame_begin(&a.net); rnd_flush(&r, NULL); net_frame_end(&a.net, 0);
+    uint64_t before = a.net.total_bytes;
+    CHECK_EQ((int)(a.net.total_bytes - before), 0);
+    app_key(&a, f2);
+    net_set_live(&a.net, a.screen == SCREEN_PLAY);
+    rnd_begin(&r); app_draw(&a); net_frame_begin(&a.net); rnd_flush(&r, NULL); net_frame_end(&a.net, 0);
+    CHECK_EQ(net_recv_until(&a.net, w, &d, &c, 2, 0), 0);
+    CHECK_EQ(c.fulls, 2);
+
+    CASE(":mirror with no terminal to open says so, and how to do it by hand");
+    const char *had_term = getenv("TERMINAL");
+    char saved_term[512] = "";
+    if (had_term) str_lcpy(saved_term, had_term, sizeof saved_term);
+    const char *had_path = getenv("PATH");
+    char saved_path[2048] = "";
+    if (had_path) str_lcpy(saved_path, had_path, sizeof saved_path);
+    setenv("TERMINAL", "/nonexistent/terminal", 1);
+    setenv("PATH", "/nonexistent", 1);
+    press(&a, ":mirror\r");
+    CHECK(strstr(a.status, "no terminal found") != NULL);
+    CHECK(strstr(a.status, "--watch 127.0.0.1:") != NULL);
+    if (had_term) setenv("TERMINAL", saved_term, 1); else unsetenv("TERMINAL");
+    if (had_path) setenv("PATH", saved_path, 1);
+
+    CASE(":serve off drops everyone");
+    press(&a, ":serve off\r");
+    CHECK_EQ(net_active(&a.net), 0);
+    CHECK(strstr(a.status, "1 client dropped") != NULL);
+    uint8_t z;
+    struct timeval tv = { 1, 0 };
+    setsockopt(w, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+    ssize_t got;
+    do got = read(w, &z, 1); while (got > 0);
+    CHECK_EQ((int)got, 0);                              /* the server closed it */
+    close(w);
+    press(&a, ":serve off\r");
+    CHECK(strstr(a.status, "not on") != NULL);
+
+    CASE(":mirror starts the server itself when it has to");
+    setenv("TERMINAL", "/nonexistent/terminal", 1);
+    setenv("PATH", "/nonexistent", 1);
+    press(&a, ":mirror\r");
+    CHECK_EQ(net_active(&a.net), 1);
+    if (had_term) setenv("TERMINAL", saved_term, 1); else unsetenv("TERMINAL");
+    if (had_path) setenv("PATH", saved_path, 1);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
 int main(void)
 {
     prof_init();
@@ -8262,6 +8361,7 @@ int main(void)
         { "wire",   test_wire },
         { "netprim", test_net_primitives },
         { "netserver", test_net_server },
+        { "serve",  test_serve_commands },
         { "turns",  test_turns },
         { "turnkeys", test_turn_keys },
         { "dice",   test_dice },

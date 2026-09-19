@@ -1,4 +1,8 @@
 #include <errno.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <fcntl.h>
+#include <arpa/inet.h>
 #include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,6 +36,7 @@ typedef struct {
     uint64_t    seed;
     int         seeded;
     const char *watch;              /* --watch host:port: be a mirror */
+    int         bench_clients;      /* --bench-clients N: loopback watchers on a bench */
     int         serve;              /* --serve: open the remote view at startup */
     int         serve_port;
 } Options;
@@ -51,6 +56,7 @@ static void usage(void)
         "  --seed N           seed the dice, for a repeatable session or script\n"
         "  --serve [PORT]     open the remote view at startup (:serve does it later)\n"
         "  --watch HOST:PORT  mirror a serving vtt in this terminal, read-only\n"
+        "  --bench-clients N  attach N loopback watchers to a --bench run\n"
         "  -h, --help         this message\n",
         stdout);
 }
@@ -72,6 +78,7 @@ static int parse_args(Options *o, int argc, char **argv)
         else if (!strcmp(a, "--bench")  && i + 1 < argc) { o->bench = 1; o->script_path = argv[++i]; }
         else if (!strcmp(a, "--bench-loops") && i + 1 < argc) o->bench_loops = atoi(argv[++i]);
         else if (!strcmp(a, "--watch") && i + 1 < argc) o->watch = argv[++i];
+        else if (!strcmp(a, "--bench-clients") && i + 1 < argc) o->bench_clients = atoi(argv[++i]);
         else if (!strcmp(a, "--serve")) {
             o->serve = 1;
             if (i + 1 < argc && argv[i + 1][0] >= '0' && argv[i + 1][0] <= '9') o->serve_port = atoi(argv[++i]);
@@ -230,6 +237,37 @@ static int run_headless(const Options *o)
         Script      sc = read_script(o->script_path);
         InputParser p;
 
+        /* Loopback watchers, so the bench measures the frame with the
+         * remote view attached. They are drained after every frame the way
+         * a real client's kernel buffer would drain. */
+        int cfd[NET_MAX_CLIENTS];
+        int ncf = 0;
+        if (o->bench_clients > 0) {
+            char err[128];
+            if (net_start(&a.net, 0, &r, err, sizeof err) == 0) {
+                for (int i = 0; i < o->bench_clients && i < NET_MAX_CLIENTS; i++) {
+                    int fd = socket(AF_INET, SOCK_STREAM, 0);
+                    struct sockaddr_in sa;
+                    memset(&sa, 0, sizeof sa);
+                    sa.sin_family = AF_INET;
+                    sa.sin_port   = htons(a.net.port);
+                    sa.sin_addr.s_addr = htonl(0x7F000001);
+                    if (fd < 0 || connect(fd, (struct sockaddr *)&sa, sizeof sa) < 0) { if (fd >= 0) close(fd); break; }
+                    (void)!write(fd, "VTT1\n", 5);
+                    int fl = fcntl(fd, F_GETFL, 0);
+                    fcntl(fd, F_SETFL, fl | O_NONBLOCK);
+                    cfd[ncf++] = fd;
+                }
+                /* Let the hellos arrive and the full frames go out. */
+                for (int i = 0; i < 20; i++) {
+                    struct pollfd fds[1 + NET_MAX_CLIENTS];
+                    int k = net_pollfds(&a.net, fds, 1 + NET_MAX_CLIENTS);
+                    poll(fds, (nfds_t)k, 5);
+                    net_service(&a.net, fds, k, (uint64_t)i);
+                }
+            }
+        }
+
         for (int loop = 0; loop < o->bench_loops && a.running; loop++) {
             input_init(&p);
             input_feed(&p, sc.bytes, sc.len);
@@ -242,12 +280,22 @@ static int run_headless(const Options *o)
                 prof_frame_begin();
                 rnd_begin(&r);
                 app_draw(&a);
+                net_set_live(&a.net, a.screen == SCREEN_PLAY);
+                net_frame_begin(&a.net);
                 rnd_flush(&r, NULL);
+                net_frame_end(&a.net, 0);
                 prof_frame_end();
                 prof_set_counters(r.cells_changed, r.bytes_written);
+                if (ncf) {
+                    prof_set_net((uint32_t)net_clients(&a.net), a.net.frame_bytes);
+                    uint8_t sink[65536];
+                    for (int i = 0; i < ncf; i++)
+                        while (read(cfd[i], sink, sizeof sink) > 0) { }
+                }
             }
             a.running = 1;      /* a 'q' in the script must not end the bench */
         }
+        for (int i = 0; i < ncf; i++) close(cfd[i]);
         script_free(&sc);
         prof_report();
     }
@@ -399,6 +447,7 @@ static int run_interactive(const Options *o)
             net_frame_end(&a.net, prof_now_ns() / 1000000u);
             prof_frame_end();
             prof_set_counters(r.cells_changed, r.bytes_written);
+            if (net_clients(&a.net)) prof_set_net((uint32_t)net_clients(&a.net), a.net.frame_bytes);
             a.dirty = 0;
         }
 
@@ -420,6 +469,12 @@ int main(int argc, char **argv)
 
     draw_set_ascii(o.ascii);
     if (o.watch) return watch_main(o.watch, o.ascii);
+
+    /* For :mirror, which runs this binary again in a new window. */
+    static char self[1024];
+    ssize_t sl = readlink("/proc/self/exe", self, sizeof self - 1);
+    if (sl > 0) { self[sl] = '\0'; app_self_path = self; }
+    else app_self_path = argv[0];
 
     prof_init();
     if (o.seeded) dice_seed(o.seed); else dice_seed_random();

@@ -26,6 +26,8 @@ void prof_frame_end(void);
 /* Renderer counters folded into the same history as the timings, because
  * bytes-per-frame explains latency that wall-clock alone does not. */
 void prof_set_counters(uint32_t cells_changed, uint32_t bytes_written);
+/* Bytes queued to remote clients this frame, all clients together. */
+void prof_set_net(uint32_t clients, uint32_t net_bytes);
 
 void prof_overlay_toggle(void);
 int  prof_overlay_visible(void);

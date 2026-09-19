@@ -196,6 +196,54 @@ void app_exec_command(App *a, const char *line)
         app_note(a, msg);
         return;
     }
+    if (!strcmp(verb, "serve")) {
+        Net *net = &a->net;
+        char msg[256], url[160];
+        if (!strcmp(rest, "off")) {
+            if (!net_active(net)) { app_set_status(a, "the remote view is not on"); return; }
+            int had = net_clients(net);
+            net_stop(net);
+            snprintf(msg, sizeof msg, "remote view off - %d client%s dropped", had, had == 1 ? "" : "s");
+            app_note(a, msg);
+            return;
+        }
+        if (net_active(net) && !*rest) {
+            net_url(net, url, sizeof url);
+            snprintf(msg, sizeof msg, "serving at %s - %d client%s", url,
+                     net_clients(net), net_clients(net) == 1 ? "" : "s");
+            app_set_status(a, msg);
+            return;
+        }
+        int port = 0;
+        if (*rest) {
+            char *end;
+            long v = strtol(rest, &end, 10);
+            if (end == rest || *end || v < 0 || v > 65535) { app_set_status(a, ":serve [port], :serve off"); return; }
+            port = (int)v;
+        }
+        char err[128];
+        if (net_start(net, (uint16_t)port, a->rnd, err, sizeof err) < 0) { app_set_status(a, err); return; }
+        net_set_live(net, a->screen == SCREEN_PLAY);
+        net_url(net, url, sizeof url);
+        snprintf(msg, sizeof msg, "serving at %s", url);
+        app_note(a, msg);
+        return;
+    }
+    if (!strcmp(verb, "mirror")) {
+        /* A second window on this machine, running the watcher against our
+         * own server, which is started if it is not. It is detached so it
+         * outlives nothing of ours but the server itself. */
+        Net *net = &a->net;
+        if (!net_active(net)) {
+            char err[128];
+            if (net_start(net, 0, a->rnd, err, sizeof err) < 0) { app_set_status(a, err); return; }
+            net_set_live(net, a->screen == SCREEN_PLAY);
+        }
+        char msg[192];
+        if (app_spawn_mirror(a, msg, sizeof msg) < 0) { app_set_status(a, msg); return; }
+        app_note(a, msg);
+        return;
+    }
     if (!strcmp(verb, "panel")) {
         Play *pl = &a->play;
         if (!*rest)                    pl->panel = !pl->panel;

@@ -111,12 +111,13 @@ LONG=$(awk 'BEGIN{ for (i = 0; i < 60; i++) printf "l" }')
 # One run answers both questions: the bench reports frame times on stderr, and
 # tracing the same run records every occurrence of every zone.
 #
-# run LABEL MAP SIZE KEYS
+# run LABEL MAP SIZE KEYS [EXTRA FLAGS]
 run() {
-    _label=$1 _map=$2 _size=$3 _keys=$4
+    _label=$1 _map=$2 _size=$3 _keys=$4 _extra=${5:-}
     printf '%s' "$_keys" > "$DIR/keys"
 
-    "$BIN" "$_map" --bench "$DIR/keys" --bench-loops "$LOOPS" --size "$_size" \
+    # shellcheck disable=SC2086
+    "$BIN" "$_map" --bench "$DIR/keys" --bench-loops "$LOOPS" --size "$_size" $_extra \
         --trace "$DIR/t.json" > /dev/null 2> "$DIR/out" \
         || { echo "  $_label FAILED" >&2; return; }
 
@@ -185,6 +186,9 @@ run "play, range square"   "$PLAIN"  80x24  ':play\rt4R6rllllhhhh'
 run "play, turn order"     "$FIGHT"  80x24  ':play\r8a8A'
 run "play, fight cycling"  "$FIGHT"  80x24  ':play\rttttTTTT'
 run "play, spotlight"      "$MOB"    80x24  ':play\raa'
+run "play, 1 watcher"      "$MOB"    80x24  ':play\rjjllkkhh' "--bench-clients 1"
+run "play, 4 watchers"     "$MOB"    80x24  ':play\rjjllkkhh' "--bench-clients 4"
+run "play, carry, 4 watch" "$MOB"    80x24  ':play\rt\rlllljjjj\r' "--bench-clients 4"
 run "play, logging"        "$MOB"    80x24  ':play\r:log on\rt\rlllljjjj\r'
 run "play, rolling"        "$MOB"    80x24  ':play\r:roll 2d6+3\r:roll +1\r'
 run "help page"            "$WALLED" 80x24  '?jjjj'

@@ -54,6 +54,11 @@ static const KeyDoc PLAY[] = {
     KEY(":turns", "the whole order on one line    :turns off ends the fight"),
     KEY(":panel", "the side panel, on or off; it appears when there is a fight"),
 
+    GROUP("Remote view"),
+    KEY(":serve",  "let players watch from a browser; the status line shows the URL"),
+    KEY(":mirror", "a second window mirroring play mode, to drag to a TV"),
+    KEY(":serve off", "close the remote view and drop everyone"),
+
     GROUP("Status markers"),
     KEY("s a",    "add a marker: a colour and a word"),
     KEY("s c",    "colour the next marker will use"),

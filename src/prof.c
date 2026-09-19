@@ -30,6 +30,8 @@ static struct {
     uint64_t frame_hist[PROF_HISTORY];
     uint32_t cells_hist[PROF_HISTORY];
     uint32_t bytes_hist[PROF_HISTORY];
+    uint32_t net_hist[PROF_HISTORY];
+    uint32_t net_clients;
 
     uint32_t frame_count;                 /* total frames since start */
     uint32_t slot;                        /* ring index of the newest sample */
@@ -134,6 +136,14 @@ void prof_set_counters(uint32_t cells_changed, uint32_t bytes_written)
     uint32_t slot = P.frame_count % PROF_HISTORY;
     P.cells_hist[slot] = cells_changed;
     P.bytes_hist[slot] = bytes_written;
+    P.net_hist[slot]   = 0;
+}
+
+void prof_set_net(uint32_t clients, uint32_t net_bytes)
+{
+    uint32_t slot = P.frame_count % PROF_HISTORY;
+    P.net_hist[slot] = net_bytes;
+    P.net_clients    = clients;
 }
 
 void prof_overlay_toggle(void) { P.overlay = !P.overlay; }
@@ -280,6 +290,11 @@ void prof_overlay_draw(Renderer *r)
     snprintf(line, sizeof line, "cells %6u   bytes %7u   frames %6u",
              P.cells_hist[P.slot], P.bytes_hist[P.slot], P.frame_count);
     draw_text(r, x + 2, cy++, line, w - 3, dim);
+    if (P.net_clients) {
+        snprintf(line, sizeof line, "net   %u client%s   bytes %7u",
+                 P.net_clients, P.net_clients == 1 ? " " : "s", P.net_hist[P.slot]);
+        draw_text(r, x + 2, cy++, line, w - 3, dim);
+    }
 
     draw_text(r, x + 2, cy++, "zone            last      p50      p99", w - 3, head);
 
@@ -341,10 +356,13 @@ void prof_report(void)
     fprintf(stderr, "\nframes: %u (last %u sampled)\n", P.frame_count, n);
     fprintf(stderr, "  frame  last %s  p50 %s  p99 %s  max %s\n", a, b, c, d);
 
-    uint64_t bytes = 0, cells = 0;
-    for (uint32_t i = 0; i < n; i++) { bytes += P.bytes_hist[i]; cells += P.cells_hist[i]; }
+    uint64_t bytes = 0, cells = 0, net = 0;
+    for (uint32_t i = 0; i < n; i++) { bytes += P.bytes_hist[i]; cells += P.cells_hist[i]; net += P.net_hist[i]; }
     fprintf(stderr, "  cells/frame avg %llu   bytes/frame avg %llu\n",
             (unsigned long long)(cells / n), (unsigned long long)(bytes / n));
+    if (P.net_clients)
+        fprintf(stderr, "  net: %u client%s, bytes/frame avg %llu (all clients)\n",
+                P.net_clients, P.net_clients == 1 ? "" : "s", (unsigned long long)(net / n));
 
     for (int i = 0; i < P.nzones; i++) {
         Stats zs = stats_of(P.zones[i].hist, n, P.slot);

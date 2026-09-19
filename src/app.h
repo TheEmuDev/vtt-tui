@@ -130,6 +130,10 @@ void app_set_status(App *a, const char *msg);
 void app_note(App *a, const char *msg);     /* status line + session log */
 void app_status_span(App *a, int at, int len, uint32_t fg);   /* colour part of it */
 
+/* How to run this binary again, for :mirror's second window; main sets it
+ * from /proc/self/exe or argv[0]. */
+extern const char *app_self_path;
+
 /* Opens a map by path, replacing whatever is loaded. Returns 0 on success
  * and leaves a message modal up on failure. */
 int  app_open_map(App *a, const char *path);

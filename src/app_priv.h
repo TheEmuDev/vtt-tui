@@ -56,6 +56,10 @@ void app_leave_map(App *a);
 void app_close_map(App *a);
 int  app_save_map(App *a, const char *path);
 
+/* app.c: opens a terminal window running `vtt --watch` against our server.
+ * Returns 0 with what was opened in msg, or -1 with why not. */
+int  app_spawn_mirror(App *a, char *msg, size_t msgsz);
+
 /* app_cmd.c */
 void app_exec_command(App *a, const char *line);
 void app_command_key(App *a, Key k);

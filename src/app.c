@@ -1,10 +1,13 @@
 #include "app_priv.h"
 
 #include <errno.h>
+#include <fcntl.h>
+#include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "draw.h"
@@ -725,6 +728,93 @@ void app_clear_token_status(App *a, int idx, int which)
     undo_edit_token(&a->undo, m, idx, t);
     undo_end(&a->undo);
     app_note(a, msg);
+}
+
+/* ---------------------------------------------------------------- mirror */
+
+/* Terminals differ in how a command is handed to them. The user's $TERMINAL
+ * is tried first, then the usual suspects. */
+typedef struct { const char *name; const char *style; } TermKind;
+static const TermKind TERMINALS[] = {
+    { "alacritty", "-e" }, { "kitty", "" },   { "foot", "" },       { "ghostty", "-e" },
+    { "wezterm", "start" }, { "gnome-terminal", "--" }, { "konsole", "-e" },
+    { "xfce4-terminal", "-x" }, { "xterm", "-e" }, { "urxvt", "-e" }, { "st", "-e" },
+};
+
+static const char *term_style(const char *name)
+{
+    const char *base = strrchr(name, '/');
+    base = base ? base + 1 : name;
+    for (size_t i = 0; i < sizeof TERMINALS / sizeof *TERMINALS; i++)
+        if (!strcmp(TERMINALS[i].name, base)) return TERMINALS[i].style;
+    return "-e";
+}
+
+const char *app_self_path = "vtt";
+
+int app_spawn_mirror(App *a, char *msg, size_t msgsz)
+{
+    char target[64];
+    snprintf(target, sizeof target, "127.0.0.1:%u", (unsigned)a->net.port);
+
+    /* The candidates, $TERMINAL first. */
+    const char *names[16];
+    int         nn = 0;
+    const char *env = getenv("TERMINAL");
+    if (env && env[0]) names[nn++] = env;
+    for (size_t i = 0; i < sizeof TERMINALS / sizeof *TERMINALS && nn < 16; i++)
+        names[nn++] = TERMINALS[i].name;
+
+    /* A pipe the grandchild writes a byte to only if every exec failed;
+     * exec closes it (CLOEXEC), so silence within a moment means success. */
+    int pfd[2];
+    if (pipe(pfd) < 0) { snprintf(msg, msgsz, "cannot open a window: %s", strerror(errno)); return -1; }
+    fcntl(pfd[1], F_SETFD, FD_CLOEXEC);
+
+    pid_t pid = fork();
+    if (pid < 0) { snprintf(msg, msgsz, "cannot open a window: %s", strerror(errno)); close(pfd[0]); close(pfd[1]); return -1; }
+    if (pid == 0) {
+        /* Twice, so the window is nobody's child and our terminal is not
+         * its controlling one. */
+        setsid();
+        pid_t g = fork();
+        if (g != 0) _exit(0);
+        close(pfd[0]);
+        int null = open("/dev/null", O_RDWR);
+        if (null >= 0) { dup2(null, 0); dup2(null, 1); dup2(null, 2); }
+        for (int i = 0; i < nn; i++) {
+            const char *style = term_style(names[i]);
+            const char *argv[8];
+            int k = 0;
+            argv[k++] = names[i];
+            if (style[0]) argv[k++] = style;
+            if (!strcmp(style, "start")) argv[k++] = "--";
+            argv[k++] = app_self_path;
+            argv[k++] = "--watch";
+            argv[k++] = target;
+            argv[k]   = NULL;
+            execvp(names[i], (char *const *)argv);
+        }
+        char no = 1;
+        (void)!write(pfd[1], &no, 1);
+        _exit(127);
+    }
+    close(pfd[1]);
+    waitpid(pid, NULL, 0);
+
+    struct pollfd p = { pfd[0], POLLIN, 0 };
+    int failed = 0;
+    if (poll(&p, 1, 300) > 0) {
+        char no;
+        failed = read(pfd[0], &no, 1) == 1;
+    }
+    close(pfd[0]);
+    if (failed) {
+        snprintf(msg, msgsz, "no terminal found - set $TERMINAL, or run: vtt --watch %s", target);
+        return -1;
+    }
+    snprintf(msg, msgsz, "mirror opened - vtt --watch %s (q closes it)", target);
+    return 0;
 }
 
 /* ------------------------------------------------------------- key page */
