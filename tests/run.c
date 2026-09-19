@@ -7419,6 +7419,10 @@ static void test_turns(void)
     CHECK_EQ(strcmp(m->tokens.v[2].label, "Bram"), 0);
     CHECK_EQ(m->tokens.v[2].init, 15);
 
+    char  err[128];
+    char *text = NULL;
+    Map  *back = NULL;
+
     CASE("the last one out ends the fight");
     Map *solo = map_new(4, 4, "solo");
     tokens_add(&solo->tokens, aria);
@@ -7449,12 +7453,59 @@ static void test_turns(void)
     /* A fight is combat state, like the markers version 3 was for: a file
      * that holds one says 4 so an older build refuses it instead of quietly
      * dropping whose turn it is. A map with no fight still says 3. */
+    /* A game with no initiative: the turn is a side. */
+    CASE("under a spotlight ruleset the turn passes between the players and the GM");
+    str_lcpy(m->ruleset, "daggerheart", sizeof m->ruleset);
+    turn_clear(m, &u);
+    CHECK_EQ(turn_spotlight_ruleset(m), 1);
+    CHECK_EQ(m->spotlight, SPOTLIGHT_PLAYERS);
+    turn_status(m, buf, sizeof buf);
+    CHECK_EQ(strcmp(buf, "Players' spotlight"), 0);
+    turn_flip_spotlight(m, &u);
+    CHECK_EQ(m->spotlight, SPOTLIGHT_GM);
+    turn_status(m, buf, sizeof buf);
+    CHECK_EQ(strcmp(buf, "GM spotlight"), 0);
+    turn_take(m, &u, 0);                                        /* Aria, a player */
+    CHECK_EQ(m->spotlight, SPOTLIGHT_PLAYERS);                  /* the side follows the creature */
+    turn_status(m, buf, sizeof buf);
+    CHECK_EQ(strcmp(buf, "Players' spotlight - Aria"), 0);
+    turn_take(m, &u, 1);                                        /* the ogre */
+    CHECK_EQ(m->spotlight, SPOTLIGHT_GM);
+    turn_flip_spotlight(m, &u);                                 /* across, and nobody holds it */
+    CHECK_EQ(m->spotlight, SPOTLIGHT_PLAYERS);
+    CHECK_EQ(turn_acting(m), -1);
+    CHECK_EQ(undo_undo(&u, m), 1);                              /* one step: side and holder */
+    CHECK_EQ(m->spotlight, SPOTLIGHT_GM);
+    CHECK_EQ(turn_acting(m), 1);
+    CHECK_EQ(turn_panel_wanted(m), 1);
+
+    CASE("a spotlight fight is version 4 too, and ends with the fight");
+    CHECK_EQ(mapio_save(m, "/tmp/vtt-spot.vtt", err, sizeof err), 0);
+    text = slurp("/tmp/vtt-spot.vtt");
+    if (text) {
+        CHECK_EQ(strncmp(text, "VTT 4\n", 6), 0);
+        CHECK(strstr(text, "spotlight gm\n") != NULL);
+        free(text);
+    }
+    back = mapio_load("/tmp/vtt-spot.vtt", err, sizeof err);
+    CHECK(back != NULL);
+    if (back) { CHECK_EQ(back->spotlight, SPOTLIGHT_GM); CHECK_EQ(turn_acting(back), 1); map_free(back); }
+    unlink("/tmp/vtt-spot.vtt");
+    turn_clear(m, &u);
+    CHECK_EQ(m->spotlight, SPOTLIGHT_PLAYERS);
+    m->ruleset[0] = '\0';
+    CHECK_EQ(turn_panel_wanted(m), 0);
+
+    /* Back on numbers for the file tests below. */
+    turn_join(m, &u, 0, 18); turn_join(m, &u, 1, 15); turn_join(m, &u, 2, 15);
+    turn_advance(m, &u, 3);
+
     CASE("a fight round-trips through the file, as version 4");
     turn_take(m, &u, 3);                                        /* an outsider holds the turn */
-    char path[128], err[128];
+    char path[128];
     snprintf(path, sizeof path, "/tmp/vtt-turns-%ld.vtt", (long)getpid());
     CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
-    char *text = slurp(path);
+    text = slurp(path);
     CHECK(text != NULL);
     if (text) {
         CHECK_EQ(strncmp(text, "VTT 4\n", 6), 0);
@@ -7465,7 +7516,7 @@ static void test_turns(void)
         CHECK(strstr(text, want) != NULL);
         free(text);
     }
-    Map *back = mapio_load(path, err, sizeof err);
+    back = mapio_load(path, err, sizeof err);
     CHECK(back != NULL);
     if (back) {
         CHECK_EQ(back->round, m->round);
@@ -7666,6 +7717,73 @@ static void test_turn_keys(void)
     press(&a, "u");
     CHECK_EQ(turn_count(a.map), 3);
     CHECK_EQ(turn_acting(a.map), 1);
+
+    CASE("the panel appears with the fight, takes its width from the map, and can be turned off");
+    press(&a, ":turns off\r");                           /* a known fight: Aria 18, Ogre 12 */
+    play_focus(&a.play, 0); press(&a, "si18\r");
+    play_focus(&a.play, 1); press(&a, "si12\r");
+    CHECK_EQ(a.map->tokens.n, 4);
+    press(&a, "a");
+    rnd_begin(&r);
+    app_draw(&a);
+    CHECK_EQ(a.ed.view.view.x + a.ed.view.view.w, r.w - TURN_PANEL_W);
+    bb_init(&frame, 32768);
+    rnd_dump(&r, &frame);
+    bb_putc(&frame, '\0');
+    CHECK(strstr(frame.data, "Turn order") != NULL);
+    CHECK(strstr(frame.data, "Round 1") != NULL);
+    CHECK(strstr(frame.data, "\u25b6  18  Aria") != NULL);
+    CHECK(strstr(frame.data, "   12  Ogre") != NULL);
+    CHECK(strstr(frame.data, "2 not in the fight") != NULL);
+    bb_free(&frame);
+    press(&a, ":panel off\r");
+    rnd_begin(&r);
+    app_draw(&a);
+    CHECK_EQ(a.ed.view.view.x + a.ed.view.view.w, r.w);
+    press(&a, ":panel\r");
+    rnd_begin(&r);
+    app_draw(&a);
+    CHECK_EQ(a.ed.view.view.x + a.ed.view.view.w, r.w - TURN_PANEL_W);
+    press(&a, ":turns off\r");
+    rnd_begin(&r);
+    app_draw(&a);
+    CHECK_EQ(a.ed.view.view.x + a.ed.view.view.w, r.w);   /* no fight, no panel */
+    press(&a, "u");
+
+    /* Daggerheart: no numbers, a passes the spotlight across, s t hands it
+     * to a creature and the side follows, and the panel shows the sides. */
+    CASE("under daggerheart a passes the spotlight and the panel shows the sides");
+    press(&a, ":turns off\r");
+    press(&a, ":ruleset daggerheart\r");
+    rnd_begin(&r);
+    app_draw(&a);
+    bb_init(&frame, 32768);
+    rnd_dump(&r, &frame);
+    bb_putc(&frame, '\0');
+    CHECK(strstr(frame.data, "Spotlight") != NULL);
+    CHECK(strstr(frame.data, "\u25b6 Players") != NULL);
+    CHECK(strstr(frame.data, "Players' spotlight") != NULL);   /* the title bar too */
+    bb_free(&frame);
+    press(&a, "a");
+    CHECK_EQ(a.map->spotlight, SPOTLIGHT_GM);
+    CHECK(strstr(a.status, "GM has the spotlight") != NULL);
+    press(&a, "3A");                                     /* a count means nothing here */
+    CHECK_EQ(a.map->spotlight, SPOTLIGHT_PLAYERS);
+    play_focus(&a.play, 1);                              /* the ogre */
+    press(&a, "st");
+    CHECK_EQ(a.map->spotlight, SPOTLIGHT_GM);
+    rnd_begin(&r);
+    app_draw(&a);
+    bb_init(&frame, 32768);
+    rnd_dump(&r, &frame);
+    bb_putc(&frame, '\0');
+    CHECK(strstr(frame.data, "\u25b6 GM") != NULL);
+    CHECK(strstr(frame.data, "    Ogre") != NULL);
+    CHECK(strstr(frame.data, "GM spotlight - Ogre") != NULL);
+    bb_free(&frame);
+    press(&a, "u");
+    CHECK_EQ(a.map->spotlight, SPOTLIGHT_PLAYERS);
+    press(&a, ":ruleset none\r");
 
     CASE("the s prefix lists its new members");
     press(&a, "s");

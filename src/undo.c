@@ -232,6 +232,19 @@ void undo_set_round(Undo *u, Map *m, int round)
     m->modified = 1;
 }
 
+void undo_set_spotlight(Undo *u, Map *m, int side)
+{
+    side = side ? SPOTLIGHT_GM : SPOTLIGHT_PLAYERS;
+    if (m->spotlight == side) return;
+
+    Op *o = push(u);
+    o->kind = OP_SPOTLIGHT;
+    o->x    = (int16_t)m->spotlight;
+    o->y    = (int16_t)side;
+    m->spotlight = side;
+    m->modified  = 1;
+}
+
 /* Re-inserts a token at a specific index so undoing a delete restores the
  * ordering that hit-testing depends on. */
 static void token_insert_at(TokenList *l, int idx, Token t)
@@ -272,6 +285,9 @@ static void apply(const Undo *u, Map *m, const Op *o, int forward)
         break;
     case OP_ROUND:
         m->round = forward ? o->y : o->x;
+        break;
+    case OP_SPOTLIGHT:
+        m->spotlight = forward ? o->y : o->x;
         break;
     case OP_TOKEN_MOVE:
         if (o->x >= 0 && o->x < m->tokens.n) {

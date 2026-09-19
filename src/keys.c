@@ -47,10 +47,12 @@ static const KeyDoc PLAY[] = {
     KEY("n  N",   "next / previous match"),
 
     GROUP("Turn order"),
-    KEY("a  A",   "next / previous turn; 3a moves three on; a new lap is a new round"),
+    KEY("a  A",   "next / previous turn; 3a moves three on; a lap is a new round"),
+    KEY("a (spotlight)", "under a spotlight ruleset: the spotlight crosses to the other side"),
     KEY("s i",    "initiative: a number joins the order, blank leaves it"),
     KEY("s t",    "hand the turn to this creature, in the order or not"),
     KEY(":turns", "the whole order on one line    :turns off ends the fight"),
+    KEY(":panel", "the side panel, on or off; it appears when there is a fight"),
 
     GROUP("Status markers"),
     KEY("s a",    "add a marker: a colour and a word"),

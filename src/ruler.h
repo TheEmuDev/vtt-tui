@@ -50,6 +50,10 @@ typedef struct {
      * Daggerheart's two d12s -- or NULL when it has no action roll and
      * :roll wants an expression. */
     const char      *action_roll;
+    /* Set for a game with no initiative, where the turn is a spotlight that
+     * passes between the players and the GM. The tracker shows the side that
+     * has it, and a moves it across, instead of counting rounds. */
+    int              spotlight;
 } Ruleset;
 
 const Ruleset *ruleset_by_name(const char *name);   /* NULL if unknown */

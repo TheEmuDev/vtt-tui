@@ -56,7 +56,7 @@ int mapio_save(Map *m, const char *path, char *err, size_t errsz)
         return -1;
     }
 
-    int fight = m->round > 0;
+    int fight = m->round > 0 || m->spotlight != SPOTLIGHT_PLAYERS;
     for (int i = 0; i < m->tokens.n && !fight; i++) fight = m->tokens.v[i].turn != 0;
     fprintf(f, "VTT %d\n", fight ? FORMAT_VERSION : FORMAT_BEFORE_TURNS);
     fprintf(f, "name %s\n", m->name);
@@ -99,6 +99,7 @@ int mapio_save(Map *m, const char *path, char *err, size_t errsz)
         }
     }
     if (m->round > 0) fprintf(f, "round %d\n", m->round);
+    if (m->spotlight == SPOTLIGHT_GM) fputs("spotlight gm\n", f);
 
     int ok = (fflush(f) == 0);
     if (ok) ok = (fsync(fileno(f)) == 0) || errno == EINVAL;   /* pipes are fine */
@@ -322,6 +323,8 @@ Map *mapio_load(const char *path, char *err, size_t errsz)
             parse_status_line(m, line);
         } else if (!strncmp(line, "tokenturn ", 10)) {
             parse_turn_line(m, line);
+        } else if (!strcmp(line, "spotlight gm")) {
+            m->spotlight = SPOTLIGHT_GM;
         } else if (!strncmp(line, "round ", 6)) {
             int round = 0;
             if (sscanf(line, "round %d", &round) == 1) m->round = iclamp(round, 0, INT16_MAX);

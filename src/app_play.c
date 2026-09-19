@@ -742,6 +742,16 @@ void app_play_key(App *a, Key k)
     case 'a': case 'A': {
         if (pl->grabbed) { app_set_status(a, "put it down first - enter drops, esc cancels"); break; }
 
+        /* No initiative in this game: the turn is a side, and a passes it
+         * across. A count is meaningless here and is dropped. */
+        if (turn_count(m) == 0 && turn_spotlight_ruleset(m)) {
+            take_count_raw(e);
+            turn_flip_spotlight(m, &a->undo);
+            app_note(a, m->spotlight == SPOTLIGHT_GM ? "the GM has the spotlight"
+                                                     : "the players have the spotlight");
+            break;
+        }
+
         int n   = take_count(e);
         int got = turn_advance(m, &a->undo, k.ch == 'a' ? n : -n);
         if (got == TURN_NO_ORDER) {

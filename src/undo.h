@@ -12,6 +12,7 @@ typedef enum {
     OP_TOKEN_MOVE,
     OP_TOKEN_EDIT,
     OP_ROUND,            /* the fight's round counter: x before, y after */
+    OP_SPOTLIGHT,        /* which side has the spotlight: x before, y after */
 } OpKind;
 
 /* One op is one cell or one token changing. Tile ops dominate -- a brush
@@ -82,6 +83,7 @@ void undo_edit_token(Undo *u, Map *m, int idx, Token after);
 
 /* The round counter, so stepping a turn back with u puts the round back too. */
 void undo_set_round(Undo *u, Map *m, int round);
+void undo_set_spotlight(Undo *u, Map *m, int side);
 
 int  undo_undo(Undo *u, Map *m);
 

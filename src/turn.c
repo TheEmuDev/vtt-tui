@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "prof.h"
+#include "ruler.h"
 #include "util.h"
 
 /* Where a creature comes in the walk. The order is never stored or sorted:
@@ -129,6 +130,20 @@ int turn_advance(Map *m, Undo *u, int delta)
     return cur;
 }
 
+int turn_spotlight_ruleset(const Map *m)
+{
+    const Ruleset *rs = ruleset_by_name(m->ruleset);
+    return rs && rs->spotlight;
+}
+
+void turn_flip_spotlight(Map *m, Undo *u)
+{
+    undo_begin(u);
+    pass_turn(m, u, -1);
+    undo_set_spotlight(u, m, m->spotlight == SPOTLIGHT_GM ? SPOTLIGHT_PLAYERS : SPOTLIGHT_GM);
+    undo_end(u);
+}
+
 void turn_join(Map *m, Undo *u, int idx, int init)
 {
     if (idx < 0 || idx >= m->tokens.n) return;
@@ -162,6 +177,8 @@ void turn_take(Map *m, Undo *u, int idx)
     undo_begin(u);
     pass_turn(m, u, idx);
     if ((m->tokens.v[idx].turn & TURN_IN) && m->round == 0) undo_set_round(u, m, 1);
+    /* The side follows the creature: an enemy's turn is the GM's spotlight. */
+    undo_set_spotlight(u, m, m->tokens.v[idx].kind == TOKEN_ENEMY ? SPOTLIGHT_GM : SPOTLIGHT_PLAYERS);
     undo_end(u);
 }
 
@@ -173,6 +190,7 @@ int turn_clear(Map *m, Undo *u)
     for (int i = 0; i < m->tokens.n; i++)
         if (m->tokens.v[i].turn) set_flags(m, u, i, 0, TURN_IN | TURN_ACTING);
     undo_set_round(u, m, 0);
+    undo_set_spotlight(u, m, SPOTLIGHT_PLAYERS);
     undo_end(u);
     return had;
 }
@@ -206,6 +224,12 @@ void turn_sanitize(Map *m)
     }
     if (m->round < 0) m->round = 0;
     if (turn_count(m) == 0) m->round = 0;
+    m->spotlight = m->spotlight ? SPOTLIGHT_GM : SPOTLIGHT_PLAYERS;
+}
+
+static const char *side_name(const Map *m)
+{
+    return m->spotlight == SPOTLIGHT_GM ? "GM spotlight" : "Players' spotlight";
 }
 
 void turn_status(const Map *m, char *buf, size_t bufsz)
@@ -215,6 +239,14 @@ void turn_status(const Map *m, char *buf, size_t bufsz)
 
     int cur = turn_acting(m);
     int n   = turn_count(m);
+
+    /* No initiative in this game: the turn is a side, and a creature only
+     * when one was handed it by name. */
+    if (n == 0 && turn_spotlight_ruleset(m)) {
+        if (cur >= 0) snprintf(buf, bufsz, "%s - %.20s", side_name(m), name_of(&m->tokens.v[cur]));
+        else          snprintf(buf, bufsz, "%s", side_name(m));
+        return;
+    }
     if (cur < 0 && n == 0) return;
 
     int off = 0;
@@ -261,4 +293,94 @@ void turn_list(const Map *m, char *buf, size_t bufsz)
     }
     if (at >= 0 && neighbour(m, at, 1, TOKEN_ANY_KIND, 1) >= 0 && (size_t)off + 5 < bufsz)
         snprintf(buf + off, bufsz - (size_t)off, ", ...");
+}
+
+/* ------------------------------------------------------------ the panel */
+
+int turn_panel_wanted(const Map *m)
+{
+    return turn_count(m) > 0 || turn_acting(m) >= 0 || turn_spotlight_ruleset(m);
+}
+
+void turn_draw_panel(Renderer *r, const Map *m, const Theme *th, Rect rc, int ascii)
+{
+    PROF_ZONE("panel.draw");
+    if (rc.w < 8 || rc.h < 3) return;
+
+    Style plain  = style(th->fg, th->bg, 0);
+    Style dim    = style(th->dim, th->bg, 0);
+    Style head   = style(th->accent, th->bg, ATTR_BOLD);
+    Style lit    = style(th->turn, th->bg, ATTR_BOLD);
+
+    draw_fill(r, rc, ' ', plain);
+    for (int y = rc.y; y < rc.y + rc.h; y++)
+        draw_text(r, rc.x, y, ascii ? "|" : "\u2502", 1, dim);
+
+    int x = rc.x + 2, w = rc.w - 3, y = rc.y;
+    int cur = turn_acting(m);
+    int n   = turn_count(m);
+    const char *mark = ascii ? ">" : "\u25b6";
+
+    if (n == 0 && turn_spotlight_ruleset(m)) {
+        draw_text(r, x, y++, "Spotlight", w, head);
+        y++;
+        for (int side = 0; side < 2 && y < rc.y + rc.h; side++) {
+            int on = (m->spotlight == SPOTLIGHT_GM) == (side == 1);
+            char line[32];
+            snprintf(line, sizeof line, "%s %s", on ? mark : " ", side ? "GM" : "Players");
+            draw_text(r, x, y++, line, w, on ? lit : plain);
+            /* The creature holding it sits under its side. */
+            if (on && cur >= 0 && y < rc.y + rc.h) {
+                char who[40];
+                snprintf(who, sizeof who, "    %.24s", name_of(&m->tokens.v[cur]));
+                draw_text(r, x, y++, who, w,
+                          style(m->tokens.v[cur].kind == TOKEN_ENEMY ? th->enemy : th->player, th->bg, 0));
+            }
+        }
+        return;
+    }
+
+    draw_text(r, x, y++, "Turn order", w, head);
+    if (m->round > 0) {
+        char round[24];
+        snprintf(round, sizeof round, "Round %d", m->round);
+        draw_text(r, x, y++, round, w, dim);
+    }
+    y++;
+
+    /* Highest first, each with its number; the actor lit. One row is kept
+     * for the count of creatures not in the fight. */
+    int at    = -1;
+    int shown = 0;
+    while (shown < n && y < rc.y + rc.h - 2) {
+        at = neighbour(m, at, 1, TOKEN_ANY_KIND, 1);
+        if (at < 0) break;
+        const Token *t = &m->tokens.v[at];
+        int on = at == cur;
+
+        char line[48];
+        snprintf(line, sizeof line, "%s %3d  %.*s", on ? mark : " ", t->init,
+                 imax(1, w - 7), name_of(t));
+        draw_text(r, x, y++, line, w,
+                  on ? lit : style(t->kind == TOKEN_ENEMY ? th->enemy : th->player, th->bg, 0));
+        shown++;
+    }
+    if (shown < n) {
+        char more[24];
+        snprintf(more, sizeof more, "  +%d more", n - shown);
+        draw_text(r, x, y++, more, w, dim);
+    }
+
+    /* A creature holding the turn from outside the order, and the rest. */
+    if (cur >= 0 && !(m->tokens.v[cur].turn & TURN_IN) && y < rc.y + rc.h) {
+        char who[48];
+        snprintf(who, sizeof who, "%s  %.*s", mark, imax(1, w - 3), name_of(&m->tokens.v[cur]));
+        draw_text(r, x, y++, who, w, lit);
+    }
+    int out = m->tokens.n - n;
+    if (out > 0 && y < rc.y + rc.h) {
+        char rest[32];
+        snprintf(rest, sizeof rest, "%d not in the fight", out);
+        draw_text(r, x, rc.y + rc.h - 1, rest, w, dim);
+    }
 }

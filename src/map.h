@@ -20,6 +20,9 @@
 #define MAP_METRIC_DEFAULT 2
 #define MAP_PATH_MAX 512
 
+#define SPOTLIGHT_PLAYERS 0
+#define SPOTLIGHT_GM      1
+
 /* ------------------------------------------------------------ coordinates */
 
 /* Squares are named the way a battle map names them: columns run A, B ... Z,
@@ -93,6 +96,7 @@ typedef struct {
     int  zoom;              /* preferred zoom level, persisted with the map */
     int  modified;          /* unsaved changes */
     int  round;             /* of the fight; 0 when there is none */
+    int  spotlight;         /* SPOTLIGHT_PLAYERS or SPOTLIGHT_GM, for a game that passes one */
 
     /* Measurement settings travel with the encounter, since they belong to
      * the game being played rather than to the session. */

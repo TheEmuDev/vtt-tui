@@ -594,6 +594,7 @@ first, and going past the last starts a new round.
 | `a` `A` | next / previous turn. `3a` moves three on. The view goes to whoever is up, and they become the selection |
 | `s t` | hands the turn to the selected creature, out of order, or with no order at all |
 | `:turns` | reads the whole order out; `:turns off` ends the fight |
+| `:panel` | the side panel, on or off (on by default) |
 
 `a` is the fourth pair shaped like `t` `T`, `f` `F` and `e` `E`, and the odd one out in
 one respect: those look, this one acts. The turn passes, the round counts up, the session
@@ -608,6 +609,23 @@ whatever is selected:
  crypt [+]    Round 2 - Ogre's turn, then Aria, Bram                              PLAY
 ```
 
+**The panel.** When there is a fight and the terminal is 80 columns or wider, a panel down
+the right lists the order top to bottom — number, name, the actor marked with `▶` — with
+the round above it and how many creatures are not in the fight below. It takes its
+columns from the map, never from the bars, and goes away with the fight; `:panel off`
+keeps it away. On a narrower terminal the title bar carries the fight alone.
+
+```
+│ Turn order
+│ Round 2
+│
+│ ▶  18  Aria
+│    15  Ogre
+│    15  Bram
+│
+│ 2 not in the fight
+```
+
 On the map the creature whose turn it is has the grid line above and below it lit, where a
 selected one has all four sides lit in its own colour. The two marks share a creature
 without hiding each other, which matters because advancing the turn selects whoever it
@@ -619,9 +637,11 @@ everything that already handles a creature handles its place in the fight: delet
 never the turn; remove the creature whose turn it is and the turn passes to the next, in the
 same undo step. It is saved with the map.
 
-**Games with no initiative** use `s t` alone. Hand the turn to whoever the table agrees is
-up and the title bar and the bars on the map follow it; nobody needs a number, and `a` is
-never pressed. [Daggerheart](#daggerheart) plays this way.
+**Games with no initiative** get a spotlight instead, when their [ruleset](#rulesets) says
+so. The turn is then a *side* — the players or the GM — and `a` passes it across, `s t`
+hands it to a creature and the side follows that creature's kind, and the panel shows the
+two sides with the lit one marked. Nobody needs a number, and there are no rounds to
+count. [Daggerheart](#daggerheart) plays this way.
 
 ### Dice (`:roll`)
 
@@ -713,9 +733,23 @@ same fictional distance. There is no *Out of Range* band: the book defines it as
 bounds of the conflict, which is a call about the scene rather than a distance, and anything
 the cursor can reach is on the map by definition.
 
-**The spotlight.** Daggerheart has no initiative: the spotlight passes to whoever the
-fiction points at. `s t` is that — it hands the [turn](#turn-order-a) to the selected
-creature with no numbers involved, and the title bar says whose spotlight it is.
+**The spotlight.** Daggerheart has no initiative: the spotlight passes between the players
+and the GM as the fiction and the dice dictate. Under this ruleset the
+[turn tracker](#turn-order-a) tracks that instead of an order. `a` passes the spotlight
+to the other side, `s t` hands it to a particular creature — a player's turn is the
+players' spotlight, an enemy's the GM's — and the panel shows which side has it:
+
+```
+│ Spotlight
+│
+│ ▶ Players
+│     Aria
+│   GM
+```
+
+The title bar says the same in words, *Players' spotlight - Aria*, for a terminal too
+narrow for the panel. Rolling initiative with `s i` still works here; the moment anyone
+has a number the tracker is an order again.
 
 The SRD is explicit that these ranges "aren't intended to be precisely measured during play"
 and are a quick guide for the GM — the readout is the same kind of aid.
@@ -792,12 +826,14 @@ tokenturn 18 acting
 token enemy 10 4 2 "Ogre"
 tokenturn 12
 round 2
+spotlight gm
 ```
 
 A `tokenstatus` line hangs a marker on the token above it, so the attachment needs no index
 to go wrong. A `tokenturn` line does the same for the [turn order](#turn-order-a): the
 creature's number, then `acting` if the turn is its. `tokenturn - acting` is a creature
-holding the turn from outside the order.
+holding the turn from outside the order. `spotlight gm` says the GM has the spotlight, for
+a game that passes one; the players having it is the default and is not written.
 
 | terrain | char | | boundary | char |
 |---------|------|-|----------|------|
@@ -841,7 +877,7 @@ path culls to the visible tiles first.
 | | 80×24 | 200×50 |
 |---|---|---|
 | build, 200×200 map | 29 µs | 121 µs |
-| play, 24 tokens | 32 µs | 102 µs |
+| play, 24 tokens | 30 µs | 108 µs |
 | bytes written per frame | ~209 | ~212 |
 
 **[docs/PERFORMANCE.md](docs/PERFORMANCE.md) has every path measured**, what dominates a

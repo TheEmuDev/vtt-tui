@@ -1568,7 +1568,11 @@ static void draw_editor(App *a)
     const Theme *th = a->th;
     Map         *m  = a->map;
 
-    ed_layout(&a->ed, m, r->w, r->h);
+    /* The turn-order panel takes its columns off the map view, and only
+     * when there is a fight to show and room to show it; the bars keep the
+     * whole width either way. */
+    int panel = a->screen == SCREEN_PLAY && a->play.panel && r->w >= 80 && turn_panel_wanted(m);
+    ed_layout(&a->ed, m, r->w - (panel ? TURN_PANEL_W : 0), r->h);
 
     /* The fight rides in the title bar: it is true for the whole table, not
      * for whatever happens to be selected, so it does not belong on the
@@ -1590,6 +1594,9 @@ static void draw_editor(App *a)
         ruler_draw(r, m, &a->ed.view, &a->ruler, th, 1);
         rnd_clip_restore(r, saved);
     }
+
+    if (panel)
+        turn_draw_panel(r, m, th, rect(r->w - TURN_PANEL_W, 1, TURN_PANEL_W, r->h - 3), a->ascii);
 
     /* Status line sits directly above the keybinding bar. */
     char status[192];

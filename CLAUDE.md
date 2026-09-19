@@ -48,7 +48,7 @@ Bench scripts replay whole; no toggles — use loop-neutral pairs (`llllhhhh`,
 | `app_cmd.c` | every `:` command |
 | `app_priv.h` | what those three share; `count_digit`, `take_count` (silence=1), `take_count_raw` (silence=0) |
 | `play.c/h` | play state, route search (`trail.path`), groups, the range overlay (`RangeGeom`, shapes) |
-| `turn.c/h` | turn order: state is `Token.turn`/`Token.init`, never a list; `turn_walk` also drives `t`/`f`/`e` |
+| `turn.c/h` | turn order and spotlight: state is `Token.turn`/`Token.init` + `Map.round`/`Map.spotlight`, never a list; `turn_walk` also drives `t`/`f`/`e`; draws the side panel |
 | `editor.c` | build mode: brush, visual box/circle, wall trace |
 | `undo.c/h` | flat op log, batches, `OP_ROUND`; tokens in a side array; capped at four fills of the largest map |
 | `mapio.c` | file format; version 4 only when a fight is saved, else 3 |

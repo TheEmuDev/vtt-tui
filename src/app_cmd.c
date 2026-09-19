@@ -196,6 +196,16 @@ void app_exec_command(App *a, const char *line)
         app_note(a, msg);
         return;
     }
+    if (!strcmp(verb, "panel")) {
+        Play *pl = &a->play;
+        if (!*rest)                    pl->panel = !pl->panel;
+        else if (!strcmp(rest, "on"))  pl->panel = 1;
+        else if (!strcmp(rest, "off")) pl->panel = 0;
+        else { app_set_status(a, ":panel on, :panel off, or :panel to toggle"); return; }
+        app_set_status(a, pl->panel ? "turn panel on - it shows when there is a fight"
+                                    : "turn panel off");
+        return;
+    }
     if (!strcmp(verb, "log")) {
         /* :log toggles; on/off say which; anything else is a file. */
         SessionLog *l = &a->slog;

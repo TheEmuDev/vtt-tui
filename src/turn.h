@@ -3,7 +3,10 @@
 
 #include <stddef.h>
 
+#include "draw.h"
 #include "map.h"
+#include "render.h"
+#include "theme.h"
 #include "undo.h"
 
 /* The turn order. Rules-agnostic: a creature in the order has a number, the
@@ -37,6 +40,11 @@ int turn_walk(const Map *m, int from, int dir, int kind);
  * creature now acting, or one of the two codes above with nothing changed. */
 int turn_advance(Map *m, Undo *u, int delta);
 
+/* A spotlight ruleset with no order: the turn is a side, not a creature.
+ * turn_flip_spotlight passes it across and lets go of whoever held it. */
+int  turn_spotlight_ruleset(const Map *m);
+void turn_flip_spotlight(Map *m, Undo *u);
+
 void turn_join(Map *m, Undo *u, int idx, int init);
 void turn_leave(Map *m, Undo *u, int idx);
 void turn_take(Map *m, Undo *u, int idx);
@@ -60,5 +68,14 @@ void turn_status(const Map *m, char *buf, size_t bufsz);
 
 /* ":turns" -- the whole order on one line: "Round 2: Ogre 18*, Aria 15". */
 void turn_list(const Map *m, char *buf, size_t bufsz);
+
+/* Is there anything for the side panel to show? A fight, a held turn, or a
+ * spotlight ruleset, whose two sides are always worth a glance. */
+int  turn_panel_wanted(const Map *m);
+
+/* The side panel: the order top to bottom with the actor marked, or the two
+ * sides of the spotlight with the lit one marked. Draws only inside rc. */
+#define TURN_PANEL_W 24
+void turn_draw_panel(Renderer *r, const Map *m, const Theme *th, Rect rc, int ascii);
 
 #endif /* VTT_TURN_H */
