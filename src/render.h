@@ -41,6 +41,12 @@ typedef struct {
     uint32_t cells_changed;
     uint32_t bytes_written;
 
+    /* Told about every changed cell as the flush walks them, so a remote
+     * view is fed from the same diff at no second walk. NULL when nobody is
+     * watching, which costs one compare per changed cell. */
+    void (*observer)(void *ctx, int x, int y, const Cell *c);
+    void  *observer_ctx;
+
     /* What rnd_begin() clears to. Setting it to the theme background saves a
      * full-screen fill every frame -- on a large terminal that is thousands
      * of writes that the clear was about to make anyway. */
@@ -52,6 +58,13 @@ void rnd_free(Renderer *r);
 
 /* Reallocates for a new size and forces a full repaint. No-op if unchanged. */
 void rnd_resize(Renderer *r, int w, int h);
+
+typedef void (*RndObserver)(void *ctx, int x, int y, const Cell *c);
+static inline void rnd_set_observer(Renderer *r, RndObserver fn, void *ctx)
+{
+    r->observer     = fn;
+    r->observer_ctx = ctx;
+}
 
 /* Sets the colour rnd_begin() clears to. */
 void rnd_set_clear(Renderer *r, uint32_t fg, uint32_t bg);

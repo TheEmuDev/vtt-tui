@@ -29,6 +29,7 @@ void app_init(App *a, Term *t, Renderer *r)
     a->pending_token = -1;
     undo_init(&a->undo);
     slog_init(&a->slog);
+    net_init(&a->net);
 
     /* The frame clear paints the theme background, so no screen-sized fill
      * is needed at the top of any draw. */
@@ -43,6 +44,7 @@ void app_free(App *a)
     a->entries = NULL;
     undo_free(&a->undo);
     slog_close(&a->slog);
+    net_stop(&a->net);
 }
 
 void app_set_status(App *a, const char *msg)

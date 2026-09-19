@@ -5,6 +5,7 @@
 #include "input.h"
 #include "map.h"
 #include "mapio.h"
+#include "net.h"
 #include "play.h"
 #include "ruler.h"
 #include "slog.h"
@@ -85,6 +86,9 @@ typedef struct {
 
     /* The session log, off until :log. */
     SessionLog slog;
+
+    /* The remote view's server, off until :serve. main polls it. */
+    Net net;
 
     TextPrompt prompt;
     PromptWhat prompt_what;

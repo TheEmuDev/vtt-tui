@@ -13,6 +13,7 @@
 #include "render.h"
 #include "term.h"
 #include "util.h"
+#include "watch.h"
 
 /* Upper bound on bytes taken from the terminal in one pass of the event
  * loop, so a flood of input can never postpone the redraw indefinitely. Far
@@ -30,6 +31,9 @@ typedef struct {
     const char *map_path;           /* positional argument */
     uint64_t    seed;
     int         seeded;
+    const char *watch;              /* --watch host:port: be a mirror */
+    int         serve;              /* --serve: open the remote view at startup */
+    int         serve_port;
 } Options;
 
 static void usage(void)
@@ -45,6 +49,8 @@ static void usage(void)
         "  --dump-frame       render one frame as plain text to stdout and exit\n"
         "  --size WxH         geometry for headless modes (default 80x24)\n"
         "  --seed N           seed the dice, for a repeatable session or script\n"
+        "  --serve [PORT]     open the remote view at startup (:serve does it later)\n"
+        "  --watch HOST:PORT  mirror a serving vtt in this terminal, read-only\n"
         "  -h, --help         this message\n",
         stdout);
 }
@@ -65,6 +71,11 @@ static int parse_args(Options *o, int argc, char **argv)
         else if (!strcmp(a, "--script") && i + 1 < argc) o->script_path = argv[++i];
         else if (!strcmp(a, "--bench")  && i + 1 < argc) { o->bench = 1; o->script_path = argv[++i]; }
         else if (!strcmp(a, "--bench-loops") && i + 1 < argc) o->bench_loops = atoi(argv[++i]);
+        else if (!strcmp(a, "--watch") && i + 1 < argc) o->watch = argv[++i];
+        else if (!strcmp(a, "--serve")) {
+            o->serve = 1;
+            if (i + 1 < argc && argv[i + 1][0] >= '0' && argv[i + 1][0] <= '9') o->serve_port = atoi(argv[++i]);
+        }
         else if (!strcmp(a, "--seed") && i + 1 < argc) {
             o->seed = strtoull(argv[++i], NULL, 10);
             o->seeded = 1;
@@ -274,16 +285,32 @@ static int run_interactive(const Options *o)
         script_free(&sc);
     }
 
+    if (o->serve) {
+        char err[128];
+        if (net_start(&a.net, (uint16_t)o->serve_port, &r, err, sizeof err) < 0)
+            app_set_status(&a, err);
+        else {
+            char url[160], msg[200];
+            net_url(&a.net, url, sizeof url);
+            snprintf(msg, sizeof msg, "serving at %s", url);
+            app_set_status(&a, msg);
+        }
+    }
+
     /* Paint once before blocking so the first frame is up immediately. */
     prof_frame_begin();
     rnd_begin(&r);
     app_draw(&a);
+    net_frame_begin(&a.net);
     rnd_flush(&r, &t);
+    net_frame_end(&a.net, prof_now_ns() / 1000000u);
     prof_frame_end();
     prof_set_counters(r.cells_changed, r.bytes_written);
     a.dirty = 0;
 
-    struct pollfd fds[2];
+    /* stdin, the signal pipe, then whatever the remote view is listening
+     * on: its entries are rebuilt every time round, since clients come and go. */
+    struct pollfd fds[2 + 1 + NET_MAX_CLIENTS];
     fds[0].fd = t.in_fd;
     fds[0].events = POLLIN;
     fds[1].fd = term_signal_fd(&t);
@@ -294,12 +321,16 @@ static int run_interactive(const Options *o)
          * must cost zero CPU. The only reason to wake on a timer is an
          * unresolved ESC, which needs a decision after a short grace period. */
         int timeout = input_pending(&p) ? INPUT_ESC_TIMEOUT_MS : -1;
+        int nnet = net_pollfds(&a.net, fds + 2, 1 + NET_MAX_CLIENTS);
+        /* With clients attached, wake now and then for keep-alives. */
+        if (nnet > 1 && (timeout < 0 || timeout > 1000)) timeout = 1000;
 
-        int nready = poll(fds, 2, timeout);
+        int nready = poll(fds, (nfds_t)(2 + nnet), timeout);
         if (nready < 0) {
             if (errno == EINTR) continue;
             break;
         }
+        if (nnet > 0) net_service(&a.net, fds + 2, nnet, prof_now_ns() / 1000000u);
 
         if (nready > 0 && (fds[1].revents & POLLIN)) {
             if (term_drain_signals(&t) && term_update_size(&t)) {
@@ -362,7 +393,10 @@ static int run_interactive(const Options *o)
             prof_frame_begin();
             rnd_begin(&r);
             app_draw(&a);
+            net_set_live(&a.net, a.screen == SCREEN_PLAY);
+            net_frame_begin(&a.net);
             rnd_flush(&r, &t);
+            net_frame_end(&a.net, prof_now_ns() / 1000000u);
             prof_frame_end();
             prof_set_counters(r.cells_changed, r.bytes_written);
             a.dirty = 0;
@@ -385,6 +419,8 @@ int main(int argc, char **argv)
     if (parse_args(&o, argc, argv)) return 0;
 
     draw_set_ascii(o.ascii);
+    if (o.watch) return watch_main(o.watch, o.ascii);
+
     prof_init();
     if (o.seeded) dice_seed(o.seed); else dice_seed_random();
     if (o.trace_path && prof_trace_open(o.trace_path) < 0)

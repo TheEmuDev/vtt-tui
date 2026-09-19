@@ -171,6 +171,7 @@ void rnd_flush(Renderer *r, Term *t)
 
             if (!r->force_full && cell_eq(b, &r->front[i])) continue;
             r->cells_changed++;
+            if (r->observer) r->observer(r->observer_ctx, x, y, b);
 
             if (cx != x || cy != y) {
                 emit_cup(o, x, y);

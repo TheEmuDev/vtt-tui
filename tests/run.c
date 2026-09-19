@@ -13,7 +13,14 @@
 #include <unistd.h>
 
 #include "app.h"
+#include "net.h"
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <poll.h>
+#include <sys/socket.h>
+#include <sys/time.h>
 #include "dice.h"
+#include "wire.h"
 #include "editor.h"
 #include "grid.h"
 #include "map.h"
@@ -7796,6 +7803,446 @@ static void test_turn_keys(void)
     sandbox_leave(&sb);
 }
 
+
+/* ---------------------------------------------------------------- wire */
+
+typedef struct {
+    int      w, h, fulls, ends, pings;
+    uint32_t pal[256];
+    Cell     grid[64 * 32];
+    int      runs, glyphs;
+} WireCatch;
+
+static void wc_full(void *ctx, int w, int h) { WireCatch *c = ctx; c->w = w; c->h = h; c->fulls++; }
+static void wc_pal(void *ctx, int i, uint32_t rgb) { ((WireCatch *)ctx)->pal[i] = rgb; }
+static void wc_end(void *ctx) { ((WireCatch *)ctx)->ends++; }
+static void wc_ping(void *ctx) { ((WireCatch *)ctx)->pings++; }
+static void wc_run(void *ctx, int x, int y, int n, uint8_t fg, uint8_t bg, uint8_t attr,
+                   const uint16_t *g)
+{
+    WireCatch *c = ctx;
+    c->runs++;
+    for (int i = 0; i < n; i++) {
+        if (y < 0 || y >= 32 || x + i < 0 || x + i >= 64) continue;
+        Cell *cell = &c->grid[y * 64 + x + i];
+        cell->ch = g[i]; cell->fg = c->pal[fg]; cell->bg = c->pal[bg]; cell->attr = attr;
+        c->glyphs++;
+    }
+}
+static const WireSink WC_SINK = { wc_full, wc_pal, wc_run, wc_end, wc_ping };
+
+static void test_wire(void)
+{
+    Renderer r;
+    rnd_init(&r);
+    rnd_resize(&r, 40, 12);
+
+    /* A frame with a few runs of text in two colours and a wide glyph. */
+    rnd_begin(&r);
+    draw_text(&r, 2, 3, "hello world", -1, style(0x112233, 0x000000, 0));
+    draw_text(&r, 20, 3, "red", -1, style(0xFF0000, 0x000000, ATTR_BOLD));
+    draw_text(&r, 0, 5, "中", -1, style(0x112233, 0x000000, 0));   /* wide */
+    rnd_flush(&r, NULL);                                                  /* now in front */
+
+    WireEnc e;
+    wire_enc_init(&e, 65536);
+
+    CASE("a full frame decodes to the same cells, in runs, through a palette");
+    wire_enc_full(&e, &r);
+    CHECK_EQ(e.overflow, 0);
+    CHECK_EQ((int)e.cells, 40 * 12);
+    WireCatch c;
+    memset(&c, 0, sizeof c);
+    WireDec d;
+    wire_dec_init(&d, &WC_SINK, &c);
+    uint8_t pal[2048];
+    size_t  pn = wire_enc_palette(&e, 0, pal, sizeof pal);
+    CHECK_EQ((int)pn, e.npal * 5);
+    wire_dec_feed(&d, pal, pn);
+    CHECK_EQ((int)wire_dec_feed(&d, e.buf, e.len), (int)e.len);
+    CHECK_EQ(d.bad, 0);
+    CHECK_EQ(c.w, 40);
+    CHECK_EQ(c.h, 12);
+    CHECK_EQ(c.fulls, 1);
+    CHECK_EQ(c.ends, 1);
+    CHECK_EQ(c.glyphs, 40 * 12);
+    CHECK(c.runs < 40 * 12 / 4);                        /* runs, not cells */
+    int same = 1;
+    for (int y = 0; y < 12; y++)
+        for (int x = 0; x < 40; x++) {
+            const Cell *a = &r.front[y * 40 + x], *b = &c.grid[y * 64 + x];
+            if (a->ch != b->ch || (a->fg & 0xFFFFFF) != b->fg || (a->bg & 0xFFFFFF) != b->bg || a->attr != b->attr) same = 0;
+        }
+    CHECK_EQ(same, 1);
+    CHECK_EQ(c.grid[5 * 64 + 1].ch, 0);                 /* the wide glyph's second half */
+    CHECK(e.npal >= 3 && e.npal <= 8);
+
+    CASE("a diff frame carries only the changed cells, and no palette at all");
+    rnd_begin(&r);
+    draw_text(&r, 2, 3, "hello world", -1, style(0x112233, 0x000000, 0));
+    draw_text(&r, 20, 3, "RED", -1, style(0xFF0000, 0x000000, ATTR_BOLD));
+    draw_text(&r, 0, 5, "中", -1, style(0x112233, 0x000000, 0));
+    wire_enc_begin(&e);
+    rnd_set_observer(&r, (RndObserver)wire_enc_cell, &e);
+    rnd_flush(&r, NULL);
+    rnd_set_observer(&r, NULL, NULL);
+    wire_enc_end(&e);
+    CHECK_EQ((int)e.cells, 3);
+    CHECK_EQ((int)e.len, 1 + 10 + 2 * 3);              /* one run of three, then E */
+    memset(&c, 0, sizeof c);
+    wire_dec_init(&d, &WC_SINK, &c);
+    wire_dec_feed(&d, pal, pn);
+    wire_dec_feed(&d, e.buf, e.len);
+    CHECK_EQ(c.runs, 1);
+    CHECK_EQ(c.glyphs, 3);
+    CHECK_EQ(c.grid[3 * 64 + 20].ch, 'R');
+
+    CASE("nothing changed is nothing on the wire but the end mark");
+    rnd_begin(&r);
+    draw_text(&r, 2, 3, "hello world", -1, style(0x112233, 0x000000, 0));
+    draw_text(&r, 20, 3, "RED", -1, style(0xFF0000, 0x000000, ATTR_BOLD));
+    draw_text(&r, 0, 5, "中", -1, style(0x112233, 0x000000, 0));
+    wire_enc_begin(&e);
+    rnd_set_observer(&r, (RndObserver)wire_enc_cell, &e);
+    rnd_flush(&r, NULL);
+    rnd_set_observer(&r, NULL, NULL);
+    wire_enc_end(&e);
+    CHECK_EQ((int)e.cells, 0);
+    CHECK_EQ((int)e.len, 1);
+
+    CASE("the decoder takes a stream one byte at a time, records split anywhere");
+    wire_enc_full(&e, &r);
+    memset(&c, 0, sizeof c);
+    wire_dec_init(&d, &WC_SINK, &c);
+    wire_dec_feed(&d, pal, pn);
+    for (size_t i = 0; i < e.len; i++) CHECK_EQ((int)wire_dec_feed(&d, e.buf + i, 1), 1);
+    CHECK_EQ(d.bad, 0);
+    CHECK_EQ(c.fulls, 1);
+    CHECK_EQ(c.glyphs, 40 * 12);
+    /* and in odd chunks */
+    memset(&c, 0, sizeof c);
+    wire_dec_init(&d, &WC_SINK, &c);
+    for (size_t i = 0; i < e.len; i += 7) wire_dec_feed(&d, e.buf + i, i + 7 <= e.len ? 7 : e.len - i);
+    CHECK_EQ(c.glyphs, 40 * 12);
+    CHECK_EQ(c.ends, 1);
+
+    CASE("the palette is replayed from any point, and can be reset");
+    CHECK_EQ((int)wire_enc_palette(&e, 1, pal, sizeof pal), (e.npal - 1) * 5);
+    CHECK_EQ((int)wire_enc_palette(&e, e.npal, pal, sizeof pal), 0);
+    wire_enc_reset_palette(&e);
+    CHECK_EQ(e.npal, 0);
+    wire_enc_full(&e, &r);
+    CHECK(e.npal >= 3);
+
+    CASE("a frame that will not fit is flagged, never overrun");
+    WireEnc tiny;
+    wire_enc_init(&tiny, 64);
+    wire_enc_full(&tiny, &r);
+    CHECK_EQ(tiny.overflow, 1);
+    CHECK((int)tiny.len <= 64);
+    wire_enc_free(&tiny);
+
+    CASE("an unknown tag stops the decoder rather than guessing");
+    uint8_t junk[3] = { 'Q', 1, 2 };
+    wire_dec_init(&d, &WC_SINK, &c);
+    wire_dec_feed(&d, junk, 3);
+    CHECK_EQ(d.bad, 1);
+
+    wire_enc_free(&e);
+    rnd_free(&r);
+}
+
+
+/* ----------------------------------------------------------------- net */
+
+static void hex20(const uint8_t *d, char *out)
+{
+    for (int i = 0; i < 20; i++) sprintf(out + 2 * i, "%02x", d[i]);
+}
+
+static void test_net_primitives(void)
+{
+    uint8_t d[20];
+    char    h[41];
+
+    CASE("SHA-1 matches the RFC vectors, one block, empty, and two blocks");
+    net_sha1((const uint8_t *)"abc", 3, d); hex20(d, h);
+    CHECK_EQ(strcmp(h, "a9993e364706816aba3e25717850c26c9cd0d89d"), 0);
+    net_sha1((const uint8_t *)"", 0, d); hex20(d, h);
+    CHECK_EQ(strcmp(h, "da39a3ee5e6b4b0d3255bfef95601890afd80709"), 0);
+    const char *two = "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
+    net_sha1((const uint8_t *)two, strlen(two), d); hex20(d, h);
+    CHECK_EQ(strcmp(h, "84983e441c3bd26ebaae4aa1f95129e5e54670f1"), 0);
+    uint8_t million[1000];
+    memset(million, 'a', sizeof million);
+    net_sha1(million, 64, d); hex20(d, h);                    /* exactly one block of data */
+    CHECK_EQ(strcmp(h, "0098ba824b5c16427bd7a1122a5a442a25ec644d"), 0);
+
+    CASE("base64 pads the way the RFC does");
+    char b[16];
+    net_base64((const uint8_t *)"Man", 3, b, sizeof b); CHECK_EQ(strcmp(b, "TWFu"), 0);
+    net_base64((const uint8_t *)"Ma", 2, b, sizeof b);  CHECK_EQ(strcmp(b, "TWE="), 0);
+    net_base64((const uint8_t *)"M", 1, b, sizeof b);   CHECK_EQ(strcmp(b, "TQ=="), 0);
+
+    CASE("the WebSocket accept key is the one in RFC 6455");
+    char acc[32];
+    net_ws_accept("dGhlIHNhbXBsZSBub25jZQ==", acc);
+    CHECK_EQ(strcmp(acc, "s3pPLMBiTxaQ9kYGzzhZRbK+xOo="), 0);
+}
+
+/* A loopback client of the server under test. */
+static int net_connect(uint16_t port)
+{
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in a;
+    memset(&a, 0, sizeof a);
+    a.sin_family = AF_INET;
+    a.sin_port   = htons(port);
+    a.sin_addr.s_addr = htonl(0x7F000001);
+    if (connect(fd, (struct sockaddr *)&a, sizeof a) < 0) { close(fd); return -1; }
+    struct timeval tv = { 2, 0 };
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+    return fd;
+}
+
+/* One turn of the server's event loop, as main would run it. */
+static void net_pump(Net *n, uint64_t now_ms)
+{
+    struct pollfd fds[1 + NET_MAX_CLIENTS];
+    int k = net_pollfds(n, fds, 1 + NET_MAX_CLIENTS);
+    if (k == 0) return;
+    poll(fds, (nfds_t)k, 20);
+    net_service(n, fds, k, now_ms);
+}
+
+/* Reads from a raw client into the decoder until `ends` frames have
+ * arrived or the wait runs out. */
+static int net_recv_until(Net *n, int fd, WireDec *d, WireCatch *c, int ends, uint64_t now_ms)
+{
+    uint8_t buf[8192];
+    for (int tries = 0; tries < 50 && c->ends < ends; tries++) {
+        net_pump(n, now_ms);
+        struct pollfd p = { fd, POLLIN, 0 };
+        if (poll(&p, 1, 20) <= 0) continue;
+        ssize_t got = read(fd, buf, sizeof buf);
+        if (got <= 0) return -1;
+        wire_dec_feed(d, buf, (size_t)got);
+    }
+    return c->ends >= ends ? 0 : -1;
+}
+
+/* Everything the server has for a WebSocket client, unframed into the decoder. */
+static int ws_recv_until(Net *n, int fd, WireDec *d, WireCatch *c, int ends, uint64_t now_ms)
+{
+    static uint8_t buf[65536];
+    static size_t  len;
+    len = 0;
+    for (int tries = 0; tries < 50 && c->ends < ends; tries++) {
+        net_pump(n, now_ms);
+        struct pollfd p = { fd, POLLIN, 0 };
+        if (poll(&p, 1, 20) <= 0) continue;
+        ssize_t got = read(fd, buf + len, sizeof buf - len);
+        if (got <= 0) return -1;
+        len += (size_t)got;
+        size_t off = 0;
+        for (;;) {
+            if (len - off < 2) break;
+            uint8_t  op = buf[off] & 0x0F;
+            uint64_t pl = buf[off + 1] & 0x7F;
+            size_t   hl = 2;
+            if (pl == 126) { if (len - off < 4) break; pl = ((uint64_t)buf[off + 2] << 8) | buf[off + 3]; hl = 4; }
+            if (len - off < hl + pl) break;
+            CHECK_EQ(op, 2);
+            CHECK_EQ(buf[off] & 0x80, 0x80);
+            wire_dec_feed(d, buf + off + hl, (size_t)pl);
+            off += hl + (size_t)pl;
+        }
+        memmove(buf, buf + off, len - off);
+        len -= off;
+    }
+    return c->ends >= ends ? 0 : -1;
+}
+
+static void test_net_server(void)
+{
+    Renderer r;
+    rnd_init(&r);
+    rnd_resize(&r, 60, 16);
+    rnd_begin(&r);
+    draw_text(&r, 1, 1, "the GM's screen", -1, style(0xD8D8E0, 0x0E0E12, 0));
+    rnd_flush(&r, NULL);
+
+    Net n;
+    net_init(&n);
+    char err[128];
+    uint64_t now = 1000;
+
+    CASE("the server opens on any free port and knows its address");
+    CHECK_EQ(net_start(&n, 0, &r, err, sizeof err), 0);
+    CHECK(n.port > 0);
+    CHECK_EQ(strlen(n.code), (size_t)NET_CODE_LEN);
+    char url[160];
+    net_url(&n, url, sizeof url);
+    CHECK(strstr(url, "http://") != NULL && strstr(url, "/?k=") != NULL);
+    CHECK_EQ(net_clients(&n), 0);
+
+    CASE("a watcher says hello and is sent the whole screen");
+    int w = net_connect(n.port);
+    CHECK(w >= 0);
+    CHECK_EQ((int)write(w, "VTT1\n", 5), 5);          /* local: no code needed */
+    WireCatch c;
+    memset(&c, 0, sizeof c);
+    WireDec d;
+    wire_dec_init(&d, &WC_SINK, &c);
+    CHECK_EQ(net_recv_until(&n, w, &d, &c, 1, now), 0);
+    CHECK_EQ(net_clients(&n), 1);
+    CHECK_EQ(c.fulls, 1);
+    CHECK_EQ(c.w, 60);
+    CHECK_EQ(c.h, 16);
+    CHECK_EQ(c.glyphs, 60 * 16);
+    CHECK_EQ(c.grid[1 * 64 + 5].ch, r.front[1 * 60 + 5].ch);   /* 'G' of GM, same cell */
+    CHECK_EQ(c.grid[1 * 64 + 5].fg, 0xD8D8E0u);
+
+    CASE("a frame with no change sends nothing; a change sends only the diff");
+    uint64_t before = n.total_bytes;
+    rnd_begin(&r);
+    draw_text(&r, 1, 1, "the GM's screen", -1, style(0xD8D8E0, 0x0E0E12, 0));
+    net_frame_begin(&n);
+    rnd_flush(&r, NULL);
+    net_frame_end(&n, now);
+    CHECK_EQ((int)(n.total_bytes - before), 0);
+    rnd_begin(&r);
+    draw_text(&r, 1, 1, "the GM's SCREEN", -1, style(0xD8D8E0, 0x0E0E12, 0));
+    net_frame_begin(&n);
+    rnd_flush(&r, NULL);
+    net_frame_end(&n, now);
+    CHECK((int)(n.total_bytes - before) < 40);         /* one run of six, and E */
+    CHECK_EQ(net_recv_until(&n, w, &d, &c, 2, now), 0);
+    CHECK_EQ(c.grid[1 * 64 + 10].ch, 'S');
+    CHECK_EQ(c.runs, c.runs);                          /* decoded, nothing bad */
+    CHECK_EQ(d.bad, 0);
+
+    CASE("while not live nothing goes out; going live again sends a full frame");
+    net_set_live(&n, 0);
+    rnd_begin(&r);
+    draw_text(&r, 1, 3, "GM only", -1, style(0xFF0000, 0x0E0E12, 0));
+    net_frame_begin(&n); rnd_flush(&r, NULL); net_frame_end(&n, now);
+    before = n.total_bytes;
+    net_pump(&n, now);
+    CHECK_EQ((int)(n.total_bytes - before), 0);
+    net_set_live(&n, 1);
+    rnd_begin(&r);
+    draw_text(&r, 1, 3, "back in play", -1, style(0xD8D8E0, 0x0E0E12, 0));
+    net_frame_begin(&n); rnd_flush(&r, NULL); net_frame_end(&n, now);
+    CHECK_EQ(net_recv_until(&n, w, &d, &c, 3, now), 0);
+    CHECK_EQ(c.fulls, 2);
+    CHECK_EQ(c.grid[3 * 64 + 1].ch, 'b');
+
+    CASE("a keep-alive goes out when the line has been quiet");
+    CHECK_EQ(net_recv_until(&n, w, &d, &c, 3, now + NET_PING_MS + 1), 0);
+    for (int i = 0; i < 5 && c.pings == 0; i++) {
+        net_pump(&n, now + NET_PING_MS + 1);
+        uint8_t z;
+        if (read(w, &z, 1) == 1) wire_dec_feed(&d, &z, 1);
+    }
+    CHECK_EQ(c.pings, 1);
+
+    CASE("a browser gets the page, or a refusal without the code once it is not local");
+    int b = net_connect(n.port);
+    const char *req = "GET /?k=000000 HTTP/1.1\r\nHost: x\r\n\r\n";
+    CHECK_EQ((int)write(b, req, strlen(req)), (int)strlen(req));
+    char resp[4096] = { 0 };
+    size_t rl = 0;
+    for (int i = 0; i < 20 && !strstr(resp, "</body>") && !strstr(resp, "vtt: "); i++) {
+        net_pump(&n, now);
+        ssize_t got = read(b, resp + rl, sizeof resp - 1 - rl);
+        if (got > 0) rl += (size_t)got;
+    }
+    CHECK(strncmp(resp, "HTTP/1.1 200", 12) == 0);
+    CHECK(strstr(resp, "text/html") != NULL);
+    close(b);
+    b = net_connect(n.port);
+    net_pump(&n, now);                                  /* accepted */
+    for (int i = 0; i < n.ncl; i++) if (n.cl[i].kind == CL_NEW) n.cl[i].local = 0;
+    const char *bad = "GET / HTTP/1.1\r\nHost: x\r\n\r\n";
+    CHECK_EQ((int)write(b, bad, strlen(bad)), (int)strlen(bad));
+    memset(resp, 0, sizeof resp); rl = 0;
+    for (int i = 0; i < 20 && !strstr(resp, "code"); i++) {
+        net_pump(&n, now);
+        ssize_t got = read(b, resp + rl, sizeof resp - 1 - rl);
+        if (got > 0) rl += (size_t)got;
+    }
+    CHECK(strncmp(resp, "HTTP/1.1 403", 12) == 0);
+    close(b);
+
+    CASE("a WebSocket upgrade is answered with the right key and a full frame in binary messages");
+    int s = net_connect(n.port);
+    char up[300];
+    snprintf(up, sizeof up,
+             "GET /ws?k=%s HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+             "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n", n.code);
+    CHECK_EQ((int)write(s, up, strlen(up)), (int)strlen(up));
+    memset(resp, 0, sizeof resp); rl = 0;
+    for (int i = 0; i < 20 && !strstr(resp, "\r\n\r\n"); i++) {
+        net_pump(&n, now);
+        ssize_t got = read(s, resp + rl, sizeof resp - 1 - rl);
+        if (got > 0) rl += (size_t)got;
+    }
+    CHECK(strncmp(resp, "HTTP/1.1 101", 12) == 0);
+    CHECK(strstr(resp, "Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=") != NULL);
+    /* Whatever followed the headers is the first message. */
+    WireCatch wc;
+    memset(&wc, 0, sizeof wc);
+    WireDec wd;
+    wire_dec_init(&wd, &WC_SINK, &wc);
+    char *body = strstr(resp, "\r\n\r\n") + 4;
+    size_t bl = rl - (size_t)(body - resp);
+    /* feed via the unframer: put the bytes back where ws_recv_until reads */
+    if (bl) {
+        /* the simplest way: a tiny inline unframe of what we already hold */
+        size_t off = 0;
+        while (bl - off >= 2) {
+            uint64_t pl = (uint8_t)body[off + 1] & 0x7F; size_t hl = 2;
+            if (pl == 126) { pl = ((uint64_t)(uint8_t)body[off + 2] << 8) | (uint8_t)body[off + 3]; hl = 4; }
+            if (bl - off < hl + pl) break;
+            wire_dec_feed(&wd, (uint8_t *)body + off + hl, (size_t)pl);
+            off += hl + (size_t)pl;
+        }
+    }
+    CHECK_EQ(ws_recv_until(&n, s, &wd, &wc, 1, now), 0);
+    CHECK_EQ(wc.fulls, 1);
+    CHECK_EQ(wc.glyphs, 60 * 16);
+    CHECK_EQ(wc.grid[3 * 64 + 1].ch, 'b');
+    CHECK_EQ(net_clients(&n), 2);
+
+    CASE("a client that cannot take a frame is dropped, and the GM is never waited for");
+    int ncl = n.ncl;
+    for (int i = 0; i < n.ncl; i++) if (n.cl[i].kind == CL_RAW) n.cl[i].out_len = NET_SEND_CAP - 4;
+    n.stale = 1;                                        /* force a full frame out */
+    rnd_begin(&r);
+    draw_text(&r, 1, 5, "a big change", -1, style(0xD8D8E0, 0x0E0E12, 0));
+    net_frame_begin(&n); rnd_flush(&r, NULL); net_frame_end(&n, now);
+    CHECK_EQ(n.ncl, ncl - 1);
+    CHECK_EQ((int)n.dropped, 1);
+    CHECK_EQ(ws_recv_until(&n, s, &wd, &wc, 2, now), 0);   /* the other still gets it */
+    CHECK_EQ(wc.grid[5 * 64 + 1].ch, 'a');
+
+    CASE("a client closing is noticed, and the last one out resets the palette");
+    close(s);
+    close(w);
+    for (int i = 0; i < 10 && n.ncl > 0; i++) net_pump(&n, now);
+    CHECK_EQ(n.ncl, 0);
+    CHECK_EQ(n.enc.npal, 0);
+    CHECK(r.observer == NULL);
+
+    CASE("stop closes everything and can start again");
+    net_stop(&n);
+    CHECK_EQ(net_active(&n), 0);
+    CHECK_EQ(net_start(&n, 0, &r, err, sizeof err), 0);
+    net_stop(&n);
+    rnd_free(&r);
+}
+
 int main(void)
 {
     prof_init();
@@ -7812,6 +8259,9 @@ int main(void)
         { "grid",   test_grid },
         { "editor", test_editor },
         { "undo",   test_undo },
+        { "wire",   test_wire },
+        { "netprim", test_net_primitives },
+        { "netserver", test_net_server },
         { "turns",  test_turns },
         { "turnkeys", test_turn_keys },
         { "dice",   test_dice },
