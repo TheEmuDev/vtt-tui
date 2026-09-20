@@ -8342,6 +8342,27 @@ static void test_serve_commands(void)
     sandbox_leave(&sb);
 }
 
+
+static void test_webpage(void)
+{
+    extern const char   WEBPAGE[];
+    extern const size_t WEBPAGE_LEN;
+
+    CASE("the page is one request under 12 KB, with nothing fetched from anywhere");
+    CHECK((int)WEBPAGE_LEN < 12288);
+    CHECK(strstr(WEBPAGE, "<!doctype html") != NULL);
+    CHECK(strstr(WEBPAGE, "new WebSocket(") != NULL);
+    CHECK(strstr(WEBPAGE, "WebAssembly.Module") != NULL);
+    CHECK(strstr(WEBPAGE, "src=\"http") == NULL);
+    CHECK(strstr(WEBPAGE, "href=\"http") == NULL);
+    CHECK(strstr(WEBPAGE, "@import") == NULL);
+
+    CASE("the embedded wasm module is the one tools/blit_wasm.py assembles");
+    const char *w = strstr(WEBPAGE, "const WASM='");
+    CHECK(w != NULL);
+    if (w) CHECK(strncmp(w + 12, "AGFzbQEAAAAB", 12) == 0);   /* \0asm, version 1, a type section */
+}
+
 int main(void)
 {
     prof_init();
@@ -8362,6 +8383,7 @@ int main(void)
         { "netprim", test_net_primitives },
         { "netserver", test_net_server },
         { "serve",  test_serve_commands },
+        { "webpage", test_webpage },
         { "turns",  test_turns },
         { "turnkeys", test_turn_keys },
         { "dice",   test_dice },

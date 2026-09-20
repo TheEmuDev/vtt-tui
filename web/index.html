@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=8">
+<meta name="theme-color" content="#0e0e12">
+<title>vtt</title>
+<style>
+html,body{margin:0;background:#0e0e12;color:#d8d8e0;height:100%;overflow:hidden;font:12px/1.4 monospace;-webkit-user-select:none;user-select:none}
+body{display:flex;align-items:center;justify-content:center}
+#c{display:block;image-rendering:pixelated;touch-action:pinch-zoom}
+#s{position:fixed;left:0;bottom:0;padding:2px 6px;background:rgba(14,14,18,.85);color:#60647a;font:11px monospace;pointer-events:none}
+#s b{color:#8ac8ff;font-weight:normal}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="s">connecting…</div>
+<script>
+'use strict';
+/* vtt remote view. The GM's terminal, drawn the way a terminal draws it:
+ * glyphs rasterised once into an atlas, a pixel framebuffer, and one
+ * putImageData of what changed. Nothing is allocated per frame. */
+const cv=document.getElementById('c'),st=document.getElementById('s');
+const ctx=cv.getContext('2d',{alpha:false});
+let cols=0,rows=0,gl=null,fg=null,bg=null,at=null;        // the cell buffer
+const pal=new Uint32Array(256);                            // 0xRRGGBB by index
+let cw=8,ch=16,fpx=13,scale=1;                             // cell size in device px
+let img=null,px=null;                                      // framebuffer (ImageData, Uint32 view)
+/* The copy loop, in WebAssembly: tools/blit_wasm.py assembles it by hand.
+ * w(dst, ptrs, n, rows, stride) copies n tiles into a row of the framebuffer,
+ * each listed in ptrs as (byte offset, row bytes). Without it, the same in JS. */
+const WASM='AGFzbQEAAAABCQFgBX9/f39/AAIIAQFlAW0CAAEDAgEABwUBAXcAAAqQAQGNAQEHfwJAA0AgBSACTw0BIAEgBUEDdGoiCigCACEHIAooAgQhCCAAIQlBACEGAkADQCAGIANPDQFBACELAkADQCALIAhPDQEgCSALaiAHIAtqKQMANwMAIAtBCGohCwwACwsgCSAEaiEJIAcgCGohByAGQQFqIQYMAAsLIAAgCGohACAFQQFqIQUMAAsLCw==';
+const wmod=typeof WebAssembly!=='undefined'?new WebAssembly.Module(Uint8Array.from(atob(WASM),c=>c.charCodeAt(0))):null;
+let mem=null,wblit=null,tilesAt=0,tilesEnd=0,tnext=0,ptrsAt=0,ptrs=null,tu32=null;
+let rd=null,rx0=null,rx1=null,dirtyAll=false;               // dirty span per row, in cells
+let ms=0,frames=0,ws=null,retry=null;
+
+/* ---- glyph atlas: alpha masks, keyed by glyph and bold, made on demand */
+const atlas=new Map();
+const gcv=document.createElement('canvas'),gctx=gcv.getContext('2d',{willReadFrequently:true});
+function mask(g,bold,wide){
+  const key=g|(bold?1<<21:0)|(wide?1<<22:0);
+  let m=atlas.get(key);
+  if(m)return m;
+  const w=wide?cw*2:cw;
+  gcv.width=w;gcv.height=ch;
+  gctx.clearRect(0,0,w,ch);
+  gctx.fillStyle='#fff';
+  gctx.font=(bold?'bold ':'')+fpx+'px monospace';
+  gctx.textBaseline='middle';
+  gctx.fillText(String.fromCharCode(g),0,ch/2);
+  const d=gctx.getImageData(0,0,w,ch).data,a=new Uint8Array(w*ch);
+  for(let i=0,j=3;i<a.length;i++,j+=4)a[i]=d[j];
+  m={a,w};atlas.set(key,m);
+  return m;
+}
+
+/* ---- tiles: a glyph in its colours, rendered once, then copied by the row.
+ * The blend runs once per distinct (glyph, colours, attributes), which a
+ * frame has a few hundred of; every cell after that is native row copies. */
+/* Two levels, so every key is a small integer: the glyph indexes an array,
+ * the colours and attributes key a map beneath it. */
+const tiles=new Array(65536);let ntiles=0;
+function tile(g,f,b,a,wide){
+  let byc=tiles[g];
+  if(!byc)byc=tiles[g]=new Map();
+  const key=(a<<17|f<<9|b<<1|(wide?1:0));
+  let t=byc.get(key);
+  if(t)return t;
+  if(++ntiles>4096)clearTiles();
+  let fc=pal[f],bc=pal[b];
+  if(a&8){const q=fc;fc=bc;bc=q}                              // reverse
+  if(a&2)fc=((fc>>1)&0x7f7f7f)+((bc>>1)&0x7f7f7f);            // dim: halfway to the background
+  const m=mask(g,(a&1)!==0,wide),w=m.w,ma=m.a;
+  const fr=fc>>16&255,fgn=fc>>8&255,fb=fc&255,br=bc>>16&255,bgn=bc>>8&255,bb=bc&255;
+  const pixF=0xff000000|fb<<16|fgn<<8|fr,pixB=0xff000000|bb<<16|bgn<<8|br;
+  const need=w*ch;
+  if(tnext+need*4>tilesEnd){clearTiles();}
+  const off=tnext;tnext+=need*4;
+  const buf=tu32.subarray(off>>2,(off>>2)+need);
+  for(let k=0;k<buf.length;k++){
+    const al=ma[k];
+    if(al===0)buf[k]=pixB;
+    else if(al===255)buf[k]=pixF;
+    else{const ia=255-al;
+      buf[k]=0xff000000|((bb*ia+fb*al)/255|0)<<16|((bgn*ia+fgn*al)/255|0)<<8|((br*ia+fr*al)/255|0)}
+  }
+  if(a&4)for(let c=0;c<w;c++)buf[(ch-1)*w+c]=pixF;            // underline
+  t={off,wb:w*4};byc.set(key,t);
+  return t;
+}
+function clearTiles(){tiles.fill(undefined);ntiles=0;tnext=tilesAt;dirtyAll=true}
+
+/* ---- a row's dirty span into the framebuffer: list the tiles, one call */
+function blitRow(y,x0,x1){
+  let n=0;
+  for(let x=x0;x<=x1;x++){
+    const i=y*cols+x,g=gl[i];
+    if(g===0)continue;                                     // second half of a wide glyph
+    const wide=g>0x2E7F&&g<0xA4D0&&x+1<cols&&gl[i+1]===0;
+    const t=tile(g,fg[i],bg[i],at[i],wide);
+    ptrs[2*n]=t.off;ptrs[2*n+1]=t.wb;n++;
+  }
+  /* x0 may be the blank half of a wide glyph; its tile is one cell back and
+   * was listed by the caller widening the span. Cells are laid down in
+   * order, so the destination is x0's, or one cell left of it. */
+  const start=(y*ch*cols+x0)*cw*4;
+  if(wblit)wblit(start,ptrsAt,n,ch,cols*cw*4);
+  else{let d=start>>2;for(let k=0;k<n;k++){const off=ptrs[2*k]>>2,w=ptrs[2*k+1]>>2;let o=d;for(let r=0;r<ch;r++,o+=cols*cw)px.set(tu32.subarray(off+r*w,off+(r+1)*w),o);d+=w}}
+}
+
+/* ---- present the dirty rectangle, once per animation frame */
+/* An animation frame when the browser will give one, a timer when it will
+ * not: an occluded window gets no animation frames at all. */
+let raf=0,tmo=0;
+function present(){
+  if(raf)cancelAnimationFrame(raf);if(tmo)clearTimeout(tmo);raf=tmo=0;
+  if(!img)return;
+  const t0=performance.now();
+  if(dirtyAll){for(let y=0;y<rows;y++){rd[y]=1;rx0[y]=0;rx1[y]=cols-1}dirtyAll=false}
+  /* Blit the dirty cells, then push pixels: a few rows go one by one, more
+   * than that go as one box, since each push is a native copy with a fixed
+   * cost on top. */
+  let cells=0,nrows=0,by0=rows,by1=-1,bx0=cols,bx1=-1;
+  for(let y=0;y<rows;y++){
+    if(!rd[y])continue;
+    const x0=rx0[y],x1=rx1[y];
+    blitRow(y,x0,x1);
+    cells+=x1-x0+1;nrows++;
+    if(y<by0)by0=y;if(y>by1)by1=y;if(x0<bx0)bx0=x0;if(x1>bx1)bx1=x1;
+  }
+  if(nrows>4)ctx.putImageData(img,0,0,bx0*cw,by0*ch,(bx1-bx0+1)*cw,(by1-by0+1)*ch);
+  for(let y=0;y<rows;y++){
+    if(!rd[y])continue;
+    if(nrows<=4)ctx.putImageData(img,0,0,rx0[y]*cw,y*ch,(rx1[y]-rx0[y]+1)*cw,ch);
+    rd[y]=0;rx0[y]=1e9;rx1[y]=-1;
+  }
+  ms=performance.now()-t0;frames++;last=cells;
+  status();
+}
+function schedule(){if(!raf){raf=requestAnimationFrame(present);tmo=setTimeout(present,50)}}
+let last=0;
+function touch(x0,y,x1){if(x0<rx0[y])rx0[y]=x0;if(x1>rx1[y])rx1[y]=x1;rd[y]=1;schedule()}
+
+/* ---- sizing: fit the columns to the viewport, crisp at the zoom in force */
+function layout(){
+  if(!cols)return;
+  const vv=window.visualViewport,z=vv?vv.scale:1,dpr=window.devicePixelRatio||1;
+  scale=dpr*z;
+  /* The whole frame on screen: as wide as the width allows, or as the
+   * height does, whichever bites first. A cell is twice as tall as wide. */
+  cw=Math.max(4,Math.min(Math.floor(window.innerWidth*dpr/cols),Math.floor(window.innerHeight*dpr/(rows*2))))&~1;
+  fpx=Math.round(cw*1.7);ch=cw*2;
+  cv.width=cols*cw;cv.height=rows*ch;
+  cv.style.width=(cv.width/dpr)+'px';cv.style.height=(cv.height/dpr)+'px';
+  /* One block of memory for everything: the framebuffer, the tile list for
+   * a row, and an arena of rendered tiles, sized for a few thousand. */
+  const fbBytes=cv.width*cv.height*4,arena=Math.min(4096*cw*ch*4,8<<20);
+  ptrsAt=fbBytes;tilesAt=fbBytes+cols*8;tilesEnd=tilesAt+arena;
+  const pages=Math.ceil(tilesEnd/65536)+1;
+  let buf;
+  if(wmod){mem=new WebAssembly.Memory({initial:pages});wblit=new WebAssembly.Instance(wmod,{e:{m:mem}}).exports.w;buf=mem.buffer}
+  else buf=new ArrayBuffer(pages*65536);
+  img=new ImageData(new Uint8ClampedArray(buf,0,fbBytes),cv.width,cv.height);
+  px=new Uint32Array(buf,0,fbBytes>>2);
+  ptrs=new Int32Array(buf,ptrsAt,cols*2);
+  tu32=new Uint32Array(buf);
+  atlas.clear();clearTiles();
+  schedule();
+}
+let lz=0;
+addEventListener('resize',layout);
+if(window.visualViewport)window.visualViewport.addEventListener('resize',()=>{clearTimeout(lz);lz=setTimeout(layout,150)});
+
+/* ---- the wire: records, little-endian, no text */
+function feed(u8){
+  const dv=new DataView(u8.buffer,u8.byteOffset,u8.byteLength);
+  let p=0;const n=u8.byteLength;
+  while(p<n){
+    const t=u8[p];
+    if(t===0x46){                                          // 'F' w h
+      const w=dv.getUint16(p+1,true),h=dv.getUint16(p+3,true);p+=5;
+      if(w!==cols||h!==rows){cols=w;rows=h;gl=new Uint16Array(w*h);fg=new Uint8Array(w*h);bg=new Uint8Array(w*h);at=new Uint8Array(w*h);
+        rd=new Uint8Array(h);rx0=new Int32Array(h).fill(1e9);rx1=new Int32Array(h).fill(-1);layout()}
+      dirtyAll=true;
+    }else if(t===0x50){pal[u8[p+1]]=u8[p+2]<<16|u8[p+3]<<8|u8[p+4];p+=5;clearTiles();dirtyAll=true}   // 'P'
+    else if(t===0x52){                                     // 'R' x y n fg bg attr, glyphs
+      const x=dv.getUint16(p+1,true),y=dv.getUint16(p+3,true),k=dv.getUint16(p+5,true);
+      const f=u8[p+7],b=u8[p+8],a=u8[p+9];p+=10;
+      if(y<rows){let i=y*cols+x;
+        for(let j=0;j<k&&x+j<cols;j++,i++){gl[i]=dv.getUint16(p+2*j,true);fg[i]=f;bg[i]=b;at[i]=a}
+        touch(Math.max(0,x-1),y,Math.min(cols-1,x+k))}     // a neighbour, for a wide glyph's half
+      p+=2*k;
+    }else if(t===0x45){p++;schedule()}                     // 'E': present
+    else if(t===0x5a){p++}                                 // 'Z': keep-alive
+    else break;
+  }
+}
+
+/* ---- connection */
+function status(m){
+  st.innerHTML=m||('<b>'+cols+'×'+rows+'</b> '+ms.toFixed(2)+' ms · '+last+' cells · '+frames);
+}
+function connect(){
+  const k=new URLSearchParams(location.search).get('k')||'';
+  ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws?k='+k);
+  ws.binaryType='arraybuffer';
+  ws.onopen=()=>{status('connected');if(navigator.wakeLock)navigator.wakeLock.request('screen').catch(()=>{})};
+  ws.onmessage=e=>feed(new Uint8Array(e.data));
+  ws.onclose=()=>{status('disconnected · retrying');retry=setTimeout(connect,2000)};
+  ws.onerror=()=>ws.close();
+}
+connect();
+</script>
+</body>
+</html>
