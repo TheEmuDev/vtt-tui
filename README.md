@@ -704,11 +704,31 @@ menus.
 | `:mirror` | a second terminal window mirroring play mode, to drag to a TV; serves if it has to |
 | `vtt --watch HOST:PORT` | the same mirror by hand, on any machine on the LAN |
 
-**Phones and tablets** open the URL in a browser: `http://192.168.1.10:7777/?k=482913`.
-The page is 10 KB, served by `vtt` itself, and fetches nothing from anywhere. It draws
-the GM's terminal on a canvas, fitted to the screen and crisp again after a pinch, and it
-reconnects by itself. The join code is in the URL so nobody on the network can wander in;
-this is a living-room lock, not a secure one, and there is no TLS by design.
+**Connecting a phone or tablet.** Nothing to install; the phone needs a browser and the
+same Wi-Fi as the GM's machine.
+
+1. On the GM's machine, open the map, press `F2` for play mode, and type `:serve`. The
+   status line shows the address, something like `serving at http://192.168.1.10:7777/?k=482913`.
+   `:serve 7777` names the port, so the address is the same every session; the six-digit
+   join code is new each time.
+2. On the phone, open Chrome (or any browser) and type that address in exactly, code and
+   all. Turn the phone sideways: an 80-column terminal wants the width.
+3. The map appears and follows the GM from then on. The corner of the page shows the
+   size of the GM's terminal and how long each frame took to draw; that is the only thing
+   on the page that is not the GM's screen.
+
+The page is 10 KB, served by `vtt` itself, and fetches nothing from anywhere. It fits the
+GM's whole terminal to the screen, is crisp again after a pinch, keeps the screen awake,
+and reconnects by itself if the Wi-Fi drops or the GM restarts the server.
+
+If the phone says it cannot reach the address, one of two things is in the way. The GM
+machine's firewall may not allow the port -- open it, or pick one that is open. Or the
+router keeps Wi-Fi devices from talking to each other ("client isolation" or "AP
+isolation", common on guest networks) -- use the main network, or a phone hotspot with
+both devices on it. A wrong or missing join code gets a short refusal page instead.
+
+The join code is a living-room lock, not a secure one: it stops the neighbours' devices
+wandering in, and there is no TLS by design.
 
 **The second terminal** is the same picture in a terminal: `:mirror` opens a new window
 running `vtt --watch` against the GM's own server, via `$TERMINAL` or whichever terminal it
