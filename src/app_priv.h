@@ -47,6 +47,8 @@ static inline int take_count_raw(Editor *e)
 void app_open_prompt(App *a, PromptWhat what, const char *title,
                      const char *hint, const char *initial);
 void app_clear_token_status(App *a, int idx, int which);
+/* Opens the note on creature idx, or on square (x,y) when idx is -1. */
+void app_note_prompt(App *a, int idx, int x, int y);
 void app_follow_selection(App *a);
 void app_report_selection(App *a);
 void app_ruler_begin(App *a);

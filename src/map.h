@@ -39,6 +39,16 @@ typedef struct {
     char expr[ROLL_EXPR_MAX];
 } NamedRoll;
 
+/* Notes on squares: "pressure plate", "the altar hides the key". A sparse
+ * list, since a map with more than a few dozen is a novel. Not drawn in
+ * play mode, where the map is what the players may see. */
+#define MAP_NOTES_MAX 64
+#define NOTE_MAX      TOKEN_NOTE_MAX
+typedef struct {
+    int16_t x, y;
+    char    text[NOTE_MAX];
+} Note;
+
 #define SPOTLIGHT_PLAYERS 0
 #define SPOTLIGHT_GM      1
 
@@ -118,6 +128,8 @@ typedef struct {
     int  spotlight;         /* SPOTLIGHT_PLAYERS or SPOTLIGHT_GM, for a game that passes one */
     Clock clocks[CLOCK_MAX];
     NamedRoll rolls[ROLL_MAX];
+    Note notes[MAP_NOTES_MAX];
+    int  nnotes;
 
     /* Measurement settings travel with the encounter, since they belong to
      * the game being played rather than to the session. */
@@ -167,6 +179,11 @@ int map_edge_opaque(const Map *m, int x, int y, int dx, int dy);
  * diagonals too; a diagonal is blocked if either of the orthogonal crossings
  * it is made of is blocked, so you cannot slip through a corner. */
 int map_blocked(const Map *m, int x, int y, int dx, int dy);
+
+/* The note on a square, or NULL. Setting a blank removes it; returns 0
+ * when there was no room for a new one. */
+const char *map_note_at(const Map *m, int x, int y);
+int         map_note_set(Map *m, int x, int y, const char *text);
 
 /* Fills a tile rectangle, clipped to the map. */
 void map_fill_tiles(Map *m, int x0, int y0, int x1, int y1, uint8_t kind);

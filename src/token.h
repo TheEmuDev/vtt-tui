@@ -7,6 +7,9 @@
 
 #define TOKEN_LABEL_MAX 32
 #define TOKEN_SIZE_MAX  3
+/* A line of the GM's own text on a creature: what it wants, what it is
+ * hiding, what it does when cornered. Never drawn on the map. */
+#define TOKEN_NOTE_MAX  64
 
 /* Markers a GM hangs on a creature: poisoned, marked, restrained, whatever
  * the table calls it. The tool attaches no meaning to them -- they are a
@@ -42,6 +45,7 @@ typedef struct {
      * Rules-agnostic on purpose -- init is just a number, highest first. */
     uint8_t turn;       /* TURN_IN | TURN_ACTING */
     int16_t init;       /* meaningful only with TURN_IN */
+    char    note[TOKEN_NOTE_MAX];
 } Token;
 
 #define TURN_IN     0x01u   /* has a place in the order */
@@ -94,6 +98,7 @@ static inline int token_equal(const Token *a, const Token *b)
         return 0;
     if (strcmp(a->label, b->label) != 0 || a->nstatus != b->nstatus) return 0;
     if (a->turn != b->turn || ((a->turn & TURN_IN) && a->init != b->init)) return 0;
+    if (strcmp(a->note, b->note) != 0) return 0;
     for (int i = 0; i < a->nstatus; i++)
         if (a->status[i].color != b->status[i].color ||
             strcmp(a->status[i].label, b->status[i].label) != 0)

@@ -151,6 +151,7 @@ Maps are found in the current directory and in `~/.local/share/vtt/maps`.
 | `f` `x` | fill selection with floor / clear it to void |
 | `b` `B` | brush size, 1×1 → 2×2 → 3×3 — `2b` names it |
 | `space` | toggle the cursor tile between floor and void |
+| `s n` | a note on this square |
 | `u`, `Ctrl-r` | undo / redo |
 | `+` `-` | zoom in / out |
 | `z` | centre the view on the cursor |
@@ -248,6 +249,7 @@ A whole pen-down stroke is one undo step.
 | `s a` | add a status marker (prompts for a word) |
 | `s c` | change the colour the next marker will use |
 | `s d` | take a marker off (asks which, when there is more than one) |
+| `s n` | a note on the selected creature, or on this square when there is none |
 | `a` `A` | next / previous turn — `3a` moves three on (see [Turn order](#turn-order-a)) |
 | `s i` | initiative: a number puts the creature in the turn order, a blank takes it out |
 | `s t` | hand the turn to this creature, whether or not it is in the order |
@@ -263,8 +265,8 @@ A whole pen-down stroke is one undo step.
 | `?` | every key, in full |
 
 Two prefixes carry a family each, which is what keeps the bar to six hints: `i` inserts
-(`i p`, `i e`) and `s` is for a creature's state — its markers (`s a`, `s c`, `s d`) and its place in the
-fight (`s i`, `s t`). Press either alone and
+(`i p`, `i e`) and `s` is for a creature's state — its markers (`s a`, `s c`, `s d`), its place in the
+fight (`s i`, `s t`) and its note (`s n`). Press either alone and
 the status line names the options; `esc` abandons it. A prefix swallows whatever comes
 next, so a half-typed command can never turn into a different whole one.
 
@@ -429,6 +431,20 @@ more than one it asks which:
 The rows are spelled out and coloured, because the map only ever showed initials and two
 conditions can share one. A token wearing a single marker skips the question — a chooser
 with one row asks nothing.
+
+**Notes.** `s n` is a line of the GM's own text on the selected creature — what it wants,
+what it is hiding, what it does when cornered — or, with no creature under the cursor, on
+the square: "pressure plate", "the altar hides the key". One prompt reads and writes it: it
+opens holding what is there, `enter` keeps or changes it, `ctrl-u` then `enter` takes it
+away. A creature's note travels with it through copy, paste, undo and the file; a square's
+note is a setting of that square, written or blanked.
+
+Play mode is what the players may see, so a note never appears there. The status line says
+`(note)` when the cursor is on one and nothing more; `:notes` says where they all are; and
+while a note is open the [remote view](#remote-view-serve-mirror) holds its last frame, so
+a phone never shows the prompt. Build mode, which is the GM's alone, marks every noted
+square with a `”` in its corner, and has `s n` too, for the square. A map holds sixty-four
+notes on squares and one on every creature.
 
 ### Ruler (`m`)
 
@@ -731,7 +747,7 @@ as it is written, so a crash loses nothing, and closing the map closes the log.
 Players watch the map from their own devices. The GM's `vtt` serves; a phone, a tablet or
 a second terminal is a client of the same stream, and all of them see exactly what the GM
 sees in play mode -- and keep seeing it, frozen, while the GM is in build mode or the
-menus.
+menus, or has a note open.
 
 | | |
 |---|---|
@@ -884,6 +900,7 @@ with no verdict, ruleset or not.
 | `:turns` | read the [turn order](#turn-order-a) out; `:turns off` ends the fight |
 | `:panel` | the side panel, on or off |
 | `:clock NAME N` | start a [clock](#clocks-clock-tick); `:tick` fills a segment |
+| `:notes` | where the [notes](#play-mode-f2) are |
 | `:roll 2d6+3` | roll dice — see [Dice](#dice-roll) |
 | `:roll NAME = EXPR` | save a roll under a name; `:rolls` lists them |
 | `:log` | the session log, on or off — see [Session log](#session-log-log) |
@@ -922,12 +939,14 @@ hedges          # w chars per row, h+1 rows
 token player 2 2 1 "Aria"
 tokenstatus red "Poisoned"
 tokenturn 18 acting
+tokennote "wants the amulet"
 token enemy 10 4 2 "Ogre"
 tokenturn 12
 round 2
 spotlight gm
 clock Dragon 3 6
 roll attack "2d12+3"
+note 5 3 "pressure plate"
 ```
 
 A `tokenstatus` line hangs a marker on the token above it, so the attachment needs no index
@@ -936,7 +955,8 @@ creature's number, then `acting` if the turn is its. `tokenturn - acting` is a c
 holding the turn from outside the order. `spotlight gm` says the GM has the spotlight, for
 a game that passes one; the players having it is the default and is not written. A
 `clock` line is a [clock](#clocks-clock-tick): its name, then filled and total segments;
-a `roll` line a [named roll](#dice-roll).
+a `roll` line a [named roll](#dice-roll). `tokennote` hangs a note on the token above it,
+and `note x y` puts one on a square.
 
 | terrain | char | | boundary | char |
 |---------|------|-|----------|------|
@@ -954,7 +974,7 @@ room as open. Version 3 added status markers: an older reader would ignore those
 silently drop them, losing combat state from a saved fight, so it refuses too. Version 4
 added the turn order, for the same reason — but only a map with a fight in it says 4. One
 without is still written as version 3, which says everything it needs to and stays
-loadable by the builds that came before. Version 5 added clocks and named rolls, on the same terms: the
+loadable by the builds that came before. Version 5 added clocks, named rolls and notes, on the same terms: the
 writer always picks the lowest version that says everything in the map. Each version
 still loads everything older, and an unrecognised character reads as empty rather than
 failing the load.

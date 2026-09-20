@@ -66,6 +66,9 @@ static const KeyDoc PLAY[] = {
     KEY("s a",    "add a marker: a colour and a word"),
     KEY("s c",    "colour the next marker will use"),
     KEY("s d",    "drop a marker, asking which when there are several"),
+    GROUP("Notes"),
+    KEY("s n",    "a note on this creature, or on the square; the prompt reads and writes it"),
+    KEY(":notes", "where the notes are"),
 
     GROUP("Tools"),
     KEY("m",      "measure (the ruler)"),

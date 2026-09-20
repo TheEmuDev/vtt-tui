@@ -47,6 +47,7 @@ typedef enum {
     PROMPT_STATUS_LABEL,
     PROMPT_INITIATIVE,
     PROMPT_TOKEN_SEARCH,
+    PROMPT_NOTE,
 } PromptWhat;
 
 typedef struct {
@@ -130,6 +131,17 @@ void app_draw(App *a);
 void app_set_status(App *a, const char *msg);
 void app_note(App *a, const char *msg);     /* status line + session log */
 void app_status_span(App *a, int at, int len, uint32_t fg);   /* colour part of it */
+
+/* Is the frame the GM's alone right now? True while a note is open for
+ * reading or writing: play mode is otherwise what the players may see, and
+ * the remote view holds its last frame until this is false again. */
+int  app_gm_only(const App *a);
+
+/* Whether the remote view should be streaming this frame. */
+static inline int app_remote_live(const App *a)
+{
+    return a->screen == SCREEN_PLAY && !app_gm_only(a);
+}
 
 /* How to run this binary again, for :mirror's second window; main sets it
  * from /proc/self/exe or argv[0]. */

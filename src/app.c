@@ -487,6 +487,34 @@ void app_open_prompt(App *a, PromptWhat what, const char *title,
     a->dirty = 1;
 }
 
+int app_gm_only(const App *a)
+{
+    return a->modal == MODAL_PROMPT && a->prompt_what == PROMPT_NOTE;
+}
+
+/* The prompt is the reader as well as the writer: it opens holding what is
+ * there, enter keeps or changes it, ctrl-u then enter takes it away. */
+void app_note_prompt(App *a, int idx, int x, int y)
+{
+    char title[64];
+    const char *had;
+    if (idx >= 0 && idx < a->map->tokens.n) {
+        const Token *t = &a->map->tokens.v[idx];
+        a->pending_token = idx;
+        snprintf(title, sizeof title, "note on %.20s", t->label[0] ? t->label : token_kind_name(t->kind));
+        had = t->note;
+    } else {
+        a->pending_token = -1;
+        a->pending_tx    = x;
+        a->pending_ty    = y;
+        char at[MAP_COORD_MAX];
+        map_coord_name(x, y, at, sizeof at);
+        snprintf(title, sizeof title, "note on %s", at);
+        had = map_note_at(a->map, x, y);
+    }
+    app_open_prompt(a, PROMPT_NOTE, title, "enter keeps it, ctrl-u then enter takes it away", had ? had : "");
+}
+
 /* The cursor goes to whatever is now selected, and the view goes with it.
  * A selection scrolled off screen is no use for finding a creature, which is
  * the whole point of cycling and searching. */
@@ -643,6 +671,41 @@ static void prompt_accept(App *a)
         snprintf(msg, sizeof msg, "%s marker on %.24s: %.30s",
                  status_color_name(a->play.status_color),
                  t.label[0] ? t.label : token_kind_name(t.kind), text);
+        app_note(a, msg);
+        return;
+    }
+    case PROMPT_NOTE: {
+        /* The text itself stays off the status line and out of the log: the
+         * line is in the frame the players see, and the log is for what
+         * happened, which is that a note was made. */
+        int idx = a->pending_token;
+        a->pending_token = -1;
+        while (*text == ' ') text++;
+        char msg[96];
+        if (idx >= 0) {
+            if (idx >= a->map->tokens.n) return;
+            Token t = a->map->tokens.v[idx];
+            const char *who = t.label[0] ? t.label : token_kind_name(t.kind);
+            int had = t.note[0] != '\0';
+            if (!*text && !had) { app_set_status(a, "nothing noted"); return; }
+            str_lcpy(t.note, text, sizeof t.note);
+            undo_begin(&a->undo);
+            undo_edit_token(&a->undo, a->map, idx, t);
+            undo_end(&a->undo);
+            snprintf(msg, sizeof msg, *text ? "noted on %.30s" : "note taken off %.30s", who);
+            app_note(a, msg);
+            return;
+        }
+        char at[MAP_COORD_MAX];
+        map_coord_name(a->pending_tx, a->pending_ty, at, sizeof at);
+        int had = map_note_at(a->map, a->pending_tx, a->pending_ty) != NULL;
+        if (!*text && !had) { app_set_status(a, "nothing noted"); return; }
+        if (!map_note_set(a->map, a->pending_tx, a->pending_ty, text)) {
+            snprintf(msg, sizeof msg, "no room: a map holds %d notes on squares", MAP_NOTES_MAX);
+            app_set_status(a, msg);
+            return;
+        }
+        snprintf(msg, sizeof msg, *text ? "noted on %s" : "note taken off %s", at);
         app_note(a, msg);
         return;
     }
@@ -1375,6 +1438,15 @@ static void editor_key(App *a, Key k)
 
     if (k.kind != KEY_CHAR || k.mods != 0) return;
 
+    /* The one member of the s family build mode has: the same key as play
+     * mode, on the square, since creatures are play mode's to select. */
+    if (a->pending == 's') {
+        a->pending = 0;
+        if (k.ch == 'n') app_note_prompt(a, -1, e->cx, e->cy);
+        else             app_set_status(a, "s wants n for a note on this square");
+        return;
+    }
+
     if (e->pending_g) {
         e->pending_g = 0;
         if (k.ch == 'g') { e->cy = 0; grid_ensure_visible(&e->view, m, e->cx, e->cy, ED_SCROLLOFF); }
@@ -1455,6 +1527,11 @@ static void editor_key(App *a, Key k)
         app_set_status(a, msg);
         break;
     }
+
+    case 's':
+        a->pending = 's';
+        app_set_status(a, "s n: a note on this square");
+        break;
 
     case 'o': case 'O': {
         int secret = (k.ch == 'O');

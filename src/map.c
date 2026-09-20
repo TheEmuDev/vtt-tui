@@ -145,11 +145,14 @@ int map_resize(Map *m, int w, int h)
     m->w = w;
     m->h = h;
 
-    /* Drop tokens that the shrink left outside the map. */
+    /* Drop tokens, and notes, that the shrink left outside the map. */
     for (int i = m->tokens.n - 1; i >= 0; i--) {
         const Token *t = &m->tokens.v[i];
         if (t->x + t->size > w || t->y + t->size > h) tokens_remove(&m->tokens, i);
     }
+    for (int i = m->nnotes - 1; i >= 0; i--)
+        if (m->notes[i].x >= w || m->notes[i].y >= h)
+            m->notes[i] = m->notes[--m->nnotes];
     m->modified = 1;
     return 0;
 }
@@ -238,6 +241,41 @@ int map_blocked(const Map *m, int x, int y, int dx, int dy)
 }
 
 static void order(int *a, int *b) { if (*a > *b) { int t = *a; *a = *b; *b = t; } }
+
+static int note_index(const Map *m, int x, int y)
+{
+    for (int i = 0; i < m->nnotes; i++)
+        if (m->notes[i].x == x && m->notes[i].y == y) return i;
+    return -1;
+}
+
+const char *map_note_at(const Map *m, int x, int y)
+{
+    int i = note_index(m, x, y);
+    return i < 0 ? NULL : m->notes[i].text;
+}
+
+int map_note_set(Map *m, int x, int y, const char *text)
+{
+    if (!map_in_bounds(m, x, y)) return 0;
+    while (*text == ' ') text++;
+    int i = note_index(m, x, y);
+    if (!*text) {
+        if (i < 0) return 1;
+        m->notes[i] = m->notes[--m->nnotes];     /* order is nothing */
+        m->modified = 1;
+        return 1;
+    }
+    if (i < 0) {
+        if (m->nnotes >= MAP_NOTES_MAX) return 0;
+        i = m->nnotes++;
+        m->notes[i].x = (int16_t)x;
+        m->notes[i].y = (int16_t)y;
+    }
+    str_lcpy(m->notes[i].text, text, sizeof m->notes[i].text);
+    m->modified = 1;
+    return 1;
+}
 
 void map_fill_tiles(Map *m, int x0, int y0, int x1, int y1, uint8_t kind)
 {

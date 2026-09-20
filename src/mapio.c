@@ -66,6 +66,8 @@ int mapio_save(Map *m, const char *path, char *err, size_t errsz)
     for (int i = 0; i < m->tokens.n && !fight; i++) fight = m->tokens.v[i].turn != 0;
     int v5 = clock_count(m) > 0;
     for (int i = 0; i < ROLL_MAX && !v5; i++) v5 = m->rolls[i].name[0] != '\0';
+    for (int i = 0; i < m->tokens.n && !v5; i++) v5 = m->tokens.v[i].note[0] != '\0';
+    if (m->nnotes) v5 = 1;
     fprintf(f, "VTT %d\n", v5 ? FORMAT_VERSION : fight ? FORMAT_BEFORE_CLOCKS : FORMAT_BEFORE_TURNS);
     fprintf(f, "name %s\n", m->name);
     fprintf(f, "size %d %d\n", m->w, m->h);
@@ -97,6 +99,8 @@ int mapio_save(Map *m, const char *path, char *err, size_t errsz)
             fprintf(f, "tokenstatus %s \"%s\"\n",
                     status_color_name(t->status[j].color), t->status[j].label);
 
+        if (t->note[0]) fprintf(f, "tokennote \"%s\"\n", t->note);
+
         /* Its place in the turn order, the same way: "tokenturn 15",
          * "tokenturn 15 acting", or "tokenturn - acting" for a creature
          * holding the turn from outside the order. */
@@ -114,6 +118,8 @@ int mapio_save(Map *m, const char *path, char *err, size_t errsz)
     for (int i = 0; i < ROLL_MAX; i++)
         if (m->rolls[i].name[0])
             fprintf(f, "roll %s \"%s\"\n", m->rolls[i].name, m->rolls[i].expr);
+    for (int i = 0; i < m->nnotes; i++)
+        fprintf(f, "note %d %d \"%s\"\n", m->notes[i].x, m->notes[i].y, m->notes[i].text);
 
     int ok = (fflush(f) == 0);
     if (ok) ok = (fsync(fileno(f)) == 0) || errno == EINVAL;   /* pipes are fine */
@@ -208,6 +214,23 @@ static int parse_status_line(Map *m, const char *line)
 
     token_add_status(&m->tokens.v[m->tokens.n - 1], (uint8_t)c, label);
     return 0;
+}
+
+static int parse_token_note_line(Map *m, const char *line)
+{
+    if (m->tokens.n == 0 || strlen(line) < 10) return -1;
+    Token *t = &m->tokens.v[m->tokens.n - 1];
+    parse_quoted(line + 10, t->note, sizeof t->note);
+    return 0;
+}
+
+static int parse_note_line(Map *m, const char *line)
+{
+    int x, y, consumed = 0;
+    if (sscanf(line, "note %d %d %n", &x, &y, &consumed) < 2) return -1;
+    char text[NOTE_MAX];
+    parse_quoted(consumed > 0 ? line + consumed : NULL, text, sizeof text);
+    return map_in_bounds(m, x, y) && map_note_set(m, x, y, text) ? 0 : -1;
 }
 
 static int parse_turn_line(Map *m, const char *line)
@@ -368,6 +391,10 @@ Map *mapio_load(const char *path, char *err, size_t errsz)
             parse_status_line(m, line);
         } else if (!strncmp(line, "tokenturn ", 10)) {
             parse_turn_line(m, line);
+        } else if (!strncmp(line, "tokennote ", 10)) {
+            parse_token_note_line(m, line);
+        } else if (!strncmp(line, "note ", 5)) {
+            parse_note_line(m, line);
         } else if (!strcmp(line, "spotlight gm")) {
             m->spotlight = SPOTLIGHT_GM;
         } else if (!strncmp(line, "clock ", 6)) {

@@ -304,7 +304,8 @@ static int pending_key(App *a, Key k)
         if (k.ch == 'd') { status_drop(a);   return 1; }
         if (k.ch == 'i') { turn_prompt(a);   return 1; }
         if (k.ch == 't') { turn_hand_over(a); return 1; }
-        app_set_status(a, "s wants a add, c colour, d drop, i initiative, t take the turn");
+        if (k.ch == 'n') { app_note_prompt(a, play_target_token(a), a->ed.cx, a->ed.cy); return 1; }
+        app_set_status(a, "s wants a add, c colour, d drop, i initiative, t take the turn, n note");
         return 1;
     }
     return 1;
@@ -567,7 +568,7 @@ void app_play_key(App *a, Key k)
 
     case 's':
         a->pending = 's';
-        app_set_status(a, "s    a add marker    c colour    d drop    i initiative    t take the turn");
+        app_set_status(a, "s    a add marker    c colour    d drop    i initiative    t take the turn    n note");
         break;
 
     case '/': {

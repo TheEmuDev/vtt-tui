@@ -280,7 +280,7 @@ static int run_headless(const Options *o)
                 prof_frame_begin();
                 rnd_begin(&r);
                 app_draw(&a);
-                net_set_live(&a.net, a.screen == SCREEN_PLAY);
+                net_set_live(&a.net, app_remote_live(&a));
                 net_frame_begin(&a.net);
                 rnd_flush(&r, NULL);
                 net_frame_end(&a.net, 0);
@@ -441,7 +441,7 @@ static int run_interactive(const Options *o)
             prof_frame_begin();
             rnd_begin(&r);
             app_draw(&a);
-            net_set_live(&a.net, a.screen == SCREEN_PLAY);
+            net_set_live(&a.net, app_remote_live(&a));
             net_frame_begin(&a.net);
             rnd_flush(&r, &t);
             net_frame_end(&a.net, prof_now_ns() / 1000000u);

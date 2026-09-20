@@ -326,6 +326,30 @@ static void draw_shape(Renderer *r, const Map *m, const Editor *e,
                 grid_draw_tile_cursor(r, &e->view, x, y, bg);
 }
 
+/* A mark in the corner of every noted square. Build mode only: play mode
+ * is what the players may see, and a mark on a square says "something is
+ * here" as plainly as the note would. The notes are few, so they are walked
+ * rather than the tiles. */
+static void draw_note_marks(Renderer *r, const Map *m, const GridView *g,
+                            const Theme *th, int ascii)
+{
+    if (!m->nnotes) return;
+    PROF_ZONE("note.marks");
+    int x0, y0, x1, y1;
+    grid_visible_tiles(g, m, &x0, &y0, &x1, &y1);
+    Style s = style(th->accent, th->bg, 0);
+    for (int i = 0; i < m->nnotes; i++) {
+        const Note *n = &m->notes[i];
+        if (n->x < x0 || n->x > x1 || n->y < y0 || n->y > y1) continue;
+        int sx, sy;
+        grid_tile_interior(g, n->x, n->y, &sx, &sy);
+        Cell *c = rnd_at(r, sx + ZOOM[g->zoom].iw - 1, sy);
+        if (!c) continue;
+        c->ch = ascii ? '"' : 0x201Du;      /* a closing quote: something was said here */
+        c->fg = s.fg;
+    }
+}
+
 void ed_draw(Renderer *r, const Map *m, const Editor *e, const Theme *th, int ascii)
 {
     PROF_ZONE("editor.draw");
@@ -340,6 +364,7 @@ void ed_draw(Renderer *r, const Map *m, const Editor *e, const Theme *th, int as
                                    e->view.view.w, e->view.view.h);
 
     grid_draw(r, m, &e->view, th, ascii, 1);   /* build mode sees secrets */
+    draw_note_marks(r, m, &e->view, th, ascii);
 
     if (e->mode == ED_VISUAL) {
         EdShape s = ed_shape(e->shape, e->anchor_x, e->anchor_y, e->cx, e->cy, 0);
@@ -408,9 +433,10 @@ void ed_status(const Editor *e, const Map *m, char *buf, size_t bufsz)
         snprintf(brush, sizeof brush, "  brush %dx%d", e->brush, e->brush);
 
     map_coord_name(e->cx, e->cy, at, sizeof at);
-    snprintf(buf, bufsz, "%-7s %s  %s  [%s/%s]%s%s  zoom %d  map %dx%d",
+    snprintf(buf, bufsz, "%-7s %s  %s%s  [%s/%s]%s%s  zoom %d  map %dx%d",
              ed_mode_name(e->mode), at,
              tile_name(map_tile(m, e->cx, e->cy)),
+             map_note_at(m, e->cx, e->cy) ? "  (note)" : "",
              edge_name(e->material), tile_name(e->terrain), brush, shape,
              e->view.zoom, m->w, m->h);
 }

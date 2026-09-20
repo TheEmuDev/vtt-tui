@@ -439,6 +439,27 @@ void app_exec_command(App *a, const char *line)
         app_note(a, msg);
         return;
     }
+    if (!strcmp(verb, "notes")) {
+        /* Where the notes are, not what they say: this line is mirrored. */
+        char msg[200];
+        int  off = 0, n = 0;
+        for (int i = 0; i < m->tokens.n && off < (int)sizeof msg - 28; i++) {
+            const Token *t = &m->tokens.v[i];
+            if (!t->note[0]) continue;
+            off += snprintf(msg + off, sizeof msg - (size_t)off, "%s%.16s", n++ ? ", " : "notes on ",
+                            t->label[0] ? t->label : token_kind_name(t->kind));
+        }
+        for (int i = 0; i < m->nnotes && off < (int)sizeof msg - 28; i++) {
+            char at[MAP_COORD_MAX];
+            map_coord_name(m->notes[i].x, m->notes[i].y, at, sizeof at);
+            off += snprintf(msg + off, sizeof msg - (size_t)off, "%s%s", n++ ? ", " : "notes on ", at);
+        }
+        int total = m->nnotes;
+        for (int i = 0; i < m->tokens.n; i++) total += m->tokens.v[i].note[0] != '\0';
+        if (n < total && off < (int)sizeof msg - 8) snprintf(msg + off, sizeof msg - (size_t)off, ", ...");
+        app_set_status(a, n ? msg : "no notes - s n writes one on a creature or a square");
+        return;
+    }
     if (!strcmp(verb, "clock")) { clock_command(a, rest); return; }
     if (!strcmp(verb, "tick"))  { tick_command(a, rest);  return; }
     if (!strcmp(verb, "serve")) {
@@ -468,7 +489,7 @@ void app_exec_command(App *a, const char *line)
         }
         char err[128];
         if (net_start(net, (uint16_t)port, a->rnd, err, sizeof err) < 0) { app_set_status(a, err); return; }
-        net_set_live(net, a->screen == SCREEN_PLAY);
+        net_set_live(net, app_remote_live(a));
         net_url(net, url, sizeof url);
         snprintf(msg, sizeof msg, "serving at %s", url);
         app_note(a, msg);
@@ -482,7 +503,7 @@ void app_exec_command(App *a, const char *line)
         if (!net_active(net)) {
             char err[128];
             if (net_start(net, 0, a->rnd, err, sizeof err) < 0) { app_set_status(a, err); return; }
-            net_set_live(net, a->screen == SCREEN_PLAY);
+            net_set_live(net, app_remote_live(a));
         }
         char msg[192];
         if (app_spawn_mirror(a, msg, sizeof msg) < 0) { app_set_status(a, msg); return; }

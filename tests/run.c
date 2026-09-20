@@ -1018,6 +1018,7 @@ static void test_undo(void)
     f2.x = 2; f2.y = 2; f2.size = 1; f2.kind = TOKEN_PLAYER; f2.nstatus = 0;
     f2.turn = 0;                                            /* init stays garbage: not in the order */
     str_lcpy(f2.label, "Aria", sizeof f2.label);
+    f2.note[0] = '\0';                                      /* past the NUL stays garbage */
     int marks_before = u.nmarks;
     undo_begin(&u); undo_edit_token(&u, m, fi, f2); undo_end(&u);
     CHECK_EQ(u.nmarks, marks_before);
@@ -6277,7 +6278,7 @@ static void test_help_page(void)
     CHECK(strstr(f.data, "cycle the bands") == NULL);   /* below the fold at 24 rows */
     bb_free(&f);
 
-    rnd_resize(&r, 90, 60);
+    rnd_resize(&r, 90, 80);                    /* the play page has grown past sixty rows */
     rnd_begin(&r);
     app_draw(&a);
     bb_init(&f, 65536);
@@ -7355,6 +7356,166 @@ static void test_clocks(void)
     CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
     text = slurp(path);
     if (text) { CHECK_EQ(strncmp(text, "VTT 3\n", 6), 0); free(text); }
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
+/* Notes: the GM's own text on a creature or a square, read and written
+ * through one prompt, hinted at but never shown on the mirrored status
+ * line, marked on the map in build mode only. */
+static void test_notes(void)
+{
+    Sandbox sb = sandbox_enter("notes");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+
+    write_map_file(sb.dir, "fight.vtt");
+    char path[600];
+    snprintf(path, sizeof path, "%s/fight.vtt", sb.dir);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+    Map *m = a.map;
+    a.ed.cx = 0; a.ed.cy = 0;
+    press(&a, "ipAria\r");
+    CHECK_EQ(m->tokens.n, 1);
+
+    CASE("s n on a creature opens its note, and the remote view holds while it is open");
+    CHECK_EQ(app_remote_live(&a), 1);
+    press(&a, "sn");
+    CHECK_EQ(a.modal, MODAL_PROMPT);
+    CHECK_EQ(a.prompt_what, PROMPT_NOTE);
+    CHECK(strstr(a.prompt.title, "note on Aria") != NULL);
+    CHECK_EQ(app_gm_only(&a), 1);
+    CHECK_EQ(app_remote_live(&a), 0);
+    press(&a, "wants the amulet\r");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK_EQ(app_remote_live(&a), 1);
+    CHECK_EQ(strcmp(m->tokens.v[0].note, "wants the amulet"), 0);
+    CHECK(strstr(a.status, "noted on Aria") != NULL);
+    CHECK(strstr(a.status, "amulet") == NULL);            /* the text stays off the line */
+    CHECK_EQ(m->modified, 1);
+
+    CASE("the readout says there is a note, not what it says");
+    char line[192];
+    play_status(&a.play, m, &a.ed, line, sizeof line);
+    CHECK(strstr(line, "(note)") != NULL);
+    CHECK(strstr(line, "amulet") == NULL);
+
+    CASE("the prompt opens holding the note, so it is the reader too");
+    press(&a, "sn");
+    CHECK_EQ(strcmp(a.prompt.buf, "wants the amulet"), 0);
+    press(&a, " and the ring\r");
+    CHECK_EQ(strcmp(m->tokens.v[0].note, "wants the amulet and the ring"), 0);
+
+    CASE("a creature's note undoes, and ctrl-u then enter takes it off");
+    press(&a, "u");
+    CHECK_EQ(strcmp(m->tokens.v[0].note, "wants the amulet"), 0);
+    press(&a, "\x12");
+    CHECK_EQ(strcmp(m->tokens.v[0].note, "wants the amulet and the ring"), 0);
+    press(&a, "sn\025\r");
+    CHECK_EQ(m->tokens.v[0].note[0], '\0');
+    CHECK(strstr(a.status, "note taken off Aria") != NULL);
+    press(&a, "sn\r");
+    CHECK(strstr(a.status, "nothing noted") != NULL);
+
+    CASE("with no creature under the cursor the note goes on the square");
+    press(&a, "\x1b");                                     /* deselect */
+    a.ed.cx = 1; a.ed.cy = 1;
+    CHECK_EQ(a.play.sel, -1);
+    press(&a, "sn");
+    CHECK(strstr(a.prompt.title, "note on B2") != NULL);
+    press(&a, "pressure plate\r");
+    CHECK(map_note_at(m, 1, 1) != NULL);
+    CHECK_EQ(strcmp(map_note_at(m, 1, 1), "pressure plate"), 0);
+    CHECK(strstr(a.status, "noted on B2") != NULL);
+    CHECK_EQ(m->nnotes, 1);
+    play_status(&a.play, m, &a.ed, line, sizeof line);
+    CHECK(strstr(line, "(note)") != NULL);
+    a.ed.cx = 0; a.ed.cy = 1;
+    play_status(&a.play, m, &a.ed, line, sizeof line);
+    CHECK(strstr(line, "(note)") == NULL);
+
+    CASE(":notes says where they are");
+    press(&a, "sn");
+    press(&a, "loose flagstone\r");                        /* A2 */
+    a.ed.cx = 0; a.ed.cy = 0;
+    press(&a, "t");                                        /* select Aria */
+    press(&a, "sn");
+    press(&a, "afraid of fire\r");
+    press(&a, ":notes\r");
+    CHECK(strstr(a.status, "notes on Aria, B2, A2") != NULL);
+    CHECK(strstr(a.status, "flagstone") == NULL);
+
+    CASE("in play mode nothing marks a noted square; in build mode a quote does");
+    rnd_begin(&r);
+    app_draw(&a);
+    int marks = 0;
+    for (size_t i = 0; i < (size_t)r.w * (size_t)r.h; i++) marks += r.back[i].ch == 0x201Du;
+    CHECK_EQ(marks, 0);
+    Key f1 = { KEY_F1, 0, 0 };
+    app_key(&a, f1);
+    rnd_begin(&r);
+    app_draw(&a);
+    marks = 0;
+    for (size_t i = 0; i < (size_t)r.w * (size_t)r.h; i++) marks += r.back[i].ch == 0x201Du;
+    CHECK_EQ(marks, 2);
+    int sx, sy;
+    grid_tile_interior(&a.ed.view, 1, 1, &sx, &sy);
+    CHECK_EQ(r.back[(size_t)sy * (size_t)r.w + (size_t)(sx + ZOOM[a.ed.view.zoom].iw - 1)].ch, 0x201Du);
+
+    CASE("build mode has s n too, on the square, and says so");
+    a.ed.cx = 1; a.ed.cy = 0;
+    press(&a, "s");
+    CHECK(strstr(a.status, "s n") != NULL);
+    press(&a, "n");
+    CHECK(strstr(a.prompt.title, "note on B1") != NULL);
+    press(&a, "the altar\r");
+    CHECK_EQ(m->nnotes, 3);
+    ed_status(&a.ed, m, line, sizeof line);
+    CHECK(strstr(line, "(note)") != NULL);
+    press(&a, "sx");
+    CHECK(strstr(a.status, "s wants n") != NULL);
+    app_key(&a, f2);
+
+    CASE("notes are saved as version 5, on the creature and on the squares, and read back");
+    char err[128];
+    CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+    char *text = slurp(path);
+    CHECK(text != NULL);
+    if (text) {
+        CHECK_EQ(strncmp(text, "VTT 5\n", 6), 0);
+        CHECK(strstr(text, "token player 0 0 1 \"Aria\"\ntokennote \"afraid of fire\"\n") != NULL);
+        CHECK(strstr(text, "note 1 1 \"pressure plate\"\n") != NULL);
+        free(text);
+    }
+    Map *back = mapio_load(path, err, sizeof err);
+    CHECK(back != NULL);
+    if (back) {
+        CHECK_EQ(strcmp(back->tokens.v[0].note, "afraid of fire"), 0);
+        CHECK_EQ(back->nnotes, 3);
+        CHECK_EQ(strcmp(map_note_at(back, 1, 0), "the altar"), 0);
+        CHECK_EQ(back->modified, 0);
+
+        CASE("a shrink drops the notes it leaves outside");
+        CHECK_EQ(map_resize(back, 1, 1), 0);
+        CHECK_EQ(back->nnotes, 0);
+        map_free(back);
+    }
+
+    CASE("a copied creature carries its note, and equality sees it");
+    Token t1 = m->tokens.v[0], t2 = t1;
+    CHECK_EQ(token_equal(&t1, &t2), 1);
+    str_lcpy(t2.note, "other", sizeof t2.note);
+    CHECK_EQ(token_equal(&t1, &t2), 0);
 
     app_free(&a);
     rnd_free(&r);
@@ -8647,6 +8808,7 @@ int main(void)
         { "dice",   test_dice },
         { "slog",   test_session_log },
         { "clocks", test_clocks },
+        { "notes",  test_notes },
         { "roll",   test_roll_command },
         { "editing", test_editing },
         { "play",   test_play },
