@@ -7175,6 +7175,190 @@ static void test_session_log(void)
     sandbox_leave(&sb);
 }
 
+/* Clocks: named, sized, ticked through the undo log, drawn under the turn
+ * order, and saved as version 5. */
+static void test_clocks(void)
+{
+    Sandbox sb = sandbox_enter("clocks");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+
+    write_map_file(sb.dir, "fight.vtt");
+    char path[600];
+    snprintf(path, sizeof path, "%s/fight.vtt", sb.dir);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+    Map *m = a.map;
+
+    CASE("no clocks to begin with, and the panel stays away");
+    CHECK_EQ(clock_count(m), 0);
+    CHECK_EQ(clock_panel_rows(m), 0);
+    press(&a, ":clock\r");
+    CHECK(strstr(a.status, "no clocks") != NULL);
+    press(&a, ":tick\r");
+    CHECK(strstr(a.status, "no clocks") != NULL);
+
+    CASE(":clock NAME SIZE starts one");
+    press(&a, ":clock Dragon 6\r");
+    CHECK_EQ(clock_count(m), 1);
+    CHECK_EQ(m->clocks[0].size, 6);
+    CHECK_EQ(m->clocks[0].value, 0);
+    CHECK(strstr(a.status, "clock Dragon 0/6 started") != NULL);
+    CHECK_EQ(m->modified, 1);
+
+    CASE("a bare :tick fills the clock in hand; the last started or ticked");
+    press(&a, ":tick\r");
+    CHECK_EQ(m->clocks[0].value, 1);
+    CHECK(strstr(a.status, "Dragon 1/6") != NULL);
+    press(&a, ":tick 2\r");
+    CHECK_EQ(m->clocks[0].value, 3);
+    press(&a, ":tick -1\r");
+    CHECK_EQ(m->clocks[0].value, 2);
+    press(&a, ":tick =5\r");
+    CHECK_EQ(m->clocks[0].value, 5);
+
+    CASE("a tick is one undo step");
+    press(&a, "u");
+    CHECK_EQ(m->clocks[0].value, 2);
+    press(&a, "u");
+    CHECK_EQ(m->clocks[0].value, 3);
+    press(&a, "\x12");                                    /* ctrl-r */
+    CHECK_EQ(m->clocks[0].value, 2);
+
+    CASE("filling it says so, and it will not go past full or below empty");
+    press(&a, ":tick =6\r");
+    CHECK(strstr(a.status, "Dragon 6/6 - full") != NULL);
+    press(&a, ":tick\r");
+    CHECK(strstr(a.status, "full at 6") != NULL);
+    CHECK_EQ(m->clocks[0].value, 6);
+    press(&a, ":tick =0\r");
+    press(&a, ":tick -1\r");
+    CHECK(strstr(a.status, "already empty") != NULL);
+
+    CASE("names match by prefix, case aside, and an exact name beats a longer one");
+    press(&a, ":clock Ritual 4\r");
+    press(&a, ":clock Rite 8\r");
+    CHECK_EQ(clock_count(m), 3);
+    press(&a, ":tick dr\r");
+    CHECK_EQ(m->clocks[0].value, 1);
+    press(&a, ":tick R\r");
+    CHECK(strstr(a.status, "more than one clock") != NULL);
+    press(&a, ":tick rite\r");
+    CHECK_EQ(m->clocks[2].value, 1);
+    press(&a, ":tick\r");                                   /* Rite is now in hand */
+    CHECK_EQ(m->clocks[2].value, 2);
+    press(&a, ":tick Nothing\r");
+    CHECK(strstr(a.status, "no clock called") != NULL);
+
+    CASE(":clock lists them; :clock NAME SIZE resizes; :clock NAME off drops");
+    press(&a, ":clock\r");
+    CHECK(strstr(a.status, "Dragon 1/6, Ritual 0/4, Rite 2/8") != NULL);
+    press(&a, ":clock Rite 2\r");
+    CHECK_EQ(m->clocks[2].size, 2);
+    CHECK_EQ(m->clocks[2].value, 2);                        /* kept, clamped */
+    CHECK(strstr(a.status, "resized") != NULL);
+    press(&a, ":clock Ritual off\r");
+    CHECK_EQ(clock_count(m), 2);
+    CHECK_EQ(m->clocks[1].name[0], '\0');                   /* the slot stays empty */
+    press(&a, ":clock Sun 3\r");                            /* and is taken by the next */
+    CHECK_EQ(strcmp(m->clocks[1].name, "Sun"), 0);
+    press(&a, ":clock 7up 3\r");
+    CHECK(strstr(a.status, "starts with a letter") != NULL);
+    press(&a, ":clock Big 99\r");
+    CHECK(strstr(a.status, "1 to 24 segments") != NULL);
+
+    CASE("an undo recorded against a dropped slot touches nothing");
+    press(&a, ":tick Sun\r");                               /* Sun 1/3, in slot 1 */
+    press(&a, ":clock Sun off\r");
+    press(&a, "u");                                         /* the tick's op names slot 1, now empty */
+    CHECK_EQ(m->clocks[1].name[0], '\0');
+    press(&a, ":clock Moon 3\r");                           /* slot 1 again */
+    press(&a, "\x12");                                      /* redo: clamped, on Moon */
+    CHECK(m->clocks[1].value <= m->clocks[1].size);
+
+    CASE("the panel shows the clocks under the turn order, dots for segments, a full one lit");
+    press(&a, ":clock Moon off\r");
+    press(&a, ":tick Rite =2\r");
+    rnd_begin(&r);
+    app_draw(&a);
+    ByteBuf frame;
+    bb_init(&frame, 65536);
+    rnd_dump(&r, &frame);
+    bb_putc(&frame, '\0');
+    CHECK(strstr(frame.data, "Clocks") != NULL);
+    CHECK(strstr(frame.data, "Dragon ●○○○○○") != NULL);
+    CHECK(strstr(frame.data, "Rite   ●●") != NULL);
+    CHECK(strstr(frame.data, "Turn order") == NULL);       /* no fight: no order block */
+    CHECK_EQ(a.ed.view.view.x + a.ed.view.view.w, r.w - TURN_PANEL_W);
+    int lit = 0;
+    for (int y = 0; y < r.h; y++) {
+        const Cell *c = &r.back[(size_t)y * (size_t)r.w + (size_t)(r.w - TURN_PANEL_W + 2)];
+        if (c->ch == 'R' && c->fg == a.th->turn) lit++;
+    }
+    CHECK_EQ(lit, 1);
+    bb_free(&frame);
+
+    CASE("in build mode the panel is not drawn");
+    Key f1 = { KEY_F1, 0, 0 };
+    app_key(&a, f1);
+    rnd_begin(&r);
+    app_draw(&a);
+    CHECK_EQ(a.ed.view.view.x + a.ed.view.view.w, r.w);
+    app_key(&a, f2);
+
+    CASE("a wide clock is a fraction, not dots");
+    press(&a, ":clock Siege 24\r");
+    press(&a, ":tick 5\r");
+    rnd_begin(&r);
+    app_draw(&a);
+    bb_init(&frame, 65536);
+    rnd_dump(&r, &frame);
+    bb_putc(&frame, '\0');
+    CHECK(strstr(frame.data, "Siege  5/24") != NULL);
+    bb_free(&frame);
+
+    CASE("clocks are saved as version 5 and read back, in order");
+    char err[128];
+    CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+    char *text = slurp(path);
+    CHECK(text != NULL);
+    if (text) {
+        CHECK_EQ(strncmp(text, "VTT 5\n", 6), 0);
+        CHECK(strstr(text, "clock Dragon 1 6\n") != NULL);
+        CHECK(strstr(text, "clock Siege 5 24\n") != NULL);
+        free(text);
+    }
+    Map *back = mapio_load(path, err, sizeof err);
+    CHECK(back != NULL);
+    if (back) {
+        CHECK_EQ(clock_count(back), 3);
+        CHECK_EQ(strcmp(back->clocks[0].name, "Dragon"), 0);
+        CHECK_EQ(back->clocks[0].value, 1);
+        CHECK_EQ(strcmp(back->clocks[1].name, "Siege"), 0);   /* the first empty slot */
+        CHECK_EQ(back->clocks[1].size, 24);
+        map_free(back);
+    }
+
+    CASE("with the clocks gone the file is version 3 again");
+    press(&a, ":clock Dragon off\r");
+    press(&a, ":clock Rite off\r");
+    press(&a, ":clock Siege off\r");
+    CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+    text = slurp(path);
+    if (text) { CHECK_EQ(strncmp(text, "VTT 3\n", 6), 0); free(text); }
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
 static void test_roll_command(void)
 {
     Sandbox sb = sandbox_enter("roll");
@@ -8388,6 +8572,7 @@ int main(void)
         { "turnkeys", test_turn_keys },
         { "dice",   test_dice },
         { "slog",   test_session_log },
+        { "clocks", test_clocks },
         { "roll",   test_roll_command },
         { "editing", test_editing },
         { "play",   test_play },

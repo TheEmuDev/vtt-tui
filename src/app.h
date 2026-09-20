@@ -1,6 +1,7 @@
 #ifndef VTT_APP_H
 #define VTT_APP_H
 
+#include "clock.h"
 #include "editor.h"
 #include "input.h"
 #include "map.h"

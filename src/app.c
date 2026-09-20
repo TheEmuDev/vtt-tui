@@ -1663,7 +1663,9 @@ static void draw_editor(App *a)
     /* The turn-order panel takes its columns off the map view, and only
      * when there is a fight to show and room to show it; the bars keep the
      * whole width either way. */
-    int panel = a->screen == SCREEN_PLAY && a->play.panel && r->w >= 80 && turn_panel_wanted(m);
+    int clocks = a->screen == SCREEN_PLAY ? clock_panel_rows(m) : 0;
+    int turns  = a->screen == SCREEN_PLAY && turn_panel_wanted(m);
+    int panel  = a->play.panel && r->w >= 80 && (turns || clocks);
     ed_layout(&a->ed, m, r->w - (panel ? TURN_PANEL_W : 0), r->h);
 
     /* The fight rides in the title bar: it is true for the whole table, not
@@ -1687,8 +1689,19 @@ static void draw_editor(App *a)
         rnd_clip_restore(r, saved);
     }
 
-    if (panel)
-        turn_draw_panel(r, m, th, rect(r->w - TURN_PANEL_W, 1, TURN_PANEL_W, r->h - 3), a->ascii);
+    /* The panel is the turn order with the clocks under it; each draws its
+     * own rows, so whichever is absent leaves no gap. */
+    if (panel) {
+        Rect pr = rect(r->w - TURN_PANEL_W, 1, TURN_PANEL_W, r->h - 3);
+        int  ch = imin(clocks, pr.h);
+        if (turns) turn_draw_panel(r, m, th, rect(pr.x, pr.y, pr.w, pr.h - ch), a->ascii);
+        else {
+            draw_fill(r, rect(pr.x, pr.y, pr.w, pr.h - ch), ' ', style(th->fg, th->bg, 0));
+            for (int y = pr.y; y < pr.y + pr.h - ch; y++)
+                draw_text(r, pr.x, y, a->ascii ? "|" : "\u2502", 1, style(th->dim, th->bg, 0));
+        }
+        if (ch) clock_draw_panel(r, m, th, rect(pr.x, pr.y + pr.h - ch, pr.w, ch), a->ascii);
+    }
 
     /* Status line sits directly above the keybinding bar. */
     char status[192];

@@ -9,6 +9,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "clock.h"
 #include "ruler.h"
 #include "turn.h"
 #include "util.h"
@@ -20,13 +21,18 @@
  * v3 added status markers on tokens. An older reader would ignore those lines
  * and silently drop them, which loses combat state from a saved fight, so it
  * refuses too. Each version still loads everything older. */
-#define FORMAT_VERSION 4
+#define FORMAT_VERSION 5
 
 /* Version 4 added the turn order. A map with no fight in it is still written
  * as version 3, which says everything it needs and stays loadable by the
  * builds that came before; one with a fight says 4, so that an older reader
- * refuses it rather than dropping whose turn it is on the floor. */
-#define FORMAT_BEFORE_TURNS 3
+ * refuses it rather than dropping whose turn it is on the floor.
+ *
+ * Version 5 added clocks, named rolls and notes, on the same terms: a map
+ * carrying none of them is written as whatever version it needs. The
+ * writer always picks the lowest version that says everything. */
+#define FORMAT_BEFORE_TURNS  3
+#define FORMAT_BEFORE_CLOCKS 4
 
 /* ------------------------------------------------------------------ save */
 
@@ -58,7 +64,8 @@ int mapio_save(Map *m, const char *path, char *err, size_t errsz)
 
     int fight = m->round > 0 || m->spotlight != SPOTLIGHT_PLAYERS;
     for (int i = 0; i < m->tokens.n && !fight; i++) fight = m->tokens.v[i].turn != 0;
-    fprintf(f, "VTT %d\n", fight ? FORMAT_VERSION : FORMAT_BEFORE_TURNS);
+    int v5 = clock_count(m) > 0;
+    fprintf(f, "VTT %d\n", v5 ? FORMAT_VERSION : fight ? FORMAT_BEFORE_CLOCKS : FORMAT_BEFORE_TURNS);
     fprintf(f, "name %s\n", m->name);
     fprintf(f, "size %d %d\n", m->w, m->h);
     fprintf(f, "zoom %d\n", m->zoom);
@@ -100,6 +107,9 @@ int mapio_save(Map *m, const char *path, char *err, size_t errsz)
     }
     if (m->round > 0) fprintf(f, "round %d\n", m->round);
     if (m->spotlight == SPOTLIGHT_GM) fputs("spotlight gm\n", f);
+    for (int i = 0; i < CLOCK_MAX; i++)
+        if (m->clocks[i].name[0])
+            fprintf(f, "clock %s %d %d\n", m->clocks[i].name, m->clocks[i].value, m->clocks[i].size);
 
     int ok = (fflush(f) == 0);
     if (ok) ok = (fsync(fileno(f)) == 0) || errno == EINVAL;   /* pipes are fine */
@@ -215,6 +225,20 @@ static int parse_turn_line(Map *m, const char *line)
     return 0;
 }
 
+/* "clock Dragon 3 6": the name, then filled and total segments. Slots are
+ * taken in file order, so a saved map reads back in the order it was
+ * written. */
+static int parse_clock_line(Map *m, const char *line)
+{
+    char name[CLOCK_NAME_MAX] = { 0 };
+    int  value = 0, size = 0;
+    if (sscanf(line, "clock %19s %d %d", name, &value, &size) < 3) return -1;
+    int idx = clock_start(m, name, size);
+    if (idx < 0) return -1;
+    m->clocks[idx].value = (uint8_t)iclamp(value, 0, m->clocks[idx].size);
+    return 0;
+}
+
 static int parse_token_line(Map *m, const char *line)
 {
     char kind[16] = { 0 };
@@ -325,6 +349,8 @@ Map *mapio_load(const char *path, char *err, size_t errsz)
             parse_turn_line(m, line);
         } else if (!strcmp(line, "spotlight gm")) {
             m->spotlight = SPOTLIGHT_GM;
+        } else if (!strncmp(line, "clock ", 6)) {
+            parse_clock_line(m, line);
         } else if (!strncmp(line, "round ", 6)) {
             int round = 0;
             if (sscanf(line, "round %d", &round) == 1) m->round = iclamp(round, 0, INT16_MAX);

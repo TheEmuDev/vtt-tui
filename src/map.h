@@ -20,6 +20,15 @@
 #define MAP_METRIC_DEFAULT 2
 #define MAP_PATH_MAX 512
 
+/* Clocks: see clock.h. Fixed slots, an empty one has no name. */
+#define CLOCK_MAX      8
+#define CLOCK_NAME_MAX 20
+typedef struct {
+    char    name[CLOCK_NAME_MAX];   /* "" for an empty slot */
+    uint8_t value;
+    uint8_t size;
+} Clock;
+
 #define SPOTLIGHT_PLAYERS 0
 #define SPOTLIGHT_GM      1
 
@@ -97,6 +106,7 @@ typedef struct {
     int  modified;          /* unsaved changes */
     int  round;             /* of the fight; 0 when there is none */
     int  spotlight;         /* SPOTLIGHT_PLAYERS or SPOTLIGHT_GM, for a game that passes one */
+    Clock clocks[CLOCK_MAX];
 
     /* Measurement settings travel with the encounter, since they belong to
      * the game being played rather than to the session. */

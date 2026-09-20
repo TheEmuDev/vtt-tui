@@ -52,7 +52,10 @@ static const KeyDoc PLAY[] = {
     KEY("s i",    "initiative: a number joins the order, blank leaves it"),
     KEY("s t",    "hand the turn to this creature, in the order or not"),
     KEY(":turns", "the whole order on one line    :turns off ends the fight"),
-    KEY(":panel", "the side panel, on or off; it appears when there is a fight"),
+    KEY(":panel", "the side panel, on or off; it appears when there is a fight or a clock"),
+    GROUP("Clocks"),
+    KEY(":clock Dragon 6", "start a clock of six segments  (:clock lists them, :clock Dragon off drops it)"),
+    KEY(":tick",  "fill a segment of the clock in hand   :tick Dragon 2, :tick Dragon -1, :tick Dragon =0"),
 
     GROUP("Remote view"),
     KEY(":serve",  "let players watch from a browser; the status line shows the URL"),

@@ -597,7 +597,7 @@ first, and going past the last starts a new round.
 | `a` `A` | next / previous turn. `3a` moves three on. The view goes to whoever is up, and they become the selection |
 | `s t` | hands the turn to the selected creature, out of order, or with no order at all |
 | `:turns` | reads the whole order out; `:turns off` ends the fight |
-| `:panel` | the side panel, on or off (on by default) |
+| `:panel` | the side panel, on or off (on by default) — it also carries the [clocks](#clocks-clock-tick) |
 | `:serve` | the [remote view](#remote-view-serve-mirror) for phones; `:serve off` closes it |
 | `:mirror` | a second terminal window mirroring play mode |
 
@@ -647,6 +647,30 @@ so. The turn is then a *side* — the players or the GM — and `a` passes it ac
 hands it to a creature and the side follows that creature's kind, and the panel shows the
 two sides with the lit one marked. Nobody needs a number, and there are no rounds to
 count. [Daggerheart](#daggerheart) plays this way.
+
+### Clocks (`:clock`, `:tick`)
+
+A clock is a name and a row of segments, some of them filled — the countdown a Daggerheart
+GM ticks while the party dawdles, the progress clock a heist fills, "three more rounds
+until the roof comes in". The tool attaches no meaning to a clock filling: it lights the
+row, says so, and the table decides what it means.
+
+```
+:clock Dragon 6       start a six-segment clock (or resize one already called Dragon)
+:tick                 fill one segment of the clock in hand -- the last started or ticked
+:tick Dragon          fill one of that clock, which becomes the one in hand
+:tick Dragon 2        two;   :tick Dragon -1  one back;   :tick Dragon =0  set outright
+:clock                list them:  Dragon 3/6, Ritual 0/4
+:clock Dragon off     drop it
+```
+
+Names are one word, starting with a letter, and a prefix will do: `:tick dr` ticks Dragon
+unless another clock starts the same way. A map holds eight. They are drawn in the side
+panel under the turn order, as dots when they fit the row and as `5/24` when they do not,
+and the panel appears for them whether or not there is a fight. A tick is one undo step;
+starting, resizing and dropping a clock are not undone, since they are as easy to redo by
+hand as a tick is not. Clocks are saved with the map and go to the [session
+log](#session-log-log) as they change.
 
 ### Dice (`:roll`)
 
@@ -846,6 +870,8 @@ with no verdict, ruleset or not.
 | `:metric NAME` | `chebyshev`, `euclidean`, `alt` or `manhattan` |
 | `:ruleset NAME` | switch the rules-aware readouts — see [Rulesets](#rulesets) |
 | `:turns` | read the [turn order](#turn-order-a) out; `:turns off` ends the fight |
+| `:panel` | the side panel, on or off |
+| `:clock NAME N` | start a [clock](#clocks-clock-tick); `:tick` fills a segment |
 | `:roll 2d6+3` | roll dice — see [Dice](#dice-roll) |
 | `:log` | the session log, on or off — see [Session log](#session-log-log) |
 | `:play` `:build` | switch mode |
@@ -870,7 +896,7 @@ short lines are treated as trailing blanks, so an editor that strips trailing wh
 cannot corrupt a map.
 
 ```
-VTT 4
+VTT 5
 name Goblin Ambush
 size 16 9
 zoom 1
@@ -887,13 +913,15 @@ token enemy 10 4 2 "Ogre"
 tokenturn 12
 round 2
 spotlight gm
+clock Dragon 3 6
 ```
 
 A `tokenstatus` line hangs a marker on the token above it, so the attachment needs no index
 to go wrong. A `tokenturn` line does the same for the [turn order](#turn-order-a): the
 creature's number, then `acting` if the turn is its. `tokenturn - acting` is a creature
 holding the turn from outside the order. `spotlight gm` says the GM has the spotlight, for
-a game that passes one; the players having it is the default and is not written.
+a game that passes one; the players having it is the default and is not written. A
+`clock` line is a [clock](#clocks-clock-tick): its name, then filled and total segments.
 
 | terrain | char | | boundary | char |
 |---------|------|-|----------|------|
@@ -911,7 +939,9 @@ room as open. Version 3 added status markers: an older reader would ignore those
 silently drop them, losing combat state from a saved fight, so it refuses too. Version 4
 added the turn order, for the same reason — but only a map with a fight in it says 4. One
 without is still written as version 3, which says everything it needs to and stays
-loadable by the builds that came before. Each version still loads everything older, and an unrecognised character reads as empty rather than
+loadable by the builds that came before. Version 5 added clocks, on the same terms: the
+writer always picks the lowest version that says everything in the map. Each version
+still loads everything older, and an unrecognised character reads as empty rather than
 failing the load.
 
 ## Performance

@@ -20,6 +20,7 @@ void play_init(Play *p)
     p->enforce_walls = 1;
     range_clear(&p->range);
     p->panel = 1;
+    p->clock = -1;
 }
 
 int token_can_move(const Map *m, const Token *t, int dx, int dy, int enforce,

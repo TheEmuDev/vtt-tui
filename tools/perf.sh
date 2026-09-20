@@ -186,6 +186,7 @@ run "play, range square"   "$PLAIN"  80x24  ':play\rt4R6rllllhhhh'
 run "play, turn order"     "$FIGHT"  80x24  ':play\r8a8A'
 run "play, fight cycling"  "$FIGHT"  80x24  ':play\rttttTTTT'
 run "play, spotlight"      "$MOB"    80x24  ':play\raa'
+run "play, clocks"         "$MOB"    80x24  ':play\r:clock Dragon 6\r:clock Ritual 8\r:tick Dragon 2\r:tick -2\r'
 run "play, 1 watcher"      "$MOB"    80x24  ':play\rjjllkkhh' "--bench-clients 1"
 run "play, 4 watchers"     "$MOB"    80x24  ':play\rjjllkkhh' "--bench-clients 4"
 run "play, carry, 4 watch" "$MOB"    80x24  ':play\rt\rlllljjjj\r' "--bench-clients 4"

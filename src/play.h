@@ -131,7 +131,8 @@ typedef struct {
     /* Rules-agnostic means never fighting the GM: blocking can be switched
      * off to drop a token anywhere. */
     int enforce_walls;
-    int panel;           /* the turn-order panel, when there is one to show; :panel */
+    int panel;           /* the side panel, when there is something to show; :panel */
+    int clock;           /* the clock a bare :tick means: the last started or ticked */
 
     uint8_t next_size;   /* footprint for the next token placed */
 

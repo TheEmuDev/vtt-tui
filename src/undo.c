@@ -245,6 +245,22 @@ void undo_set_spotlight(Undo *u, Map *m, int side)
     m->modified  = 1;
 }
 
+void undo_set_clock(Undo *u, Map *m, int slot, int value)
+{
+    if (slot < 0 || slot >= CLOCK_MAX || !m->clocks[slot].name[0]) return;
+    Clock *c = &m->clocks[slot];
+    value = iclamp(value, 0, c->size);
+    if (c->value == value) return;
+
+    Op *o = push(u);
+    o->kind   = OP_CLOCK;
+    o->x      = (int16_t)slot;
+    o->before = c->value;
+    o->after  = (uint8_t)value;
+    c->value    = (uint8_t)value;
+    m->modified = 1;
+}
+
 /* Re-inserts a token at a specific index so undoing a delete restores the
  * ordering that hit-testing depends on. */
 static void token_insert_at(TokenList *l, int idx, Token t)
@@ -288,6 +304,14 @@ static void apply(const Undo *u, Map *m, const Op *o, int forward)
         break;
     case OP_SPOTLIGHT:
         m->spotlight = forward ? o->y : o->x;
+        break;
+    case OP_CLOCK:
+        /* The slot may have been dropped and started again since; a value
+         * past the new size is clamped rather than trusted. */
+        if (o->x >= 0 && o->x < CLOCK_MAX && m->clocks[o->x].name[0]) {
+            uint8_t v = forward ? o->after : o->before;
+            m->clocks[o->x].value = v > m->clocks[o->x].size ? m->clocks[o->x].size : v;
+        }
         break;
     case OP_TOKEN_MOVE:
         if (o->x >= 0 && o->x < m->tokens.n) {
