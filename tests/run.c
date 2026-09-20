@@ -7135,6 +7135,8 @@ static void test_session_log(void)
 
     CASE("hints and errors stay off the log");
     press(&a, ":roll nonsense\r");
+    CHECK(strstr(a.status, "no roll called nonsense") != NULL);
+    press(&a, ":roll 2x6\r");
     CHECK(strstr(a.status, ":roll -") != NULL);
     press(&a, "i");                             /* a prefix waiting: a hint */
     press(&a, "\x1b");
@@ -7458,6 +7460,78 @@ static void test_roll_command(void)
     char want[32];
     snprintf(want, sizeof want, "= %d ", d.total);
     CHECK(strstr(a.status, want) != NULL);
+
+
+    CASE("a roll can be saved under a name, and rolled by it or a prefix of it");
+    press(&a, ":rolls\r");
+    CHECK(strstr(a.status, "no named rolls") != NULL);
+    press(&a, ":roll attack = 2d12+3\r");
+    CHECK(strstr(a.status, "attack = 2d12+3") != NULL);
+    CHECK_EQ(a.map->modified, 1);
+    press(&a, ":roll attack\r");
+    CHECK(strstr(a.status, "attack: 2d12+3 = ") != NULL);
+    press(&a, ":roll att\r");
+    CHECK(strstr(a.status, "attack: 2d12+3 = ") != NULL);
+    press(&a, ":roll bite=d8 + 1\r");                 /* spaces around = are optional */
+    press(&a, ":rolls\r");
+    CHECK(strstr(a.status, "attack = 2d12+3, bite = d8 + 1") != NULL);
+
+    CASE("a saved roll may be the action roll, and keeps its colours");
+    press(&a, ":roll swing = duality +2\r");
+    press(&a, ":roll swing\r");
+    CHECK(strstr(a.status, "swing: Duality +2 = ") != NULL);
+    CHECK_EQ(a.nstatus_span, 2);
+    CHECK(a.status_span[0].at > 7);                    /* shifted past the name */
+    CHECK_EQ(a.status[a.status_span[0].at - 1] != '\0', 1);
+    press(&a, ":roll raise = +1\r");
+    press(&a, ":roll raise\r");
+    CHECK(strstr(a.status, "raise: Duality +1 = ") != NULL);
+
+    CASE("plain dice always win over a name, and a name may not be dice");
+    press(&a, ":roll d20 = 3d6\r");
+    CHECK(strstr(a.status, "already a roll of its own") != NULL);
+    press(&a, ":roll duality = 3d6\r");
+    CHECK(strstr(a.status, "already a roll of its own") != NULL);
+    press(&a, ":roll 2d12+3\r");
+    CHECK(strstr(a.status, "attack:") == NULL);
+    press(&a, ":roll bad = 2x6\r");
+    CHECK(strstr(a.status, ":roll -") != NULL);
+    press(&a, ":roll 7up = d6\r");
+    CHECK(strstr(a.status, "starting with a letter") != NULL);
+    press(&a, ":roll arrow = d6\r");
+    press(&a, ":roll a\r");
+    CHECK(strstr(a.status, "more than one roll") != NULL);
+    press(&a, ":roll arrow =\r");
+    press(&a, ":roll nothing\r");
+    CHECK(strstr(a.status, "no roll called nothing") != NULL);
+
+    CASE("named rolls are saved as version 5 and read back");
+    {
+        char err[128];
+        CHECK_EQ(mapio_save(a.map, path, err, sizeof err), 0);
+        char *text = slurp(path);
+        if (text) {
+            CHECK_EQ(strncmp(text, "VTT 5\n", 6), 0);
+            CHECK(strstr(text, "roll attack \"2d12+3\"\n") != NULL);
+            CHECK(strstr(text, "roll swing \"duality +2\"\n") != NULL);
+            free(text);
+        }
+        Map *back = mapio_load(path, err, sizeof err);
+        CHECK(back != NULL);
+        if (back) {
+            CHECK_EQ(strcmp(back->rolls[0].name, "attack"), 0);
+            CHECK_EQ(strcmp(back->rolls[1].expr, "d8 + 1"), 0);
+            map_free(back);
+        }
+    }
+
+    CASE(":roll NAME = with nothing after it forgets the roll");
+    press(&a, ":roll bite =\r");
+    CHECK(strstr(a.status, "forgot bite") != NULL);
+    press(&a, ":roll bite\r");
+    CHECK(strstr(a.status, "no roll called bite") != NULL);
+    press(&a, ":roll att =\r");                       /* a prefix will not do for forgetting */
+    CHECK(strstr(a.status, "no roll called att") != NULL);
 
     app_free(&a);
     rnd_free(&r);

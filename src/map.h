@@ -29,6 +29,16 @@ typedef struct {
     uint8_t size;
 } Clock;
 
+/* Named rolls: ":roll attack" for a stat block's "2d12+3". They belong to
+ * the encounter, so they live on the map. A slot with no name is empty. */
+#define ROLL_MAX      16
+#define ROLL_NAME_MAX 16
+#define ROLL_EXPR_MAX 40
+typedef struct {
+    char name[ROLL_NAME_MAX];
+    char expr[ROLL_EXPR_MAX];
+} NamedRoll;
+
 #define SPOTLIGHT_PLAYERS 0
 #define SPOTLIGHT_GM      1
 
@@ -107,6 +117,7 @@ typedef struct {
     int  round;             /* of the fight; 0 when there is none */
     int  spotlight;         /* SPOTLIGHT_PLAYERS or SPOTLIGHT_GM, for a game that passes one */
     Clock clocks[CLOCK_MAX];
+    NamedRoll rolls[ROLL_MAX];
 
     /* Measurement settings travel with the encounter, since they belong to
      * the game being played rather than to the session. */

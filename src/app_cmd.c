@@ -1,6 +1,8 @@
 #include "app_priv.h"
 
+#include <ctype.h>
 #include <stdio.h>
+#include <strings.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -133,6 +135,172 @@ static void tick_command(App *a, const char *rest)
     app_note(a, msg);
 }
 
+/* ------------------------------------------------------------------ dice */
+
+/* Rolls `p` into msg: a bare roll or a bare modifier is the ruleset's
+ * action roll; "duality" asks for Daggerheart's two d12s by name on any
+ * map; anything else is an expression, rules or no rules. Returns -1 with
+ * the complaint already on the status line. */
+static int roll_text(App *a, const char *p, char *msg, size_t msgsz, DualitySpans *sp)
+{
+    const Ruleset *rs = ruleset_by_name(a->map->ruleset);
+    int    mod = 0, bare = 0;
+    size_t plen = strlen(p);
+    if (plen >= 7 && !strncmp(p, "duality", 7) &&
+        (plen == 7 || p[7] == ' ' || p[7] == '+' || p[7] == '-')) {
+        p += 7;
+        bare = 1;
+    } else if (!*p || p[0] == '+' || p[0] == '-') {
+        bare = 1;
+        if (!rs || !rs->action_roll) {
+            app_set_status(a, *p ? "a bare modifier needs a ruleset with an action roll - :roll 2d6+3"
+                                 : "roll what? :roll 2d6+3, or :roll +2 under a ruleset with an action roll");
+            return -1;
+        }
+    }
+    if (bare) {
+        while (*p == ' ') p++;
+        if (*p) {
+            char *end;
+            long v = strtol(p, &end, 10);
+            while (*end == ' ') end++;
+            if (end == p || *end || v < -99 || v > 99) {
+                app_set_status(a, "the modifier is a number, -99 to +99");
+                return -1;
+            }
+            mod = (int)v;
+        }
+        DualityRoll d;
+        dice_duality(mod, &d);
+        dice_duality_format(&d, msg, msgsz, sp);
+        return 0;
+    }
+
+    DiceResult r;
+    char err[64];
+    if (dice_roll_expr(p, &r, err, sizeof err) != 0) {
+        snprintf(msg, msgsz, ":roll - %s", err);
+        app_set_status(a, msg);
+        return -1;
+    }
+    dice_format(p, &r, msg, msgsz);
+    return 0;
+}
+
+static int roll_find(const Map *m, const char *name)
+{
+    int found = -1, hits = 0;
+    for (int i = 0; i < ROLL_MAX; i++) {
+        const char *n = m->rolls[i].name;
+        if (!n[0] || strncasecmp(n, name, strlen(name)) != 0) continue;
+        if (strlen(n) == strlen(name)) return i;
+        found = i;
+        hits++;
+    }
+    return hits > 1 ? -2 : found;
+}
+
+static void rolls_list(App *a)
+{
+    char msg[200];
+    int  off = 0;
+    for (int i = 0; i < ROLL_MAX && off < (int)sizeof msg - 24; i++) {
+        if (!a->map->rolls[i].name[0]) continue;
+        off += snprintf(msg + off, sizeof msg - (size_t)off, "%s%s = %s",
+                        off ? ", " : "", a->map->rolls[i].name, a->map->rolls[i].expr);
+    }
+    app_set_status(a, off ? msg : "no named rolls - :roll attack = 2d12+3 saves one");
+}
+
+/* :roll 2d6+3            an expression
+ * :roll attack           a saved roll by name, or a prefix of it
+ * :roll attack = 2d12+3  save one;  :roll attack =  forgets it */
+static void roll_command(App *a, const char *rest)
+{
+    Map  *m = a->map;
+    char  msg[160];
+    const char *eq = strchr(rest, '=');
+
+    if (eq) {
+        char name[ROLL_NAME_MAX + 8] = { 0 };
+        int  nl = 0;
+        for (const char *p = rest; p < eq && nl + 1 < (int)sizeof name; p++)
+            if (*p != ' ') name[nl++] = *p;
+        name[nl] = '\0';
+        const char *expr = eq + 1;
+        while (*expr == ' ') expr++;
+
+        if (!nl || !isalpha((unsigned char)name[0]) || nl >= ROLL_NAME_MAX) {
+            snprintf(msg, sizeof msg, "a roll's name is one word starting with a letter, under %d characters", ROLL_NAME_MAX);
+            app_set_status(a, msg);
+            return;
+        }
+        int idx = roll_find(m, name);
+        if (idx >= 0 && strcasecmp(m->rolls[idx].name, name) != 0) idx = -1;   /* a prefix is not the name */
+        if (!*expr) {
+            if (idx < 0) { snprintf(msg, sizeof msg, "no roll called %s", name); app_set_status(a, msg); return; }
+            snprintf(msg, sizeof msg, "forgot %s", m->rolls[idx].name);
+            memset(&m->rolls[idx], 0, sizeof m->rolls[idx]);
+            m->modified = 1;
+            app_note(a, msg);
+            return;
+        }
+        /* The expression must be something :roll would take, and the name
+         * must not be one: "d6 = 2d6" would shadow every d6 forever. */
+        DiceResult probe;
+        char err[64];
+        if (!strcmp(name, "duality") || dice_roll_expr(name, &probe, err, sizeof err) == 0) {
+            app_set_status(a, "that name is already a roll of its own");
+            return;
+        }
+        int bare = !strncmp(expr, "duality", 7) || expr[0] == '+' || expr[0] == '-';
+        if (!bare && dice_roll_expr(expr, &probe, err, sizeof err) != 0) {
+            snprintf(msg, sizeof msg, ":roll - %s", err);
+            app_set_status(a, msg);
+            return;
+        }
+        if (strlen(expr) >= ROLL_EXPR_MAX) { app_set_status(a, "that expression is too long to save"); return; }
+        if (idx < 0)
+            for (int i = 0; i < ROLL_MAX && idx < 0; i++)
+                if (!m->rolls[i].name[0]) idx = i;
+        if (idx < 0) { snprintf(msg, sizeof msg, "no room: a map holds %d named rolls", ROLL_MAX); app_set_status(a, msg); return; }
+        str_lcpy(m->rolls[idx].name, name, sizeof m->rolls[idx].name);
+        str_lcpy(m->rolls[idx].expr, expr, sizeof m->rolls[idx].expr);
+        m->modified = 1;
+        snprintf(msg, sizeof msg, "%s = %s - :roll %s rolls it", name, expr, name);
+        app_note(a, msg);
+        return;
+    }
+
+    /* A name is tried only when the text is not a roll in itself, so a
+     * saved roll can never shadow plain dice. */
+    const char *text = rest;
+    int         named = -1;
+    if (*rest && isalpha((unsigned char)rest[0]) && strncmp(rest, "duality", 7) != 0) {
+        DiceResult probe;
+        char err[64];
+        if (dice_roll_expr(rest, &probe, err, sizeof err) != 0) {
+            named = roll_find(m, rest);
+            if (named == -2) { snprintf(msg, sizeof msg, "\"%.20s\" could be more than one roll", rest); app_set_status(a, msg); return; }
+            if (named >= 0) text = m->rolls[named].expr;
+            else if (strchr(rest, ' ') == NULL) {
+                snprintf(msg, sizeof msg, "no roll called %.20s - :roll %.20s = 2d6+3 would save one", rest, rest);
+                app_set_status(a, msg);
+                return;
+            }
+        }
+    }
+
+    int  off = named >= 0 ? snprintf(msg, sizeof msg, "%s: ", m->rolls[named].name) : 0;
+    DualitySpans sp = { 0, 0, 0, 0 };
+    if (roll_text(a, text, msg + off, sizeof msg - (size_t)off, &sp) < 0) return;
+    app_note(a, msg);
+    if (sp.hope_len) {
+        app_status_span(a, off + sp.hope_at, sp.hope_len, a->th->hope);
+        app_status_span(a, off + sp.fear_at, sp.fear_len, a->th->fear);
+    }
+}
+
 /* --------------------------------------------------------- command line */
 
 void app_exec_command(App *a, const char *line)
@@ -254,60 +422,8 @@ void app_exec_command(App *a, const char *line)
         app_note(a, msg);
         return;
     }
-    if (!strcmp(verb, "roll")) {
-        /* A bare roll, or a bare modifier, is the ruleset's action roll;
-         * "duality" asks for Daggerheart's two d12s by name on any map;
-         * anything else is an expression, rules or no rules. */
-        const Ruleset *rs = ruleset_by_name(m->ruleset);
-        const char *p = rest;
-        int   mod = 0, bare = 0;
-        size_t plen = strlen(p);
-        if (plen >= 7 && !strncmp(p, "duality", 7) &&
-            (plen == 7 || p[7] == ' ' || p[7] == '+' || p[7] == '-')) {
-            p += 7;
-            bare = 1;
-        } else if (!*p || p[0] == '+' || p[0] == '-') {
-            bare = 1;
-            if (!rs || !rs->action_roll) {
-                app_set_status(a, *p ? "a bare modifier needs a ruleset with an action roll - :roll 2d6+3"
-                                     : "roll what? :roll 2d6+3, or :roll +2 under a ruleset with an action roll");
-                return;
-            }
-        }
-        char msg[160];
-        DualitySpans sp = { 0, 0, 0, 0 };
-        if (bare) {
-            while (*p == ' ') p++;
-            if (*p) {
-                char *end;
-                long v = strtol(p, &end, 10);
-                while (*end == ' ') end++;
-                if (end == p || *end || v < -99 || v > 99) {
-                    app_set_status(a, "the modifier is a number, -99 to +99");
-                    return;
-                }
-                mod = (int)v;
-            }
-            DualityRoll d;
-            dice_duality(mod, &d);
-            dice_duality_format(&d, msg, sizeof msg, &sp);
-        } else {
-            DiceResult r;
-            char err[64];
-            if (dice_roll_expr(p, &r, err, sizeof err) != 0) {
-                snprintf(msg, sizeof msg, ":roll - %s", err);
-                app_set_status(a, msg);
-                return;
-            }
-            dice_format(p, &r, msg, sizeof msg);
-        }
-        app_note(a, msg);
-        if (sp.hope_len) {
-            app_status_span(a, sp.hope_at, sp.hope_len, a->th->hope);
-            app_status_span(a, sp.fear_at, sp.fear_len, a->th->fear);
-        }
-        return;
-    }
+    if (!strcmp(verb, "roll"))  { roll_command(a, rest); return; }
+    if (!strcmp(verb, "rolls")) { rolls_list(a); return; }
     if (!strcmp(verb, "turns")) {
         /* Bare, it reads the order out; "off" ends the fight. */
         char msg[160];

@@ -689,6 +689,18 @@ one a system means by "roll" with nothing else said. Without a ruleset there is 
 thing and `:roll` asks for an expression. [Daggerheart](#daggerheart)'s is the duality
 roll, described there.
 
+**Named rolls.** A stat block's rolls can be saved with the map and rolled by name:
+
+```
+:roll attack = 2d12+3    save it        :roll attack     attack: 2d12+3 = 17  [9 5]
+:roll swing = duality +2 the action roll, with its modifier
+:rolls                   list them      :roll attack =   forget it
+```
+
+A prefix will do (`:roll att`) when only one name starts that way. Plain dice always win:
+`:roll d20` is a d20 however many rolls are saved, and a name that reads as dice is
+refused. A map holds sixteen.
+
 Rolls go to the [session log](#session-log-log) when it is on.
 
 ### Session log (`:log`)
@@ -873,6 +885,7 @@ with no verdict, ruleset or not.
 | `:panel` | the side panel, on or off |
 | `:clock NAME N` | start a [clock](#clocks-clock-tick); `:tick` fills a segment |
 | `:roll 2d6+3` | roll dice — see [Dice](#dice-roll) |
+| `:roll NAME = EXPR` | save a roll under a name; `:rolls` lists them |
 | `:log` | the session log, on or off — see [Session log](#session-log-log) |
 | `:play` `:build` | switch mode |
 
@@ -914,6 +927,7 @@ tokenturn 12
 round 2
 spotlight gm
 clock Dragon 3 6
+roll attack "2d12+3"
 ```
 
 A `tokenstatus` line hangs a marker on the token above it, so the attachment needs no index
@@ -921,7 +935,8 @@ to go wrong. A `tokenturn` line does the same for the [turn order](#turn-order-a
 creature's number, then `acting` if the turn is its. `tokenturn - acting` is a creature
 holding the turn from outside the order. `spotlight gm` says the GM has the spotlight, for
 a game that passes one; the players having it is the default and is not written. A
-`clock` line is a [clock](#clocks-clock-tick): its name, then filled and total segments.
+`clock` line is a [clock](#clocks-clock-tick): its name, then filled and total segments;
+a `roll` line a [named roll](#dice-roll).
 
 | terrain | char | | boundary | char |
 |---------|------|-|----------|------|
@@ -939,7 +954,7 @@ room as open. Version 3 added status markers: an older reader would ignore those
 silently drop them, losing combat state from a saved fight, so it refuses too. Version 4
 added the turn order, for the same reason — but only a map with a fight in it says 4. One
 without is still written as version 3, which says everything it needs to and stays
-loadable by the builds that came before. Version 5 added clocks, on the same terms: the
+loadable by the builds that came before. Version 5 added clocks and named rolls, on the same terms: the
 writer always picks the lowest version that says everything in the map. Each version
 still loads everything older, and an unrecognised character reads as empty rather than
 failing the load.

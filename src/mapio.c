@@ -65,6 +65,7 @@ int mapio_save(Map *m, const char *path, char *err, size_t errsz)
     int fight = m->round > 0 || m->spotlight != SPOTLIGHT_PLAYERS;
     for (int i = 0; i < m->tokens.n && !fight; i++) fight = m->tokens.v[i].turn != 0;
     int v5 = clock_count(m) > 0;
+    for (int i = 0; i < ROLL_MAX && !v5; i++) v5 = m->rolls[i].name[0] != '\0';
     fprintf(f, "VTT %d\n", v5 ? FORMAT_VERSION : fight ? FORMAT_BEFORE_CLOCKS : FORMAT_BEFORE_TURNS);
     fprintf(f, "name %s\n", m->name);
     fprintf(f, "size %d %d\n", m->w, m->h);
@@ -110,6 +111,9 @@ int mapio_save(Map *m, const char *path, char *err, size_t errsz)
     for (int i = 0; i < CLOCK_MAX; i++)
         if (m->clocks[i].name[0])
             fprintf(f, "clock %s %d %d\n", m->clocks[i].name, m->clocks[i].value, m->clocks[i].size);
+    for (int i = 0; i < ROLL_MAX; i++)
+        if (m->rolls[i].name[0])
+            fprintf(f, "roll %s \"%s\"\n", m->rolls[i].name, m->rolls[i].expr);
 
     int ok = (fflush(f) == 0);
     if (ok) ok = (fsync(fileno(f)) == 0) || errno == EINVAL;   /* pipes are fine */
@@ -239,6 +243,23 @@ static int parse_clock_line(Map *m, const char *line)
     return 0;
 }
 
+/* "roll attack "2d12+3"": a named roll. The expression is not checked
+ * here; :roll says what is wrong with it when it is used. */
+static int parse_roll_line(Map *m, const char *line)
+{
+    char name[ROLL_NAME_MAX] = { 0 };
+    int  consumed = 0;
+    if (sscanf(line, "roll %15s %n", name, &consumed) < 1) return -1;
+    int idx = -1;
+    for (int i = 0; i < ROLL_MAX && idx < 0; i++)
+        if (!m->rolls[i].name[0]) idx = i;
+    if (idx < 0) return -1;
+    str_lcpy(m->rolls[idx].name, name, sizeof m->rolls[idx].name);
+    parse_quoted(consumed > 0 ? line + consumed : NULL, m->rolls[idx].expr, sizeof m->rolls[idx].expr);
+    if (!m->rolls[idx].expr[0]) m->rolls[idx].name[0] = '\0';
+    return 0;
+}
+
 static int parse_token_line(Map *m, const char *line)
 {
     char kind[16] = { 0 };
@@ -351,6 +372,8 @@ Map *mapio_load(const char *path, char *err, size_t errsz)
             m->spotlight = SPOTLIGHT_GM;
         } else if (!strncmp(line, "clock ", 6)) {
             parse_clock_line(m, line);
+        } else if (!strncmp(line, "roll ", 5)) {
+            parse_roll_line(m, line);
         } else if (!strncmp(line, "round ", 6)) {
             int round = 0;
             if (sscanf(line, "round %d", &round) == 1) m->round = iclamp(round, 0, INT16_MAX);
