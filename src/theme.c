@@ -60,7 +60,10 @@ const Theme THEME_DARK = {
         [TILE_ROUGH]  = RGB(0x7A, 0x74, 0x6A),
         [TILE_BRUSH]  = RGB(0x62, 0x9C, 0x5E),
         [TILE_WOOD]   = RGB(0x9A, 0x74, 0x4C),
-        [TILE_HAZARD] = RGB(0xD8, 0x74, 0x3C),
+        /* An ember, not a flame: every interior cell of a hazard tile is a
+         * triangle, so the colour is seen as a field, and a bright one was
+         * the loudest thing on the map. */
+        [TILE_HAZARD] = RGB(0x9C, 0x50, 0x2E),
     },
     .terrain_bg = {
         /* Floor is the page, and every other terrain is tuned to sit above it.
