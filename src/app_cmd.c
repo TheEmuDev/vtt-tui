@@ -274,7 +274,7 @@ static void roll_command(App *a, const char *rest)
             if (idx < 0) { snprintf(msg, sizeof msg, "no roll called %s", name); app_set_status(a, msg); return; }
             snprintf(msg, sizeof msg, "forgot %s", m->rolls[idx].name);
             memset(&m->rolls[idx], 0, sizeof m->rolls[idx]);
-            m->modified = 1;
+            map_touch(m);
             app_note(a, msg);
             return;
         }
@@ -299,7 +299,7 @@ static void roll_command(App *a, const char *rest)
         if (idx < 0) { snprintf(msg, sizeof msg, "no room: a map holds %d named rolls", ROLL_MAX); app_set_status(a, msg); return; }
         str_lcpy(m->rolls[idx].name, name, sizeof m->rolls[idx].name);
         str_lcpy(m->rolls[idx].expr, expr, sizeof m->rolls[idx].expr);
-        m->modified = 1;
+        map_touch(m);
         snprintf(msg, sizeof msg, "%s = %s - :roll %s rolls it", name, expr, name);
         app_note(a, msg);
         return;
@@ -382,7 +382,7 @@ void app_exec_command(App *a, const char *line)
     if (!strcmp(verb, "name")) {
         if (!rest[0]) { app_set_status(a, ":name needs a value"); return; }
         str_lcpy(m->name, rest, sizeof m->name);
-        m->modified = 1;
+        map_touch(m);
         app_set_status(a, "renamed");
         return;
     }
@@ -414,7 +414,7 @@ void app_exec_command(App *a, const char *line)
             return;
         }
         m->scale_ft = v;
-        m->modified = 1;
+        map_touch(m);
         char msg[64];
         snprintf(msg, sizeof msg, "one tile is %g ft", v);
         app_set_status(a, msg);
@@ -427,7 +427,7 @@ void app_exec_command(App *a, const char *line)
             return;
         }
         m->metric = got;
-        m->modified = 1;
+        map_touch(m);
         char msg[64];
         snprintf(msg, sizeof msg, "metric: %s", dist_metric_name((DistMetric)got));
         app_set_status(a, msg);
@@ -445,7 +445,7 @@ void app_exec_command(App *a, const char *line)
             return;
         }
         str_lcpy(m->ruleset, strcmp(rs->name, "none") ? rs->name : "", sizeof m->ruleset);
-        m->modified = 1;
+        map_touch(m);
         /* The overlay's reach is read against the ruleset, so a band index
          * or a radius from the old one would mean something else now. */
         range_off(&a->play.range);

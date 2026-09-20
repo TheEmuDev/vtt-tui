@@ -153,7 +153,7 @@ int map_resize(Map *m, int w, int h)
     for (int i = m->nnotes - 1; i >= 0; i--)
         if (m->notes[i].x >= w || m->notes[i].y >= h)
             m->notes[i] = m->notes[--m->nnotes];
-    m->modified = 1;
+    map_touch(m);
     return 0;
 }
 
@@ -167,7 +167,7 @@ void map_set_tile(Map *m, int x, int y, uint8_t kind)
 {
     if (!map_in_bounds(m, x, y)) return;
     m->tiles[(size_t)y * (size_t)m->w + (size_t)x] = kind;
-    m->modified = 1;
+    map_touch(m);
 }
 
 uint8_t map_vedge(const Map *m, int x, int y)
@@ -180,7 +180,7 @@ void map_set_vedge(Map *m, int x, int y, uint8_t kind)
 {
     if (x < 0 || y < 0 || x > m->w || y >= m->h) return;
     m->vedges[(size_t)y * (size_t)(m->w + 1) + (size_t)x] = kind;
-    m->modified = 1;
+    map_touch(m);
 }
 
 uint8_t map_hedge(const Map *m, int x, int y)
@@ -193,7 +193,7 @@ void map_set_hedge(Map *m, int x, int y, uint8_t kind)
 {
     if (x < 0 || y < 0 || x >= m->w || y > m->h) return;
     m->hedges[(size_t)y * (size_t)m->w + (size_t)x] = kind;
-    m->modified = 1;
+    map_touch(m);
 }
 
 int map_walkable(const Map *m, int x, int y)
@@ -263,7 +263,7 @@ int map_note_set(Map *m, int x, int y, const char *text)
     if (!*text) {
         if (i < 0) return 1;
         m->notes[i] = m->notes[--m->nnotes];     /* order is nothing */
-        m->modified = 1;
+        map_touch(m);
         return 1;
     }
     if (i < 0) {
@@ -273,7 +273,7 @@ int map_note_set(Map *m, int x, int y, const char *text)
         m->notes[i].y = (int16_t)y;
     }
     str_lcpy(m->notes[i].text, text, sizeof m->notes[i].text);
-    m->modified = 1;
+    map_touch(m);
     return 1;
 }
 
@@ -287,7 +287,7 @@ void map_fill_tiles(Map *m, int x0, int y0, int x1, int y1, uint8_t kind)
     for (int y = y0; y <= y1; y++)
         for (int x = x0; x <= x1; x++)
             m->tiles[(size_t)y * (size_t)m->w + (size_t)x] = kind;
-    m->modified = 1;
+    map_touch(m);
 }
 
 void map_rect_walls(Map *m, int x0, int y0, int x1, int y1, uint8_t kind)

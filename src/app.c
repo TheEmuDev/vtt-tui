@@ -8,6 +8,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "draw.h"
@@ -113,6 +114,8 @@ static void show_message(App *a, const char *title, const char *body)
 
 /* --------------------------------------------------------------- maps */
 
+static void offer_recovery(App *a);
+
 int app_open_map(App *a, const char *path)
 {
     char err[MAPIO_ERR_MAX] = { 0 };
@@ -132,11 +135,98 @@ int app_open_map(App *a, const char *path)
     grid_center_on(&a->ed.view, m, a->ed.cx, a->ed.cy);
 
     a->screen = SCREEN_EDITOR;
+    a->autosave_gen = a->seen_gen = m->gen;
 
     char msg[192];
     snprintf(msg, sizeof msg, "opened %s (%dx%d, %d token%s)",
              m->name, m->w, m->h, m->tokens.n, m->tokens.n == 1 ? "" : "s");
     app_set_status(a, msg);
+    offer_recovery(a);
+    return 0;
+}
+
+/* Recovery is asked in the way a shell asks about a core file: the map is
+ * open as it was saved, and this offers the newer copy over it. Saying no
+ * throws the copy away, so the question is asked once. */
+static void offer_recovery(App *a)
+{
+    char autosave[MAP_PATH_MAX + 16];
+    mapio_autosave_path(a->map, autosave, sizeof autosave);
+    long when = 0;
+    if (!mapio_autosave_newer(a->map->path, autosave, &when)) return;
+
+    char stamp[32] = "";
+    struct tm tmv;
+    time_t t = (time_t)when;
+    if (localtime_r(&t, &tmv)) strftime(stamp, sizeof stamp, "%H:%M on %d %b", &tmv);
+
+    str_lcpy(a->pending_file, autosave, sizeof a->pending_file);
+    a->modal = MODAL_CONFIRM_RECOVER;
+    str_lcpy(a->modal_title, "Unsaved work found", sizeof a->modal_title);
+    snprintf(a->modal_body, sizeof a->modal_body,
+             "%s was still being edited at %s when it was last open, and those changes were never saved. Recover them?",
+             a->map->name, stamp);
+}
+
+static void recover_autosave(App *a)
+{
+    char err[MAPIO_ERR_MAX] = { 0 };
+    Map *m = mapio_load(a->pending_file, err, sizeof err);
+    if (!m) { show_message(a, "Cannot read the autosave", err); return; }
+
+    /* It stands in for the map, under the map's own path, and counts as
+     * unsaved: the file on disk is still the older one until :w. */
+    str_lcpy(m->path, a->map->path, sizeof m->path);
+    map_free(a->map);
+    a->map = m;
+    undo_clear(&a->undo);
+    play_init(&a->play);
+    ed_init(&a->ed, m);
+    ed_layout(&a->ed, m, a->rnd->w, a->rnd->h);
+    grid_center_on(&a->ed.view, m, a->ed.cx, a->ed.cy);
+    m->modified = 1;
+    a->autosave_gen = a->seen_gen = m->gen;
+    app_set_status(a, "recovered - :w keeps it, :q! lets it go");
+}
+
+/* The autosave lives while the work is unsaved and goes with the first
+ * save or the decision to discard; only a crash leaves it behind. */
+static void drop_autosave(const App *a)
+{
+    if (!a->map) return;
+    char autosave[MAP_PATH_MAX + 16];
+    mapio_autosave_path(a->map, autosave, sizeof autosave);
+    unlink(autosave);
+}
+
+void app_tick(App *a, uint64_t now_ms)
+{
+    if (!a->map) return;
+    if (a->map->gen != a->seen_gen) {
+        a->seen_gen  = a->map->gen;
+        a->change_ms = now_ms;
+    }
+    if (app_autosave_due(a, now_ms) == 0) app_autosave(a);
+}
+
+int app_autosave_due(const App *a, uint64_t now_ms)
+{
+    if (!a->autosave_on || !a->map || !a->map->modified) return -1;
+    if (a->map->gen == a->autosave_gen) return -1;
+    uint64_t at = a->change_ms + AUTOSAVE_QUIET_MS;
+    return now_ms >= at ? 0 : (int)(at - now_ms);
+}
+
+int app_autosave(App *a)
+{
+    if (!a->map) return -1;
+    PROF_ZONE("autosave");
+    char autosave[MAP_PATH_MAX + 16], err[MAPIO_ERR_MAX];
+    mapio_autosave_path(a->map, autosave, sizeof autosave);
+    /* The directory may not exist yet for a map that was never saved; one
+     * failure is not worth a message, the next save will say. */
+    if (mapio_write(a->map, autosave, err, sizeof err) != 0) return -1;
+    a->autosave_gen = a->map->gen;
     return 0;
 }
 
@@ -148,7 +238,7 @@ static void app_new_map(App *a, const char *name, int w, int h)
     Map *m = map_new(w, h, name);
     map_fill_tiles(m, 0, 0, w - 1, h - 1, TILE_FLOOR);
     map_rect_walls(m, 0, 0, w - 1, h - 1, EDGE_WALL);
-    m->modified = 1;
+    map_touch(m);
 
     char path[MAP_PATH_MAX];
     mapio_resolve_path(name, path, sizeof path);
@@ -171,6 +261,8 @@ static void app_new_map(App *a, const char *name, int w, int h)
     snprintf(msg, sizeof msg, "new map %.40s (%dx%d) - :w saves to %.100s",
              name, w, h, path);
     app_set_status(a, msg);
+    a->autosave_gen = a->seen_gen = m->gen;
+    offer_recovery(a);
 }
 
 int app_save_map(App *a, const char *path)
@@ -195,10 +287,16 @@ int app_save_map(App *a, const char *path)
     }
 
     char err[MAPIO_ERR_MAX] = { 0 };
+    /* The autosave is named from the path the map had; find it before the
+     * save moves the map to a new one. */
+    char autosave[MAP_PATH_MAX + 16];
+    mapio_autosave_path(a->map, autosave, sizeof autosave);
     if (mapio_save(a->map, path, err, sizeof err) != 0) {
         show_message(a, "Cannot save map", err);
         return -1;
     }
+    unlink(autosave);
+    a->autosave_gen = a->map->gen;
 
     char msg[192];
     snprintf(msg, sizeof msg, "wrote %.170s", path);
@@ -1020,6 +1118,20 @@ static int modal_key(App *a, Key k)
         return 1;
     }
 
+    case MODAL_CONFIRM_RECOVER: {
+        if (k.kind == KEY_CHAR && (k.ch == 'y' || k.ch == 'Y')) {
+            a->modal = MODAL_NONE;
+            recover_autosave(a);
+        } else if (k.kind == KEY_ESC ||
+                   (k.kind == KEY_CHAR && (k.ch == 'n' || k.ch == 'N'))) {
+            a->modal = MODAL_NONE;
+            unlink(a->pending_file);
+            app_set_status(a, "the unsaved work was let go");
+        }
+        if (a->modal == MODAL_NONE) a->pending_file[0] = '\0';
+        return 1;
+    }
+
     case MODAL_CONFIRM_QUIT:
     case MODAL_CONFIRM_DISCARD: {
         int discard = (a->modal == MODAL_CONFIRM_DISCARD);
@@ -1047,6 +1159,7 @@ static int modal_key(App *a, Key k)
  * closes here and nowhere else. */
 void app_close_map(App *a)
 {
+    drop_autosave(a);
     slog_close(&a->slog);
     map_free(a->map);
     a->map = NULL;
@@ -1379,7 +1492,7 @@ int app_ruler_key(App *a, Key k)
         /* Cycling in place beats remembering the command name when the number
          * on screen looks wrong. */
         m->metric = (m->metric + 1) % DIST_COUNT;
-        m->modified = 1;
+        map_touch(m);
         char msg[64];
         snprintf(msg, sizeof msg, "metric: %s",
                  dist_metric_name((DistMetric)m->metric));
@@ -1869,6 +1982,11 @@ void app_draw(App *a)
     case MODAL_CONFIRM_QUIT:
     case MODAL_CONFIRM_DISCARD:
         ui_confirm(a->rnd, a->th, a->modal_title, a->modal_body, frame);
+        break;
+
+    case MODAL_CONFIRM_RECOVER:
+        ui_modal(a->rnd, a->th, a->modal_title, a->modal_body,
+                 "y  recover them      n / esc  let them go", frame);
         break;
 
     case MODAL_CONFIRM_DELETE:

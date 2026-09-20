@@ -57,6 +57,7 @@ Bench scripts replay whole; no toggles — use loop-neutral pairs (`llllhhhh`,
 | `mapio.c` | file format; the writer picks the lowest version that says everything: 3, 4 with a fight, 5 with clocks, named rolls or notes |
 | `clock.c/h` | clocks: fixed slots on the map (`Map.clocks`), `down` per clock, `OP_CLOCK` for ticks only; `:clock`/`:tick` in `app_cmd.c`; drawn under the turn panel |
 | `keys.c` | key tables for the bar and the `?` page |
+| autosave (`app.c`) | `map_touch` bumps `Map.gen`; `app_tick`/`app_autosave_due` in main's loop write `path.autosave` after 1.5 s quiet; `offer_recovery` on open; `autosave_on` is set only in the interactive loop |
 | `dice.c`, `slog.c` | `:roll` (xoshiro, duality), the session log; named rolls are `Map.rolls`, expanded in `app_cmd.c` |
 | `wire.c/h` | the remote view's frame format: runs of cells, palette indices; encoder and incremental decoder shared by server, watcher and tests |
 | `net.c/h` | the server: listener, up to 8 clients with fixed buffers, HTTP + WebSocket (SHA-1/base64), raw watcher hello, broadcast from the renderer's observer |

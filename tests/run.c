@@ -7618,6 +7618,148 @@ static void test_notes(void)
     sandbox_leave(&sb);
 }
 
+/* The recovery autosave: a copy beside the file once changes go quiet,
+ * gone with a save or a discard, offered back after a crash. */
+static void test_autosave(void)
+{
+    Sandbox sb = sandbox_enter("autosave");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+
+    write_map_file(sb.dir, "fight.vtt");
+    char path[600], autosave[620];
+    snprintf(path, sizeof path, "%s/fight.vtt", sb.dir);
+    snprintf(autosave, sizeof autosave, "%s.autosave", path);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+    a.autosave_on = 1;
+    CHECK_EQ(app_open_map(&a, path), 0);
+    a.ed.cx = a.ed.cy = 0;
+    CHECK_EQ(a.modal, MODAL_NONE);                          /* nothing to recover */
+
+    CASE("a clean map owes no autosave, and an idle loop can sleep for ever");
+    CHECK_EQ(app_autosave_due(&a, 1000), -1);
+    app_tick(&a, 1000);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+
+    CASE("a change starts the clock; the copy is written once the changes go quiet");
+    press(&a, "x");                                         /* a tile to void */
+    CHECK_EQ(a.map->modified, 1);
+    app_tick(&a, 2000);
+    CHECK_EQ(app_autosave_due(&a, 2000), AUTOSAVE_QUIET_MS);
+    app_tick(&a, 2000 + AUTOSAVE_QUIET_MS - 1);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+    press(&a, "lx");                                        /* still typing: the clock restarts */
+    app_tick(&a, 2000 + AUTOSAVE_QUIET_MS);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+    app_tick(&a, 2000 + 2 * AUTOSAVE_QUIET_MS);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1);
+    CHECK_EQ(app_autosave_due(&a, 9000), -1);              /* nothing more owed */
+    CHECK_EQ(a.map->modified, 1);                           /* it is not a save */
+    CHECK_EQ(strcmp(a.map->path, path), 0);
+
+    CASE("the copy holds the changes");
+    {
+        char err[128];
+        Map *copy = mapio_load(autosave, err, sizeof err);
+        CHECK(copy != NULL);
+        if (copy) { CHECK_EQ(map_tile(copy, 0, 0), TILE_VOID); CHECK_EQ(map_tile(copy, 1, 0), TILE_VOID); map_free(copy); }
+    }
+
+    CASE("a save takes the copy away");
+    press(&a, ":w\r");
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+    CHECK_EQ(app_autosave_due(&a, 20000), -1);
+
+    CASE("so does a deliberate discard");
+    press(&a, "jx");
+    app_tick(&a, 30000);
+    app_tick(&a, 30000 + AUTOSAVE_QUIET_MS);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1);
+    press(&a, ":q!\r");
+    CHECK_EQ(a.map, NULL);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+
+    CASE("after a crash the next open offers the copy, and y takes it");
+    CHECK_EQ(app_open_map(&a, path), 0);
+    a.ed.cx = a.ed.cy = 0;
+    press(&a, "jx");                                        /* (0,1) */
+    app_tick(&a, 40000);
+    app_tick(&a, 40000 + AUTOSAVE_QUIET_MS);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1);
+    map_free(a.map);                                        /* the crash: no close, no save */
+    a.map = NULL;
+    undo_clear(&a.undo);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    a.ed.cx = a.ed.cy = 0;
+    CHECK_EQ(a.modal, MODAL_CONFIRM_RECOVER);
+    CHECK(strstr(a.modal_body, "never saved") != NULL);
+    CHECK_EQ(map_tile(a.map, 0, 1), TILE_FLOOR);            /* the file as saved, until answered */
+    press(&a, "y");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK_EQ(map_tile(a.map, 0, 1), TILE_VOID);
+    CHECK_EQ(a.map->modified, 1);
+    CHECK_EQ(strcmp(a.map->path, path), 0);
+    CHECK(strstr(a.status, "recovered") != NULL);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1); /* kept until the save */
+    press(&a, ":w\r");
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+    {
+        char err[128];
+        Map *disk = mapio_load(path, err, sizeof err);
+        CHECK(disk != NULL);
+        if (disk) { CHECK_EQ(map_tile(disk, 0, 1), TILE_VOID); map_free(disk); }
+    }
+
+    CASE("n lets the copy go, once");
+    press(&a, "lx");
+    app_tick(&a, 50000);
+    app_tick(&a, 50000 + AUTOSAVE_QUIET_MS);
+    map_free(a.map);
+    a.map = NULL;
+    undo_clear(&a.undo);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    a.ed.cx = a.ed.cy = 0;
+    CHECK_EQ(a.modal, MODAL_CONFIRM_RECOVER);
+    press(&a, "n");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+    CHECK_EQ(map_tile(a.map, 1, 1), TILE_FLOOR);
+    map_free(a.map); a.map = NULL; undo_clear(&a.undo);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    a.ed.cx = a.ed.cy = 0;
+    CHECK_EQ(a.modal, MODAL_NONE);
+
+    CASE("an autosave older than the file is not offered");
+    press(&a, " ");                                         /* toggle: always a change */
+    app_tick(&a, 60000);
+    app_tick(&a, 60000 + AUTOSAVE_QUIET_MS);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1);
+    a.map->modified = 0;                                    /* pretend it was saved elsewhere... */
+    write_map_file(sb.dir, "fight.vtt");                    /* ...and the file rewritten since */
+    map_free(a.map); a.map = NULL; undo_clear(&a.undo);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    a.ed.cx = a.ed.cy = 0;
+    CHECK_EQ(a.modal, MODAL_NONE);
+    unlink(autosave);
+
+    CASE("headless runs never write one");
+    a.autosave_on = 0;
+    press(&a, " ");
+    app_tick(&a, 70000);
+    app_tick(&a, 70000 + AUTOSAVE_QUIET_MS);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+    CHECK_EQ(app_autosave_due(&a, 80000), -1);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
 static void test_roll_command(void)
 {
     Sandbox sb = sandbox_enter("roll");
@@ -8905,6 +9047,7 @@ int main(void)
         { "slog",   test_session_log },
         { "clocks", test_clocks },
         { "notes",  test_notes },
+        { "autosave", test_autosave },
         { "roll",   test_roll_command },
         { "editing", test_editing },
         { "play",   test_play },

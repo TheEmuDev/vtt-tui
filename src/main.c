@@ -321,6 +321,7 @@ static int run_interactive(const Options *o)
     rnd_resize(&r, t.w, t.h);
     app_init(&a, &t, &r);
     a.ascii = o->ascii;
+    a.autosave_on = 1;              /* interactive only: a bench would litter */
     if (o->map_path) app_open_map(&a, o->map_path);
 
     InputParser p;
@@ -372,6 +373,10 @@ static int run_interactive(const Options *o)
         int nnet = net_pollfds(&a.net, fds + 2, 1 + NET_MAX_CLIENTS);
         /* With clients attached, wake now and then for keep-alives. */
         if (nnet > 1 && (timeout < 0 || timeout > 1000)) timeout = 1000;
+        /* And once, for the autosave, when there is unsaved work it has
+         * not yet copied: a quiet vtt with nothing owed still sleeps. */
+        int due = app_autosave_due(&a, prof_now_ns() / 1000000u);
+        if (due >= 0 && (timeout < 0 || due < timeout)) timeout = due;
 
         int nready = poll(fds, (nfds_t)(2 + nnet), timeout);
         if (nready < 0) {
@@ -379,6 +384,7 @@ static int run_interactive(const Options *o)
             break;
         }
         if (nnet > 0) net_service(&a.net, fds + 2, nnet, prof_now_ns() / 1000000u);
+        app_tick(&a, prof_now_ns() / 1000000u);
 
         if (nready > 0 && (fds[1].revents & POLLIN)) {
             if (term_drain_signals(&t) && term_update_size(&t)) {

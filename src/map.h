@@ -125,6 +125,7 @@ typedef struct {
     char path[MAP_PATH_MAX];
     int  zoom;              /* preferred zoom level, persisted with the map */
     int  modified;          /* unsaved changes */
+    unsigned gen;           /* bumped by every change; the autosave watches it */
     int  round;             /* of the fight; 0 when there is none */
     int  spotlight;         /* SPOTLIGHT_PLAYERS or SPOTLIGHT_GM, for a game that passes one */
     Clock clocks[CLOCK_MAX];
@@ -146,6 +147,11 @@ void map_free(Map *m);
 
 /* Resizes in place, preserving the overlapping region. */
 int  map_resize(Map *m, int w, int h);
+
+/* Every change to the map goes through here, so a watcher that compares
+ * generations (the recovery autosave) can tell "changed since" from
+ * "unsaved", which modified alone cannot once it has been set. */
+static inline void map_touch(Map *m) { m->modified = 1; m->gen++; }
 
 static inline int map_in_bounds(const Map *m, int x, int y)
 {

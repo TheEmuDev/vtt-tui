@@ -51,7 +51,7 @@ static void put_edge_row(FILE *f, const uint8_t *row, int n, char wall_char)
     fputc('\n', f);
 }
 
-int mapio_save(Map *m, const char *path, char *err, size_t errsz)
+int mapio_write(const Map *m, const char *path, char *err, size_t errsz)
 {
     char tmp[MAP_PATH_MAX + 8];
     snprintf(tmp, sizeof tmp, "%s.tmp", path);
@@ -136,10 +136,34 @@ int mapio_save(Map *m, const char *path, char *err, size_t errsz)
         unlink(tmp);
         return -1;
     }
+    return 0;
+}
 
+int mapio_save(Map *m, const char *path, char *err, size_t errsz)
+{
+    if (mapio_write(m, path, err, errsz) != 0) return -1;
     str_lcpy(m->path, path, sizeof m->path);
     m->modified = 0;
     return 0;
+}
+
+void mapio_autosave_path(const Map *m, char *buf, size_t bufsz)
+{
+    char base[MAP_PATH_MAX];
+    if (m->path[0]) str_lcpy(base, m->path, sizeof base);
+    else            mapio_resolve_path(m->name[0] ? m->name : "untitled", base, sizeof base);
+    snprintf(buf, bufsz, "%s.autosave", base);
+}
+
+int mapio_autosave_newer(const char *path, const char *autosave, long *when)
+{
+    struct stat sa, sp;
+    if (stat(autosave, &sa) != 0 || !S_ISREG(sa.st_mode)) return 0;
+    if (when) *when = (long)sa.st_mtime;
+    if (stat(path, &sp) != 0) return 1;
+    /* To the nanosecond: a save and its autosave can fall in one second. */
+    return sa.st_mtim.tv_sec > sp.st_mtim.tv_sec ||
+           (sa.st_mtim.tv_sec == sp.st_mtim.tv_sec && sa.st_mtim.tv_nsec > sp.st_mtim.tv_nsec);
 }
 
 /* ------------------------------------------------------------------ load */

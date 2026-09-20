@@ -33,6 +33,7 @@ typedef enum {
     MODAL_CONFIRM_DISCARD,
     MODAL_CONFIRM_DELETE,
     MODAL_CLEAR_STATUS,   /* which of a token's markers to take off */
+    MODAL_CONFIRM_RECOVER,   /* an autosave newer than the map: take it? */
 } ModalKind;
 
 typedef enum {
@@ -92,6 +93,16 @@ typedef struct {
     /* The remote view's server, off until :serve. main polls it. */
     Net net;
 
+    /* The recovery autosave: a copy of the map written beside its file once
+     * the changes have been quiet for a moment, removed by a save or a
+     * deliberate discard, and offered back the next time the map is opened
+     * if it is still there -- which it only is after a crash or a lost
+     * terminal. Off for headless runs, which would litter. */
+    int      autosave_on;
+    unsigned autosave_gen;   /* the map generation the autosave holds */
+    unsigned seen_gen;       /* the last generation app_tick saw */
+    uint64_t change_ms;      /* when seen_gen last moved */
+
     TextPrompt prompt;
     PromptWhat prompt_what;
     char       pending_name[MAP_NAME_MAX];
@@ -148,7 +159,16 @@ static inline int app_remote_live(const App *a)
 extern const char *app_self_path;
 
 /* Opens a map by path, replacing whatever is loaded. Returns 0 on success
- * and leaves a message modal up on failure. */
+ * and leaves a message modal up on failure -- or, on success, the offer of
+ * a newer autosave, which the next key answers. */
 int  app_open_map(App *a, const char *path);
+
+/* The autosave's clock. app_tick is called once round the event loop with
+ * the time; app_autosave_due says how many ms until it will want to write,
+ * -1 for never, so the loop can sleep exactly that long. */
+#define AUTOSAVE_QUIET_MS 1500
+void app_tick(App *a, uint64_t now_ms);
+int  app_autosave_due(const App *a, uint64_t now_ms);
+int  app_autosave(App *a);      /* writes it now; 0 on success */
 
 #endif /* VTT_APP_H */

@@ -62,7 +62,7 @@ int clock_start(Map *m, const char *name, int size, int down)
     c->down = (uint8_t)(down != 0);
     if (fresh)                   c->value = (uint8_t)clock_start_value(c);
     else if (c->value > c->size) c->value = c->size;
-    m->modified = 1;
+    map_touch(m);
     return idx;
 }
 
@@ -70,7 +70,7 @@ void clock_drop(Map *m, int idx)
 {
     if (idx < 0 || idx >= CLOCK_MAX || !m->clocks[idx].name[0]) return;
     memset(&m->clocks[idx], 0, sizeof m->clocks[idx]);
-    m->modified = 1;
+    map_touch(m);
 }
 
 int clock_set(Map *m, Undo *u, int idx, int value)

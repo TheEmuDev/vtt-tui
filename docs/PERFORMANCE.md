@@ -243,6 +243,24 @@ nanoseconds; buffering would save nothing anyone could feel and lose the last li
 mattered. With the log off the call is a null check. Dice are cheaper still: `play,
 rolling` is two `:roll` commands a loop and reads as the cost of typing them.
 
+**The recovery autosave is a whole-map write, off the keystroke path.** It writes the
+map to `name.vtt.autosave` once the changes have been quiet for 1.5 seconds, never
+while keys are arriving, and never twice for the same state: the map carries a
+generation counter and the copy is owed only while it is behind. A full write,
+`fsync` included, best of five:
+
+| map | bytes | write |
+|---|---|---|
+| 40×25, 24 creatures | 3.9 KB | 0.05 ms |
+| 200×200 | 122 KB | 0.6 ms |
+| 512×512 | 790 KB | 4.1 ms |
+
+Those are the costs of a save, and of a crash losing nothing. A snapshot was chosen
+over replaying the undo log because the log does not see everything the map is: the
+ruleset, the scale, the clocks and named rolls, a resize. Anything that goes through
+`map_touch` is covered, which is everything. An idle `vtt` with nothing owed still
+blocks in `poll` for ever; the only timer is the one write it is waiting to make.
+
 `group.move` is the whole formation's move: the check for every member, then the
 steps. **0.1us typical and 2.0us at p99** for the sizes a table plays at. It is
 O(members x tokens x members), because each member asks the token list whether

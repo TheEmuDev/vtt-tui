@@ -749,6 +749,31 @@ markers added and cleared, doors, rolls, ruleset changes, and undo and redo. Err
 and the things the app says about itself stay on the status line. Every line is flushed
 as it is written, so a crash loses nothing, and closing the map closes the log.
 
+### Recovery
+
+Unsaved work is copied to `name.vtt.autosave` beside the map once the changes have gone
+quiet for a moment — never mid-keystroke, and never for a map that has nothing unsaved. A
+save removes the copy, and so does deliberately discarding (`:q!`, or answering yes to the
+question). Only a crash or a lost terminal leaves it behind, and the next time that map is
+opened the tool asks:
+
+```
+╭─ Unsaved work found ───────────────────────────────────────╮
+│                                                            │
+│  Crypt was still being edited at 21:14 on 20 Sep when it   │
+│  was last open, and those changes were never saved.        │
+│  Recover them?                                             │
+│                                                            │
+│  y  recover them      n / esc  let them go                 │
+╰────────────────────────────────────────────────────────────╯
+```
+
+`y` puts the copy in place of the map, unsaved, so `:w` keeps it and `:q!` lets it go;
+`n` deletes the copy and opens the map as it was saved. The question is asked once. The
+copy is a whole map in the same [format](#file-format), so it can be opened by hand in a
+pinch, and the undo history is not part of it. Headless runs (`--script`, `--bench`)
+never write one.
+
 ### Remote view (`:serve`, `:mirror`)
 
 Players watch the map from their own devices. The GM's `vtt` serves; a phone, a tablet or

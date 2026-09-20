@@ -166,7 +166,7 @@ int undo_add_token(Undo *u, Map *m, Token t)
     o->kind = OP_TOKEN_ADD;
     o->x    = (int16_t)idx;
     push_token(u, &m->tokens.v[idx]);
-    m->modified = 1;
+    map_touch(m);
     return idx;
 }
 
@@ -179,7 +179,7 @@ void undo_del_token(Undo *u, Map *m, int idx)
     o->x    = (int16_t)idx;
     push_token(u, &m->tokens.v[idx]);
     tokens_remove(&m->tokens, idx);
-    m->modified = 1;
+    map_touch(m);
 }
 
 void undo_move_token(Undo *u, Map *m, int idx, int nx, int ny)
@@ -199,7 +199,7 @@ void undo_move_token(Undo *u, Map *m, int idx, int nx, int ny)
 
     t->x = (int16_t)nx;
     t->y = (int16_t)ny;
-    m->modified = 1;
+    map_touch(m);
 }
 
 void undo_edit_token(Undo *u, Map *m, int idx, Token after)
@@ -216,7 +216,7 @@ void undo_edit_token(Undo *u, Map *m, int idx, Token after)
     push_token(u, &after);
 
     *t = after;
-    m->modified = 1;
+    map_touch(m);
 }
 
 void undo_set_round(Undo *u, Map *m, int round)
@@ -229,7 +229,7 @@ void undo_set_round(Undo *u, Map *m, int round)
     o->x    = (int16_t)m->round;
     o->y    = (int16_t)round;
     m->round    = round;
-    m->modified = 1;
+    map_touch(m);
 }
 
 void undo_set_spotlight(Undo *u, Map *m, int side)
@@ -242,7 +242,7 @@ void undo_set_spotlight(Undo *u, Map *m, int side)
     o->x    = (int16_t)m->spotlight;
     o->y    = (int16_t)side;
     m->spotlight = side;
-    m->modified  = 1;
+    map_touch(m);
 }
 
 void undo_set_clock(Undo *u, Map *m, int slot, int value)
@@ -258,7 +258,7 @@ void undo_set_clock(Undo *u, Map *m, int slot, int value)
     o->before = c->value;
     o->after  = (uint8_t)value;
     c->value    = (uint8_t)value;
-    m->modified = 1;
+    map_touch(m);
 }
 
 /* Re-inserts a token at a specific index so undoing a delete restores the
@@ -323,7 +323,7 @@ static void apply(const Undo *u, Map *m, const Op *o, int forward)
     default:
         break;
     }
-    m->modified = 1;
+    map_touch(m);
 }
 
 static int batch_end(const Undo *u, int batch)
