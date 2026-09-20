@@ -7239,11 +7239,14 @@ static void test_clocks(void)
     press(&a, ":tick =6\r");
     CHECK(strstr(a.status, "Dragon 6/6 - full") != NULL);
     press(&a, ":tick\r");
-    CHECK(strstr(a.status, "full at 6") != NULL);
+    CHECK(strstr(a.status, "Dragon is full") != NULL);
     CHECK_EQ(m->clocks[0].value, 6);
     press(&a, ":tick =0\r");
     press(&a, ":tick -1\r");
-    CHECK(strstr(a.status, "already empty") != NULL);
+    CHECK(strstr(a.status, "Dragon is at its start") != NULL);
+    press(&a, ":tick 3\r");
+    press(&a, ":tick reset\r");
+    CHECK_EQ(m->clocks[0].value, 0);
 
     CASE("names match by prefix, case aside, and an exact name beats a longer one");
     press(&a, ":clock Ritual 4\r");
@@ -7348,6 +7351,99 @@ static void test_clocks(void)
         CHECK_EQ(back->clocks[1].size, 24);
         map_free(back);
     }
+
+    /* Daggerheart's countdowns run the other way: they start full and a
+     * tick brings them down. The ruleset decides the default, a word after
+     * the size decides outright, and a die names the size and rolls the
+     * start. Nothing ticks by itself: this is for a table that rolls its
+     * own dice. */
+    CASE("under daggerheart a new clock counts down: full at the start, done at nothing");
+    press(&a, ":ruleset daggerheart\r");
+    press(&a, ":clock Ambush 4\r");
+    int amb = clock_find(m, "Ambush");
+    CHECK(amb >= 0);
+    CHECK_EQ(m->clocks[amb].down, 1);
+    CHECK_EQ(m->clocks[amb].value, 4);
+    CHECK(strstr(a.status, "Ambush 4/4 started - :tick counts it down") != NULL);
+    press(&a, ":tick\r");
+    CHECK_EQ(m->clocks[amb].value, 3);
+    press(&a, ":tick 2\r");
+    CHECK_EQ(m->clocks[amb].value, 1);
+    press(&a, ":tick -1\r");                               /* back towards the start */
+    CHECK_EQ(m->clocks[amb].value, 2);
+    press(&a, ":tick =0\r");
+    CHECK(strstr(a.status, "Ambush 0/4 - done") != NULL);
+    CHECK_EQ(clock_done(&m->clocks[amb]), 1);
+    press(&a, ":tick\r");
+    CHECK(strstr(a.status, "Ambush is done") != NULL);
+    press(&a, "u");
+    CHECK_EQ(m->clocks[amb].value, 2);
+
+    CASE("a loop is a reset by hand, and a resize keeps counting the same way");
+    press(&a, ":tick =0\r");
+    press(&a, ":tick reset\r");
+    CHECK_EQ(m->clocks[amb].value, 4);
+    press(&a, ":clock Ambush 5\r");                        /* the loop that grows */
+    CHECK_EQ(m->clocks[amb].size, 5);
+    CHECK_EQ(m->clocks[amb].value, 4);
+    CHECK_EQ(m->clocks[amb].down, 1);
+    press(&a, ":tick reset\r");
+    CHECK_EQ(m->clocks[amb].value, 5);
+
+    CASE("\"up\" and \"down\" after the size say which way, whatever the game");
+    press(&a, ":clock Heist 6 up\r");
+    int h = clock_find(m, "Heist");
+    CHECK_EQ(m->clocks[h].down, 0);
+    CHECK_EQ(m->clocks[h].value, 0);
+    press(&a, ":clock Ambush 5 up\r");                     /* a change of direction starts over */
+    CHECK_EQ(m->clocks[amb].down, 0);
+    CHECK_EQ(m->clocks[amb].value, 0);
+    press(&a, ":clock Ambush 5 sideways\r");
+    CHECK(strstr(a.status, "\"up\" or \"down\"") != NULL);
+    press(&a, ":ruleset none\r");
+    press(&a, ":clock Fuse 3 down\r");
+    CHECK_EQ(m->clocks[clock_find(m, "Fuse")].down, 1);
+    CHECK_EQ(m->clocks[clock_find(m, "Fuse")].value, 3);
+
+    CASE("a die for the size starts the clock at the roll");
+    dice_seed(3);
+    int expect = dice_one(8);
+    dice_seed(3);
+    press(&a, ":clock Storm d8 down\r");
+    int st = clock_find(m, "Storm");
+    CHECK_EQ(m->clocks[st].size, 8);
+    CHECK_EQ(m->clocks[st].value, expect);
+    CHECK(strstr(a.status, "started at the d8's") != NULL);
+    CHECK(strstr(a.status, "counting down") != NULL);
+
+    CASE("the direction is saved, and a countdown at nothing is lit");
+    CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+    text = slurp(path);
+    if (text) {
+        CHECK(strstr(text, "clock Fuse 3 3 down\n") != NULL);
+        CHECK(strstr(text, "clock Heist 0 6\n") != NULL);
+        free(text);
+    }
+    back = mapio_load(path, err, sizeof err);
+    CHECK(back != NULL);
+    if (back) {
+        int f = clock_find(back, "Fuse");
+        CHECK(f >= 0 && back->clocks[f].down == 1 && back->clocks[f].value == 3);
+        map_free(back);
+    }
+    press(&a, ":tick Fuse =0\r");
+    rnd_begin(&r);
+    app_draw(&a);
+    lit = 0;
+    for (int y = 0; y < r.h; y++) {
+        const Cell *c = &r.back[(size_t)y * (size_t)r.w + (size_t)(r.w - TURN_PANEL_W + 2)];
+        if (c->ch == 'F' && c->fg == a.th->turn) lit++;
+    }
+    CHECK_EQ(lit, 1);
+    press(&a, ":clock Ambush off\r");
+    press(&a, ":clock Heist off\r");
+    press(&a, ":clock Fuse off\r");
+    press(&a, ":clock Storm off\r");
 
     CASE("with the clocks gone the file is version 3 again");
     press(&a, ":clock Dragon off\r");

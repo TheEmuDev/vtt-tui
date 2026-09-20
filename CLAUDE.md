@@ -16,7 +16,7 @@ maintainer; this file is what survives a context reset, so keep it true.
   the window, not the map: cull with `grid_visible_tiles` first.
 - **Push only when told** ("push it"). Commit freely; never push on your own.
 - **Rules-agnostic core.** Game-specific behaviour lives behind the `Ruleset`
-  table in `ruler.c` (bands, `action_roll`), documented under the README's
+  table in `ruler.c` (bands, `action_roll`, `spotlight`, `countdown`), documented under the README's
   *Rulesets* section with a subsection per game. Nothing else may know a game.
 - **Keys follow the eight rules** in README *Keys → How a key is chosen*. Read
   them before binding anything. The `?` page and the bar both come from
@@ -47,16 +47,17 @@ Bench scripts replay whole; no toggles — use loop-neutral pairs (`llllhhhh`,
 | file | owns |
 |---|---|
 | `app.c` | lifecycle, screens, prompts (`prompt_accept`), modals, drawing the frame, `app_key` dispatch, `app_note` (status + session log) vs `app_set_status` (status only) |
-| `app_play.c` | play-mode keys (`app_play_key`), prefix families `i`/`s`, `retired_key` hints |
+| `app_play.c` | play-mode keys (`app_play_key`), prefix families `i`/`s`, `retired_key` hints; `s n` notes (build mode has the same key in `app.c`) |
 | `app_cmd.c` | every `:` command |
 | `app_priv.h` | what those three share; `count_digit`, `take_count` (silence=1), `take_count_raw` (silence=0) |
 | `play.c/h` | play state, route search (`trail.path`), groups, the range overlay (`RangeGeom`, shapes) |
 | `turn.c/h` | turn order and spotlight: state is `Token.turn`/`Token.init` + `Map.round`/`Map.spotlight`, never a list; `turn_walk` also drives `t`/`f`/`e`; draws the side panel |
 | `editor.c` | build mode: brush, visual box/circle, wall trace |
 | `undo.c/h` | flat op log, batches, `OP_ROUND`; tokens in a side array; capped at four fills of the largest map |
-| `mapio.c` | file format; version 4 only when a fight is saved, else 3 |
+| `mapio.c` | file format; the writer picks the lowest version that says everything: 3, 4 with a fight, 5 with clocks, named rolls or notes |
+| `clock.c/h` | clocks: fixed slots on the map (`Map.clocks`), `down` per clock, `OP_CLOCK` for ticks only; `:clock`/`:tick` in `app_cmd.c`; drawn under the turn panel |
 | `keys.c` | key tables for the bar and the `?` page |
-| `dice.c`, `slog.c` | `:roll` (xoshiro, duality), the session log |
+| `dice.c`, `slog.c` | `:roll` (xoshiro, duality), the session log; named rolls are `Map.rolls`, expanded in `app_cmd.c` |
 | `wire.c/h` | the remote view's frame format: runs of cells, palette indices; encoder and incremental decoder shared by server, watcher and tests |
 | `net.c/h` | the server: listener, up to 8 clients with fixed buffers, HTTP + WebSocket (SHA-1/base64), raw watcher hello, broadcast from the renderer's observer |
 | `watch.c` | `vtt --watch host:port`, the read-only terminal mirror; `:mirror` spawns it in `$TERMINAL` |
@@ -80,6 +81,10 @@ Bench scripts replay whole; no toggles — use loop-neutral pairs (`llllhhhh`,
 
 - Status messages: `app_note` for things that *happened* (logged), `app_set_status`
   for hints and errors.
+- Play mode is what the players may see (the remote view mirrors it). GM-only text
+  (notes) never goes on the map or the status line there; `app_gm_only` freezes the
+  remote while a note prompt is open. Build mode is the GM's alone.
+- Ideas consciously set aside live in `docs/IDEAS.md` with the reason (the Fear pool).
 - Distances print through `dist_fmt`; coordinates through `map_coord_name`.
 - `range_clear` resets the overlay; `range_off` switches it off and keeps the shape.
 - The `Cell` padding must stay zero (row memcmp in the renderer); tokens compare

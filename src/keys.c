@@ -54,8 +54,9 @@ static const KeyDoc PLAY[] = {
     KEY(":turns", "the whole order on one line    :turns off ends the fight"),
     KEY(":panel", "the side panel, on or off; it appears when there is a fight or a clock"),
     GROUP("Clocks"),
-    KEY(":clock Dragon 6", "start a clock of six segments  (:clock lists them, :clock Dragon off drops it)"),
-    KEY(":tick",  "fill a segment of the clock in hand   :tick Dragon 2, :tick Dragon -1, :tick Dragon =0"),
+    KEY(":clock Dragon 6", "start a clock of six segments; d6 rolls the start; 'down' or 'up' says which way"),
+    KEY(":tick",  "a step on the clock in hand   :tick Dragon 2, :tick Dragon -1, :tick Dragon =3, reset"),
+    KEY(":clock", "list them   :clock Dragon off drops one"),
 
     GROUP("Remote view"),
     KEY(":serve",  "let players watch from a browser; the status line shows the URL"),

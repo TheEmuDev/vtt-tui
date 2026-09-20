@@ -54,6 +54,10 @@ typedef struct {
      * passes between the players and the GM. The tracker shows the side that
      * has it, and a moves it across, instead of counting rounds. */
     int              spotlight;
+    /* Set for a game whose clocks count down -- Daggerheart's countdowns
+     * start full and tick towards zero. Otherwise a new clock fills up,
+     * the way a progress clock does. Either can be asked for by name. */
+    int              countdown;
 } Ruleset;
 
 const Ruleset *ruleset_by_name(const char *name);   /* NULL if unknown */

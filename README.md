@@ -668,25 +668,32 @@ count. [Daggerheart](#daggerheart) plays this way.
 
 A clock is a name and a row of segments, some of them filled — the countdown a Daggerheart
 GM ticks while the party dawdles, the progress clock a heist fills, "three more rounds
-until the roof comes in". The tool attaches no meaning to a clock filling: it lights the
-row, says so, and the table decides what it means.
+until the roof comes in". It runs one of two ways: *up*, from empty to full, or *down*,
+from full to nothing. A tick is always a step towards the end, and nothing ticks by itself:
+the tool serves a table that rolls its own dice and decides for itself when time has
+passed. It attaches no meaning to a clock reaching its end either. It lights the row, says
+so, and the table decides what it means.
 
 ```
 :clock Dragon 6       start a six-segment clock (or resize one already called Dragon)
-:tick                 fill one segment of the clock in hand -- the last started or ticked
-:tick Dragon          fill one of that clock, which becomes the one in hand
-:tick Dragon 2        two;   :tick Dragon -1  one back;   :tick Dragon =0  set outright
-:clock                list them:  Dragon 3/6, Ritual 0/4
+:clock Fuse 4 down    counting down -- the default under a ruleset whose clocks do
+:clock Storm d8       a die for the size: eight segments, starting at the roll
+:tick                 one step on the clock in hand -- the last started or ticked
+:tick Dragon          one step on that clock, which becomes the one in hand
+:tick Dragon 2        two;   :tick Dragon -1  one back;   :tick Dragon =3  set outright
+:tick Dragon reset    back to the start, for a clock that loops
+:clock                list them:  Dragon 3/6, Fuse 4/4
 :clock Dragon off     drop it
 ```
 
 Names are one word, starting with a letter, and a prefix will do: `:tick dr` ticks Dragon
 unless another clock starts the same way. A map holds eight. They are drawn in the side
-panel under the turn order, as dots when they fit the row and as `5/24` when they do not,
-and the panel appears for them whether or not there is a fight. A tick is one undo step;
-starting, resizing and dropping a clock are not undone, since they are as easy to redo by
-hand as a tick is not. Clocks are saved with the map and go to the [session
-log](#session-log-log) as they change.
+panel under the turn order, as dots when they fit the row and as `5/24` when they do not —
+for a countdown the dots are what is left — and the panel appears for them whether or not
+there is a fight. A tick is one undo step; starting, resizing and dropping a clock are not
+undone, since they are as easy to redo by hand as a tick is not. Resizing keeps the
+count, unless the direction changes, when the clock starts over. Clocks are saved with the
+map and go to the [session log](#session-log-log) as they change.
 
 ### Dice (`:roll`)
 
@@ -818,7 +825,8 @@ session. `none` is the default: every readout reports plain squares and feet, an
 scale), which is how most games phrase
 reach anyway.
 
-A ruleset is a table of named thresholds, nothing more — the tool still attaches no
+A ruleset is a small table: named thresholds, what a bare `:roll` means, whether the turn
+is a spotlight, and which way a new clock runs. Nothing more — the tool still attaches no
 meaning to a band, enforces nothing, and never spends a creature's movement for it.
 Supported: `none`, `daggerheart`.
 
@@ -862,6 +870,17 @@ players' spotlight, an enemy's the GM's — and the panel shows which side has i
 The title bar says the same in words, *Players' spotlight - Aria*, for a terminal too
 narrow for the panel. Rolling initiative with `s i` still works here; the moment anyone
 has a number the tracker is an order again.
+
+**Countdowns.** Daggerheart's clocks count down, so under this ruleset a new
+[clock](#clocks-clock-tick) starts full and `:tick` brings it towards nothing; `:clock
+Fuse 4 up` asks for a progress clock instead. The SRD's variants are all the GM's hand on
+the same clock, which is the point at an in-person table: a *random start* is `:clock
+Ambush d6`, which rolls the die and starts there; a *looping* countdown is `:tick Ambush
+reset` when it reaches nothing, and the loop that grows or shrinks each time round is
+`:clock Ambush 7` before the reset; a countdown that moves with the fiction goes `:tick
+Ambush -1` as readily as `:tick Ambush 2`; two that advance together are two clocks and
+two ticks; a *long-term* countdown is one ticked after rests. Nothing advances on a roll
+by itself, because the dice at the table are usually not the tool's.
 
 The SRD is explicit that these ranges "aren't intended to be precisely measured during play"
 and are a quick guide for the GM — the readout is the same kind of aid.
@@ -945,6 +964,7 @@ tokenturn 12
 round 2
 spotlight gm
 clock Dragon 3 6
+clock Fuse 4 4 down
 roll attack "2d12+3"
 note 5 3 "pressure plate"
 ```
@@ -954,7 +974,8 @@ to go wrong. A `tokenturn` line does the same for the [turn order](#turn-order-a
 creature's number, then `acting` if the turn is its. `tokenturn - acting` is a creature
 holding the turn from outside the order. `spotlight gm` says the GM has the spotlight, for
 a game that passes one; the players having it is the default and is not written. A
-`clock` line is a [clock](#clocks-clock-tick): its name, then filled and total segments;
+`clock` line is a [clock](#clocks-clock-tick): its name, then filled and total segments,
+then `down` for one that counts down;
 a `roll` line a [named roll](#dice-roll). `tokennote` hangs a note on the token above it,
 and `note x y` puts one on a square.
 

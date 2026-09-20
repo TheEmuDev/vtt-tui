@@ -25,8 +25,9 @@
 #define CLOCK_NAME_MAX 20
 typedef struct {
     char    name[CLOCK_NAME_MAX];   /* "" for an empty slot */
-    uint8_t value;
+    uint8_t value;                  /* segments filled: what is left, for a countdown */
     uint8_t size;
+    uint8_t down;                   /* counts down from full to nothing */
 } Clock;
 
 /* Named rolls: ":roll attack" for a stat block's "2d12+3". They belong to

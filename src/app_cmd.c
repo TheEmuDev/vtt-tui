@@ -28,7 +28,10 @@ static int clock_named(App *a, const char *name)
 }
 
 /* :clock                 list them
- * :clock NAME SIZE       start one, or resize it
+ * :clock NAME SIZE       start one -- counting down under a ruleset that
+ *                        does, filling up otherwise; "up" or "down" after
+ *                        the size says which regardless. Or resize it.
+ * :clock NAME d6         a die for the size, and it starts at the roll
  * :clock NAME off        drop it */
 static void clock_command(App *a, const char *rest)
 {
@@ -46,8 +49,8 @@ static void clock_command(App *a, const char *rest)
         return;
     }
 
-    char name[CLOCK_NAME_MAX + 8] = { 0 }, arg[16] = { 0 };
-    if (sscanf(rest, "%27s %15s", name, arg) < 2) {
+    char name[CLOCK_NAME_MAX + 8] = { 0 }, arg[16] = { 0 }, dir[8] = { 0 };
+    if (sscanf(rest, "%27s %15s %7s", name, arg, dir) < 2) {
         app_set_status(a, ":clock NAME SIZE starts a clock; :clock NAME off drops it");
         return;
     }
@@ -60,40 +63,63 @@ static void clock_command(App *a, const char *rest)
         app_note(a, msg);
         return;
     }
+
+    /* The direction: the word if given, else what the game does, else up. */
+    const Ruleset *rs = ruleset_by_name(m->ruleset);
+    int down = rs && rs->countdown;
+    if (dir[0]) {
+        if (!strcmp(dir, "down"))    down = 1;
+        else if (!strcmp(dir, "up")) down = 0;
+        else { app_set_status(a, "after the size, \"up\" or \"down\" says which way it runs"); return; }
+    }
+
+    /* The size: a number, or a die, whose roll is where the clock starts. */
+    const char *p = arg + (arg[0] == 'd' || arg[0] == 'D');
+    int rolled = p != arg;
     char *end;
-    long  size = strtol(arg, &end, 10);
-    if (end == arg || *end || size < 1 || size > CLOCK_SIZE_MAX) {
-        snprintf(msg, sizeof msg, "a clock has 1 to %d segments", CLOCK_SIZE_MAX);
+    long  size = strtol(p, &end, 10);
+    if (end == p || *end || size < 1 || size > CLOCK_SIZE_MAX) {
+        snprintf(msg, sizeof msg, "a clock has 1 to %d segments, or a die that many sides: :clock Dragon d6", CLOCK_SIZE_MAX);
         app_set_status(a, msg);
         return;
     }
     int had = clock_find(m, name);
-    int idx = clock_start(m, name, (int)size);
+    int idx = clock_start(m, name, (int)size, down);
     if (idx < 0) {
         if (clock_count(m) >= CLOCK_MAX) snprintf(msg, sizeof msg, "no room: a map holds %d clocks", CLOCK_MAX);
         else                             snprintf(msg, sizeof msg, "a clock's name starts with a letter");
         app_set_status(a, msg);
         return;
     }
+    Clock *c = &m->clocks[idx];
+    int roll = 0;
+    if (rolled) {
+        roll = dice_one((int)size);
+        c->value = (uint8_t)roll;
+    }
     a->play.clock = idx;
     char one[48];
-    clock_format(&m->clocks[idx], one, sizeof one);
-    snprintf(msg, sizeof msg, "clock %s %s", one, had == idx ? "resized" : "started - :tick fills a segment");
+    clock_format(c, one, sizeof one);
+    if (had == idx)  snprintf(msg, sizeof msg, "clock %s resized", one);
+    else if (rolled) snprintf(msg, sizeof msg, "clock %s started at the d%ld's %d, %s", one, size, roll,
+                              down ? "counting down" : "filling up");
+    else             snprintf(msg, sizeof msg, "clock %s started - :tick %s", one,
+                              down ? "counts it down" : "fills a segment");
     app_note(a, msg);
 }
 
-/* :tick             one more on the clock in hand
- * :tick NAME        one more on that clock, which becomes the one in hand
- * :tick NAME 2      two more;  -1 one back;  =0 set outright */
+/* :tick             one step towards the end, on the clock in hand
+ * :tick NAME        the same on that clock, which becomes the one in hand
+ * :tick NAME 2      two steps;  -1 one back;  =3 set outright;  reset to the start */
 static void tick_command(App *a, const char *rest)
 {
     Map *m = a->map;
     char name[CLOCK_NAME_MAX + 8] = { 0 }, arg[16] = { 0 };
     int  n = sscanf(rest, "%27s %15s", name, arg);
 
-    /* A bare number, or a signed one, names no clock: it is the amount. */
+    /* A bare number, a signed one, or "reset" names no clock: it is the amount. */
     if (n >= 1 && (name[0] == '+' || name[0] == '-' || name[0] == '=' ||
-                   (name[0] >= '0' && name[0] <= '9'))) {
+                   (name[0] >= '0' && name[0] <= '9') || !strcmp(name, "reset"))) {
         str_lcpy(arg, name, sizeof arg);
         name[0] = '\0';
         n = 0;
@@ -112,26 +138,33 @@ static void tick_command(App *a, const char *rest)
     Clock *c = &m->clocks[idx];
 
     int delta = 1, set = -1;
-    if (arg[0]) {
+    if (!strcmp(arg, "reset")) set = clock_start_value(c);
+    else if (arg[0]) {
         const char *p = arg + (arg[0] == '=' || arg[0] == '+');
         char *end;
         long  v = strtol(p, &end, 10);
-        if (end == p || *end) { app_set_status(a, ":tick NAME, :tick NAME 2, :tick NAME -1, :tick NAME =0"); return; }
+        if (end == p || *end) { app_set_status(a, ":tick NAME, :tick NAME 2, :tick NAME -1, :tick NAME =3, :tick NAME reset"); return; }
         if (arg[0] == '=') set = (int)v;
         else               delta = (int)v;
     }
 
-    int want = set >= 0 ? set : c->value + delta;
     char msg[96];
-    if (want > c->size) { snprintf(msg, sizeof msg, "%s is full at %d", c->name, c->size); app_set_status(a, msg); return; }
-    if (want < 0)       { snprintf(msg, sizeof msg, "%s is already empty", c->name); app_set_status(a, msg); return; }
-    if (want == c->value) { app_set_status(a, "no change"); return; }
+    int  before = c->value, want;
+    if (set >= 0) { want = set; if (want <= c->size) clock_set(m, &a->undo, idx, want); }
+    else            clock_tick(m, &a->undo, idx, delta, &want);
 
-    clock_set(m, &a->undo, idx, want);
+    if (want > c->size || want < 0) {
+        if ((want < 0) == (c->down != 0)) snprintf(msg, sizeof msg, "%s is %s", c->name, c->down ? "done" : "full");
+        else                              snprintf(msg, sizeof msg, "%s is at its start", c->name);
+        app_set_status(a, msg);
+        return;
+    }
+    if (c->value == before) { app_set_status(a, "no change"); return; }
+
     a->play.clock = idx;
     char one[48];
     clock_format(c, one, sizeof one);
-    snprintf(msg, sizeof msg, "%s%s", one, c->value >= c->size ? " - full" : "");
+    snprintf(msg, sizeof msg, "%s%s", one, clock_done(c) ? (c->down ? " - done" : " - full") : "");
     app_note(a, msg);
 }
 

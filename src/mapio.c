@@ -114,7 +114,8 @@ int mapio_save(Map *m, const char *path, char *err, size_t errsz)
     if (m->spotlight == SPOTLIGHT_GM) fputs("spotlight gm\n", f);
     for (int i = 0; i < CLOCK_MAX; i++)
         if (m->clocks[i].name[0])
-            fprintf(f, "clock %s %d %d\n", m->clocks[i].name, m->clocks[i].value, m->clocks[i].size);
+            fprintf(f, "clock %s %d %d%s\n", m->clocks[i].name, m->clocks[i].value,
+                    m->clocks[i].size, m->clocks[i].down ? " down" : "");
     for (int i = 0; i < ROLL_MAX; i++)
         if (m->rolls[i].name[0])
             fprintf(f, "roll %s \"%s\"\n", m->rolls[i].name, m->rolls[i].expr);
@@ -252,15 +253,15 @@ static int parse_turn_line(Map *m, const char *line)
     return 0;
 }
 
-/* "clock Dragon 3 6": the name, then filled and total segments. Slots are
- * taken in file order, so a saved map reads back in the order it was
- * written. */
+/* "clock Dragon 3 6 down": the name, filled and total segments, and the
+ * direction when it counts down. Slots are taken in file order, so a saved
+ * map reads back in the order it was written. */
 static int parse_clock_line(Map *m, const char *line)
 {
-    char name[CLOCK_NAME_MAX] = { 0 };
+    char name[CLOCK_NAME_MAX] = { 0 }, dir[8] = { 0 };
     int  value = 0, size = 0;
-    if (sscanf(line, "clock %19s %d %d", name, &value, &size) < 3) return -1;
-    int idx = clock_start(m, name, size);
+    if (sscanf(line, "clock %19s %d %d %7s", name, &value, &size, dir) < 3) return -1;
+    int idx = clock_start(m, name, size, !strcmp(dir, "down"));
     if (idx < 0) return -1;
     m->clocks[idx].value = (uint8_t)iclamp(value, 0, m->clocks[idx].size);
     return 0;
