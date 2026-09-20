@@ -45,6 +45,9 @@ vtt [options] [map.vtt]
   --bench PATH       replay a script headlessly and report frame statistics
   --dump-frame       render one frame as plain text to stdout and exit
   --size WxH         geometry for headless modes (default 80x24)
+  --serve [PORT]     open the remote view at startup (:serve does it later)
+  --watch HOST:PORT  mirror a serving vtt in this terminal, read-only
+  --bench-clients N  attach N loopback watchers to a --bench run
 ```
 
 `--dump-frame` honours `--script`, so a whole session can be replayed and its final frame
@@ -595,6 +598,8 @@ first, and going past the last starts a new round.
 | `s t` | hands the turn to the selected creature, out of order, or with no order at all |
 | `:turns` | reads the whole order out; `:turns off` ends the fight |
 | `:panel` | the side panel, on or off (on by default) |
+| `:serve` | the [remote view](#remote-view-serve-mirror) for phones; `:serve off` closes it |
+| `:mirror` | a second terminal window mirroring play mode |
 
 `a` is the fourth pair shaped like `t` `T`, `f` `F` and `e` `E`, and the odd one out in
 one respect: those look, this one acts. The turn passes, the round counts up, the session
@@ -684,6 +689,41 @@ What is logged is what changed: creatures placed, put down, removed, pasted, rel
 markers added and cleared, doors, rolls, ruleset changes, and undo and redo. Errors, hints
 and the things the app says about itself stay on the status line. Every line is flushed
 as it is written, so a crash loses nothing, and closing the map closes the log.
+
+### Remote view (`:serve`, `:mirror`)
+
+Players watch the map from their own devices. The GM's `vtt` serves; a phone, a tablet or
+a second terminal is a client of the same stream, and all of them see exactly what the GM
+sees in play mode -- and keep seeing it, frozen, while the GM is in build mode or the
+menus.
+
+| | |
+|---|---|
+| `:serve` | open the remote view; the status line shows the URL with its join code |
+| `:serve off` | close it and drop everyone |
+| `:mirror` | a second terminal window mirroring play mode, to drag to a TV; serves if it has to |
+| `vtt --watch HOST:PORT` | the same mirror by hand, on any machine on the LAN |
+
+**Phones and tablets** open the URL in a browser: `http://192.168.1.10:7777/?k=482913`.
+The page is 10 KB, served by `vtt` itself, and fetches nothing from anywhere. It draws
+the GM's terminal on a canvas, fitted to the screen and crisp again after a pinch, and it
+reconnects by itself. The join code is in the URL so nobody on the network can wander in;
+this is a living-room lock, not a secure one, and there is no TLS by design.
+
+**The second terminal** is the same picture in a terminal: `:mirror` opens a new window
+running `vtt --watch` against the GM's own server, via `$TERMINAL` or whichever terminal it
+finds, detached so it can be dragged to another screen. `q` closes it. On a machine with no
+terminal to open, the command to type by hand is on the status line.
+
+**What it costs.** Frames go out only when something changed, as the same diff the GM's
+terminal receives, encoded once and written once per client; nothing is sent while nothing
+moves. At most eight clients, each with a fixed buffer, and one that cannot keep up is
+dropped and resynced when it reconnects, never waited for. The measured cost is in
+[docs/PERFORMANCE.md](docs/PERFORMANCE.md); the design and its budgets are in
+[docs/REMOTE.md](docs/REMOTE.md).
+
+The page lives in `web/index.html` and is embedded by `tools/embed.sh`; its copy loop is a
+WebAssembly module `tools/blit_wasm.py` assembles by hand, so neither needs a toolchain.
 
 ### Rulesets
 

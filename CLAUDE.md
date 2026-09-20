@@ -29,6 +29,9 @@ make            release build (-O2), profiler compiled in
 make test       ASan+UBSan build, unit + golden-frame tests (VTT_UPDATE_GOLDEN=1 regenerates)
 make perf       one perf run; publish the per-row MEDIAN of three quiet runs (tools/median.py a b c)
 make fuzz       libFuzzer on the map loader (clang), FUZZ_SECONDS=600 for longer
+tools/embed.sh  after editing web/index.html; tools/blit_wasm.py after editing the blitter
+./vtt map.vtt --serve 7777      serve; a raw client: printf 'VTT1\n' | nc 127.0.0.1 7777
+./vtt map --bench keys --bench-clients 4   the frame with four watchers attached
 ./vtt map.vtt --script keys --dump-frame --size 100x30     render one frame as text
 ./vtt map.vtt --bench keys --bench-loops 400 --trace t.json  headless timing + Chrome trace
 ```
@@ -54,6 +57,10 @@ Bench scripts replay whole; no toggles — use loop-neutral pairs (`llllhhhh`,
 | `mapio.c` | file format; version 4 only when a fight is saved, else 3 |
 | `keys.c` | key tables for the bar and the `?` page |
 | `dice.c`, `slog.c` | `:roll` (xoshiro, duality), the session log |
+| `wire.c/h` | the remote view's frame format: runs of cells, palette indices; encoder and incremental decoder shared by server, watcher and tests |
+| `net.c/h` | the server: listener, up to 8 clients with fixed buffers, HTTP + WebSocket (SHA-1/base64), raw watcher hello, broadcast from the renderer's observer |
+| `watch.c` | `vtt --watch host:port`, the read-only terminal mirror; `:mirror` spawns it in `$TERMINAL` |
+| `web/index.html` → `src/webpage.c` | the phone page; edit the HTML, run `tools/embed.sh`. Its copy loop is `tools/blit_wasm.py`, a hand-assembled wasm module pasted in as base64 |
 | `grid.c`, `token.c`, `draw.c`, `render.c`, `term.c` | drawing down to the diffing renderer and the terminal |
 | `tests/run.c` | one file, suites in a table at the bottom; `tests/fuzz_mapio.c` is libFuzzer only |
 
@@ -79,6 +86,10 @@ Bench scripts replay whole; no toggles — use loop-neutral pairs (`llllhhhh`,
   with `token_equal`, never `memcmp`.
 - Comments explain *why*; code says what. Rationale lives in the header or the README,
   not repeated at every call site.
+- Never `pkill -f <pattern>` from a Bash call whose own command line contains the
+  pattern: it kills the shell running it (exit 144). Record PIDs instead.
+- To drive a live `vtt` from a script: `mkfifo f; (sleep 3600 > f &); script -qfc "./vtt map --serve 7792" /dev/null < f &`
+  then `printf 'l' > f`. Chrome (via the claude-in-chrome skill) can open the served page.
 - Environment quirks: `grep` is aliased oddly in this shell (use `awk` or plain
   `grep -n` in a subshell); `ESC` + letter in a script means Alt; scratch files go in
   the session scratchpad, not the repo.

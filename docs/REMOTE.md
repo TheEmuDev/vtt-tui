@@ -62,6 +62,23 @@ on. The encoder and decoder are one file shared by server, watcher and
 tests; the end-to-end test runs both over a socket pair. The page shows its
 own frame time.
 
+## Measured, phase one
+
+| budget | measured |
+|---|---|
+| server, 2 µs per frame per client | 3.7 µs: the encode is shared, the rest is one `write` syscall per client. Missed by the syscall. |
+| zero bytes when nothing changed | zero |
+| server memory fixed at `:serve` | 64 KB send and 4 KB request buffer per client, one 128 KB frame buffer, all at start |
+| the page under 12 KB, one request | 10 KB, nothing fetched |
+| client memory allocated once | a cell buffer, the atlas, and one WebAssembly memory holding the framebuffer and the tile arena, reallocated only on resize |
+| keystroke frame 0.5 ms on a phone | 0.2-0.5 ms in desktop Chrome for a cursor move; phones to be measured |
+| full 200×50 frame in 5 ms | 0.21 µs a cell in the copy loop puts it near 2 ms plus the pixel push; a 1220-cell scroll measured 0.7-2 ms |
+| one write per client per frame | yes, with Nagle off |
+
+The copy loop went to WebAssembly after measurement, not before: JavaScript row copies
+were 4-5 µs a cell, twenty times the budget. The module is hand-assembled, so the page
+still needs no toolchain.
+
 ## Order
 
 1. Wire format, server, watcher, tests.
