@@ -86,6 +86,45 @@ still needs no toolchain.
 3. The page.
 4. README, `?` rows, PERFORMANCE.md.
 
-Later phases, not designed here: streaming the model instead of cells so each
-client draws at its own size (the map file format itself, plus a state line),
-a touch map on the phone, and moves from a player's own device on their turn.
+## Phase two: a plan, awaiting sign-off
+
+Phase one sends the GM's frame. Phase two lets the phones send something back.
+Three steps, each shippable alone, in this order. The first is planned in full
+in `docs/FOG.md` (part 3); the other two are planned here to the level of the
+decisions, and get their own instrumentation section before code.
+
+**1. The players' frame.** The server draws play mode a second time, the
+players' way -- fog opaque, counters and notes absent -- and streams that.
+Same wire, same page, same watcher. See `docs/FOG.md`.
+
+**2. Pings.** A tap on the phone names a square. The page already knows the
+cell under a touch; it sends `P x y` up the WebSocket (the socket is
+bidirectional and unused upstream today). The server draws a ring around
+that square on both frames for two seconds and puts `ping at C4` on the
+status line; a second ping from the same phone replaces the first. Rate: one a
+second per client, the rest dropped. Cost: one 4-byte message, one small
+overlay. This is the whole of "a touch map" that an in-person table needs: the
+player points, the GM looks. Pan and zoom the page does already.
+
+**3. A move from the player's own device, on their turn.** Decisions:
+
+- *Identity.* The page asks for a name once (kept in the browser), sent with
+  the WebSocket request. `:serve who` lists the phones by name. The GM binds a
+  phone to a creature with `:serve as Aria Bram` (phone "Aria" plays the
+  creature "Bram"); a phone with no binding can only watch and ping.
+- *Consent is the turn.* A bound phone gets a step pad only while its creature
+  is acting (`TURN_ACTING`), and only in play mode. Each press sends `M dx dy`;
+  the server applies `play_step` under the GM's own rules (walls on or off,
+  creatures block) and the same undo batch shape a GM's move has, so `u` on
+  the GM's keyboard takes it back. Put-down happens when the turn passes, or
+  when the player taps "done"; there is no pick-up from a phone, since the
+  creature is already theirs.
+- *Nothing else.* No dice, no markers, no notes from a phone. The tool serves
+  the table; the phone is a way to reach across it.
+
+Cost: a message per step, the same move code the GM's keys run, no new
+drawing. Zone `net.cmd`; a bench with a scripted client sending steps.
+
+Model streaming (each phone drawing at its own size) stays out of scope: the
+page fits the GM's frame to the screen well enough, and the players' frame
+gets the privacy without it.
