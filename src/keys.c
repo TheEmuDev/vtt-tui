@@ -60,6 +60,7 @@ static const KeyDoc PLAY[] = {
 
     GROUP("Remote view"),
     KEY(":serve",  "let players watch from a browser; the status line shows the URL"),
+    KEY(":serve --stay-alive", "keep that server, and its join code, when the map closes"),
     KEY(":mirror", "a second window mirroring play mode, to drag to a TV"),
     KEY(":serve off", "close the remote view and drop everyone"),
 

@@ -46,6 +46,7 @@ vtt [options] [map.vtt]
   --dump-frame       render one frame as plain text to stdout and exit
   --size WxH         geometry for headless modes (default 80x24)
   --serve [PORT]     open the remote view at startup (:serve does it later)
+  --stay-alive       keep that server up when the map closes
   --watch HOST:PORT  mirror a serving vtt in this terminal, read-only
   --bench-clients N  attach N loopback watchers to a --bench run
 ```
@@ -614,7 +615,7 @@ first, and going past the last starts a new round.
 | `s t` | hands the turn to the selected creature, out of order, or with no order at all |
 | `:turns` | reads the whole order out; `:turns off` ends the fight |
 | `:panel` | the side panel, on or off (on by default) — it also carries the [clocks](#clocks-clock-tick) |
-| `:serve` | the [remote view](#remote-view-serve-mirror) for phones; `:serve off` closes it |
+| `:serve` | the [remote view](#remote-view-serve-mirror) for phones; `:serve off` closes it. It goes down with the map unless `--stay-alive` |
 | `:mirror` | a second terminal window mirroring play mode |
 
 `a` is the fourth pair shaped like `t` `T`, `f` `F` and `e` `E`, and the odd one out in
@@ -784,9 +785,33 @@ menus, or has a note open.
 | | |
 |---|---|
 | `:serve` | open the remote view; the status line shows the URL with its join code |
+| `:serve 7777` | on a port of your choosing, so the address is the same every session |
+| `:serve --stay-alive` | keep it up when the map closes; `--no-stay-alive` takes that back |
 | `:serve off` | close it and drop everyone |
 | `:mirror` | a second terminal window mirroring play mode, to drag to a TV; serves if it has to |
 | `vtt --watch HOST:PORT` | the same mirror by hand, on any machine on the LAN |
+
+**How long it lasts.** The remote view belongs to the encounter, so closing the map
+closes it and drops everyone watching. That is deliberate: the players were watching
+*that* map, and when the GM puts it down there is nothing left for them to see. The
+status line says so, alongside whatever else the close was about:
+
+```
+wrote /home/gm/maps/crypt.vtt - remote view off - 3 clients dropped
+```
+
+`:serve --stay-alive` says otherwise. The server then survives a map close, keeps every
+client connected, and carries them straight into the next map the GM opens. Use it when
+one session runs through several encounters, because the alternative costs everyone a
+retype: a fresh `:serve` makes a **new join code**, and on a port chosen at random a new
+port too. The flag lasts as long as that server does — `:serve off`, or a restart on
+another port, starts again without it.
+
+Switching maps with `:e` is not a close, so the players keep watching either way; the
+view simply becomes the new map.
+
+Nothing keeps the server alive past `vtt` itself. Quitting the application closes the
+listener, and the operating system would close it even if the application forgot.
 
 **Connecting a phone or tablet.** Nothing to install; the phone needs a browser and the
 same Wi-Fi as the GM's machine.
@@ -794,7 +819,8 @@ same Wi-Fi as the GM's machine.
 1. On the GM's machine, open the map, press `F2` for play mode, and type `:serve`. The
    status line shows the address, something like `serving at http://192.168.1.10:7777/?k=482913`.
    `:serve 7777` names the port, so the address is the same every session; the six-digit
-   join code is new each time.
+   join code is new each time. Add `--stay-alive` to keep the same server, and the same
+   code, across several encounters in one sitting.
 2. On the phone, open Chrome (or any browser) and type that address in exactly, code and
    all. Turn the phone sideways: an 80-column terminal wants the width.
 3. The map appears and follows the GM from then on. The corner of the page shows the

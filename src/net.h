@@ -60,6 +60,10 @@ typedef struct {
     WireEnc         enc;
     const Renderer *rnd;
     int             live;       /* frames are being broadcast (play mode) */
+    /* Set by :serve --stay-alive. The server belongs to the encounter and
+     * goes down with the map unless this says otherwise; it never outlives
+     * the process, which the operating system sees to. */
+    int             stay;
     int             stale;      /* a frame was withheld: next live frame is FULL */
 
     /* Counters for the profiler: per frame, and over the server's life. */
@@ -77,6 +81,8 @@ void net_stop(Net *n);
 
 static inline int net_active(const Net *n)  { return n->listen_fd >= 0; }
 static inline int net_clients(const Net *n) { return n->ncl; }
+static inline int net_stays(const Net *n)   { return n->stay; }
+static inline void net_set_stay(Net *n, int stay) { n->stay = stay != 0; }
 
 /* The address to hand players: http://<lan ip>:<port>/?k=<code>. */
 void net_url(const Net *n, char *buf, size_t bufsz);

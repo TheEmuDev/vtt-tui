@@ -39,6 +39,7 @@ typedef struct {
     int         bench_clients;      /* --bench-clients N: loopback watchers on a bench */
     int         serve;              /* --serve: open the remote view at startup */
     int         serve_port;
+    int         serve_stay;         /* --stay-alive: and keep it past the map */
 } Options;
 
 static void usage(void)
@@ -55,6 +56,7 @@ static void usage(void)
         "  --size WxH         geometry for headless modes (default 80x24)\n"
         "  --seed N           seed the dice, for a repeatable session or script\n"
         "  --serve [PORT]     open the remote view at startup (:serve does it later)\n"
+        "  --stay-alive       keep that server up when the map closes\n"
         "  --watch HOST:PORT  mirror a serving vtt in this terminal, read-only\n"
         "  --bench-clients N  attach N loopback watchers to a --bench run\n"
         "  -h, --help         this message\n",
@@ -79,6 +81,7 @@ static int parse_args(Options *o, int argc, char **argv)
         else if (!strcmp(a, "--bench-loops") && i + 1 < argc) o->bench_loops = atoi(argv[++i]);
         else if (!strcmp(a, "--watch") && i + 1 < argc) o->watch = argv[++i];
         else if (!strcmp(a, "--bench-clients") && i + 1 < argc) o->bench_clients = atoi(argv[++i]);
+        else if (!strcmp(a, "--stay-alive")) o->serve_stay = 1;
         else if (!strcmp(a, "--serve")) {
             o->serve = 1;
             if (i + 1 < argc && argv[i + 1][0] >= '0' && argv[i + 1][0] <= '9') o->serve_port = atoi(argv[++i]);
@@ -339,9 +342,11 @@ static int run_interactive(const Options *o)
         if (net_start(&a.net, (uint16_t)o->serve_port, &r, err, sizeof err) < 0)
             app_set_status(&a, err);
         else {
-            char url[160], msg[200];
+            char url[160], msg[256];
+            net_set_stay(&a.net, o->serve_stay);
             net_url(&a.net, url, sizeof url);
-            snprintf(msg, sizeof msg, "serving at %s", url);
+            snprintf(msg, sizeof msg, "serving at %s%s", url,
+                     o->serve_stay ? " - staying up when the map closes" : "");
             app_set_status(&a, msg);
         }
     }

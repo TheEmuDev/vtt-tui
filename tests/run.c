@@ -8901,6 +8901,166 @@ static void test_net_server(void)
 }
 
 
+/* The server's lifetime: it belongs to the encounter, so closing the map
+ * takes it down unless :serve --stay-alive said otherwise. Quitting the
+ * application always takes it down, which the operating system guarantees
+ * in any case. */
+static void test_serve_lifetime(void)
+{
+    Sandbox sb = sandbox_enter("servelife");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+
+    write_map_file(sb.dir, "fight.vtt");
+    write_map_file(sb.dir, "second.vtt");
+    char path[600], other[600];
+    snprintf(path, sizeof path, "%s/fight.vtt", sb.dir);
+    snprintf(other, sizeof other, "%s/second.vtt", sb.dir);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+
+    CASE("by default the server goes down with the map, and the clients with it");
+    press(&a, ":serve\r");
+    CHECK_EQ(net_active(&a.net), 1);
+    CHECK_EQ(net_stays(&a.net), 0);
+    uint16_t port = a.net.port;
+    int w = net_connect(port);
+    CHECK(w >= 0);
+    CHECK_EQ((int)write(w, "VTT1\n", 5), 5);
+    net_pump(&a.net, 0);
+
+    /* Let it actually watch: a player mid-encounter, not a bare socket. */
+    WireCatch c;
+    memset(&c, 0, sizeof c);
+    WireDec d;
+    wire_dec_init(&d, &WC_SINK, &c);
+    rnd_begin(&r); app_draw(&a); net_frame_begin(&a.net); rnd_flush(&r, NULL); net_frame_end(&a.net, 0);
+    CHECK_EQ(net_recv_until(&a.net, w, &d, &c, 1, 0), 0);
+    CHECK_EQ(c.w, 80);
+    press(&a, ":serve\r");
+    CHECK(strstr(a.status, "1 client") != NULL);
+
+    press(&a, ":q!\r");
+    CHECK_EQ(a.map, NULL);
+    CHECK_EQ(net_active(&a.net), 0);
+    /* Both pieces of news, neither eating the other. */
+    CHECK(strstr(a.status, "closed without saving") != NULL);
+    CHECK(strstr(a.status, "1 client dropped") != NULL);
+
+    struct timeval tv = { 1, 0 };
+    setsockopt(w, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+    uint8_t  z;
+    ssize_t  got;
+    do got = read(w, &z, 1); while (got > 0);
+    CHECK_EQ((int)got, 0);                       /* the server hung up on it */
+    close(w);
+
+    CASE("the port is free again, so the next serve may have it back");
+    CHECK_EQ(app_open_map(&a, path), 0);
+    app_key(&a, f2);
+    char cmd[64];
+    snprintf(cmd, sizeof cmd, ":serve %u\r", (unsigned)port);
+    press(&a, cmd);
+    CHECK_EQ(net_active(&a.net), 1);
+    CHECK_EQ((int)a.net.port, (int)port);
+
+    CASE("--stay-alive keeps it up across a map close");
+    press(&a, ":serve --stay-alive\r");
+    CHECK_EQ(net_stays(&a.net), 1);
+    CHECK_EQ((int)a.net.port, (int)port);        /* the flag alone never restarts it */
+    CHECK(strstr(a.status, "staying up when the map closes") != NULL);
+    press(&a, ":q!\r");
+    CHECK_EQ(a.map, NULL);
+    CHECK_EQ(net_active(&a.net), 1);
+    CHECK(strstr(a.status, "remote view off") == NULL);
+
+    CASE("and the same server carries over to the next map");
+    CHECK_EQ(app_open_map(&a, other), 0);
+    app_key(&a, f2);
+    CHECK_EQ(net_active(&a.net), 1);
+    CHECK_EQ((int)a.net.port, (int)port);
+    CHECK_EQ(net_stays(&a.net), 1);
+
+    CASE("--no-stay-alive takes the flag off without dropping anyone");
+    int w2 = net_connect(a.net.port);
+    CHECK(w2 >= 0);
+    CHECK_EQ((int)write(w2, "VTT1\n", 5), 5);
+    net_pump(&a.net, 0);
+    press(&a, ":serve --no-stay-alive\r");
+    CHECK_EQ(net_stays(&a.net), 0);
+    CHECK_EQ(net_active(&a.net), 1);
+    CHECK_EQ((int)a.net.port, (int)port);
+    CHECK(strstr(a.status, "staying up") == NULL);
+    press(&a, "q");                               /* the plain close does it too */
+    CHECK_EQ(a.map, NULL);
+    CHECK_EQ(net_active(&a.net), 0);
+    CHECK(strstr(a.status, "remote view off") != NULL);
+    close(w2);
+
+    CASE("switching maps with :e is not a close, so the players keep watching");
+    CHECK_EQ(app_open_map(&a, path), 0);
+    app_key(&a, f2);
+    press(&a, ":serve\r");
+    CHECK_EQ(net_active(&a.net), 1);
+    uint16_t kept = a.net.port;
+    char open_other[700];
+    snprintf(open_other, sizeof open_other, ":e %s\r", other);
+    press(&a, open_other);
+    CHECK(a.map != NULL);
+    CHECK_EQ(net_active(&a.net), 1);
+    CHECK_EQ((int)a.net.port, (int)kept);
+
+    CASE("a saved close says both what was written and what went down");
+    app_key(&a, f2);
+    press(&a, ":wq\r");
+    CHECK_EQ(a.map, NULL);
+    CHECK_EQ(net_active(&a.net), 0);
+    CHECK(strstr(a.status, "wrote") != NULL);
+    CHECK(strstr(a.status, "remote view off") != NULL);
+
+    CASE("nonsense arguments are refused, and refuse nothing else");
+    CHECK_EQ(app_open_map(&a, path), 0);
+    app_key(&a, f2);
+    press(&a, ":serve --stay\r");
+    CHECK(strstr(a.status, ":serve [PORT]") != NULL);
+    CHECK_EQ(net_active(&a.net), 0);
+    press(&a, ":serve off --stay-alive\r");
+    CHECK(strstr(a.status, ":serve [PORT]") != NULL);
+    press(&a, ":serve 99999\r");
+    CHECK(strstr(a.status, ":serve [PORT]") != NULL);
+    CHECK_EQ(net_active(&a.net), 0);
+
+    CASE("a port and the flag together, in either order");
+    press(&a, ":serve 0 --stay-alive\r");
+    CHECK_EQ(net_active(&a.net), 1);
+    CHECK_EQ(net_stays(&a.net), 1);
+    press(&a, ":serve off\r");
+    press(&a, ":serve --stay-alive 0\r");
+    CHECK_EQ(net_active(&a.net), 1);
+    CHECK_EQ(net_stays(&a.net), 1);
+
+    CASE("a restart on another port starts again without the flag");
+    press(&a, ":serve 0\r");
+    CHECK_EQ(net_active(&a.net), 1);
+    CHECK_EQ(net_stays(&a.net), 0);
+
+    CASE("quitting the application takes it down whatever the flag says");
+    press(&a, ":serve --stay-alive\r");
+    CHECK_EQ(net_stays(&a.net), 1);
+    app_free(&a);
+    CHECK_EQ(net_active(&a.net), 0);
+
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
 static void test_serve_commands(void)
 {
     Sandbox sb = sandbox_enter("serve");
@@ -9040,6 +9200,7 @@ int main(void)
         { "netprim", test_net_primitives },
         { "netserver", test_net_server },
         { "serve",  test_serve_commands },
+        { "servelife", test_serve_lifetime },
         { "webpage", test_webpage },
         { "turns",  test_turns },
         { "turnkeys", test_turn_keys },

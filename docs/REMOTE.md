@@ -43,12 +43,17 @@ measured against them.
   the same renderer, at the GM's size, centred or clipped. `q` closes it.
 - **Access.** LAN only, a join code in the URL, at most eight clients,
   request-size and idle timeouts. No TLS, deliberately.
+- **The server belongs to the encounter.** Closing the map closes it and drops
+  every client, because the players were watching that map. `--stay-alive`
+  keeps one server, and one join code, across a session of several
+  encounters. Nothing outlives the process; the kernel sees to that.
 
 ## Commands
 
 | | |
 |---|---|
 | `:serve` | open the listener; the status line shows the URL with its code |
+| `:serve --stay-alive` | keep it open when the map closes; `--no-stay-alive` takes that back |
 | `:serve off` | close it and drop every client |
 | `:mirror` | serve if needed, then open a detached terminal window running the watcher, via `$TERMINAL` |
 | `vtt --watch host:port` | the watcher, for scripts, tests and other machines |

@@ -104,6 +104,22 @@ void app_note(App *a, const char *msg)
     slog_write(&a->slog, msg);
 }
 
+/* Adds a clause to the status line instead of replacing it. Closing a map
+ * can be two pieces of news at once -- "wrote crypt.vtt", and the remote
+ * view going down with it -- and the second must not quietly eat the
+ * first. Spans are byte offsets into what is already there, so they
+ * survive. */
+static void app_note_more(App *a, const char *msg)
+{
+    size_t n = strlen(a->status);
+    if (n && n + 4 < sizeof a->status)
+        snprintf(a->status + n, sizeof a->status - n, " - %s", msg);
+    else
+        str_lcpy(a->status, msg, sizeof a->status);
+    slog_write(&a->slog, msg);
+    a->dirty = 1;
+}
+
 static void show_message(App *a, const char *title, const char *body)
 {
     a->modal = MODAL_MESSAGE;
@@ -1138,8 +1154,8 @@ static int modal_key(App *a, Key k)
         if (k.kind == KEY_CHAR && (k.ch == 'y' || k.ch == 'Y')) {
             a->modal = MODAL_NONE;
             if (discard) {
-                app_close_map(a);
                 app_set_status(a, "discarded unsaved changes");
+                app_close_map(a);
             } else {
                 a->running = 0;
             }
@@ -1157,9 +1173,30 @@ static int modal_key(App *a, Key k)
 /* Leaving a map with unsaved work must ask first. */
 /* The one way a map is put down: the log is a session with one map, so it
  * closes here and nowhere else. */
+/* The remote view belongs to the encounter: the players were watching this
+ * map, so closing it takes their view away too, unless :serve was asked to
+ * stay. Said out loud rather than done quietly, because the next :serve
+ * makes a fresh join code and everyone has to be told the new one.
+ *
+ * Called before the session log closes, so the log records it. */
+static void close_server_with_map(App *a)
+{
+    if (!net_active(&a->net) || net_stays(&a->net)) return;
+
+    int had = net_clients(&a->net);
+    net_stop(&a->net);
+
+    char msg[96];
+    if (had) snprintf(msg, sizeof msg, "remote view off - %d client%s dropped",
+                      had, had == 1 ? "" : "s");
+    else     str_lcpy(msg, "remote view off", sizeof msg);
+    app_note_more(a, msg);
+}
+
 void app_close_map(App *a)
 {
     drop_autosave(a);
+    close_server_with_map(a);
     slog_close(&a->slog);
     map_free(a->map);
     a->map = NULL;
@@ -1176,6 +1213,7 @@ void app_leave_map(App *a)
                  "%s has unsaved changes. Discard them?", a->map->name);
         return;
     }
+    app_set_status(a, "");
     app_close_map(a);
 }
 
