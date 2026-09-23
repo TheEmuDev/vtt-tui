@@ -44,6 +44,117 @@ less than it sounds.
   terminal the players' way. Authoring a fogged map is guesswork without it,
   and once `app_draw` takes a view argument it is a flag, not a feature.
 
+## Fog of war: the agreed behaviour
+
+Your summary of 2026-09-22, which is the spec the rest of this document now
+serves. Two of these changed what was written above, and *What it costs*
+below says how.
+
+1. Fog is off by default.
+2. With it on, ground outside the players' sight is not drawn.
+3. **Memory is off by default** and can be turned on per patch.
+4. **With memory on, ground the party has seen stays drawn once they have
+   left. Creatures in it do not**: a creature is drawn only where the party
+   can see right now.
+5. Sight range can be changed at any time, mid-session.
+6. Fog applies to painted regions, not the whole map.
+7. A map holds several patches, each updated or disabled on its own.
+8. Optionally, the fog's outer rim is half-hidden: creatures there are drawn
+   without anything that identifies them, `?` in place of the name. Off by
+   default, enabled by a `--flag`.
+
+### What the summary does not settle
+
+Nine things the eight points leave open. The first four change the code; the
+rest are wording and defaults.
+
+1. **Whose screen loses the ground?** The GM must keep seeing the whole map
+   or they cannot run the encounter, so fog hides things in the *players'*
+   frame and only dims them in the GM's. That is why the players' frame has
+   to be built before fog, and it is the biggest structural claim in this
+   document.
+2. **Does sight stop at walls, or is it a plain radius?** "Visual range"
+   reads as distance alone. Every design above assumes line of sight as
+   well, using the boundaries the map already carries, so a creature cannot
+   see through the wall of a dark room. A plain radius is cheaper and much
+   less useful.
+3. **Where is the half-hidden rim?** Point 8 says "outer perimeter of the
+   fog patch", which is a fixed border drawn where the painting ends.
+   Request 4 said "the edge of view", which moves with the party. They are
+   the same only while the party is outside the patch looking in. The
+   moving one is what simulates a silhouette at the limit of a torch.
+4. **What else shows on a half-hidden tile?** A creature shows as `?`. Does
+   its ground show, or does the tile stay blank with the silhouette on it?
+   Showing the ground tells the players the shape of the room.
+5. **"Disabled" is a third state.** A patch can be scrubbed off the map, or
+   lit all at once, and now also switched off while keeping its painting.
+   Three acts needing three names that cannot be confused at the table.
+6. **Revealing by hand.** `g r` and `g h` light and darken what the cursor
+   covers, and `reveal manual` is a patch that only ever does that. The
+   summary describes sight as automatic throughout.
+7. **The build-mode indicator** that request 4 asked for: painted tiles
+   tinted in their patch's colour, so the GM can see what is covered and
+   which patch the brush will extend.
+8. **Which `--flag`, and on what?** `:serve --stay-alive` is the precedent.
+   The rim setting belongs to a patch and is saved with the map, so it
+   wants `:fog Crypt --silhouettes` rather than a command-line option.
+9. **`:fog preview`**, drawing the GM's own terminal the players' way.
+   Still unanswered, and with memory off it is the only way to check an
+   authored map without walking round to a phone.
+
+### What it costs, now that memory is off by default
+
+Point 4 is the one that reshapes the code, and point 3 removes the escape
+hatch this document was relying on.
+
+Remembered ground and visible ground are **two different things**, because
+creatures follow one and not the other. So the tile carries two bits, not
+one:
+
+| bits | holds |
+|---|---|
+| 0-3 | which patch, 1 to 15; 0 for none |
+| 4 | **seen**: the party has been here (only kept when the patch remembers) |
+| 5 | **lit**: the party can see it right now |
+| 6-7 | spare |
+
+Still one byte a tile, still one load. Ground is drawn when *seen* or *lit*;
+a creature is drawn only when *lit*.
+
+The consequence is that **the lit set has to be recomputed as the party
+moves, whatever memory says.** The earlier draft leaned on memory-on being
+the cheap case, where lighting only ever set bits and a tile already lit
+could be skipped without a line test. That saving is gone: a tile lit last
+move may not be lit this one, so it must be tested again. Memory now decides
+only whether the *seen* bit sticks, and one mechanism runs for every patch.
+
+It is still area-bounded, never patch-bounded: the bits that can change on a
+move live inside the union of the old and new sight circles, so clear that
+box and relight it from every player creature whose own circle meets it.
+What it costs, worst case, walking a whole party through a wide patch:
+
+| | |
+|---|---|
+| tiles in the box at `reveal 6` | about 196 |
+| line steps each | up to 6 |
+| creatures relighting it | up to the party |
+
+Which lands in the tens of microseconds on a keystroke whose whole frame is
+about thirty. Two things are now mandatory rather than nice:
+
+- **One recompute per keystroke, not per creature.** A group walking
+  together is one keypress; the lit set is rebuilt once after every member
+  has stepped. Doing it per member would repeat the whole box per creature.
+- **The bounding-box test comes first**, so a party in the entrance hall
+  does no work for the warren or the lake.
+
+Two smaller effects. Fog now *changes* on most moves rather than only
+growing, so more cells differ per frame and more bytes go to the phones: a
+moving rim is a few hundred bytes a step against the 5 KB a full frame
+measured, which is comfortable. And the GM's dimmed view and `:fog preview`
+matter more than they did, because with memory off the GM is the only one
+who can see where the party has been.
+
 ## Counters on creatures
 
 **What.** Named numbers on a creature: `HP 4/6`, `Stress 2/6`, `Armor 1/3`
@@ -111,7 +222,7 @@ which is what "make this fog thicker later" means:
 | setting | is | does |
 |---|---|---|
 | `reveal N` | tiles, default 2 | how far a player creature lights the patch as it moves. `reveal 0` lights only the square it stands on; `reveal manual` lights nothing by itself and leaves it all to `g r` |
-| `memory on/off` | default on | whether what was lit stays lit. On is classic fog of war: the party maps the dungeon as it goes. Off is a lantern: the dark closes behind them |
+| `memory on/off` | **default off** | whether ground the party has seen stays drawn after they leave. Off is a lantern, and the default: the dark closes behind them. On is classic fog of war, the party mapping the dungeon as it goes -- but it remembers *ground*, never creatures |
 | `edge on/off` | default off | silhouettes at this patch's rim, below |
 
 `:fog Crypt 1` makes the patch "Crypt" the one the brush paints and gives it
