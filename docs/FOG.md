@@ -68,8 +68,8 @@ Answers of 2026-09-23 settle the rest:
 9. **Sight stops at walls**, and at everything else the map says is opaque.
 10. **The soft edge is the fog tiles adjacent to a lit tile**, so it moves
     with the party rather than sitting on the painted border. Anchored on
-    *lit*; whether adjacency is four neighbours or eight is open, see
-    *The soft edge*.
+    *lit*, all eight neighbours, a diagonal only when both of its
+    orthogonal crossings are clear.
 11. **On a soft-edge tile**: walls are drawn, but a door in one is drawn as
     a wall and only becomes a door when the tile is fully lit; terrain is
     not drawn at all; creatures are drawn, including a big creature with
@@ -156,27 +156,20 @@ a step, against the 5 KB a full frame measured: comfortable. And with the
 lit set shrinking behind the party, `:player preview` and the GM's dimmed
 view are the only way the GM can see where the party has been.
 
-### Still open
+### Standing assumptions
 
-1. **Revealing by hand.** Everything above lights fog from where the party
-   is standing. Should the GM also be able to light or darken fog directly,
-   with a key, regardless of where anyone is? The uses are a dramatic
-   reveal on opening a door, taking back a reveal that was a mistake, and a
-   patch that never lights itself at all and waits for the GM to say so.
-   `g r` and `g h` would light and darken whatever the cursor covers, and a
-   patch set to `reveal manual` would only ever respond to those. Worth
-   having, or is sight from the party enough?
-2. **Does a wall stop the soft edge?** The rule as given is orthogonal
-   adjacency to a lit tile, which would put a silhouette on the far side of
-   a stone wall from a lit room. Assumed not, for consistency with "sight
-   stops at walls", and the crossing test costs nothing. Say if the plain
-   adjacency was meant.
-3. **A disabled patch in build mode.** In play it is invisible, as asked.
-   In build mode its painting is still tinted, or the GM could not find it
-   to enable it again. Assumed.
-4. **`:fog --soft-edge`** is written map-wide. Taken as the default for
-   every patch, with `:fog Crypt --soft-edge` overriding one of them, since
-   patches are otherwise settable one at a time.
+Nothing that changes the shape of the work. Three assumptions stand
+unopposed and are built on; say the word and any of them turns round:
+
+1. **A disabled patch still shows its tint in build mode.** Invisible in
+   play, as asked, but if it vanished from build mode too the GM could not
+   find it to enable it again.
+2. **`:fog --soft-edge`** is written map-wide, so it is taken as the
+   default for every patch, with `:fog Crypt --soft-edge` overriding one of
+   them, since patches are otherwise settable one at a time.
+3. **`reveal manual`** exists: a patch that never lights itself and waits
+   for `g r`. It falls out of `reveal` being a number, and it is what a
+   scripted reveal wants.
 
 ## Counters on creatures
 
@@ -441,48 +434,43 @@ border. It is the *rim* bit, set during the move walk, never worked out
 while drawing. A wall between the two tiles stops it, for the same reason
 sight stops at walls: a silhouette through stone would read as a bug.
 
-**Which neighbours count is still open.** Two definitions are on the table,
-and they agree on everything except the corners:
+**A rim tile is one that fog still hides, next to a tile that is lit right
+now, across a boundary that does not stop sight.** Neighbours are all
+eight, and a diagonal counts only when both of the orthogonal crossings it
+is made of are clear, which is the rule `map_blocked` already applies to
+movement and is what stops a silhouette appearing around the outside of a
+corner. Settled 2026-09-23 from two drafts, taking the anchor from one and
+the neighbours from the other:
 
 | | anchored on | neighbours |
 |---|---|---|
-| first draft | a *visible* tile | all eight, a diagonal counting only when both of the orthogonal crossings it is made of are clear, the rule `map_blocked` already uses |
-| 2026-09-23 | a **lit** tile | the four orthogonal ones |
+| first draft | a *visible* tile | eight |
+| 2026-09-23 | a **lit** tile | four |
+| **settled** | a **lit** tile | **eight** |
 
-The second is right about the anchor and should be kept either way. "Visible"
-was written before memory existed and is now ambiguous: with memory on,
-ground the party walked through an hour ago is still drawn, and a rim
-hanging off remembered ground would put silhouettes in rooms nobody is
-standing anywhere near. *Lit* says what was meant.
+*Lit* rather than *visible* because "visible" was written before memory
+existed and became ambiguous with it: ground the party walked through an
+hour ago is still drawn, and a rim hanging off remembered ground would
+scatter silhouettes through rooms nobody is standing near.
 
-On the neighbours, the eight-way version works better, and the reason is
-the rules that arrived with the four-way one. When the soft edge was
-creatures only, four was a clean, tight rule. Now that a rim tile draws its
-walls, corners matter:
+Eight rather than four because of a rule that arrived later: a rim tile
+draws its walls, which makes corners matter.
 
-- **A creature in melee can vanish.** At `reveal 0` the lit set is the one
-  square a creature stands on, so with four neighbours a creature standing
+- **A creature in melee would vanish.** At `reveal 0` the lit set is the
+  one square a creature stands on, so with four neighbours a creature
   diagonally beside it is not on the rim and is not drawn at all, while one
-  standing orthogonally beside it is a silhouette. Both are in melee. That
-  is the kind of difference a table notices and calls a bug.
-- **A dim wall gets a hole at the corner.** A lit region with a convex
-  corner has an unlit tile touching it only diagonally. With four
-  neighbours that tile is not rim, so its walls are not drawn, and a
-  room's corner reads as a gap in a wall that is drawn either side of it.
-  How many such tiles there are depends on the shape of the lit region --
-  four for a square one, a handful for a rounder one -- but they land
-  exactly on corners, which is where a wall most needs to look continuous.
+  orthogonally beside it is a silhouette. Both are in melee.
+- **A dim wall would get a hole at the corner.** A lit region with a convex
+  corner has an unlit tile touching it only diagonally; with four
+  neighbours its walls go undrawn, and a room corner reads as a gap in a
+  wall that is drawn either side of it.
 
-Against that, the four-way rim is tighter and gives away a little less. In
-practice not much less: at `reveal 3` the two differ by about four tiles
-out of twenty.
+The four-way rim is tighter and gives away a little less, but not much: at
+`reveal 3` the two differ by about four tiles out of twenty, and those four
+are the corners. Performance decided nothing here -- per frame both are one
+bit, and per move eight costs twelve crossing tests a candidate tile
+against four, inside a box the walk already steps through.
 
-**Performance does not decide it.** Per frame both are one bit. Per move
-the eight-way version costs twelve crossing tests a candidate tile against
-four, inside a box the walk is already stepping through, which is hundreds
-of extra tests on a move and invisible beside the line walks themselves.
-
-Recommended: the 2026-09-23 anchor with the first draft's eight neighbours.
 
 **On a rim tile**, in the players' frame:
 
@@ -528,15 +516,18 @@ red square still saying "enemy". Settled 2026-09-23.
    on by default; `delete` and `disable` are separate acts; the rim setting
    is `--soft-edge`.
 
-Four things are still open, and they are listed under *Still open* near the
-top of this document, with one more that arrived with them:
-
 6. A silhouette loses its side's colour. **Settled: neutral.**
 7. Painting fog is **build mode only**, where the rest of authoring lives.
    `g r` and `g h`, which light and darken rather than author, stay in
    play mode. **Settled.**
 8. Fifteen patches a map, named and prefix-matched like clocks, with a
    current one the brush paints. **Settled: enough for now.**
+9. The rim is anchored on *lit* and counts all eight neighbours.
+   **Settled.**
+
+Nothing blocking remains. What is left is three standing assumptions,
+listed under *Standing assumptions* near the top of this document, any of which can
+be turned round without disturbing the rest.
 
 ## The players' frame
 
