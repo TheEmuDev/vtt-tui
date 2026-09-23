@@ -9,29 +9,37 @@ mode, drawn for the phones, with the fog opaque and the GM's numbers left
 out. This document describes the three, with the decisions and what each costs;
 *Order* at the end says which lands first. Nothing here is built.
 
-## What the fourth request changes
+## What requests 4 and 5 changed
 
-Request 4 -- fog painted on chosen tiles rather than the whole map, with a
-build-mode indicator, and silhouettes at the edge of the dark -- lands more
-cheaply than it looks, and it moves the order.
+Fog was a bit per tile. Two later requests made it *patches*: areas painted
+on chosen tiles (4), each named, separately cleared, separately settable,
+and changeable afterwards (5), with silhouettes at the rim of the dark (4).
+That is a bigger idea than the one this document started with, and it costs
+less than it sounds.
 
-- **The model absorbs it for free.** The planned `seen` byte per tile
-  becomes a fog byte holding two bits: *hides* (authored in build mode) and
-  *seen* (revealed in play). Same array, same one-byte load, same 256 KB at
-  the largest map. Whole-map fog stops being a special case and becomes
-  "every tile authored".
-- **Nothing gains a drawing pass.** Both the GM's dimming and the build
-  indicator fold into the single per-tile loop `grid_draw` already runs over
-  the visible tiles: one byte load and a branch, choosing a different colour
-  for cell writes that were happening anyway. Fog is never its own sweep.
+- **The tile stays one byte, so patches are free per tile.** Four bits say
+  which patch, one says lit. Everything that varies between patches --
+  reveal distance, memory, silhouettes, colour, name -- lives in a
+  fifteen-entry table that no drawing path ever reads. A tile costs one
+  load and two masks either way, and the array is the 256 KB it always was.
+- **Nothing gains a drawing pass.** The GM's dim, the players' blank and
+  the build-mode tint all fold into the single per-tile loop `grid_draw`
+  already runs, writing the cells it was going to write in another colour.
   Where fog hides a tile the players' frame writes *less* than the GM's, so
   a fogged map is cheaper to draw for the players than for the GM.
-- **Silhouettes are per token, never per tile.** "Is this creature at the
-  edge of the dark?" is answered from its own footprint and its neighbours,
-  eight lookups a creature, not by computing an edge set over the map.
-- **It moves the players' frame to the front.** Silhouettes only exist in
-  the players' frame, and so does the point of fog. Building fog first would
-  ship a half-feature and then retrofit it. See *Order*.
+- **Many patches are cheaper than one big one.** Each carries a bounding
+  box, so a party in the entrance hall does no work at all for the warren
+  or the lake, and reveal distance is per patch: a `reveal 1` dark room
+  tests 9 tiles a move where a map-wide `reveal 6` tests 169.
+- **Silhouettes are per creature, never per tile.** "Is this one at the
+  edge of the dark?" is its own footprint against its eight neighbours, not
+  an edge set computed over the map.
+- **One trait, `memory off`, is the only real new cost**, and it is the
+  only part that can be cut without disturbing the rest. See *Line of
+  sight*.
+- **It moves the players' frame to the front.** Silhouettes live there and
+  so does the point of fog. Building fog first would ship a half-feature
+  and retrofit it. See *Order*.
 - **One addition falls out of it:** `:fog preview`, drawing the GM's own
   terminal the players' way. Authoring a fogged map is guesswork without it,
   and once `app_draw` takes a view argument it is a flag, not a feature.
@@ -79,19 +87,37 @@ first and counters are never on a phone at all.
 
 ## Fog of war
 
-**What.** Fog covers the tiles the GM paints it on, and those tiles are
-either revealed or not. A tile with no fog on it is always visible, so a
-map can have a lit entrance hall and a dark warren behind it. The players'
-frame draws a covered, unrevealed tile as nothing at all -- no floor, no
-walls, no creatures, not even the dot that marks void, since a field of
-dots would trace the shape of the room nobody is supposed to see. The GM's
-own frame draws it dimmed, so the GM sees the whole map and also what the
-players see.
+**What.** Fog is made of **patches**: named areas the GM paints on, each
+with its own settings, each cleared and changed on its own. A tile belongs
+to one patch or to none, and a tile in no patch is always visible, so a map
+can have a lit entrance hall, a dark warren behind it that lights a square
+at a time, and a mist over the lake that lights three.
 
-Fog is off by default. `:fog on` is the master switch, `:fog all` paints
-every tile, `:fog none` scrubs the painting off, and `:fog off` leaves the
-painting alone and stops it hiding anything -- the difference between
-turning the lights on and demolishing the walls.
+The players' frame draws a tile that its patch is still hiding as nothing
+at all -- no floor, no walls, no creatures, not even the dot that marks
+void, since a field of dots would trace the shape of the room nobody is
+supposed to see. The GM's own frame draws it dimmed, so the GM sees the
+whole map and also what the players see.
+
+There is no separate "whole map" fog: `:fog all` is a patch that happens to
+cover everything, which is one mechanism instead of two. Fog is off by
+default, and `:fog off` is a master switch that stops every patch hiding
+without unpainting anything -- turning the lights on rather than knocking
+the walls down.
+
+**A patch.** Name, extent, and three settings the GM can change at any time,
+which is what "make this fog thicker later" means:
+
+| setting | is | does |
+|---|---|---|
+| `reveal N` | tiles, default 2 | how far a player creature lights the patch as it moves. `reveal 0` lights only the square it stands on; `reveal manual` lights nothing by itself and leaves it all to `g r` |
+| `memory on/off` | default on | whether what was lit stays lit. On is classic fog of war: the party maps the dungeon as it goes. Off is a lantern: the dark closes behind them |
+| `edge on/off` | default off | silhouettes at this patch's rim, below |
+
+`:fog Crypt 1` makes the patch "Crypt" the one the brush paints and gives it
+`reveal 1`. Making it thicker later is `:fog Crypt 0`, or `:fog Crypt memory
+off`. Patches are addressed by name or any prefix of one, the way
+[clocks](../README.md#clocks-clock-tick) are, and a map holds fifteen.
 
 **Keys.** Revealing is frequent and needs a place, so it reads the cursor
 (rule 6) and gets a family (rule 5). `g` is vim's "extra commands" prefix
@@ -101,13 +127,17 @@ and is unused in play mode:
 |---|---|
 | `g r` | reveal the cursor's footprint, or the `v` box when one is open |
 | `g h` | hide the same again |
-| `g R` `g H` | reveal / hide everywhere |
-| `g f` | paint fog over the cursor's footprint or the box: this ground *can* be hidden |
-| `g c` | clear the painting off it: this ground is always visible |
-| `:fog on` `:fog off` | the master switch |
-| `:fog all` `:fog none` | paint every tile, or none |
-| `:fog auto N` | reveal within N squares of every player creature as it moves, by line of sight -- see below |
-| `:fog edge on` | silhouettes at the edge of the dark -- see below |
+| `g R` `g H` | reveal / hide the whole patch under the cursor |
+| `g f` | paint the current patch over the cursor's footprint or the box |
+| `g c` | scrub any patch off it: this ground is always visible |
+| `:fog` | list the patches: `Crypt 1, seen 40/210 · Mist 3` |
+| `:fog NAME [N]` | make NAME the current patch, creating it, and set its reveal |
+| `:fog NAME memory off` | change a setting; `edge on` likewise |
+| `:fog NAME clear` | light the whole patch at once, for when the door opens |
+| `:fog NAME hide` | put it all back into the dark |
+| `:fog NAME off` | scrub the patch off the map entirely |
+| `:fog all [N]` | a patch covering every tile, for plain fog of war |
+| `:fog on` `:fog off` | the master switch, changing no painting |
 | `:fog preview` | draw the GM's own terminal the players' way |
 
 The cursor's size (`b`, `3b`) is the brush, as it is for everything else.
@@ -120,70 +150,121 @@ is play, and a GM who wants to fog a room they forgot mid-session should
 not have to change modes to do it.
 
 **The build-mode indicator.** Painted tiles take a tint under their terrain,
-a different colour from the dim the GM sees in play: in build mode it says
-"fog may hide this", in play mode "the players cannot see this now". It
-costs nothing extra to draw -- see *Drawing* below -- and it is a background,
-so it cannot collide with the note mark in the tile's corner.
+and the tint is *the patch's own colour*, indexed off its number out of a
+row of fifteen in the theme, so two patches that touch can be told apart at
+a glance and the GM can see which one the brush is about to extend. It is a
+different colour again from the dim the GM sees in play: in build mode the
+tint says "this patch covers this", in play "the players cannot see this
+now". It costs one indexed load per visible tile in build mode and nothing
+in play -- see *Drawing* -- and being a background it cannot collide with
+the note mark in the tile's corner.
 
 **Line of sight.** The reveal a GM actually wants is "what the party can
 see from here", and the boundaries already know it: `map_edge_opaque`
 answers whether a crossing stops sight, windows and open doors included.
-`:fog auto N` walks every tile within N of a player creature's centre and
-reveals it if a line from the centre reaches it without an opaque
-crossing (a step-by-step walk of the line, checking each crossing).
-Worst case that is (2N+1)² tiles × N steps a move: 2,000 crossing tests at
-N=6, and five of those if a party of five walks as a group, which is tens
-of microseconds on a keystroke whose whole frame is about thirty. Two
-things keep it off the floor, and both must be in the code from the start:
+On a move, each patch within reach lights every tile inside its own
+`reveal` of the creature that a line from the creature reaches without an
+opaque crossing.
 
-- **A tile that is already revealed needs no line test.** Test the bit
-  first and skip. In a corridor the party has walked, almost everything in
-  range is already seen, so the steady-state cost collapses to the handful
-  of tiles at the new edge. This also flattens the group case: the second
-  creature's walk is nearly all skips, because the first one revealed it.
-- **A tile with no fog painted on it needs no test either**, which is the
-  whole map outside the warren.
+Worst case for one patch is (2N+1)² tiles × N steps: 2,000 crossing tests
+at `reveal 6`, and five of those if a party of five walks as a group, which
+is tens of microseconds on a keystroke whose whole frame is about thirty.
+Three things keep it off the floor, and all three must be in the code from
+the start rather than added when somebody notices:
 
-Only on a move of a player creature, never per frame. Reveals accumulate:
-what was seen stays seen. Doors opening trigger it too, since the view
-changed without a step. Zone `fog.auto`, and a perf row that moves a group,
-which is the worst case anyone will actually type.
+- **Every patch keeps a bounding box**, maintained as it is painted. A
+  creature's reveal circle is tested against fifteen boxes before any tile
+  is touched, so a party in the entrance hall does no work for the warren
+  or the lake at all. This is what makes many patches cheaper than one big
+  one, not dearer.
+- **A tile that is already lit needs no line test.** Test the bit first and
+  skip. In a corridor the party has walked, almost everything in range is
+  already seen, so the steady state collapses to the handful of tiles at
+  the new edge. It flattens the group case too: the second creature's walk
+  is nearly all skips, because the first one lit it.
+- **A tile in no patch needs no test either**, which is most of the map.
 
-**Model and file.** `Map.fog` (the master switch) and `uint8_t *fog`, one
-byte a tile like `tiles`, 256 KB at the largest map, holding two bits:
+`reveal` is per patch, so the cost is per patch too: a `reveal 1` dark room
+is 9 tiles a move, not 169.
 
-| bit | set by | means |
-|---|---|---|
-| `FOG_HIDES` | `g f`, `:fog all` (build) | fog is painted here |
-| `FOG_SEEN` | `g r`, `:fog auto` (play) | and the party has seen it |
+Only on a move of a player creature, never per frame. Doors opening trigger
+it too, since the view changed without a step. Zone `fog.auto`, and a perf
+row that walks a group through a patch, which is the worst thing anyone
+will actually type.
 
-A tile is hidden from the players when the master switch is on, `FOG_HIDES`
-is set and `FOG_SEEN` is not. Two bits in the byte the plan already spent,
-so localising fog costs no memory and no extra lookup: the one load answers
-both questions.
+**`memory off` is the one trait that costs something.** With memory on,
+lighting only ever adds bits, so the walk above is the whole story. With it
+off the dark has to close behind the party, and that cannot be done by
+clearing the patch and relighting it: clearing is O(patch), and a patch can
+be the whole map.
 
-Both painting and revealing go through the undo log as `OP_FOG` cells, one
+It is done by area instead. The bits that can change on a move are inside
+the union of the old and new reveal circles, a box of about (2N+2)² tiles.
+Clear that box, then relight it from *every* player creature whose own
+circle meets it, which is what stops one creature's lantern putting out
+another's. Cost stays O(N²) per move and never touches patch size. It is
+worth writing the test for two creatures standing one tile apart before
+writing the code, because that is the case a naive clear gets wrong.
+
+If this trait is cut, everything above it still stands.
+
+**Model and file.** Still one byte a tile, `uint8_t *fog` beside `tiles`,
+256 KB at the largest map. The byte is now:
+
+| bits | holds |
+|---|---|
+| 0-3 | which patch, 1 to 15; 0 for none |
+| 4 | lit |
+| 5-7 | spare |
+
+A tile is hidden when the master switch is on, its patch is not 0, and the
+lit bit is clear. One load and two masks, which is what the single-bit
+version cost: **patches are free per tile.** Everything that varies between
+patches lives in the patch, not in the tile.
+
+Beside it, `FogPatch patches[15]` on the Map: name, `reveal`, `memory`,
+`edge`, and the bounding box the walk tests first. Fifteen of those is well
+under a kilobyte, and it is read on a move, not on a frame.
+
+Both painting and lighting go through the undo log as `OP_FOG` cells, one
 op a tile carrying the byte before and after -- the same 20-byte op as a
 tile paint, so `u` after a wrong `g f` or `g r` is exact, and `:fog all` is
-one batch bounded by the log cap like any fill.
+one batch bounded by the log cap like any fill. A patch's *settings* are
+not undoable, matching clocks, where a tick undoes and starting a clock
+does not: they are as easy to retype as to take back.
 
-In the file, one `fog` section of rows with three characters: a space for
-unpainted, `#` for painted and unseen, `.` for painted and seen. One
-section, the same size the two-state `seen` section would have been.
-Version 6 when any tile is painted. Saving mid-session keeps what the party
-has seen, so a recovered autosave resumes the encounter rather than
-relighting the dungeon.
+In the file, patches are header lines and the map is one `fog` section of
+rows, a character a tile: `.` for no patch, `A`-`O` for patch 1-15 unlit,
+`a`-`o` for lit. Still one character a tile, so the section is the size the
+two-state one would have been, and it is still legible in a text editor.
+
+```
+fogpatch 1 Crypt reveal 1 memory off
+fogpatch 2 Mist reveal 3
+fog
+.....AAAAA.....
+....AAaaaAA....
+```
+
+Version 6 when any patch exists. Saving mid-session keeps what the party has
+lit, so a recovered autosave resumes the encounter rather than relighting
+the dungeon.
 
 **Drawing, and why it is close to free.** `grid_draw` already runs one loop
 over the visible tiles, reading each tile and writing its interior cells.
 Fog adds a byte load and a branch inside that loop, and then writes the same
 cells it was going to write anyway, in a different colour:
 
-| view | a painted tile the party has not seen |
+| view | a tile its patch is still hiding |
 |---|---|
-| build | its terrain, tinted, so the GM can see what is covered |
+| build | its terrain, tinted in the patch's own colour |
 | play, GM | its terrain, dimmed |
 | play, players | nothing: `continue`, zero cell writes |
+
+Build mode's tint is the only one that reads the patch, and it reads a
+fifteen-entry colour row by index, which is one L1 load. Play mode needs
+only "hidden or not", which is the tile byte it already has. **The patch
+record is never touched on a drawing path.**
 
 The players' frame is therefore *cheaper* to draw than the GM's wherever fog
 is doing its job, which pays back part of the second draw. Nothing
@@ -198,17 +279,21 @@ corner, still per visible tile.
 Creatures: the players' frame skips any whose footprint is wholly hidden,
 and silhouettes the ones at the edge (below).
 
+One more guard worth having: a map with no patches takes the path it takes
+today, with not even the branch, chosen once per frame rather than once per
+tile.
+
 Zones: `fog.reveal` for the keys, `fog.auto` for the walk, and the existing
 `grid.draw` carrying the lookups. Perf rows `play, fog` (cursor moves over a
-fogged map), `play, fog auto` (a group walking with `:fog auto 6`) and
-`build, fog paint`.
+fogged map), `play, fog auto` (a group walking through a `reveal 6` patch),
+`play, fog lantern` (the same through a `memory off` patch, which is the
+expensive trait) and `build, fog paint`.
 
 ### Silhouettes at the edge of the dark
 
-Request 4's second half, and a rule that lives in the players' frame alone:
-a creature standing on
-the first hidden tile beyond what the party can see is drawn, but as a
-shape with `?` where its letter would be. It says *something is there* and
+A rule that lives in the players' frame alone: a creature standing on the
+first hidden tile beyond what the party can see is drawn, but as a shape
+with `?` where its letter would be. It says *something is there* and
 nothing else. Deeper in the dark a creature is not drawn at all.
 
 **Edge** means: the tile is hidden, and at least one of its eight
@@ -223,7 +308,9 @@ most 8 neighbours. Two dozen creatures is a couple of hundred byte loads on
 a path that is already walking them. Computing an edge set over the map
 would be O(tiles) and is the trap to avoid.
 
-**Off by default**, per the request: `:fog edge on`, saved with the map.
+**Off by default**, and per patch rather than per map: `:fog Crypt edge on`.
+A dark room wants silhouettes; a patch hiding a corridor the party has not
+reached yet should give nothing away. Saved with the patch.
 
 **To confirm.** A silhouette keeps the creature's shape and footprint, since
 that is what a silhouette is, but takes a neutral colour rather than the
@@ -241,6 +328,12 @@ colour still says which side it is on. Status markers are not drawn.
    lit room. ---- Approved
 3. `:fog auto` is off by default; the GM turns it on per map and it is
    saved with the map.  ---- Approved
+
+   *Superseded by request 5, and worth re-reading before it counts as
+   approved.* Auto-reveal is no longer a per-map switch: it is each patch's
+   `reveal`, so a map can light one room a square at a time and another
+   three squares at a time. `reveal manual` is the old "off". It is still
+   saved with the map, now with the patch.
 4. I would also like fog to be something that can be localized onto specific tiles. For example
    I want the ability to design a map such that a specific location can have fog while the rest of
    the map behaves normally. It would also need a visual indicator in build mode. Additionally, 
@@ -255,12 +348,24 @@ colour still says which side it is on. Status markers are not drawn.
    4a. A silhouette keeps its shape and footprint but loses its colour, so
        the `?` is not undone by a red square saying "enemy". Or keep the
        colour, and accept that the side shows?
-   4b. `:fog off` leaves the painting in place and only stops it hiding;
-       `:fog none` scrubs the painting. Two words for two different acts,
-       or is that a distinction that will be misremembered at the table?
-   4c. `g f` paints fog and `g c` clears it, in both modes. The alternative
+   4b. `g f` paints fog and `g c` clears it, in both modes. The alternative
        is to confine painting to build mode, where the rest of authoring
        lives.
+
+5. Patches, their settings, and changing them later (*designed above*, in
+   *What*, *Keys*, *Model and file* and *Line of sight*). Three answers
+   needed:
+
+   5a. The settings are `reveal`, `memory` and `edge`. `reveal` and the
+       separate clearing were asked for; `memory` (does the dark close
+       behind the party) and `edge` are my reading of "more foggy". Is
+       `memory` worth its cost, which is the only awkward code in this
+       document? Cutting it changes nothing else.
+   5b. Fifteen patches a map, named and prefix-matched like clocks, with a
+       current one the brush paints. Enough?
+   5c. `:fog Crypt clear` lights the patch and `:fog Crypt off` scrubs it
+       off the map. Two very different acts a keystroke apart. Better
+       words?
 
 
 ## The players' frame
@@ -351,9 +456,15 @@ frame. It should now be:
    the same as today.
 2. **Counters.** With the frame already in place they never reach a phone,
    so the leak described under *Counters on creatures* never happens.
-3. **Fog.** The model and the `g` family, the build tint, the GM's dim, the
-   players' blank, the file, undo. Then `:fog auto` with line of sight.
-   Then silhouettes, which have somewhere to be drawn.
+3. **Fog**, which requests 4 and 5 grew past one commit's worth. In order,
+   each one usable at the table before the next starts:
+
+   a. Patches and painting: the tile byte, the patch table, `g f`, `g c`,
+      `g r`, `g h`, the build tint, the GM's dim, the players' blank, the
+      file, undo. Fog works here, revealed by hand.
+   b. Line of sight: per-patch `reveal`, the bounding-box test, the
+      skip-if-lit test. `memory off` only if 5a says so.
+   c. Silhouettes, which by now have somewhere to be drawn.
 
 The reason for the change is that both halves of request 4 live in the
 players' frame, and so does the point of fog: built the old way round, fog
