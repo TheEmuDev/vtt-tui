@@ -558,9 +558,12 @@ players' frame leaves out:
 
 - unseen tiles and the creatures on them (fog),
 - counters on the status line and in the panel,
-- the note hint `(note)` and the note prompt -- so the freeze added with
-  notes goes away, replaced by a frame that never had them,
-- the profiler overlay, and the `[+]` unsaved mark.
+- the note hint `(note)`, and every modal and prompt, the note's among
+  them -- so the freeze added with notes is gone, replaced by a frame that
+  never had them,
+- the profiler overlay. (The `[+]` unsaved mark stays: it says nothing
+  about the encounter, and hiding it would make every unsaved map draw
+  twice.)
 
 ...and what it adds: silhouettes at the edge of the dark, which exist in no
 other view.
@@ -639,11 +642,14 @@ is a separate plan.
 The fourth request turns the order round. It was counters, fog, players'
 frame. It should now be:
 
-1. **The players' frame.** The `VIEW_GM` / `VIEW_PLAYERS` argument, the
-   second renderer, the gate that skips it, `:player preview` riding along.
-   Nothing is hidden yet, so it ships as pure plumbing with the frames
-   identical, which is the easiest possible thing to verify: byte for byte
-   the same as today.
+1. **The players' frame.** *Built 2026-09-23.* The `VIEW_GM` /
+   `VIEW_PLAYERS` argument (`app_draw_view`, `a->view`), `Net.players`, the
+   gate (`app_view_differs`), `app_frame` as the one frame sequence, and
+   `:player preview`. Two things were decided in the building: the `[+]`
+   unsaved mark stays in the players' frame, since it says nothing about
+   the encounter and hiding it would make every unsaved map draw twice; and
+   the copy happens before the GM's flush, because the flush swaps its
+   buffers. The note freeze is gone.
 2. **Counters.** With the frame already in place they never reach a phone,
    so the leak described under *Counters on creatures* never happens.
 3. **Fog**, which requests 4 and 5 grew past one commit's worth. In order,

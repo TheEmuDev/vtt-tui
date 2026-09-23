@@ -266,6 +266,8 @@ int  play_can_place_set(const Map *m, int tx, int ty, int size,
 
 void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
                const Theme *th, int ascii);
-void play_status(const Play *p, const Map *m, const Editor *e, char *buf, size_t bufsz);
+/* `gm` says whose eyes: the GM's line may mention that a note exists; the
+ * players' never does. */
+void play_status(const Play *p, const Map *m, const Editor *e, int gm, char *buf, size_t bufsz);
 
 #endif /* VTT_PLAY_H */

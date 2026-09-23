@@ -60,7 +60,7 @@ Bench scripts replay whole; no toggles — use loop-neutral pairs (`llllhhhh`,
 | autosave (`app.c`) | `map_touch` bumps `Map.gen`; `app_tick`/`app_autosave_due` in main's loop write `path.autosave` after 1.5 s quiet (a failed write still counts as attempted, or the loop spins); `offer_recovery` on open; dropped by save, `:q!`, discard, quit-with-y, delete; renamed with the map; `autosave_on` is set only in the interactive loop |
 | `dice.c`, `slog.c` | `:roll` (xoshiro, duality), the session log; named rolls are `Map.rolls`, expanded in `app_cmd.c` |
 | `wire.c/h` | the remote view's frame format: runs of cells, palette indices; encoder and incremental decoder shared by server, watcher and tests |
-| `net.c/h` | the server: listener, up to 8 clients with fixed buffers, HTTP + WebSocket (SHA-1/base64), raw watcher hello, broadcast from the renderer's observer. `Net.stay` (`:serve --stay-alive`) is the only thing that keeps it alive past `app_close_map` |
+| `net.c/h` | the server: listener, up to 8 clients with fixed buffers, HTTP + WebSocket (SHA-1/base64), raw watcher hello, broadcast from `Net.players`'s observer (the renderer given to `net_start` until `net_players_renderer` is first asked for). `Net.stay` (`:serve --stay-alive`) is the only thing that keeps it alive past `app_close_map` |
 | `watch.c` | `vtt --watch host:port`, the read-only terminal mirror; `:mirror` spawns it in `$TERMINAL` |
 | `web/index.html` → `src/webpage.c` | the phone page; edit the HTML, run `tools/embed.sh`. Its copy loop is `tools/blit_wasm.py`, a hand-assembled wasm module pasted in as base64 |
 | `grid.c`, `token.c`, `draw.c`, `render.c`, `term.c` | drawing down to the diffing renderer and the terminal |
@@ -84,9 +84,13 @@ Bench scripts replay whole; no toggles — use loop-neutral pairs (`llllhhhh`,
   for hints and errors. Anything that puts a map down goes through `app_close_map`;
   anything that might discard work asks via `app_leave_map_for` (which `:e` uses).
 - A prompt whose answer lands in a fixed field sets `a->prompt.max` to the field size.
-- Play mode is what the players may see (the remote view mirrors it). GM-only text
-  (notes) never goes on the map or the status line there; `app_gm_only` freezes the
-  remote while a note prompt is open. Build mode is the GM's alone.
+- Every frame goes through `app_frame` (main, the bench and the net tests alike): the
+  GM's view to the terminal, then the players' frame to the clients from `Net.players`,
+  drawn with `app_draw_view(a, VIEW_PLAYERS)` when `app_view_differs` says the two
+  could differ, else copied from the GM's back buffer. `a->view` is what is being drawn;
+  GM-only things (modals, prompts, the profiler, the `(note)` hint) check it. Add any
+  new GM-only thing to `app_view_differs` too, or it reaches the phones. Build mode is
+  the GM's alone.
 - Ideas consciously set aside live in `docs/IDEAS.md` with the reason (the Fear pool).
 - Distances print through `dist_fmt`; coordinates through `map_coord_name`.
 - `range_clear` resets the overlay; `range_off` switches it off and keeps the shape.

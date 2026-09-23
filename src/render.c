@@ -133,6 +133,12 @@ static void emit_attr(ByteBuf *o, uint8_t attr)
     if (attr & ATTR_REVERSE)   bb_puts(o, "\x1b[7m");
 }
 
+void rnd_copy_back(Renderer *dst, const Renderer *src)
+{
+    if (dst->ncells != src->ncells) return;
+    memcpy(dst->back, src->back, dst->ncells * sizeof(Cell));
+}
+
 void rnd_flush(Renderer *r, Term *t)
 {
     ByteBuf *o = &r->out;

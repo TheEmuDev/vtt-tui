@@ -32,43 +32,44 @@ binary is what showed it was the machine and not the code.
 
 | scenario             | size   | frame p50 | frame p99 | cells | bytes |
 |----------------------|--------|-----------|-----------|-------|-------|
-| build, open          | 80x24  |    29.2us |    34.4us |    10 |   207 |
-| build, every edge    | 80x24  |    29.2us |    57.1us |    10 |   207 |
-| build, 200x200       | 80x24  |    29.5us |    35.3us |    12 |   209 |
-| build, 200x200       | 200x50 |   121.0us |   153.3us |    12 |   212 |
-| build, mostly void   | 200x50 |   105.4us |   188.4us |    20 |   267 |
-| build, noted squares | 80x24  |    30.0us |    40.2us |    88 |   524 |
-| build, tracing       | 80x24  |    29.1us |    55.9us |     2 |   140 |
-| build, circle brush  | 80x24  |    31.1us |    42.0us |    28 |   292 |
-| build, 3x3 brush     | 80x24  |    26.2us |    44.9us |    18 |   128 |
-| build, fill+undo 200 | 80x24  |    26.5us |    87.6us |   303 |  3398 |
-| build, fill history  | 80x24  |    29.6us |   129.2us |   335 |  4145 |
-| ruler, three legs    | 80x24  |    25.8us |    44.7us |    11 |    40 |
-| play, 24 tokens      | 80x24  |    30.2us |    58.5us |    19 |   298 |
-| play, 24 tokens      | 200x50 |   110.0us |   216.1us |    36 |   315 |
-| play, carrying       | 80x24  |    25.8us |    42.3us |    33 |   205 |
-| play, carry 200x200  | 80x24  |    26.3us |    36.1us |    22 |   136 |
-| play, 3x3 cursor     | 80x24  |    33.5us |    42.5us |    37 |   606 |
-| play, choosing       | 80x24  |    27.5us |    41.6us |    12 |    95 |
-| play, group box      | 80x24  |    25.8us |    32.1us |    18 |   133 |
-| play, group carry    | 80x24  |    25.4us |    44.7us |    22 |   131 |
-| play, range bands    | 80x24  |    34.3us |    65.6us |   129 |   657 |
-| play, range radius   | 80x24  |    60.5us |   102.9us |   169 |   958 |
-| play, range cone     | 80x24  |    35.5us |    85.8us |    60 |   654 |
-| play, range line     | 80x24  |    34.7us |    80.6us |    55 |   620 |
-| play, range square   | 80x24  |    34.9us |    82.0us |    63 |   669 |
-| play, turn order     | 80x24  |    33.7us |    63.7us |    49 |   488 |
-| play, fight cycling  | 80x24  |    49.3us |    85.3us |   317 |  4596 |
-| play, spotlight      | 80x24  |    28.7us |    44.0us |    37 |   245 |
-| play, named roll     | 80x24  |    27.6us |    56.4us |    16 |   164 |
-| play, clocks         | 80x24  |    28.5us |    41.4us |    15 |   162 |
-| play, 1 watcher      | 80x24  |    36.0us |    48.9us |    19 |   298 |
-| play, 4 watchers     | 80x24  |    46.7us |    85.2us |    19 |   298 |
-| play, carry, 4 watch | 80x24  |    41.0us |    59.3us |    33 |   205 |
-| play, logging        | 80x24  |    25.6us |    35.1us |    31 |   198 |
-| play, rolling        | 80x24  |    27.2us |    44.8us |    23 |   191 |
-| help page            | 80x24  |    39.0us |    69.0us |   544 |  2699 |
-| profiler overlay     | 80x24  |    33.9us |   159.3us |   117 |   751 |
+| build, open          | 80x24  |    29.8us |    32.9us |    10 |   207 |
+| build, every edge    | 80x24  |    29.4us |    39.6us |    10 |   207 |
+| build, 200x200       | 80x24  |    29.6us |    32.7us |    12 |   209 |
+| build, 200x200       | 200x50 |   121.5us |   138.5us |    12 |   212 |
+| build, mostly void   | 200x50 |   103.6us |   110.0us |    20 |   267 |
+| build, noted squares | 80x24  |    30.6us |    38.6us |    88 |   524 |
+| build, tracing       | 80x24  |    29.4us |    33.0us |     2 |   140 |
+| build, circle brush  | 80x24  |    30.9us |    35.5us |    28 |   292 |
+| build, 3x3 brush     | 80x24  |    26.3us |    29.1us |    18 |   128 |
+| build, fill+undo 200 | 80x24  |    27.4us |   100.9us |   303 |  3398 |
+| build, fill history  | 80x24  |    27.7us |   106.8us |   335 |  4145 |
+| ruler, three legs    | 80x24  |    26.1us |    38.7us |    11 |    40 |
+| play, 24 tokens      | 80x24  |    30.6us |    33.6us |    19 |   298 |
+| play, 24 tokens      | 200x50 |   109.5us |   135.0us |    36 |   315 |
+| play, carrying       | 80x24  |    26.1us |    36.7us |    33 |   205 |
+| play, carry 200x200  | 80x24  |    26.6us |    38.6us |    22 |   136 |
+| play, 3x3 cursor     | 80x24  |    33.7us |    37.2us |    37 |   606 |
+| play, choosing       | 80x24  |    30.2us |    51.2us |    12 |    95 |
+| play, group box      | 80x24  |    26.1us |    30.3us |    18 |   133 |
+| play, group carry    | 80x24  |    25.7us |    31.0us |    22 |   131 |
+| play, range bands    | 80x24  |    34.8us |    67.7us |   129 |   657 |
+| play, range radius   | 80x24  |    57.4us |    83.4us |   169 |   958 |
+| play, range cone     | 80x24  |    36.0us |    80.2us |    60 |   654 |
+| play, range line     | 80x24  |    35.2us |    80.2us |    55 |   620 |
+| play, range square   | 80x24  |    35.0us |    80.3us |    63 |   669 |
+| play, turn order     | 80x24  |    34.2us |    57.1us |    49 |   488 |
+| play, fight cycling  | 80x24  |    50.2us |    83.3us |   317 |  4596 |
+| play, spotlight      | 80x24  |    29.4us |    32.8us |    37 |   245 |
+| play, named roll     | 80x24  |    27.9us |    32.7us |    17 |   165 |
+| play, clocks         | 80x24  |    28.9us |    33.5us |    15 |   162 |
+| play, 1 watcher      | 80x24  |    42.5us |    48.9us |    19 |   298 |
+| play, 4 watchers     | 80x24  |    51.1us |    57.4us |    19 |   298 |
+| play, 4 watchers, differing | 80x24  |    74.2us |   162.4us |    58 |   530 |
+| play, carry, 4 watch | 80x24  |    44.8us |    62.5us |    33 |   205 |
+| play, logging        | 80x24  |    25.9us |    33.9us |    31 |   198 |
+| play, rolling        | 80x24  |    27.6us |    33.3us |    23 |   191 |
+| help page            | 80x24  |    40.5us |    71.2us |   544 |  2699 |
+| profiler overlay     | 80x24  |    34.3us |   132.3us |   118 |   757 |
 
 > The machine's own baseline drifts: one recording of this table sat ~10% above its
 > neighbours on every row, and none of it was the code -- the previous binary run
@@ -91,31 +92,32 @@ a median near zero and a p99 that says what it costs when it does.
 
 | path             | p50     | p99     | worst   | calls | heaviest scenario      |
 |------------------|---------|---------|---------|-------|------------------------|
-| app.draw         | 105.9us | 207.9us | 282.6us |  3200 | build, 200x200 200x50  |
-| clock.draw       |   1.6us |   3.4us |  29.0us | 18165 | play, clocks 80x24     |
-| editor.draw      | 100.4us | 202.2us | 265.1us |  3200 | build, 200x200 200x50  |
-| grid.draw        |  92.9us | 180.2us | 246.5us |  3200 | build, 200x200 200x50  |
-| grid.labels      |   7.3us |  18.1us |  35.6us |  3200 | build, mostly void 200x50 |
-| group.box        |   0.1us |   0.2us |   0.2us |   400 | play, group carry 80x24 |
-| group.move       |   0.1us |   1.3us |  15.5us |  3200 | play, carry, 4 watch 80x24 |
-| input.key        |   0.0us | 493.6us | 9552.4us | 14400 | build, fill history 80x24 |
-| log.write        |   2.0us |  12.8us |  16.0us |   253 | play, logging 80x24    |
-| move.label       |   0.0us |   4.3us |  13.0us |  6795 | play, carry, 4 watch 80x24 |
-| net.accept       |   7.1us |   9.8us |   9.8us |     4 | play, carry, 4 watch 80x24 |
-| net.frame        |  14.2us |  56.6us | 336.6us |  5600 | play, 4 watchers 80x24 |
-| note.marks       |   0.1us |   0.1us |   3.1us |  7997 | build, noted squares 80x24 |
-| panel.draw       |   8.4us |  17.8us |  39.1us |  3995 | play, turn order 80x24 |
-| play.draw        |  80.2us | 169.5us | 250.8us |  5595 | play, 24 tokens 200x50 |
-| prof.overlay     |   6.9us | 110.9us | 132.7us |  1000 | profiler overlay 80x24 |
-| range.draw       |  21.2us |  40.6us |  73.9us |  3995 | play, range radius 80x24 |
-| range.status     |   5.0us |  10.6us |  23.1us |  2794 | play, range radius 80x24 |
-| ruler.draw       |   0.7us |   1.6us |  19.8us |  4400 | ruler, three legs 80x24 |
-| trail.draw       |   0.1us |   0.6us |   9.2us |  6795 | play, carry, 4 watch 80x24 |
-| trail.path       |   4.3us |  19.7us | 107.0us |  6231 | play, carry 200x200 80x24 |
-| turn.advance     |   0.9us |   6.3us |  71.6us |   800 | play, turn order 80x24 |
-| turn.status      |   0.3us |   1.1us |   9.9us |  5595 | play, 1 watcher 80x24  |
-| undo.step        | 219.4us | 387.2us | 439.4us |  1200 | build, fill+undo 200 80x24 |
-| undo.trim        | 4542.8us | 9127.3us | 9127.3us |    97 | build, fill history 80x24 |
+| app.draw         |  92.9us | 182.7us | 225.1us |  3200 | build, 200x200 200x50  |
+| clock.draw       |   1.6us |   2.7us |  15.5us | 18165 | play, clocks 80x24     |
+| editor.draw      | 100.8us | 127.6us | 169.9us |  3200 | build, 200x200 200x50  |
+| grid.draw        |  72.7us | 144.6us | 182.0us |  3200 | build, 200x200 200x50  |
+| grid.labels      |   6.0us |  12.4us |  33.1us |  3200 | build, 200x200 200x50  |
+| group.box        |   0.1us |   0.1us |   0.2us |   400 | play, group carry 80x24 |
+| group.move       |   0.1us |   0.8us |   9.7us |  3200 | play, carry, 4 watch 80x24 |
+| input.key        |   0.1us | 421.4us | 5834.9us | 14400 | build, fill history 80x24 |
+| log.write        |   1.9us |   8.7us |  13.1us |   253 | play, logging 80x24    |
+| move.label       |   0.0us |   3.0us |  13.3us |  6795 | play, carry, 4 watch 80x24 |
+| net.accept       |   8.1us |   9.0us |   9.0us |     1 | play, 1 watcher 80x24  |
+| net.frame        |  13.8us |  39.7us | 201.9us |  6795 | play, carry, 4 watch 80x24 |
+| net.players_frame |  27.4us |  44.2us | 130.2us |  9496 | play, 4 watchers, differing 80x24 |
+| note.marks       |   0.1us |   0.1us |  10.3us |  7997 | build, noted squares 80x24 |
+| panel.draw       |   8.3us |  14.7us |  30.3us |  5595 | play, fight cycling 80x24 |
+| play.draw        |  81.2us | 162.9us | 232.5us |  5595 | play, 24 tokens 200x50 |
+| prof.overlay     |   7.0us |  94.5us | 117.6us |  1000 | profiler overlay 80x24 |
+| range.draw       |  21.1us |  28.9us |  54.2us |  3995 | play, range radius 80x24 |
+| range.status     |   2.0us |   8.0us |  18.4us |  2000 | play, range bands 80x24 |
+| ruler.draw       |   0.7us |   1.1us |  10.5us |  4400 | ruler, three legs 80x24 |
+| trail.draw       |   0.2us |   0.5us |   3.4us |  6795 | play, carry, 4 watch 80x24 |
+| trail.path       |   4.3us |  19.6us |  93.4us |  6231 | play, carry 200x200 80x24 |
+| turn.advance     |   0.9us |   5.1us |  50.9us |   800 | play, turn order 80x24 |
+| turn.status      |   0.5us |   1.0us |   4.7us |  3995 | play, turn order 80x24 |
+| undo.step        | 216.7us | 254.1us | 421.9us |  1200 | build, fill+undo 200 80x24 |
+| undo.trim        | 4219.3us | 5170.8us | 5170.8us |    97 | build, fill history 80x24 |
 
 ### Reading it
 
@@ -214,6 +216,30 @@ when it landed: the bench's 24-token map is one, and under a spotlight ruleset t
 is always up. At 80×24 the rows fell by a microsecond or two, the grid being 24 columns
 narrower; at 200×50 `play, 24 tokens` rose from 102µs to 108µs, the panel's 8µs less the
 grid it displaced. None of it is the turn order, which the paragraph above prices.
+
+**The players' frame costs a copy and a second diff, or a second draw.** Since
+the players' frame landed, what the clients receive is a second renderer's
+diff. When nothing GM-only is on screen that renderer takes a copy of the
+GM's back buffer -- 30 KB, one memcpy -- and is flushed against its own
+front, which is one more row-memcmp sweep and the same observer walk the
+GM's flush used to carry. `play, 1 watcher` moved from 35.7µs to 42.5µs
+for it, A/B'd against the previous binary in the same run; `play, 4
+watchers` did not move past noise, since the per-client writes dominate
+there. When the two views could differ -- a prompt or a modal up, the
+profiler on, a note in view -- the frame is drawn a second time instead:
+`net.players_frame` is 27.4µs typical, and `play, 4 watchers, differing`
+(a creature with a note selected, so every frame differs) reads 74.2µs
+against 51.1µs. That is the price the plan in `docs/FOG.md` accepted for a
+frame that is obviously correct at a privacy boundary.
+
+A win is on the table and is recorded here rather than taken: in the
+identical case the encoder could read the GM's own flush, as it did before,
+and the players' front be kept in step by copying the GM's front after the
+swap, which drops the second sweep and saves roughly 5µs a frame while
+serving. The catch is the frame after a differing one, whose diff has to
+be against what the clients hold rather than the GM's old front; it needs
+one bit of state and a test for the transition. Worth doing when the
+watcher rows matter more than they do now.
 
 **A remote watcher costs one write.** `play, 1 watcher` is `play, 24 tokens` with a
 loopback client attached: 36.5µs against 30.2µs. Four watchers are 45.2µs, so each is

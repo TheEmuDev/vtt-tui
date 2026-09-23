@@ -76,6 +76,11 @@ void rnd_begin(Renderer *r);
  * writes it in a single write(). */
 void rnd_flush(Renderer *r, Term *t);
 
+/* Copies src's back buffer into dst's, for a second renderer whose frame is
+ * known to be the same as the first's: a memcpy instead of a second draw.
+ * Both must be the same size. */
+void rnd_copy_back(Renderer *dst, const Renderer *src);
+
 /* Bounds- and clip-checked cell access; returns NULL when not drawable. */
 static inline Cell *rnd_at(Renderer *r, int x, int y)
 {

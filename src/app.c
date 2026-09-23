@@ -616,11 +616,6 @@ void app_open_prompt(App *a, PromptWhat what, const char *title,
     a->dirty = 1;
 }
 
-int app_gm_only(const App *a)
-{
-    return a->modal == MODAL_PROMPT && a->prompt_what == PROMPT_NOTE;
-}
-
 /* The prompt is the reader as well as the writer: it opens holding what is
  * there, enter keeps or changes it, ctrl-u then enter takes it away. */
 void app_note_prompt(App *a, int idx, int x, int y)
@@ -1223,6 +1218,7 @@ static void close_server_with_map(App *a)
  * closes here and nowhere else. */
 void app_close_map(App *a)
 {
+    a->preview = 0;
     drop_autosave(a);
     close_server_with_map(a);
     slog_close(&a->slog);
@@ -1782,6 +1778,15 @@ void app_key(App *a, Key k)
 
     if (modal_key(a, k)) return;
 
+    /* q leaves :player preview, the way it leaves the ? page, and it is
+     * caught here so it cannot reach the q that closes the map. */
+    if (a->preview && a->screen == SCREEN_PLAY && k.kind == KEY_CHAR && k.mods == 0 &&
+        k.ch == 'q' && a->ed.mode != ED_COMMAND && !a->pending) {
+        a->preview = 0;
+        app_set_status(a, "back to the GM's view");
+        return;
+    }
+
     if (a->screen == SCREEN_HELP) { help_key(a, k); return; }
 
     /* ? is global rather than repeated in every handler, so no mode can end up
@@ -1972,7 +1977,7 @@ static void draw_editor(App *a)
     if (a->ruler.active)            ruler_status(&a->ruler, m, status, sizeof status);
     else if (playing && a->play.range.active)
                                     range_status(&a->play.range, m, status, sizeof status);
-    else if (playing)               play_status(&a->play, m, &a->ed, status, sizeof status);
+    else if (playing)               play_status(&a->play, m, &a->ed, a->view == VIEW_GM, status, sizeof status);
     else                            ed_status(&a->ed, m, status, sizeof status);
 
     int   sy  = r->h - 2;
@@ -2034,7 +2039,13 @@ static void draw_editor(App *a)
 
 void app_draw(App *a)
 {
+    app_draw_view(a, a->preview && a->screen == SCREEN_PLAY ? VIEW_PLAYERS : VIEW_GM);
+}
+
+void app_draw_view(App *a, View view)
+{
     PROF_ZONE("app.draw");
+    a->view = view;
 
     switch (a->screen) {
     case SCREEN_HELP:    draw_help(a); prof_overlay_draw(a->rnd); return;
@@ -2046,6 +2057,11 @@ void app_draw(App *a)
         else        draw_menu(a);
         break;
     }
+
+    /* Modals, prompts and the profiler are the GM's: they ask the GM
+     * questions, and one of them holds a note's text. The players' frame
+     * ends here. */
+    if (view == VIEW_PLAYERS) return;
 
     const BoxGlyphs *frame = a->ascii ? &BOX_ASCII : &BOX_ROUND;
 
@@ -2091,4 +2107,52 @@ void app_draw(App *a)
     }
 
     prof_overlay_draw(a->rnd);
+}
+
+int app_view_differs(const App *a)
+{
+    if (a->preview) return 0;                 /* the GM is already looking at it */
+    if (a->modal != MODAL_NONE) return 1;
+    if (prof_overlay_visible()) return 1;
+    if (a->screen == SCREEN_PLAY && a->map) {
+        const Play *pl = &a->play;
+        if (pl->sel >= 0 && pl->sel < a->map->tokens.n && a->map->tokens.v[pl->sel].note[0]) return 1;
+        if (map_note_at(a->map, a->ed.cx, a->ed.cy)) return 1;
+    }
+    return 0;
+}
+
+void app_frame(App *a, Term *t, uint64_t now_ms)
+{
+    Renderer *r = a->rnd;
+    rnd_begin(r);
+    app_draw(a);
+
+    Net *net = &a->net;
+    net_set_live(net, app_remote_live(a));
+    int wanted = net_active(net) && net_clients(net) > 0 && net_is_live(net);
+
+    /* The players' frame: drawn when it could differ from the GM's, copied
+     * when it cannot -- and copied before the GM's flush, which swaps its
+     * buffers. Either way the players' renderer diffs against what the
+     * clients are showing, which is the only thing that makes a diff
+     * stream, and a FULL on resync, correct. */
+    Renderer *pr = wanted ? net_players_renderer(net, r) : NULL;
+    if (pr) {
+        if (app_view_differs(a)) {
+            PROF_ZONE("net.players_frame");
+            rnd_begin(pr);
+            a->rnd = pr;
+            app_draw_view(a, VIEW_PLAYERS);
+            a->rnd = r;
+        } else {
+            rnd_copy_back(pr, r);
+        }
+    }
+
+    rnd_flush(r, t);
+    if (!pr) return;
+    net_frame_begin(net);
+    rnd_flush(pr, NULL);
+    net_frame_end(net, now_ms);
 }

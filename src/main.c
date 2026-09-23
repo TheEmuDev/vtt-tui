@@ -281,12 +281,7 @@ static int run_headless(const Options *o)
             while (input_next(&p, &k)) {
                 app_key(&a, k);
                 prof_frame_begin();
-                rnd_begin(&r);
-                app_draw(&a);
-                net_set_live(&a.net, app_remote_live(&a));
-                net_frame_begin(&a.net);
-                rnd_flush(&r, NULL);
-                net_frame_end(&a.net, 0);
+                app_frame(&a, NULL, 0);
                 prof_frame_end();
                 prof_set_counters(r.cells_changed, r.bytes_written);
                 if (ncf) {
@@ -353,11 +348,7 @@ static int run_interactive(const Options *o)
 
     /* Paint once before blocking so the first frame is up immediately. */
     prof_frame_begin();
-    rnd_begin(&r);
-    app_draw(&a);
-    net_frame_begin(&a.net);
-    rnd_flush(&r, &t);
-    net_frame_end(&a.net, prof_now_ns() / 1000000u);
+    app_frame(&a, &t, prof_now_ns() / 1000000u);
     prof_frame_end();
     prof_set_counters(r.cells_changed, r.bytes_written);
     a.dirty = 0;
@@ -450,12 +441,7 @@ static int run_interactive(const Options *o)
 
         if (a.dirty) {
             prof_frame_begin();
-            rnd_begin(&r);
-            app_draw(&a);
-            net_set_live(&a.net, app_remote_live(&a));
-            net_frame_begin(&a.net);
-            rnd_flush(&r, &t);
-            net_frame_end(&a.net, prof_now_ns() / 1000000u);
+            app_frame(&a, &t, prof_now_ns() / 1000000u);
             prof_frame_end();
             prof_set_counters(r.cells_changed, r.bytes_written);
             if (net_clients(&a.net)) prof_set_net((uint32_t)net_clients(&a.net), a.net.frame_bytes);

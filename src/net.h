@@ -58,7 +58,15 @@ typedef struct {
     int       ncl;
 
     WireEnc         enc;
-    const Renderer *rnd;
+    /* The players' frame. The app sends the clients this renderer's diff,
+     * never the GM's terminal's: each frame it either draws the players'
+     * view into it or, when the two views cannot differ, copies the GM's
+     * back buffer across, so its front buffer is exactly what every client
+     * is showing, which is what makes a FULL on resync right. Until
+     * net_players_renderer is first asked for, `rnd` is the renderer given
+     * to net_start, which is how the server is used bare in the tests. */
+    Renderer        players;
+    const Renderer *rnd;        /* the source of frames: start's, then &players */
     int             live;       /* frames are being broadcast (play mode) */
     /* Set by :serve --stay-alive. The server belongs to the encounter and
      * goes down with the map unless this says otherwise; it never outlives
@@ -82,6 +90,11 @@ void net_stop(Net *n);
 static inline int net_active(const Net *n)  { return n->listen_fd >= 0; }
 static inline int net_clients(const Net *n) { return n->ncl; }
 static inline int net_stays(const Net *n)   { return n->stay; }
+static inline int net_is_live(const Net *n) { return n->live; }
+
+/* The players' renderer, sized to match the GM's (a resize resyncs every
+ * client with a FULL). NULL when not serving. */
+Renderer *net_players_renderer(Net *n, const Renderer *gm);
 static inline void net_set_stay(Net *n, int stay) { n->stay = stay != 0; }
 
 /* The address to hand players: http://<lan ip>:<port>/?k=<code>. */

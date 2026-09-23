@@ -22,9 +22,12 @@ measured against them.
 - **One listener, two kinds of client.** The first bytes decide: `GET` is a
   browser (the page, or an upgrade to WebSocket); the magic `VTT1` is a
   watcher on a raw socket. Both receive identical frame payloads.
-- **The frame is the renderer's diff.** The flush already walks the changed
-  cells to emit ANSI; with clients attached it hands each cell to the encoder
-  as well. A new client gets a `FULL` from the front buffer, then `DIFF`s.
+- **The frame is the players' renderer's diff.** The server keeps a second
+  renderer, and each frame the app either draws the players' view into it
+  (no prompt, no modal, no profiler, no note hint) or, when the two views
+  cannot differ, copies the GM's back buffer across. Its flush hands each
+  changed cell to the encoder, so its front buffer is always exactly what
+  the clients show. A new client gets a `FULL` from that front, then `DIFF`s.
 - **Runs, not cells.** A record is a run of consecutive cells in one row
   sharing colours: an 8-byte header and two bytes a glyph. Colours are
   one-byte indices into a palette sent as colours are first met. Glyphs are
@@ -56,6 +59,7 @@ measured against them.
 | `:serve --stay-alive` | keep it open when the map closes; `--no-stay-alive` takes that back |
 | `:serve off` | close it and drop every client |
 | `:mirror` | serve if needed, then open a detached terminal window running the watcher, via `$TERMINAL` |
+| `:player preview` | the players' frame on the GM's own screen; `q` returns |
 | `vtt --watch host:port` | the watcher, for scripts, tests and other machines |
 
 ## Instrumentation
@@ -71,7 +75,7 @@ own frame time.
 
 | budget | measured |
 |---|---|
-| server, 2 µs per frame per client | 3.7 µs: the encode is shared, the rest is one `write` syscall per client. Missed by the syscall. |
+| server, 2 µs per frame per client | 3.7 µs: the encode is shared, the rest is one `write` syscall per client. Missed by the syscall. Since the players' frame: plus 7 µs once per frame for the copy and second diff, or a second draw of about 27 µs when the views differ -- `docs/PERFORMANCE.md` has the rows. |
 | zero bytes when nothing changed | zero |
 | server memory fixed at `:serve` | 64 KB send and 4 KB request buffer per client, one 128 KB frame buffer, all at start |
 | the page under 12 KB, one request | 10 KB, nothing fetched |
@@ -98,9 +102,10 @@ Three steps, each shippable alone, in this order. The first is planned in full
 in `docs/FOG.md` (part 3); the other two are planned here to the level of the
 decisions, and get their own instrumentation section before code.
 
-**1. The players' frame.** The server draws play mode a second time, the
-players' way -- fog opaque, counters and notes absent -- and streams that.
-Same wire, same page, same watcher. See `docs/FOG.md`.
+**1. The players' frame.** *Built.* The server draws play mode a second time,
+the players' way -- prompts, modals, the profiler and the note hint absent,
+fog and counters to follow -- and streams that. Same wire, same page, same
+watcher. See `docs/FOG.md`.
 
 **2. Pings.** A tap on the phone names a square. The page already knows the
 cell under a touch; it sends `P x y` up the WebSocket (the socket is

@@ -25,6 +25,12 @@ typedef enum {
     SCREEN_HELP,       /* the ? reference, over whatever called it */
 } Screen;
 
+/* Whose eyes a frame is drawn for. The GM's terminal is VIEW_GM; the
+ * players' frame -- what the phones and the watcher receive, and what
+ * :player preview shows the GM -- is VIEW_PLAYERS, which draws no modal, no
+ * prompt, no profiler overlay and no hint that a note exists. */
+typedef enum { VIEW_GM, VIEW_PLAYERS } View;
+
 typedef enum {
     MODAL_NONE,
     MODAL_PROMPT,
@@ -60,6 +66,8 @@ typedef struct {
     int    running;
     int    dirty;      /* a redraw is owed */
     int    ascii;
+    View   view;       /* what app_draw_view is drawing right now */
+    int    preview;    /* :player preview -- the GM's terminal shows VIEW_PLAYERS */
 
     char status[160];
 
@@ -138,20 +146,30 @@ typedef struct {
 void app_init(App *a, Term *t, Renderer *r);
 void app_free(App *a);
 void app_key(App *a, Key k);
+/* Draws into a->rnd: the GM's view, or the players' under :player preview. */
 void app_draw(App *a);
+void app_draw_view(App *a, View view);
+
+/* One whole frame: the GM's view to the terminal (NULL for headless), then,
+ * with clients attached and play mode live, the players' frame to them --
+ * drawn when the two views could differ, copied when they cannot. Every
+ * frame the app shows goes through here, so main, the bench and the tests
+ * cannot disagree about the sequence. */
+void app_frame(App *a, Term *t, uint64_t now_ms);
+
+/* Could the players' frame differ from the GM's right now? Conservative:
+ * true unless nothing GM-only is on screen. This is a privacy boundary. */
+int  app_view_differs(const App *a);
 void app_set_status(App *a, const char *msg);
 void app_note(App *a, const char *msg);     /* status line + session log */
 void app_status_span(App *a, int at, int len, uint32_t fg);   /* colour part of it */
 
-/* Is the frame the GM's alone right now? True while a note is open for
- * reading or writing: play mode is otherwise what the players may see, and
- * the remote view holds its last frame until this is false again. */
-int  app_gm_only(const App *a);
-
-/* Whether the remote view should be streaming this frame. */
+/* Whether the remote view should be streaming this frame: play mode is what
+ * the players may see. GM-only things are not in the players' frame at all,
+ * so nothing else has to freeze it. */
 static inline int app_remote_live(const App *a)
 {
-    return a->screen == SCREEN_PLAY && !app_gm_only(a);
+    return a->screen == SCREEN_PLAY;
 }
 
 /* How to run this binary again, for :mirror's second window; main sets it

@@ -63,6 +63,7 @@ static const KeyDoc PLAY[] = {
     KEY(":serve --stay-alive", "keep that server, and its join code, when the map closes"),
     KEY(":mirror", "a second window mirroring play mode, to drag to a TV"),
     KEY(":serve off", "close the remote view and drop everyone"),
+    KEY(":player preview", "see the players' frame on your own screen; q returns"),
 
     GROUP("Status markers"),
     KEY("s a",    "add a marker: a colour and a word"),

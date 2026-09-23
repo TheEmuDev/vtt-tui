@@ -7500,27 +7500,30 @@ static void test_notes(void)
     press(&a, "ipAria\r");
     CHECK_EQ(m->tokens.n, 1);
 
-    CASE("s n on a creature opens its note, and the remote view holds while it is open");
+    CASE("s n on a creature opens its note; the players' frame would differ while it is open");
     CHECK_EQ(app_remote_live(&a), 1);
+    CHECK_EQ(app_view_differs(&a), 0);
     press(&a, "sn");
     CHECK_EQ(a.modal, MODAL_PROMPT);
     CHECK_EQ(a.prompt_what, PROMPT_NOTE);
     CHECK(strstr(a.prompt.title, "note on Aria") != NULL);
-    CHECK_EQ(app_gm_only(&a), 1);
-    CHECK_EQ(app_remote_live(&a), 0);
+    CHECK_EQ(app_remote_live(&a), 1);              /* no freeze: the prompt is simply not in their frame */
+    CHECK_EQ(app_view_differs(&a), 1);
     press(&a, "wants the amulet\r");
     CHECK_EQ(a.modal, MODAL_NONE);
-    CHECK_EQ(app_remote_live(&a), 1);
+    CHECK_EQ(app_view_differs(&a), 1);             /* the selected creature has a note: (note) is GM-only */
     CHECK_EQ(strcmp(m->tokens.v[0].note, "wants the amulet"), 0);
     CHECK(strstr(a.status, "noted on Aria") != NULL);
     CHECK(strstr(a.status, "amulet") == NULL);            /* the text stays off the line */
     CHECK_EQ(m->modified, 1);
 
-    CASE("the readout says there is a note, not what it says");
+    CASE("the readout says there is a note, not what it says -- and only to the GM");
     char line[192];
-    play_status(&a.play, m, &a.ed, line, sizeof line);
+    play_status(&a.play, m, &a.ed, 1, line, sizeof line);
     CHECK(strstr(line, "(note)") != NULL);
     CHECK(strstr(line, "amulet") == NULL);
+    play_status(&a.play, m, &a.ed, 0, line, sizeof line);
+    CHECK(strstr(line, "(note)") == NULL);
 
     CASE("the prompt stops where the note does, so nothing typed is lost on the way in");
     press(&a, "sn\025");
@@ -7558,10 +7561,10 @@ static void test_notes(void)
     CHECK_EQ(strcmp(map_note_at(m, 1, 1), "pressure plate"), 0);
     CHECK(strstr(a.status, "noted on B2") != NULL);
     CHECK_EQ(m->nnotes, 1);
-    play_status(&a.play, m, &a.ed, line, sizeof line);
+    play_status(&a.play, m, &a.ed, 1, line, sizeof line);
     CHECK(strstr(line, "(note)") != NULL);
     a.ed.cx = 0; a.ed.cy = 1;
-    play_status(&a.play, m, &a.ed, line, sizeof line);
+    play_status(&a.play, m, &a.ed, 1, line, sizeof line);
     CHECK(strstr(line, "(note)") == NULL);
 
     CASE(":notes says where they are");
@@ -8992,7 +8995,7 @@ static void test_serve_lifetime(void)
     memset(&c, 0, sizeof c);
     WireDec d;
     wire_dec_init(&d, &WC_SINK, &c);
-    rnd_begin(&r); app_draw(&a); net_frame_begin(&a.net); rnd_flush(&r, NULL); net_frame_end(&a.net, 0);
+    app_frame(&a, NULL, 0);
     CHECK_EQ(net_recv_until(&a.net, w, &d, &c, 1, 0), 0);
     CHECK_EQ(c.w, 80);
     press(&a, ":serve\r");
@@ -9137,6 +9140,157 @@ static void test_serve_lifetime(void)
     sandbox_leave(&sb);
 }
 
+/* rnd_dump reads the back buffer, which after a flush is the previous frame;
+ * this reads what was actually shown or sent. */
+static void front_text(const Renderer *r, ByteBuf *out)
+{
+    for (int y = 0; y < r->h; y++) {
+        for (int x = 0; x < r->w; x++) {
+            const Cell *c = &r->front[(size_t)y * (size_t)r->w + (size_t)x];
+            if (c->ch == 0) continue;
+            char enc[4];
+            int  n = utf8_encode(c->ch, enc);
+            if (n > 0) bb_put(out, enc, (size_t)n); else bb_putc(out, ' ');
+        }
+        bb_putc(out, '\n');
+    }
+}
+
+/* The players' frame: what the clients receive is a second renderer's diff,
+ * drawn the players' way when it could differ from the GM's and copied from
+ * the GM's when it cannot. */
+static void test_players_frame(void)
+{
+    Sandbox sb = sandbox_enter("pframe");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+
+    write_map_file(sb.dir, "fight.vtt");
+    char path[600];
+    snprintf(path, sizeof path, "%s/fight.vtt", sb.dir);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+    a.ed.cx = a.ed.cy = 0;
+    press(&a, "ipAria\r");
+
+    press(&a, ":serve\r");
+    CHECK_EQ(net_active(&a.net), 1);
+    int w = net_connect(a.net.port);
+    CHECK(w >= 0);
+    CHECK_EQ((int)write(w, "VTT1\n", 5), 5);
+    net_pump(&a.net, 0);
+    WireCatch c;
+    memset(&c, 0, sizeof c);
+    WireDec d;
+    wire_dec_init(&d, &WC_SINK, &c);
+
+    CASE("with nothing GM-only on screen the two frames are the same bytes, and nothing is drawn twice");
+    CHECK_EQ(app_view_differs(&a), 0);
+    app_frame(&a, NULL, 0);
+    CHECK_EQ(net_recv_until(&a.net, w, &d, &c, 1, 0), 0);
+    const Renderer *pr = &a.net.players;
+    CHECK_EQ(pr->w, r.w);
+    CHECK_EQ(memcmp(pr->front, r.front, r.ncells * sizeof(Cell)), 0);
+    CHECK_EQ(a.view, VIEW_GM);                      /* the last draw was the GM's: nothing drawn twice */
+
+    CASE("a note prompt is in the GM's frame and not in the players'");
+    press(&a, "sn");
+    CHECK_EQ(app_view_differs(&a), 1);
+    app_frame(&a, NULL, 0);
+    CHECK_EQ(net_recv_until(&a.net, w, &d, &c, 2, 0), 0);
+    CHECK_EQ(a.view, VIEW_PLAYERS);                 /* the last draw was the players' */
+    ByteBuf gm, pl;
+    bb_init(&gm, 65536); front_text(&r, &gm); bb_putc(&gm, '\0');
+    bb_init(&pl, 65536); front_text(pr, &pl); bb_putc(&pl, '\0');
+    CHECK(strstr(gm.data, "note on Aria") != NULL);
+    CHECK(strstr(pl.data, "note on Aria") == NULL);
+    CHECK(strstr(pl.data, "PLAY") != NULL);          /* still a play frame */
+    bb_free(&gm); bb_free(&pl);
+    press(&a, "the amulet\r");
+
+    CASE("the (note) hint is the GM's alone, and the client's picture says so");
+    app_frame(&a, NULL, 0);
+    CHECK_EQ(net_recv_until(&a.net, w, &d, &c, 3, 0), 0);
+    bb_init(&gm, 65536); front_text(&r, &gm); bb_putc(&gm, '\0');
+    bb_init(&pl, 65536); front_text(pr, &pl); bb_putc(&pl, '\0');
+    CHECK(strstr(gm.data, "(note)") != NULL);
+    CHECK(strstr(pl.data, "(note)") == NULL);
+    /* and what the watcher decoded is the players' frame, cell for cell */
+    int same = 1;                                     /* the catch keeps 64x32 of it */
+    for (int y = 0; y < c.h && y < 32 && same; y++)
+        for (int x = 0; x < c.w && x < 64; x++)
+            if (c.grid[y * 64 + x].ch != pr->front[(size_t)y * (size_t)pr->w + (size_t)x].ch) { same = 0; break; }
+    CHECK_EQ(same, 1);
+    bb_free(&gm); bb_free(&pl);
+
+    CASE("the profiler overlay never reaches a phone");
+    press(&a, "\x1b");                                /* deselect: no note in view */
+    a.ed.cx = 1; a.ed.cy = 1;
+    CHECK_EQ(app_view_differs(&a), 0);
+    Key f12 = { KEY_F12, 0, 0 };
+    app_key(&a, f12);
+    CHECK_EQ(app_view_differs(&a), 1);
+    app_frame(&a, NULL, 0);
+    CHECK_EQ(net_recv_until(&a.net, w, &d, &c, 4, 0), 0);
+    bb_init(&pl, 65536); front_text(pr, &pl); bb_putc(&pl, '\0');
+    CHECK(strstr(pl.data, "frame") == NULL);         /* the overlay's own word */
+    bb_free(&pl);
+    app_key(&a, f12);
+
+    CASE(":player preview shows the GM the players' frame; q comes back, and does not close the map");
+    press(&a, "t");                                   /* select Aria, who has a note */
+    press(&a, ":player preview\r");
+    CHECK_EQ(a.preview, 1);
+    CHECK(strstr(a.status, "previewing") != NULL);
+    rnd_begin(&r); app_draw(&a);
+    CHECK_EQ(a.view, VIEW_PLAYERS);
+    bb_init(&gm, 65536); rnd_dump(&r, &gm); bb_putc(&gm, '\0');
+    CHECK(strstr(gm.data, "(note)") == NULL);
+    bb_free(&gm);
+    CHECK_EQ(app_view_differs(&a), 0);                /* both frames are the players' now */
+    press(&a, "q");
+    CHECK_EQ(a.preview, 0);
+    CHECK(a.map != NULL);
+    rnd_begin(&r); app_draw(&a);
+    CHECK_EQ(a.view, VIEW_GM);
+    press(&a, ":player preview\r");
+    press(&a, ":player preview\r");                   /* a second one toggles it off */
+    CHECK_EQ(a.preview, 0);
+    press(&a, ":player\r");
+    CHECK(strstr(a.status, ":player preview") != NULL);
+
+    CASE("the players' renderer follows the terminal's size, and a resize resyncs the client whole");
+    rnd_resize(&r, 100, 30);
+    press(&a, "\x1b");
+    a.ed.cx = 1; a.ed.cy = 1;
+    int fulls = c.fulls;
+    app_frame(&a, NULL, 0);
+    CHECK_EQ(net_recv_until(&a.net, w, &d, &c, 5, 0), 0);
+    CHECK_EQ(a.net.players.w, 100);
+    CHECK_EQ(c.w, 100);
+    CHECK_EQ(c.fulls, fulls + 1);
+
+    CASE("out of play mode nothing is sent, and no players' frame is drawn");
+    Key f1 = { KEY_F1, 0, 0 };
+    app_key(&a, f1);
+    uint64_t before = a.net.total_bytes;
+    app_frame(&a, NULL, 0);
+    CHECK_EQ((int)(a.net.total_bytes - before), 0);
+    CHECK_EQ(a.view, VIEW_GM);
+
+    close(w);
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
 static void test_serve_commands(void)
 {
     Sandbox sb = sandbox_enter("serve");
@@ -9174,7 +9328,7 @@ static void test_serve_commands(void)
     WireDec d;
     wire_dec_init(&d, &WC_SINK, &c);
     /* the app draws its frame through the same hooks main uses */
-    rnd_begin(&r); app_draw(&a); net_frame_begin(&a.net); rnd_flush(&r, NULL); net_frame_end(&a.net, 0);
+    app_frame(&a, NULL, 0);
     CHECK_EQ(net_recv_until(&a.net, w, &d, &c, 1, 0), 0);
     CHECK_EQ(c.w, 80);
     press(&a, ":serve\r");
@@ -9183,13 +9337,11 @@ static void test_serve_commands(void)
     CASE("leaving play mode freezes the mirror; coming back sends it whole");
     Key f1 = { KEY_F1, 0, 0 };
     app_key(&a, f1);
-    net_set_live(&a.net, a.screen == SCREEN_PLAY);
-    rnd_begin(&r); app_draw(&a); net_frame_begin(&a.net); rnd_flush(&r, NULL); net_frame_end(&a.net, 0);
+    app_frame(&a, NULL, 0);
     uint64_t before = a.net.total_bytes;
     CHECK_EQ((int)(a.net.total_bytes - before), 0);
     app_key(&a, f2);
-    net_set_live(&a.net, a.screen == SCREEN_PLAY);
-    rnd_begin(&r); app_draw(&a); net_frame_begin(&a.net); rnd_flush(&r, NULL); net_frame_end(&a.net, 0);
+    app_frame(&a, NULL, 0);
     CHECK_EQ(net_recv_until(&a.net, w, &d, &c, 2, 0), 0);
     CHECK_EQ(c.fulls, 2);
 
@@ -9277,6 +9429,7 @@ int main(void)
         { "netserver", test_net_server },
         { "serve",  test_serve_commands },
         { "servelife", test_serve_lifetime },
+        { "pframe", test_players_frame },
         { "webpage", test_webpage },
         { "turns",  test_turns },
         { "turnkeys", test_turn_keys },

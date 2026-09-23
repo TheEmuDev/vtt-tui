@@ -780,9 +780,15 @@ never write one.
 ### Remote view (`:serve`, `:mirror`)
 
 Players watch the map from their own devices. The GM's `vtt` serves; a phone, a tablet or
-a second terminal is a client of the same stream, and all of them see exactly what the GM
-sees in play mode -- and keep seeing it, frozen, while the GM is in build mode or the
-menus, or has a note open.
+a second terminal is a client of the same stream, and all of them see the **players'
+frame**: play mode as the GM sees it, less anything that is the GM's alone -- no prompt,
+no question box, no profiler, no hint that a [note](#play-mode-f2) exists. They keep
+seeing the last frame, frozen, while the GM is in build mode or the menus.
+
+`:player preview` puts that frame on the GM's own screen, so what the table sees can be
+checked without walking round to a phone; `q` returns to the GM's view, and nothing else
+changes while previewing. The frame is drawn a second time only when the two could
+differ; otherwise it is the GM's, copied, and costs a memcpy.
 
 | | |
 |---|---|
@@ -791,6 +797,7 @@ menus, or has a note open.
 | `:serve --stay-alive` | keep it up when the map closes; `--no-stay-alive` takes that back |
 | `:serve off` | close it and drop everyone |
 | `:mirror` | a second terminal window mirroring play mode, to drag to a TV; serves if it has to |
+| `:player preview` | the players' frame on the GM's own screen; `q` returns |
 | `vtt --watch HOST:PORT` | the same mirror by hand, on any machine on the LAN |
 
 **How long it lasts.** The remote view belongs to the encounter, so closing the map
@@ -974,6 +981,7 @@ with no verdict, ruleset or not.
 | `:clock NAME N` | start a [clock](#clocks-clock-tick); `:tick` fills a segment |
 | `:notes` | where the [notes](#play-mode-f2) are |
 | `:serve [PORT] [--stay-alive]` | the [remote view](#remote-view-serve-mirror); `:serve off` closes it |
+| `:player preview` | see the players' frame on your own screen; `q` returns |
 | `:mirror` | a second terminal window mirroring play mode |
 | `:roll 2d6+3` | roll dice — see [Dice](#dice-roll) |
 | `:roll NAME = EXPR` | save a roll under a name; `:rolls` lists them |

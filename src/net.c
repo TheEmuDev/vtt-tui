@@ -157,6 +157,9 @@ int net_start(Net *n, uint16_t port, const Renderer *r, char *err, size_t errsz)
 
     n->listen_fd = fd;
     n->port      = port;
+    rnd_init(&n->players);
+    rnd_resize(&n->players, r->w, r->h);
+    n->players.clear_cell = r->clear_cell;
     n->rnd       = r;
     n->live      = 1;
     n->stale     = 0;
@@ -205,7 +208,26 @@ void net_stop(Net *n)
     close(n->listen_fd);
     wire_enc_free(&n->enc);
     rnd_set_observer((Renderer *)n->rnd, NULL, NULL);
+    rnd_free(&n->players);
     net_init(n);
+}
+
+Renderer *net_players_renderer(Net *n, const Renderer *gm)
+{
+    if (!net_active(n)) return NULL;
+    if (n->rnd != &n->players) {
+        /* Handing over from the renderer given at start: the clients hold
+         * that one's picture, so the first frame from this one is a FULL. */
+        rnd_set_observer((Renderer *)n->rnd, NULL, NULL);
+        n->rnd   = &n->players;
+        n->stale = 1;
+    }
+    if (n->players.w != gm->w || n->players.h != gm->h) {
+        rnd_resize(&n->players, gm->w, gm->h);
+        n->stale = 1;                     /* a new size wants a new FULL */
+    }
+    n->players.clear_cell = gm->clear_cell;
+    return &n->players;
 }
 
 void net_url(const Net *n, char *buf, size_t bufsz)

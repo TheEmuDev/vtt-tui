@@ -631,7 +631,7 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
     rnd_clip_restore(r, saved);
 }
 
-void play_status(const Play *p, const Map *m, const Editor *e, char *buf, size_t bufsz)
+void play_status(const Play *p, const Map *m, const Editor *e, int gm, char *buf, size_t bufsz)
 {
     const char *walls = p->enforce_walls ? "walls on" : "walls OFF";
 
@@ -676,7 +676,7 @@ void play_status(const Play *p, const Map *m, const Editor *e, char *buf, size_t
         snprintf(buf, bufsz, "PLAY    %.20s (%s %dx%d) at %s%s%s  %s",
                  t->label[0] ? t->label : "unlabelled",
                  token_kind_name(t->kind), t->size, t->size, at,
-                 marks, t->note[0] ? "  (note)" : "", walls);
+                 marks, gm && t->note[0] ? "  (note)" : "", walls);
         return;
     }
 
@@ -685,7 +685,7 @@ void play_status(const Play *p, const Map *m, const Editor *e, char *buf, size_t
 
     snprintf(buf, bufsz, "PLAY    %s  %s%s  %d token%s  next size %d  %s",
              at, map_walkable(m, e->cx, e->cy) ? "floor" : "void",
-             map_note_at(m, e->cx, e->cy) ? "  (note)" : "",
+             gm && map_note_at(m, e->cx, e->cy) ? "  (note)" : "",
              m->tokens.n, m->tokens.n == 1 ? "" : "s", p->next_size, walls);
 }
 
