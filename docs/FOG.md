@@ -66,8 +66,10 @@ below says how.
 Answers of 2026-09-23 settle the rest:
 
 9. **Sight stops at walls**, and at everything else the map says is opaque.
-10. **The soft edge is the fog tiles orthogonally adjacent to a lit tile**,
-    so it moves with the party rather than sitting on the painted border.
+10. **The soft edge is the fog tiles adjacent to a lit tile**, so it moves
+    with the party rather than sitting on the painted border. Anchored on
+    *lit*; whether adjacency is four neighbours or eight is open, see
+    *The soft edge*.
 11. **On a soft-edge tile**: walls are drawn, but a door in one is drawn as
     a wall and only becomes a door when the tile is fully lit; terrain is
     not drawn at all; creatures are drawn, including a big creature with
@@ -101,7 +103,7 @@ hidden creatures.
 | 0-3 | which patch, 1 to 15; 0 for none |
 | 4 | **seen**: has been inside someone's sight (kept only while the patch remembers) |
 | 5 | **lit**: inside someone's sight right now |
-| 6 | **rim**: unlit, and orthogonally next to a lit tile across a boundary that does not stop sight |
+| 6 | **rim**: unlit, and next to a lit tile across a boundary that does not stop sight |
 | 7 | spare |
 
 Ground is drawn when *seen* or *lit*, a creature only when *lit*, and the
@@ -278,10 +280,10 @@ The cursor's size (`b`, `3b`) is the brush, as it is for everything else.
 
 `g` is vim's prefix for its odds and ends and is free in play mode; build
 mode already holds a pending `g` for `gg`, which a second key distinguishes.
-The whole family works in both modes, because rule 2 wants one meaning
-everywhere: painting fog is authoring and belongs to build mode, revealing
-is play, and a GM who wants to fog a room they forgot mid-session should
-not have to change modes to do it.
+The family splits by what the key *is*: `g f` and `g c` author a patch and
+live in build mode with the rest of authoring, while `g r` and `g h` light
+and darken during play and live there. Rule 2 is kept because no key means
+two things -- each one simply has one home.
 
 **The build-mode indicator.** Painted tiles take a tint under their terrain,
 and the tint is *the patch's own colour*, indexed off its number out of a
@@ -434,14 +436,53 @@ paint`.
 than blank, so the players see that the room goes on and that something is
 moving in it, without being told what.
 
-**The rim is the fog tiles orthogonally next to a lit one**, so it travels
-with the party rather than sitting on the painted border. It is the *rim*
-bit, set during the move walk, never worked out while drawing.
+**The rim travels with the party** rather than sitting on the painted
+border. It is the *rim* bit, set during the move walk, never worked out
+while drawing. A wall between the two tiles stops it, for the same reason
+sight stops at walls: a silhouette through stone would read as a bug.
 
-A wall between the two is assumed to stop it, for the same reason sight
-stops at walls: a silhouette through stone would read as a bug. That is the
-non-opaque crossing in the bit's definition, and it costs one call in the
-walk that is already testing crossings.
+**Which neighbours count is still open.** Two definitions are on the table,
+and they agree on everything except the corners:
+
+| | anchored on | neighbours |
+|---|---|---|
+| first draft | a *visible* tile | all eight, a diagonal counting only when both of the orthogonal crossings it is made of are clear, the rule `map_blocked` already uses |
+| 2026-09-23 | a **lit** tile | the four orthogonal ones |
+
+The second is right about the anchor and should be kept either way. "Visible"
+was written before memory existed and is now ambiguous: with memory on,
+ground the party walked through an hour ago is still drawn, and a rim
+hanging off remembered ground would put silhouettes in rooms nobody is
+standing anywhere near. *Lit* says what was meant.
+
+On the neighbours, the eight-way version works better, and the reason is
+the rules that arrived with the four-way one. When the soft edge was
+creatures only, four was a clean, tight rule. Now that a rim tile draws its
+walls, corners matter:
+
+- **A creature in melee can vanish.** At `reveal 0` the lit set is the one
+  square a creature stands on, so with four neighbours a creature standing
+  diagonally beside it is not on the rim and is not drawn at all, while one
+  standing orthogonally beside it is a silhouette. Both are in melee. That
+  is the kind of difference a table notices and calls a bug.
+- **A dim wall gets a hole at the corner.** A lit region with a convex
+  corner has an unlit tile touching it only diagonally. With four
+  neighbours that tile is not rim, so its walls are not drawn, and a
+  room's corner reads as a gap in a wall that is drawn either side of it.
+  How many such tiles there are depends on the shape of the lit region --
+  four for a square one, a handful for a rounder one -- but they land
+  exactly on corners, which is where a wall most needs to look continuous.
+
+Against that, the four-way rim is tighter and gives away a little less. In
+practice not much less: at `reveal 3` the two differ by about four tiles
+out of twenty.
+
+**Performance does not decide it.** Per frame both are one bit. Per move
+the eight-way version costs twelve crossing tests a candidate tile against
+four, inside a box the walk is already stepping through, which is hundreds
+of extra tests on a move and invisible beside the line walks themselves.
+
+Recommended: the 2026-09-23 anchor with the first draft's eight neighbours.
 
 **On a rim tile**, in the players' frame:
 
@@ -465,10 +506,9 @@ square in the half-light is covered:
 
 At most nine tiles scanned for a creature the frame was walking anyway.
 
-**To confirm.** A silhouette keeps the creature's shape and footprint, since
-that is what a silhouette is, but takes a neutral colour rather than the
-player blue or enemy red -- otherwise the `?` hides the name while the
-colour still says which side it is on.
+A silhouette keeps the creature's shape and footprint, since that is what a
+silhouette is, but takes a **neutral colour**: the `?` would be undone by a
+red square still saying "enemy". Settled 2026-09-23.
 
 **Decisions, and where they stand.**
 
@@ -491,13 +531,12 @@ colour still says which side it is on.
 Four things are still open, and they are listed under *Still open* near the
 top of this document, with one more that arrived with them:
 
-6. A silhouette keeps its shape and footprint but loses its colour, so the
-   `?` is not undone by a red square saying "enemy". Or keep the colour and
-   accept that the side shows?
-7. `g f` paints fog and `g c` clears it, in both modes. The alternative is
-   to confine painting to build mode, where the rest of authoring lives.
+6. A silhouette loses its side's colour. **Settled: neutral.**
+7. Painting fog is **build mode only**, where the rest of authoring lives.
+   `g r` and `g h`, which light and darken rather than author, stay in
+   play mode. **Settled.**
 8. Fifteen patches a map, named and prefix-matched like clocks, with a
-   current one the brush paints. Enough?
+   current one the brush paints. **Settled: enough for now.**
 
 ## The players' frame
 
