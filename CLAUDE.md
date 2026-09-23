@@ -55,9 +55,9 @@ Bench scripts replay whole; no toggles — use loop-neutral pairs (`llllhhhh`,
 | `editor.c` | build mode: brush, visual box/circle, wall trace |
 | `undo.c/h` | flat op log, batches, `OP_ROUND`; tokens in a side array; capped at four fills of the largest map |
 | `mapio.c` | file format; the writer picks the lowest version that says everything: 3, 4 with a fight, 5 with clocks, named rolls or notes |
-| `clock.c/h` | clocks: fixed slots on the map (`Map.clocks`), `down` per clock, `OP_CLOCK` for ticks only; `:clock`/`:tick` in `app_cmd.c`; drawn under the turn panel |
+| `clock.c/h` | clocks: fixed slots on the map (`Map.clocks`), `down` per clock, `OP_CLOCK` for ticks only and it carries the slot's `gen` so a reused slot ignores old ops; `:clock`/`:tick` in `app_cmd.c`; drawn under the turn panel |
 | `keys.c` | key tables for the bar and the `?` page |
-| autosave (`app.c`) | `map_touch` bumps `Map.gen`; `app_tick`/`app_autosave_due` in main's loop write `path.autosave` after 1.5 s quiet; `offer_recovery` on open; `autosave_on` is set only in the interactive loop |
+| autosave (`app.c`) | `map_touch` bumps `Map.gen`; `app_tick`/`app_autosave_due` in main's loop write `path.autosave` after 1.5 s quiet (a failed write still counts as attempted, or the loop spins); `offer_recovery` on open; dropped by save, `:q!`, discard, quit-with-y, delete; renamed with the map; `autosave_on` is set only in the interactive loop |
 | `dice.c`, `slog.c` | `:roll` (xoshiro, duality), the session log; named rolls are `Map.rolls`, expanded in `app_cmd.c` |
 | `wire.c/h` | the remote view's frame format: runs of cells, palette indices; encoder and incremental decoder shared by server, watcher and tests |
 | `net.c/h` | the server: listener, up to 8 clients with fixed buffers, HTTP + WebSocket (SHA-1/base64), raw watcher hello, broadcast from the renderer's observer. `Net.stay` (`:serve --stay-alive`) is the only thing that keeps it alive past `app_close_map` |
@@ -81,7 +81,9 @@ Bench scripts replay whole; no toggles — use loop-neutral pairs (`llllhhhh`,
 ## Conventions
 
 - Status messages: `app_note` for things that *happened* (logged), `app_set_status`
-  for hints and errors.
+  for hints and errors. Anything that puts a map down goes through `app_close_map`;
+  anything that might discard work asks via `app_leave_map_for` (which `:e` uses).
+- A prompt whose answer lands in a fixed field sets `a->prompt.max` to the field size.
 - Play mode is what the players may see (the remote view mirrors it). GM-only text
   (notes) never goes on the map or the status line there; `app_gm_only` freezes the
   remote while a note prompt is open. Build mode is the GM's alone.

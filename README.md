@@ -43,8 +43,10 @@ vtt [options] [map.vtt]
   --trace PATH       write a Chrome Tracing profile on exit
   --script PATH      replay a keystroke script instead of reading the tty
   --bench PATH       replay a script headlessly and report frame statistics
+  --bench-loops N    how many times the bench replays it (default 400)
   --dump-frame       render one frame as plain text to stdout and exit
   --size WxH         geometry for headless modes (default 80x24)
+  --seed N           seed the dice, for a repeatable session or script
   --serve [PORT]     open the remote view at startup (:serve does it later)
   --stay-alive       keep that server up when the map closes
   --watch HOST:PORT  mirror a serving vtt in this terminal, read-only
@@ -754,8 +756,8 @@ as it is written, so a crash loses nothing, and closing the map closes the log.
 
 Unsaved work is copied to `name.vtt.autosave` beside the map once the changes have gone
 quiet for a moment — never mid-keystroke, and never for a map that has nothing unsaved. A
-save removes the copy, and so does deliberately discarding (`:q!`, or answering yes to the
-question). Only a crash or a lost terminal leaves it behind, and the next time that map is
+save removes the copy, and so does deliberately discarding (`:q!`, `:e` to another map, or
+answering yes to any of the questions, including the one on quitting). Only a crash or a lost terminal leaves it behind, and the next time that map is
 opened the tool asks:
 
 ```
@@ -971,6 +973,8 @@ with no verdict, ruleset or not.
 | `:panel` | the side panel, on or off |
 | `:clock NAME N` | start a [clock](#clocks-clock-tick); `:tick` fills a segment |
 | `:notes` | where the [notes](#play-mode-f2) are |
+| `:serve [PORT] [--stay-alive]` | the [remote view](#remote-view-serve-mirror); `:serve off` closes it |
+| `:mirror` | a second terminal window mirroring play mode |
 | `:roll 2d6+3` | roll dice — see [Dice](#dice-roll) |
 | `:roll NAME = EXPR` | save a roll under a name; `:rolls` lists them |
 | `:log` | the session log, on or off — see [Session log](#session-log-log) |
