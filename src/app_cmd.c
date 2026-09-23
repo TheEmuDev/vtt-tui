@@ -453,7 +453,7 @@ void app_exec_command(App *a, const char *line)
         if (!rest[0]) { app_set_status(a, ":e needs a file name"); return; }
         char path[MAP_PATH_MAX];
         mapio_resolve_path(rest, path, sizeof path);
-        app_open_map(a, path);
+        app_leave_map_for(a, path);
         return;
     }
     if (!strcmp(verb, "play"))  { a->screen = SCREEN_PLAY;   app_set_status(a, "play mode"); return; }

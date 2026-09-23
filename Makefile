@@ -10,6 +10,10 @@ WARNINGS  := -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion \
              -Wstrict-prototypes -Wmissing-prototypes -Wpointer-arith \
              -Wwrite-strings -Wno-unused-parameter
 BASEFLAGS := -std=c11 -D_POSIX_C_SOURCE=200809L -I$(SRCDIR) $(WARNINGS)
+# The tests build Token literals positionally and format long paths into
+# fixed buffers on purpose; those two warnings say nothing there and bury
+# the ones that do. The sources themselves keep every warning.
+TESTWARN  := -Wno-missing-field-initializers -Wno-format-truncation
 
 # Profiling instrumentation is compiled in by default; -DVTT_PROF=0 removes it.
 PROF      ?= 1
@@ -69,7 +73,7 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.c
 test: BUILDFLAGS := $(DBGFLAGS)
 test:
 	@mkdir -p $(OBJDIR)
-	$(CC) $(BASEFLAGS) $(DBGFLAGS) $(CFLAGS) -I$(TESTDIR) \
+	$(CC) $(BASEFLAGS) $(DBGFLAGS) $(CFLAGS) -I$(TESTDIR) $(TESTWARN) \
 	    $(LIBSRCS) $(TESTSRCS) -o $(OBJDIR)/run-tests \
 	    -fsanitize=address,undefined $(LDLIBS)
 	@$(OBJDIR)/run-tests

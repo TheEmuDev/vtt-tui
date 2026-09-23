@@ -180,7 +180,7 @@ static void offer_recovery(App *a)
     a->modal = MODAL_CONFIRM_RECOVER;
     str_lcpy(a->modal_title, "Unsaved work found", sizeof a->modal_title);
     snprintf(a->modal_body, sizeof a->modal_body,
-             "%s was still being edited at %s when it was last open, and those changes were never saved. Recover them?",
+             "%.40s was still being edited at %s when it was last open, and those changes were never saved. Recover them?",
              a->map->name, stamp);
 }
 
@@ -1171,7 +1171,15 @@ static int modal_key(App *a, Key k)
             a->modal = MODAL_NONE;
             if (discard) {
                 app_set_status(a, "discarded unsaved changes");
-                app_close_map(a);
+                if (a->pending_file[0]) {
+                    char next[MAP_PATH_MAX];
+                    str_lcpy(next, a->pending_file, sizeof next);
+                    a->pending_file[0] = '\0';
+                    drop_autosave(a);
+                    app_open_map(a, next);
+                } else {
+                    app_close_map(a);
+                }
             } else {
                 /* Quitting is the other way work is let go on purpose, and
                  * the copy must not offer it back next time. */
@@ -1180,8 +1188,10 @@ static int modal_key(App *a, Key k)
             }
         } else if (k.kind == KEY_CHAR && (k.ch == 'n' || k.ch == 'N')) {
             a->modal = MODAL_NONE;
+            a->pending_file[0] = '\0';
         } else if (k.kind == KEY_ESC) {
             a->modal = MODAL_NONE;
+            a->pending_file[0] = '\0';
         }
         return 1;
     }
@@ -1189,9 +1199,6 @@ static int modal_key(App *a, Key k)
     return 0;
 }
 
-/* Leaving a map with unsaved work must ask first. */
-/* The one way a map is put down: the log is a session with one map, so it
- * closes here and nowhere else. */
 /* The remote view belongs to the encounter: the players were watching this
  * map, so closing it takes their view away too, unless :serve was asked to
  * stay. Said out loud rather than done quietly, because the next :serve
@@ -1212,6 +1219,8 @@ static void close_server_with_map(App *a)
     app_note_more(a, msg);
 }
 
+/* The one way a map is put down: the log is a session with one map, so it
+ * closes here and nowhere else. */
 void app_close_map(App *a)
 {
     drop_autosave(a);
@@ -1223,18 +1232,26 @@ void app_close_map(App *a)
     a->screen = SCREEN_MENU;
 }
 
-void app_leave_map(App *a)
+/* Leaving a map with unsaved work must ask first. `next` is a map to open
+ * once it is discarded, which is how :e asks the same question rather than
+ * throwing the work away in silence; NULL just closes. */
+void app_leave_map_for(App *a, const char *next)
 {
     if (a->map && a->map->modified) {
         a->modal = MODAL_CONFIRM_DISCARD;
         str_lcpy(a->modal_title, "Unsaved changes", sizeof a->modal_title);
         snprintf(a->modal_body, sizeof a->modal_body,
-                 "%s has unsaved changes. Discard them?", a->map->name);
+                 next ? "%.40s has unsaved changes. Discard them and open the other map?"
+                      : "%.40s has unsaved changes. Discard them?", a->map->name);
+        str_lcpy(a->pending_file, next ? next : "", sizeof a->pending_file);
         return;
     }
+    if (next) { app_open_map(a, next); return; }
     app_set_status(a, "");
     app_close_map(a);
 }
+
+void app_leave_map(App *a) { app_leave_map_for(a, NULL); }
 
 static void app_request_quit(App *a)
 {
@@ -1920,7 +1937,7 @@ static void draw_editor(App *a)
      * status line that describes the selection. */
     char left[192], fight[128] = "";
     if (a->screen == SCREEN_PLAY) turn_status(m, fight, sizeof fight);
-    snprintf(left, sizeof left, "%s%s%s%s", m->name, m->modified ? " [+]" : "",
+    snprintf(left, sizeof left, "%.63s%s%s%.120s", m->name, m->modified ? " [+]" : "",
              fight[0] ? "    " : "", fight);
     ui_titlebar(r, th, left, a->screen == SCREEN_PLAY ? "PLAY" : "BUILD");
 

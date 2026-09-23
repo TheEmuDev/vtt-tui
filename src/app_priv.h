@@ -55,6 +55,7 @@ void app_ruler_begin(App *a);
 int  app_ruler_key(App *a, Key k);
 int  app_token_under_cursor(App *a);
 void app_leave_map(App *a);
+void app_leave_map_for(App *a, const char *next);   /* :e -- ask, then open */
 void app_close_map(App *a);
 int  app_save_map(App *a, const char *path);
 

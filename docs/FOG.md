@@ -18,10 +18,11 @@ That is a bigger idea than the one this document started with, and it costs
 less than it sounds.
 
 - **The tile stays one byte, so patches are free per tile.** Four bits say
-  which patch, one says lit. Everything that varies between patches --
-  reveal distance, memory, silhouettes, colour, name -- lives in a
-  fifteen-entry table that no drawing path ever reads. A tile costs one
-  load and two masks either way, and the array is the 256 KB it always was.
+  which patch; the rest say seen, lit, rim and held. Everything that varies
+  between patches -- reveal distance, memory, the soft edge, colour, name --
+  lives in a fifteen-entry table that no drawing path ever reads. A tile
+  costs one load and a mask either way, and the array is the 256 KB it
+  always was.
 - **Nothing gains a drawing pass.** The GM's dim, the players' blank and
   the build-mode tint all fold into the single per-tile loop `grid_draw`
   already runs, writing the cells it was going to write in another colour.
@@ -31,12 +32,14 @@ less than it sounds.
   box, so a party in the entrance hall does no work at all for the warren
   or the lake, and reveal distance is per patch: a `reveal 1` dark room
   tests 9 tiles a move where a map-wide `reveal 6` tests 169.
-- **Silhouettes are per creature, never per tile.** "Is this one at the
-  edge of the dark?" is its own footprint against its eight neighbours, not
-  an edge set computed over the map.
-- **One trait, `memory off`, is the only real new cost**, and it is the
-  only part that can be cut without disturbing the rest. See *Line of
-  sight*.
+- **The rim is worked out when the party moves, not when the frame is
+  drawn.** It is a bit set in the same walk that sets *lit*, over the same
+  box, so a rim tile costs the drawing path one mask like any other, and a
+  creature asks only its own footprint.
+- **The one real cost is recomputing sight on every move**, which the rule
+  "creatures are drawn only where the party can see now" makes unavoidable.
+  It is bounded by the party's reach, never by patch size. See *What memory
+  costs*.
 - **It moves the players' frame to the front.** Silhouettes live there and
   so does the point of fog. Building fog first would ship a half-feature
   and retrofit it. See *Order*.
@@ -104,10 +107,28 @@ hidden creatures.
 | 4 | **seen**: has been inside someone's sight (kept only while the patch remembers) |
 | 5 | **lit**: inside someone's sight right now |
 | 6 | **rim**: unlit, and next to a lit tile across a boundary that does not stop sight |
-| 7 | spare |
+| 7 | **held**: lit by the GM's hand (`g r`), which the walk leaves alone |
 
-Ground is drawn when *seen* or *lit*, a creature only when *lit*, and the
-soft edge on *rim*. Every drawing path still does one load and a mask.
+Ground is drawn when *seen*, *lit* or *held*; a creature when *lit* or
+*held*; the soft edge on *rim*. Every drawing path still does one load and
+a mask.
+
+**Held is what makes revealing by hand mean something.** If `g r` merely set
+*lit*, the next step anyone took would clear it. Held is a light the GM has
+put down: the recompute never touches it, `g h` takes it away, and `g r` on
+a remembering patch sets *seen* as well so the ground stays. A `reveal
+manual` patch is one that is only ever held-lit, which is what a scripted
+reveal wants, and creatures in it are drawn exactly where the GM has put
+light and nowhere else.
+
+**When sight is recomputed.** Anything that can change what the party sees,
+and a missed one draws a creature that should be hidden, which is the one
+bug this design must not have. The list, so it is a checklist and not a
+guess: a player creature moves, is placed, pasted, deleted or resized; undo
+or redo of any of those; a door or window opens or closes; a patch is
+created, painted, scrubbed, enabled, disabled, or has its `reveal` changed;
+the master switch flips; the map opens, resizes, or is recovered. One
+recompute per keystroke however many of those a keystroke does.
 
 **The rim is a bit, not a question asked while drawing.** Answering "is this
 tile next to a lit one" at draw time would be four extra lookups on every
@@ -169,7 +190,8 @@ unopposed and are built on; say the word and any of them turns round:
    them, since patches are otherwise settable one at a time.
 3. **`reveal manual`** exists: a patch that never lights itself and waits
    for `g r`. It falls out of `reveal` being a number, and it is what a
-   scripted reveal wants.
+   scripted reveal wants. It needs the *held* bit to mean anything, which
+   *What memory costs* sets out.
 
 ## Counters on creatures
 
@@ -298,20 +320,20 @@ opaque crossing.
 Worst case for one patch is (2N+1)² tiles × N steps: 2,000 crossing tests
 at `reveal 6`, and five of those if a party of five walks as a group, which
 is tens of microseconds on a keystroke whose whole frame is about thirty.
-Three things keep it off the floor, and all three must be in the code from
-the start rather than added when somebody notices:
+Two things keep it off the floor, and both must be in the code from the
+start rather than added when somebody notices:
 
 - **Every patch keeps a bounding box**, maintained as it is painted. A
   creature's reveal circle is tested against fifteen boxes before any tile
   is touched, so a party in the entrance hall does no work for the warren
   or the lake at all. This is what makes many patches cheaper than one big
   one, not dearer.
-- **A tile that is already lit needs no line test.** Test the bit first and
-  skip. In a corridor the party has walked, almost everything in range is
-  already seen, so the steady state collapses to the handful of tiles at
-  the new edge. It flattens the group case too: the second creature's walk
-  is nearly all skips, because the first one lit it.
-- **A tile in no patch needs no test either**, which is most of the map.
+- **A tile in no patch needs no test**, which is most of the map.
+
+There is no skipping a tile because it was lit last move: it may not be lit
+this move, which is the whole reason sight is recomputed. *Seen* is the bit
+that only ever accumulates, and it is derived from *lit*, so it costs no
+test of its own.
 
 `reveal` is per patch, so the cost is per patch too: a `reveal 1` dark room
 is 9 tiles a move, not 169.
@@ -321,21 +343,14 @@ it too, since the view changed without a step. Zone `fog.auto`, and a perf
 row that walks a group through a patch, which is the worst thing anyone
 will actually type.
 
-**`memory off` is the one trait that costs something.** With memory on,
-lighting only ever adds bits, so the walk above is the whole story. With it
-off the dark has to close behind the party, and that cannot be done by
-clearing the patch and relighting it: clearing is O(patch), and a patch can
-be the whole map.
-
-It is done by area instead. The bits that can change on a move are inside
-the union of the old and new reveal circles, a box of about (2N+2)² tiles.
-Clear that box, then relight it from *every* player creature whose own
-circle meets it, which is what stops one creature's lantern putting out
-another's. Cost stays O(N²) per move and never touches patch size. It is
-worth writing the test for two creatures standing one tile apart before
-writing the code, because that is the case a naive clear gets wrong.
-
-If this trait is cut, everything above it still stands.
+The recompute itself is by area, never by patch: the bits that can change
+on a move are inside the union of the old and new reveal circles, a box of
+about (2N+2)² tiles. Clear *lit* and *rim* in that box, then relight it from
+*every* player creature whose own circle meets it, which is what stops one
+creature's lantern putting out another's. It is worth writing the test for
+two creatures standing one tile apart before writing the code, because that
+is the case a naive clear gets wrong. *What memory costs*, above, has the
+numbers.
 
 **Model and file.** Still one byte a tile, `uint8_t *fog` beside `tiles`,
 256 KB at the largest map. The byte is now:
@@ -346,30 +361,35 @@ If this trait is cut, everything above it still stands.
 | 4 | seen |
 | 5 | lit |
 | 6 | rim |
-| 7 | spare |
+| 7 | held |
 
-Ground is drawn when *seen* or *lit*, a creature only when *lit*, the soft
-edge on *rim*. One load and a mask on every drawing path, which is what the
-single-bit version cost: **patches are free per tile.** Everything that
-varies between patches lives in the patch, not in the tile.
+Ground is drawn when *seen*, *lit* or *held*; a creature when *lit* or
+*held*; the soft edge on *rim*. One load and a mask on every drawing path,
+which is what the single-bit version cost: **patches are free per tile.**
+Everything that varies between patches lives in the patch, not in the tile.
 
 Beside it, `FogPatch patches[15]` on the Map: name, `reveal`, `memory`,
 `soft_edge`, `disabled`, and the bounding box the walk tests first. Fifteen
 of those is well under a kilobyte, and it is read on a move, not on a
 frame.
 
-Both painting and lighting go through the undo log as `OP_FOG` cells, one
-op a tile carrying the byte before and after -- the same 20-byte op as a
-tile paint, so `u` after a wrong `g f` or `g r` is exact, and `:fog all` is
-one batch bounded by the log cap like any fill. A patch's *settings* are
-not undoable, matching clocks, where a tick undoes and starting a clock
-does not: they are as easy to retype as to take back.
+Painting (`g f`, `g c`, `:fog all`) and the GM's own lighting (`g r`, `g h`,
+which set and clear *held* and *seen*) go through the undo log as `OP_FOG`
+cells, one op a tile carrying the byte before and after -- the same 20-byte
+op as a tile paint, so `u` after a wrong `g f` or `g r` is exact, and
+`:fog all` is one batch bounded by the log cap like any fill. *Lit* and
+*rim* are never in the log: they are recomputed from where the creatures
+stand, and an undo that moves a creature recomputes them like any move. A
+patch's *settings* are not undoable, matching clocks, where a tick undoes
+and starting a clock does not: they are as easy to retype as to take back.
 
 In the file, patches are header lines and the map is one `fog` section of
 rows, a character a tile: `.` for no patch, `A`-`O` for patch 1-15 unseen,
-`a`-`o` for seen. *Lit* and *rim* are not written: they are where the party
-is standing this second, and they are rebuilt from the creatures on the map
-the moment it opens. Still one character a tile, so the section is the size the
+`a`-`o` for seen, and `1`-`9`/`!`-`&` -- the same fifteen shifted -- for
+held, since a light the GM put down should still be there after a save.
+*Lit* and *rim* are not written: they are where the party is standing this
+second, and they are rebuilt from the creatures on the map the moment it
+opens. Still one character a tile, so the section is the size the
 two-state one would have been, and it is still legible in a text editor.
 
 ```
@@ -509,8 +529,7 @@ red square still saying "enemy". Settled 2026-09-23.
    superseded: it is each patch's `reveal` rather than one switch for the
    map, and `reveal manual` is the old "off".
 4. Fog on chosen tiles, a build-mode indicator, and `?` creatures at the
-   rim. **Approved and designed above**, the rim settled as the fog tiles
-   orthogonally next to a lit one.
+   rim. **Approved and designed above**, the rim settled under 9.
 5. Patches with settings that can be changed afterwards, cleared and
    disabled one at a time. **Approved and designed above.** `memory` stays,
    on by default; `delete` and `disable` are separate acts; the rim setting
@@ -546,8 +565,17 @@ players' frame leaves out:
 ...and what it adds: silhouettes at the edge of the dark, which exist in no
 other view.
 
-Everything else is identical: the cursor, the range overlay, the ruler,
-the turn order, the clocks, the rolls on the status line.
+Everything else is identical -- the clocks, the rolls on the status line,
+the map itself -- **except anything that would betray a hidden creature's
+position or name.** Each of these is drawn in the GM's frame and must be
+suppressed or blanked in the players' when its creature is not *lit* or
+*held*: the cursor and the selection ring resting on it; the range overlay,
+the ruler or the route trail anchored on it; its name in the turn panel and
+in the title bar's "Ogre's turn, then Aria", which show `?` instead. And
+no modal or prompt of any kind is drawn in the players' frame: they are the
+GM's questions, and one of them holds a note's text. This is the checklist
+the frame's test walks, one item at a time, with a creature standing in
+the dark.
 
 **How.** `app_draw` already takes the renderer from the App; it gains a
 `view` argument (`VIEW_GM` / `VIEW_PLAYERS`) threaded to `play_draw`,
@@ -625,8 +653,9 @@ frame. It should now be:
       `g r`, `g h`, the build tint, the GM's dim, the players' blank, the
       file, undo. Fog works here, revealed by hand.
    b. Line of sight: per-patch `reveal`, the bounding-box test, the
-      skip-if-lit test. `memory off` only if 5a says so.
-   c. Silhouettes, which by now have somewhere to be drawn.
+      recompute on every trigger in the list, *held* for the GM's hand,
+      memory both ways.
+   c. The soft edge, which by now has somewhere to be drawn.
 
 The reason for the change is that both halves of request 4 live in the
 players' frame, and so does the point of fog: built the old way round, fog

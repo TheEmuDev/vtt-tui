@@ -9055,6 +9055,31 @@ static void test_serve_lifetime(void)
     CHECK(strstr(a.status, "remote view off") != NULL);
     close(w2);
 
+    CASE(":e with unsaved work asks, and y discards then opens; n keeps the map");
+    CHECK_EQ(app_open_map(&a, path), 0);                   /* build mode, where space edits ground */
+    a.ed.cx = a.ed.cy = 0;
+    press(&a, " ");                                        /* an unsaved change */
+    CHECK_EQ(a.map->modified, 1);
+    char e_other[700];
+    snprintf(e_other, sizeof e_other, ":e %s\r", other);
+    press(&a, e_other);
+    CHECK_EQ(a.modal, MODAL_CONFIRM_DISCARD);
+    CHECK(strstr(a.modal_body, "open the other map") != NULL);
+    press(&a, "n");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK_EQ(strcmp(a.map->path, path), 0);                /* still the first map, still unsaved */
+    CHECK_EQ(a.map->modified, 1);
+    press(&a, e_other);
+    press(&a, "y");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK_EQ(strcmp(a.map->path, other), 0);
+    CHECK_EQ(a.map->modified, 0);
+    CHECK_EQ(a.screen, SCREEN_EDITOR);
+    app_key(&a, f2);
+    press(&a, ":q!\r");
+    CHECK_EQ(app_open_map(&a, path), 0);
+    app_key(&a, f2);
+
     CASE("switching maps with :e is not a close, so the players keep watching");
     CHECK_EQ(app_open_map(&a, path), 0);
     app_key(&a, f2);

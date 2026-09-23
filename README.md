@@ -960,7 +960,7 @@ with no verdict, ruleset or not.
 | `:w [name]` | save |
 | `:wq` `:x` | save and close |
 | `:q` `:q!` | close, with or without asking |
-| `:e <name>` | open another map |
+| `:e <name>` | open another map; asks first if this one has unsaved changes |
 | `:name <text>` | rename the map |
 | `:resize WxH` | resize (clears the undo history) |
 | `:zoom N` | set the zoom level, 0–3 |
