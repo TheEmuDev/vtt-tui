@@ -69,7 +69,9 @@ int clock_start(Map *m, const char *name, int size, int down)
 void clock_drop(Map *m, int idx)
 {
     if (idx < 0 || idx >= CLOCK_MAX || !m->clocks[idx].name[0]) return;
+    uint8_t gen = m->clocks[idx].gen;
     memset(&m->clocks[idx], 0, sizeof m->clocks[idx]);
+    m->clocks[idx].gen = (uint8_t)(gen + 1);
     map_touch(m);
 }
 

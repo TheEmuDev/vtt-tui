@@ -143,7 +143,10 @@ static void tick_command(App *a, const char *rest)
         const char *p = arg + (arg[0] == '=' || arg[0] == '+');
         char *end;
         long  v = strtol(p, &end, 10);
-        if (end == p || *end) { app_set_status(a, ":tick NAME, :tick NAME 2, :tick NAME -1, :tick NAME =3, :tick NAME reset"); return; }
+        if (end == p || *end || (arg[0] == '=' && v < 0)) {
+            app_set_status(a, ":tick NAME, :tick NAME 2, :tick NAME -1, :tick NAME =3, :tick NAME reset");
+            return;
+        }
         if (arg[0] == '=') set = (int)v;
         else               delta = (int)v;
     }

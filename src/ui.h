@@ -61,6 +61,7 @@ typedef struct {
     int  len;        /* bytes used */
     int  cursor;     /* byte offset */
     int  active;
+    int  max;        /* bytes the answer may hold, NUL included; 0 means the buffer */
 } TextPrompt;
 
 void ui_prompt_open(TextPrompt *p, const char *title, const char *hint,

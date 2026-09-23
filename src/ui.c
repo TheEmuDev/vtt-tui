@@ -328,7 +328,8 @@ int ui_prompt_key(TextPrompt *p, Key k)
 
     char enc[4];
     int  n = utf8_encode(k.ch, enc);
-    if (n <= 0 || p->len + n >= UI_PROMPT_MAX) return 0;
+    int cap = p->max > 0 && p->max < UI_PROMPT_MAX ? p->max : UI_PROMPT_MAX;
+    if (n <= 0 || p->len + n >= cap) return 0;
 
     memmove(p->buf + p->cursor + n, p->buf + p->cursor, (size_t)p->len - (size_t)p->cursor + 1);
     memcpy(p->buf + p->cursor, enc, (size_t)n);

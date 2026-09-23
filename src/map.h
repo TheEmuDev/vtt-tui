@@ -28,6 +28,9 @@ typedef struct {
     uint8_t value;                  /* segments filled: what is left, for a countdown */
     uint8_t size;
     uint8_t down;                   /* counts down from full to nothing */
+    uint8_t gen;                    /* bumped when the slot is dropped, so an undo
+                                       op recorded against the old clock can tell
+                                       it from a new one in the same slot */
 } Clock;
 
 /* Named rolls: ":roll attack" for a stat block's "2d12+3". They belong to

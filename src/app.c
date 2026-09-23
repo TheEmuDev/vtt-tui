@@ -240,10 +240,13 @@ int app_autosave(App *a)
     char autosave[MAP_PATH_MAX + 16], err[MAPIO_ERR_MAX];
     mapio_autosave_path(a->map, autosave, sizeof autosave);
     /* The directory may not exist yet for a map that was never saved; one
-     * failure is not worth a message, the next save will say. */
-    if (mapio_write(a->map, autosave, err, sizeof err) != 0) return -1;
+     * failure is not worth a message, the next save will say. Either way
+     * this generation counts as attempted: a failure that stayed "owed"
+     * would be retried on every turn of the loop, with poll told not to
+     * wait, which is a spinning process for as long as the map is unsaved. */
+    int rc = mapio_write(a->map, autosave, err, sizeof err);
     a->autosave_gen = a->map->gen;
-    return 0;
+    return rc == 0 ? 0 : -1;
 }
 
 /* A fresh map is a floored rectangle with a wall around it: the common case
@@ -529,6 +532,12 @@ static void app_rename_map(App *a, const char *from, const char *typed)
         }
     }
 
+    /* A recovery copy left by a crash follows the map it belongs to. */
+    char from_copy[MAP_PATH_MAX + 16], to_copy[MAP_PATH_MAX + 16];
+    snprintf(from_copy, sizeof from_copy, "%s.autosave", from);
+    snprintf(to_copy, sizeof to_copy, "%s.autosave", to);
+    if (rename(from_copy, to_copy) != 0 && errno != ENOENT) unlink(from_copy);
+
     int titled = retitle_map(to, base);
     select_path(a, to);
 
@@ -572,6 +581,12 @@ static void app_delete_map(App *a, const char *path)
 {
     char shown[MAP_PATH_MAX];
     str_lcpy(shown, path, sizeof shown);
+
+    /* Its recovery copy goes with it, or a new map under this name would be
+     * offered the deleted one's contents. */
+    char copy[MAP_PATH_MAX + 16];
+    snprintf(copy, sizeof copy, "%s.autosave", path);
+    unlink(copy);
 
     if (unlink(path) != 0) {
         char body[MAP_PATH_MAX + 64];
@@ -627,6 +642,7 @@ void app_note_prompt(App *a, int idx, int x, int y)
         had = map_note_at(a->map, x, y);
     }
     app_open_prompt(a, PROMPT_NOTE, title, "enter keeps it, ctrl-u then enter takes it away", had ? had : "");
+    a->prompt.max = TOKEN_NOTE_MAX;   /* the field is the limit, so nothing typed is lost */
 }
 
 /* The cursor goes to whatever is now selected, and the view goes with it.
@@ -1157,6 +1173,9 @@ static int modal_key(App *a, Key k)
                 app_set_status(a, "discarded unsaved changes");
                 app_close_map(a);
             } else {
+                /* Quitting is the other way work is let go on purpose, and
+                 * the copy must not offer it back next time. */
+                drop_autosave(a);
                 a->running = 0;
             }
         } else if (k.kind == KEY_CHAR && (k.ch == 'n' || k.ch == 'N')) {

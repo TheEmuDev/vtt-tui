@@ -255,6 +255,7 @@ void undo_set_clock(Undo *u, Map *m, int slot, int value)
     Op *o = push(u);
     o->kind   = OP_CLOCK;
     o->x      = (int16_t)slot;
+    o->y      = (int16_t)c->gen;
     o->before = c->value;
     o->after  = (uint8_t)value;
     c->value    = (uint8_t)value;
@@ -306,9 +307,12 @@ static void apply(const Undo *u, Map *m, const Op *o, int forward)
         m->spotlight = forward ? o->y : o->x;
         break;
     case OP_CLOCK:
-        /* The slot may have been dropped and started again since; a value
-         * past the new size is clamped rather than trusted. */
-        if (o->x >= 0 && o->x < CLOCK_MAX && m->clocks[o->x].name[0]) {
+        /* The slot may have been dropped and started again since. The op
+         * carries the generation it was recorded against, so a new clock
+         * in the same slot is left alone rather than handed the old one's
+         * history. */
+        if (o->x >= 0 && o->x < CLOCK_MAX && m->clocks[o->x].name[0] &&
+            m->clocks[o->x].gen == (uint8_t)o->y) {
             uint8_t v = forward ? o->after : o->before;
             m->clocks[o->x].value = v > m->clocks[o->x].size ? m->clocks[o->x].size : v;
         }

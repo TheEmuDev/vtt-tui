@@ -3030,10 +3030,12 @@ static void test_delete_map(void)
     CHECK_EQ(a.modal, MODAL_NONE);
     CHECK_EQ(file_exists(dir, "bravo.vtt"), 1);
 
-    CASE("y deletes it, and only it");
+    CASE("y deletes it, and only it, and its recovery copy with it");
+    write_map_file(dir, "bravo.vtt.autosave");
     press(&a, "dy");
     CHECK_EQ(a.modal, MODAL_NONE);
     CHECK_EQ(file_exists(dir, "bravo.vtt"), 0);
+    CHECK_EQ(file_exists(dir, "bravo.vtt.autosave"), 0);
     CHECK_EQ(file_exists(dir, "alpha.vtt"), 1);
     CHECK_EQ(file_exists(dir, "charlie.vtt"), 1);
 
@@ -3136,10 +3138,14 @@ static void test_rename_map(void)
 
     /* The name in the browser and the title in the editor should not drift
      * apart, so a rename reaches inside the file too. */
-    CASE("renaming moves the file and retitles the map");
+    CASE("renaming moves the file and retitles the map, and its recovery copy follows");
+    write_map_file(dir, "bravo.vtt.autosave");
     press(&a, "R\025goblin\r");
     CHECK_EQ(file_exists(dir, "bravo.vtt"), 0);
     CHECK_EQ(file_exists(dir, "goblin.vtt"), 1);
+    CHECK_EQ(file_exists(dir, "bravo.vtt.autosave"), 0);
+    CHECK_EQ(file_exists(dir, "goblin.vtt.autosave"), 1);
+    unlink("goblin.vtt.autosave");
     char title[128];
     read_title(dir, "goblin.vtt", title, sizeof title);
     CHECK_EQ(strcmp(title, "goblin"), 0);
@@ -7280,14 +7286,24 @@ static void test_clocks(void)
     press(&a, ":clock Big 99\r");
     CHECK(strstr(a.status, "1 to 24 segments") != NULL);
 
-    CASE("an undo recorded against a dropped slot touches nothing");
+    CASE("an undo recorded against a dropped slot touches nothing, not even its successor");
     press(&a, ":tick Sun\r");                               /* Sun 1/3, in slot 1 */
     press(&a, ":clock Sun off\r");
     press(&a, "u");                                         /* the tick's op names slot 1, now empty */
     CHECK_EQ(m->clocks[1].name[0], '\0');
-    press(&a, ":clock Moon 3\r");                           /* slot 1 again */
-    press(&a, "\x12");                                      /* redo: clamped, on Moon */
-    CHECK(m->clocks[1].value <= m->clocks[1].size);
+    press(&a, ":clock Moon 3\r");                           /* slot 1 again, a new generation */
+    press(&a, "\x12");                                      /* redo: Sun's tick must not land on Moon */
+    CHECK_EQ(m->clocks[1].value, 0);
+    press(&a, "u");
+    CHECK_EQ(m->clocks[1].value, 0);
+
+    CASE(":tick NAME = takes a count, not a direction");
+    press(&a, ":tick Dragon =2\r");
+    CHECK_EQ(m->clocks[0].value, 2);
+    press(&a, ":tick Dragon =-1\r");
+    CHECK(strstr(a.status, ":tick NAME") != NULL);
+    CHECK_EQ(m->clocks[0].value, 2);
+    press(&a, ":tick Dragon =1\r");                        /* back to where the cases below expect it */
 
     CASE("the panel shows the clocks under the turn order, dots for segments, a full one lit");
     press(&a, ":clock Moon off\r");
@@ -7505,6 +7521,14 @@ static void test_notes(void)
     play_status(&a.play, m, &a.ed, line, sizeof line);
     CHECK(strstr(line, "(note)") != NULL);
     CHECK(strstr(line, "amulet") == NULL);
+
+    CASE("the prompt stops where the note does, so nothing typed is lost on the way in");
+    press(&a, "sn\025");
+    for (int i = 0; i < 80; i++) press(&a, "x");
+    CHECK_EQ(a.prompt.len, TOKEN_NOTE_MAX - 1);
+    press(&a, "\r");
+    CHECK_EQ((int)strlen(m->tokens.v[0].note), TOKEN_NOTE_MAX - 1);
+    press(&a, "sn\025wants the amulet\r");
 
     CASE("the prompt opens holding the note, so it is the reader too");
     press(&a, "sn");
@@ -7746,6 +7770,33 @@ static void test_autosave(void)
     a.ed.cx = a.ed.cy = 0;
     CHECK_EQ(a.modal, MODAL_NONE);
     unlink(autosave);
+
+    CASE("a write that fails is not owed again until the next change");
+    char real_path[MAP_PATH_MAX];
+    str_lcpy(real_path, a.map->path, sizeof real_path);
+    str_lcpy(a.map->path, "/nonexistent/dir/t.vtt", sizeof a.map->path);
+    press(&a, " ");
+    app_tick(&a, 65000);
+    app_tick(&a, 65000 + AUTOSAVE_QUIET_MS);              /* the attempt, which fails */
+    CHECK_EQ(app_autosave_due(&a, 65000 + AUTOSAVE_QUIET_MS), -1);
+    CHECK_EQ(app_autosave_due(&a, 99000), -1);            /* and stays that way */
+    press(&a, " ");                                        /* a change owes one again */
+    app_tick(&a, 99000);
+    CHECK(app_autosave_due(&a, 99000) >= 0);
+    str_lcpy(a.map->path, real_path, sizeof a.map->path);
+    app_tick(&a, 99000 + AUTOSAVE_QUIET_MS);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1);
+
+    CASE("quitting with y to the question lets the copy go");
+    a.screen = SCREEN_MENU;                                /* the quit key lives on the menu */
+    press(&a, "q");
+    CHECK_EQ(a.modal, MODAL_CONFIRM_QUIT);
+    press(&a, "y");
+    CHECK_EQ(a.running, 0);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+    a.running = 1;
+    a.screen = SCREEN_EDITOR;
+    a.map->modified = 0;
 
     CASE("headless runs never write one");
     a.autosave_on = 0;
