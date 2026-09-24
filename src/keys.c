@@ -76,6 +76,7 @@ static const KeyDoc PLAY[] = {
     KEY("g r  g h", "light / darken the fog under the cursor or the box"),
     KEY("g R  g H", "the whole fog patch under the cursor"),
     KEY(":fog",     "the patches and the switch  (:fog Crypt clear, :fog off ...)"),
+    KEY(":fog --soft-edge", "show the players the rim of the dark: dim walls, silhouettes"),
     GROUP("Notes"),
     KEY("s n",    "a note on this creature, or on the square; the prompt reads and writes it"),
     KEY(":notes", "where the notes are"),

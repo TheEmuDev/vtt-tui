@@ -797,12 +797,15 @@ with a crypt at one end costs nothing while the party is at the other.
 
 **The soft edge.** `:fog --soft-edge`, off by default, half-shows the rim of the dark: the
 squares next to one the party can see now, all eight round it, a diagonal only when nothing
-blocks the corner — so it moves with the party, and never reaches through a wall. On the rim
-the players see its walls, dimmed, with any door in them drawn as a wall until the square
-beside it is lit; no ground and no grid lines; and a creature as a **silhouette** — its shape
-and its size in a neutral grey, `?` for a name, no markers. A big creature with one square on
-the rim is a silhouette too. The rim is anchored on sight, not on the GM's `g r` light or on
-remembered ground. The map's setting is every patch's default; `:fog Crypt --soft-edge` or
+blocks the corner — so it moves with the party, and never reaches through a wall. On a rim
+square nobody has seen yet the players see its walls, dimmed, with any door in them drawn as
+a wall until the party has seen the square beside it (a window stays a window, dimmed); no
+ground and no grid lines. A rim square memory already shows keeps what memory shows. On any
+rim square a creature is a **silhouette**: its size, in one neutral form — a grey square
+whatever it is, since a circle would say "player" — `?` for a name, no markers. A big creature
+with one square on the rim is a silhouette too. A creature the players cannot see is `?` in
+the turn panel and not coloured by side there either. The rim is anchored on sight, not on the
+GM's `g r` light or on remembered ground. The map's setting is every patch's default; `:fog Crypt --soft-edge` or
 `--no-soft-edge` gives one patch its own.
 
 ### Dice (`:roll`)

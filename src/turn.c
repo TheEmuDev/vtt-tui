@@ -34,6 +34,15 @@ static const char *name_of(const Token *t)
     return t->label[0] ? t->label : token_kind_name(t->kind);
 }
 
+/* A row in its creature's side colour -- but a creature the players' frame
+ * names "?" is not coloured by side either, or the colour would say what
+ * the name does not. */
+static Style side_style(const Token *t, const Theme *th)
+{
+    if (g_mask && fog_token_hidden(g_mask, t)) return style(th->dim, th->bg, 0);
+    return style(t->kind == TOKEN_ENEMY ? th->enemy : th->player, th->bg, 0);
+}
+
 /* The neighbour of `from` in key order among tokens that pass the filter,
  * without wrapping: -1 when `from` is already the last (or first). A `from`
  * of -1 gives the first (dir > 0) or the last. */
@@ -383,7 +392,7 @@ static void turn_draw_panel_body(Renderer *r, const Map *m, const Theme *th, Rec
             /* The creature holding it sits under its side. */
             if (on && cur >= 0 && y < rc.y + rc.h) {
                 const Token *ct = &m->tokens.v[cur];
-                Style ws = style(ct->kind == TOKEN_ENEMY ? th->enemy : th->player, th->bg, 0);
+                Style ws = side_style(ct, th);
                 int   took = draw_actor_counter(r, ct, counter, x, y, w, ws);
                 char who[40];
                 snprintf(who, sizeof who, "    %.24s", name_of(ct));
@@ -412,7 +421,7 @@ static void turn_draw_panel_body(Renderer *r, const Map *m, const Theme *th, Rec
         int on = at == cur;
 
         char line[48];
-        Style rs   = on ? lit : style(t->kind == TOKEN_ENEMY ? th->enemy : th->player, th->bg, 0);
+        Style rs   = on ? lit : side_style(t, th);
         int   took = on ? draw_actor_counter(r, t, counter, x, y, w, rs) : 0;
         snprintf(line, sizeof line, "%s %3d  %.*s", on ? mark : " ", t->init,
                  imax(1, w - 7 - took), name_of(t));

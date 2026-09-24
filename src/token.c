@@ -275,7 +275,11 @@ static void token_draw(Renderer *r, const GridView *g, const Token *t,
     grid_token_area(g, t->x, t->y, t->size, &a);
     if (a.w < 1 || a.h < 1) return;
 
-    int player = (t->kind != TOKEN_ENEMY);
+    /* A silhouette takes one form whatever it is: circles are players and
+     * squares enemies everywhere else, so keeping its own would say its side
+     * as plainly as its colour. The square, since nearly every creature the
+     * party cannot see is one. */
+    int player = !silhouette && t->kind != TOKEN_ENEMY;
 
     if (selected) draw_select_ring(r, &a, base);
     if (!silhouette && (t->turn & TURN_ACTING)) draw_turn_bars(r, &a, th->turn);

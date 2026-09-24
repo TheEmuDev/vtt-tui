@@ -166,7 +166,7 @@ one line further down, not a new mechanism.
 
 **A creature at the rim.** Its whole footprint decides, in this order: any
 tile of it lit, and it is drawn as itself; else any tile of it on rim, and
-it is drawn as its own shape, dimmed, with `?` where its name would be;
+it is drawn as a neutral square its size, dimmed, with `?` where its name would be;
 else not drawn. That is what covers a big creature with only one square in
 the half-light, and it is a scan of at most nine tiles for a creature the
 frame was already drawing.
@@ -496,10 +496,10 @@ against four, inside a box the walk already steps through.
 
 | | |
 |---|---|
-| terrain | not drawn, glyph or ground colour, until the tile is fully lit |
-| walls | drawn, dimmed |
+| terrain | not drawn, glyph or ground colour, until the tile is fully lit -- unless memory already shows it, when the rim changes nothing about its ground or walls |
+| walls | drawn, dimmed; a window stays a window, dimmed |
 | a door | drawn as a **wall**, and only becomes a door when the tile is lit. `seg_look` already makes this substitution for secret doors; this is the same line one case further down |
-| a creature | drawn, dimmed, its own shape, `?` where its name would be |
+| a creature | drawn, dimmed, one neutral square whatever it is, `?` where its name would be |
 | status markers | not drawn |
 
 Drawing one costs *less* than drawing a lit tile: no terrain glyphs, no
@@ -514,9 +514,14 @@ square in the half-light is covered:
 
 At most nine tiles scanned for a creature the frame was walking anyway.
 
-A silhouette keeps the creature's shape and footprint, since that is what a
+A silhouette keeps the creature's footprint, since that is what a
 silhouette is, but takes a **neutral colour**: the `?` would be undone by a
-red square still saying "enemy". Settled 2026-09-23.
+red square still saying "enemy". Settled 2026-09-23. Built, the same
+reasoning reached its shape: circles are players and squares enemies
+everywhere else, so a silhouette takes **one form**, the square, whatever
+it is -- found in review 2026-09-24, and the one line to turn round if the
+shape should stay. The turn panel's `?` rows lose their side colour for
+the same reason.
 
 **Decisions, and where they stand.**
 
@@ -707,10 +712,12 @@ frame. It should now be:
       solid kinds -- no grid lines, since the rim shows walls, not floor --
       and any door becomes a wall; a corner is dim when every solid
       boundary meeting it is. A hidden creature with a square on a shown
-      rim is drawn by `grid_draw_token_silhouette`: its shape and size in
-      `Theme.dim`, `?` for a name, no ring, bars or markers. Terrain on the
-      rim is not drawn, which the players' frame already did for hidden
-      ground. The rim is anchored on LIT, so ground the GM holds lit with
+      rim is drawn by `grid_draw_token_silhouette`: its size, always the
+      square form, in `Theme.dim`, `?` for a name, no ring, bars or
+      markers. Terrain on the rim is not drawn, which the players' frame
+      already did for hidden ground; a rim square memory shows (SEEN) is
+      not hidden, so it keeps its remembered ground, grid lines and doors,
+      and only its creatures change. Windows at the rim stay windows. The rim is anchored on LIT, so ground the GM holds lit with
       `g r` has none, as settled under 9. `:fog` lists `soft` on each patch
       that shows it.
 

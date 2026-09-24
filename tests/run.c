@@ -10073,6 +10073,50 @@ static void test_fog_edge(void)
     imp->x = 0; imp->y = 0; imp->size = 1;                  /* back out of the way, in the dark */
     CHECK_EQ(fog_token_silhouette(m, imp), 0);
 
+    CASE("drawn, the big one is grey across the dark squares it covers too");
+    imp->x = 0; imp->y = 3; imp->size = 2;
+    rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+    CHECK_EQ(tile_cell(&r, &a, 1, 4)->bg, a.th->dim);      /* (0,3)'s cell is the square's inset */
+    imp->x = 0; imp->y = 0; imp->size = 1;
+
+    CASE("a silhouette is a square whatever it is: a circle would say player");
+    m->tokens.v[1].kind = TOKEN_PLAYER;                     /* drawn as it stands, no keystroke */
+    rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+    CHECK_EQ(tile_cell(&r, &a, 5, 3)[0].ch, (uint32_t)'[');
+    m->tokens.v[1].kind = TOKEN_ENEMY;
+
+    CASE("selected, acting and in the fight, a silhouette has no ring, no bars and no side colour in the panel");
+    m->tokens.v[0].turn = TURN_IN; m->tokens.v[0].init = 12;
+    m->tokens.v[1].turn = TURN_IN | TURN_ACTING; m->tokens.v[1].init = 10;
+    play_focus(&a.play, 1);
+    rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+    red = 0;
+    int bars = 0;
+    for (size_t i = 0; i < (size_t)r.w * (size_t)r.h; i++) {
+        red  += r.back[i].fg == a.th->enemy || r.back[i].bg == a.th->enemy ||
+                r.back[i].fg == a.th->enemy_sel;
+    }
+    int ox, oy;
+    grid_tile_screen(&a.ed.view, 5, 3, &ox, &oy);           /* the lattice above the Ogre */
+    bars = r.back[(size_t)oy * (size_t)r.w + (size_t)ox + 1].fg == a.th->turn;
+    CHECK_EQ(red, 0);
+    CHECK_EQ(bars, 0);
+    bb_init(&fr, 65536); rnd_dump(&r, &fr); bb_putc(&fr, '\0');
+    CHECK(strstr(fr.data, "Ogre") == NULL);
+    bb_free(&fr);
+    m->tokens.v[1].turn = TURN_IN;                          /* Aria acts: the Ogre's row is plain */
+    m->tokens.v[0].turn = TURN_IN | TURN_ACTING;
+    rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+    red = 0;
+    for (size_t i = 0; i < (size_t)r.w * (size_t)r.h; i++) red += r.back[i].fg == a.th->enemy;
+    CHECK_EQ(red, 0);
+    rnd_begin(&r); app_draw_view(&a, VIEW_GM);              /* the GM's panel still colours it */
+    red = 0;
+    for (size_t i = 0; i < (size_t)r.w * (size_t)r.h; i++) red += r.back[i].fg == a.th->enemy;
+    CHECK(red > 0);
+    m->tokens.v[0].turn = 0; m->tokens.v[1].turn = 0;
+    play_focus(&a.play, -1);
+
     CASE("the GM's frame draws the Ogre as itself");
     rnd_begin(&r); app_draw_view(&a, VIEW_GM);
     bb_init(&fr, 65536); rnd_dump(&r, &fr); bb_putc(&fr, '\0');
