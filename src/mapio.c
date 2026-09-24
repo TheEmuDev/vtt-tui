@@ -1,5 +1,6 @@
 #include "mapio.h"
 
+#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <stdio.h>
@@ -11,6 +12,7 @@
 
 #include "clock.h"
 #include "counter.h"
+#include "fog.h"
 #include "ruler.h"
 #include "turn.h"
 #include "util.h"
@@ -35,6 +37,9 @@
 #define FORMAT_BEFORE_TURNS    3
 #define FORMAT_BEFORE_CLOCKS   4
 #define FORMAT_BEFORE_COUNTERS 5
+
+/* Fog rows: a held tile of patch 1..15 is one of these, in order. */
+static const char FOG_HELD_CHARS[FOG_PATCH_MAX + 1] = "123456789!\"#$%&";
 
 /* ------------------------------------------------------------------ save */
 
@@ -70,8 +75,11 @@ int mapio_write(const Map *m, const char *path, char *err, size_t errsz)
     for (int i = 0; i < ROLL_MAX && !v5; i++) v5 = m->rolls[i].name[0] != '\0';
     for (int i = 0; i < m->tokens.n && !v5; i++) v5 = m->tokens.v[i].note[0] != '\0';
     if (m->nnotes) v5 = 1;
-    int v6 = 0;
+    int v6 = 0, patches = 0;
     for (int i = 0; i < m->tokens.n && !v6; i++) v6 = m->tokens.v[i].ncounters > 0;
+    for (int i = 0; i < FOG_PATCH_MAX; i++)
+        patches += m->fog_patches[i].name[0] && !m->fog_patches[i].dead;
+    if (patches) v6 = 1;
     fprintf(f, "VTT %d\n", v6 ? FORMAT_VERSION : v5 ? FORMAT_BEFORE_COUNTERS
                           : fight ? FORMAT_BEFORE_CLOCKS : FORMAT_BEFORE_TURNS);
     fprintf(f, "name %s\n", m->name);
@@ -129,6 +137,41 @@ int mapio_write(const Map *m, const char *path, char *err, size_t errsz)
             fprintf(f, "roll %s \"%s\"\n", m->rolls[i].name, m->rolls[i].expr);
     for (int i = 0; i < m->nnotes; i++)
         fprintf(f, "note %d %d \"%s\"\n", m->notes[i].x, m->notes[i].y, m->notes[i].text);
+
+    /* Fog: the switches, the patches, then one row a map row, a character a
+     * tile. Lit and rim are not written: they are where the party stands
+     * this second, and are rebuilt from the creatures when the map opens. */
+    if (patches) {
+        if (m->fog_on)        fputs("fog on\n", f);
+        if (m->fog_soft_edge) fputs("fog soft-edge\n", f);
+        for (int i = 0; i < FOG_PATCH_MAX; i++) {
+            const FogPatch *p = &m->fog_patches[i];
+            if (!p->name[0] || p->dead) continue;
+            fprintf(f, "fogpatch %d %s", i + 1, p->name);
+            if (p->reveal == FOG_REVEAL_MANUAL) fputs(" reveal manual", f);
+            else                                fprintf(f, " reveal %d", p->reveal);
+            fprintf(f, " memory %s", p->memory ? "on" : "off");
+            if (p->soft_edge >= 0) fprintf(f, " soft-edge %s", p->soft_edge ? "on" : "off");
+            if (p->disabled) fputs(" disabled", f);
+            fputc('\n', f);
+        }
+        fputs("fog\n", f);
+        for (int y = 0; y < m->h; y++) {
+            for (int x = 0; x < m->w; x++) {
+                uint8_t fb = m->fog[(size_t)y * (size_t)m->w + (size_t)x];
+                int     id = fb & FOG_ID;
+                const FogPatch *p = id ? &m->fog_patches[id - 1] : NULL;
+                char c = '.';
+                if (p && p->name[0] && !p->dead) {
+                    if (fb & FOG_HELD)      c = FOG_HELD_CHARS[id - 1];
+                    else if (fb & FOG_SEEN) c = (char)('a' + id - 1);
+                    else                    c = (char)('A' + id - 1);
+                }
+                fputc(c, f);
+            }
+            fputc('\n', f);
+        }
+    }
 
     int ok = (fflush(f) == 0);
     if (ok) ok = (fsync(fileno(f)) == 0) || errno == EINVAL;   /* pipes are fine */
@@ -250,6 +293,57 @@ static int parse_status_line(Map *m, const char *line)
 }
 
 /* "tokencounter HP 4 6": a counter on the token above it. */
+/* "fogpatch 2 Crypt reveal 1 memory off soft-edge on disabled". */
+static int parse_fogpatch_line(Map *m, const char *line)
+{
+    int  id = 0, consumed = 0;
+    char name[FOG_NAME_MAX + 1] = { 0 };
+    if (sscanf(line, "fogpatch %d %16s %n", &id, name, &consumed) < 2) return -1;
+    if (id < 1 || id > FOG_PATCH_MAX || strlen(name) >= FOG_NAME_MAX || !isalpha((unsigned char)name[0]))
+        return -1;
+    FogPatch *p = &m->fog_patches[id - 1];
+    memset(p, 0, sizeof *p);
+    str_lcpy(p->name, name, sizeof p->name);
+    p->reveal = 2; p->memory = 1; p->soft_edge = -1; p->x1 = -1;
+
+    const char *s = consumed > 0 ? line + consumed : "";
+    char key[16], val[16];
+    int  n;
+    while (*s) {
+        while (*s == ' ') s++;
+        if (!*s) break;
+        if (sscanf(s, "%15s %n", key, &n) < 1) break;
+        s += n;
+        if (!strcmp(key, "disabled")) { p->disabled = 1; continue; }
+        if (sscanf(s, "%15s %n", val, &n) < 1) break;
+        s += n;
+        if (!strcmp(key, "reveal")) {
+            if (!strcmp(val, "manual")) p->reveal = FOG_REVEAL_MANUAL;
+            else p->reveal = (int8_t)iclamp(atoi(val), 0, 99);
+        } else if (!strcmp(key, "memory"))    p->memory    = !strcmp(val, "on");
+        else if (!strcmp(key, "soft-edge"))   p->soft_edge = (int8_t)!strcmp(val, "on");
+    }
+    return 0;
+}
+
+/* One row of the fog section. An unknown character is no fog, the same
+ * forgiveness the tile rows get. */
+static void parse_fog_row(Map *m, int y, const char *line)
+{
+    size_t len = strlen(line);
+    for (int x = 0; x < m->w && (size_t)x < len; x++) {
+        char c = line[x];
+        uint8_t f = 0;
+        if (c >= 'A' && c < 'A' + FOG_PATCH_MAX)      f = (uint8_t)(c - 'A' + 1);
+        else if (c >= 'a' && c < 'a' + FOG_PATCH_MAX) f = (uint8_t)((unsigned)(c - 'a' + 1) | FOG_SEEN);
+        else {
+            const char *h = strchr(FOG_HELD_CHARS, c);
+            if (c && h) f = (uint8_t)((h - FOG_HELD_CHARS + 1) | FOG_HELD | FOG_SEEN);
+        }
+        if (f) map_fog_set(m, x, y, f);
+    }
+}
+
 static int parse_counter_line(Map *m, const char *line)
 {
     if (m->tokens.n == 0) return -1;
@@ -416,7 +510,18 @@ Map *mapio_load(const char *path, char *err, size_t errsz)
     if (ruleset_by_name(ruleset)) str_lcpy(m->ruleset, ruleset, sizeof m->ruleset);
 
     while (read_line(f, line, sizeof line) >= 0) {
-        if (!strcmp(line, "tiles")) {
+        if (!strcmp(line, "fog")) {
+            for (int y = 0; y < h; y++) {
+                if (read_line(f, line, sizeof line) < 0) break;
+                parse_fog_row(m, y, line);
+            }
+        } else if (!strcmp(line, "fog on")) {
+            m->fog_on = 1;
+        } else if (!strcmp(line, "fog soft-edge")) {
+            m->fog_soft_edge = 1;
+        } else if (!strncmp(line, "fogpatch ", 9)) {
+            parse_fogpatch_line(m, line);
+        } else if (!strcmp(line, "tiles")) {
             for (int y = 0; y < h; y++) {
                 if (read_line(f, line, sizeof line) < 0) break;
                 parse_tile_row(line, m->tiles + (size_t)y * (size_t)w, w);
@@ -457,6 +562,11 @@ Map *mapio_load(const char *path, char *err, size_t errsz)
     }
     fclose(f);
     turn_sanitize(m);
+    /* A fog row that names a patch no fogpatch line created is no fog. */
+    for (size_t i = 0; i < (size_t)w * (size_t)h; i++) {
+        int id = m->fog[i] & FOG_ID;
+        if (id && !m->fog_patches[id - 1].name[0]) m->fog[i] = 0;
+    }
 
     str_lcpy(m->path, path, sizeof m->path);
     m->modified = 0;

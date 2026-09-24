@@ -1,5 +1,7 @@
 #include "editor.h"
 
+#include "fog.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -291,6 +293,27 @@ void ed_apply_tiles(Editor *e, Map *m, Undo *u, uint8_t kind)
     undo_end(u);
 }
 
+int ed_apply_fog(Editor *e, Map *m, Undo *u, int id)
+{
+    PROF_ZONE("fog.paint");
+    EdShape s = ed_shape(ED_SHAPE_RECT, e->cx, e->cy,
+                         e->cx + e->brush - 1, e->cy + e->brush - 1, 0);
+    if (e->mode == ED_VISUAL)
+        s = ed_shape(e->shape, e->anchor_x, e->anchor_y, e->cx, e->cy, 0);
+
+    int changed = 0;
+    undo_begin(u);
+    for (int y = s.y0; y <= s.y1; y++)
+        for (int x = s.x0; x <= s.x1; x++) {
+            if (!ed_shape_has(&s, x, y) || !map_in_bounds(m, x, y)) continue;
+            uint8_t was = fog_at(m, x, y);
+            fog_paint(m, u, x, y, id);
+            changed += fog_at(m, x, y) != was;
+        }
+    undo_end(u);
+    return changed;
+}
+
 void ed_toggle_tile(Editor *e, Map *m, Undo *u)
 {
     uint8_t next = map_tile(m, e->cx, e->cy) == TILE_VOID ? e->terrain
@@ -363,7 +386,7 @@ void ed_draw(Renderer *r, const Map *m, const Editor *e, const Theme *th, int as
     ClipRect saved = rnd_clip_push(r, e->view.view.x, e->view.view.y,
                                    e->view.view.w, e->view.view.h);
 
-    grid_draw(r, m, &e->view, th, ascii, 1);   /* build mode sees secrets */
+    grid_draw(r, m, &e->view, th, ascii, 1, FOGV_BUILD);   /* build mode sees secrets */
     draw_note_marks(r, m, &e->view, th, ascii);
 
     if (e->mode == ED_VISUAL) {
@@ -433,10 +456,21 @@ void ed_status(const Editor *e, const Map *m, char *buf, size_t bufsz)
         snprintf(brush, sizeof brush, "  brush %dx%d", e->brush, e->brush);
 
     map_coord_name(e->cx, e->cy, at, sizeof at);
-    snprintf(buf, bufsz, "%-7s %s  %s%s  [%s/%s]%s%s  zoom %d  map %dx%d",
+    /* Which patch the cursor stands in, then which one g f would paint. */
+    char fogs[48] = "";
+    int  here = fog_at(m, e->cx, e->cy) & FOG_ID;
+    int  cur  = e->fog_patch;
+    if (cur && (!m->fog_patches[cur - 1].name[0] || m->fog_patches[cur - 1].dead)) cur = 0;
+    if (here && m->fog_patches[here - 1].name[0])
+        snprintf(fogs, sizeof fogs, "  fog %.15s", m->fog_patches[here - 1].name);
+    if (cur && cur != here)
+        snprintf(fogs + strlen(fogs), sizeof fogs - strlen(fogs), "  g f: %.15s",
+                 m->fog_patches[cur - 1].name);
+
+    snprintf(buf, bufsz, "%-7s %s  %s%s%s  [%s/%s]%s%s  zoom %d  map %dx%d",
              ed_mode_name(e->mode), at,
              tile_name(map_tile(m, e->cx, e->cy)),
-             map_note_at(m, e->cx, e->cy) ? "  (note)" : "",
+             map_note_at(m, e->cx, e->cy) ? "  (note)" : "", fogs,
              edge_name(e->material), tile_name(e->terrain), brush, shape,
              e->view.zoom, m->w, m->h);
 }

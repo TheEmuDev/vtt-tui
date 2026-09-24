@@ -662,7 +662,18 @@ frame. It should now be:
 
    a. Patches and painting: the tile byte, the patch table, `g f`, `g c`,
       `g r`, `g h`, the build tint, the GM's dim, the players' blank, the
-      file, undo. Fog works here, revealed by hand.
+      file, undo. Fog works here, revealed by hand. *Built 2026-09-23.*
+      Decided in the building: a deleted patch's number is tombstoned for
+      the session rather than reused, because the undo log can put that
+      number back on a tile, and a new patch in the slot would inherit the
+      ground -- the clock bug the review found, avoided by construction; so
+      `delete` is not undoable. The first patch turns the master switch on,
+      or making one would seem to do nothing. Over fog the players' frame
+      shows no status message at all, since most of them name a creature or
+      a square; the ruler is the GM's and is not drawn for the players; a
+      range or trail anchored in the light has the dark blanked back out of
+      it afterwards (`grid_blank_fog`), which costs a pass only while one of
+      those is showing.
    b. Line of sight: per-patch `reveal`, the bounding-box test, the
       recompute on every trigger in the list, *held* for the GM's hand,
       memory both ways.

@@ -53,6 +53,26 @@ typedef struct {
     char    text[NOTE_MAX];
 } Note;
 
+/* Fog of war: see fog.h. One byte a tile beside `tiles` -- which patch, and
+ * what the party can see of it -- and a small table of patches. */
+#define FOG_PATCH_MAX     15
+#define FOG_NAME_MAX      16
+#define FOG_ID            0x0Fu   /* which patch, 1..15; 0 for none */
+#define FOG_SEEN          0x10u   /* has been inside someone's sight */
+#define FOG_LIT           0x20u   /* inside someone's sight now */
+#define FOG_RIM           0x40u   /* unlit, next to a lit tile */
+#define FOG_HELD          0x80u   /* lit by the GM's hand */
+#define FOG_REVEAL_MANUAL (-1)
+typedef struct {
+    char    name[FOG_NAME_MAX];   /* "" for an empty slot */
+    int8_t  reveal;               /* tiles a player creature lights, or FOG_REVEAL_MANUAL */
+    uint8_t memory;               /* lit ground stays drawn once the party has left */
+    int8_t  soft_edge;            /* -1 follows the map's setting, else 0 or 1 */
+    uint8_t disabled;             /* keeps its painting, hides nothing */
+    uint8_t dead;                 /* deleted this session; never reused, see fog.h */
+    int16_t x0, y0, x1, y1;       /* painted extent; x1 < x0 when empty */
+} FogPatch;
+
 #define SPOTLIGHT_PLAYERS 0
 #define SPOTLIGHT_GM      1
 
@@ -135,6 +155,10 @@ typedef struct {
     NamedRoll rolls[ROLL_MAX];
     Note notes[MAP_NOTES_MAX];
     int  nnotes;
+    uint8_t *fog;                         /* w*h, see FOG_* */
+    int      fog_on;                      /* the master switch */
+    int      fog_soft_edge;               /* the map's default for patches that follow it */
+    FogPatch fog_patches[FOG_PATCH_MAX];
 
     /* Measurement settings travel with the encounter, since they belong to
      * the game being played rather than to the session. */
@@ -189,6 +213,12 @@ int map_edge_opaque(const Map *m, int x, int y, int dx, int dy);
  * diagonals too; a diagonal is blocked if either of the orthogonal crossings
  * it is made of is blocked, so you cannot slip through a corner. */
 int map_blocked(const Map *m, int x, int y, int dx, int dy);
+
+/* Sets a tile's fog byte and grows its patch's painted extent. Every write
+ * goes through here, undo included, so the extent can only be too big,
+ * never too small -- which is the safe way round for a box the sight walk
+ * uses to skip work. */
+void map_fog_set(Map *m, int x, int y, uint8_t f);
 
 /* The note on a square, or NULL. Setting a blank removes it; returns 0
  * when there was no room for a new one. */

@@ -1,6 +1,7 @@
 #include "play.h"
 
 #include "counter.h"
+#include "fog.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -567,19 +568,29 @@ void play_move_label(Renderer *r, const Map *m, const GridView *g,
 }
 
 void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
-               const Theme *th, int ascii)
+               const Theme *th, int ascii, int players)
 {
     PROF_ZONE("play.draw");
+
+    /* The players' frame over fog: everything below that could point at
+     * what the party cannot see asks first. */
+    int fogp = players && fog_any(m);
+    int held_hidden = fogp && p->grabbed && p->sel >= 0 && p->sel < m->tokens.n &&
+                      fog_token_hidden(m, &m->tokens.v[p->sel]);
+    int range_hidden = fogp && (p->range.token >= 0
+        ? p->range.token < m->tokens.n && fog_token_hidden(m, &m->tokens.v[p->range.token])
+        : fog_ground_hidden(m, p->range.ax, p->range.ay));
 
     grid_draw_labels(r, m, &e->view, th, ed_gutter(e, m), e->cx, e->cy);
 
     ClipRect saved = rnd_clip_push(r, e->view.view.x, e->view.view.y,
                                    e->view.view.w, e->view.view.h);
 
-    grid_draw(r, m, &e->view, th, ascii, 0);   /* play mode gives nothing away */
+    grid_draw(r, m, &e->view, th, ascii, 0,    /* play mode gives nothing away */
+              players ? FOGV_PLAYERS : FOGV_GM);
 
     /* Under everything else, so tokens standing in it stay readable. */
-    range_draw(r, m, &e->view, &p->range, th);
+    if (!range_hidden) range_draw(r, m, &e->view, &p->range, th);
 
     /* The box, under the creatures it is picking out. Tinted the same way
      * build mode tints its visual selection, so the gesture reads as the same
@@ -591,18 +602,27 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
     /* The outline first, then the trail over it: the trail tints backgrounds
      * without touching glyphs, so the outline survives, and its own origin
      * mark lands on top where the two would otherwise both claim one cell. */
-    if (p->grabbed && p->sel >= 0 && p->sel < m->tokens.n)
+    if (p->grabbed && p->sel >= 0 && p->sel < m->tokens.n && !held_hidden)
         grid_draw_token_ghost(r, &e->view, p->origin_x, p->origin_y,
                               m->tokens.v[p->sel].size, th);
 
     /* Over the range wash but under the cursor: where this creature has been
      * is a more specific fact than what is merely in range of it. */
-    play_trail_draw(r, m, &e->view, p, th, ascii);
+    if (!held_hidden) play_trail_draw(r, m, &e->view, p, th, ascii);
+
+    /* The wash, the trail and the box tint whatever they cover; over fog,
+     * the ground nobody can see goes back to nothing before anything that
+     * stands on visible ground is drawn. */
+    if (fogp && (p->range.active || p->grabbed || p->visual))
+        grid_blank_fog(r, m, &e->view);
 
     /* The cursor tint goes under the tokens so a token is never hidden by
-     * it; the corner marks below put the cursor back on top. */
+     * it; the corner marks below put the cursor back on top. In the dark
+     * the players' frame has no cursor at all: its size follows whatever it
+     * rests on, which would say what is there. */
     uint8_t csize = play_cursor_size(p, m);
-    grid_draw_cursor_area(r, &e->view, m, e->cx, e->cy, csize, th->cursor_bg);
+    int     cursor = !(fogp && fog_ground_hidden(m, e->cx, e->cy));
+    if (cursor) grid_draw_cursor_area(r, &e->view, m, e->cx, e->cy, csize, th->cursor_bg);
 
     /* Everything in the group is ringed, not just the primary: a formation
      * you cannot see the extent of is one you will move by accident. While
@@ -613,6 +633,7 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
          * token, and at one PROF_ZONE per token per frame the instrument cost
          * more than the thing it was measuring. group.box measures the
          * enumeration on the keystroke paths instead. */
+        if (fogp && fog_token_hidden(m, &m->tokens.v[i])) continue;
         int lit = p->visual ? box_meets(&m->tokens.v[i], p->anchor_x,
                                         p->anchor_y, e->cx, e->cy)
                             : play_in_group(p, i);
@@ -620,15 +641,17 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
     }
 
     /* After every token, so a marker is never buried under the next one. */
-    for (int i = 0; i < m->tokens.n; i++)
+    for (int i = 0; i < m->tokens.n; i++) {
+        if (fogp && fog_token_hidden(m, &m->tokens.v[i])) continue;
         grid_draw_token_status(r, &e->view, &m->tokens.v[i], th, ascii);
+    }
 
     /* Recolouring the tile's four boundary corners keeps the cursor visible
      * on top of a token without painting over the box-drawing underneath. */
-    grid_draw_tile_marker(r, &e->view, m, e->cx, e->cy, csize, th->accent);
+    if (cursor) grid_draw_tile_marker(r, &e->view, m, e->cx, e->cy, csize, th->accent);
 
     /* Over everything, since it is the one thing being read right now. */
-    play_move_label(r, m, &e->view, p, th);
+    if (!held_hidden) play_move_label(r, m, &e->view, p, th);
 
     rnd_clip_restore(r, saved);
 }
@@ -637,7 +660,14 @@ void play_status(const Play *p, const Map *m, const Editor *e, int gm, char *buf
 {
     const char *walls = p->enforce_walls ? "walls on" : "walls OFF";
 
-    if (p->sel >= 0 && p->sel < m->tokens.n) {
+    /* The players' line over fog says nothing the map does not: a selected
+     * creature in the dark is not named, a square in the dark is "dark",
+     * and the count of creatures on the map is left out altogether. */
+    int fogp = !gm && fog_any(m);
+    int sel_ok = p->sel >= 0 && p->sel < m->tokens.n &&
+                 !(fogp && fog_token_hidden(m, &m->tokens.v[p->sel]));
+
+    if (sel_ok) {
         const Token *t = &m->tokens.v[p->sel];
         if (p->grabbed) {
             /* With no walkable route the count is keystrokes rather than the
@@ -691,6 +721,12 @@ void play_status(const Play *p, const Map *m, const Editor *e, int gm, char *buf
     char at[MAP_COORD_MAX];
     map_coord_name(e->cx, e->cy, at, sizeof at);
 
+    if (fogp) {
+        snprintf(buf, bufsz, "PLAY    %s  %s  %s", at,
+                 fog_ground_hidden(m, e->cx, e->cy) ? "dark"
+                 : map_walkable(m, e->cx, e->cy) ? "floor" : "void", walls);
+        return;
+    }
     snprintf(buf, bufsz, "PLAY    %s  %s%s  %d token%s  next size %d  %s",
              at, map_walkable(m, e->cx, e->cy) ? "floor" : "void",
              gm && map_note_at(m, e->cx, e->cy) ? "  (note)" : "",

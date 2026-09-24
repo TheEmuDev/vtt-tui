@@ -13,7 +13,8 @@ typedef enum {
     OP_TOKEN_EDIT,
     OP_ROUND,            /* the fight's round counter: x before, y after */
     OP_SPOTLIGHT,        /* which side has the spotlight: x before, y after */
-    OP_CLOCK,            /* a clock's filled segments: x is the slot, before/after */
+    OP_CLOCK,
+    OP_FOG,              /* a tile's fog byte: before/after */            /* a clock's filled segments: x is the slot, before/after */
 } OpKind;
 
 /* One op is one cell or one token changing. Tile ops dominate -- a brush
@@ -85,6 +86,8 @@ void undo_edit_token(Undo *u, Map *m, int idx, Token after);
 /* The round counter, so stepping a turn back with u puts the round back too. */
 void undo_set_round(Undo *u, Map *m, int round);
 void undo_set_spotlight(Undo *u, Map *m, int side);
+/* A tile's fog byte: which patch it belongs to and what is lit by hand. */
+void undo_set_fog(Undo *u, Map *m, int x, int y, uint8_t f);
 /* A clock's value; the slot must hold a clock. */
 void undo_set_clock(Undo *u, Map *m, int slot, int value);
 

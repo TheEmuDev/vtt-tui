@@ -1,5 +1,7 @@
 #include "grid.h"
 
+#include "fog.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -194,10 +196,18 @@ typedef struct {
     uint8_t kind;
 } Seg;
 
+/* Set for the length of one grid_draw when it draws the players' frame over
+ * a fogged map: a boundary with hidden ground on both sides is not drawn,
+ * or the walls would trace the rooms nobody is supposed to see. A file
+ * static rather than a parameter because vseg and hseg are asked from
+ * several places inside that one call, and it is cleared on the way out. */
+static const Map *g_fog_blank;
+
 static Seg vseg(const Map *m, int x, int y)
 {
     Seg s = { 0, EDGE_NONE };
     if (x < 0 || x > m->w || y < 0 || y >= m->h) return s;
+    if (g_fog_blank && fog_ground_hidden(m, x - 1, y) && fog_ground_hidden(m, x, y)) return s;
 
     s.kind  = map_vedge(m, x, y);
     s.level = edge_weight(s.kind);
@@ -210,6 +220,7 @@ static Seg hseg(const Map *m, int x, int y)
 {
     Seg s = { 0, EDGE_NONE };
     if (y < 0 || y > m->h || x < 0 || x >= m->w) return s;
+    if (g_fog_blank && fog_ground_hidden(m, x, y - 1) && fog_ground_hidden(m, x, y)) return s;
 
     s.kind  = map_hedge(m, x, y);
     s.level = edge_weight(s.kind);
@@ -272,9 +283,22 @@ void grid_visible_tiles(const GridView *g, const Map *m,
 }
 
 void grid_draw(Renderer *r, const Map *m, const GridView *g, const Theme *th,
-               int ascii, int reveal)
+               int ascii, int reveal, int fogview)
 {
     PROF_ZONE("grid.draw");
+
+    /* Decided once a frame, so a map with no fog pays not even the branch's
+     * load per tile. Build mode tints painting whether or not the master
+     * switch is on; play mode acts only on what fog is hiding right now. */
+    int fog_build = 0, fog_play = 0;
+    if (fogview == FOGV_BUILD) {
+        for (int i = 0; i < FOG_PATCH_MAX && !fog_build; i++)
+            fog_build = m->fog_patches[i].name[0] && !m->fog_patches[i].dead &&
+                        m->fog_patches[i].x1 >= m->fog_patches[i].x0;
+    } else {
+        fog_play = fog_any(m);
+    }
+    g_fog_blank = fog_play && fogview == FOGV_PLAYERS ? m : NULL;
 
     int pw = zoom_pw(g->zoom), ph = zoom_ph(g->zoom);
     int iw = ZOOM[g->zoom].iw, ih = ZOOM[g->zoom].ih;
@@ -295,6 +319,10 @@ void grid_draw(Renderer *r, const Map *m, const GridView *g, const Theme *th,
             uint8_t t = map_tile(m, tx, ty);
             if (t >= TILE_COUNT) continue;
 
+            /* 0 in the clear; otherwise the fog's say over this tile. */
+            int hidden = fog_play && fog_ground_hidden(m, tx, ty);
+            if (hidden && fogview == FOGV_PLAYERS) continue;   /* not even the void mark */
+
             /* Void is marked, not shaded. One dim dot in the middle of the
              * square says "not map" at any brightness a terminal renders at,
              * where a background dark enough to stay quiet would be a
@@ -312,6 +340,13 @@ void grid_draw(Renderer *r, const Map *m, const GridView *g, const Theme *th,
 
             uint32_t glyph = ascii ? TERRAIN_LOOK[t].ascii : TERRAIN_LOOK[t].glyph;
             uint32_t bg    = th->terrain_bg[t];
+            uint32_t fg    = th->terrain_fg[t];
+            if (hidden) { bg = th->fog_gm_bg; fg = th->dim; }
+            if (fog_build) {
+                int id = fog_at(m, tx, ty) & FOG_ID;
+                if (id && m->fog_patches[id - 1].name[0] && !m->fog_patches[id - 1].dead)
+                    bg = th->fog_tint[fog_tint(id)];
+            }
             if (glyph == ' ' && bg == th->bg) continue;   /* nothing to show */
 
             int sx, sy;
@@ -328,7 +363,7 @@ void grid_draw(Renderer *r, const Map *m, const GridView *g, const Theme *th,
                         if (c) c->bg = bg;
                     }
             } else {
-                Style ts = style(th->terrain_fg[t], bg, 0);
+                Style ts = style(fg, bg, 0);
                 for (int j = 0; j < ih; j++)
                     for (int i = 0; i < iw; i++)
                         draw_cell(r, sx + i, sy + j, glyph, ts);
@@ -421,6 +456,26 @@ void grid_draw(Renderer *r, const Map *m, const GridView *g, const Theme *th,
             w = e;
         }
     }
+    g_fog_blank = NULL;
+}
+
+void grid_blank_fog(Renderer *r, const Map *m, const GridView *g)
+{
+    PROF_ZONE("fog.blank");
+    int tx0, ty0, tx1, ty1;
+    grid_visible_tiles(g, m, &tx0, &ty0, &tx1, &ty1);
+    int iw = ZOOM[g->zoom].iw, ih = ZOOM[g->zoom].ih;
+    for (int ty = ty0; ty <= ty1; ty++)
+        for (int tx = tx0; tx <= tx1; tx++) {
+            if (!fog_ground_hidden(m, tx, ty)) continue;
+            int sx, sy;
+            grid_tile_interior(g, tx, ty, &sx, &sy);
+            for (int y = 0; y < ih; y++)
+                for (int x = 0; x < iw; x++) {
+                    Cell *c = rnd_at(r, sx + x, sy + y);
+                    if (c) *c = r->clear_cell;
+                }
+        }
 }
 
 void grid_draw_tile_cursor(Renderer *r, const GridView *g, int tx, int ty, uint32_t bg)

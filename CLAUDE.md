@@ -15,6 +15,9 @@ maintainer; this file is what survives a context reset, so keep it true.
   `docs/PERFORMANCE.md`. Bytes written matter more than frame time. Cost follows
   the window, not the map: cull with `grid_visible_tiles` first.
 - **Push only when told** ("push it"). Commit freely; never push on your own.
+- **A subagent reviews every finished change** before it is reported done; verify
+  its findings and fix what holds up. The reviewer is Fable 5.1 for now (Agent
+  `model: "fable"`); the user will name a different one when that changes.
 - **Rules-agnostic core.** Game-specific behaviour lives behind the `Ruleset`
   table in `ruler.c` (bands, `action_roll`, `spotlight`, `countdown`), documented under the README's
   *Rulesets* section with a subsection per game. Nothing else may know a game.
@@ -54,9 +57,10 @@ Bench scripts replay whole; no toggles — use loop-neutral pairs (`llllhhhh`,
 | `turn.c/h` | turn order and spotlight: state is `Token.turn`/`Token.init` + `Map.round`/`Map.spotlight`, never a list; `turn_walk` also drives `t`/`f`/`e`; draws the side panel |
 | `editor.c` | build mode: brush, visual box/circle, wall trace |
 | `undo.c/h` | flat op log, batches, `OP_ROUND`; tokens in a side array; capped at four fills of the largest map |
-| `mapio.c` | file format; the writer picks the lowest version that says everything: 3, 4 with a fight, 5 with clocks, named rolls or notes, 6 with counters |
+| `mapio.c` | file format; the writer picks the lowest version that says everything: 3, 4 with a fight, 5 with clocks, named rolls or notes, 6 with counters or fog |
 | `clock.c/h` | clocks: fixed slots on the map (`Map.clocks`), `down` per clock, `OP_CLOCK` for ticks only and it carries the slot's `gen` so a reused slot ignores old ops; `:clock`/`:tick` in `app_cmd.c`; drawn under the turn panel |
 | `counter.c/h` | counters on creatures: `Token.counters[4]`, `counter_apply` parses the `s v` prompt, `<`/`>` step `Play.counter` (`app_current_counter` falls back to the ruleset's first, `Ruleset.counters`); GM-only via `play_status(gm)`, `turn_draw_panel(counter)` and `app_note_gm`/`app_set_status_gm` (`App.status_gm`) -- every message about a creature's numbers, refusals included, uses one of those two |
+| `fog.c/h` | fog of war: `Map.fog` byte per tile (patch id + SEEN/LIT/RIM/HELD), `Map.fog_patches[15]`; `fog_ground_hidden`/`fog_creature_hidden`/`fog_token_hidden` are the questions every view asks; `map_fog_set` is the only writer (grows the patch extent); deleted patches are tombstoned (`dead`) because undo can put their number back. Drawn by `grid_draw(..., FogView)`; the players' frame skips hidden ground, walls between hidden tiles (`g_fog_blank`), hidden creatures, the cursor in the dark, and masks names via `turn_status_view` |
 | `keys.c` | key tables for the bar and the `?` page |
 | autosave (`app.c`) | `map_touch` bumps `Map.gen`; `app_tick`/`app_autosave_due` in main's loop write `path.autosave` after 1.5 s quiet (a failed write still counts as attempted, or the loop spins); `offer_recovery` on open; dropped by save, `:q!`, discard, quit-with-y, delete; renamed with the map; `autosave_on` is set only in the interactive loop |
 | `dice.c`, `slog.c` | `:roll` (xoshiro, duality), the session log; named rolls are `Map.rolls`, expanded in `app_cmd.c` |

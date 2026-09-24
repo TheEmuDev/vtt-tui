@@ -60,8 +60,16 @@ int  grid_screen_to_tile(const GridView *g, const Map *m, int sx, int sy, int *t
 /* `reveal` shows what only the GM should see: secret doors are drawn as plain
  * walls without it, so play mode gives nothing away to anyone reading the
  * screen. */
+/* `fogview` is a FogView (fog.h): build mode's tint, the GM's dim, or the
+ * players' blank. A map with no fog in it draws the same in all three. */
 void grid_draw(Renderer *r, const Map *m, const GridView *g, const Theme *th,
-               int ascii, int reveal);
+               int ascii, int reveal, int fogview);
+
+/* The players' frame over fog: clears the interiors of the visible tiles fog
+ * still hides, after anything that tints ground indiscriminately -- the
+ * range wash, a trail, the selection box -- so none of them draws the shape
+ * of a room nobody can see. Run only when one of those is showing. */
+void grid_blank_fog(Renderer *r, const Map *m, const GridView *g);
 
 /* Highlights the tile the cursor is on. */
 void grid_draw_tile_cursor(Renderer *r, const GridView *g, int tx, int ty, uint32_t bg);

@@ -54,6 +54,11 @@ typedef struct {
 
     uint32_t terrain_fg[TILE_COUNT];
     uint32_t terrain_bg[TILE_COUNT];
+    /* Fog. Build mode tints each patch in a colour of its own, fifteen hues
+     * at one low value so neighbours part by hue and none shouts; play mode
+     * shows the GM what the table cannot see on a background of its own. */
+    uint32_t fog_tint[FOG_PATCH_MAX];
+    uint32_t fog_gm_bg;
 } Theme;
 
 extern const Theme THEME_DARK;

@@ -267,8 +267,11 @@ int  play_can_place(const Map *m, int tx, int ty, int size, int except);
 int  play_can_place_set(const Map *m, int tx, int ty, int size,
                         const int *skip, int nskip);
 
+/* `players` draws the players' frame: over fog it leaves out whatever the
+ * party cannot see -- hidden ground, the creatures on it, and the cursor,
+ * ring, trail and range anchored in the dark. */
 void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
-               const Theme *th, int ascii);
+               const Theme *th, int ascii, int players);
 /* `gm` says whose eyes: the GM's line may mention that a note exists; the
  * players' never does. */
 void play_status(const Play *p, const Map *m, const Editor *e, int gm, char *buf, size_t bufsz);

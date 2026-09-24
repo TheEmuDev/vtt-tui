@@ -93,6 +93,8 @@ Map *map_new(int w, int h, const char *name)
     m->tiles  = xcalloc((size_t)w * (size_t)h, 1);
     m->vedges = xcalloc((size_t)(w + 1) * (size_t)h, 1);
     m->hedges = xcalloc((size_t)w * (size_t)(h + 1), 1);
+    m->fog    = xcalloc((size_t)w * (size_t)h, 1);
+    for (int i = 0; i < FOG_PATCH_MAX; i++) m->fog_patches[i].x1 = -1;
     m->zoom     = 1;
     m->scale_ft = MAP_SCALE_DEFAULT;
     m->metric   = MAP_METRIC_DEFAULT;
@@ -106,6 +108,7 @@ void map_free(Map *m)
     free(m->tiles);
     free(m->vedges);
     free(m->hedges);
+    free(m->fog);
     tokens_free(&m->tokens);
     free(m);
 }
@@ -119,12 +122,23 @@ int map_resize(Map *m, int w, int h)
     uint8_t *tiles  = xcalloc((size_t)w * (size_t)h, 1);
     uint8_t *vedges = xcalloc((size_t)(w + 1) * (size_t)h, 1);
     uint8_t *hedges = xcalloc((size_t)w * (size_t)(h + 1), 1);
+    uint8_t *fog    = xcalloc((size_t)w * (size_t)h, 1);
 
     int cw = imin(w, m->w), ch = imin(h, m->h);
 
-    for (int y = 0; y < ch; y++)
+    for (int y = 0; y < ch; y++) {
         memcpy(tiles + (size_t)y * (size_t)w,
                m->tiles + (size_t)y * (size_t)m->w, (size_t)cw);
+        memcpy(fog + (size_t)y * (size_t)w,
+               m->fog + (size_t)y * (size_t)m->w, (size_t)cw);
+    }
+    for (int i = 0; i < FOG_PATCH_MAX; i++) {
+        FogPatch *p = &m->fog_patches[i];
+        if (p->x1 < p->x0) continue;
+        if (p->x0 >= w || p->y0 >= h) { p->x0 = 0; p->x1 = -1; continue; }
+        if (p->x1 >= w) p->x1 = (int16_t)(w - 1);
+        if (p->y1 >= h) p->y1 = (int16_t)(h - 1);
+    }
 
     /* Edge arrays are one wider/taller than the tile grid, so the copied span
      * includes the boundary that closes the preserved region. */
@@ -139,6 +153,8 @@ int map_resize(Map *m, int w, int h)
     free(m->tiles);
     free(m->vedges);
     free(m->hedges);
+    free(m->fog);
+    m->fog    = fog;
     m->tiles  = tiles;
     m->vedges = vedges;
     m->hedges = hedges;
@@ -241,6 +257,24 @@ int map_blocked(const Map *m, int x, int y, int dx, int dy)
 }
 
 static void order(int *a, int *b) { if (*a > *b) { int t = *a; *a = *b; *b = t; } }
+
+void map_fog_set(Map *m, int x, int y, uint8_t f)
+{
+    if (!map_in_bounds(m, x, y)) return;
+    m->fog[(size_t)y * (size_t)m->w + (size_t)x] = f;
+    int id = f & FOG_ID;
+    if (!id) return;
+    FogPatch *p = &m->fog_patches[id - 1];
+    if (p->x1 < p->x0) {
+        p->x0 = p->x1 = (int16_t)x;
+        p->y0 = p->y1 = (int16_t)y;
+        return;
+    }
+    if (x < p->x0) p->x0 = (int16_t)x;
+    if (x > p->x1) p->x1 = (int16_t)x;
+    if (y < p->y0) p->y0 = (int16_t)y;
+    if (y > p->y1) p->y1 = (int16_t)y;
+}
 
 static int note_index(const Map *m, int x, int y)
 {

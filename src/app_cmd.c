@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "dice.h"
+#include "fog.h"
 
 /* ---------------------------------------------------------------- clocks */
 
@@ -413,6 +414,151 @@ static void serve_command(App *a, const char *rest)
     app_note(a, msg);
 }
 
+/* ------------------------------------------------------------------- fog */
+
+static void fog_list(App *a)
+{
+    const Map *m = a->map;
+    char msg[200];
+    int  off = snprintf(msg, sizeof msg, "fog %s", m->fog_on ? "on" : "off");
+    int  n = 0;
+    for (int i = 0; i < FOG_PATCH_MAX && off < (int)sizeof msg - 40; i++) {
+        const FogPatch *p = &m->fog_patches[i];
+        if (!p->name[0] || p->dead) continue;
+        int seen, tiles = fog_count(m, i + 1, &seen);
+        char rev[12];
+        if (p->reveal == FOG_REVEAL_MANUAL) str_lcpy(rev, "manual", sizeof rev);
+        else                                snprintf(rev, sizeof rev, "r%d", p->reveal);
+        off += snprintf(msg + off, sizeof msg - (size_t)off, "%s%s %s %d/%d%s%s%s",
+                        n++ ? ", " : ": ", p->name, rev, seen, tiles,
+                        p->memory ? "" : " lantern", p->disabled ? " disabled" : "",
+                        i + 1 == a->ed.fog_patch ? " *" : "");
+    }
+    if (!n) str_lcpy(msg, "no fog - :fog NAME starts a patch, then g f paints it in build mode", sizeof msg);
+    app_set_status(a, msg);
+}
+
+/* :fog                       list the patches, the one g f paints marked *
+ * :fog on | off              the master switch; painting is kept either way
+ * :fog --soft-edge           the half-lit rim, for every patch that follows the map
+ * :fog all [N]               a patch over the whole map
+ * :fog NAME [N | manual]     make NAME the patch g f paints, creating it; its reveal
+ * :fog NAME memory on|off    does lit ground stay drawn once the party leaves
+ * :fog NAME --soft-edge      that patch's own rim setting; --no-soft-edge
+ * :fog NAME clear | hide     light the whole patch, or put it back in the dark
+ * :fog NAME disable | enable keep the painting, stop it hiding / start again
+ * :fog NAME delete           scrub it off the map for good */
+static void fog_command(App *a, const char *rest)
+{
+    Map *m = a->map;
+    char msg[160];
+    if (!*rest) { fog_list(a); return; }
+
+    char w1[32] = { 0 }, w2[32] = { 0 }, w3[32] = { 0 };
+    sscanf(rest, "%31s %31s %31s", w1, w2, w3);
+
+    if (!strcmp(w1, "on") || !strcmp(w1, "off")) {
+        if (w2[0]) { app_set_status(a, ":fog on, :fog off"); return; }
+        m->fog_on = !strcmp(w1, "on");
+        map_touch(m);
+        app_note(a, m->fog_on ? "fog on" : "fog off - the painting is kept; :fog on brings it back");
+        return;
+    }
+    if (!strcmp(w1, "--soft-edge") || !strcmp(w1, "--no-soft-edge")) {
+        m->fog_soft_edge = !strcmp(w1, "--soft-edge");
+        map_touch(m);
+        app_note(a, m->fog_soft_edge ? "soft edge on for every patch that follows the map"
+                                     : "soft edge off for every patch that follows the map");
+        return;
+    }
+
+    int all = !strcmp(w1, "all");
+    const char *name = all ? "All" : w1;
+
+    int id = all ? fog_find(m, "All") : fog_find(m, name);
+    if (id < 0) {
+        snprintf(msg, sizeof msg, "\"%.20s\" could be more than one patch", name);
+        app_set_status(a, msg);
+        return;
+    }
+    const char *verb = w2;
+    const char *arg  = w3;
+
+    /* Verbs on an existing patch. */
+    if (!strcmp(verb, "clear") || !strcmp(verb, "hide") || !strcmp(verb, "disable") ||
+        !strcmp(verb, "enable") || !strcmp(verb, "delete")) {
+        if (!id) { snprintf(msg, sizeof msg, "no fog patch called %.20s", name); app_set_status(a, msg); return; }
+        FogPatch *p = &m->fog_patches[id - 1];
+        char pname[FOG_NAME_MAX];
+        str_lcpy(pname, p->name, sizeof pname);
+        if (!strcmp(verb, "clear") || !strcmp(verb, "hide")) {
+            int n = fog_light_patch(m, &a->undo, id, !strcmp(verb, "clear"));
+            snprintf(msg, sizeof msg, "%s %s - %d square%s", !strcmp(verb, "clear") ? "lit" : "darkened",
+                     pname, n, n == 1 ? "" : "s");
+        } else if (!strcmp(verb, "delete")) {
+            fog_delete(m, id);
+            if (a->ed.fog_patch == id) a->ed.fog_patch = 0;
+            snprintf(msg, sizeof msg, "fog patch %s deleted, painting and all", pname);
+        } else {
+            p->disabled = !strcmp(verb, "disable");
+            map_touch(m);
+            snprintf(msg, sizeof msg, "fog patch %s %s", pname,
+                     p->disabled ? "disabled - it hides nothing until :fog NAME enable" : "enabled");
+        }
+        app_note(a, msg);
+        return;
+    }
+
+    /* Otherwise it is the patch g f paints, created if need be, with any
+     * setting that came with it. */
+    int created = 0;
+    if (!id) {
+        id = fog_create(m, name);
+        if (id == 0) { snprintf(msg, sizeof msg, "no room: a map holds %d fog patches", FOG_PATCH_MAX); app_set_status(a, msg); return; }
+        if (id < 0)  { app_set_status(a, "a fog patch's name is one word, starting with a letter, under 16 characters"); return; }
+        created = 1;
+    }
+    FogPatch *p = &m->fog_patches[id - 1];
+
+    if (!strcmp(verb, "memory")) {
+        if (strcmp(arg, "on") && strcmp(arg, "off")) { app_set_status(a, ":fog NAME memory on, or off"); return; }
+        p->memory = !strcmp(arg, "on");
+    } else if (!strcmp(verb, "--soft-edge") || !strcmp(verb, "--no-soft-edge")) {
+        p->soft_edge = (int8_t)!strcmp(verb, "--soft-edge");
+    } else if (!strcmp(verb, "manual")) {
+        p->reveal = FOG_REVEAL_MANUAL;
+    } else if (verb[0]) {
+        char *end;
+        long v = strtol(verb, &end, 10);
+        if (*end || v < 0 || v > 99) {
+            app_set_status(a, ":fog NAME [reveal 0-99 | manual | memory on/off | --soft-edge | clear | hide | disable | enable | delete]");
+            return;
+        }
+        p->reveal = (int8_t)v;
+    }
+    map_touch(m);
+    a->ed.fog_patch = id;
+
+    if (all) {
+        undo_begin(&a->undo);
+        for (int y = 0; y < m->h; y++)
+            for (int x = 0; x < m->w; x++)
+                if ((fog_at(m, x, y) & FOG_ID) != (uint8_t)id) fog_paint(m, &a->undo, x, y, id);
+        undo_end(&a->undo);
+    }
+    int switched = 0;
+    if (created && !m->fog_on) { m->fog_on = 1; switched = 1; }
+
+    char rev[16];
+    if (p->reveal == FOG_REVEAL_MANUAL) str_lcpy(rev, "lit by hand only", sizeof rev);
+    else                                snprintf(rev, sizeof rev, "reveal %d", p->reveal);
+    snprintf(msg, sizeof msg, "fog patch %s%s: %s, memory %s%s%s", p->name, created ? " made" : "",
+             rev, p->memory ? "on" : "off",
+             all ? " - over the whole map" : created ? " - g f paints it in build mode" : "",
+             switched ? "; fog on" : "");
+    app_note(a, msg);
+}
+
 /* --------------------------------------------------------- command line */
 
 void app_exec_command(App *a, const char *line)
@@ -572,6 +718,7 @@ void app_exec_command(App *a, const char *line)
         app_set_status(a, n ? msg : "no notes - s n writes one on a creature or a square");
         return;
     }
+    if (!strcmp(verb, "fog"))   { fog_command(a, rest);   return; }
     if (!strcmp(verb, "clock")) { clock_command(a, rest); return; }
     if (!strcmp(verb, "tick"))  { tick_command(a, rest);  return; }
     if (!strcmp(verb, "player")) {

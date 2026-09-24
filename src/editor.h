@@ -61,6 +61,7 @@ typedef struct {
 
     int    count;              /* pending numeric prefix, 0 when none */
     int    pending_g;          /* a `g` was typed and is awaiting its pair */
+    int    fog_patch;          /* the fog patch g f paints, 1..15, or 0 for none yet */
 
     /* What the pen lays and what the brush paints. Held here rather than
      * passed around so every tool agrees on the current choice. */
@@ -134,6 +135,9 @@ void ed_wall_shape(Map *m, Undo *u, const EdShape *s, uint8_t kind);
 /* Applies a tile kind to the cursor tile, or to the whole selection when
  * visual mode is active. */
 void ed_apply_tiles(Editor *e, Map *m, Undo *u, uint8_t kind);
+/* The same footprint, painted into fog patch `id`, or scrubbed with 0.
+ * Returns how many tiles changed. */
+int  ed_apply_fog(Editor *e, Map *m, Undo *u, int id);
 void ed_toggle_tile(Editor *e, Map *m, Undo *u);
 
 void ed_draw(Renderer *r, const Map *m, const Editor *e, const Theme *th, int ascii);

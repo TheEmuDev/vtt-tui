@@ -92,7 +92,7 @@ next one does too:
    metric; `r` is the range and `R` its shape; `v` and `V` are the two selections; `b` and
    `B`, `t` and `T`, `a` and `A` run the same cycle both ways. A capital never starts
    something unrelated.
-5. **A family gets a prefix, not a row of keys.** `i p` `i e`, `s a` `s c` `s d`. The
+5. **A family gets a prefix, not a row of keys.** `i p` `i e`, `s a` `s c` `s d`, `g r` `g h`. The
    prefix alone lists its options; `esc` abandons it; it swallows the next key whatever it is.
 6. **The cursor is the pointer.** Whatever needs a place or a direction reads the cursor —
    the ruler's far end, the brush's footprint, the range template's aim. There are no
@@ -155,6 +155,7 @@ Maps are found in the current directory and in `~/.local/share/vtt/maps`.
 | `b` `B` | brush size, 1×1 → 2×2 → 3×3 — `2b` names it |
 | `space` | toggle the cursor tile between floor and void |
 | `s n` | a note on this square |
+| `g f` `g c` | paint the current [fog](#fog-of-war-fog) patch over the brush or the box / scrub fog off it |
 | `u`, `Ctrl-r` | undo / redo |
 | `+` `-` | zoom in / out |
 | `z` | centre the view on the cursor |
@@ -255,6 +256,8 @@ A whole pen-down stroke is one undo step.
 | `s n` | a note on the selected creature, or on this square when there is none |
 | `s v` | the selected creature's counters: `hp 6`, `hp -2`, `stress 0/6`, `-hp` |
 | `<` `>` | one off / one on its current counter — `3<` takes three (see *Counters* below) |
+| `g r` `g h` | light / darken the [fog](#fog-of-war-fog) under the cursor or the box, by hand |
+| `g R` `g H` | light / darken the whole fog patch under the cursor |
 | `a` `A` | next / previous turn — `3a` moves three on (see [Turn order](#turn-order-a)) |
 | `s i` | initiative: a number puts the creature in the turn order, a blank takes it out |
 | `s t` | hand the turn to this creature, whether or not it is in the order |
@@ -269,9 +272,10 @@ A whole pen-down stroke is one undo step.
 | `#` | column letters and row numbers, on or off |
 | `?` | every key, in full |
 
-Two prefixes carry a family each, which is what keeps the bar to six hints: `i` inserts
-(`i p`, `i e`) and `s` is for a creature's state — its markers (`s a`, `s c`, `s d`), its place in the
-fight (`s i`, `s t`), its note (`s n`) and its counters (`s v`). Press either alone and
+Three prefixes carry a family each, which is what keeps the bar to six hints: `i` inserts
+(`i p`, `i e`), `s` is for a creature's state — its markers (`s a`, `s c`, `s d`), its place in the
+fight (`s i`, `s t`), its note (`s n`) and its counters (`s v`) — and `g` is the GM's hand on the
+[fog](#fog-of-war-fog) (`g r`, `g h`, `g R`, `g H`). Press any of them alone and
 the status line names the options; `esc` abandons it. A prefix swallows whatever comes
 next, so a half-typed command can never turn into a different whole one.
 
@@ -725,6 +729,52 @@ undone, since they are as easy to redo by hand as a tick is not. Resizing keeps 
 count, unless the direction changes, when the clock starts over. Clocks are saved with the
 map and go to the [session log](#session-log-log) as they change.
 
+### Fog of war (`:fog`)
+
+Fog hides parts of the map from the players until they are lit. It is made of **patches**:
+named areas painted onto chosen squares, each with its own settings, so a map can have a lit
+entrance hall, a dark crypt behind it, and a mist over the lake. Ground in no patch is always
+visible. Fog is off until the first patch is made.
+
+What a patch still hides is drawn three ways. In the [players' frame](#remote-view-serve-mirror)
+— the phones, the mirror, and `:player preview` — it is not drawn at all: no floor, no walls
+inside it, no creatures, and not even the dot that marks void, since a field of dots would
+trace the room. The wall between a lit room and a dark one is drawn, from the lit side. The
+GM's own screen shows the same ground on a dark blue shadow, with everything on it, so the
+GM sees the whole map and what the table sees at once. Build mode tints each patch in a colour
+of its own.
+
+```
+:fog Crypt          make a patch (or pick one) for g f to paint; fog comes on with the first
+:fog Crypt 3        how far a creature will light it, in squares  (manual: only by hand)
+:fog Crypt memory off   the dark closes behind the party instead of staying mapped
+:fog Crypt clear    light the whole patch, for when the door opens;  hide  puts it back
+:fog Crypt disable  keep the painting, hide nothing;  enable  puts it back to work
+:fog Crypt delete   scrub it off the map for good
+:fog all            one patch over the whole map, for plain fog of war
+:fog on | off       the master switch; the painting is kept either way
+:fog                list them:  fog on: Crypt r3 12/40 *, Mist r2 0/16
+```
+
+**Painting** is build mode's: `g f` paints the current patch over the brush's footprint, or
+over the `v` box or `V` circle, and `g c` scrubs fog off it. The status line names the patch the
+cursor stands in and the one `g f` would paint. **Lighting** is play mode's: `g r` lights what
+the cursor covers (or the `v` box), `g h` puts it back in the dark, and `g R` / `g H` do the
+whole patch under the cursor. Painting and lighting are undoable, a stroke at a time; a
+patch's settings are not, any more than starting a clock is.
+
+In the players' frame fog also keeps the dark from being described. A creature in it is named
+`?` in the title bar and the turn panel. The cursor is not drawn while it rests in the dark,
+since its size follows whatever it rests on. The status line says `dark` for such a square,
+names no hidden creature, leaves out the count of creatures on the map, and shows no message
+at all — most of what the app says names a creature or a square. The range highlight and the
+ruler anchored in the dark are not drawn for the players, and one anchored in the light tints
+only lit ground.
+
+Creatures lighting fog by walking into it — each patch's `reveal`, `memory` and the soft
+edge (`:fog --soft-edge`) — are the next steps of [docs/FOG.md](docs/FOG.md). For now `reveal`
+and `memory` are stored and fog is lit by hand.
+
 ### Dice (`:roll`)
 
 ```
@@ -1008,6 +1058,7 @@ with no verdict, ruleset or not.
 | `:panel` | the side panel, on or off |
 | `:clock NAME N` | start a [clock](#clocks-clock-tick); `:tick` fills a segment |
 | `:notes` | where the [notes](#play-mode-f2) are |
+| `:fog ...` | [fog of war](#fog-of-war-fog): patches, their settings, the master switch |
 | `:serve [PORT] [--stay-alive]` | the [remote view](#remote-view-serve-mirror); `:serve off` closes it |
 | `:player preview` | see the players' frame on your own screen; `q` returns |
 | `:mirror` | a second terminal window mirroring play mode |
@@ -1059,6 +1110,9 @@ clock Dragon 3 6
 clock Fuse 4 4 down
 roll attack "2d12+3"
 note 5 3 "pressure plate"
+fog on
+fogpatch 1 Crypt reveal 2 memory on
+fog             # one line per row, like tiles: ..........AAAaaa
 ```
 
 A `tokenstatus` line hangs a marker on the token above it, so the attachment needs no index
@@ -1069,6 +1123,9 @@ a game that passes one; the players having it is the default and is not written.
 `clock` line is a [clock](#clocks-clock-tick): its name, then filled and total segments,
 then `down` for one that counts down;
 a `roll` line a [named roll](#dice-roll). `tokennote` hangs a note on the token above it, `tokencounter NAME VALUE MAX` a counter,
+and `fogpatch` lines name the [fog](#fog-of-war-fog) patches whose ground the `fog` section's rows
+hold, one character a square: `.` for none, `A`-`O` for patch 1-15 unseen, `a`-`o` for seen,
+and `1`-`9` then `!"#$%&` for lit by hand,
 and `note x y` puts one on a square.
 
 | terrain | char | | boundary | char |
@@ -1088,7 +1145,7 @@ silently drop them, losing combat state from a saved fight, so it refuses too. V
 added the turn order, for the same reason — but only a map with a fight in it says 4. One
 without is still written as version 3, which says everything it needs to and stays
 loadable by the builds that came before. Version 5 added clocks, named rolls and notes, and
-version 6 counters, on the same terms: the writer always picks the lowest version that
+version 6 counters and fog, on the same terms: the writer always picks the lowest version that
 says everything in the map. Each version
 still loads everything older, and an unrecognised character reads as empty rather than
 failing the load.

@@ -1,6 +1,7 @@
 #include "turn.h"
 
 #include "counter.h"
+#include "fog.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -22,8 +23,14 @@ static int64_t walk_key(const Token *t, int idx)
     return ((int64_t)1 << 48) | (int64_t)idx;
 }
 
+/* Set for the length of a call drawing words for the players' frame over
+ * fog: a creature the party cannot see is named "?", so the title bar and
+ * the panel say someone is acting in the dark without saying who. */
+static const Map *g_mask;
+
 static const char *name_of(const Token *t)
 {
+    if (g_mask && fog_token_hidden(g_mask, t)) return "?";
     return t->label[0] ? t->label : token_kind_name(t->kind);
 }
 
@@ -236,6 +243,20 @@ static const char *side_name(const Map *m)
 
 void turn_status(const Map *m, char *buf, size_t bufsz)
 {
+    turn_status_view(m, 0, buf, bufsz);
+}
+
+static void turn_status_body(const Map *m, char *buf, size_t bufsz);
+
+void turn_status_view(const Map *m, int players, char *buf, size_t bufsz)
+{
+    g_mask = players && fog_any(m) ? m : NULL;
+    turn_status_body(m, buf, bufsz);
+    g_mask = NULL;
+}
+
+static void turn_status_body(const Map *m, char *buf, size_t bufsz)
+{
     PROF_ZONE("turn.status");
     buf[0] = '\0';
 
@@ -319,8 +340,20 @@ static int draw_actor_counter(Renderer *r, const Token *t, const char *counter,
     return n + 1;
 }
 
+static void turn_draw_panel_body(Renderer *r, const Map *m, const Theme *th, Rect rc,
+                                 int ascii, const char *counter);
+
 void turn_draw_panel(Renderer *r, const Map *m, const Theme *th, Rect rc, int ascii,
                      const char *counter)
+{
+    /* No counter means the players' frame, which never names the unseen. */
+    g_mask = !counter && fog_any(m) ? m : NULL;
+    turn_draw_panel_body(r, m, th, rc, ascii, counter);
+    g_mask = NULL;
+}
+
+static void turn_draw_panel_body(Renderer *r, const Map *m, const Theme *th, Rect rc,
+                                 int ascii, const char *counter)
 {
     PROF_ZONE("panel.draw");
     if (rc.w < 8 || rc.h < 3) return;

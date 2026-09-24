@@ -245,6 +245,21 @@ void undo_set_spotlight(Undo *u, Map *m, int side)
     map_touch(m);
 }
 
+void undo_set_fog(Undo *u, Map *m, int x, int y, uint8_t f)
+{
+    if (!map_in_bounds(m, x, y)) return;
+    uint8_t was = m->fog[(size_t)y * (size_t)m->w + (size_t)x];
+    if (was == f) return;
+    Op *o = push(u);
+    o->kind   = OP_FOG;
+    o->x      = (int16_t)x;
+    o->y      = (int16_t)y;
+    o->before = was;
+    o->after  = f;
+    map_fog_set(m, x, y, f);
+    map_touch(m);
+}
+
 void undo_set_clock(Undo *u, Map *m, int slot, int value)
 {
     if (slot < 0 || slot >= CLOCK_MAX || !m->clocks[slot].name[0]) return;
@@ -305,6 +320,9 @@ static void apply(const Undo *u, Map *m, const Op *o, int forward)
         break;
     case OP_SPOTLIGHT:
         m->spotlight = forward ? o->y : o->x;
+        break;
+    case OP_FOG:
+        map_fog_set(m, o->x, o->y, forward ? o->after : o->before);
         break;
     case OP_CLOCK:
         /* The slot may have been dropped and started again since. The op

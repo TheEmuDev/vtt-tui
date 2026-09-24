@@ -14,6 +14,7 @@
 
 #include "app.h"
 #include "counter.h"
+#include "fog.h"
 #include "net.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -697,7 +698,7 @@ static void test_grid(void)
     g.zoom = 0;                       /* pitch 2x2, so corner (cx,cy) is at (2cx,2cy) */
     g.view = rect(0, 0, 40, 20);
 
-    grid_draw(&r, m, &g, &THEME_DARK, 0, 1);
+    grid_draw(&r, m, &g, &THEME_DARK, 0, 1, FOGV_GM);
 
     /* This is the rule that makes edge-walls legible: where a wall meets a
      * grid line, the junction belongs to the wall alone. The room's top-left
@@ -724,7 +725,7 @@ static void test_grid(void)
     CASE("void areas draw their marks and no lattice");
     Map *v = map_new(3, 3, "void");
     rnd_begin(&r);
-    grid_draw(&r, v, &g, &THEME_DARK, 0, 1);
+    grid_draw(&r, v, &g, &THEME_DARK, 0, 1, FOGV_GM);
     int drawn = 0, marks = 0;
     for (int y = 0; y < 8; y++)
         for (int x = 0; x < 8; x++) {
@@ -2658,7 +2659,7 @@ static void test_terrain(void)
         Map *t = map_new(3, 3, "t");
         map_fill_tiles(t, 0, 0, 2, 2, (uint8_t)k);
         rnd_begin(&r);
-        grid_draw(&r, t, &g, &THEME_DARK, 0, 1);
+        grid_draw(&r, t, &g, &THEME_DARK, 0, 1, FOGV_GM);
         CHECK_EQ(rnd_at(&r, 0, 0)->ch, 0x250Cu);      /* the map's outer corner */
         map_free(t);
     }
@@ -2666,7 +2667,7 @@ static void test_terrain(void)
     CASE("void draws its mark and no terrain, whatever the palette");
     Map *v = map_new(3, 3, "v");
     rnd_begin(&r);
-    grid_draw(&r, v, &g, &THEME_DARK, 0, 1);
+    grid_draw(&r, v, &g, &THEME_DARK, 0, 1, FOGV_GM);
     int drawn = 0, marks = 0;
     for (int y = 0; y < 8; y++)
         for (int x = 0; x < 8; x++) {
@@ -2705,12 +2706,12 @@ static void test_secret_doors(void)
      * can tell it from a wall. Not by glyph, and not by colour. */
     CASE("in play mode a secret door is pixel for pixel a wall");
     rnd_begin(&r);
-    grid_draw(&r, m, &g, &THEME_DARK, 0, 0);
+    grid_draw(&r, m, &g, &THEME_DARK, 0, 0, FOGV_GM);
     Cell secret[40 * 20];
     memcpy(secret, r.back, sizeof secret);
 
     rnd_begin(&r);
-    grid_draw(&r, w, &g, &THEME_DARK, 0, 0);
+    grid_draw(&r, w, &g, &THEME_DARK, 0, 0, FOGV_GM);
     int same = 1;
     for (int i = 0; i < 40 * 20; i++)
         if (secret[i].ch != r.back[i].ch || secret[i].fg != r.back[i].fg ||
@@ -2720,7 +2721,7 @@ static void test_secret_doors(void)
 
     CASE("in build mode it is marked, so the GM can see their own door");
     rnd_begin(&r);
-    grid_draw(&r, m, &g, &THEME_DARK, 0, 1);
+    grid_draw(&r, m, &g, &THEME_DARK, 0, 1, FOGV_GM);
     int differs = 0;
     for (int i = 0; i < 40 * 20; i++)
         if (secret[i].ch != r.back[i].ch || secret[i].fg != r.back[i].fg)
@@ -4378,7 +4379,7 @@ static void test_selection_contrast(void)
     CASE("an unselected creature has no ring");
     play_focus(&p, -1);
     rnd_begin(&r);
-    play_draw(&r, m, &e, &p, th, 0);
+    play_draw(&r, m, &e, &p, th, 0, 0);
     Cell *ring[4];
     RING_MID(ring);
     for (int i = 0; i < 4; i++) {
@@ -4392,7 +4393,7 @@ static void test_selection_contrast(void)
                                        * only cue left, which is the case
                                        * that was failing */
     rnd_begin(&r);
-    play_draw(&r, m, &e, &p, th, 0);
+    play_draw(&r, m, &e, &p, th, 0, 0);
     RING_MID(ring);
     for (int i = 0; i < 4; i++) {
         CHECK(ring[i] != NULL);
@@ -4409,7 +4410,7 @@ static void test_selection_contrast(void)
     play_focus(&p, bi);
     grid_token_area(&e.view, 8, 3, 1, &area);
     rnd_begin(&r);
-    play_draw(&r, m, &e, &p, th, 0);
+    play_draw(&r, m, &e, &p, th, 0, 0);
     RING_MID(ring);
     CHECK_EQ(ring[0]->fg, th->enemy_sel);
 
@@ -4815,7 +4816,7 @@ static void test_cursor_size(void)
 
     #define FRAME() do {                              \
         rnd_begin(&r);                                \
-        play_draw(&r, m, &e, &p, &THEME_DARK, 0);     \
+        play_draw(&r, m, &e, &p, &THEME_DARK, 0, 0);     \
     } while (0)
 
     CASE("with nothing selected the cursor is the size the next token will be");
@@ -5161,7 +5162,7 @@ static void test_move_label(void)
     ByteBuf f;
     #define FRAME() do {                                   \
         rnd_begin(&r);                                     \
-        play_draw(&r, m, &e, &p, &THEME_DARK, 0);          \
+        play_draw(&r, m, &e, &p, &THEME_DARK, 0, 0);          \
         bb_init(&f, 32768);                                \
         rnd_dump(&r, &f);                                  \
         bb_putc(&f, '\0');                                 \
@@ -5237,7 +5238,7 @@ static void test_move_label(void)
         play_trail_sync(&p, m);
 
         rnd_begin(&r);
-        play_draw(&r, m, &e, &p, &THEME_DARK, 0);
+        play_draw(&r, m, &e, &p, &THEME_DARK, 0, 0);
         grid_ensure_visible(&e.view, m, x, 4, ED_SCROLLOFF);
 
         bb_init(&f, 32768);
@@ -5444,7 +5445,7 @@ static void test_void_reads_as_void(void)
     g.view = rect(0, 0, 60, 20);
 
     rnd_begin(&r);
-    grid_draw(&r, m, &g, &THEME_DARK, 0, 1);
+    grid_draw(&r, m, &g, &THEME_DARK, 0, 1, FOGV_GM);
 
     int hx, hy, fx, fy;
     grid_tile_interior(&g, 4, 2, &hx, &hy);   /* the hole */
@@ -5479,14 +5480,14 @@ static void test_void_reads_as_void(void)
 
     CASE("ascii mode marks it too");
     rnd_begin(&r);
-    grid_draw(&r, m, &g, &THEME_DARK, 1, 1);
+    grid_draw(&r, m, &g, &THEME_DARK, 1, 1, FOGV_GM);
     CHECK_EQ(rnd_at(&r, mx, my)->ch, (uint32_t)'.');
 
     CASE("every zoom puts the mark inside the square");
     for (int z = 0; z < ZOOM_COUNT; z++) {
         g.zoom = z;
         rnd_begin(&r);
-        grid_draw(&r, m, &g, &THEME_DARK, 0, 1);
+        grid_draw(&r, m, &g, &THEME_DARK, 0, 1, FOGV_GM);
         grid_tile_interior(&g, 4, 2, &hx, &hy);
         int found = 0;
         for (int j2 = 0; j2 < ZOOM[z].ih; j2++)
@@ -9524,6 +9525,357 @@ static void test_counters(void)
     sandbox_leave(&sb);
 }
 
+/* A 10x4 map with a wall down the middle, x=5, for the fog tests. */
+static void write_split_map(const char *dir, const char *name)
+{
+    char path[512];
+    snprintf(path, sizeof path, "%s/%s", dir, name);
+    FILE *f = fopen(path, "w");
+    if (!f) return;
+    fputs("VTT 2\nname x\nsize 10 4\nzoom 1\ntiles\n"
+          "..........\n..........\n..........\n..........\n"
+          "vedges\n     |     \n     |     \n     |     \n     |     \n"
+          "hedges\n          \n          \n          \n          \n          \n", f);
+    fclose(f);
+}
+
+/* The first cell of a tile's interior, as drawn into r. */
+static const Cell *tile_cell(const Renderer *r, const App *a, int tx, int ty)
+{
+    int sx, sy;
+    grid_tile_interior(&a->ed.view, tx, ty, &sx, &sy);
+    return &r->back[(size_t)sy * (size_t)r->w + (size_t)sx];
+}
+
+/* Fog, part one: patches painted in build mode, lit and darkened by hand in
+ * play, blank in the players' frame, dimmed in the GM's, tinted in build
+ * mode, and saved. */
+static void test_fog(void)
+{
+    Sandbox sb = sandbox_enter("fog");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    write_split_map(sb.dir, "crypt.vtt");
+    char path[600];
+    snprintf(path, sizeof path, "%s/crypt.vtt", sb.dir);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 64, 14);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Map *m = a.map;
+
+    CASE("no fog to begin with: nothing hides, and the frames cannot differ for it");
+    CHECK_EQ(fog_any(m), 0);
+    press(&a, ":fog\r");
+    CHECK(strstr(a.status, "no fog") != NULL);
+    press(&a, "gf");
+    CHECK(strstr(a.status, "no fog patch to paint") != NULL);
+
+    CASE(":fog NAME makes a patch with the defaults, makes it the brush's, and turns fog on");
+    press(&a, ":fog Crypt\r");
+    int id = fog_find(m, "Crypt");
+    CHECK_EQ(id, 1);
+    CHECK_EQ(a.ed.fog_patch, 1);
+    CHECK_EQ(m->fog_on, 1);
+    CHECK_EQ(m->fog_patches[0].reveal, 2);
+    CHECK_EQ(m->fog_patches[0].memory, 1);
+    CHECK_EQ(m->fog_patches[0].soft_edge, -1);
+    CHECK(strstr(a.status, "fog patch Crypt made") != NULL);
+    CHECK(strstr(a.status, "fog on") != NULL);
+    CHECK_EQ(fog_any(m), 0);                               /* nothing painted yet */
+
+    CASE("g f paints the box, and it is one undo step; g c scrubs the brush's square");
+    a.ed.cx = 5; a.ed.cy = 0;
+    press(&a, "v4l3jgf");
+    CHECK_EQ(fog_count(m, 1, NULL), 20);
+    CHECK_EQ(fog_at(m, 4, 0) & FOG_ID, 0);
+    CHECK_EQ(fog_at(m, 5, 0) & FOG_ID, 1);
+    CHECK_EQ(a.ed.mode, ED_NORMAL);
+    CHECK(strstr(a.status, "fog Crypt over 20 squares") != NULL);
+    CHECK_EQ(fog_any(m), 1);
+    press(&a, "u");
+    CHECK_EQ(fog_count(m, 1, NULL), 0);
+    press(&a, "\x12");
+    CHECK_EQ(fog_count(m, 1, NULL), 20);
+    a.ed.cx = 9; a.ed.cy = 3;
+    press(&a, "gc");
+    CHECK_EQ(fog_at(m, 9, 3), 0);
+    CHECK(strstr(a.status, "scrubbed from 1 square") != NULL);
+    press(&a, "u");
+    CHECK_EQ(fog_at(m, 9, 3) & FOG_ID, 1);
+    char line[192];
+    a.ed.cx = 6; a.ed.cy = 1;
+    ed_status(&a.ed, m, line, sizeof line);
+    CHECK(strstr(line, "fog Crypt") != NULL);
+
+    CASE("build mode tints painted ground in the patch's colour");
+    rnd_begin(&r); app_draw(&a);
+    CHECK_EQ(tile_cell(&r, &a, 7, 2)->bg, a.th->fog_tint[fog_tint(1)]);
+    CHECK(tile_cell(&r, &a, 2, 2)->bg != a.th->fog_tint[fog_tint(1)]);
+
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+    a.ed.cx = 7; a.ed.cy = 1;
+    press(&a, "ieOgre\r");
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "ipAria\r");
+    CHECK_EQ(m->tokens.n, 2);
+
+    CASE("the GM sees hidden ground dimmed and everything on it");
+    press(&a, "\x1b");
+    rnd_begin(&r); app_draw_view(&a, VIEW_GM);
+    CHECK_EQ(tile_cell(&r, &a, 8, 2)->bg, a.th->fog_gm_bg);
+    CHECK(tile_cell(&r, &a, 2, 2)->bg != a.th->fog_gm_bg);
+    ByteBuf fr;
+    bb_init(&fr, 65536); rnd_dump(&r, &fr); bb_putc(&fr, '\0');
+    CHECK(strstr(fr.data, "[O]") != NULL);
+    bb_free(&fr);
+
+    CASE("the players see nothing of it: no ground, no walls inside it, no Ogre; the dividing wall stays");
+    CHECK_EQ(fog_ground_hidden(m, 7, 1), 1);
+    CHECK_EQ(fog_token_hidden(m, &m->tokens.v[0]), 1);
+    CHECK_EQ(app_view_differs(&a), 1);
+    rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+    bb_init(&fr, 65536); rnd_dump(&r, &fr); bb_putc(&fr, '\0');
+    CHECK(strstr(fr.data, "[O]") == NULL);
+    CHECK(strstr(fr.data, "(A)") != NULL);
+    CHECK(strstr(fr.data, "┃") != NULL);              /* the heavy dividing wall */
+    bb_free(&fr);
+    int sx, sy;
+    grid_tile_screen(&a.ed.view, 8, 2, &sx, &sy);          /* a corner inside the fog */
+    CHECK_EQ(r.back[(size_t)sy * (size_t)r.w + (size_t)sx].ch, ' ');
+    CHECK_EQ(tile_cell(&r, &a, 8, 2)->ch, ' ');
+
+    CASE("in the dark the players' frame has no cursor, no name and no count");
+    a.ed.cx = 7; a.ed.cy = 1;                              /* on the Ogre */
+    play_focus(&a.play, 0);                                /* even selected */
+    play_status(&a.play, m, &a.ed, 0, line, sizeof line);
+    CHECK(strstr(line, "Ogre") == NULL);
+    CHECK(strstr(line, "dark") != NULL);
+    CHECK(strstr(line, "token") == NULL);
+    rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+    CHECK(tile_cell(&r, &a, 7, 1)->bg != a.th->cursor_bg);
+    bb_init(&fr, 65536); rnd_dump(&r, &fr); bb_putc(&fr, '\0');
+    CHECK(strstr(fr.data, "Ogre") == NULL);
+    bb_free(&fr);
+    play_status(&a.play, m, &a.ed, 1, line, sizeof line);  /* the GM's line still says */
+    CHECK(strstr(line, "Ogre") != NULL);
+
+    CASE("over fog the players' frame carries no status message at all");
+    press(&a, ":roll 2d6\r");
+    rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+    bb_init(&fr, 65536); rnd_dump(&r, &fr); bb_putc(&fr, '\0');
+    CHECK(strstr(fr.data, "2d6") == NULL);
+    bb_free(&fr);
+
+    CASE("the title bar and the panel name a creature in the dark '?'");
+    press(&a, "si12\r");
+    press(&a, "a");                                        /* the Ogre acts */
+    char title[128];
+    turn_status_view(m, 1, title, sizeof title);
+    CHECK(strstr(title, "?'s turn") != NULL);
+    CHECK(strstr(title, "Ogre") == NULL);
+    turn_status_view(m, 0, title, sizeof title);
+    CHECK(strstr(title, "Ogre's turn") != NULL);
+    rnd_resize(&r, 90, 14);
+    rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+    bb_init(&fr, 65536); rnd_dump(&r, &fr); bb_putc(&fr, '\0');
+    CHECK(strstr(fr.data, "Ogre") == NULL);
+    CHECK(strstr(fr.data, "12  ?") != NULL);
+    bb_free(&fr);
+    rnd_begin(&r); app_draw_view(&a, VIEW_GM);
+    bb_init(&fr, 65536); rnd_dump(&r, &fr); bb_putc(&fr, '\0');
+    CHECK(strstr(fr.data, "12  Ogre") != NULL);
+    bb_free(&fr);
+    press(&a, ":turns off\r");
+
+    CASE("a range anchored on a creature in the dark is not drawn for the players");
+    play_focus(&a.play, 0);
+    press(&a, "6r");
+    CHECK_EQ(a.play.range.active, 1);
+    rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+    CHECK(tile_cell(&r, &a, 3, 1)->bg != a.th->range_bg);  /* in range, on lit ground */
+    press(&a, "\x1b\x1b");
+
+    CASE("a range from a creature in the light tints lit ground only");
+    play_focus(&a.play, 1);                                /* Aria */
+    press(&a, "6r");
+    rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+    CHECK(tile_cell(&r, &a, 6, 1)->bg != a.th->range_bg);  /* hidden: blanked */
+    CHECK_EQ(tile_cell(&r, &a, 6, 1)->ch, ' ');
+    press(&a, "\x1b\x1b");
+
+    CASE("g r lights the cursor's square, and the Ogre on it; g h puts it back; both undo");
+    a.ed.cx = 7; a.ed.cy = 1;
+    press(&a, "gr");
+    CHECK(fog_at(m, 7, 1) & FOG_HELD);
+    CHECK(fog_at(m, 7, 1) & FOG_SEEN);
+    CHECK_EQ(fog_token_hidden(m, &m->tokens.v[0]), 0);
+    CHECK(strstr(a.status, "lit 1 square") != NULL);
+    rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+    bb_init(&fr, 65536); rnd_dump(&r, &fr); bb_putc(&fr, '\0');
+    CHECK(strstr(fr.data, "[O]") != NULL);
+    bb_free(&fr);
+    press(&a, "u");
+    CHECK_EQ(fog_token_hidden(m, &m->tokens.v[0]), 1);
+    press(&a, "\x12");
+    press(&a, "gh");
+    CHECK_EQ(fog_at(m, 7, 1), 1);
+    press(&a, "gh");
+    CHECK(strstr(a.status, "already dark") != NULL);
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "gr");
+    CHECK(strstr(a.status, "no fog here") != NULL);
+
+    CASE("g R lights the whole patch under the cursor, g H darkens it");
+    a.ed.cx = 6; a.ed.cy = 2;
+    press(&a, "gR");
+    CHECK(strstr(a.status, "lit Crypt - 20 squares") != NULL);
+    CHECK_EQ(fog_ground_hidden(m, 9, 3), 0);
+    press(&a, "gH");
+    CHECK_EQ(fog_ground_hidden(m, 9, 3), 1);
+    press(&a, "gx");
+    CHECK(strstr(a.status, "g wants r") != NULL);
+
+    CASE(":fog NAME clear and hide do the same by name; settings change and list");
+    press(&a, ":fog cr clear\r");
+    CHECK_EQ(fog_ground_hidden(m, 9, 3), 0);
+    press(&a, ":fog Crypt hide\r");
+    CHECK_EQ(fog_ground_hidden(m, 9, 3), 1);
+    press(&a, ":fog Crypt 1\r");
+    CHECK_EQ(m->fog_patches[0].reveal, 1);
+    press(&a, ":fog Crypt manual\r");
+    CHECK_EQ(m->fog_patches[0].reveal, FOG_REVEAL_MANUAL);
+    press(&a, ":fog Crypt memory off\r");
+    CHECK_EQ(m->fog_patches[0].memory, 0);
+    press(&a, ":fog Crypt --soft-edge\r");
+    CHECK_EQ(m->fog_patches[0].soft_edge, 1);
+    press(&a, ":fog --soft-edge\r");
+    CHECK_EQ(m->fog_soft_edge, 1);
+    press(&a, ":fog\r");
+    CHECK(strstr(a.status, "Crypt manual 0/20 lantern *") != NULL);
+    press(&a, ":fog Crypt memory maybe\r");
+    CHECK(strstr(a.status, "memory on, or off") != NULL);
+    press(&a, ":fog Crypt 500\r");
+    CHECK(strstr(a.status, ":fog NAME [") != NULL);
+    press(&a, ":fog 7up\r");
+    CHECK(strstr(a.status, "starting with a letter") != NULL);
+    press(&a, ":fog Crypt manual\r");
+
+    CASE("disable keeps the painting and hides nothing; enable puts it back");
+    press(&a, ":fog Crypt disable\r");
+    CHECK_EQ(fog_any(m), 0);
+    CHECK_EQ(fog_ground_hidden(m, 9, 3), 0);
+    CHECK_EQ(fog_count(m, 1, NULL), 20);
+    CHECK(strstr(a.status, "disabled") != NULL);
+    press(&a, ":fog Crypt enable\r");
+    CHECK_EQ(fog_ground_hidden(m, 9, 3), 1);
+
+    CASE(":fog off is the master switch; the painting stays");
+    press(&a, ":fog off\r");
+    CHECK_EQ(fog_any(m), 0);
+    CHECK_EQ(fog_count(m, 1, NULL), 20);
+    press(&a, ":fog on\r");
+    CHECK_EQ(fog_any(m), 1);
+
+    CASE("patches, by prefix, and a second one painted over the first takes the tiles afresh");
+    press(&a, ":fog Crate\r");
+    CHECK_EQ(a.ed.fog_patch, 2);
+    press(&a, ":fog cr\r");
+    CHECK(strstr(a.status, "more than one patch") != NULL);
+    Key f1 = { KEY_F1, 0, 0 };
+    app_key(&a, f1);
+    a.ed.cx = 9; a.ed.cy = 0;
+    press(&a, "gf");
+    CHECK_EQ(fog_at(m, 9, 0), 2);
+    CHECK_EQ(fog_count(m, 1, NULL), 19);
+
+    CASE("the file keeps the switches, the patches and the ground, held and seen included");
+    app_key(&a, f2);
+    a.ed.cx = 6; a.ed.cy = 0;
+    press(&a, "gr");                                       /* one held tile of Crypt */
+    char err[128];
+    CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+    char *text = slurp(path);
+    CHECK(text != NULL);
+    if (text) {
+        CHECK_EQ(strncmp(text, "VTT 6\n", 6), 0);
+        CHECK(strstr(text, "fog on\n") != NULL);
+        CHECK(strstr(text, "fog soft-edge\n") != NULL);
+        CHECK(strstr(text, "fogpatch 1 Crypt reveal manual memory off soft-edge on\n") != NULL);
+        CHECK(strstr(text, "fogpatch 2 Crate reveal 2 memory on\n") != NULL);
+        CHECK(strstr(text, "\nfog\n.....A1AAB\n") != NULL);
+        free(text);
+    }
+    Map *back = mapio_load(path, err, sizeof err);
+    CHECK(back != NULL);
+    if (back) {
+        CHECK_EQ(memcmp(back->fog, m->fog, 40), 0);
+        CHECK_EQ(back->fog_on, 1);
+        CHECK_EQ(back->fog_soft_edge, 1);
+        CHECK_EQ(strcmp(back->fog_patches[0].name, "Crypt"), 0);
+        CHECK_EQ(back->fog_patches[0].reveal, FOG_REVEAL_MANUAL);
+        CHECK_EQ(back->fog_patches[1].x0, 9);              /* extents rebuilt from the rows */
+        map_free(back);
+    }
+
+    CASE("a row naming a patch no line created is no fog");
+    {
+        char bad[700];
+        snprintf(bad, sizeof bad, "%s/bad.vtt", sb.dir);
+        FILE *bf = fopen(bad, "w");
+        if (bf) {
+            fputs("VTT 6\nname x\nsize 3 1\ntiles\n...\nfogpatch 1 Hall reveal 2 memory on\n"
+                  "fog\nAC?\n", bf);
+            fclose(bf);
+        }
+        Map *bm = mapio_load(bad, err, sizeof err);
+        CHECK(bm != NULL);
+        if (bm) {
+            CHECK_EQ(bm->fog[0], 1);
+            CHECK_EQ(bm->fog[1], 0);
+            CHECK_EQ(bm->fog[2], 0);
+            map_free(bm);
+        }
+    }
+
+    CASE("delete scrubs a patch for good, and its number is never handed out again this session");
+    press(&a, ":fog Crate delete\r");
+    CHECK_EQ(fog_at(m, 9, 0), 0);
+    CHECK_EQ(fog_find(m, "Crate"), 0);
+    CHECK(strstr(a.status, "deleted") != NULL);
+    press(&a, "u");                                        /* back comes a tile of a dead patch... */
+    press(&a, ":fog Newt\r");
+    CHECK_EQ(fog_find(m, "Newt"), 3);                      /* ...and slot 2 is not reused */
+    CHECK_EQ(fog_ground_hidden(m, 9, 0), 0);               /* a dead number hides nothing */
+
+    CASE("a resize keeps the fog that is still on the map");
+    press(&a, ":resize 8x4\r");
+    CHECK_EQ(m->w, 8);
+    CHECK_EQ(fog_at(m, 7, 3) & FOG_ID, 1);
+    CHECK(m->fog_patches[0].x1 <= 7);
+
+    CASE(":fog all is a patch over the whole map");
+    press(&a, ":fog all 3\r");
+    int all = fog_find(m, "All");
+    CHECK(all > 0);
+    CHECK_EQ(fog_count(m, all, NULL), 32);
+    CHECK_EQ(m->fog_patches[all - 1].reveal, 3);
+
+    CASE("a full table refuses the sixteenth");
+    char cmd[32];
+    for (int i = 0; i < 12; i++) { snprintf(cmd, sizeof cmd, ":fog P%d\r", i); press(&a, cmd); }
+    press(&a, ":fog Extra\r");
+    CHECK(strstr(a.status, "no room") != NULL);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
 static void test_serve_commands(void)
 {
     Sandbox sb = sandbox_enter("serve");
@@ -9664,6 +10016,7 @@ int main(void)
         { "servelife", test_serve_lifetime },
         { "pframe", test_players_frame },
         { "counters", test_counters },
+        { "fog",    test_fog },
         { "webpage", test_webpage },
         { "turns",  test_turns },
         { "turnkeys", test_turn_keys },

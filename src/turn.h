@@ -65,6 +65,9 @@ void turn_sanitize(Map *m);
 /* "Round 2 - Ogre's turn, then Aria, Bram" for the title bar; empty when
  * there is no fight and nobody holds the turn. */
 void turn_status(const Map *m, char *buf, size_t bufsz);
+/* The same for the players' frame when `players`: over fog, a creature the
+ * party cannot see is named "?". */
+void turn_status_view(const Map *m, int players, char *buf, size_t bufsz);
 
 /* ":turns" -- the whole order on one line: "Round 2: Ogre 18*, Aria 15". */
 void turn_list(const Map *m, char *buf, size_t bufsz);
@@ -77,7 +80,8 @@ int  turn_panel_wanted(const Map *m);
  * sides of the spotlight with the lit one marked. Draws only inside rc. */
 #define TURN_PANEL_W 24
 /* `counter` names the counter to show beside whoever is acting ("HP"), or
- * is NULL for the players' frame, which never shows one. */
+ * is NULL for the players' frame, which never shows one -- and over fog
+ * names a creature the party cannot see "?". */
 void turn_draw_panel(Renderer *r, const Map *m, const Theme *th, Rect rc, int ascii,
                      const char *counter);
 

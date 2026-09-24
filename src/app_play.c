@@ -1,6 +1,7 @@
 #include "app_priv.h"
 
 #include "counter.h"
+#include "fog.h"
 #include "prof.h"
 
 #include <stdio.h>
@@ -168,6 +169,55 @@ static int play_target_token(App *a)
     Play *pl = &a->play;
     if (pl->sel >= 0 && pl->sel < a->map->tokens.n) return pl->sel;
     return app_token_under_cursor(a);
+}
+
+/* g r and g h: the GM's own light, over the cursor's footprint or the box.
+ * Only painted ground answers; the rest of the map is always lit. */
+static void fog_hand(App *a, int on)
+{
+    PROF_ZONE("fog.reveal");
+    Map  *m  = a->map;
+    Play *pl = &a->play;
+    int x0 = a->ed.cx, y0 = a->ed.cy, x1, y1;
+    if (pl->visual) {
+        x0 = imin(pl->anchor_x, a->ed.cx); x1 = imax(pl->anchor_x, a->ed.cx);
+        y0 = imin(pl->anchor_y, a->ed.cy); y1 = imax(pl->anchor_y, a->ed.cy);
+        pl->visual = 0;
+    } else {
+        int size = play_cursor_size(pl, m);
+        x1 = x0 + size - 1;
+        y1 = y0 + size - 1;
+    }
+    int changed = 0, painted = 0;
+    undo_begin(&a->undo);
+    for (int y = y0; y <= y1; y++)
+        for (int x = x0; x <= x1; x++) {
+            uint8_t was = fog_at(m, x, y);
+            if (!(was & FOG_ID)) continue;
+            painted++;
+            fog_light(m, &a->undo, x, y, on);
+            changed += fog_at(m, x, y) != was;
+        }
+    undo_end(&a->undo);
+    char msg[80];
+    if (!painted) { app_set_status(a, "no fog here - build mode paints it: g f"); return; }
+    if (!changed) { app_set_status(a, on ? "already lit" : "already dark"); return; }
+    snprintf(msg, sizeof msg, "%s %d square%s", on ? "lit" : "darkened", changed, changed == 1 ? "" : "s");
+    app_note(a, msg);
+}
+
+/* g R and g H: the whole patch under the cursor, for when the door opens. */
+static void fog_hand_patch(App *a, int on)
+{
+    PROF_ZONE("fog.reveal");
+    Map *m  = a->map;
+    int  id = fog_at(m, a->ed.cx, a->ed.cy) & FOG_ID;
+    if (!id || !m->fog_patches[id - 1].name[0]) { app_set_status(a, "no fog patch here"); return; }
+    int n = fog_light_patch(m, &a->undo, id, on);
+    char msg[80];
+    snprintf(msg, sizeof msg, "%s %s - %d square%s", on ? "lit" : "darkened",
+             m->fog_patches[id - 1].name, n, n == 1 ? "" : "s");
+    app_note(a, msg);
 }
 
 /* s v: the prompt that reads and changes a creature's counters. */
@@ -354,6 +404,13 @@ static int pending_key(App *a, Key k)
         if (k.ch == 'p') { place_token(a, TOKEN_PLAYER); return 1; }
         if (k.ch == 'e') { place_token(a, TOKEN_ENEMY);  return 1; }
         app_set_status(a, "i wants p for a player or e for an enemy");
+        return 1;
+    }
+
+    if (pre == 'g') {
+        if (k.ch == 'r' || k.ch == 'h') { fog_hand(a, k.ch == 'r'); return 1; }
+        if (k.ch == 'R' || k.ch == 'H') { fog_hand_patch(a, k.ch == 'R'); return 1; }
+        app_set_status(a, "g wants r to light, h to darken -- R and H for the whole patch");
         return 1;
     }
 
@@ -624,6 +681,11 @@ void app_play_key(App *a, Key k)
     case 'i':
         a->pending = 'i';
         app_set_status(a, "i    p player    e enemy");
+        break;
+
+    case 'g':
+        a->pending = 'g';
+        app_set_status(a, "g    r light    h darken    R light the patch    H darken it");
         break;
 
     case 's':

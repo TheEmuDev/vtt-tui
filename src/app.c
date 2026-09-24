@@ -12,6 +12,7 @@
 #include <unistd.h>
 
 #include "counter.h"
+#include "fog.h"
 #include "draw.h"
 #include "prof.h"
 
@@ -78,7 +79,10 @@ static void draw_status_msg(App *a, int x, int y, int maxw)
 {
     Renderer    *r  = a->rnd;
     const Theme *th = a->th;
-    if (a->status_gm && a->view == VIEW_PLAYERS) return;
+    /* The players' frame carries no GM-only message, and over fog no message
+     * at all: most of what the app says names a creature or a square, and
+     * one placed in the dark would be announced to the table. */
+    if (a->view == VIEW_PLAYERS && (a->status_gm || (a->map && fog_any(a->map)))) return;
 
     draw_text_ellipsis(r, x, y, a->status, maxw, style(th->dim, th->bg, 0));
 
@@ -1674,6 +1678,23 @@ static void editor_key(App *a, Key k)
     if (e->pending_g) {
         e->pending_g = 0;
         if (k.ch == 'g') { e->cy = 0; grid_ensure_visible(&e->view, m, e->cx, e->cy, ED_SCROLLOFF); }
+        else if (k.ch == 'f' || k.ch == 'c') {
+            /* Painting fog is authoring, so it lives here with the terrain
+             * brush and takes the same footprint: the brush, or the box. */
+            int id = k.ch == 'f' ? e->fog_patch : 0;
+            if (k.ch == 'f' && (!id || !m->fog_patches[id - 1].name[0] || m->fog_patches[id - 1].dead)) {
+                app_set_status(a, "no fog patch to paint - :fog NAME makes one");
+                return;
+            }
+            int n = ed_apply_fog(e, m, &a->undo, id);
+            if (e->mode == ED_VISUAL) e->mode = ED_NORMAL;
+            char msg[96];
+            if (k.ch == 'f') snprintf(msg, sizeof msg, "fog %s over %d square%s",
+                                      m->fog_patches[id - 1].name, n, n == 1 ? "" : "s");
+            else             snprintf(msg, sizeof msg, "fog scrubbed from %d square%s", n, n == 1 ? "" : "s");
+            app_note(a, msg);
+        }
+        else app_set_status(a, "g wants g for the top, f to paint fog, c to scrub it");
         return;
     }
 
@@ -1982,17 +2003,20 @@ static void draw_editor(App *a)
      * for whatever happens to be selected, so it does not belong on the
      * status line that describes the selection. */
     char left[192], fight[128] = "";
-    if (a->screen == SCREEN_PLAY) turn_status(m, fight, sizeof fight);
+    if (a->screen == SCREEN_PLAY) turn_status_view(m, a->view == VIEW_PLAYERS, fight, sizeof fight);
     snprintf(left, sizeof left, "%.63s%s%s%.120s", m->name, m->modified ? " [+]" : "",
              fight[0] ? "    " : "", fight);
     ui_titlebar(r, th, left, a->screen == SCREEN_PLAY ? "PLAY" : "BUILD");
 
     int playing = (a->screen == SCREEN_PLAY);
 
-    if (playing) play_draw(r, m, &a->ed, &a->play, th, a->ascii);
+    if (playing) play_draw(r, m, &a->ed, &a->play, th, a->ascii, a->view == VIEW_PLAYERS);
     else         ed_draw(r, m, &a->ed, th, a->ascii);
 
-    if (a->ruler.active) {
+    /* The ruler is the GM's instrument; over fog its line would cross, and
+     * its numbers measure, ground the players cannot see. */
+    int fog_players = a->view == VIEW_PLAYERS && fog_any(m);
+    if (a->ruler.active && !fog_players) {
         ClipRect saved = rnd_clip_push(r, a->ed.view.view.x, a->ed.view.view.y,
                                        a->ed.view.view.w, a->ed.view.view.h);
         ruler_draw(r, m, &a->ed.view, &a->ruler, th, 1);
@@ -2018,7 +2042,8 @@ static void draw_editor(App *a)
 
     /* Status line sits directly above the keybinding bar. */
     char status[192];
-    if (a->ruler.active)            ruler_status(&a->ruler, m, status, sizeof status);
+    if (fog_players && playing)     play_status(&a->play, m, &a->ed, 0, status, sizeof status);
+    else if (a->ruler.active)       ruler_status(&a->ruler, m, status, sizeof status);
     else if (playing && a->play.range.active)
                                     range_status(&a->play.range, m, status, sizeof status);
     else if (playing)               play_status(&a->play, m, &a->ed, a->view == VIEW_GM, status, sizeof status);
@@ -2165,6 +2190,7 @@ int app_view_differs(const App *a)
     if (a->preview) return 0;                 /* the GM is already looking at it */
     if (a->modal != MODAL_NONE) return 1;
     if (a->status_gm && a->status[0]) return 1;
+    if (a->screen == SCREEN_PLAY && a->map && fog_any(a->map)) return 1;
     if (prof_overlay_visible()) return 1;
     if (a->screen == SCREEN_PLAY && a->map) {
         const Map  *m  = a->map;
