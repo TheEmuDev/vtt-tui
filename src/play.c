@@ -641,7 +641,13 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
          * token, and at one PROF_ZONE per token per frame the instrument cost
          * more than the thing it was measuring. group.box measures the
          * enumeration on the keystroke paths instead. */
-        if (fogp && fog_token_hidden(m, &m->tokens.v[i])) continue;
+        if (fogp && fog_token_hidden(m, &m->tokens.v[i])) {
+            /* At the soft edge the party sees that something is there, and
+             * its shape, and nothing else. */
+            if (fog_token_silhouette(m, &m->tokens.v[i]))
+                grid_draw_token_silhouette(r, &e->view, &m->tokens.v[i], th, ascii);
+            continue;
+        }
         int lit = p->visual ? box_meets(&m->tokens.v[i], p->anchor_x,
                                         p->anchor_y, e->cx, e->cy)
                             : play_in_group(p, i);

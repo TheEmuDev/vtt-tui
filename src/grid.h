@@ -95,6 +95,13 @@ void grid_draw_corner_cursor(Renderer *r, const GridView *g, int cx, int cy,
 void grid_draw_token(Renderer *r, const GridView *g, const Token *t,
                      const Theme *th, int selected, int ascii);
 
+/* A creature at the soft edge of the dark: its shape and footprint in a
+ * neutral dim colour, `?` for a name, no ring, no turn bars. The shape stays
+ * because that is what a silhouette is; the colour goes because a red square
+ * would say "enemy" as plainly as a name. */
+void grid_draw_token_silhouette(Renderer *r, const GridView *g, const Token *t,
+                                const Theme *th, int ascii);
+
 /* Status markers, drawn above the token so they never hide its label. Kept
  * separate from grid_draw_token so they can be layered over every token once
  * the tokens themselves are down. */

@@ -143,6 +143,7 @@ static const KeyDoc BUILD[] = {
 
     GROUP("Fog"),
     KEY(":fog Crypt", "make a patch, or pick one, for g f to paint"),
+    KEY(":fog --soft-edge", "show the rim of the dark: dim walls, silhouettes"),
     KEY("g f  g c", "paint the patch over the brush or the box / scrub fog off"),
     GROUP("Ground"),
     { "b  B",     "brush size, cycled -- 2b names it; keys act on it all", NULL, NULL },

@@ -429,9 +429,10 @@ static void fog_list(App *a)
         char rev[12];
         if (p->reveal == FOG_REVEAL_MANUAL) str_lcpy(rev, "manual", sizeof rev);
         else                                snprintf(rev, sizeof rev, "r%d", p->reveal);
-        off += snprintf(msg + off, sizeof msg - (size_t)off, "%s%s %s %d/%d%s%s%s",
+        off += snprintf(msg + off, sizeof msg - (size_t)off, "%s%s %s %d/%d%s%s%s%s",
                         n++ ? ", " : ": ", p->name, rev, seen, tiles,
-                        p->memory ? "" : " lantern", p->disabled ? " disabled" : "",
+                        p->memory ? "" : " lantern", fog_patch_soft(m, i + 1) ? " soft" : "",
+                        p->disabled ? " disabled" : "",
                         i + 1 == a->ed.fog_patch ? " *" : "");
     }
     if (!n) str_lcpy(msg, "no fog - :fog NAME starts a patch, then g f paints it in build mode", sizeof msg);

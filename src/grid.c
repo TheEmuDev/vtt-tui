@@ -194,6 +194,7 @@ int grid_screen_to_tile(const GridView *g, const Map *m, int sx, int sy, int *tx
 typedef struct {
     int     level;
     uint8_t kind;
+    uint8_t dim;     /* at the soft edge of the dark: drawn, but dimmed */
 } Seg;
 
 /* Set for the length of one grid_draw when it draws the players' frame over
@@ -214,22 +215,41 @@ static int side_dark(const Map *m, int x, int y)
            !fog_patch_live(m, fog_at(m, x, y) & FOG_ID);
 }
 
-/* A boundary the players' frame leaves out: dark on both sides, and hidden
- * on at least one -- so two voids outside any fog keep their wall. */
-static int seg_blank(const Map *m, int ax, int ay, int bx, int by)
+/* How the players' frame treats a boundary over fog: drawn as it is when
+ * either side can be seen, or when neither is hidden -- so two voids outside
+ * any fog keep their wall; else drawn dimmed when either side is on a shown
+ * rim; else not drawn at all. */
+enum { SEG_SHOWN, SEG_DIM, SEG_BLANK };
+
+static int seg_fog(const Map *m, int ax, int ay, int bx, int by)
 {
-    return side_dark(m, ax, ay) && side_dark(m, bx, by) &&
-           (fog_ground_hidden(m, ax, ay) || fog_ground_hidden(m, bx, by));
+    if (!side_dark(m, ax, ay) || !side_dark(m, bx, by)) return SEG_SHOWN;
+    if (!fog_ground_hidden(m, ax, ay) && !fog_ground_hidden(m, bx, by)) return SEG_SHOWN;
+    return fog_rim_shown(m, ax, ay) || fog_rim_shown(m, bx, by) ? SEG_DIM : SEG_BLANK;
+}
+
+/* A boundary at the soft edge. Only the solid ones are drawn -- the grid
+ * lines would trace the floor, which the rim does not show -- and a door of
+ * any kind is a wall until the square beside it is lit: the rim says the
+ * room goes on, not how to get into it. */
+static void seg_dim(Seg *s)
+{
+    if (s->kind != EDGE_NONE && s->kind != EDGE_WALL && s->kind != EDGE_WINDOW)
+        s->kind = EDGE_WALL;
+    s->level = s->kind == EDGE_NONE ? 0 : 2;
+    s->dim   = 1;
 }
 
 static Seg vseg(const Map *m, int x, int y)
 {
-    Seg s = { 0, EDGE_NONE };
+    Seg s = { 0, EDGE_NONE, 0 };
     if (x < 0 || x > m->w || y < 0 || y >= m->h) return s;
-    if (g_fog_blank && seg_blank(m, x - 1, y, x, y)) return s;
+    int fog = g_fog_blank ? seg_fog(m, x - 1, y, x, y) : SEG_SHOWN;
+    if (fog == SEG_BLANK) return s;
 
     s.kind  = map_vedge(m, x, y);
     s.level = edge_weight(s.kind);
+    if (fog == SEG_DIM) { seg_dim(&s); return s; }
     if (s.level == 0 && (map_walkable(m, x - 1, y) || map_walkable(m, x, y)))
         s.level = 1;
     return s;
@@ -237,12 +257,14 @@ static Seg vseg(const Map *m, int x, int y)
 
 static Seg hseg(const Map *m, int x, int y)
 {
-    Seg s = { 0, EDGE_NONE };
+    Seg s = { 0, EDGE_NONE, 0 };
     if (y < 0 || y > m->h || x < 0 || x >= m->w) return s;
-    if (g_fog_blank && seg_blank(m, x, y - 1, x, y)) return s;
+    int fog = g_fog_blank ? seg_fog(m, x, y - 1, x, y) : SEG_SHOWN;
+    if (fog == SEG_BLANK) return s;
 
     s.kind  = map_hedge(m, x, y);
     s.level = edge_weight(s.kind);
+    if (fog == SEG_DIM) { seg_dim(&s); return s; }
     if (s.level == 0 && (map_walkable(m, x, y - 1) || map_walkable(m, x, y)))
         s.level = 1;
     return s;
@@ -433,18 +455,22 @@ void grid_draw(Renderer *r, const Map *m, const GridView *g, const Theme *th,
             Style s_junc = s_wall;
             if (solid) {
                 uint8_t k0 = 0;
-                int     uniform = 1;
+                int     uniform = 1, dim = 1;
                 const Seg *segs[4] = { &n, &e, &sg, &w };
                 for (int i = 0; i < 4; i++) {
                     if (segs[i]->level != 2) continue;
                     if (!k0) k0 = segs[i]->kind;
                     else if (segs[i]->kind != k0) uniform = 0;
+                    dim &= segs[i]->dim;
                 }
                 if (uniform && k0 && k0 != EDGE_WALL) {
                     uint32_t g_unused, fg;
                     seg_look(k0, 0, ascii, reveal, th, &g_unused, &fg);
                     s_junc = style(fg, th->bg, 0);
                 }
+                /* A corner that belongs to the rim alone is dim with it;
+                 * one that a shown wall also meets is that wall's. */
+                if (dim) s_junc = style(th->dim, th->bg, 0);
             }
 
             /* Where a solid boundary meets a thin one, the junction belongs
@@ -458,6 +484,7 @@ void grid_draw(Renderer *r, const Map *m, const GridView *g, const Theme *th,
             if (e.level) {
                 uint32_t glyph, fg;
                 seg_look(e.kind, 0, ascii, reveal, th, &glyph, &fg);
+                if (e.dim) fg = th->dim;
                 draw_hline(r, sx + 1, sy, iw, glyph, style(fg, th->bg, 0));
                 if (reveal && e.kind == EDGE_SECRET_CLOSED)
                     draw_cell(r, sx + 1 + iw / 2, sy, ascii ? 'S' : 0x2573u,
@@ -466,6 +493,7 @@ void grid_draw(Renderer *r, const Map *m, const GridView *g, const Theme *th,
             if (sg.level) {
                 uint32_t glyph, fg;
                 seg_look(sg.kind, 1, ascii, reveal, th, &glyph, &fg);
+                if (sg.dim) fg = th->dim;
                 draw_vline(r, sx, sy + 1, ih, glyph, style(fg, th->bg, 0));
                 if (reveal && sg.kind == EDGE_SECRET_CLOSED)
                     draw_cell(r, sx, sy + 1 + ih / 2, ascii ? 'S' : 0x2573u,

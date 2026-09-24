@@ -9794,7 +9794,7 @@ static void test_fog(void)
     press(&a, ":fog --soft-edge\r");
     CHECK_EQ(m->fog_soft_edge, 1);
     press(&a, ":fog\r");
-    CHECK(strstr(a.status, "Crypt manual 0/20 lantern *") != NULL);
+    CHECK(strstr(a.status, "Crypt manual 0/20 lantern soft *") != NULL);
     press(&a, ":fog Crypt memory maybe\r");
     CHECK(strstr(a.status, "memory on, or off") != NULL);
     press(&a, ":fog Crypt 500\r");
@@ -9985,6 +9985,151 @@ static void write_sight_map(const char *dir, const char *name, int reveal, int m
                "AAAAAAAAAAAA\nAAAAAAAAAAAA\nAAAAAAAAAAAA\nAAAAAAAAAAAA\nAAAAAAAAAAAA\n",
             reveal, memory ? "on" : "off");
     fclose(f);
+}
+
+/* The cell a boundary draws its middle in: the vertical one west of tile
+ * (tx,ty), or the horizontal one north of it. */
+static const Cell *edge_cell(const Renderer *r, const App *a, int tx, int ty, int vertical)
+{
+    int sx, sy;
+    grid_tile_screen(&a->ed.view, tx, ty, &sx, &sy);
+    if (vertical) sy += 1 + ZOOM[a->ed.view.zoom].ih / 2;
+    else          sx += 1 + ZOOM[a->ed.view.zoom].iw / 2;
+    return &r->back[(size_t)sy * (size_t)r->w + (size_t)sx];
+}
+
+/* Fog, part three: the soft edge. */
+static void test_fog_edge(void)
+{
+    Sandbox sb = sandbox_enter("fogedge");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    write_sight_map(sb.dir, "e.vtt", 1, 0);
+    char path[600];
+    snprintf(path, sizeof path, "%s/e.vtt", sb.dir);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 16);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Map *m = a.map;
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+    m->tiles[(size_t)2 * (size_t)m->w + 1] = TILE_WATER;    /* on the rim, west */
+    m->tiles[(size_t)1 * (size_t)m->w + 2] = TILE_WATER;    /* lit */
+
+    /* Aria at (3,2) lights x 2..4, y 1..3; the rim is the ring round that,
+     * out to (5,*) against the wall, whose door is at (6,2). */
+    a.ed.cx = 3; a.ed.cy = 2;
+    press(&a, "ipAria\r");
+    a.ed.cx = 5; a.ed.cy = 3;
+    press(&a, "ieOgre\r");                                 /* on the rim */
+    a.ed.cx = 0; a.ed.cy = 2;
+    press(&a, "ieImp\r");                                  /* beyond it */
+    press(&a, "\x1b");
+    a.ed.cx = 3; a.ed.cy = 2;                               /* the cursor on Aria, in the light */
+    CHECK(fog_at(m, 5, 2) & FOG_RIM);
+    CHECK(fog_at(m, 5, 3) & FOG_RIM);
+    CHECK_EQ(fog_at(m, 0, 2) & FOG_RIM, 0);
+
+    CASE("off by default: the rim is as dark as the rest");
+    CHECK_EQ(fog_rim_shown(m, 5, 2), 0);
+    rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+    ByteBuf fr;
+    bb_init(&fr, 65536); rnd_dump(&r, &fr); bb_putc(&fr, '\0');
+    CHECK(strstr(fr.data, "[?]") == NULL);
+    CHECK(strstr(fr.data, "[O]") == NULL);
+    bb_free(&fr);
+    CHECK_EQ(edge_cell(&r, &a, 6, 2, 1)->ch, ' ');          /* the door, dark both sides */
+
+    CASE(":fog --soft-edge: a creature on the rim is a silhouette, neutral, nameless");
+    press(&a, ":fog --soft-edge\r");
+    CHECK_EQ(fog_rim_shown(m, 5, 3), 1);
+    CHECK_EQ(fog_token_silhouette(m, &m->tokens.v[1]), 1);
+    CHECK_EQ(fog_token_silhouette(m, &m->tokens.v[2]), 0);
+    rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+    bb_init(&fr, 65536); rnd_dump(&r, &fr); bb_putc(&fr, '\0');
+    CHECK(strstr(fr.data, "[?]") != NULL);
+    CHECK(strstr(fr.data, "[O]") == NULL);
+    CHECK(strstr(fr.data, "[I]") == NULL);                  /* the Imp, past the rim */
+    CHECK(strstr(fr.data, "Ogre") == NULL);
+    bb_free(&fr);
+    const Cell *mark = tile_cell(&r, &a, 5, 3);             /* "[?]" starts in the interior */
+    CHECK_EQ(mark[0].ch, (uint32_t)'[');
+    CHECK_EQ(mark[1].ch, (uint32_t)'?');
+    CHECK_EQ(mark[1].fg, a.th->dim);
+    int red = 0;
+    for (size_t i = 0; i < (size_t)r.w * (size_t)r.h; i++)
+        red += r.back[i].fg == a.th->enemy || r.back[i].bg == a.th->enemy;
+    CHECK_EQ(red, 0);
+
+    CASE("a big creature with one square on the rim is a silhouette, all of it");
+    Token *imp = &m->tokens.v[2];
+    imp->x = 0; imp->y = 3; imp->size = 2;                  /* (1,3) is rim, the rest dark */
+    CHECK_EQ(fog_token_hidden(m, imp), 1);
+    CHECK_EQ(fog_token_silhouette(m, imp), 1);
+    imp->x = 0; imp->y = 0; imp->size = 1;                  /* back out of the way, in the dark */
+    CHECK_EQ(fog_token_silhouette(m, imp), 0);
+
+    CASE("the GM's frame draws the Ogre as itself");
+    rnd_begin(&r); app_draw_view(&a, VIEW_GM);
+    bb_init(&fr, 65536); rnd_dump(&r, &fr); bb_putc(&fr, '\0');
+    CHECK(strstr(fr.data, "[O]") != NULL);
+    CHECK(strstr(fr.data, "[?]") == NULL);
+    bb_free(&fr);
+
+    CASE("at the rim a door is a dimmed wall; terrain is not drawn; nothing past the rim is");
+    rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+    const Cell *door = edge_cell(&r, &a, 6, 2, 1);
+    CHECK_EQ(door->ch, (uint32_t)0x2503u);                   /* a heavy wall, not a door */
+    CHECK_EQ(door->fg, a.th->dim);
+    CHECK_EQ(edge_cell(&r, &a, 6, 1, 1)->fg, a.th->dim);     /* the wall beside it, dimmed */
+    CHECK(tile_cell(&r, &a, 1, 2)->bg != a.th->terrain_bg[TILE_WATER]);
+    CHECK_EQ(tile_cell(&r, &a, 2, 1)->bg, a.th->terrain_bg[TILE_WATER]);
+    CHECK_EQ(edge_cell(&r, &a, 6, 4, 1)->fg, a.th->dim);     /* (5,4) is rim, diagonally */
+    CHECK_EQ(edge_cell(&r, &a, 0, 2, 0)->ch, ' ');          /* between two dark squares */
+
+    CASE("no grid lines on the rim: it shows walls, not floor");
+    CHECK_EQ(edge_cell(&r, &a, 1, 0, 1)->ch, ' ');          /* between rim (1,0) and dark (0,0) */
+
+    CASE("lit, the door is a door again, in its own colour");
+    play_focus(&a.play, 0);
+    press(&a, "\rl\r");                                   /* Aria to (4,2): (5,2) is lit */
+    CHECK(fog_at(m, 5, 2) & FOG_LIT);
+    rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+    door = edge_cell(&r, &a, 6, 2, 1);
+    CHECK_EQ(door->fg, a.th->edge_door);
+
+    CASE("a patch can take its own setting over the map's, and the listing says so");
+    press(&a, ":fog Dark --no-soft-edge\r");
+    CHECK_EQ(fog_rim_shown(m, 6, 1), 0);
+    rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+    bb_init(&fr, 65536); rnd_dump(&r, &fr); bb_putc(&fr, '\0');
+    CHECK(strstr(fr.data, "[?]") == NULL);
+    bb_free(&fr);
+    press(&a, ":fog\r");
+    CHECK(strstr(a.status, "soft") == NULL);
+    press(&a, ":fog Dark --soft-edge\r");
+    press(&a, ":fog --no-soft-edge\r");
+    CHECK_EQ(fog_patch_soft(m, 1), 1);
+    press(&a, ":fog\r");
+    CHECK(strstr(a.status, "soft") != NULL);
+
+    CASE("the setting is saved with the patch");
+    char err[128];
+    CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+    app_free(&a);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    m = a.map;
+    CHECK_EQ(m->fog_soft_edge, 0);
+    CHECK_EQ(fog_patch_soft(m, 1), 1);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
 }
 
 /* Fog, part two: player creatures light what they can see, as they move. */
@@ -10294,6 +10439,7 @@ int main(void)
         { "counters", test_counters },
         { "fog",    test_fog },
         { "fogsight", test_fog_sight },
+        { "fogedge", test_fog_edge },
         { "webpage", test_webpage },
         { "turns",  test_turns },
         { "turnkeys", test_turn_keys },

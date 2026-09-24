@@ -265,19 +265,21 @@ static int in_ellipse(int i, int j, int w, int h)
     return dx * dx + dy * dy <= 0.82;
 }
 
-void grid_draw_token(Renderer *r, const GridView *g, const Token *t,
-                     const Theme *th, int selected, int ascii)
+/* `base` is the fill; a silhouette passes its own neutral one and nothing
+ * else of the creature's -- no ring, no turn bars, no name. */
+static void token_draw(Renderer *r, const GridView *g, const Token *t,
+                       const Theme *th, int selected, int ascii, uint32_t base,
+                       int silhouette)
 {
     Rect a;
     grid_token_area(g, t->x, t->y, t->size, &a);
     if (a.w < 1 || a.h < 1) return;
 
-    int      player = (t->kind != TOKEN_ENEMY);
-    uint32_t base   = player ? th->player : th->enemy;
-    if (selected) base = player ? th->player_sel : th->enemy_sel;
+    int player = (t->kind != TOKEN_ENEMY);
 
     if (selected) draw_select_ring(r, &a, base);
-    if (t->turn & TURN_ACTING) draw_turn_bars(r, &a, th->turn);
+    if (!silhouette && (t->turn & TURN_ACTING)) draw_turn_bars(r, &a, th->turn);
+    const char *label = silhouette ? "?" : t->label;
 
     /* A single-row token has no room for a shape, and colour alone is a poor
      * way to tell a player from an enemy — it fails in --ascii and for a
@@ -296,8 +298,8 @@ void grid_draw_token(Renderer *r, const GridView *g, const Token *t,
          * ellipsis: in three cells "Aria" has to read as A, and "(…)" names
          * nothing at the table. The status line carries the full label. */
         int avail = a.w - 2;
-        int lw    = imin(text_width(t->label), avail);
-        draw_text(r, a.x + 1 + (avail - lw) / 2, a.y, t->label, avail, s);
+        int lw    = imin(text_width(label), avail);
+        draw_text(r, a.x + 1 + (avail - lw) / 2, a.y, label, avail, s);
         return;
     }
 
@@ -331,7 +333,7 @@ void grid_draw_token(Renderer *r, const GridView *g, const Token *t,
         draw_cell(r, body.x + body.w - 1, mid, (uint32_t)(player ? ')' : ']'), edge);
     }
 
-    if (!t->label[0]) return;
+    if (!label[0]) return;
 
     /* The label sits on the middle row, centred, trimmed to what fits.
      * It has to stay clear of the ASCII brackets when those are drawn, and
@@ -344,11 +346,26 @@ void grid_draw_token(Renderer *r, const GridView *g, const Token *t,
     int avail = body.w - 2 * inset;
     if (avail < 1) return;
 
-    int lw = imin(text_width(t->label), avail);
+    int lw = imin(text_width(label), avail);
     int lx = body.x + inset + (avail - lw) / 2;
 
     Style ls = style(th->bg, base, ATTR_BOLD);
-    draw_text(r, lx, row, t->label, avail, ls);
+    draw_text(r, lx, row, label, avail, ls);
+}
+
+void grid_draw_token(Renderer *r, const GridView *g, const Token *t,
+                     const Theme *th, int selected, int ascii)
+{
+    int      player = (t->kind != TOKEN_ENEMY);
+    uint32_t base   = player ? th->player : th->enemy;
+    if (selected) base = player ? th->player_sel : th->enemy_sel;
+    token_draw(r, g, t, th, selected, ascii, base, 0);
+}
+
+void grid_draw_token_silhouette(Renderer *r, const GridView *g, const Token *t,
+                                const Theme *th, int ascii)
+{
+    token_draw(r, g, t, th, 0, ascii, th->dim, 1);
 }
 
 void grid_draw_token_ghost(Renderer *r, const GridView *g, int tx, int ty,

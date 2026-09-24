@@ -139,6 +139,14 @@ int fog_token_hidden(const Map *m, const Token *t)
     return 1;
 }
 
+int fog_token_silhouette(const Map *m, const Token *t)
+{
+    for (int y = t->y; y < t->y + t->size; y++)
+        for (int x = t->x; x < t->x + t->size; x++)
+            if (fog_rim_shown(m, x, y)) return 1;
+    return 0;
+}
+
 int fog_find(const Map *m, const char *prefix)
 {
     if (!prefix || !*prefix) return 0;

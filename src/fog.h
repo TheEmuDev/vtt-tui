@@ -67,6 +67,28 @@ static inline int fog_creature_hidden(const Map *m, int x, int y)
 /* A creature is hidden when every square it covers is. */
 int fog_token_hidden(const Map *m, const Token *t);
 
+/* Does this patch show its rim? Its own setting, or the map's when it
+ * follows the map. */
+static inline int fog_patch_soft(const Map *m, int id)
+{
+    int s = m->fog_patches[id - 1].soft_edge;
+    return s < 0 ? m->fog_soft_edge : s;
+}
+
+/* The soft edge: a square the party cannot see now, beside one it can, in a
+ * patch that shows its rim. The players' frame draws its walls dimmed and
+ * any creature on it as a silhouette; its ground stays as memory left it. */
+static inline int fog_rim_shown(const Map *m, int x, int y)
+{
+    uint8_t f = fog_at(m, x, y);
+    return (f & FOG_RIM) && m->fog_on && fog_patch_live(m, f & FOG_ID) &&
+           fog_patch_soft(m, f & FOG_ID);
+}
+
+/* A hidden creature with a square on a shown rim: drawn as a silhouette,
+ * its shape and nothing else. */
+int fog_token_silhouette(const Map *m, const Token *t);
+
 /* Patches, by name or any prefix of one, case aside; an exact name beats a
  * longer one. Returns a patch number 1..15, 0 for none, -1 when several
  * match. */

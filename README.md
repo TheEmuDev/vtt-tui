@@ -755,7 +755,9 @@ of its own.
 :fog Crypt delete   scrub it off the map for good
 :fog all            one patch over the whole map, for plain fog of war
 :fog on | off       the master switch; the painting is kept either way
-:fog                list them:  fog on: Crypt r3 12/40 *, Mist r2 0/16
+:fog --soft-edge    show the rim of the dark, below;  --no-soft-edge  hides it again
+:fog Crypt --soft-edge   the same for one patch, over the map's setting
+:fog                list them:  fog on: Crypt r3 12/40 soft *, Mist r2 0/16
 ```
 
 **Painting** is build mode's: `g f` paints the current patch over the brush's footprint, or
@@ -791,8 +793,17 @@ stays down whoever walks away, until `g h` takes it back.
 
 Sight is worked out again after any keystroke that changed the map — a step, a door, an undo,
 a patch painted or reset — and at no other time, and it covers only the party's reach: a map
-with a crypt at one end costs nothing while the party is at the other. The soft edge
-(`:fog --soft-edge`) is stored for the next step of [docs/FOG.md](docs/FOG.md).
+with a crypt at one end costs nothing while the party is at the other.
+
+**The soft edge.** `:fog --soft-edge`, off by default, half-shows the rim of the dark: the
+squares next to one the party can see now, all eight round it, a diagonal only when nothing
+blocks the corner — so it moves with the party, and never reaches through a wall. On the rim
+the players see its walls, dimmed, with any door in them drawn as a wall until the square
+beside it is lit; no ground and no grid lines; and a creature as a **silhouette** — its shape
+and its size in a neutral grey, `?` for a name, no markers. A big creature with one square on
+the rim is a silhouette too. The rim is anchored on sight, not on the GM's `g r` light or on
+remembered ground. The map's setting is every patch's default; `:fog Crypt --soft-edge` or
+`--no-soft-edge` gives one patch its own.
 
 ### Dice (`:roll`)
 

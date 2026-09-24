@@ -696,7 +696,23 @@ frame. It should now be:
       so the README's "the dark closes behind them" holds for ground seen
       before the switch as well. The lit area is
       remembered as up to 64 rectangles, folded into one past that.
-   c. The soft edge, which by now has somewhere to be drawn.
+   c. The soft edge, which by now has somewhere to be drawn. **Built
+      2026-09-24.** `fog_rim_shown` is the RIM bit, the master switch, a
+      live patch and that patch's `soft_edge` (or the map's); nothing new
+      is stored or worked out per move. In the players' frame a boundary
+      over the dark is drawn as it is when either side can be seen, dimmed
+      when either side is a shown rim, and not at all otherwise: one more
+      question asked only where the old rule would have blanked it, so the
+      fog-free and GM paths are untouched. A dimmed boundary keeps only its
+      solid kinds -- no grid lines, since the rim shows walls, not floor --
+      and any door becomes a wall; a corner is dim when every solid
+      boundary meeting it is. A hidden creature with a square on a shown
+      rim is drawn by `grid_draw_token_silhouette`: its shape and size in
+      `Theme.dim`, `?` for a name, no ring, bars or markers. Terrain on the
+      rim is not drawn, which the players' frame already did for hidden
+      ground. The rim is anchored on LIT, so ground the GM holds lit with
+      `g r` has none, as settled under 9. `:fog` lists `soft` on each patch
+      that shows it.
 
 The reason for the change is that both halves of request 4 live in the
 players' frame, and so does the point of fog: built the old way round, fog
