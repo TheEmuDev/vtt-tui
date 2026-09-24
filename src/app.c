@@ -11,6 +11,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "counter.h"
 #include "draw.h"
 #include "prof.h"
 
@@ -55,6 +56,7 @@ void app_set_status(App *a, const char *msg)
 {
     str_lcpy(a->status, msg, sizeof a->status);
     a->nstatus_span = 0;
+    a->status_gm    = 0;
     a->dirty = 1;
 }
 
@@ -76,6 +78,7 @@ static void draw_status_msg(App *a, int x, int y, int maxw)
 {
     Renderer    *r  = a->rnd;
     const Theme *th = a->th;
+    if (a->status_gm && a->view == VIEW_PLAYERS) return;
 
     draw_text_ellipsis(r, x, y, a->status, maxw, style(th->dim, th->bg, 0));
 
@@ -102,6 +105,12 @@ void app_note(App *a, const char *msg)
 {
     app_set_status(a, msg);
     slog_write(&a->slog, msg);
+}
+
+void app_note_gm(App *a, const char *msg)
+{
+    app_note(a, msg);
+    a->status_gm = 1;
 }
 
 /* Adds a clause to the status line instead of replacing it. Closing a map
@@ -797,6 +806,29 @@ static void prompt_accept(App *a)
                  status_color_name(a->play.status_color),
                  t.label[0] ? t.label : token_kind_name(t.kind), text);
         app_note(a, msg);
+        return;
+    }
+    case PROMPT_COUNTERS: {
+        int idx = a->pending_token;
+        a->pending_token = -1;
+        if (idx < 0 || idx >= a->map->tokens.n) return;
+
+        const Ruleset *rs = ruleset_by_name(a->map->ruleset);
+        Token t = a->map->tokens.v[idx];
+        char  cur[COUNTER_NAME_MAX], msg[160], out[200];
+        app_current_counter(a, cur, sizeof cur);
+        if (counter_apply(&t, text, rs ? rs->counters : NULL, cur, sizeof cur, msg, sizeof msg) != 0) {
+            app_set_status(a, msg);
+            return;
+        }
+        str_lcpy(a->play.counter, cur, sizeof a->play.counter);
+        const Token *was = &a->map->tokens.v[idx];
+        if (token_equal(was, &t)) { app_set_status(a, msg); return; }
+        undo_begin(&a->undo);
+        undo_edit_token(&a->undo, a->map, idx, t);
+        undo_end(&a->undo);
+        snprintf(out, sizeof out, "%.24s: %s", t.label[0] ? t.label : token_kind_name(t.kind), msg);
+        app_note_gm(a, out);
         return;
     }
     case PROMPT_NOTE: {
@@ -1963,7 +1995,10 @@ static void draw_editor(App *a)
     if (panel) {
         Rect pr = rect(r->w - TURN_PANEL_W, 1, TURN_PANEL_W, r->h - 3);
         int  ch = imin(clocks, pr.h);
-        if (turns) turn_draw_panel(r, m, th, rect(pr.x, pr.y, pr.w, pr.h - ch), a->ascii);
+        char cn[COUNTER_NAME_MAX];
+        app_current_counter(a, cn, sizeof cn);
+        if (turns) turn_draw_panel(r, m, th, rect(pr.x, pr.y, pr.w, pr.h - ch), a->ascii,
+                                   a->view == VIEW_GM ? cn : NULL);
         else {
             draw_fill(r, rect(pr.x, pr.y, pr.w, pr.h - ch), ' ', style(th->fg, th->bg, 0));
             for (int y = pr.y; y < pr.y + pr.h - ch; y++)
@@ -2109,15 +2144,29 @@ void app_draw_view(App *a, View view)
     prof_overlay_draw(a->rnd);
 }
 
+void app_current_counter(const App *a, char *buf, size_t bufsz)
+{
+    if (a->play.counter[0]) { str_lcpy(buf, a->play.counter, bufsz); return; }
+    const Ruleset *rs = a->map ? ruleset_by_name(a->map->ruleset) : NULL;
+    counter_default(rs ? rs->counters : NULL, buf, bufsz);
+}
+
 int app_view_differs(const App *a)
 {
     if (a->preview) return 0;                 /* the GM is already looking at it */
     if (a->modal != MODAL_NONE) return 1;
+    if (a->status_gm && a->status[0]) return 1;
     if (prof_overlay_visible()) return 1;
     if (a->screen == SCREEN_PLAY && a->map) {
+        const Map  *m  = a->map;
         const Play *pl = &a->play;
-        if (pl->sel >= 0 && pl->sel < a->map->tokens.n && a->map->tokens.v[pl->sel].note[0]) return 1;
-        if (map_note_at(a->map, a->ed.cx, a->ed.cy)) return 1;
+        if (pl->sel >= 0 && pl->sel < m->tokens.n) {
+            const Token *t = &m->tokens.v[pl->sel];
+            if (t->note[0] || t->ncounters) return 1;
+        }
+        int cur = turn_acting(m);                 /* the panel shows the actor's */
+        if (cur >= 0 && m->tokens.v[cur].ncounters) return 1;
+        if (map_note_at(m, a->ed.cx, a->ed.cy)) return 1;
     }
     return 0;
 }

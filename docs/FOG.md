@@ -650,8 +650,13 @@ frame. It should now be:
    the encounter and hiding it would make every unsaved map draw twice; and
    the copy happens before the GM's flush, because the flush swaps its
    buffers. The note freeze is gone.
-2. **Counters.** With the frame already in place they never reach a phone,
-   so the leak described under *Counters on creatures* never happens.
+2. **Counters.** *Built 2026-09-23.* With the frame already in place they
+   never reach a phone. Decided in the building: the ruleset's names are
+   what the prompt offers and how it spells them, not counters every new
+   creature silently carries -- a creature has only the counters it has
+   numbers for, so there is no invisible state in the token, the file or
+   undo. A status message can now be the GM's alone (`app_note_gm`), since
+   "Ogre HP 3/6" on the status line would otherwise have reached the table.
 3. **Fog**, which requests 4 and 5 grew past one commit's worth. In order,
    each one usable at the table before the next starts:
 

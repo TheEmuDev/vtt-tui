@@ -159,6 +159,9 @@ typedef struct {
     /* The last thing searched for, so n and N can walk the matches without
      * making you type it again. */
     char    search[TOKEN_LABEL_MAX];
+    /* The counter < and > step: the last one named in s v, the ruleset's
+     * first until then. "" means not yet chosen. */
+    char    counter[COUNTER_NAME_MAX];
 
     RangeOverlay range;
 } Play;

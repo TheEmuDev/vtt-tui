@@ -1,5 +1,7 @@
 #include "turn.h"
 
+#include "counter.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -302,7 +304,23 @@ int turn_panel_wanted(const Map *m)
     return turn_count(m) > 0 || turn_acting(m) >= 0 || turn_spotlight_ruleset(m);
 }
 
-void turn_draw_panel(Renderer *r, const Map *m, const Theme *th, Rect rc, int ascii)
+/* The actor's counter, right-aligned on its row: "4/6", or nothing. Returns
+ * the columns it took, so the name can give them up. */
+static int draw_actor_counter(Renderer *r, const Token *t, const char *counter,
+                              int x, int y, int w, Style s)
+{
+    if (!counter) return 0;
+    int i = counter_find(t, counter);
+    if (i < 0) return 0;
+    char num[16];
+    int  n = snprintf(num, sizeof num, "%d/%d", t->counters[i].value, t->counters[i].max);
+    if (n <= 0 || n + 6 > w) return 0;
+    draw_text(r, x + w - n, y, num, n, s);
+    return n + 1;
+}
+
+void turn_draw_panel(Renderer *r, const Map *m, const Theme *th, Rect rc, int ascii,
+                     const char *counter)
 {
     PROF_ZONE("panel.draw");
     if (rc.w < 8 || rc.h < 3) return;
@@ -331,10 +349,12 @@ void turn_draw_panel(Renderer *r, const Map *m, const Theme *th, Rect rc, int as
             draw_text(r, x, y++, line, w, on ? lit : plain);
             /* The creature holding it sits under its side. */
             if (on && cur >= 0 && y < rc.y + rc.h) {
+                const Token *ct = &m->tokens.v[cur];
+                Style ws = style(ct->kind == TOKEN_ENEMY ? th->enemy : th->player, th->bg, 0);
+                int   took = draw_actor_counter(r, ct, counter, x, y, w, ws);
                 char who[40];
-                snprintf(who, sizeof who, "    %.24s", name_of(&m->tokens.v[cur]));
-                draw_text(r, x, y++, who, w,
-                          style(m->tokens.v[cur].kind == TOKEN_ENEMY ? th->enemy : th->player, th->bg, 0));
+                snprintf(who, sizeof who, "    %.24s", name_of(ct));
+                draw_text(r, x, y++, who, w - took, ws);
             }
         }
         return;
@@ -359,10 +379,11 @@ void turn_draw_panel(Renderer *r, const Map *m, const Theme *th, Rect rc, int as
         int on = at == cur;
 
         char line[48];
+        Style rs   = on ? lit : style(t->kind == TOKEN_ENEMY ? th->enemy : th->player, th->bg, 0);
+        int   took = on ? draw_actor_counter(r, t, counter, x, y, w, rs) : 0;
         snprintf(line, sizeof line, "%s %3d  %.*s", on ? mark : " ", t->init,
-                 imax(1, w - 7), name_of(t));
-        draw_text(r, x, y++, line, w,
-                  on ? lit : style(t->kind == TOKEN_ENEMY ? th->enemy : th->player, th->bg, 0));
+                 imax(1, w - 7 - took), name_of(t));
+        draw_text(r, x, y++, line, w - took, rs);
         shown++;
     }
     if (shown < n) {

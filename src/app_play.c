@@ -1,5 +1,8 @@
 #include "app_priv.h"
 
+#include "counter.h"
+#include "prof.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -167,6 +170,63 @@ static int play_target_token(App *a)
     return app_token_under_cursor(a);
 }
 
+/* s v: the prompt that reads and changes a creature's counters. */
+static void counters_prompt(App *a)
+{
+    int idx = play_target_token(a);
+    if (idx < 0) { app_set_status(a, "no creature here to count"); return; }
+    const Token *t = &a->map->tokens.v[idx];
+    a->pending_token = idx;
+
+    char title[64], hint[96], have[80];
+    snprintf(title, sizeof title, "counters on %.24s", t->label[0] ? t->label : token_kind_name(t->kind));
+    counter_format(t, have, sizeof have);
+    if (have[0]) {
+        snprintf(hint, sizeof hint, "%.60s  -  hp -2, hp 4/6, -hp", have);
+    } else {
+        const Ruleset *rs = ruleset_by_name(a->map->ruleset);
+        char first[COUNTER_NAME_MAX];
+        counter_default(rs ? rs->counters : NULL, first, sizeof first);
+        if (rs && rs->counters) snprintf(hint, sizeof hint, "%s  -  e.g. %s 6", rs->counters, first);
+        else                    snprintf(hint, sizeof hint, "none yet  -  e.g. %s 6, or any name", first);
+    }
+    app_open_prompt(a, PROMPT_COUNTERS, title, hint, "");
+}
+
+/* < and >: the current counter of the selected creature, a step (or a
+ * count's worth) down or up. */
+static void counter_step(App *a, int delta)
+{
+    PROF_ZONE("counter.step");
+    int idx = play_target_token(a);
+    if (idx < 0) { app_set_status(a, "no creature here - < and > step its counter"); return; }
+    Token t = a->map->tokens.v[idx];
+    const char *who = t.label[0] ? t.label : token_kind_name(t.kind);
+
+    char cur[COUNTER_NAME_MAX], msg[96];
+    app_current_counter(a, cur, sizeof cur);
+    int i = counter_find(&t, cur);
+    if (i < 0) {
+        snprintf(msg, sizeof msg, "no %s on %.24s - s v sets it: %s 6", cur, who, cur);
+        app_set_status(a, msg);
+        return;
+    }
+    int was = t.counters[i].value;
+    counter_set(&t, t.counters[i].name, was + delta, t.counters[i].max);
+    if (t.counters[i].value == was) {
+        snprintf(msg, sizeof msg, "%.24s %s already %d/%d", who, t.counters[i].name, was, t.counters[i].max);
+        app_set_status(a, msg);
+        a->status_gm = 1;
+        return;
+    }
+    undo_begin(&a->undo);
+    undo_edit_token(&a->undo, a->map, idx, t);
+    undo_end(&a->undo);
+    snprintf(msg, sizeof msg, "%.24s %s %d/%d", who, t.counters[i].name,
+             t.counters[i].value, t.counters[i].max);
+    app_note_gm(a, msg);
+}
+
 static void place_token(App *a, uint8_t kind)
 {
     Editor *e = &a->ed;
@@ -305,7 +365,8 @@ static int pending_key(App *a, Key k)
         if (k.ch == 'i') { turn_prompt(a);   return 1; }
         if (k.ch == 't') { turn_hand_over(a); return 1; }
         if (k.ch == 'n') { app_note_prompt(a, play_target_token(a), a->ed.cx, a->ed.cy); return 1; }
-        app_set_status(a, "s wants a add, c colour, d drop, i initiative, t take the turn, n note");
+        if (k.ch == 'v') { counters_prompt(a); return 1; }
+        app_set_status(a, "s wants a add, c colour, d drop, i initiative, t take the turn, n note, v counters");
         return 1;
     }
     return 1;
@@ -568,8 +629,14 @@ void app_play_key(App *a, Key k)
 
     case 's':
         a->pending = 's';
-        app_set_status(a, "s    a add marker    c colour    d drop    i initiative    t take the turn    n note");
+        app_set_status(a, "s    a add marker    c colour    d drop    i initiative    t take the turn    n note    v counters");
         break;
+
+    case '<': case '>': {
+        int times = take_count(e);
+        counter_step(a, k.ch == '<' ? -times : times);
+        break;
+    }
 
     case '/': {
         /* Opens empty rather than pre-filled with the last search: a prompt

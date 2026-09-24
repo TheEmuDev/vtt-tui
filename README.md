@@ -253,6 +253,8 @@ A whole pen-down stroke is one undo step.
 | `s c` | change the colour the next marker will use |
 | `s d` | take a marker off (asks which, when there is more than one) |
 | `s n` | a note on the selected creature, or on this square when there is none |
+| `s v` | the selected creature's counters: `hp 6`, `hp -2`, `stress 0/6`, `-hp` |
+| `<` `>` | one off / one on its current counter — `3<` takes three (see *Counters* below) |
 | `a` `A` | next / previous turn — `3a` moves three on (see [Turn order](#turn-order-a)) |
 | `s i` | initiative: a number puts the creature in the turn order, a blank takes it out |
 | `s t` | hand the turn to this creature, whether or not it is in the order |
@@ -269,7 +271,7 @@ A whole pen-down stroke is one undo step.
 
 Two prefixes carry a family each, which is what keeps the bar to six hints: `i` inserts
 (`i p`, `i e`) and `s` is for a creature's state — its markers (`s a`, `s c`, `s d`), its place in the
-fight (`s i`, `s t`) and its note (`s n`). Press either alone and
+fight (`s i`, `s t`), its note (`s n`) and its counters (`s v`). Press either alone and
 the status line names the options; `esc` abandons it. A prefix swallows whatever comes
 next, so a half-typed command can never turn into a different whole one.
 
@@ -434,6 +436,31 @@ more than one it asks which:
 The rows are spelled out and coloured, because the map only ever showed initials and two
 conditions can share one. A token wearing a single marker skips the question — a chooser
 with one row asks nothing.
+
+**Counters.** `s v` keeps numbers on the selected creature — its hit points, its stress,
+whatever the game counts. Each is a short name, a value and a maximum, and a creature
+holds four. The prompt takes one change or several, separated by commas:
+
+```
+hp 6          a new counter at 6/6, or an existing one set to 6
+hp 4/8        value and maximum together
+hp -2         two off;  stress +1  one on
+armor         make it the counter < and > step
+-hp           take it off the creature
+```
+
+`<` and `>` then take one off or put one on the *current* counter — the last one named,
+or the ruleset's first (HP) until one is — and a count says how many: `3<` is three
+off. Values stay between zero and the maximum, and every change is one undo step, so
+`u` takes back a hit. The tool attaches no meaning to a counter reaching zero.
+
+Counters are the GM's. The status line shows the selected creature's
+(`Ogre (enemy 1x1) at D3  HP 4/6  Stress 0/3`), and the side panel shows the current
+one beside whoever is acting (`▶  12  Ogre   4/6`), but neither reaches the
+[players' frame](#remote-view-serve-mirror): the phones see the Ogre and its place in the
+order, never its number. A [ruleset](#rulesets) names the counters its game uses,
+which the prompt offers and whose spelling it keeps; Daggerheart's are HP, Stress and
+Armor. They travel with the creature through copy, paste, undo and the file.
 
 **Notes.** `s n` is a line of the GM's own text on the selected creature — what it wants,
 what it is hiding, what it does when cornered — or, with no creature under the cursor, on
@@ -892,7 +919,8 @@ Supported: `none`, `daggerheart`.
 
 #### Daggerheart
 
-`:ruleset daggerheart` adds the five bands: Melee, Very Close, Close, Far, Very Far.
+`:ruleset daggerheart` adds the five bands: Melee, Very Close, Close, Far, Very Far, and
+names the [counters](#play-mode-f2) a creature keeps: HP, Stress and Armor.
 
 The Daggerheart SRD describes each band twice — a fiction distance in feet, and an estimate
 for a physical battle map — and the two do not agree (Far is "about 30–100 feet" in the
@@ -1008,7 +1036,7 @@ short lines are treated as trailing blanks, so an editor that strips trailing wh
 cannot corrupt a map.
 
 ```
-VTT 5
+VTT 6
 name Goblin Ambush
 size 16 9
 zoom 1
@@ -1022,6 +1050,7 @@ token player 2 2 1 "Aria"
 tokenstatus red "Poisoned"
 tokenturn 18 acting
 tokennote "wants the amulet"
+tokencounter HP 4 6
 token enemy 10 4 2 "Ogre"
 tokenturn 12
 round 2
@@ -1039,7 +1068,7 @@ holding the turn from outside the order. `spotlight gm` says the GM has the spot
 a game that passes one; the players having it is the default and is not written. A
 `clock` line is a [clock](#clocks-clock-tick): its name, then filled and total segments,
 then `down` for one that counts down;
-a `roll` line a [named roll](#dice-roll). `tokennote` hangs a note on the token above it,
+a `roll` line a [named roll](#dice-roll). `tokennote` hangs a note on the token above it, `tokencounter NAME VALUE MAX` a counter,
 and `note x y` puts one on a square.
 
 | terrain | char | | boundary | char |
@@ -1058,8 +1087,9 @@ room as open. Version 3 added status markers: an older reader would ignore those
 silently drop them, losing combat state from a saved fight, so it refuses too. Version 4
 added the turn order, for the same reason — but only a map with a fight in it says 4. One
 without is still written as version 3, which says everything it needs to and stays
-loadable by the builds that came before. Version 5 added clocks, named rolls and notes, on the same terms: the
-writer always picks the lowest version that says everything in the map. Each version
+loadable by the builds that came before. Version 5 added clocks, named rolls and notes, and
+version 6 counters, on the same terms: the writer always picks the lowest version that
+says everything in the map. Each version
 still loads everything older, and an unrecognised character reads as empty rather than
 failing the load.
 

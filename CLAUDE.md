@@ -54,8 +54,9 @@ Bench scripts replay whole; no toggles — use loop-neutral pairs (`llllhhhh`,
 | `turn.c/h` | turn order and spotlight: state is `Token.turn`/`Token.init` + `Map.round`/`Map.spotlight`, never a list; `turn_walk` also drives `t`/`f`/`e`; draws the side panel |
 | `editor.c` | build mode: brush, visual box/circle, wall trace |
 | `undo.c/h` | flat op log, batches, `OP_ROUND`; tokens in a side array; capped at four fills of the largest map |
-| `mapio.c` | file format; the writer picks the lowest version that says everything: 3, 4 with a fight, 5 with clocks, named rolls or notes |
+| `mapio.c` | file format; the writer picks the lowest version that says everything: 3, 4 with a fight, 5 with clocks, named rolls or notes, 6 with counters |
 | `clock.c/h` | clocks: fixed slots on the map (`Map.clocks`), `down` per clock, `OP_CLOCK` for ticks only and it carries the slot's `gen` so a reused slot ignores old ops; `:clock`/`:tick` in `app_cmd.c`; drawn under the turn panel |
+| `counter.c/h` | counters on creatures: `Token.counters[4]`, `counter_apply` parses the `s v` prompt, `<`/`>` step `Play.counter` (`app_current_counter` falls back to the ruleset's first, `Ruleset.counters`); GM-only via `play_status(gm)`, `turn_draw_panel(counter)` and `app_note_gm`/`App.status_gm` |
 | `keys.c` | key tables for the bar and the `?` page |
 | autosave (`app.c`) | `map_touch` bumps `Map.gen`; `app_tick`/`app_autosave_due` in main's loop write `path.autosave` after 1.5 s quiet (a failed write still counts as attempted, or the loop spins); `offer_recovery` on open; dropped by save, `:q!`, discard, quit-with-y, delete; renamed with the map; `autosave_on` is set only in the interactive loop |
 | `dice.c`, `slog.c` | `:roll` (xoshiro, duality), the session log; named rolls are `Map.rolls`, expanded in `app_cmd.c` |
@@ -88,7 +89,8 @@ Bench scripts replay whole; no toggles — use loop-neutral pairs (`llllhhhh`,
   GM's view to the terminal, then the players' frame to the clients from `Net.players`,
   drawn with `app_draw_view(a, VIEW_PLAYERS)` when `app_view_differs` says the two
   could differ, else copied from the GM's back buffer. `a->view` is what is being drawn;
-  GM-only things (modals, prompts, the profiler, the `(note)` hint) check it. Add any
+  GM-only things (modals, prompts, the profiler, the `(note)` hint, counters, a status
+  message set with `app_note_gm`) check it. Add any
   new GM-only thing to `app_view_differs` too, or it reaches the phones. Build mode is
   the GM's alone.
 - Ideas consciously set aside live in `docs/IDEAS.md` with the reason (the Fear pool).

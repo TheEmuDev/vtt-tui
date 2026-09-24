@@ -55,6 +55,7 @@ typedef enum {
     PROMPT_INITIATIVE,
     PROMPT_TOKEN_SEARCH,
     PROMPT_NOTE,
+    PROMPT_COUNTERS,
 } PromptWhat;
 
 typedef struct {
@@ -76,6 +77,9 @@ typedef struct {
      * message, so a span can never outlive the text it was measured on. */
     struct { int at, len; uint32_t fg; } status_span[2];
     int nstatus_span;
+    /* The status message is the GM's alone -- a counter's value, say -- and
+     * the players' frame leaves it out. Cleared with every new message. */
+    int status_gm;
 
     ListState menu;
 
@@ -162,6 +166,7 @@ void app_frame(App *a, Term *t, uint64_t now_ms);
 int  app_view_differs(const App *a);
 void app_set_status(App *a, const char *msg);
 void app_note(App *a, const char *msg);     /* status line + session log */
+void app_note_gm(App *a, const char *msg);  /* the same, kept off the players' frame */
 void app_status_span(App *a, int at, int len, uint32_t fg);   /* colour part of it */
 
 /* Whether the remote view should be streaming this frame: play mode is what

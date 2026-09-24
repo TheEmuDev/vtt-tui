@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include "clock.h"
+#include "counter.h"
 #include "ruler.h"
 #include "turn.h"
 #include "util.h"
@@ -21,7 +22,7 @@
  * v3 added status markers on tokens. An older reader would ignore those lines
  * and silently drop them, which loses combat state from a saved fight, so it
  * refuses too. Each version still loads everything older. */
-#define FORMAT_VERSION 5
+#define FORMAT_VERSION 6
 
 /* Version 4 added the turn order. A map with no fight in it is still written
  * as version 3, which says everything it needs and stays loadable by the
@@ -31,8 +32,9 @@
  * Version 5 added clocks, named rolls and notes, on the same terms: a map
  * carrying none of them is written as whatever version it needs. The
  * writer always picks the lowest version that says everything. */
-#define FORMAT_BEFORE_TURNS  3
-#define FORMAT_BEFORE_CLOCKS 4
+#define FORMAT_BEFORE_TURNS    3
+#define FORMAT_BEFORE_CLOCKS   4
+#define FORMAT_BEFORE_COUNTERS 5
 
 /* ------------------------------------------------------------------ save */
 
@@ -68,7 +70,10 @@ int mapio_write(const Map *m, const char *path, char *err, size_t errsz)
     for (int i = 0; i < ROLL_MAX && !v5; i++) v5 = m->rolls[i].name[0] != '\0';
     for (int i = 0; i < m->tokens.n && !v5; i++) v5 = m->tokens.v[i].note[0] != '\0';
     if (m->nnotes) v5 = 1;
-    fprintf(f, "VTT %d\n", v5 ? FORMAT_VERSION : fight ? FORMAT_BEFORE_CLOCKS : FORMAT_BEFORE_TURNS);
+    int v6 = 0;
+    for (int i = 0; i < m->tokens.n && !v6; i++) v6 = m->tokens.v[i].ncounters > 0;
+    fprintf(f, "VTT %d\n", v6 ? FORMAT_VERSION : v5 ? FORMAT_BEFORE_COUNTERS
+                          : fight ? FORMAT_BEFORE_CLOCKS : FORMAT_BEFORE_TURNS);
     fprintf(f, "name %s\n", m->name);
     fprintf(f, "size %d %d\n", m->w, m->h);
     fprintf(f, "zoom %d\n", m->zoom);
@@ -100,6 +105,9 @@ int mapio_write(const Map *m, const char *path, char *err, size_t errsz)
                     status_color_name(t->status[j].color), t->status[j].label);
 
         if (t->note[0]) fprintf(f, "tokennote \"%s\"\n", t->note);
+        for (int j = 0; j < t->ncounters; j++)
+            fprintf(f, "tokencounter %s %d %d\n", t->counters[j].name,
+                    t->counters[j].value, t->counters[j].max);
 
         /* Its place in the turn order, the same way: "tokenturn 15",
          * "tokenturn 15 acting", or "tokenturn - acting" for a creature
@@ -239,6 +247,16 @@ static int parse_status_line(Map *m, const char *line)
 
     token_add_status(&m->tokens.v[m->tokens.n - 1], (uint8_t)c, label);
     return 0;
+}
+
+/* "tokencounter HP 4 6": a counter on the token above it. */
+static int parse_counter_line(Map *m, const char *line)
+{
+    if (m->tokens.n == 0) return -1;
+    char name[COUNTER_NAME_MAX] = { 0 };
+    int  value = 0, max = 0;
+    if (sscanf(line, "tokencounter %7s %d %d", name, &value, &max) != 3) return -1;
+    return counter_set(&m->tokens.v[m->tokens.n - 1], name, value, max) >= 0 ? 0 : -1;
 }
 
 static int parse_token_note_line(Map *m, const char *line)
@@ -416,6 +434,8 @@ Map *mapio_load(const char *path, char *err, size_t errsz)
             parse_status_line(m, line);
         } else if (!strncmp(line, "tokenturn ", 10)) {
             parse_turn_line(m, line);
+        } else if (!strncmp(line, "tokencounter ", 13)) {
+            parse_counter_line(m, line);
         } else if (!strncmp(line, "tokennote ", 10)) {
             parse_token_note_line(m, line);
         } else if (!strncmp(line, "note ", 5)) {

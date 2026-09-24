@@ -76,6 +76,9 @@ int  turn_panel_wanted(const Map *m);
 /* The side panel: the order top to bottom with the actor marked, or the two
  * sides of the spotlight with the lit one marked. Draws only inside rc. */
 #define TURN_PANEL_W 24
-void turn_draw_panel(Renderer *r, const Map *m, const Theme *th, Rect rc, int ascii);
+/* `counter` names the counter to show beside whoever is acting ("HP"), or
+ * is NULL for the players' frame, which never shows one. */
+void turn_draw_panel(Renderer *r, const Map *m, const Theme *th, Rect rc, int ascii,
+                     const char *counter);
 
 #endif /* VTT_TURN_H */

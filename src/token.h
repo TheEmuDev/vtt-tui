@@ -23,6 +23,17 @@ typedef struct {
     char    label[STATUS_LABEL_MAX];
 } Status;
 
+/* Named numbers on a creature: HP 4/6, Stress 2/6. Rules-agnostic -- a
+ * short name, a value and a maximum -- and the GM's business, never the
+ * table's: they are drawn in the GM's frame only. See counter.h. */
+#define TOKEN_COUNTER_MAX 4
+#define COUNTER_NAME_MAX  8
+#define COUNTER_VALUE_MAX 999
+typedef struct {
+    char    name[COUNTER_NAME_MAX];
+    int16_t value, max;             /* 0 <= value <= max, 1 <= max */
+} Counter;
+
 typedef enum {
     TOKEN_PLAYER = 0,   /* drawn as a circle */
     TOKEN_ENEMY  = 1,   /* drawn as a square, inset inside its tile */
@@ -46,6 +57,8 @@ typedef struct {
     uint8_t turn;       /* TURN_IN | TURN_ACTING */
     int16_t init;       /* meaningful only with TURN_IN */
     char    note[TOKEN_NOTE_MAX];
+    Counter counters[TOKEN_COUNTER_MAX];
+    uint8_t ncounters;
 } Token;
 
 #define TURN_IN     0x01u   /* has a place in the order */
@@ -99,6 +112,12 @@ static inline int token_equal(const Token *a, const Token *b)
     if (strcmp(a->label, b->label) != 0 || a->nstatus != b->nstatus) return 0;
     if (a->turn != b->turn || ((a->turn & TURN_IN) && a->init != b->init)) return 0;
     if (strcmp(a->note, b->note) != 0) return 0;
+    if (a->ncounters != b->ncounters) return 0;
+    for (int i = 0; i < a->ncounters; i++)
+        if (strcmp(a->counters[i].name, b->counters[i].name) != 0 ||
+            a->counters[i].value != b->counters[i].value ||
+            a->counters[i].max != b->counters[i].max)
+            return 0;
     for (int i = 0; i < a->nstatus; i++)
         if (a->status[i].color != b->status[i].color ||
             strcmp(a->status[i].label, b->status[i].label) != 0)

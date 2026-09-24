@@ -13,6 +13,7 @@
 #include <unistd.h>
 
 #include "app.h"
+#include "counter.h"
 #include "net.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -1019,6 +1020,7 @@ static void test_undo(void)
     f2.turn = 0;                                            /* init stays garbage: not in the order */
     str_lcpy(f2.label, "Aria", sizeof f2.label);
     f2.note[0] = '\0';                                      /* past the NUL stays garbage */
+    f2.ncounters = 0;                                       /* and so do the unused counters */
     int marks_before = u.nmarks;
     undo_begin(&u); undo_edit_token(&u, m, fi, f2); undo_end(&u);
     CHECK_EQ(u.nmarks, marks_before);
@@ -9291,6 +9293,196 @@ static void test_players_frame(void)
     sandbox_leave(&sb);
 }
 
+/* Counters on creatures: s v reads and writes them, < and > step the
+ * current one, undo takes a hit back, the file keeps them, and the
+ * players' frame never shows a number. */
+static void test_counters(void)
+{
+    CASE("the parser: set, step, name, remove, and refuse nonsense");
+    Token t;
+    memset(&t, 0, sizeof t);
+    char cur[COUNTER_NAME_MAX] = "HP", msg[160];
+    const char *dh = "HP Stress Armor";
+    CHECK_EQ(counter_apply(&t, "hp 6", dh, cur, sizeof cur, msg, sizeof msg), 0);
+    CHECK_EQ(t.ncounters, 1);
+    CHECK_EQ(strcmp(t.counters[0].name, "HP"), 0);          /* the ruleset's spelling */
+    CHECK_EQ(t.counters[0].value, 6);
+    CHECK_EQ(t.counters[0].max, 6);
+    CHECK_EQ(counter_apply(&t, "hp -2, stress 0/6", dh, cur, sizeof cur, msg, sizeof msg), 0);
+    CHECK_EQ(t.counters[0].value, 4);
+    CHECK_EQ(strcmp(t.counters[1].name, "Stress"), 0);
+    CHECK_EQ(strcmp(cur, "Stress"), 0);                      /* the last one named */
+    CHECK_EQ(strcmp(msg, "HP 4/6  Stress 0/6"), 0);
+    CHECK_EQ(counter_apply(&t, "hp +9", dh, cur, sizeof cur, msg, sizeof msg), 0);
+    CHECK_EQ(t.counters[0].value, 6);                        /* clamped at the maximum */
+    CHECK_EQ(counter_apply(&t, "hp 3/8", dh, cur, sizeof cur, msg, sizeof msg), 0);
+    CHECK_EQ(t.counters[0].max, 8);
+    CHECK_EQ(counter_apply(&t, "hp", dh, cur, sizeof cur, msg, sizeof msg), 0);
+    CHECK_EQ(strcmp(cur, "HP"), 0);
+    CHECK(strstr(msg, "the counter < and > step") != NULL);
+    CHECK_EQ(counter_apply(&t, "Wounds 2", NULL, cur, sizeof cur, msg, sizeof msg), 0);
+    CHECK_EQ(strcmp(t.counters[2].name, "Wounds"), 0);       /* any name, as typed */
+    CHECK_EQ(counter_apply(&t, "-stress", dh, cur, sizeof cur, msg, sizeof msg), 0);
+    CHECK_EQ(t.ncounters, 2);
+    CHECK_EQ(strcmp(t.counters[1].name, "Wounds"), 0);       /* the rest close up */
+    CHECK_EQ(counter_apply(&t, "armor -1", dh, cur, sizeof cur, msg, sizeof msg), -1);
+    CHECK(strstr(msg, "no Armor yet") != NULL);
+    CHECK_EQ(counter_apply(&t, "armor 0", dh, cur, sizeof cur, msg, sizeof msg), -1);
+    CHECK(strstr(msg, "needs its maximum") != NULL);
+    CHECK_EQ(counter_apply(&t, "hp 3/0", dh, cur, sizeof cur, msg, sizeof msg), -1);
+    CHECK_EQ(counter_apply(&t, "hp x", dh, cur, sizeof cur, msg, sizeof msg), -1);
+    CHECK_EQ(counter_apply(&t, "3 hp", dh, cur, sizeof cur, msg, sizeof msg), -1);
+    CHECK_EQ(counter_apply(&t, "toolongname 3", dh, cur, sizeof cur, msg, sizeof msg), -1);
+    CHECK_EQ(counter_apply(&t, "-nothing", dh, cur, sizeof cur, msg, sizeof msg), -1);
+    CHECK_EQ(counter_apply(&t, "a 1, b 1, c 1", NULL, cur, sizeof cur, msg, sizeof msg), -1);
+    CHECK(strstr(msg, "at most 4") != NULL);
+    char def[COUNTER_NAME_MAX];
+    counter_default(dh, def, sizeof def);   CHECK_EQ(strcmp(def, "HP"), 0);
+    counter_default(NULL, def, sizeof def); CHECK_EQ(strcmp(def, "HP"), 0);
+    counter_default("Wounds Grit", def, sizeof def); CHECK_EQ(strcmp(def, "Wounds"), 0);
+
+    Sandbox sb = sandbox_enter("counters");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    write_map_file(sb.dir, "fight.vtt");
+    char path[600];
+    snprintf(path, sizeof path, "%s/fight.vtt", sb.dir);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+    press(&a, ":ruleset daggerheart\r");
+    a.ed.cx = a.ed.cy = 0;
+    press(&a, "ieOgre\r");
+    Map *m = a.map;
+
+    CASE("s v opens the prompt with the ruleset's counters offered");
+    press(&a, "sv");
+    CHECK_EQ(a.modal, MODAL_PROMPT);
+    CHECK_EQ(a.prompt_what, PROMPT_COUNTERS);
+    CHECK(strstr(a.prompt.title, "counters on Ogre") != NULL);
+    CHECK(strstr(a.prompt.hint, "HP Stress Armor") != NULL);
+    press(&a, "hp 6, stress 0/3\r");
+    CHECK_EQ(m->tokens.v[0].ncounters, 2);
+    CHECK(strstr(a.status, "Ogre: HP 6/6  Stress 0/3") != NULL);
+    CHECK_EQ(a.status_gm, 1);
+    CHECK_EQ(m->modified, 1);
+
+    CASE("< and > step the current counter -- the last named, here Stress -- and a count names how far");
+    press(&a, ">");
+    CHECK_EQ(m->tokens.v[0].counters[1].value, 1);
+    press(&a, "svhp\r");                                   /* HP is current now */
+    press(&a, "2<");
+    CHECK_EQ(m->tokens.v[0].counters[0].value, 4);
+    CHECK(strstr(a.status, "Ogre HP 4/6") != NULL);
+    press(&a, "9<");
+    CHECK_EQ(m->tokens.v[0].counters[0].value, 0);
+    press(&a, "<");
+    CHECK(strstr(a.status, "already 0/6") != NULL);
+
+    CASE("a hit is one undo step");
+    press(&a, "u");
+    CHECK_EQ(m->tokens.v[0].counters[0].value, 4);
+    press(&a, "\x12");
+    CHECK_EQ(m->tokens.v[0].counters[0].value, 0);
+    press(&a, "sv\025hp 5\r");
+
+    CASE("the GM's status line shows the counters; the players' never does");
+    char line[192];
+    play_status(&a.play, m, &a.ed, 1, line, sizeof line);
+    CHECK(strstr(line, "HP 5/6") != NULL);
+    play_status(&a.play, m, &a.ed, 0, line, sizeof line);
+    CHECK(strstr(line, "HP") == NULL);
+
+    CASE("a creature with counters selected makes the two frames differ, and the phone sees no number");
+    CHECK_EQ(app_view_differs(&a), 1);
+    press(&a, ":serve\r");
+    int w = net_connect(a.net.port);
+    CHECK(w >= 0);
+    CHECK_EQ((int)write(w, "VTT1\n", 5), 5);
+    net_pump(&a.net, 0);
+    press(&a, ">");                                        /* a GM-only message on the line */
+    app_frame(&a, NULL, 0);
+    ByteBuf gm, pl;
+    bb_init(&gm, 65536); front_text(&r, &gm); bb_putc(&gm, '\0');
+    bb_init(&pl, 65536); front_text(&a.net.players, &pl); bb_putc(&pl, '\0');
+    CHECK(strstr(gm.data, "6/6") != NULL);
+    CHECK(strstr(pl.data, "6/6") == NULL);
+    CHECK(strstr(pl.data, "HP") == NULL);
+    CHECK(strstr(pl.data, "PLAY") != NULL);
+    bb_free(&gm); bb_free(&pl);
+
+    CASE("the panel shows the actor's counter to the GM only");
+    play_focus(&a.play, 0);
+    press(&a, "si12\r");
+    press(&a, "a");
+    press(&a, "\x1b");
+    a.ed.cx = 3; a.ed.cy = 3;
+    app_frame(&a, NULL, 0);
+    bb_init(&gm, 65536); front_text(&r, &gm); bb_putc(&gm, '\0');
+    bb_init(&pl, 65536); front_text(&a.net.players, &pl); bb_putc(&pl, '\0');
+    CHECK(strstr(gm.data, "Ogre") != NULL);
+    CHECK(strstr(gm.data, "6/6") != NULL);
+    CHECK(strstr(pl.data, "Ogre") != NULL);                /* the order is the table's */
+    CHECK(strstr(pl.data, "6/6") == NULL);                 /* the number is not */
+    bb_free(&gm); bb_free(&pl);
+    close(w);
+    press(&a, ":serve off\r");
+
+    CASE("copy and paste carry the counters along");
+    play_focus(&a.play, 0);
+    a.ed.cx = 0; a.ed.cy = 0;
+    press(&a, "y");
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "p");
+    CHECK_EQ(m->tokens.n, 2);
+    CHECK_EQ(m->tokens.v[1].ncounters, 2);
+    CHECK_EQ(m->tokens.v[1].counters[0].value, 6);
+
+    CASE("counters are saved as version 6 and read back; without them the file says what it did before");
+    char err[128];
+    CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+    char *text = slurp(path);
+    CHECK(text != NULL);
+    if (text) {
+        CHECK_EQ(strncmp(text, "VTT 6\n", 6), 0);
+        CHECK(strstr(text, "tokencounter HP 6 6\ntokencounter Stress 1 3\n") != NULL);
+        free(text);
+    }
+    Map *back = mapio_load(path, err, sizeof err);
+    CHECK(back != NULL);
+    if (back) {
+        CHECK_EQ(back->tokens.v[0].ncounters, 2);
+        CHECK_EQ(token_equal(&back->tokens.v[0], &m->tokens.v[0]), 1);
+        map_free(back);
+    }
+    press(&a, "u");                                        /* the paste */
+    play_focus(&a.play, 0);
+    press(&a, "sv\025-hp, -stress\r");
+    CHECK_EQ(m->tokens.v[0].ncounters, 0);
+    CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+    text = slurp(path);
+    if (text) { CHECK_EQ(strncmp(text, "VTT 4\n", 6), 0); free(text); }   /* still a fight */
+
+    CASE("with no creature, s v and < say so");
+    press(&a, ":turns off\r");
+    press(&a, "\x1b");
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "sv");
+    CHECK(strstr(a.status, "no creature") != NULL);
+    press(&a, "<");
+    CHECK(strstr(a.status, "no creature") != NULL);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
 static void test_serve_commands(void)
 {
     Sandbox sb = sandbox_enter("serve");
@@ -9430,6 +9622,7 @@ int main(void)
         { "serve",  test_serve_commands },
         { "servelife", test_serve_lifetime },
         { "pframe", test_players_frame },
+        { "counters", test_counters },
         { "webpage", test_webpage },
         { "turns",  test_turns },
         { "turnkeys", test_turn_keys },

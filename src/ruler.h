@@ -58,6 +58,9 @@ typedef struct {
      * start full and tick towards zero. Otherwise a new clock fills up,
      * the way a progress clock does. Either can be asked for by name. */
     int              countdown;
+    /* The counters the game keeps on a creature, space-separated, for the
+     * s v prompt to offer and to spell; NULL for none in particular. */
+    const char      *counters;
 } Ruleset;
 
 const Ruleset *ruleset_by_name(const char *name);   /* NULL if unknown */
