@@ -71,8 +71,8 @@ Answers of 2026-09-23 settle the rest:
 9. **Sight stops at walls**, and at everything else the map says is opaque.
 10. **The soft edge is the fog tiles adjacent to a lit tile**, so it moves
     with the party rather than sitting on the painted border. Anchored on
-    *lit*, all eight neighbours, a diagonal only when both of its
-    orthogonal crossings are clear.
+    *lit*, all eight neighbours, a diagonal only when all four crossings
+    round its corner are clear -- the rule `map_blocked` uses for movement.
 11. **On a soft-edge tile**: walls are drawn, but a door in one is drawn as
     a wall and only becomes a door when the tile is fully lit; terrain is
     not drawn at all; creatures are drawn, including a big creature with
@@ -115,8 +115,8 @@ a mask.
 
 **Held is what makes revealing by hand mean something.** If `g r` merely set
 *lit*, the next step anyone took would clear it. Held is a light the GM has
-put down: the recompute never touches it, `g h` takes it away, and `g r` on
-a remembering patch sets *seen* as well so the ground stays. A `reveal
+put down: the recompute never touches it, `g h` takes it away, and `g r` sets
+*seen* as well, whatever the memory setting. A `reveal
 manual` patch is one that is only ever held-lit, which is what a scripted
 reveal wants, and creatures in it are drawn exactly where the GM has put
 light and nowhere else.
@@ -686,7 +686,15 @@ frame. It should now be:
       big creature sees from any of its squares. LIT and RIM are kept out
       of the undo log entirely, since an undo that restored a light nobody
       holds would be a leak; SEEN, which memory makes permanent, is not
-      taken back by undoing the step that caused it. The lit area is
+      taken back by undoing the step that caused it. It *is* taken back by
+      undoing a `g r` or a repaint of that square, which restores the whole
+      square as it was -- including ground the party saw after -- which is
+      accepted: that undo is the GM saying the square should not have been
+      lit, and it hides ground, never a creature. `g r` sets SEEN whatever
+      the memory setting; HELD decides the drawing, and `g h` clears both.
+      Switching memory off forgets what the patch remembered (`fog_forget`),
+      so the README's "the dark closes behind them" holds for ground seen
+      before the switch as well. The lit area is
       remembered as up to 64 rectangles, folded into one past that.
    c. The soft edge, which by now has somewhere to be drawn.
 

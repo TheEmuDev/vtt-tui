@@ -10128,6 +10128,19 @@ static void test_fog_sight(void)
     CHECK_EQ(fog_at(m, 0, 0) & (FOG_LIT | FOG_SEEN), 0);
     CHECK_EQ(fog_ground_hidden(m, 0, 0), 1);
 
+    CASE("switching memory off forgets what the patch remembered, apart from what the GM holds");
+    a.ed.cx = 10; a.ed.cy = 4;
+    press(&a, "gr");
+    press(&a, ":fog Dark memory on\r");
+    play_focus(&a.play, 0);
+    a.ed.cx = 4; a.ed.cy = 1;
+    press(&a, "\rhhh\r");                                  /* back west: remembers (4,1)..(5,*) */
+    CHECK(fog_at(m, 5, 1) & FOG_SEEN);
+    press(&a, ":fog Dark memory off\r");
+    CHECK_EQ(fog_at(m, 5, 1) & FOG_SEEN, 0);
+    CHECK(fog_at(m, 10, 4) & FOG_SEEN);                      /* held: kept */
+    CHECK(fog_at(m, 0, 0) & FOG_LIT);                        /* what she sees now stays lit */
+
     CASE("a big creature lights from all of its squares");
     a.ed.cx = 1; a.ed.cy = 3;
     press(&a, "2bipOx\r");

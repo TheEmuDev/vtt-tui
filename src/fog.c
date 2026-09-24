@@ -230,6 +230,19 @@ int fog_light_patch(Map *m, Undo *u, int id, int on)
     return changed;
 }
 
+void fog_forget(Map *m, int id)
+{
+    if (id < 1 || id > FOG_PATCH_MAX) return;
+    const FogPatch *p = &m->fog_patches[id - 1];
+    if (p->x1 < p->x0) return;
+    for (int y = p->y0; y <= p->y1; y++)
+        for (int x = p->x0; x <= p->x1; x++) {
+            uint8_t *f = &m->fog[(size_t)y * (size_t)m->w + (size_t)x];
+            if ((*f & FOG_ID) == (uint8_t)id && !(*f & FOG_HELD)) *f &= (uint8_t)~FOG_SEEN;
+        }
+    map_touch(m);
+}
+
 int fog_count(const Map *m, int id, int *seen)
 {
     int n = 0, s = 0;

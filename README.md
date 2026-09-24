@@ -785,7 +785,8 @@ light nothing. `reveal manual` is a patch only the GM's hand lights.
 
 With **memory** on, the default, ground the party has seen stays drawn after they move on, the
 way a map is drawn as a dungeon is explored — but a creature standing on it is drawn only while
-someone can see it now. With memory off the dark closes behind them. The GM's own light (`g r`)
+someone can see it now. With memory off the dark closes behind them; switching it off
+forgets what the patch had remembered, apart from what the GM holds lit. The GM's own light (`g r`)
 stays down whoever walks away, until `g h` takes it back.
 
 Sight is worked out again after any keystroke that changed the map — a step, a door, an undo,

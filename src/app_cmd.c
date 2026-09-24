@@ -538,7 +538,10 @@ static void fog_command(App *a, const char *rest)
     }
     FogPatch *p = &m->fog_patches[id - 1];
 
-    if (!strcmp(verb, "memory"))                                        p->memory = !strcmp(arg, "on");
+    if (!strcmp(verb, "memory")) {
+        p->memory = !strcmp(arg, "on");
+        if (!p->memory) fog_forget(m, id);
+    }
     else if (!strcmp(verb, "--soft-edge") || !strcmp(verb, "--no-soft-edge")) p->soft_edge = (int8_t)!strcmp(verb, "--soft-edge");
     else if (!strcmp(verb, "manual"))                                   p->reveal = FOG_REVEAL_MANUAL;
     else if (reveal >= 0)                                               p->reveal = (int8_t)reveal;

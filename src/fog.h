@@ -93,6 +93,12 @@ void fog_light(Map *m, Undo *u, int x, int y, int on);
  * changed. */
 int  fog_light_patch(Map *m, Undo *u, int id, int on);
 
+/* Memory switched off forgets what the patch remembered: SEEN goes from
+ * every square of it the GM is not holding lit, so "the dark closes
+ * behind them" is true of ground seen before the switch too. A setting,
+ * not an undo op, like the rest of a patch's settings. */
+void fog_forget(Map *m, int id);
+
 /* Tiles painted into a patch, and how many of those the party has seen or
  * has had lit. */
 int  fog_count(const Map *m, int id, int *seen);

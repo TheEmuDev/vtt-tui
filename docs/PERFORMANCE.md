@@ -316,7 +316,10 @@ over its edges now stands in for a line walk a square; a room with walls in reac
 every line. Two further wins are on the table and not taken: recomputing only the creatures
 that moved (the rest of the party's light is unchanged by one step), and shadowcasting, which
 visits each square once however many lines would pass through it. Either would matter for a
-large party in a warren of walls; neither does at a table of four.
+large party in a warren of walls; neither does at a table of four. One more thing worth
+knowing: the recompute is keyed on any change to the map, so it also runs after edits that
+cannot change sight -- a counter, a clock, a note, the round. That is the price of one rule
+instead of a list of call sites that could miss one, and a missed one would be a leak.
 
 **A counter step is a token edit.** `counter.step` is 0.4µs typical: find the
 current counter, clamp, and one `undo_edit_token`, the same path a relabel takes.
