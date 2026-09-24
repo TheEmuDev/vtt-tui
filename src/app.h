@@ -69,6 +69,7 @@ typedef struct {
     int    ascii;
     View   view;       /* what app_draw_view is drawing right now */
     int    preview;    /* :player preview -- the GM's terminal shows VIEW_PLAYERS */
+    unsigned fog_gen;  /* the map generation sight was last worked out for */
 
     char status[160];
 
@@ -150,6 +151,10 @@ typedef struct {
 void app_init(App *a, Term *t, Renderer *r);
 void app_free(App *a);
 void app_key(App *a, Key k);
+/* Works fog's sight out again if anything on the map changed since last
+ * time -- a creature moved, a door opened, a patch was painted, an undo.
+ * app_key calls it after every key, so it is once a keystroke at most. */
+void app_fog_sync(App *a);
 /* Draws into a->rnd: the GM's view, or the players' under :player preview. */
 void app_draw(App *a);
 void app_draw_view(App *a, View view);

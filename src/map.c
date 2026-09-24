@@ -131,7 +131,10 @@ int map_resize(Map *m, int w, int h)
                m->tiles + (size_t)y * (size_t)m->w, (size_t)cw);
         memcpy(fog + (size_t)y * (size_t)w,
                m->fog + (size_t)y * (size_t)m->w, (size_t)cw);
+        for (int x = 0; x < cw; x++)                         /* sight is rebuilt */
+            fog[(size_t)y * (size_t)w + (size_t)x] &= (uint8_t)~(FOG_LIT | FOG_RIM);
     }
+    m->fog_nlit = 0;
     for (int i = 0; i < FOG_PATCH_MAX; i++) {
         FogPatch *p = &m->fog_patches[i];
         if (p->x1 < p->x0) continue;

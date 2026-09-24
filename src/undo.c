@@ -248,15 +248,21 @@ void undo_set_spotlight(Undo *u, Map *m, int side)
 void undo_set_fog(Undo *u, Map *m, int x, int y, uint8_t f)
 {
     if (!map_in_bounds(m, x, y)) return;
-    uint8_t was = m->fog[(size_t)y * (size_t)m->w + (size_t)x];
-    if (was == f) return;
+    /* LIT and RIM are where the creatures stand this second, rebuilt by
+     * fog_recompute; they are kept out of the log so an undo can never put
+     * back a light nobody is holding. */
+    const uint8_t derived = FOG_LIT | FOG_RIM;
+    uint8_t now = m->fog[(size_t)y * (size_t)m->w + (size_t)x];
+    uint8_t was = (uint8_t)(now & ~derived);
+    f = (uint8_t)(f & ~derived);
+    if (was == f) { m->fog[(size_t)y * (size_t)m->w + (size_t)x] = (uint8_t)(f | (now & derived)); return; }
     Op *o = push(u);
     o->kind   = OP_FOG;
     o->x      = (int16_t)x;
     o->y      = (int16_t)y;
     o->before = was;
     o->after  = f;
-    map_fog_set(m, x, y, f);
+    map_fog_set(m, x, y, (uint8_t)(f | (now & derived)));
     map_touch(m);
 }
 
@@ -321,9 +327,12 @@ static void apply(const Undo *u, Map *m, const Op *o, int forward)
     case OP_SPOTLIGHT:
         m->spotlight = forward ? o->y : o->x;
         break;
-    case OP_FOG:
-        map_fog_set(m, o->x, o->y, forward ? o->after : o->before);
+    case OP_FOG: {
+        uint8_t now = map_in_bounds(m, o->x, o->y) ? m->fog[(size_t)o->y * (size_t)m->w + (size_t)o->x] : 0;
+        map_fog_set(m, o->x, o->y, (uint8_t)((forward ? o->after : o->before) |
+                                             (now & (FOG_LIT | FOG_RIM))));
         break;
+    }
     case OP_CLOCK:
         /* The slot may have been dropped and started again since. The op
          * carries the generation it was recorded against, so a new clock

@@ -171,6 +171,8 @@ int app_open_map(App *a, const char *path)
 
     a->screen = SCREEN_EDITOR;
     a->autosave_gen = a->seen_gen = m->gen;
+    fog_recompute(m);
+    a->fog_gen = m->gen;
 
     char msg[192];
     snprintf(msg, sizeof msg, "opened %s (%dx%d, %d token%s)",
@@ -221,6 +223,8 @@ static void recover_autosave(App *a)
     grid_center_on(&a->ed.view, m, a->ed.cx, a->ed.cy);
     m->modified = 1;
     a->autosave_gen = a->seen_gen = m->gen;
+    fog_recompute(m);
+    a->fog_gen = m->gen;
     app_set_status(a, "recovered - :w keeps it, :q! lets it go");
 }
 
@@ -1828,7 +1832,23 @@ static void editor_key(App *a, Key k)
     }
 }
 
+static void app_key_dispatch(App *a, Key k);
+
+void app_fog_sync(App *a)
+{
+    if (!a->map) return;
+    if (a->map->gen == a->fog_gen) return;
+    fog_recompute(a->map);
+    a->fog_gen = a->map->gen;
+}
+
 void app_key(App *a, Key k)
+{
+    app_key_dispatch(a, k);
+    app_fog_sync(a);
+}
+
+static void app_key_dispatch(App *a, Key k)
 {
     PROF_ZONE("input.key");
 

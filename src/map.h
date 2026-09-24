@@ -159,6 +159,11 @@ typedef struct {
     int      fog_on;                      /* the master switch */
     int      fog_soft_edge;               /* the map's default for patches that follow it */
     FogPatch fog_patches[FOG_PATCH_MAX];
+    /* Where the last sight recompute set LIT and RIM, so the next one clears
+     * exactly that and never walks a whole patch. Derived, not saved. */
+#define FOG_LIT_RECTS 64
+    int16_t  fog_lit[FOG_LIT_RECTS][4];   /* x0, y0, x1, y1 */
+    int      fog_nlit;
 
     /* Measurement settings travel with the encounter, since they belong to
      * the game being played rather than to the session. */

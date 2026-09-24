@@ -9969,6 +9969,176 @@ static void test_fog(void)
     sandbox_leave(&sb);
 }
 
+/* An open 12x5 room, a wall down x=6 with a door at y=2 (closed), and fog
+ * painted everywhere, for the sight tests. */
+static void write_sight_map(const char *dir, const char *name, int reveal, int memory)
+{
+    char path[512];
+    snprintf(path, sizeof path, "%s/%s", dir, name);
+    FILE *f = fopen(path, "w");
+    if (!f) return;
+    fprintf(f, "VTT 6\nname sight\nsize 12 5\nzoom 1\nmetric chebyshev\ntiles\n"
+               "............\n............\n............\n............\n............\n"
+               "vedges\n      |      \n      |      \n      +      \n      |      \n      |      \n"
+               "hedges\n            \n            \n            \n            \n            \n            \n"
+               "fog on\nfogpatch 1 Dark reveal %d memory %s\nfog\n"
+               "AAAAAAAAAAAA\nAAAAAAAAAAAA\nAAAAAAAAAAAA\nAAAAAAAAAAAA\nAAAAAAAAAAAA\n",
+            reveal, memory ? "on" : "off");
+    fclose(f);
+}
+
+/* Fog, part two: player creatures light what they can see, as they move. */
+static void test_fog_sight(void)
+{
+    Sandbox sb = sandbox_enter("fogsight");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    write_sight_map(sb.dir, "s.vtt", 2, 1);
+    char path[600];
+    snprintf(path, sizeof path, "%s/s.vtt", sb.dir);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 16);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Map *m = a.map;
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+
+    CASE("with nobody on the map nothing is lit");
+    CHECK_EQ(fog_ground_hidden(m, 2, 2), 1);
+
+    CASE("a player creature lights its reveal, in the map's metric, and no further");
+    a.ed.cx = 2; a.ed.cy = 2;
+    press(&a, "ipAria\r");
+    CHECK(fog_at(m, 2, 2) & FOG_LIT);
+    CHECK(fog_at(m, 4, 4) & FOG_LIT);                       /* chebyshev 2 */
+    CHECK(fog_at(m, 0, 0) & FOG_LIT);
+    CHECK_EQ(fog_at(m, 5, 2) & FOG_LIT, 0);                 /* 3 away */
+    CHECK_EQ(fog_ground_hidden(m, 5, 2), 1);
+    CHECK_EQ(fog_token_hidden(m, &m->tokens.v[0]), 0);
+
+    CASE("an enemy lights nothing");
+    a.ed.cx = 9; a.ed.cy = 2;
+    press(&a, "ieOgre\r");
+    CHECK_EQ(fog_at(m, 9, 2) & FOG_LIT, 0);
+    CHECK_EQ(fog_token_hidden(m, &m->tokens.v[1]), 1);
+
+    CASE("walking up to the wall lights up to it, never through it");
+    press(&a, "\x1b");
+    play_focus(&a.play, 0);
+    a.ed.cx = 2; a.ed.cy = 2;
+    press(&a, "\r lll\r");                                  /* carry Aria to (5,2) */
+    press(&a, "\r");
+    CHECK_EQ(m->tokens.v[0].x, 5);
+    CHECK(fog_at(m, 5, 0) & FOG_LIT);
+    CHECK_EQ(fog_at(m, 6, 2) & FOG_LIT, 0);                 /* beyond the closed door */
+    CHECK_EQ(fog_at(m, 7, 1) & FOG_LIT, 0);
+
+    CASE("memory keeps the ground she left drawn, and nothing standing on it");
+    CHECK(fog_at(m, 1, 2) & FOG_SEEN);
+    CHECK_EQ(fog_at(m, 1, 2) & FOG_LIT, 0);                 /* 4 away now */
+    CHECK_EQ(fog_ground_hidden(m, 1, 2), 0);
+    CHECK_EQ(fog_creature_hidden(m, 1, 2), 1);
+
+    CASE("opening the door lights what is beyond it, and the Ogre with it");
+    a.ed.cx = 5; a.ed.cy = 2;
+    press(&a, "o");
+    CHECK(fog_at(m, 7, 2) & FOG_LIT);
+    CHECK(fog_at(m, 6, 3) & FOG_LIT);                        /* round the door's frame, diagonally */
+    press(&a, "o");                                         /* closed again: dark again */
+    CHECK_EQ(fog_at(m, 7, 2) & FOG_LIT, 0);
+    CHECK(fog_at(m, 7, 2) & FOG_SEEN);                       /* but remembered */
+
+    CASE("undo of a step works sight out again");
+    press(&a, "u");                                         /* the door */
+    CHECK(fog_at(m, 7, 2) & FOG_LIT);
+    press(&a, "u");
+    CHECK_EQ(fog_at(m, 7, 2) & FOG_LIT, 0);
+
+    CASE("the rim is the unlit fog beside the light, and not through the wall");
+    CHECK(fog_at(m, 2, 2) & FOG_RIM);                       /* 3 west of her, beside lit (3,2) */
+    CHECK_EQ(fog_at(m, 3, 2) & FOG_RIM, 0);                 /* lit, so not rim */
+    CHECK_EQ(fog_at(m, 6, 1) & FOG_RIM, 0);                 /* beside lit (5,1), across the wall */
+    CHECK_EQ(fog_at(m, 6, 2) & FOG_RIM, 0);                 /* across the closed door */
+
+    CASE("the GM's light stays where it was put, whoever walks away");
+    a.ed.cx = 10; a.ed.cy = 4;
+    press(&a, "gr");
+    CHECK(fog_at(m, 10, 4) & FOG_HELD);
+    play_focus(&a.play, 0);
+    a.ed.cx = 5; a.ed.cy = 2;
+    press(&a, "\rh\r");
+    CHECK(fog_at(m, 10, 4) & FOG_HELD);
+    CHECK_EQ(fog_ground_hidden(m, 10, 4), 0);
+
+    CASE("two creatures side by side: one walking away does not put out the other's light");
+    a.ed.cx = 2; a.ed.cy = 0;
+    press(&a, "ipBram\r");
+    press(&a, "\x1b");
+    CHECK(fog_at(m, 0, 0) & FOG_LIT);                        /* Bram's */
+    play_focus(&a.play, 0);                                 /* Aria, at (4,2) */
+    a.ed.cx = 4; a.ed.cy = 2;
+    press(&a, "\rjj\r");
+    CHECK(fog_at(m, 0, 0) & FOG_LIT);
+    CHECK(fog_at(m, 3, 1) & FOG_LIT);                        /* both of theirs */
+
+    CASE("sight is bounded: it records only the party's reach");
+    CHECK(m->fog_nlit >= 1 && m->fog_nlit <= 4);
+
+    CASE("reveal manual lights nothing by itself; the master switch and disable put everything out");
+    press(&a, ":fog Dark manual\r");
+    CHECK_EQ(fog_at(m, 0, 0) & FOG_LIT, 0);
+    press(&a, ":fog Dark 2\r");
+    CHECK(fog_at(m, 0, 0) & FOG_LIT);
+    press(&a, ":fog off\r");
+    CHECK_EQ(fog_at(m, 0, 0) & FOG_LIT, 0);
+    press(&a, ":fog on\r");
+    press(&a, ":fog Dark disable\r");
+    CHECK_EQ(fog_at(m, 0, 0) & FOG_LIT, 0);
+    press(&a, ":fog Dark enable\r");
+    CHECK(fog_at(m, 0, 0) & FOG_LIT);
+
+    CASE("lit and rim are never saved, and the map opens with sight worked out");
+    char err[128];
+    CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+    app_free(&a);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    m = a.map;
+    CHECK(fog_at(m, 0, 0) & FOG_LIT);
+
+    CASE("memory off: the dark closes behind");
+    app_free(&a);
+    write_sight_map(sb.dir, "l.vtt", 1, 0);
+    snprintf(path, sizeof path, "%s/l.vtt", sb.dir);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    m = a.map;
+    app_key(&a, f2);
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "ipAria\r");
+    CHECK(fog_at(m, 0, 0) & FOG_LIT);
+    press(&a, "\x1b");
+    play_focus(&a.play, 0);
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "\rlll\r");
+    CHECK_EQ(fog_at(m, 0, 0) & (FOG_LIT | FOG_SEEN), 0);
+    CHECK_EQ(fog_ground_hidden(m, 0, 0), 1);
+
+    CASE("a big creature lights from all of its squares");
+    a.ed.cx = 1; a.ed.cy = 3;
+    press(&a, "2bipOx\r");
+    CHECK(fog_at(m, 0, 4) & FOG_LIT);
+    CHECK(fog_at(m, 3, 4) & FOG_LIT);                       /* one past its right edge */
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
 static void test_serve_commands(void)
 {
     Sandbox sb = sandbox_enter("serve");
@@ -10110,6 +10280,7 @@ int main(void)
         { "pframe", test_players_frame },
         { "counters", test_counters },
         { "fog",    test_fog },
+        { "fogsight", test_fog_sight },
         { "webpage", test_webpage },
         { "turns",  test_turns },
         { "turnkeys", test_turn_keys },

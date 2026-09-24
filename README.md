@@ -776,9 +776,22 @@ at all — most of what the app says names a creature or a square. The range hig
 ruler anchored in the dark are not drawn for the players, and one anchored in the light tints
 only lit ground.
 
-Creatures lighting fog by walking into it — each patch's `reveal`, `memory` and the soft
-edge (`:fog --soft-edge`) — are the next steps of [docs/FOG.md](docs/FOG.md). For now `reveal`
-and `memory` are stored and fog is lit by hand.
+**Sight.** Player creatures light fog as they move. Each patch lights to its own `reveal`,
+counted in squares by the map's [metric](#measurement) — the same count the ruler makes — from
+the nearest square of the creature, along lines that walls, closed doors and secret doors stop
+and windows and open doors do not, which is the test the ruler and the range highlight already
+use. Opening a door lights what is beyond it; closing it puts that back in the dark. Enemies
+light nothing. `reveal manual` is a patch only the GM's hand lights.
+
+With **memory** on, the default, ground the party has seen stays drawn after they move on, the
+way a map is drawn as a dungeon is explored — but a creature standing on it is drawn only while
+someone can see it now. With memory off the dark closes behind them. The GM's own light (`g r`)
+stays down whoever walks away, until `g h` takes it back.
+
+Sight is worked out again after any keystroke that changed the map — a step, a door, an undo,
+a patch painted or reset — and at no other time, and it covers only the party's reach: a map
+with a crypt at one end costs nothing while the party is at the other. The soft edge
+(`:fog --soft-edge`) is stored for the next step of [docs/FOG.md](docs/FOG.md).
 
 ### Dice (`:roll`)
 

@@ -97,6 +97,17 @@ int  fog_light_patch(Map *m, Undo *u, int id, int on);
  * has had lit. */
 int  fog_count(const Map *m, int id, int *seen);
 
+/* Sight: which painted ground the party can see *now*. Rebuilds LIT (and
+ * SEEN, for a patch that remembers) from every player creature, each patch
+ * lighting to its own `reveal` in the map's own metric, along lines the
+ * boundaries do not block -- the same test the ruler and the range use.
+ * Then RIM on the unlit fog next to it. Clears only where it lit last time
+ * and tests each patch's extent before touching a tile, so the cost is the
+ * party's reach, never the size of a patch. HELD is never touched: the GM's
+ * light stays down. Not an undo op and not saved: it is where the creatures
+ * stand, and is rebuilt whenever that could have changed. */
+void fog_recompute(Map *m);
+
 /* The patch colour index for the build-mode tint, 0..14. */
 static inline int fog_tint(int id) { return (id - 1) % FOG_PATCH_MAX; }
 

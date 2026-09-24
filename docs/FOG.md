@@ -676,7 +676,18 @@ frame. It should now be:
       those is showing.
    b. Line of sight: per-patch `reveal`, the bounding-box test, the
       recompute on every trigger in the list, *held* for the GM's hand,
-      memory both ways.
+      memory both ways. *Built 2026-09-23.* Decided in the building: the
+      trigger list is met by one rule rather than a list of call sites --
+      every change on the checklist already bumps `Map.gen`, so sight is
+      worked out after any keystroke that moved it, once, and after open
+      and recovery. Distance is the map's own metric from the creature's
+      nearest square, and the line test is `sight_blocked`, the ruler's,
+      so fog, ruler and range cannot disagree about what can be seen. A
+      big creature sees from any of its squares. LIT and RIM are kept out
+      of the undo log entirely, since an undo that restored a light nobody
+      holds would be a leak; SEEN, which memory makes permanent, is not
+      taken back by undoing the step that caused it. The lit area is
+      remembered as up to 64 rectangles, folded into one past that.
    c. The soft edge, which by now has somewhere to be drawn.
 
 The reason for the change is that both halves of request 4 live in the
