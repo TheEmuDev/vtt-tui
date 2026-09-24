@@ -253,9 +253,12 @@ static int parse_status_line(Map *m, const char *line)
 static int parse_counter_line(Map *m, const char *line)
 {
     if (m->tokens.n == 0) return -1;
-    char name[COUNTER_NAME_MAX] = { 0 };
+    /* Scanned one wider than a name may be, so an overlong one is refused
+     * rather than cut short with its tail read as the value. */
+    char name[COUNTER_NAME_MAX + 1] = { 0 };
     int  value = 0, max = 0;
-    if (sscanf(line, "tokencounter %7s %d %d", name, &value, &max) != 3) return -1;
+    if (sscanf(line, "tokencounter %8s %d %d", name, &value, &max) != 3) return -1;
+    if (strlen(name) >= COUNTER_NAME_MAX) return -1;
     return counter_set(&m->tokens.v[m->tokens.n - 1], name, value, max) >= 0 ? 0 : -1;
 }
 

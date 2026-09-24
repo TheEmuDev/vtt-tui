@@ -107,6 +107,12 @@ void app_note(App *a, const char *msg)
     slog_write(&a->slog, msg);
 }
 
+void app_set_status_gm(App *a, const char *msg)
+{
+    app_set_status(a, msg);
+    a->status_gm = 1;
+}
+
 void app_note_gm(App *a, const char *msg)
 {
     app_note(a, msg);
@@ -817,13 +823,16 @@ static void prompt_accept(App *a)
         Token t = a->map->tokens.v[idx];
         char  cur[COUNTER_NAME_MAX], msg[160], out[200];
         app_current_counter(a, cur, sizeof cur);
+        /* Every message here is about a creature's numbers, the ones that
+         * say nothing changed and the complaints that echo what was typed
+         * included, so none of them may reach the players' frame. */
         if (counter_apply(&t, text, rs ? rs->counters : NULL, cur, sizeof cur, msg, sizeof msg) != 0) {
-            app_set_status(a, msg);
+            app_set_status_gm(a, msg);
             return;
         }
         str_lcpy(a->play.counter, cur, sizeof a->play.counter);
         const Token *was = &a->map->tokens.v[idx];
-        if (token_equal(was, &t)) { app_set_status(a, msg); return; }
+        if (token_equal(was, &t)) { app_set_status_gm(a, msg); return; }
         undo_begin(&a->undo);
         undo_edit_token(&a->undo, a->map, idx, t);
         undo_end(&a->undo);

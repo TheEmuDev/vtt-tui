@@ -208,15 +208,14 @@ static void counter_step(App *a, int delta)
     int i = counter_find(&t, cur);
     if (i < 0) {
         snprintf(msg, sizeof msg, "no %s on %.24s - s v sets it: %s 6", cur, who, cur);
-        app_set_status(a, msg);
+        app_set_status_gm(a, msg);
         return;
     }
     int was = t.counters[i].value;
     counter_set(&t, t.counters[i].name, was + delta, t.counters[i].max);
     if (t.counters[i].value == was) {
         snprintf(msg, sizeof msg, "%.24s %s already %d/%d", who, t.counters[i].name, was, t.counters[i].max);
-        app_set_status(a, msg);
-        a->status_gm = 1;
+        app_set_status_gm(a, msg);
         return;
     }
     undo_begin(&a->undo);

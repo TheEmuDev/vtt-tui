@@ -154,6 +154,10 @@ int counter_apply(Token *t, const char *text, const char *names,
         const char *e;
         if (*r == '+' || *r == '-') {
             if (!parse_int(r, &e, &a) || *e) { snprintf(msg, msgsz, "%s %.12s - a step is +2 or -2", name, r); return -1; }
+            /* Bounded before the add: nothing past the widest counter means
+             * anything, and an unbounded long would overflow the int sum. */
+            if (a >  COUNTER_VALUE_MAX) a =  COUNTER_VALUE_MAX;
+            if (a < -COUNTER_VALUE_MAX) a = -COUNTER_VALUE_MAX;
             if (at < 0) { snprintf(msg, msgsz, "no %s yet - %s 6 sets one", name, name); return -1; }
             counter_set(t, name, t->counters[at].value + (int)a, t->counters[at].max);
             changed = 1;

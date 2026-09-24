@@ -9334,6 +9334,10 @@ static void test_counters(void)
     CHECK_EQ(counter_apply(&t, "3 hp", dh, cur, sizeof cur, msg, sizeof msg), -1);
     CHECK_EQ(counter_apply(&t, "toolongname 3", dh, cur, sizeof cur, msg, sizeof msg), -1);
     CHECK_EQ(counter_apply(&t, "-nothing", dh, cur, sizeof cur, msg, sizeof msg), -1);
+    CHECK_EQ(counter_apply(&t, "hp +2147483647", dh, cur, sizeof cur, msg, sizeof msg), 0);
+    CHECK_EQ(t.counters[0].value, t.counters[0].max);        /* bounded, not overflowed */
+    CHECK_EQ(counter_apply(&t, "hp -9999999999", dh, cur, sizeof cur, msg, sizeof msg), 0);
+    CHECK_EQ(t.counters[0].value, 0);
     CHECK_EQ(counter_apply(&t, "a 1, b 1, c 1", NULL, cur, sizeof cur, msg, sizeof msg), -1);
     CHECK(strstr(msg, "at most 4") != NULL);
     char def[COUNTER_NAME_MAX];
@@ -9417,6 +9421,24 @@ static void test_counters(void)
     CHECK(strstr(pl.data, "PLAY") != NULL);
     bb_free(&gm); bb_free(&pl);
 
+    CASE("a prompt that changes nothing, or is refused, still keeps its numbers off the phone");
+    play_focus(&a.play, 0);
+    press(&a, "sv\025hp 6\r");                             /* already 6/6 */
+    CHECK(strstr(a.status, "HP 6/6") != NULL);
+    CHECK_EQ(a.status_gm, 1);
+    press(&a, "\x1b");                                     /* deselect; the cursor still names Ogre */
+    a.ed.cx = 0; a.ed.cy = 0;
+    press(&a, "sv\025hp 4/\r");                            /* refused, echoing what was typed */
+    CHECK(strstr(a.status, "maximum") != NULL);
+    CHECK_EQ(a.status_gm, 1);
+    a.ed.cx = 3; a.ed.cy = 3;                                /* nothing else GM-only in view */
+    CHECK_EQ(app_view_differs(&a), 1);
+    app_frame(&a, NULL, 0);
+    bb_init(&pl, 65536); front_text(&a.net.players, &pl); bb_putc(&pl, '\0');
+    CHECK(strstr(pl.data, "maximum") == NULL);
+    CHECK(strstr(pl.data, "4/") == NULL);
+    bb_free(&pl);
+
     CASE("the panel shows the actor's counter to the GM only");
     play_focus(&a.play, 0);
     press(&a, "si12\r");
@@ -9460,6 +9482,25 @@ static void test_counters(void)
         CHECK_EQ(back->tokens.v[0].ncounters, 2);
         CHECK_EQ(token_equal(&back->tokens.v[0], &m->tokens.v[0]), 1);
         map_free(back);
+    }
+
+    CASE("an overlong counter name in a file is refused, not cut short with its tail read as a number");
+    {
+        char bad[700];
+        snprintf(bad, sizeof bad, "%s/bad.vtt", sb.dir);
+        FILE *bf = fopen(bad, "w");
+        if (bf) {
+            fputs("VTT 6\nname x\nsize 2 2\ntiles\n..\n..\ntoken enemy 0 0 1 \"Ogre\"\n"
+                  "tokencounter Stamina2 4 6\ntokencounter Grit 2 5\n", bf);
+            fclose(bf);
+        }
+        Map *bm = mapio_load(bad, err, sizeof err);
+        CHECK(bm != NULL);
+        if (bm) {
+            CHECK_EQ(bm->tokens.v[0].ncounters, 1);
+            CHECK_EQ(strcmp(bm->tokens.v[0].counters[0].name, "Grit"), 0);
+            map_free(bm);
+        }
     }
     press(&a, "u");                                        /* the paste */
     play_focus(&a.play, 0);

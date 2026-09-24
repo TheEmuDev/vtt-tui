@@ -167,6 +167,7 @@ int  app_view_differs(const App *a);
 void app_set_status(App *a, const char *msg);
 void app_note(App *a, const char *msg);     /* status line + session log */
 void app_note_gm(App *a, const char *msg);  /* the same, kept off the players' frame */
+void app_set_status_gm(App *a, const char *msg);  /* a hint or error the table must not see */
 void app_status_span(App *a, int at, int len, uint32_t fg);   /* colour part of it */
 
 /* Whether the remote view should be streaming this frame: play mode is what
