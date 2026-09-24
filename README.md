@@ -740,6 +740,8 @@ What a patch still hides is drawn three ways. In the [players' frame](#remote-vi
 — the phones, the mirror, and `:player preview` — it is not drawn at all: no floor, no walls
 inside it, no creatures, and not even the dot that marks void, since a field of dots would
 trace the room. The wall between a lit room and a dark one is drawn, from the lit side. The
+void around a painted room counts as dark too, so painting a room's floor is enough to hide
+its outline -- only a wall with lit ground on one side is drawn. The
 GM's own screen shows the same ground on a dark blue shadow, with everything on it, so the
 GM sees the whole map and what the table sees at once. Build mode tints each patch in a colour
 of its own.
@@ -765,7 +767,10 @@ patch's settings are not, any more than starting a clock is.
 
 In the players' frame fog also keeps the dark from being described. A creature in it is named
 `?` in the title bar and the turn panel. The cursor is not drawn while it rests in the dark,
-since its size follows whatever it rests on. The status line says `dark` for such a square,
+since its size follows whatever it rests on, and neither are its row and column lit in the
+margins. The status line says only `dark` for such a square, not which one it is; a creature
+carried out of the dark does not say where it set out from or how far it has come. The panel's
+count of creatures outside the fight leaves out the ones in the dark. The status line
 names no hidden creature, leaves out the count of creatures on the map, and shows no message
 at all — most of what the app says names a creature or a square. The range highlight and the
 ruler anchored in the dark are not drawn for the players, and one anchored in the light tints

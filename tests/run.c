@@ -9664,12 +9664,44 @@ static void test_fog(void)
     play_status(&a.play, m, &a.ed, 1, line, sizeof line);  /* the GM's line still says */
     CHECK(strstr(line, "Ogre") != NULL);
 
+    CASE("the players' frame does not light the cursor's row and column in the dark, nor name its square");
+    rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+    int accent_labels = 0;
+    for (int x = 0; x < r.w; x++) {
+        const Cell *c = &r.back[(size_t)1 * (size_t)r.w + (size_t)x];
+        if (c->fg == a.th->accent && c->ch >= 'A' && c->ch <= 'J') accent_labels++;
+    }
+    CHECK_EQ(accent_labels, 0);
+    play_focus(&a.play, -1);
+    play_status(&a.play, m, &a.ed, 0, line, sizeof line);
+    CHECK(strstr(line, "H2") == NULL);
+    CHECK(strstr(line, "dark") != NULL);
+    play_focus(&a.play, 0);
+
     CASE("over fog the players' frame carries no status message at all");
     press(&a, ":roll 2d6\r");
     rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
     bb_init(&fr, 65536); rnd_dump(&r, &fr); bb_putc(&fr, '\0');
     CHECK(strstr(fr.data, "2d6") == NULL);
     bb_free(&fr);
+
+    CASE("a creature carried out of the dark does not say where it came from");
+    a.ed.cx = 7; a.ed.cy = 1;
+    press(&a, "\r");                                        /* pick up the Ogre, in the dark */
+    press(&a, "\x17hhh\x17");                              /* through the wall, into the light */
+    CHECK_EQ(fog_token_hidden(m, &m->tokens.v[0]), 0);
+    play_status(&a.play, m, &a.ed, 0, line, sizeof line);
+    CHECK(strstr(line, "MOVING") != NULL);
+    CHECK(strstr(line, "from") == NULL);
+    CHECK(strstr(line, "step") == NULL);
+    play_status(&a.play, m, &a.ed, 1, line, sizeof line);
+    CHECK(strstr(line, "from H2") != NULL);                 /* the GM's still does */
+    rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+    bb_init(&fr, 65536); rnd_dump(&r, &fr); bb_putc(&fr, '\0');
+    CHECK(strstr(fr.data, " sq") == NULL);                 /* no distance label */
+    bb_free(&fr);
+    press(&a, "\x1b");                                      /* cancel: back where it was */
+    CHECK_EQ(m->tokens.v[0].x, 7);
 
     CASE("the title bar and the panel name a creature in the dark '?'");
     press(&a, "si12\r");
@@ -9685,6 +9717,7 @@ static void test_fog(void)
     bb_init(&fr, 65536); rnd_dump(&r, &fr); bb_putc(&fr, '\0');
     CHECK(strstr(fr.data, "Ogre") == NULL);
     CHECK(strstr(fr.data, "12  ?") != NULL);
+    CHECK(strstr(fr.data, "1 not in the fight") != NULL);  /* Aria, who is in the light */
     bb_free(&fr);
     rnd_begin(&r); app_draw_view(&a, VIEW_GM);
     bb_init(&fr, 65536); rnd_dump(&r, &fr); bb_putc(&fr, '\0');
@@ -9739,6 +9772,11 @@ static void test_fog(void)
     CHECK_EQ(fog_ground_hidden(m, 9, 3), 1);
     press(&a, "gx");
     CHECK(strstr(a.status, "g wants r") != NULL);
+
+    CASE("a typo in a setting makes no patch; :fog all never paints into a patch that merely starts with All");
+    press(&a, ":fog Cellar bogus\r");
+    CHECK(strstr(a.status, ":fog NAME [") != NULL);
+    CHECK_EQ(fog_find(m, "Cellar"), 0);
 
     CASE(":fog NAME clear and hide do the same by name; settings change and list");
     press(&a, ":fog cr clear\r");
@@ -9822,6 +9860,26 @@ static void test_fog(void)
         map_free(back);
     }
 
+    CASE("a fogpatch line after its section, or twice, still leaves the ground hidden");
+    {
+        char late[700];
+        snprintf(late, sizeof late, "%s/late.vtt", sb.dir);
+        FILE *lf = fopen(late, "w");
+        if (lf) {
+            fputs("VTT 6\nname x\nsize 3 1\ntiles\n...\nfog on\nfog\n.AA\n"
+                  "fogpatch 1 Hall reveal 2 memory on\nfogpatch 1 Hall reveal 2 memory on\n", lf);
+            fclose(lf);
+        }
+        Map *lm = mapio_load(late, err, sizeof err);
+        CHECK(lm != NULL);
+        if (lm) {
+            CHECK_EQ(fog_count(lm, 1, NULL), 2);
+            CHECK_EQ(fog_any(lm), 1);
+            CHECK_EQ(fog_ground_hidden(lm, 2, 0), 1);
+            map_free(lm);
+        }
+    }
+
     CASE("a row naming a patch no line created is no fog");
     {
         char bad[700];
@@ -9858,12 +9916,47 @@ static void test_fog(void)
     CHECK_EQ(fog_at(m, 7, 3) & FOG_ID, 1);
     CHECK(m->fog_patches[0].x1 <= 7);
 
-    CASE(":fog all is a patch over the whole map");
+    CASE(":fog all is a patch over the whole map, called All exactly");
+    press(&a, ":fog Allies\r");
+    int allies = fog_find(m, "Allies");
     press(&a, ":fog all 3\r");
+    CHECK_EQ(fog_count(m, allies, NULL), 0);
     int all = fog_find(m, "All");
     CHECK(all > 0);
     CHECK_EQ(fog_count(m, all, NULL), 32);
     CHECK_EQ(m->fog_patches[all - 1].reveal, 3);
+
+    CASE("a walled room whose floor alone is painted shows no outline to the players");
+    {
+        char room[700];
+        snprintf(room, sizeof room, "%s/room.vtt", sb.dir);
+        FILE *rf = fopen(room, "w");
+        if (rf) {
+            fputs("VTT 6\nname room\nsize 6 3\nzoom 1\ntiles\n. ... \n. ... \n. ... \n"
+                  "vedges\n  |   | \n  |   | \n  |   | \nhedges\n  --- \n      \n      \n  --- \n"
+                  "fog on\nfogpatch 1 Room reveal 2 memory on\nfog\n..AAA.\n..AAA.\n..AAA.\n", rf);
+            fclose(rf);
+        }
+        App b;
+        Renderer rr;
+        rnd_init(&rr);
+        rnd_resize(&rr, 40, 12);
+        app_init(&b, NULL, &rr);
+        CHECK_EQ(app_open_map(&b, room), 0);
+        app_key(&b, f2);
+        rnd_begin(&rr); app_draw_view(&b, VIEW_PLAYERS);
+        ByteBuf rb;
+        bb_init(&rb, 8192); rnd_dump(&rr, &rb); bb_putc(&rb, '\0');
+        CHECK(strstr(rb.data, "\u2503") == NULL);          /* no heavy wall anywhere */
+        CHECK(strstr(rb.data, "\u2501") == NULL);
+        bb_free(&rb);
+        rnd_begin(&rr); app_draw_view(&b, VIEW_GM);
+        bb_init(&rb, 8192); rnd_dump(&rr, &rb); bb_putc(&rb, '\0');
+        CHECK(strstr(rb.data, "\u2503") != NULL);          /* the GM's has it */
+        bb_free(&rb);
+        app_free(&b);
+        rnd_free(&rr);
+    }
 
     CASE("a full table refuses the sixteenth");
     char cmd[32];

@@ -431,7 +431,12 @@ static void turn_draw_panel_body(Renderer *r, const Map *m, const Theme *th, Rec
         snprintf(who, sizeof who, "%s  %.*s", mark, imax(1, w - 3), name_of(&m->tokens.v[cur]));
         draw_text(r, x, y++, who, w, lit);
     }
-    int out = m->tokens.n - n;
+    /* Over fog, a creature the party cannot see is not counted either:
+     * "1 not in the fight" would announce it. */
+    int out = 0;
+    for (int i = 0; i < m->tokens.n; i++)
+        if (!(m->tokens.v[i].turn & TURN_IN) && !(g_mask && fog_token_hidden(g_mask, &m->tokens.v[i])))
+            out++;
     if (out > 0 && y < rc.y + rc.h) {
         char rest[32];
         snprintf(rest, sizeof rest, "%d not in the fight", out);

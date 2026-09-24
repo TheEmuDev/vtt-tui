@@ -575,13 +575,21 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
     /* The players' frame over fog: everything below that could point at
      * what the party cannot see asks first. */
     int fogp = players && fog_any(m);
+    /* A carried creature's ghost, trail and distance all point back at
+     * where it set out from, so a start in the dark hides them as surely as
+     * a creature that is still in it. */
     int held_hidden = fogp && p->grabbed && p->sel >= 0 && p->sel < m->tokens.n &&
-                      fog_token_hidden(m, &m->tokens.v[p->sel]);
+                      (fog_token_hidden(m, &m->tokens.v[p->sel]) ||
+                       fog_ground_hidden(m, p->origin_x, p->origin_y));
+    int cursor_dark = fogp && fog_ground_hidden(m, e->cx, e->cy);
     int range_hidden = fogp && (p->range.token >= 0
         ? p->range.token < m->tokens.n && fog_token_hidden(m, &m->tokens.v[p->range.token])
         : fog_ground_hidden(m, p->range.ax, p->range.ay));
 
-    grid_draw_labels(r, m, &e->view, th, ed_gutter(e, m), e->cx, e->cy);
+    /* The lit row and column say where the cursor is; in the dark that is
+     * where the GM is working, which is usually on something hidden. */
+    grid_draw_labels(r, m, &e->view, th, ed_gutter(e, m),
+                     cursor_dark ? -1 : e->cx, cursor_dark ? -1 : e->cy);
 
     ClipRect saved = rnd_clip_push(r, e->view.view.x, e->view.view.y,
                                    e->view.view.w, e->view.view.h);
@@ -621,7 +629,7 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
      * the players' frame has no cursor at all: its size follows whatever it
      * rests on, which would say what is there. */
     uint8_t csize = play_cursor_size(p, m);
-    int     cursor = !(fogp && fog_ground_hidden(m, e->cx, e->cy));
+    int     cursor = !cursor_dark;
     if (cursor) grid_draw_cursor_area(r, &e->view, m, e->cx, e->cy, csize, th->cursor_bg);
 
     /* Everything in the group is ringed, not just the primary: a formation
@@ -680,6 +688,13 @@ void play_status(const Play *p, const Map *m, const Editor *e, int gm, char *buf
             char from[MAP_COORD_MAX];
             map_coord_name(p->origin_x, p->origin_y, from, sizeof from);
 
+            /* Over fog, a start in the dark is not the players' to know --
+             * nor, therefore, how far it has come. */
+            if (fogp && fog_ground_hidden(m, p->origin_x, p->origin_y)) {
+                snprintf(buf, bufsz, "MOVING  %.20s %dx%d  %s",
+                         t->label[0] ? t->label : token_kind_name(t->kind), t->size, t->size, walls);
+                return;
+            }
             snprintf(buf, bufsz,
                      "MOVING  %.20s %dx%d  %d step%s%s  from %s  %s",
                      t->label[0] ? t->label : token_kind_name(t->kind),
@@ -722,9 +737,10 @@ void play_status(const Play *p, const Map *m, const Editor *e, int gm, char *buf
     map_coord_name(e->cx, e->cy, at, sizeof at);
 
     if (fogp) {
-        snprintf(buf, bufsz, "PLAY    %s  %s  %s", at,
-                 fog_ground_hidden(m, e->cx, e->cy) ? "dark"
-                 : map_walkable(m, e->cx, e->cy) ? "floor" : "void", walls);
+        /* The square's name would say where in the dark the GM is looking. */
+        if (fog_ground_hidden(m, e->cx, e->cy)) snprintf(buf, bufsz, "PLAY    dark  %s", walls);
+        else snprintf(buf, bufsz, "PLAY    %s  %s  %s", at,
+                      map_walkable(m, e->cx, e->cy) ? "floor" : "void", walls);
         return;
     }
     snprintf(buf, bufsz, "PLAY    %s  %s%s  %d token%s  next size %d  %s",

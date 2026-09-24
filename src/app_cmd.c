@@ -475,7 +475,12 @@ static void fog_command(App *a, const char *rest)
     int all = !strcmp(w1, "all");
     const char *name = all ? "All" : w1;
 
-    int id = all ? fog_find(m, "All") : fog_find(m, name);
+    /* "all" is the one patch found by its exact name, never a prefix: with
+     * a patch called Allies it must not paint the whole map into that. */
+    int id = all ? 0 : fog_find(m, name);
+    if (all)
+        for (int i = 0; i < FOG_PATCH_MAX && !id; i++)
+            if (!m->fog_patches[i].dead && !strcmp(m->fog_patches[i].name, "All")) id = i + 1;
     if (id < 0) {
         snprintf(msg, sizeof msg, "\"%.20s\" could be more than one patch", name);
         app_set_status(a, msg);
@@ -510,7 +515,20 @@ static void fog_command(App *a, const char *rest)
     }
 
     /* Otherwise it is the patch g f paints, created if need be, with any
-     * setting that came with it. */
+     * setting that came with it -- checked before anything is created, so
+     * a typo does not leave a stray patch behind. */
+    long reveal = -2;
+    if (!strcmp(verb, "memory")) {
+        if (strcmp(arg, "on") && strcmp(arg, "off")) { app_set_status(a, ":fog NAME memory on, or off"); return; }
+    } else if (!strcmp(verb, "manual") || !strcmp(verb, "--soft-edge") || !strcmp(verb, "--no-soft-edge") || !verb[0]) {
+    } else {
+        char *end;
+        reveal = strtol(verb, &end, 10);
+        if (*end || reveal < 0 || reveal > 99) {
+            app_set_status(a, ":fog NAME [reveal 0-99 | manual | memory on/off | --soft-edge | clear | hide | disable | enable | delete]");
+            return;
+        }
+    }
     int created = 0;
     if (!id) {
         id = fog_create(m, name);
@@ -520,22 +538,10 @@ static void fog_command(App *a, const char *rest)
     }
     FogPatch *p = &m->fog_patches[id - 1];
 
-    if (!strcmp(verb, "memory")) {
-        if (strcmp(arg, "on") && strcmp(arg, "off")) { app_set_status(a, ":fog NAME memory on, or off"); return; }
-        p->memory = !strcmp(arg, "on");
-    } else if (!strcmp(verb, "--soft-edge") || !strcmp(verb, "--no-soft-edge")) {
-        p->soft_edge = (int8_t)!strcmp(verb, "--soft-edge");
-    } else if (!strcmp(verb, "manual")) {
-        p->reveal = FOG_REVEAL_MANUAL;
-    } else if (verb[0]) {
-        char *end;
-        long v = strtol(verb, &end, 10);
-        if (*end || v < 0 || v > 99) {
-            app_set_status(a, ":fog NAME [reveal 0-99 | manual | memory on/off | --soft-edge | clear | hide | disable | enable | delete]");
-            return;
-        }
-        p->reveal = (int8_t)v;
-    }
+    if (!strcmp(verb, "memory"))                                        p->memory = !strcmp(arg, "on");
+    else if (!strcmp(verb, "--soft-edge") || !strcmp(verb, "--no-soft-edge")) p->soft_edge = (int8_t)!strcmp(verb, "--soft-edge");
+    else if (!strcmp(verb, "manual"))                                   p->reveal = FOG_REVEAL_MANUAL;
+    else if (reveal >= 0)                                               p->reveal = (int8_t)reveal;
     map_touch(m);
     a->ed.fog_patch = id;
 

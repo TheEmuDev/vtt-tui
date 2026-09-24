@@ -203,11 +203,30 @@ typedef struct {
  * several places inside that one call, and it is cleared on the way out. */
 static const Map *g_fog_blank;
 
+/* For the wall test only: a side is dark when fog hides it, or when it is
+ * void that no patch covers. Painting a room's floor and not the void
+ * around it is the natural gesture, and without this its whole outline --
+ * every wall between the hidden floor and the void -- would be drawn. */
+static int side_dark(const Map *m, int x, int y)
+{
+    if (fog_ground_hidden(m, x, y)) return 1;
+    return map_in_bounds(m, x, y) && map_tile(m, x, y) == TILE_VOID &&
+           !fog_patch_live(m, fog_at(m, x, y) & FOG_ID);
+}
+
+/* A boundary the players' frame leaves out: dark on both sides, and hidden
+ * on at least one -- so two voids outside any fog keep their wall. */
+static int seg_blank(const Map *m, int ax, int ay, int bx, int by)
+{
+    return side_dark(m, ax, ay) && side_dark(m, bx, by) &&
+           (fog_ground_hidden(m, ax, ay) || fog_ground_hidden(m, bx, by));
+}
+
 static Seg vseg(const Map *m, int x, int y)
 {
     Seg s = { 0, EDGE_NONE };
     if (x < 0 || x > m->w || y < 0 || y >= m->h) return s;
-    if (g_fog_blank && fog_ground_hidden(m, x - 1, y) && fog_ground_hidden(m, x, y)) return s;
+    if (g_fog_blank && seg_blank(m, x - 1, y, x, y)) return s;
 
     s.kind  = map_vedge(m, x, y);
     s.level = edge_weight(s.kind);
@@ -220,7 +239,7 @@ static Seg hseg(const Map *m, int x, int y)
 {
     Seg s = { 0, EDGE_NONE };
     if (y < 0 || y > m->h || x < 0 || x >= m->w) return s;
-    if (g_fog_blank && fog_ground_hidden(m, x, y - 1) && fog_ground_hidden(m, x, y)) return s;
+    if (g_fog_blank && seg_blank(m, x, y - 1, x, y)) return s;
 
     s.kind  = map_hedge(m, x, y);
     s.level = edge_weight(s.kind);

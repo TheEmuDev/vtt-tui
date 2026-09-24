@@ -13,8 +13,8 @@ typedef enum {
     OP_TOKEN_EDIT,
     OP_ROUND,            /* the fight's round counter: x before, y after */
     OP_SPOTLIGHT,        /* which side has the spotlight: x before, y after */
-    OP_CLOCK,
-    OP_FOG,              /* a tile's fog byte: before/after */            /* a clock's filled segments: x is the slot, before/after */
+    OP_CLOCK,            /* a clock's filled segments: x is the slot, y its generation, before/after */
+    OP_FOG,              /* a tile's fog byte: before/after */
 } OpKind;
 
 /* One op is one cell or one token changing. Tile ops dominate -- a brush

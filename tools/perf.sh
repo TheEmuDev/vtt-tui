@@ -190,6 +190,8 @@ run "play, spotlight"      "$MOB"    80x24  ':play\raa'
 run "play, named roll"     "$MOB"    80x24  ':play\r:roll attack = 2d12+3\r:roll attack\r:roll att\r'
 run "play, fog"            "$MOB"    80x24  ':fog all\r:play\rjjllkkhh'
 run "play, fog, 4 watchers" "$MOB"   80x24  ':fog all\r:play\rjjllkkhh' "--bench-clients 4"
+run "play, fog by hand"    "$MOB"    80x24  ':fog all\r:play\rgrghllgrghhh'
+run "play, fog range, 4 watchers" "$MOB" 80x24 ':fog all\r:play\rtgR6rllhh' "--bench-clients 4"
 run "build, fog paint"     "$MOB"    80x24  ':fog Crypt\r3bgfgcllgfgchh'
 run "play, counters"       "$MOB"    80x24  ':play\rtsvhp 9\r><><><><'
 run "play, clocks"         "$MOB"    80x24  ':play\r:clock Dragon 6\r:clock Ritual 8\r:tick Dragon 2\r:tick -2\r'

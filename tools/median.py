@@ -32,7 +32,12 @@ def rows(table):
 
 
 def us(cell):
-    return float(cell.strip().replace("us", ""))
+    cell = cell.strip()
+    # The bench prints a slow frame in milliseconds rather than a four-digit
+    # microsecond figure; read both.
+    if cell.endswith("ms"):
+        return float(cell[:-2]) * 1000.0
+    return float(cell.replace("us", ""))
 
 
 def fmt(v, width):

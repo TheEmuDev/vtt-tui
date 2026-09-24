@@ -562,11 +562,19 @@ Map *mapio_load(const char *path, char *err, size_t errsz)
     }
     fclose(f);
     turn_sanitize(m);
-    /* A fog row that names a patch no fogpatch line created is no fog. */
-    for (size_t i = 0; i < (size_t)w * (size_t)h; i++) {
-        int id = m->fog[i] & FOG_ID;
-        if (id && !m->fog_patches[id - 1].name[0]) m->fog[i] = 0;
-    }
+    /* A fog row that names a patch no fogpatch line created is no fog; and
+     * the extents are rebuilt from the rows, whatever order the lines came
+     * in -- a fogpatch line after the section, or twice, would otherwise
+     * leave painted ground under an empty extent, and hide nothing. */
+    for (int i = 0; i < FOG_PATCH_MAX; i++) { m->fog_patches[i].x0 = 0; m->fog_patches[i].x1 = -1; }
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            uint8_t fb = m->fog[(size_t)y * (size_t)w + (size_t)x];
+            int id = fb & FOG_ID;
+            if (!id) continue;
+            if (!m->fog_patches[id - 1].name[0]) m->fog[(size_t)y * (size_t)w + (size_t)x] = 0;
+            else map_fog_set(m, x, y, fb);
+        }
 
     str_lcpy(m->path, path, sizeof m->path);
     m->modified = 0;

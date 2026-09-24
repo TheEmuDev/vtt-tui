@@ -63,6 +63,8 @@ binary is what showed it was the machine and not the code.
 | play, named roll     | 80x24  |    27.8us |    32.6us |    17 |   165 |
 | play, fog            | 80x24  |    32.1us |    40.8us |    24 |   265 |
 | play, fog, 4 watchers | 80x24  |    66.3us |    87.9us |    24 |   265 |
+| play, fog by hand    | 80x24  |    32.2us |    44.0us |    35 |   231 |
+| play, fog range, 4 watchers | 80x24  |   116.3us |   224.3us |    77 |   541 |
 | build, fog paint     | 80x24  |    29.1us |    44.9us |    24 |   219 |
 | play, counters       | 80x24  |    30.1us |    64.3us |    54 |   402 |
 | play, clocks         | 80x24  |    28.9us |    33.5us |    15 |   162 |
@@ -100,7 +102,9 @@ a median near zero and a p99 that says what it costs when it does.
 | clock.draw       |   1.6us |   3.4us |  55.5us | 18165 | play, clocks 80x24     |
 | counter.step     |   0.4us |   6.0us |  22.4us |  3200 | play, counters 80x24   |
 | editor.draw      | 103.6us | 215.7us | 342.6us |  3200 | build, 200x200 200x50  |
+| fog.blank        |   0.7us |   2.2us |  12.3us |  7335 | play, fog range, 4 watchers 80x24 |
 | fog.paint        |   0.2us |   3.6us |  84.6us |  1600 | build, fog paint 80x24 |
+| fog.reveal       |   6.1us |  21.1us |  93.7us |   367 | play, fog range, 4 watchers 80x24 |
 | grid.draw        |  95.9us | 197.4us | 334.9us |  3200 | build, 200x200 200x50  |
 | grid.labels      |   7.5us |  18.6us |  38.0us |  3200 | build, mostly void 200x50 |
 | group.box        |   0.1us |   0.5us |   1.1us |   400 | play, group carry 80x24 |
@@ -290,8 +294,19 @@ being written anyway. The players' frame over fog is cheaper to draw than the GM
 tile is a `continue` with no writes, and walls between hidden tiles are never resolved -- so
 `play, fog, 4 watchers` at 66.3µs is the second draw the plan priced in, less than the
 differing-frame row pays for a note. `fog.paint` is 0.2µs a brush stroke, a handful of 20-byte
-undo ops. `fog.blank`, the pass that takes the dark back out of a range wash or a trail in the
+undo ops. `fog.reveal`, a `g r` or `g h`, is 6.1µs: a footprint of undo ops, or a
+patch's extent for `g R`. `fog.blank`, the pass that takes the dark back out of a range wash or a trail in the
 players' frame, runs only while one of those is showing over fog.
+
+*Provenance, 2026-09-23.* The two rows `play, fog by hand` and `play, fog range, 4
+watchers`, and the zones `fog.blank` and `fog.reveal`, come from a median of three runs
+taken after the review fixes to fog part one; the rest of these tables are from the runs
+before them, which the fixes do not touch outside the players' frame. A full regeneration
+was attempted and abandoned: the machine's battery was at 12% and the CPU was held at
+0.8 GHz, which put every row, fog or not, at four times its value. In that same post-fix
+set `play, fog` read 38.1µs; an interleaved A/B against the previous binary put it at
+32.0-32.4µs against 31.8-32.1µs, so that was one disturbed pass and the 32.1µs above
+stands. Regenerate all of it on the next quiet run at full clock.
 
 **A counter step is a token edit.** `counter.step` is 0.4µs typical: find the
 current counter, clamp, and one `undo_edit_token`, the same path a relabel takes.
