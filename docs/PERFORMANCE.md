@@ -356,8 +356,8 @@ Each recompute here is one keystroke's; a frame never pays for it.
 
 The "before" column is sight as first built; "now" is the build as committed, which
 recomputes only the creatures that moved (below) and walks lines with the shared
-\`sight_walk\` -- measured after step 3, with the mask taken out again. A step on the open map is 6.0µs where it was 34, and 14µs in the
-warren where it was 52. The rows that must rebuild everything -- a setting changed, a door
+`sight_walk` -- measured after step 3, with the mask taken out again. A step on the open
+map is 6.0µs where it was 34, and 14µs in the warren where it was 52. The rows that must rebuild everything -- a setting changed, a door
 toggled -- got cheaper too, 28 and 43 against 33 and 48, because the rebuild now skips the
 line walks the old loop skipped and works distance out a row at a time. `warren, party`
 moves three creatures a step through walls, and pays for three creatures' line walks: 31µs
