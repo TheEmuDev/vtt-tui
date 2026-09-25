@@ -263,6 +263,7 @@ static void snapshot(Map *m)
         s->tok[i].size = t->size; s->tok[i].kind = t->kind;
     }
     s->n      = m->tokens.n;
+    s->shape  = m->tokens.shape;
     s->gen    = m->gen;
     s->fog_on = m->fog_on;
     s->metric = m->metric;
@@ -372,15 +373,17 @@ void fog_recompute(Map *m)
     Sight *s = &m->sight;
 
     /* The step path's proof. map_touch is the only writer of Map.gen, every
-     * change to a map touches it, and a move touches exactly once and does
-     * nothing else. So if gen moved by k, and exactly k creatures stand
-     * somewhere else -- same list, same sizes and sides, every setting sight
-     * reads unchanged -- then those k touches were those k moves and nothing
-     * else happened. Anything short of that proof rebuilds everything. */
+     * change to a map touches it, and a change to one token touches once.
+     * With the token list the same shape (no add or remove, so no index
+     * shifted) each touch can leave at most one creature elsewhere. So if
+     * gen moved by k and exactly k creatures stand somewhere else -- same
+     * sizes and sides, every setting sight reads unchanged -- then every
+     * touch was one of those moves and nothing else happened. Anything
+     * short of that proof rebuilds everything. */
     unsigned k = m->gen - s->gen;
     int moved[FOG_STEP_MAX], nmoved = 0, step = 0;
     if (s->valid && m->fog_on && s->fog_on && k >= 1 && k <= FOG_STEP_MAX &&
-        s->n == m->tokens.n && s->metric == m->metric && s->w == m->w && s->h == m->h &&
+        s->n == m->tokens.n && s->shape == m->tokens.shape && s->metric == m->metric && s->w == m->w && s->h == m->h &&
         !memcmp(s->patches, m->fog_patches, sizeof s->patches)) {
         step = 1;
         for (int i = 0; i < m->tokens.n && step; i++) {

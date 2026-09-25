@@ -25,6 +25,7 @@ int tokens_add(TokenList *l, Token t)
     if (t.size < 1) t.size = 1;
     if (t.size > TOKEN_SIZE_MAX) t.size = TOKEN_SIZE_MAX;
     l->v[l->n] = t;
+    l->shape++;
     return l->n++;
 }
 
@@ -33,6 +34,7 @@ void tokens_remove(TokenList *l, int idx)
     if (idx < 0 || idx >= l->n) return;
     memmove(&l->v[idx], &l->v[idx + 1], (size_t)(l->n - idx - 1) * sizeof(Token));
     l->n--;
+    l->shape++;
 }
 
 int tokens_at(const TokenList *l, int x, int y)

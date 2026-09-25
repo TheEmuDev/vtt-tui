@@ -741,7 +741,7 @@ frame. It should now be:
          are cleared and relit; anything unprovable rebuilds everything, as
          today. No list of call sites to keep in step. Merge only if the
          stepping rows at least halve and the full-rebuild rows rise under
-         15%. **Built 2026-09-24.** Two things the plan did not foresee.
+         15%. **Built 2026-09-24.** Three things the plan did not foresee.
          Complete entries made the full rebuild dearer (every creature
          walked squares an earlier one had lit, which the old loop
          skipped): entries now hold VIS_ASK for such a square and the step
@@ -750,6 +750,13 @@ frame. It should now be:
          test is a per-row limit worked out with `dist_tiles` (every metric
          grows with either offset), not a call a square. Overlapping boxes
          are merged into the box round them when that is no bigger.
+         Review found the proof as first written was short one condition:
+         a delete and an add shift the list's indices, so one batch of
+         (edge change, delete, add) could leave three creatures "elsewhere"
+         for three touches and hide the edge change. No keystroke makes
+         such a batch today; `TokenList.shape`, bumped by every add and
+         remove, now has to be unchanged too, and with it each touch can
+         account for at most one creature elsewhere.
       3. **Cheaper line walks, same rule**, only if 2 leaves them worth it:
          one shared walk loop for fog, ruler and range; an opacity mask over
          the reach; prefix sums so a square with no wall between it and the

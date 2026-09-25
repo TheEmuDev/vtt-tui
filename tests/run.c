@@ -10049,10 +10049,10 @@ static void fd_write_map(const char *path)
     /* One to three patches over rectangles that may overlap (the later one
      * wins the square), with every kind of setting. */
     int np = 1 + (int)fd_rand(3);
-    static const int reveals[] = { 0, 1, 2, 3, 6, -1 };
+    static const int reveals[] = { 0, 1, 2, 3, 6, -1, 0, 1, 2, 3, 6, -1, 12, 40, 99 };
     fprintf(f, "fog on\n%s", fd_rand(2) ? "fog soft-edge\n" : "");
     for (int i = 1; i <= np; i++) {
-        int r = reveals[fd_rand(6)];
+        int r = reveals[fd_rand(15)];
         char rv[16];
         if (r < 0) snprintf(rv, sizeof rv, "manual"); else snprintf(rv, sizeof rv, "%d", r);
         fprintf(f, "fogpatch %d P%d reveal %s memory %s%s%s\n", i, i, rv,
@@ -10223,7 +10223,44 @@ static void test_fog_diff(void)
     rnd_resize(&r, 80, 24);
     Key f1 = { KEY_F1, 0, 0 }, f2 = { KEY_F2, 0, 0 };
     int open = 0, fails = 0, maps = 0, gen_fails = 0;
-    int mix[20] = { 0 };
+    int mix[22] = { 0 };
+
+    CASE("a wall, a delete and an add in one batch: three touches, three creatures elsewhere, and no step");
+    {
+        Map *m = map_new(12, 8, "gap");
+        m->fog_on = 1;
+        int id = fog_create(m, "P1");
+        m->fog_patches[id - 1].reveal = 3;
+        m->fog_patches[id - 1].memory = 0;
+        for (int y = 0; y < 8; y++)
+            for (int x = 0; x < 12; x++) map_fog_set(m, x, y, (uint8_t)id);
+        Token pc = { 0 };
+        pc.size = 1; pc.kind = TOKEN_PLAYER;
+        static const int at[4][2] = { { 1, 1 }, { 5, 5 }, { 9, 1 }, { 9, 6 } };
+        for (int i = 0; i < 4; i++) { pc.x = (int16_t)at[i][0]; pc.y = (int16_t)at[i][1]; tokens_add(&m->tokens, pc); }
+        Undo u;
+        undo_init(&u);
+        fog_recompute(m);
+        CHECK(fog_at(m, 3, 1) & FOG_LIT);
+        undo_begin(&u);
+        undo_set_vedge(&u, m, 3, 1, EDGE_WALL);              /* between (2,1) and (3,1) */
+        undo_del_token(&u, m, 1);                            /* indices 1..3 shift */
+        pc.x = 5; pc.y = 6;
+        undo_add_token(&u, m, pc);
+        undo_end(&u);
+        unsigned st0, fu0, st1, fu1;
+        fog_sight_counts(&st0, &fu0);
+        fog_recompute(m);
+        fog_sight_counts(&st1, &fu1);
+        CHECK_EQ(st1 - st0, 0u);
+        CHECK_EQ(fog_at(m, 3, 1) & FOG_LIT, 0);             /* behind the new wall */
+        CHECK_EQ(fog_at(m, 4, 1) & FOG_LIT, 0);
+        undo_undo(&u, m);
+        fog_recompute(m);
+        CHECK(fog_at(m, 3, 1) & FOG_LIT);
+        undo_free(&u);
+        map_free(m);
+    }
 
     unsigned steps0, fulls0;
     fog_sight_counts(&steps0, &fulls0);
@@ -10244,7 +10281,7 @@ static void test_fog_diff(void)
         FdSnap before;
         fd_snap(m, &before);
 
-        int kind = (int)fd_rand(20);
+        int kind = (int)fd_rand(22);
         mix[kind]++;
         char keys[64];
         int  n = m->tokens.n;
@@ -10340,6 +10377,43 @@ static void test_fog_diff(void)
                 }
             }
             break;
+        case 20: case 21:                                    /* a batch no key makes today */
+            if (!t || a.play.grabbed) break;
+            {
+                /* Moves mixed with other changes in one undo batch: the
+                 * step path must see through every one of them. */
+                int idx = (int)(t - m->tokens.v), v = (int)fd_rand(5);
+                int nx = iclamp(t->x + (int)fd_rand(3) - 1, 0, m->w - t->size);
+                int ny = iclamp(t->y + (int)fd_rand(3) - 1, 0, m->h - t->size);
+                int ex = (int)fd_rand((unsigned)m->w + 1), ey = (int)fd_rand((unsigned)m->h);
+                undo_begin(&a.undo);
+                if (v == 0) {                                /* a move and a wall */
+                    undo_move_token(&a.undo, m, idx, nx, ny);
+                    undo_set_vedge(&a.undo, m, ex, ey, map_vedge(m, ex, ey) ? EDGE_NONE : EDGE_WALL);
+                } else if (v == 1) {                         /* a move and a stroke of paint */
+                    undo_move_token(&a.undo, m, idx, nx, ny);
+                    fog_paint(m, &a.undo, (int)fd_rand((unsigned)m->w), (int)fd_rand((unsigned)m->h),
+                              (int)fd_rand(4));
+                } else if (v == 2 && n >= 2) {               /* a wall, a delete, an add: indices shift */
+                    Token nt = m->tokens.v[n - 1];
+                    nt.x = (int16_t)nx; nt.y = (int16_t)ny;
+                    undo_set_vedge(&a.undo, m, ex, ey, map_vedge(m, ex, ey) ? EDGE_NONE : EDGE_WALL);
+                    undo_del_token(&a.undo, m, idx);
+                    undo_add_token(&a.undo, m, nt);
+                } else if (v == 3 && n >= 2) {               /* two creatures swap places */
+                    int j = (idx + 1) % n;
+                    int ax = m->tokens.v[idx].x, ay = m->tokens.v[idx].y;
+                    undo_move_token(&a.undo, m, idx, m->tokens.v[j].x, m->tokens.v[j].y);
+                    undo_move_token(&a.undo, m, j, ax, ay);
+                } else {                                     /* there and back */
+                    int ox = t->x, oy = t->y;
+                    undo_move_token(&a.undo, m, idx, nx, ny);
+                    undo_move_token(&a.undo, m, idx, ox, oy);
+                }
+                undo_end(&a.undo);
+                app_fog_sync(&a);
+            }
+            break;
         default:                                             /* stray keys, cancelled */
             a.ed.cx = (int)fd_rand((unsigned)m->w); a.ed.cy = (int)fd_rand((unsigned)m->h);
             press(&a, (const char *[]){ "\r", "\rl", "v", "f", "F", "t", "\x1b" }[fd_rand(7)]);
@@ -10377,7 +10451,7 @@ static void test_fog_diff(void)
     if (env) {
         fprintf(stderr, "    fogdiff: %u step recomputes, %u full\n", steps, fulls);
         fprintf(stderr, "    fogdiff: %d ops over %d maps; mix", ops, maps);
-        for (int i = 0; i < 20; i++) fprintf(stderr, " %d", mix[i]);
+        for (int i = 0; i < 22; i++) fprintf(stderr, " %d", mix[i]);
         fprintf(stderr, "\n");
     }
     if (open) app_free(&a);

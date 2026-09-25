@@ -65,9 +65,11 @@ typedef struct {
 #define TURN_ACTING 0x02u   /* it is this creature's turn; at most one */
 
 typedef struct {
-    Token *v;
-    int    n;
-    int    cap;
+    Token   *v;
+    int      n;
+    int      cap;
+    unsigned shape;     /* bumped by every add and remove: sight's step path
+                         * needs the list's indices to mean what they meant */
 } TokenList;
 
 void   tokens_free(TokenList *l);

@@ -129,11 +129,14 @@ int  fog_count(const Map *m, int id, int *seen);
  * SEEN, for a patch that remembers) from every player creature, each patch
  * lighting to its own `reveal` in the map's own metric, along lines the
  * boundaries do not block -- the same test the ruler and the range use.
- * Then RIM on the unlit fog next to it. Clears only where it lit last time
- * and tests each patch's extent before touching a tile, so the cost is the
- * party's reach, never the size of a patch. HELD is never touched: the GM's
- * light stays down. Not an undo op and not saved: it is where the creatures
- * stand, and is rebuilt whenever that could have changed. */
+ * Then RIM on the unlit fog next to it. Each creature's own light is kept
+ * (Map.sight), so a keystroke that was provably nothing but moves relights
+ * only round the creatures that moved; anything else rebuilds every
+ * creature's. Clears only where it lit last time and tests each patch's
+ * extent before touching a tile, so the cost is the party's reach, never
+ * the size of a patch. HELD is never touched: the GM's light stays down.
+ * Not an undo op and not saved: it is where the creatures stand, and is
+ * worked out again whenever that could have changed. */
 void fog_recompute(Map *m);
 
 /* Recomputes so far that took the step path (only the creatures that

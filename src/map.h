@@ -153,6 +153,7 @@ typedef struct {
     SightEntry *e;
     SightTok   *tok;
     int         n, cap;
+    unsigned    shape;                    /* TokenList.shape the entries are for */
     int         valid;                    /* 0 until a full rebuild has run */
     unsigned    gen;                      /* the Map.gen the entries are for */
     int         fog_on, metric, w, h;
@@ -207,11 +208,14 @@ int  map_resize(Map *m, int w, int h);
 
 /* Every change to the map goes through here, so a watcher that compares
  * generations (the recovery autosave) can tell "changed since" from
- * "unsaved", which modified alone cannot once it has been set. */
-/* Every change to a map touches it, and a creature's move touches exactly
- * once and changes nothing else. Sight relies on both: a keystroke that
- * moved Map.gen by k and left exactly k creatures somewhere else, with
- * nothing else it reads changed, was nothing but moves (docs/FOG.md, 3d).
+ * "unsaved", which modified alone cannot once it has been set.
+ *
+ * Every change to a map touches it, and a change to one token touches
+ * exactly once. Sight relies on both (docs/FOG.md, 3d): with the token list
+ * the same shape -- nothing added or removed, so every index names the
+ * creature it named -- each touch can leave at most one creature somewhere
+ * else, so a keystroke that moved Map.gen by k and left exactly k creatures
+ * elsewhere, with nothing else sight reads changed, was nothing but moves.
  * The fogdiff test checks the first half after every random op. */
 static inline void map_touch(Map *m) { m->modified = 1; m->gen++; }
 
