@@ -9987,6 +9987,71 @@ static void write_sight_map(const char *dir, const char *name, int reveal, int m
     fclose(f);
 }
 
+static uint64_t g_fd_rng;
+static unsigned fd_rand(unsigned n);
+
+/* The line walk as it was before sight_walk was shared, verbatim, so the
+ * refactor answers to the original rather than to itself. */
+static int ref_sight_blocked(const Map *m, int x0, int y0, int x1, int y1)
+{
+    int x = x0, y = y0;
+    int dx = x1 > x ? x1 - x : x - x1;
+    int dy = y1 > y ? y1 - y : y - y1;
+    int sx = x < x1 ? 1 : -1;
+    int sy = y < y1 ? 1 : -1;
+    int err = dx - dy;
+    while (x != x1 || y != y1) {
+        int e2 = 2 * err;
+        int stepx = 0, stepy = 0;
+        if (e2 > -dy) { err -= dy; stepx = sx; }
+        if (e2 <  dx) { err += dx; stepy = sy; }
+        if (stepx && stepy) {
+            int via_x = map_edge_opaque(m, x, y, stepx, 0) || map_edge_opaque(m, x + stepx, y, 0, stepy);
+            int via_y = map_edge_opaque(m, x, y, 0, stepy) || map_edge_opaque(m, x, y + stepy, stepx, 0);
+            if (via_x && via_y) return 1;
+        } else if (map_edge_opaque(m, x, y, stepx, stepy)) {
+            return 1;
+        }
+        x += stepx;
+        y += stepy;
+    }
+    return 0;
+}
+
+/* sight_blocked is now sight_walk over the map: every pair of squares on
+ * random walled maps, every answer the same as the walk it replaced. */
+static void test_sight_walk(void)
+{
+    CASE("the shared walk and the original agree on every line");
+    g_fd_rng = 0xD1B54A32D192ED03ull;
+    static const uint8_t kinds[] = { EDGE_NONE, EDGE_NONE, EDGE_NONE, EDGE_WALL, EDGE_DOOR_CLOSED,
+                                     EDGE_DOOR_OPEN, EDGE_WINDOW, EDGE_SECRET_CLOSED, EDGE_SECRET_OPEN };
+    long pairs = 0, blocked = 0, bad = 0;
+    for (int trial = 0; trial < 60; trial++) {
+        Map *m = map_new(16, 16, "walk");
+        int dense = 3 + (int)fd_rand(6);
+        for (int y = 0; y < 16; y++)
+            for (int x = 0; x <= 16; x++)
+                if (!fd_rand((unsigned)dense)) map_set_vedge(m, x, y, kinds[fd_rand(9)]);
+        for (int y = 0; y <= 16; y++)
+            for (int x = 0; x < 16; x++)
+                if (!fd_rand((unsigned)dense)) map_set_hedge(m, x, y, kinds[fd_rand(9)]);
+        for (int ay = 0; ay < 16; ay++)
+            for (int ax = 0; ax < 16; ax++)
+                for (int by = 0; by < 16; by++)
+                    for (int bx = 0; bx < 16; bx++) {
+                        int ref = ref_sight_blocked(m, ax, ay, bx, by);
+                        pairs++;
+                        blocked += ref;
+                        bad += sight_blocked(m, ax, ay, bx, by) != ref;
+                    }
+        map_free(m);
+    }
+    CHECK_EQ(bad, 0);
+    CHECK(pairs > 1000000);
+    CHECK(blocked > 0 && blocked < pairs);
+}
+
 /* ---------------------------------------------------------- fog, differential
  *
  * Random maps, random keystrokes, and after every op the fog bits checked
@@ -9996,7 +10061,6 @@ static void write_sight_map(const char *dir, const char *name, int reveal, int m
  * worked out answers to the same oracle. VTT_FOGDIFF_OPS sets the length
  * (12,000 by default; 36,000 is the long run). */
 
-static uint64_t g_fd_rng;
 static unsigned fd_rand(unsigned n)
 {
     g_fd_rng ^= g_fd_rng << 13; g_fd_rng ^= g_fd_rng >> 7; g_fd_rng ^= g_fd_rng << 17;
@@ -10978,6 +11042,7 @@ int main(void)
         { "fog",    test_fog },
         { "fogsight", test_fog_sight },
         { "fogedge", test_fog_edge },
+        { "sightwalk", test_sight_walk },
         { "fogdiff", test_fog_diff },
         { "webpage", test_webpage },
         { "turns",  test_turns },

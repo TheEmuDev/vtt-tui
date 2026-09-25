@@ -762,6 +762,15 @@ frame. It should now be:
          the reach; prefix sums so a square with no wall between it and the
          creature skips its walk. Merge only if the warren drops 30% or a
          walled reveal-12 halves, with the ruler and range rows unmoved.
+         **Measured 2026-09-24 and declined, but for the shared loop.**
+         Built exactly (every line pair on 200 random walled maps agreed
+         with the map walk), it moved nothing: warren 13.9 -> 13.8µs,
+         walled reveal 12 44.6 -> 43.2, door 42.9 -> 48.1 (worse), since at
+         these reaches a blocked line stops at the first wall a step or
+         two out and building the mask costs what the walks it saves did.
+         `sight_walk`, the one loop, stays: it costs nothing (ruler and
+         range rows level) and means fog, ruler and range cannot drift
+         apart. The mask would pay at reveals far beyond a room.
       Shadowcasting was declined: the ruler's line test is Bresenham from
       each square with a permissive corner, which no angular method
       reproduces square for square, and fog, ruler and range must agree.

@@ -44,5 +44,6 @@ row "fog lantern"       "$MOB"    ':fog all 6\r:fog All memory off\r:play\rf\rll
 row "fog reveal 12"     "$MOB"    ':fog all 12\r:play\rf\rllllhhhh\r'
 row "fog full rebuild"  "$MOB"    ':fog all 6\r:play\r:fog All 5\r:fog All 6\r'
 row "fog warren"        "$WARREN" ':fog all 6\r:play\rf\rllllhhhh\r'
+row "fog warren reveal 12" "$WARREN" ':fog all 12\r:play\rf\rllllhhhh\r'
 row "fog warren, party" "$WARREN" ':fog all 6\r:play\r:H12\rvllllllllllll\rjjkk\r'
 row "fog door"          "$WARREN" ':fog all 6\r:play\r:F3\roo'

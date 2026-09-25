@@ -233,6 +233,7 @@ run "play, fog range, 4 watchers" "$MOB" 80x24 ':fog all\r:play\rtgR6rllhh' "--b
 run "play, fog sight"      "$MOB"    80x24  ':fog all 6\r:play\rf\rllllhhhh\r'
 run "play, fog lantern"    "$MOB"    80x24  ':fog all 6\r:fog All memory off\r:play\rf\rllllhhhh\r'
 run "play, fog warren"     "$WARREN" 80x24  ':fog all 6\r:play\rf\rllllhhhh\r'
+run "play, fog warren 12"  "$WARREN" 80x24  ':fog all 12\r:play\rf\rllllhhhh\r'
 run "play, fog warren, party" "$WARREN" 80x24 ':fog all 6\r:play\r:H12\rvllllllllllll\rjjkk\r'
 run "play, fog door"       "$WARREN" 80x24  ':fog all 6\r:play\r:F3\roo'
 run "play, fog full rebuild" "$MOB"  80x24  ':fog all 6\r:play\r:fog All 5\r:fog All 6\r'

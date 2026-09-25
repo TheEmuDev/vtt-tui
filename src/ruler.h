@@ -102,6 +102,46 @@ int ruler_trace(const Ruler *r, RulerPt *out, int max);
  * round the corner is open. */
 int sight_blocked(const Map *m, int x0, int y0, int x1, int y1);
 
+/* The line walk itself, the one every sight question uses: `opaque` says
+ * whether the boundary from (x,y) one step (dx,dy) stops sight. Inline and
+ * given a constant function, it compiles to a loop over whatever the caller
+ * reads opacity from, and the ruler, the range and fog cannot disagree
+ * about which lines are clear. Every boundary it asks about lies inside the
+ * rectangle the two ends span. */
+typedef int (*SightOpaque)(const void *ctx, int x, int y, int dx, int dy);
+
+static inline int sight_walk(const void *ctx, SightOpaque opaque,
+                             int x0, int y0, int x1, int y1)
+{
+    int x = x0, y = y0;
+
+    int dx = x1 > x ? x1 - x : x - x1;
+    int dy = y1 > y ? y1 - y : y - y1;
+    int sx = x < x1 ? 1 : -1;
+    int sy = y < y1 ? 1 : -1;
+    int err = dx - dy;
+
+    while (x != x1 || y != y1) {
+        int e2 = 2 * err;
+        int stepx = 0, stepy = 0;
+        if (e2 > -dy) { err -= dy; stepx = sx; }
+        if (e2 <  dx) { err += dx; stepy = sy; }
+
+        if (stepx && stepy) {
+            int via_x = opaque(ctx, x, y, stepx, 0) || opaque(ctx, x + stepx, y, 0, stepy);
+            int via_y = opaque(ctx, x, y, 0, stepy) || opaque(ctx, x, y + stepy, stepx, 0);
+            if (via_x && via_y) return 1;
+        } else if (opaque(ctx, x, y, stepx, stepy)) {
+            return 1;
+        }
+
+        x += stepx;
+        y += stepy;
+    }
+    return 0;
+}
+
+
 /* The same question, from the ruler's anchor to its live end. */
 int ruler_sight_blocked(const Ruler *r, const Map *m);
 

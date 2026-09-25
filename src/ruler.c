@@ -1,10 +1,12 @@
 #include "ruler.h"
 
 #include <math.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "prof.h"
+#include "util.h"
 
 /* ---------------------------------------------------------------- metrics */
 
@@ -209,37 +211,15 @@ int ruler_trace(const Ruler *r, RulerPt *out, int max)
 
 /* Sight follows the straight line between two tiles. A step that moves both
  * axes can pass if either of the two ways round the corner is open; only a
- * corner walled on both sides stops it. */
+ * corner walled on both sides stops it. The walk is sight_walk, shared. */
+static int map_opaque(const void *ctx, int x, int y, int dx, int dy)
+{
+    return map_edge_opaque((const Map *)ctx, x, y, dx, dy);
+}
+
 int sight_blocked(const Map *m, int x0, int y0, int x1, int y1)
 {
-    int x = x0, y = y0;
-
-    int dx = x1 > x ? x1 - x : x - x1;
-    int dy = y1 > y ? y1 - y : y - y1;
-    int sx = x < x1 ? 1 : -1;
-    int sy = y < y1 ? 1 : -1;
-    int err = dx - dy;
-
-    while (x != x1 || y != y1) {
-        int e2 = 2 * err;
-        int stepx = 0, stepy = 0;
-        if (e2 > -dy) { err -= dy; stepx = sx; }
-        if (e2 <  dx) { err += dx; stepy = sy; }
-
-        if (stepx && stepy) {
-            int via_x = map_edge_opaque(m, x, y, stepx, 0) ||
-                        map_edge_opaque(m, x + stepx, y, 0, stepy);
-            int via_y = map_edge_opaque(m, x, y, 0, stepy) ||
-                        map_edge_opaque(m, x, y + stepy, stepx, 0);
-            if (via_x && via_y) return 1;
-        } else if (map_edge_opaque(m, x, y, stepx, stepy)) {
-            return 1;
-        }
-
-        x += stepx;
-        y += stepy;
-    }
-    return 0;
+    return sight_walk(m, map_opaque, x0, y0, x1, y1);
 }
 
 int ruler_sight_blocked(const Ruler *r, const Map *m)
