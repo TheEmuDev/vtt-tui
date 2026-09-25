@@ -58,6 +58,16 @@ typedef enum {
     PROMPT_COUNTERS,
 } PromptWhat;
 
+/* A ping: a ring round a block of squares, until a moment passes. */
+#define PING_SHOW_MS 2000
+#define PING_GM      0u                     /* phones are 1 and up */
+#define PING_MAX     (NET_MAX_CLIENTS + 1)
+typedef struct {
+    uint32_t who;
+    int      x0, y0, x1, y1;
+    uint64_t until_ms;
+} Ping;
+
 typedef struct {
     Term        *term;
     Renderer    *rnd;
@@ -114,6 +124,13 @@ typedef struct {
     unsigned autosave_gen;   /* the map generation the autosave holds */
     unsigned seen_gen;       /* the last generation app_tick saw */
     uint64_t change_ms;      /* when seen_gen last moved */
+    uint64_t now_ms;         /* the time app_tick was last given */
+
+    /* Pings: rings on the table for PING_SHOW_MS, one per source -- the
+     * GM (PING_GM) or a phone, by its connection id -- a newer one from the
+     * same source replacing it. Not the map's: nothing here is saved. */
+    Ping     pings[PING_MAX];
+    int      npings;
 
     TextPrompt prompt;
     PromptWhat prompt_what;
@@ -197,6 +214,15 @@ int  app_open_map(App *a, const char *path);
 #define AUTOSAVE_QUIET_MS 1500
 void app_tick(App *a, uint64_t now_ms);
 int  app_autosave_due(const App *a, uint64_t now_ms);
+
+/* Pings. app_ping rings the block x0..x1, y0..y1 for `who` and says so on
+ * the status line; app_ping_cell is a phone's tap, a screen cell of the
+ * frame it was shown, turned into the square under it -- or nothing, off
+ * the map or out of play. app_tick drains the server's taps and takes
+ * rings down; app_ping_due is ms until the next goes, -1 with none. */
+void app_ping(App *a, uint32_t who, int x0, int y0, int x1, int y1);
+int  app_ping_cell(App *a, uint32_t who, int sx, int sy);
+int  app_ping_due(const App *a, uint64_t now_ms);
 int  app_autosave(App *a);      /* writes it now; 0 on success */
 
 #endif /* VTT_APP_H */

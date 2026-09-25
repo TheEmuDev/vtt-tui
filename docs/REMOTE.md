@@ -107,7 +107,15 @@ the players' way -- prompts, modals, the profiler and the note hint absent,
 fog and counters to follow -- and streams that. Same wire, same page, same
 watcher. See `docs/FOG.md`.
 
-**2. Pings.** A tap on the phone names a square. The page already knows the
+**2. Pings.** *Server and app built; the page's tap next.* Budgets, set before code and
+met: parsing a tap under 1µs (0.1), a ring under 2µs to draw (0.6), under 16 bytes up
+the wire a tap, the downstream cost read off the bench's bytes column (a few hundred bytes
+a tap). Decisions taken: the page sends the screen cell and the server turns it into a
+square with the players' frame's own layout; a ping into the dark is accepted, and the
+players see a ring only round what they can see; not logged; anonymous (a connection id);
+`:serve --no-pings`; the watcher stays watch-only; the GM pings with `g p`, without a
+server. Taps are one a second per client into a fixed inbox; a bad payload is ignored,
+bad framing closes. Was: A tap on the phone names a square. The page already knows the
 cell under a touch; it sends `P x y` up the WebSocket (the socket is
 bidirectional and unused upstream today). The server draws a ring around
 that square on both frames for two seconds and puts `ping at C4` on the

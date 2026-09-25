@@ -9752,6 +9752,206 @@ static const Cell *tile_cell(const Renderer *r, const App *a, int tx, int ty)
     return &r->back[(size_t)sy * (size_t)r->w + (size_t)sx];
 }
 
+static void write_sight_map(const char *dir, const char *name, int reveal, int memory);
+
+/* The ring round tile (tx,ty): true when the cell just north-west of its
+ * interior -- a corner of the ring -- has the ping's colour. */
+static int ring_at(const Renderer *r, const App *a, int tx, int ty)
+{
+    int sx, sy;
+    grid_tile_interior(&a->ed.view, tx, ty, &sx, &sy);
+    const Cell *c = rnd_at((Renderer *)r, sx - 1, sy - 1);
+    return c && c->bg == a->th->ping_bg;
+}
+
+/* Pings: a phone's tap or the GM's g p rings a square on every screen. */
+static void test_pings(void)
+{
+    Sandbox sb = sandbox_enter("pings");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    write_sight_map(sb.dir, "p.vtt", 2, 1);
+    char path[600];
+    snprintf(path, sizeof path, "%s/p.vtt", sb.dir);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 16);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Map *m = a.map;
+    Key f1 = { KEY_F1, 0, 0 }, f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+    press(&a, ":fog off\r");
+    uint64_t now = 10000;
+    app_tick(&a, now);
+    rnd_begin(&r); app_draw(&a);                            /* lay the view out */
+
+    CASE("a phone's tap on a square rings it, says where, and is taken down two seconds later");
+    int sx, sy;
+    grid_tile_interior(&a.ed.view, 4, 2, &sx, &sy);
+    CHECK_EQ(app_ping_cell(&a, 7, sx, sy), 1);
+    CHECK_EQ(a.npings, 1);
+    CHECK_EQ(a.pings[0].x0, 4);
+    CHECK_EQ(a.pings[0].y0, 2);
+    CHECK_EQ(a.pings[0].who, 7u);
+    CHECK(strstr(a.status, "ping at E3") != NULL);
+    CHECK_EQ(app_ping_due(&a, now), PING_SHOW_MS);
+    rnd_begin(&r); app_draw(&a);
+    CHECK(ring_at(&r, &a, 4, 2));
+    CHECK(!ring_at(&r, &a, 6, 2));
+
+    CASE("without fog the players' frame can be the GM's copied: a ring changes nothing there");
+    CHECK_EQ(app_view_differs(&a), 0);
+    rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+    CHECK(ring_at(&r, &a, 4, 2));
+
+    CASE("expiry: due counts down, and at two seconds the ring is gone");
+    CHECK_EQ(app_ping_due(&a, now + 1999), 1);
+    app_tick(&a, now + 1999);
+    CHECK_EQ(a.npings, 1);
+    a.dirty = 0;
+    app_tick(&a, now + 2000);
+    CHECK_EQ(a.npings, 0);
+    CHECK_EQ(a.dirty, 1);
+    CHECK_EQ(app_ping_due(&a, now + 2000), -1);
+    rnd_begin(&r); app_draw(&a);
+    CHECK(!ring_at(&r, &a, 4, 2));
+    now += 3000;
+    app_tick(&a, now);
+
+    CASE("a tap off the map -- the gutter, the title, the status line, the bar -- names nothing");
+    CHECK_EQ(app_ping_cell(&a, 7, 0, sy), 0);               /* the row labels */
+    CHECK_EQ(app_ping_cell(&a, 7, sx, 0), 0);               /* the title bar */
+    CHECK_EQ(app_ping_cell(&a, 7, sx, r.h - 2), 0);         /* the status line */
+    CHECK_EQ(app_ping_cell(&a, 7, sx, r.h - 1), 0);         /* the key bar */
+    CHECK_EQ(app_ping_cell(&a, 7, r.w - 1, sy), 0);         /* past the map's east edge */
+    CHECK_EQ(a.npings, 0);
+
+    CASE("the same phone moves its ring; another phone adds one; the GM's is its own");
+    app_ping_cell(&a, 7, sx, sy);
+    grid_tile_interior(&a.ed.view, 1, 1, &sx, &sy);
+    app_ping_cell(&a, 7, sx, sy);
+    CHECK_EQ(a.npings, 1);
+    CHECK_EQ(a.pings[0].x0, 1);
+    app_ping_cell(&a, 8, sx, sy);
+    CHECK_EQ(a.npings, 2);
+    a.ed.cx = 9; a.ed.cy = 3;
+    press(&a, "gp");
+    CHECK_EQ(a.npings, 3);
+    CHECK(strstr(a.status, "ping at J4") != NULL);
+    press(&a, "lgp");
+    CHECK_EQ(a.npings, 3);
+    int gm = -1;
+    for (int i = 0; i < a.npings; i++) if (a.pings[i].who == PING_GM) gm = i;
+    CHECK(gm >= 0);
+    CHECK_EQ(a.pings[gm].x0, 10);
+
+    CASE("the GM's ping rings the cursor's footprint, or the box");
+    press(&a, "2b");
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "gp");
+    CHECK_EQ(a.pings[gm].x1 - a.pings[gm].x0, 1);
+    CHECK_EQ(a.pings[gm].y1 - a.pings[gm].y0, 1);
+    CHECK(strstr(a.status, "ping at B2-C3") != NULL);
+    press(&a, "1b");
+    a.ed.cx = 2; a.ed.cy = 0;
+    press(&a, "vlljgp");
+    CHECK_EQ(a.pings[gm].x0, 2);
+    CHECK_EQ(a.pings[gm].x1, 4);
+    CHECK_EQ(a.pings[gm].y1, 1);
+    CHECK_EQ(a.play.visual, 0);
+
+    CASE("in build mode g p is not a ping, and the rings wait for play");
+    int before = a.npings;
+    app_key(&a, f1);
+    press(&a, "gp");
+    CHECK_EQ(a.npings, before);
+    rnd_begin(&r); app_draw(&a);
+    CHECK(!ring_at(&r, &a, 2, 0));
+    CHECK_EQ(app_ping_cell(&a, 7, sx, sy), 0);              /* the phones' frame is play mode's */
+    app_key(&a, f2);
+
+    CASE("fog: a ping into the dark rings for the GM, not for the players, and says nothing to them");
+    now += 5000;
+    app_tick(&a, now);
+    CHECK_EQ(a.npings, 0);
+    press(&a, ":fog on\r");
+    a.ed.cx = 9; a.ed.cy = 3;                                /* nobody lights it */
+    CHECK_EQ(fog_ground_hidden(m, 9, 3), 1);
+    press(&a, "gp");
+    CHECK_EQ(app_view_differs(&a), 1);
+    rnd_begin(&r); app_draw_view(&a, VIEW_GM);
+    CHECK(ring_at(&r, &a, 9, 3));
+    rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+    CHECK(!ring_at(&r, &a, 9, 3));
+    ByteBuf fr;
+    bb_init(&fr, 65536); rnd_dump(&r, &fr); bb_putc(&fr, '\0');
+    CHECK(strstr(fr.data, "ping") == NULL);
+    bb_free(&fr);
+    int amber = 0;
+    for (size_t i = 0; i < (size_t)r.w * (size_t)r.h; i++) amber += r.back[i].bg == a.th->ping_bg;
+    CHECK_EQ(amber, 0);
+
+    CASE("a box half in the light is ringed only round the part the players can see");
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "ipAria\r\x1b");                              /* she lights x 0..3 */
+    a.ed.cx = 2; a.ed.cy = 1;
+    press(&a, "vllllgp");                                   /* 2..6: 5 and 6 are dark */
+    CHECK_EQ(fog_ground_hidden(m, 2, 1), 0);
+    CHECK_EQ(fog_ground_hidden(m, 6, 1), 1);
+    rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+    CHECK(ring_at(&r, &a, 2, 1));
+    int tx6, ty6;
+    grid_tile_interior(&a.ed.view, 6, 1, &tx6, &ty6);
+    CHECK(rnd_at(&r, tx6, ty6 - 1)->bg != a.th->ping_bg);   /* the ring's top over a dark square */
+    rnd_begin(&r); app_draw_view(&a, VIEW_GM);
+    CHECK(rnd_at(&r, tx6, ty6 - 1)->bg == a.th->ping_bg);
+
+    CASE("the server's taps come through app_tick; :serve --no-pings stops them and says so");
+    press(&a, ":fog off\r");
+    now += 5000;
+    app_tick(&a, now);
+    press(&a, ":serve 0\r");
+    CHECK(net_active(&a.net));
+    int w = net_connect(a.net.port);
+    CHECK(w >= 0);
+    CHECK(write(w, "VTT1\n", 5) == 5);
+    for (int i = 0; i < 10; i++) net_pump(&a.net, now);
+    grid_tile_interior(&a.ed.view, 3, 3, &sx, &sy);
+    char line[32];
+    snprintf(line, sizeof line, "P %d %d\n", sx, sy);
+    CHECK(write(w, line, strlen(line)) == (ssize_t)strlen(line));
+    for (int i = 0; i < 20 && a.npings == 0; i++) { net_pump(&a.net, now); app_tick(&a, now); }
+    CHECK_EQ(a.npings, 1);
+    CHECK(a.pings[0].who != PING_GM);
+    CHECK_EQ(a.pings[0].x0, 3);
+    press(&a, ":serve --no-pings\r");
+    CHECK(strstr(a.status, "pings off") != NULL);
+    CHECK_EQ(net_pings_on(&a.net), 0);
+    press(&a, "gp");                                        /* the GM's own is not a phone's */
+    CHECK_EQ(a.npings, 2);
+    press(&a, ":serve --pings\r");
+    CHECK_EQ(net_pings_on(&a.net), 1);
+    close(w);
+
+    CASE("closing the map, or opening another, takes every ring down");
+    press(&a, ":q!\r");                                    /* app_close_map */
+    CHECK(a.map == NULL);
+    CHECK_EQ(a.npings, 0);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    app_key(&a, f2);
+    press(&a, "gp");
+    CHECK_EQ(a.npings, 1);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    CHECK_EQ(a.npings, 0);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
 /* Fog, part one: patches painted in build mode, lit and darkened by hand in
  * play, blank in the players' frame, dimmed in the GM's, tinted in build
  * mode, and saved. */
@@ -11252,6 +11452,7 @@ int main(void)
         { "fogedge", test_fog_edge },
         { "sightwalk", test_sight_walk },
         { "fogdiff", test_fog_diff },
+        { "pings", test_pings },
         { "webpage", test_webpage },
         { "turns",  test_turns },
         { "turnkeys", test_turn_keys },

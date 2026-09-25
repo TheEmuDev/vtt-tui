@@ -246,6 +246,9 @@ run "play, clocks"         "$MOB"    80x24  ':play\r:clock Dragon 6\r:clock Ritu
 run "play, 1 watcher"      "$MOB"    80x24  ':play\rjjllkkhh' "--bench-clients 1"
 run "play, 4 watchers"     "$MOB"    80x24  ':play\rjjllkkhh' "--bench-clients 4"
 run "play, 4 watchers, differing" "$MOB" 80x24 ':play\rtsnhidden\rjjllkkhh' "--bench-clients 4"
+run "play, pings, 4 watchers" "$MOB"  80x24  ':play\rjjllkkhh' "--bench-clients 4 --bench-pings"
+run "play, fog pings, 4 watchers" "$MOB" 80x24 ':fog all\r:play\rjjllkkhh' "--bench-clients 4 --bench-pings"
+run "play, GM ping"        "$MOB"    80x24  ':play\rgpllgphh'
 run "play, carry, 4 watch" "$MOB"    80x24  ':play\rt\rlllljjjj\r' "--bench-clients 4"
 run "play, logging"        "$MOB"    80x24  ':play\r:log on\rt\rlllljjjj\r'
 run "play, rolling"        "$MOB"    80x24  ':play\r:roll 2d6+3\r:roll +1\r'

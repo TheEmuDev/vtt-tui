@@ -85,6 +85,13 @@ void grid_draw_cursor_area(Renderer *r, const GridView *g, const Map *m,
 void grid_draw_tile_marker(Renderer *r, const GridView *g, const Map *m,
                            int tx, int ty, int size, uint32_t fg);
 
+/* A ring round the block of squares x0..x1, y0..y1: the boundary cells
+ * around it take `bg`. With `show`, only the cells bordering a square it
+ * lets be seen -- how the players' frame keeps a ping off hidden ground. */
+void grid_draw_tile_ring(Renderer *r, const GridView *g, const Map *m,
+                         int x0, int y0, int x1, int y1, uint32_t bg,
+                         int (*show)(const void *ctx, int tx, int ty), const void *ctx);
+
 /* Highlights a lattice corner, for the wall-tracing mode. */
 void grid_draw_corner_cursor(Renderer *r, const GridView *g, int cx, int cy,
                              const Theme *th, int pen_down);

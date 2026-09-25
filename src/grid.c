@@ -608,6 +608,37 @@ void grid_draw_tile_marker(Renderer *r, const GridView *g, const Map *m,
     }
 }
 
+void grid_draw_tile_ring(Renderer *r, const GridView *g, const Map *m,
+                         int x0, int y0, int x1, int y1, uint32_t bg,
+                         int (*show)(const void *ctx, int tx, int ty), const void *ctx)
+{
+    if (x1 > m->w - 1) x1 = m->w - 1;
+    if (y1 > m->h - 1) y1 = m->h - 1;
+    if (x0 < 0 || y0 < 0 || x0 > x1 || y0 > y1) return;
+    Rect a;
+    if (!block_area(g, m, x0, y0, 1, &a)) return;
+    int pw = zoom_pw(g->zoom), ph = zoom_ph(g->zoom);
+    a.w = (x1 - x0 + 1) * pw - 1;
+    a.h = (y1 - y0 + 1) * ph - 1;
+
+    /* Every cell of the boundary round the block, corners included. Each
+     * belongs to the square of the block it borders, and is drawn only if
+     * `show` lets that square be seen: over fog a ring goes round the part
+     * the players can see and never traces the dark. Background, not
+     * glyph, so a wall or door on the ring stays what it is. */
+    for (int y = a.y - 1; y <= a.y + a.h; y++)
+        for (int x = a.x - 1; x <= a.x + a.w; x++) {
+            if (y != a.y - 1 && y != a.y + a.h && x != a.x - 1 && x != a.x + a.w) continue;
+            int tx = x0 + iclamp((x - a.x) / pw, 0, x1 - x0);
+            int ty = y0 + iclamp((y - a.y) / ph, 0, y1 - y0);
+            if (x < a.x) tx = x0;
+            if (y < a.y) ty = y0;
+            if (show && !show(ctx, tx, ty)) continue;
+            Cell *c = rnd_at(r, x, y);
+            if (c) c->bg = bg;
+        }
+}
+
 void grid_draw_corner_cursor(Renderer *r, const GridView *g, int cx, int cy,
                              const Theme *th, int pen_down)
 {

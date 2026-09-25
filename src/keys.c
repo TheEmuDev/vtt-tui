@@ -61,6 +61,8 @@ static const KeyDoc PLAY[] = {
     GROUP("Remote view"),
     KEY(":serve",  "let players watch from a browser; the status line shows the URL"),
     KEY(":serve --stay-alive", "keep that server, and its join code, when the map closes"),
+    KEY(":serve --no-pings", "ignore taps from the phones; --pings takes them again"),
+    KEY("g p",    "ping: ring the cursor's squares (or the box) on every screen for two seconds"),
     KEY(":mirror", "a second window mirroring play mode, to drag to a TV"),
     KEY(":serve off", "close the remote view and drop everyone"),
     KEY(":player preview", "see the players' frame on your own screen; q returns"),

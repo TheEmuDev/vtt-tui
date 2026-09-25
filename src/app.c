@@ -171,6 +171,7 @@ int app_open_map(App *a, const char *path)
 
     a->screen = SCREEN_EDITOR;
     a->autosave_gen = a->seen_gen = m->gen;
+    a->npings = 0;                 /* squares of the old map mean nothing here */
     fog_recompute(m);
 
     char msg[192];
@@ -236,8 +237,72 @@ static void drop_autosave(const App *a)
     unlink(autosave);
 }
 
+void app_ping(App *a, uint32_t who, int x0, int y0, int x1, int y1)
+{
+    if (!a->map) return;
+    Map *m = a->map;
+    x0 = iclamp(x0, 0, m->w - 1); x1 = iclamp(x1, x0, m->w - 1);
+    y0 = iclamp(y0, 0, m->h - 1); y1 = iclamp(y1, y0, m->h - 1);
+
+    /* The same source's ring moves; a new source takes a free slot, or the
+     * one closest to going -- only reachable after phones reconnect. */
+    int k = 0;
+    while (k < a->npings && a->pings[k].who != who) k++;
+    if (k == a->npings) {
+        if (a->npings < PING_MAX) a->npings++;
+        else
+            for (int i = k = 0; i < a->npings; i++)
+                if (a->pings[i].until_ms < a->pings[k].until_ms) k = i;
+    }
+    Ping *p = &a->pings[k];
+    p->who = who;
+    p->x0 = x0; p->y0 = y0; p->x1 = x1; p->y1 = y1;
+    p->until_ms = a->now_ms + PING_SHOW_MS;
+
+    /* On the status line, not in the log: a gesture, not something that
+     * happened to the encounter. Over fog the players' frame shows no
+     * message at all, so this reaches the table only where fog is off. */
+    char at[MAP_COORD_MAX], to[MAP_COORD_MAX], msg[64];
+    map_coord_name(x0, y0, at, sizeof at);
+    if (x1 == x0 && y1 == y0) snprintf(msg, sizeof msg, "ping at %s", at);
+    else { map_coord_name(x1, y1, to, sizeof to); snprintf(msg, sizeof msg, "ping at %s-%s", at, to); }
+    app_set_status(a, msg);
+    a->dirty = 1;
+}
+
+int app_ping_cell(App *a, uint32_t who, int sx, int sy)
+{
+    /* The phones are shown play mode, laid out by the same view the GM's
+     * frame is: out of play, or on the gutter, the bars or the panel, a tap
+     * names nothing. */
+    if (!a->map || a->screen != SCREEN_PLAY || a->modal) return 0;
+    if (!rect_contains(a->ed.view.view, sx, sy)) return 0;
+    int tx, ty;
+    if (!grid_screen_to_tile(&a->ed.view, a->map, sx, sy, &tx, &ty)) return 0;
+    app_ping(a, who, tx, ty, tx, ty);
+    return 1;
+}
+
+int app_ping_due(const App *a, uint64_t now_ms)
+{
+    if (!a->npings) return -1;
+    uint64_t at = a->pings[0].until_ms;
+    for (int i = 1; i < a->npings; i++) if (a->pings[i].until_ms < at) at = a->pings[i].until_ms;
+    return now_ms >= at ? 0 : (int)(at - now_ms);
+}
+
 void app_tick(App *a, uint64_t now_ms)
 {
+    a->now_ms = now_ms;
+    if (net_active(&a->net)) {
+        NetPing in[NET_MAX_CLIENTS];
+        int n = net_take_pings(&a->net, in, NET_MAX_CLIENTS);
+        for (int i = 0; i < n; i++) app_ping_cell(a, in[i].who, in[i].sx, in[i].sy);
+    }
+    for (int i = 0; i < a->npings; ) {
+        if (a->pings[i].until_ms <= now_ms) { a->pings[i] = a->pings[--a->npings]; a->dirty = 1; }
+        else i++;
+    }
     if (!a->map) return;
     if (a->map->gen != a->seen_gen) {
         a->seen_gen  = a->map->gen;
@@ -1271,6 +1336,7 @@ void app_close_map(App *a)
     slog_close(&a->slog);
     map_free(a->map);
     a->map = NULL;
+    a->npings = 0;
     undo_clear(&a->undo);
     a->screen = SCREEN_MENU;
 }
@@ -2003,6 +2069,11 @@ static void draw_browser(App *a)
     ui_keybar(r, th, keys_map(KEYS_BROWSER));
 }
 
+static int ping_visible(const void *ctx, int tx, int ty)
+{
+    return !fog_ground_hidden((const Map *)ctx, tx, ty);
+}
+
 static void draw_editor(App *a)
 {
     Renderer    *r  = a->rnd;
@@ -2038,6 +2109,21 @@ static void draw_editor(App *a)
         ClipRect saved = rnd_clip_push(r, a->ed.view.view.x, a->ed.view.view.y,
                                        a->ed.view.view.w, a->ed.view.view.h);
         ruler_draw(r, m, &a->ed.view, &a->ruler, th, 1);
+        rnd_clip_restore(r, saved);
+    }
+
+    /* Pings, over everything on the map: they are what is being looked at
+     * right now. In the players' frame over fog, only round what the
+     * players can see. */
+    if (playing && a->npings) {
+        PROF_ZONE("ping.draw");
+        ClipRect saved = rnd_clip_push(r, a->ed.view.view.x, a->ed.view.view.y,
+                                       a->ed.view.view.w, a->ed.view.view.h);
+        for (int i = 0; i < a->npings; i++) {
+            const Ping *p = &a->pings[i];
+            grid_draw_tile_ring(r, &a->ed.view, m, p->x0, p->y0, p->x1, p->y1, th->ping_bg,
+                                fog_players ? ping_visible : NULL, m);
+        }
         rnd_clip_restore(r, saved);
     }
 

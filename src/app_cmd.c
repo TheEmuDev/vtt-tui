@@ -343,16 +343,17 @@ static void roll_command(App *a, const char *rest)
 /* :serve                  open the remote view, or report on the open one
  * :serve PORT             on a port of your choosing
  * :serve --stay-alive     and keep it up when the map closes
+ * :serve --no-pings       and ignore the phones' taps (--pings takes them again)
  * :serve off              close it and drop everyone
  *
- * The flag lasts as long as that server does: stopping it, or restarting it
- * on another port, starts again without it. */
+ * The flags last as long as that server does: stopping it, or restarting it
+ * on another port, starts again without them. */
 static void serve_command(App *a, const char *rest)
 {
     Net *net = &a->net;
     char msg[256], url[160];
 
-    int port = 0, have_port = 0, stay = -1, off = 0, bad = 0;
+    int port = 0, have_port = 0, stay = -1, pings = -1, off = 0, bad = 0;
     for (const char *p = rest; *p && !bad; ) {
         while (*p == ' ') p++;
         if (!*p) break;
@@ -368,6 +369,8 @@ static void serve_command(App *a, const char *rest)
         if (!strcmp(word, "off"))                  off = 1;
         else if (!strcmp(word, "--stay-alive"))    stay = 1;
         else if (!strcmp(word, "--no-stay-alive")) stay = 0;
+        else if (!strcmp(word, "--pings"))         pings = 1;
+        else if (!strcmp(word, "--no-pings"))      pings = 0;
         else if (word[0] >= '0' && word[0] <= '9') {
             char *end;
             long  v = strtol(word, &end, 10);
@@ -376,8 +379,8 @@ static void serve_command(App *a, const char *rest)
         }
         else bad = 1;
     }
-    if (bad || (off && (have_port || stay >= 0))) {
-        app_set_status(a, ":serve [PORT] [--stay-alive], or :serve off");
+    if (bad || (off && (have_port || stay >= 0 || pings >= 0))) {
+        app_set_status(a, ":serve [PORT] [--stay-alive] [--no-pings], or :serve off");
         return;
     }
 
@@ -394,23 +397,27 @@ static void serve_command(App *a, const char *rest)
      * came with the question. Restarting would hand every player a new join
      * code for nothing. */
     if (net_active(net) && !have_port) {
-        if (stay >= 0) net_set_stay(net, stay);
+        if (stay >= 0)  net_set_stay(net, stay);
+        if (pings >= 0) net_set_pings(net, pings);
         net_url(net, url, sizeof url);
-        snprintf(msg, sizeof msg, "serving at %s - %d client%s%s", url,
+        snprintf(msg, sizeof msg, "serving at %s - %d client%s%s%s", url,
                  net_clients(net), net_clients(net) == 1 ? "" : "s",
-                 net_stays(net) ? ", staying up when the map closes" : "");
-        if (stay >= 0) app_note(a, msg);
-        else           app_set_status(a, msg);
+                 net_stays(net) ? ", staying up when the map closes" : "",
+                 net_pings_on(net) ? "" : ", pings off");
+        if (stay >= 0 || pings >= 0) app_note(a, msg);
+        else                         app_set_status(a, msg);
         return;
     }
 
     char err[128];
     if (net_start(net, (uint16_t)port, a->rnd, err, sizeof err) < 0) { app_set_status(a, err); return; }
     net_set_stay(net, stay > 0);
+    net_set_pings(net, pings != 0);
     net_set_live(net, app_remote_live(a));
     net_url(net, url, sizeof url);
-    snprintf(msg, sizeof msg, "serving at %s%s", url,
-             net_stays(net) ? " - staying up when the map closes" : "");
+    snprintf(msg, sizeof msg, "serving at %s%s%s", url,
+             net_stays(net) ? " - staying up when the map closes" : "",
+             net_pings_on(net) ? "" : " - pings off");
     app_note(a, msg);
 }
 

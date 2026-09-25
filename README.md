@@ -49,8 +49,10 @@ vtt [options] [map.vtt]
   --seed N           seed the dice, for a repeatable session or script
   --serve [PORT]     open the remote view at startup (:serve does it later)
   --stay-alive       keep that server up when the map closes
+  --no-pings         ignore taps from the phones on that server
   --watch HOST:PORT  mirror a serving vtt in this terminal, read-only
   --bench-clients N  attach N loopback watchers to a --bench run
+  --bench-pings      and have each of them ping every frame
 ```
 
 `--dump-frame` honours `--script`, so a whole session can be replayed and its final frame
@@ -258,6 +260,7 @@ A whole pen-down stroke is one undo step.
 | `<` `>` | one off / one on its current counter — `3<` takes three (see *Counters* below) |
 | `g r` `g h` | light / darken the [fog](#fog-of-war-fog) under the cursor or the box, by hand |
 | `g R` `g H` | light / darken the whole fog patch under the cursor |
+| `g p` | [ping](#pointing-g-p-and-taps): ring the cursor's squares, or the box, on every screen for two seconds |
 | `a` `A` | next / previous turn — `3a` moves three on (see [Turn order](#turn-order-a)) |
 | `s i` | initiative: a number puts the creature in the turn order, a blank takes it out |
 | `s t` | hand the turn to this creature, whether or not it is in the order |
@@ -274,8 +277,8 @@ A whole pen-down stroke is one undo step.
 
 Three prefixes carry a family each, which is what keeps the bar to six hints: `i` inserts
 (`i p`, `i e`), `s` is for a creature's state — its markers (`s a`, `s c`, `s d`), its place in the
-fight (`s i`, `s t`), its note (`s n`) and its counters (`s v`) — and `g` is the GM's hand on the
-[fog](#fog-of-war-fog) (`g r`, `g h`, `g R`, `g H`). Press any of them alone and
+fight (`s i`, `s t`), its note (`s n`) and its counters (`s v`) — and `g` is the GM's hand, on the
+[fog](#fog-of-war-fog) (`g r`, `g h`, `g R`, `g H`) and on the table (`g p` pings). Press any of them alone and
 the status line names the options; `esc` abandons it. A prefix swallows whatever comes
 next, so a half-typed command can never turn into a different whole one.
 
@@ -905,6 +908,7 @@ differ; otherwise it is the GM's, copied, and costs a memcpy.
 | `:serve` | open the remote view; the status line shows the URL with its join code |
 | `:serve 7777` | on a port of your choosing, so the address is the same every session |
 | `:serve --stay-alive` | keep it up when the map closes; `--no-stay-alive` takes that back |
+| `:serve --no-pings` | ignore taps from the phones; `--pings` takes them again |
 | `:serve off` | close it and drop everyone |
 | `:mirror` | a second terminal window mirroring play mode, to drag to a TV; serves if it has to |
 | `:player preview` | the players' frame on the GM's own screen; `q` returns |
@@ -973,6 +977,22 @@ dropped and resynced when it reconnects, never waited for. The measured cost is 
 
 The page lives in `web/index.html` and is embedded by `tools/embed.sh`; its copy loop is a
 WebAssembly module `tools/blit_wasm.py` assembles by hand, so neither needs a toolchain.
+
+### Pointing (`g p`, and taps)
+
+A **ping** rings a square on every screen -- the GM's and every phone's -- for two seconds,
+and the status line says where: `ping at C4`. It is for "this one" at a table where
+everyone is looking at a different screen.
+
+The GM pings with `g p`: the cursor's squares, or the `v` box when one is open. It needs
+no server; the GM's own screen is a thing the table looks at too. A new `g p` moves the
+GM's ring rather than adding another.
+
+A ping is a gesture, not something that happened to the encounter, so it is not written to
+the [session log](#session-log-log) and is gone when the ring is. Over
+[fog](#fog-of-war-fog) the players see a ring only round the squares they can see -- a
+ring drawn in the dark would trace a square they are not meant to know about -- and, as
+with every message over fog, not the status line; the GM sees both.
 
 ### Rulesets
 
@@ -1092,7 +1112,7 @@ with no verdict, ruleset or not.
 | `:clock NAME N` | start a [clock](#clocks-clock-tick); `:tick` fills a segment |
 | `:notes` | where the [notes](#play-mode-f2) are |
 | `:fog ...` | [fog of war](#fog-of-war-fog): patches, their settings, the master switch |
-| `:serve [PORT] [--stay-alive]` | the [remote view](#remote-view-serve-mirror); `:serve off` closes it |
+| `:serve [PORT] [--stay-alive] [--no-pings]` | the [remote view](#remote-view-serve-mirror); `:serve off` closes it |
 | `:player preview` | see the players' frame on your own screen; `q` returns |
 | `:mirror` | a second terminal window mirroring play mode |
 | `:roll 2d6+3` | roll dice — see [Dice](#dice-roll) |

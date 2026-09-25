@@ -37,6 +37,9 @@ const Theme THEME_DARK = {
      * ruler measures in yellow, range shades in teal, a walk shows in green. */
     .trail     = RGB(0x8C, 0xD8, 0x9C),
     .trail_bg  = RGB(0x1A, 0x2E, 0x1E),
+    /* Amber, apart from the cursor's blue, the box's violet, the range's
+     * and the trail's greens: a ping is none of those. */
+    .ping_bg   = RGB(0x6A, 0x4E, 0x12),
 
     .edge_door   = RGB(0xD0, 0x9A, 0x50),
     .edge_window = RGB(0x78, 0xC0, 0xD8),

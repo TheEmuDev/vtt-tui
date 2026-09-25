@@ -206,6 +206,25 @@ static void fog_hand(App *a, int on)
     app_note(a, msg);
 }
 
+/* g p: the GM points. The cursor's footprint, or the box when one is
+ * open -- what every g key reads -- rung on every screen for a moment. No
+ * server needed: the GM's own screen is a thing the table looks at too. */
+static void ping_here(App *a)
+{
+    Play *pl = &a->play;
+    int x0 = a->ed.cx, y0 = a->ed.cy, x1, y1;
+    if (pl->visual) {
+        x0 = imin(pl->anchor_x, a->ed.cx); x1 = imax(pl->anchor_x, a->ed.cx);
+        y0 = imin(pl->anchor_y, a->ed.cy); y1 = imax(pl->anchor_y, a->ed.cy);
+        pl->visual = 0;
+    } else {
+        int size = play_cursor_size(pl, a->map);
+        x1 = x0 + size - 1;
+        y1 = y0 + size - 1;
+    }
+    app_ping(a, PING_GM, x0, y0, x1, y1);
+}
+
 /* g R and g H: the whole patch under the cursor, for when the door opens. */
 static void fog_hand_patch(App *a, int on)
 {
@@ -410,7 +429,8 @@ static int pending_key(App *a, Key k)
     if (pre == 'g') {
         if (k.ch == 'r' || k.ch == 'h') { fog_hand(a, k.ch == 'r'); return 1; }
         if (k.ch == 'R' || k.ch == 'H') { fog_hand_patch(a, k.ch == 'R'); return 1; }
-        app_set_status(a, "g wants r to light, h to darken -- R and H for the whole patch");
+        if (k.ch == 'p') { ping_here(a); return 1; }
+        app_set_status(a, "g wants r to light, h to darken -- R and H for the whole patch, p to ping");
         return 1;
     }
 
@@ -685,7 +705,7 @@ void app_play_key(App *a, Key k)
 
     case 'g':
         a->pending = 'g';
-        app_set_status(a, "g    r light    h darken    R light the patch    H darken it");
+        app_set_status(a, "g    r light    h darken    R light the patch    H darken it    p ping");
         break;
 
     case 's':

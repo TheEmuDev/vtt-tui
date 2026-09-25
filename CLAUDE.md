@@ -53,7 +53,7 @@ Bench scripts replay whole; no toggles — use loop-neutral pairs (`llllhhhh`,
 
 | file | owns |
 |---|---|
-| `app.c` | lifecycle, screens, prompts (`prompt_accept`), modals, drawing the frame, `app_key` dispatch, `app_note` (status + session log) vs `app_set_status` (status only) |
+| `app.c` | lifecycle, screens, prompts (`prompt_accept`), modals, drawing the frame, `app_key` dispatch, `app_note` (status + session log) vs `app_set_status` (status only); pings (`App.pings`, `app_ping`/`app_ping_cell`, drained and expired in `app_tick`, `app_ping_due` feeds the poll timeout, drawn after `play_draw` with `grid_draw_tile_ring`, only round visible squares in the players' frame over fog) |
 | `app_play.c` | play-mode keys (`app_play_key`), prefix families `i`/`s`, `retired_key` hints; `s n` notes (build mode has the same key in `app.c`) |
 | `app_cmd.c` | every `:` command |
 | `app_priv.h` | what those three share; `count_digit`, `take_count` (silence=1), `take_count_raw` (silence=0) |

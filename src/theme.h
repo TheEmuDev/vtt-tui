@@ -41,6 +41,7 @@ typedef struct {
     uint32_t turn;        /* the bars above and below whoever's turn it is */
     uint32_t trail;       /* the mark on the tile a held token set out from */
     uint32_t trail_bg;    /* ground a held token has walked over */
+    uint32_t ping_bg;     /* a ping's ring: "look here", on every screen */
 
     /* Boundary kinds. Secret is only ever used in build mode; in play a
      * secret door is drawn exactly as a wall. */

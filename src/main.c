@@ -40,6 +40,8 @@ typedef struct {
     int         serve;              /* --serve: open the remote view at startup */
     int         serve_port;
     int         serve_stay;         /* --stay-alive: and keep it past the map */
+    int         serve_no_pings;     /* --no-pings: and ignore the phones' taps */
+    int         bench_pings;        /* --bench-pings: the bench's watchers tap every frame */
 } Options;
 
 static void usage(void)
@@ -57,8 +59,10 @@ static void usage(void)
         "  --seed N           seed the dice, for a repeatable session or script\n"
         "  --serve [PORT]     open the remote view at startup (:serve does it later)\n"
         "  --stay-alive       keep that server up when the map closes\n"
+        "  --no-pings         ignore taps from the phones on that server\n"
         "  --watch HOST:PORT  mirror a serving vtt in this terminal, read-only\n"
         "  --bench-clients N  attach N loopback watchers to a --bench run\n"
+        "  --bench-pings      and have each of them ping every frame\n"
         "  -h, --help         this message\n",
         stdout);
 }
@@ -82,6 +86,8 @@ static int parse_args(Options *o, int argc, char **argv)
         else if (!strcmp(a, "--watch") && i + 1 < argc) o->watch = argv[++i];
         else if (!strcmp(a, "--bench-clients") && i + 1 < argc) o->bench_clients = atoi(argv[++i]);
         else if (!strcmp(a, "--stay-alive")) o->serve_stay = 1;
+        else if (!strcmp(a, "--no-pings"))   o->serve_no_pings = 1;
+        else if (!strcmp(a, "--bench-pings")) o->bench_pings = 1;
         else if (!strcmp(a, "--serve")) {
             o->serve = 1;
             if (i + 1 < argc && argv[i + 1][0] >= '0' && argv[i + 1][0] <= '9') o->serve_port = atoi(argv[++i]);
@@ -271,6 +277,7 @@ static int run_headless(const Options *o)
             }
         }
 
+        uint64_t bench_clock_ms = 1000;
         for (int loop = 0; loop < o->bench_loops && a.running; loop++) {
             input_init(&p);
             input_feed(&p, sc.bytes, sc.len);
@@ -280,6 +287,25 @@ static int run_headless(const Options *o)
             Key k;
             while (input_next(&p, &k)) {
                 app_key(&a, k);
+                /* Every watcher taps a square each frame, a second of
+                 * synthetic time apart: past the rate limit, and with rings
+                 * lasting two seconds, one per client is always up -- the
+                 * pessimistic case, status line changing every frame. */
+                if (ncf && o->bench_pings) {
+                    int tick = (int)(bench_clock_ms / 1000 % 1000);
+                    for (int i = 0; i < ncf; i++) {
+                        char line[32];
+                        int  len = snprintf(line, sizeof line, "P %d %d\n",
+                                            10 + (i * 13 + tick * 7) % 40, 3 + (i * 5 + tick * 3) % 15);
+                        (void)!write(cfd[i], line, (size_t)len);
+                    }
+                    struct pollfd fds[1 + NET_MAX_CLIENTS];
+                    int nf = net_pollfds(&a.net, fds, 1 + NET_MAX_CLIENTS);
+                    poll(fds, (nfds_t)nf, 0);
+                    net_service(&a.net, fds, nf, bench_clock_ms);
+                    app_tick(&a, bench_clock_ms);
+                    bench_clock_ms += 1000;
+                }
                 prof_frame_begin();
                 app_frame(&a, NULL, 0);
                 prof_frame_end();
@@ -339,6 +365,7 @@ static int run_interactive(const Options *o)
         else {
             char url[160], msg[256];
             net_set_stay(&a.net, o->serve_stay);
+            net_set_pings(&a.net, !o->serve_no_pings);
             net_url(&a.net, url, sizeof url);
             snprintf(msg, sizeof msg, "serving at %s%s", url,
                      o->serve_stay ? " - staying up when the map closes" : "");
@@ -373,6 +400,9 @@ static int run_interactive(const Options *o)
          * not yet copied: a quiet vtt with nothing owed still sleeps. */
         int due = app_autosave_due(&a, prof_now_ns() / 1000000u);
         if (due >= 0 && (timeout < 0 || due < timeout)) timeout = due;
+        /* And when a ping's ring is due to come down. */
+        int pd = app_ping_due(&a, prof_now_ns() / 1000000u);
+        if (pd >= 0 && (timeout < 0 || pd < timeout)) timeout = pd;
 
         int nready = poll(fds, (nfds_t)(2 + nnet), timeout);
         if (nready < 0) {
