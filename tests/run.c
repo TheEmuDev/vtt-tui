@@ -10225,6 +10225,9 @@ static void test_fog_diff(void)
     int open = 0, fails = 0, maps = 0, gen_fails = 0;
     int mix[20] = { 0 };
 
+    unsigned steps0, fulls0;
+    fog_sight_counts(&steps0, &fulls0);
+
     CASE("random keystrokes on random maps: fog agrees with the definition after every one");
     g_fd_fails = 0;
     for (int op = 0; op < ops && fails + g_fd_fails < 3 && gen_fails < 3; op++) {
@@ -10364,7 +10367,15 @@ static void test_fog_diff(void)
     CHECK_EQ(fails + g_fd_fails, 0);
     CHECK_EQ(gen_fails, 0);
     CHECK(maps >= 2);
+
+    CASE("both ways of working sight out were exercised");
+    unsigned steps, fulls;
+    fog_sight_counts(&steps, &fulls);
+    steps -= steps0; fulls -= fulls0;
+    CHECK(steps > (unsigned)ops / 10);
+    CHECK(fulls > 0);
     if (env) {
+        fprintf(stderr, "    fogdiff: %u step recomputes, %u full\n", steps, fulls);
         fprintf(stderr, "    fogdiff: %d ops over %d maps; mix", ops, maps);
         for (int i = 0; i < 20; i++) fprintf(stderr, " %d", mix[i]);
         fprintf(stderr, "\n");
@@ -10661,8 +10672,30 @@ static void test_fog_sight(void)
     CHECK(fog_at(m, 0, 0) & FOG_LIT);
     CHECK(fog_at(m, 3, 1) & FOG_LIT);                        /* both of theirs */
 
-    CASE("sight is bounded: it records only the party's reach");
-    CHECK(m->fog_nlit >= 1 && m->fog_nlit <= 4);
+    CASE("a carry's steps relight only the creature that moved; picking up and putting down do not move it");
+    unsigned st0, fu0, st1, fu1;
+    play_focus(&a.play, 0);
+    a.ed.cx = m->tokens.v[0].x; a.ed.cy = m->tokens.v[0].y;
+    fog_sight_counts(&st0, &fu0);
+    press(&a, "\r");
+    fog_sight_counts(&st1, &fu1);
+    press(&a, "l");
+    unsigned st2, fu2;
+    fog_sight_counts(&st2, &fu2);
+    CHECK_EQ(st2 - st1, 1u);
+    CHECK_EQ(fu2 - fu1, 0u);
+    press(&a, "h\r");
+    fog_sight_counts(&st1, &fu1);
+    CHECK(st1 - st0 >= 2);
+
+    CASE("sight is bounded: each creature's cache covers its reach and no more");
+    CHECK_EQ(m->sight.n, m->tokens.n);
+    for (int i = 0; i < m->tokens.n; i++) {
+        const Token     *t = &m->tokens.v[i];
+        const SightEntry *e = &m->sight.e[i];
+        if (t->kind != TOKEN_PLAYER) { CHECK(e->x1 < e->x0); continue; }
+        CHECK(e->x0 >= t->x - 2 && e->x1 <= t->x + 2 && e->y0 >= t->y - 2 && e->y1 <= t->y + 2);
+    }
 
     CASE("reveal manual lights nothing by itself; the master switch and disable put everything out");
     press(&a, ":fog Dark manual\r");

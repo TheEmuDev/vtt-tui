@@ -69,7 +69,6 @@ typedef struct {
     int    ascii;
     View   view;       /* what app_draw_view is drawing right now */
     int    preview;    /* :player preview -- the GM's terminal shows VIEW_PLAYERS */
-    unsigned fog_gen;  /* the map generation sight was last worked out for */
 
     char status[160];
 

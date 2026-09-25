@@ -311,36 +311,34 @@ players' frame, runs only while one of those is showing over fog.
 **Sight is a keystroke cost, not a frame cost, and follows the party's reach.** `fog.sight`
 runs after a keystroke that changed the map, never per frame, so it is not in the frame
 columns above: `play, fog sight` walks a creature through a map-wide patch at `reveal 6` and
-its frame reads 31.7µs, level with the rest. The recompute itself is 35.0µs typical on that
-bench map, which has twelve player creatures each reaching 169 squares -- about 3µs a
-creature, so a party of four or five costs a dozen microseconds. It clears only the
-rectangles it lit last time and tests each patch's extent before any square.
+its frame reads 31.7µs, level with the rest. A full recompute is about 28µs on that bench map, which has twelve player creatures each
+reaching 169 squares; a step, which relights only the creature that moved, is 6.5µs.
+It clears only where the creatures lit last time and tests each patch's extent before any
+square.
 
 It was 57.4µs as first written. The bench map has no walls, and every one of those squares
 paid for a line walk that could only come back clear. A rectangle that holds a creature and
 its reach, with no opaque boundary inside it, cannot block any line between them, so one pass
 over its edges now stands in for a line walk a square; a room with walls in reach still walks
-every line. Two further wins are on the table and not taken: recomputing only the creatures
-that moved (the rest of the party's light is unchanged by one step), and shadowcasting, which
-visits each square once however many lines would pass through it. Either would matter for a
-large party in a warren of walls; neither does at a table of four. One more thing worth
-knowing: the recompute is keyed on any change to the map, so it also runs after edits that
-cannot change sight -- a counter, a clock, a note, the round. That is the price of one rule
+every line. Recomputing only the creatures that moved is now built (*Sight: the plan*,
+below); shadowcasting was declined, since it cannot agree with the ruler square for square.
+One more thing worth knowing: a keystroke that is not only moves still rebuilds everything
+-- a counter, a clock, a note, the round, which cannot change sight. That is the price of one rule
 instead of a list of call sites that could miss one, and a missed one would be a leak.
 
 **Sight, scenario by scenario.** The zone table above keeps only each zone's worst
 scenario, so `tools/sight.sh` measures `fog.sight` per fog scenario (median of three,
 every recompute counted):
 
-| scenario               | sight p50 | sight p99 | calls |
-|------------------------|-----------|-----------|-------|
-| fog sight              |    33.7us |    63.2us |  3599 |
-| fog lantern            |    33.9us |    62.6us |  3944 |
-| fog reveal 12          |    73.8us |   128.1us |  3599 |
-| fog full rebuild       |    33.2us |    60.7us |  1201 |
-| fog warren             |    51.8us |    95.5us |  3601 |
-| fog warren, party      |    54.9us |   102.1us |  2001 |
-| fog door               |    47.6us |    78.4us |  1201 |
+| scenario               | before | after step 2 | calls |
+|------------------------|--------|--------------|-------|
+| fog sight              | 33.7us |        6.5us |  3599 |
+| fog lantern            | 33.9us |        7.1us |  3723 |
+| fog reveal 12          | 73.8us |       24.5us |  3599 |
+| fog full rebuild       | 33.2us |       28.1us |  1201 |
+| fog warren             | 51.8us |       14.7us |  3601 |
+| fog warren, party      | 54.9us |       40.2us |  2001 |
+| fog door               | 47.6us |       43.8us |  1201 |
 
 `fog warren` is the fixture the two sight wins in *Sight: the plan* below are for: 40x25
 cut into rooms by walls with one gap each and a closed door, twelve player creatures,
@@ -350,6 +348,16 @@ walls make necessary. `fog reveal 12` is the same walk as `fog sight` with a rea
 times the area, and costs about twice as much. `fog full rebuild` changes a patch's
 setting each keystroke, which no incremental scheme can skip; `fog door` toggles a door.
 Each recompute here is one keystroke's; a frame never pays for it.
+
+The "before" column is sight as first built; "after step 2" recomputes only the creatures
+that moved (below). A step on the open map is 6.5µs where it was 34, and 15µs in the
+warren where it was 52. The rows that must rebuild everything -- a setting changed, a door
+toggled -- got cheaper too, 28 and 44 against 33 and 48, because the rebuild now skips the
+line walks the old loop skipped and works distance out a row at a time. `warren, party`
+moves three creatures a step through walls, and pays for three creatures' line walks: 40µs
+against 55. Those walks are what step 3 is for. The p99 column is the full rebuilds, one
+a loop (the script's `:fog all 6`), and for `reveal 12` the first step after one, which
+settles the squares the rebuild left unasked.
 
 **Sight: the plan.** Signed off 2026-09-24 (docs/FOG.md, *3d*): recompute only the
 creatures that moved, proven by `Map.gen` rather than by a list of call sites, then --

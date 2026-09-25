@@ -63,6 +63,7 @@ typedef struct {
 #define FOG_RIM           0x40u   /* unlit, next to a lit tile */
 #define FOG_HELD          0x80u   /* lit by the GM's hand */
 #define FOG_REVEAL_MANUAL (-1)
+#define FOG_REVEAL_MAX    127   /* the most an int8_t holds; :fog stops at 99 */
 typedef struct {
     char    name[FOG_NAME_MAX];   /* "" for an empty slot */
     int8_t  reveal;               /* tiles a player creature lights, or FOG_REVEAL_MANUAL */
@@ -130,6 +131,34 @@ int         edge_from_file_char(char c);      /* -1 when unrecognised */
 int     edge_is_door(uint8_t kind);
 uint8_t edge_toggled(uint8_t kind);
 
+/* Sight's cache: what each creature alone lights, so a step recomputes the
+ * creatures that moved rather than the whole party. One entry per token, in
+ * list order; `vis` is a byte a square of the box its reach covers (empty
+ * when x1 < x0 -- an enemy, or a creature out of every patch's reach). The
+ * snapshot says what the entries were worked out from: tokens' positions,
+ * sizes and sides, and every setting sight reads. fog.c owns all of it;
+ * map_resize and map_free drop it. See docs/FOG.md, 3d. */
+typedef struct {
+    int16_t  x0, y0, x1, y1;
+    uint8_t *vis;
+    size_t   cap;
+} SightEntry;
+
+typedef struct {
+    int16_t x, y;
+    uint8_t size, kind;
+} SightTok;
+
+typedef struct {
+    SightEntry *e;
+    SightTok   *tok;
+    int         n, cap;
+    int         valid;                    /* 0 until a full rebuild has run */
+    unsigned    gen;                      /* the Map.gen the entries are for */
+    int         fog_on, metric, w, h;
+    FogPatch    patches[FOG_PATCH_MAX];
+} Sight;
+
 /* Walls live on the boundary *between* tiles, not on tiles themselves, so a
  * wall costs no floor space and blocking is an exact per-crossing question.
  *
@@ -159,11 +188,7 @@ typedef struct {
     int      fog_on;                      /* the master switch */
     int      fog_soft_edge;               /* the map's default for patches that follow it */
     FogPatch fog_patches[FOG_PATCH_MAX];
-    /* Where the last sight recompute set LIT and RIM, so the next one clears
-     * exactly that and never walks a whole patch. Derived, not saved. */
-#define FOG_LIT_RECTS 64
-    int16_t  fog_lit[FOG_LIT_RECTS][4];   /* x0, y0, x1, y1 */
-    int      fog_nlit;
+    Sight    sight;                       /* derived from the rest; never saved */
 
     /* Measurement settings travel with the encounter, since they belong to
      * the game being played rather than to the session. */
@@ -183,7 +208,15 @@ int  map_resize(Map *m, int w, int h);
 /* Every change to the map goes through here, so a watcher that compares
  * generations (the recovery autosave) can tell "changed since" from
  * "unsaved", which modified alone cannot once it has been set. */
+/* Every change to a map touches it, and a creature's move touches exactly
+ * once and changes nothing else. Sight relies on both: a keystroke that
+ * moved Map.gen by k and left exactly k creatures somewhere else, with
+ * nothing else it reads changed, was nothing but moves (docs/FOG.md, 3d).
+ * The fogdiff test checks the first half after every random op. */
 static inline void map_touch(Map *m) { m->modified = 1; m->gen++; }
+
+/* Drops sight's cache, for a map whose shape changed or is going away. */
+void map_sight_drop(Map *m);
 
 static inline int map_in_bounds(const Map *m, int x, int y)
 {

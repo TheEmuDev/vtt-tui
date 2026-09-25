@@ -102,6 +102,14 @@ Map *map_new(int w, int h, const char *name)
     return m;
 }
 
+void map_sight_drop(Map *m)
+{
+    for (int i = 0; i < m->sight.cap; i++) free(m->sight.e[i].vis);
+    free(m->sight.e);
+    free(m->sight.tok);
+    memset(&m->sight, 0, sizeof m->sight);
+}
+
 void map_free(Map *m)
 {
     if (!m) return;
@@ -109,6 +117,7 @@ void map_free(Map *m)
     free(m->vedges);
     free(m->hedges);
     free(m->fog);
+    map_sight_drop(m);
     tokens_free(&m->tokens);
     free(m);
 }
@@ -134,7 +143,7 @@ int map_resize(Map *m, int w, int h)
         for (int x = 0; x < cw; x++)                         /* sight is rebuilt */
             fog[(size_t)y * (size_t)w + (size_t)x] &= (uint8_t)~(FOG_LIT | FOG_RIM);
     }
-    m->fog_nlit = 0;
+    map_sight_drop(m);
     for (int i = 0; i < FOG_PATCH_MAX; i++) {
         FogPatch *p = &m->fog_patches[i];
         if (p->x1 < p->x0) continue;

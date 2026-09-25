@@ -136,6 +136,10 @@ int  fog_count(const Map *m, int id, int *seen);
  * stand, and is rebuilt whenever that could have changed. */
 void fog_recompute(Map *m);
 
+/* Recomputes so far that took the step path (only the creatures that
+ * moved) and the full one. */
+void fog_sight_counts(unsigned *steps, unsigned *fulls);
+
 /* The patch colour index for the build-mode tint, 0..14. */
 static inline int fog_tint(int id) { return (id - 1) % FOG_PATCH_MAX; }
 

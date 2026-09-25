@@ -172,7 +172,6 @@ int app_open_map(App *a, const char *path)
     a->screen = SCREEN_EDITOR;
     a->autosave_gen = a->seen_gen = m->gen;
     fog_recompute(m);
-    a->fog_gen = m->gen;
 
     char msg[192];
     snprintf(msg, sizeof msg, "opened %s (%dx%d, %d token%s)",
@@ -224,7 +223,6 @@ static void recover_autosave(App *a)
     m->modified = 1;
     a->autosave_gen = a->seen_gen = m->gen;
     fog_recompute(m);
-    a->fog_gen = m->gen;
     app_set_status(a, "recovered - :w keeps it, :q! lets it go");
 }
 
@@ -1837,9 +1835,9 @@ static void app_key_dispatch(App *a, Key k);
 void app_fog_sync(App *a)
 {
     if (!a->map) return;
-    if (a->map->gen == a->fog_gen) return;
+    /* Sight's cache records the generation it was worked out for. */
+    if (a->map->sight.valid && a->map->gen == a->map->sight.gen) return;
     fog_recompute(a->map);
-    a->fog_gen = a->map->gen;
 }
 
 void app_key(App *a, Key k)
