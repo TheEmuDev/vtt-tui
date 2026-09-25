@@ -276,19 +276,23 @@ static int client_queue(Net *n, int i, const void *p, size_t len)
     return 0;
 }
 
-/* Tries to write what is pending; what will not go now waits for POLLOUT. */
-static void client_flush(Net *n, int i, uint64_t now_ms)
+/* Tries to write what is pending; what will not go now waits for POLLOUT.
+ * Returns -1 when the write failed and the client was closed -- which
+ * shifts the next client into slot i, so a caller must not touch the slot
+ * again as if it were the same client. */
+static int client_flush(Net *n, int i, uint64_t now_ms)
 {
     NetClient *c = &n->cl[i];
     while (c->out_off < c->out_len) {
         ssize_t w = write(c->fd, c->out + c->out_off, c->out_len - c->out_off);
         if (w > 0) { c->out_off += (size_t)w; c->last_tx_ms = now_ms; continue; }
-        if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) return;
+        if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) return 0;
         if (w < 0 && errno == EINTR) continue;
         client_close(n, i);
-        return;
+        return -1;
     }
     c->out_off = c->out_len = 0;
+    return 0;
 }
 
 /* A wire frame, in the framing this client speaks. */
@@ -347,8 +351,7 @@ static void http_respond(Net *n, int i, int status, const char *type, const char
                        type, len);
     if (client_queue(n, i, hdr, (size_t)hl) < 0) return;
     if (client_queue(n, i, body, len) < 0) return;
-    client_flush(n, i, now_ms);
-    client_close(n, i);
+    if (client_flush(n, i, now_ms) == 0) client_close(n, i);
 }
 
 /* The join code in a request target's query, if any. */
@@ -510,7 +513,7 @@ static void ws_frames(Net *n, int i, uint64_t now_ms)
             uint8_t hdr[2] = { 0x8A, (uint8_t)len };
             if (client_queue(n, i, hdr, 2) < 0) return;
             if (len && client_queue(n, i, body, (size_t)len) < 0) return;
-            client_flush(n, i, now_ms);
+            if (client_flush(n, i, now_ms) < 0) return;         /* closed: slot i is another client */
         } else if (op == 1 || op == 2) {
             net_msg(n, i, body, (size_t)len, now_ms);
         }
@@ -652,8 +655,10 @@ void net_service(Net *n, const struct pollfd *fds, int count, uint64_t now_ms)
         int stream = c->kind == CL_WS || c->kind == CL_RAW;
         if (stream && now_ms - c->last_tx_ms >= NET_KEEPALIVE_MS) {
             uint8_t z = 'Z';
-            if (client_send_frame(n, i, &z, 1) == 0) { client_flush(n, i, now_ms); c->last_tx_ms = now_ms; }
-            else continue;
+            /* A failure closes the client and shifts the next into slot i:
+             * go round again for that one rather than skip it. */
+            if (client_send_frame(n, i, &z, 1) < 0 || client_flush(n, i, now_ms) < 0) { i--; continue; }
+            c->last_tx_ms = now_ms;
         }
         if (i < n->ncl && n->cl[i].fd >= 0 && now_ms - n->cl[i].last_rx_ms >= NET_IDLE_MS &&
             n->cl[i].kind != CL_RAW)          /* a watcher never speaks; only its socket can die */
@@ -698,7 +703,6 @@ void net_frame_end(Net *n, uint64_t now_ms)
         NetClient *c = &n->cl[i];
         if (c->kind != CL_WS && c->kind != CL_RAW) continue;
         if (client_send_synced(n, i, n->enc.buf, n->enc.len) < 0) { i--; continue; }
-        client_flush(n, i, now_ms);
-        if (i < n->ncl && n->cl[i].fd < 0) i--;
+        if (client_flush(n, i, now_ms) < 0) i--;
     }
 }

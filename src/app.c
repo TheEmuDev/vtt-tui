@@ -274,8 +274,9 @@ int app_ping_cell(App *a, uint32_t who, int sx, int sy)
 {
     /* The phones are shown play mode, laid out by the same view the GM's
      * frame is: out of play, or on the gutter, the bars or the panel, a tap
-     * names nothing. */
-    if (!a->map || a->screen != SCREEN_PLAY || a->modal) return 0;
+     * names nothing. A question box on the GM's screen is the GM's alone;
+     * the table's board under it still takes a tap. */
+    if (!a->map || a->screen != SCREEN_PLAY) return 0;
     if (!rect_contains(a->ed.view.view, sx, sy)) return 0;
     int tx, ty;
     if (!grid_screen_to_tile(&a->ed.view, a->map, sx, sy, &tx, &ty)) return 0;

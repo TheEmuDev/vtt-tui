@@ -367,8 +367,9 @@ static int run_interactive(const Options *o)
             net_set_stay(&a.net, o->serve_stay);
             net_set_pings(&a.net, !o->serve_no_pings);
             net_url(&a.net, url, sizeof url);
-            snprintf(msg, sizeof msg, "serving at %s%s", url,
-                     o->serve_stay ? " - staying up when the map closes" : "");
+            snprintf(msg, sizeof msg, "serving at %s%s%s", url,
+                     o->serve_stay ? " - staying up when the map closes" : "",
+                     o->serve_no_pings ? " - pings off" : "");
             app_set_status(&a, msg);
         }
     }

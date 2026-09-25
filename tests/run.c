@@ -8976,6 +8976,48 @@ static void test_net_msg(void)
     }
     CHECK(netmsg_client_open(&n, bid));
 
+    CASE("a frame split across two reads is read whole");
+    now = 40000;
+    {
+        uint8_t f[12] = { 0x81, 0x80 | 6, 1, 2, 3, 4 };
+        const char *msg = "P 8 8";
+        for (int k = 0; k < 5; k++) f[6 + k] = (uint8_t)(msg[k] ^ f[2 + (k & 3)]);
+        f[11] = (uint8_t)('\n' ^ f[2 + (5 & 3)]);
+        CHECK(write(b, f, 7) == 7);
+        for (int i = 0; i < 5; i++) net_pump(&n, now);
+        CHECK_EQ(n.ninbox, 0);
+        CHECK(write(b, f + 7, 5) == 5);
+        for (int i = 0; i < 10 && n.ninbox == 0; i++) net_pump(&n, now);
+        CHECK_EQ(net_take_pings(&n, got, NET_MAX_CLIENTS), 1);
+        CHECK_EQ(got[0].sx, 8);
+    }
+
+    CASE("a client whose pong fails to send is closed, and the next client in its slot is left alone");
+    {
+        /* A ping, then a reset, seen by a poll that reported only the data:
+         * the pong's write fails and closes the client, and the next one
+         * slides into its slot while the frame loop is still running. */
+        int x = netmsg_ws(&n, now), y = netmsg_ws(&n, now);
+        CHECK(x >= 0 && y >= 0);
+        uint32_t yid = n.cl[n.ncl - 1].id;
+        uint8_t f[] = { 0x89, 0x84, 1, 2, 3, 4, 'p' ^ 1, 'i' ^ 2, 'n' ^ 3, 'g' ^ 4 };
+        CHECK(write(x, f, sizeof f) == (ssize_t)sizeof f);
+        struct linger l = { 1, 0 };
+        setsockopt(x, SOL_SOCKET, SO_LINGER, &l, sizeof l);
+        close(x);
+        struct timespec ts = { 0, 50000000 };
+        nanosleep(&ts, NULL);
+        struct pollfd fds[1 + NET_MAX_CLIENTS];
+        int k = net_pollfds(&n, fds, 1 + NET_MAX_CLIENTS);
+        poll(fds, (nfds_t)k, 20);
+        for (int i = 1; i < k; i++) if (fds[i].revents & POLLIN) fds[i].revents = POLLIN;
+        net_service(&n, fds, k, now);                       /* ASan is the check */
+        for (int i = 0; i < 5; i++) net_pump(&n, now);
+        CHECK(netmsg_client_open(&n, yid));
+        CHECK(netmsg_client_open(&n, bid));
+        close(y);
+    }
+
     close(b);
     close(w);
     net_stop(&n);
@@ -9935,6 +9977,47 @@ static void test_pings(void)
     press(&a, ":serve --pings\r");
     CHECK_EQ(net_pings_on(&a.net), 1);
     close(w);
+
+    CASE("a phone's tap into the dark sends the phones nothing at all");
+    press(&a, ":fog on\r");
+    app_frame(&a, NULL, now);
+    app_frame(&a, NULL, now);
+    CHECK_EQ(fog_ground_hidden(m, 9, 3), 1);
+    grid_tile_interior(&a.ed.view, 9, 3, &sx, &sy);
+    now += 2000;
+    snprintf(line, sizeof line, "P %d %d\n", sx, sy);
+    int w2 = net_connect(a.net.port);
+    CHECK(w2 >= 0);
+    CHECK(write(w2, "VTT1\n", 5) == 5);
+    for (int i = 0; i < 10; i++) net_pump(&a.net, now);
+    app_tick(&a, now);                                      /* earlier rings come down first */
+    app_frame(&a, NULL, now);
+    app_frame(&a, NULL, now);
+    CHECK(write(w2, line, strlen(line)) == (ssize_t)strlen(line));
+    int dark = 0;
+    for (int i = 0; i < 20 && !dark; i++) {
+        net_pump(&a.net, now);
+        app_tick(&a, now);
+        for (int j = 0; j < a.npings; j++)
+            dark |= a.pings[j].who != PING_GM && a.pings[j].x0 == 9 && a.pings[j].y0 == 3;
+    }
+    CHECK(dark);
+    app_frame(&a, NULL, now);
+    CHECK_EQ(a.net.frame_bytes, 0u);                        /* the GM's frame changed; theirs did not */
+    close(w2);
+    press(&a, ":fog off\r");
+
+    CASE("with every slot taken, a new source takes the ring closest to going");
+    now += 10000;
+    app_tick(&a, now);
+    for (uint32_t i = 1; i <= PING_MAX; i++) { a.now_ms = now + i; app_ping(&a, 100 + i, 1, 1, 1, 1); }
+    CHECK_EQ(a.npings, PING_MAX);
+    a.now_ms = now + 50;
+    app_ping(&a, 999, 2, 2, 2, 2);
+    CHECK_EQ(a.npings, PING_MAX);
+    int evicted = 1;
+    for (int i = 0; i < a.npings; i++) if (a.pings[i].who == 101) evicted = 0;
+    CHECK(evicted);
 
     CASE("closing the map, or opening another, takes every ring down");
     press(&a, ":q!\r");                                    /* app_close_map */
