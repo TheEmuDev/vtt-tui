@@ -9987,6 +9987,393 @@ static void write_sight_map(const char *dir, const char *name, int reveal, int m
     fclose(f);
 }
 
+/* ---------------------------------------------------------- fog, differential
+ *
+ * Random maps, random keystrokes, and after every op the fog bits checked
+ * square by square against a brute force written from the definition --
+ * no rectangles, no fast paths, nothing shared with fog.c but the line
+ * test the ruler also uses. Permanent, so any later change to how sight is
+ * worked out answers to the same oracle. VTT_FOGDIFF_OPS sets the length
+ * (12,000 by default; 36,000 is the long run). */
+
+static uint64_t g_fd_rng;
+static unsigned fd_rand(unsigned n)
+{
+    g_fd_rng ^= g_fd_rng << 13; g_fd_rng ^= g_fd_rng >> 7; g_fd_rng ^= g_fd_rng << 17;
+    return n ? (unsigned)(g_fd_rng % n) : 0;
+}
+
+static void fd_write_map(const char *path)
+{
+    int w = 12 + (int)fd_rand(13), h = 9 + (int)fd_rand(8);
+    FILE *f = fopen(path, "w");
+    if (!f) return;
+    static const char *metric[] = { "chebyshev", "euclidean", "alt", "manhattan" };
+    fprintf(f, "VTT 6\nname diff\nsize %d %d\nzoom 1\nmetric %s\ntiles\n", w, h, metric[fd_rand(4)]);
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) fputc(fd_rand(12) ? '.' : ' ', f);
+        fputc('\n', f);
+    }
+    /* Mostly open, with every kind of boundary somewhere. */
+    static const uint8_t kinds[] = { EDGE_WALL, EDGE_WALL, EDGE_WALL, EDGE_DOOR_CLOSED,
+                                     EDGE_DOOR_OPEN, EDGE_WINDOW, EDGE_SECRET_CLOSED, EDGE_SECRET_OPEN };
+    fputs("vedges\n", f);
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x <= w; x++)
+            fputc(fd_rand(6) ? ' ' : edge_file_char(kinds[fd_rand(8)]), f);
+        fputc('\n', f);
+    }
+    fputs("hedges\n", f);
+    for (int y = 0; y <= h; y++) {
+        for (int x = 0; x < w; x++) {
+            uint8_t k = fd_rand(6) ? EDGE_NONE : kinds[fd_rand(8)];
+            fputc(k == EDGE_WALL ? '-' : edge_file_char(k), f);
+        }
+        fputc('\n', f);
+    }
+    /* Up to six creatures, sizes mostly 1, never overlapping. */
+    int nt = 1 + (int)fd_rand(6);
+    static uint8_t used[64 * 64];
+    memset(used, 0, sizeof used);
+    for (int i = 0; i < nt; i++) {
+        int sz = fd_rand(5) ? 1 : 2 + (int)fd_rand(2);
+        int x = (int)fd_rand((unsigned)(w - sz + 1)), y = (int)fd_rand((unsigned)(h - sz + 1));
+        int clash = 0;
+        for (int yy = y; yy < y + sz; yy++)
+            for (int xx = x; xx < x + sz; xx++) clash |= used[yy * 64 + xx];
+        if (clash) continue;
+        for (int yy = y; yy < y + sz; yy++)
+            for (int xx = x; xx < x + sz; xx++) used[yy * 64 + xx] = 1;
+        fprintf(f, "token %s %d %d %d \"T%d\"\n", fd_rand(3) ? "player" : "enemy", x, y, sz, i);
+    }
+    /* One to three patches over rectangles that may overlap (the later one
+     * wins the square), with every kind of setting. */
+    int np = 1 + (int)fd_rand(3);
+    static const int reveals[] = { 0, 1, 2, 3, 6, -1 };
+    fprintf(f, "fog on\n%s", fd_rand(2) ? "fog soft-edge\n" : "");
+    for (int i = 1; i <= np; i++) {
+        int r = reveals[fd_rand(6)];
+        char rv[16];
+        if (r < 0) snprintf(rv, sizeof rv, "manual"); else snprintf(rv, sizeof rv, "%d", r);
+        fprintf(f, "fogpatch %d P%d reveal %s memory %s%s%s\n", i, i, rv,
+                fd_rand(3) ? "on" : "off", fd_rand(3) ? "" : " soft-edge on",
+                i > 1 && !fd_rand(5) ? " disabled" : "");
+    }
+    static char fog[64 * 64];
+    memset(fog, '.', sizeof fog);
+    for (int i = 1; i <= np; i++) {
+        int x0 = (int)fd_rand((unsigned)w), y0 = (int)fd_rand((unsigned)h);
+        int x1 = x0 + (int)fd_rand((unsigned)(w - x0)), y1 = y0 + (int)fd_rand((unsigned)(h - y0));
+        if (i == 1) { x0 = 0; y0 = 0; x1 = w - 1; y1 = h - 1; }      /* the first covers it all */
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++) fog[y * 64 + x] = (char)('A' + i - 1);
+    }
+    fputs("fog\n", f);
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) fputc(fog[y * 64 + x], f);
+        fputc('\n', f);
+    }
+    fclose(f);
+}
+
+/* What can change sight or the fog, to check that every change to it moved
+ * Map.gen -- the one signal sight is recomputed on. */
+typedef struct {
+    int      w, h, n, metric, fog_on, soft;
+    Token    tok[16];
+    uint8_t  v[64 * 65], hz[65 * 64], ids[64 * 64];
+    FogPatch pat[FOG_PATCH_MAX];
+    unsigned gen;
+} FdSnap;
+
+static void fd_snap(const Map *m, FdSnap *s)
+{
+    memset(s, 0, sizeof *s);
+    s->w = m->w; s->h = m->h; s->n = m->tokens.n; s->metric = m->metric;
+    s->fog_on = m->fog_on; s->soft = m->fog_soft_edge; s->gen = m->gen;
+    for (int i = 0; i < m->tokens.n && i < 16; i++) {
+        s->tok[i] = m->tokens.v[i];
+        /* A position, a size, a kind: the rest of a token is not sight's. */
+        Token *t = &s->tok[i];
+        Token keep = { 0 };
+        keep.x = t->x; keep.y = t->y; keep.size = t->size; keep.kind = t->kind;
+        *t = keep;
+    }
+    for (int y = 0; y < m->h; y++)
+        for (int x = 0; x <= m->w; x++) s->v[y * 65 + x] = map_vedge(m, x, y);
+    for (int y = 0; y <= m->h; y++)
+        for (int x = 0; x < m->w; x++) s->hz[y * 64 + x] = map_hedge(m, x, y);
+    for (int y = 0; y < m->h; y++)
+        for (int x = 0; x < m->w; x++)
+            s->ids[y * 64 + x] = fog_at(m, x, y) & (FOG_ID | FOG_HELD);
+    memcpy(s->pat, m->fog_patches, sizeof s->pat);
+}
+
+static int fd_snap_differs(const FdSnap *a, const FdSnap *b)
+{
+    FdSnap x = *a, y = *b;
+    x.gen = y.gen = 0;
+    return memcmp(&x, &y, sizeof x) != 0;
+}
+
+/* The definition. */
+static int fd_lit(const Map *m, int x, int y)
+{
+    int id = fog_at(m, x, y) & FOG_ID;
+    if (!m->fog_on || !fog_patch_live(m, id)) return 0;
+    int n = m->fog_patches[id - 1].reveal;
+    if (n < 0) return 0;
+    for (int i = 0; i < m->tokens.n; i++) {
+        const Token *t = &m->tokens.v[i];
+        if (t->kind != TOKEN_PLAYER) continue;
+        int tx1 = t->x + t->size - 1, ty1 = t->y + t->size - 1;
+        int ox = iclamp(x, t->x, tx1), oy = iclamp(y, t->y, ty1);
+        if (dist_tiles((DistMetric)m->metric, x - ox, y - oy) > (double)n + 1e-9) continue;
+        for (int fy = t->y; fy <= ty1; fy++)
+            for (int fx = t->x; fx <= tx1; fx++)
+                if (!sight_blocked(m, fx, fy, x, y)) return 1;
+    }
+    return 0;
+}
+
+static int fd_step_clear(const Map *m, int x, int y, int dx, int dy)
+{
+    if (!dx || !dy) return !map_edge_opaque(m, x, y, dx, dy);
+    return !map_edge_opaque(m, x, y, dx, 0) && !map_edge_opaque(m, x, y, 0, dy) &&
+           !map_edge_opaque(m, x + dx, y, 0, dy) && !map_edge_opaque(m, x, y + dy, dx, 0);
+}
+
+/* 0 when the map agrees with the definition; else the first square that
+ * does not, as y*w+x+1, with what differed in *what. */
+static int fd_check(const Map *m, const uint8_t *seen_before, int pure, const char **what)
+{
+    static uint8_t lit[64 * 64];
+    for (int y = 0; y < m->h; y++)
+        for (int x = 0; x < m->w; x++) lit[y * m->w + x] = (uint8_t)fd_lit(m, x, y);
+    for (int y = 0; y < m->h; y++)
+        for (int x = 0; x < m->w; x++) {
+            uint8_t f = fog_at(m, x, y);
+            int id = f & FOG_ID, L = lit[y * m->w + x], R = 0;
+            if (m->fog_on && !L && fog_patch_live(m, id))
+                for (int dy = -1; dy <= 1 && !R; dy++)
+                    for (int dx = -1; dx <= 1 && !R; dx++) {
+                        int nx = x + dx, ny = y + dy;
+                        if ((!dx && !dy) || !map_in_bounds(m, nx, ny)) continue;
+                        R = lit[ny * m->w + nx] && fd_step_clear(m, nx, ny, -dx, -dy);
+                    }
+            int mem = id && fog_patch_live(m, id) && m->fog_patches[id - 1].memory;
+            if (!!(f & FOG_LIT) != L) { *what = "lit"; return y * m->w + x + 1; }
+            if (!!(f & FOG_RIM) != R) { *what = "rim"; return y * m->w + x + 1; }
+            if (L && mem && !(f & FOG_SEEN)) { *what = "seen missing"; return y * m->w + x + 1; }
+            if (pure && seen_before) {
+                int want = seen_before[y * m->w + x] || (L && mem);
+                if (!!(f & FOG_SEEN) != want) {
+                    static char why[96];
+                    snprintf(why, sizeof why, "seen changed (was %d now %d, lit %d, mem %d, held %d, id %d)",
+                             seen_before[y * m->w + x], !!(f & FOG_SEEN), L, mem, !!(f & FOG_HELD), id);
+                    *what = why;
+                    return y * m->w + x + 1;
+                }
+            }
+        }
+    return 0;
+}
+
+/* A pure op -- one that never takes SEEN away -- pressed a key at a time,
+ * with the whole check after each: a carry lights the squares it passes,
+ * and memory keeps them, so only per key is "seen grows by exactly what is
+ * lit" a statement that can be checked. */
+static int g_fd_fails;
+static void fd_press(App *a, const char *keys, int op, int kind)
+{
+    static uint8_t seen[64 * 64];
+    for (const char *k = keys; *k; k++) {
+        Map *m = a->map;
+        int  w = m->w, h = m->h;
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++) seen[y * w + x] = !!(fog_at(m, x, y) & FOG_SEEN);
+        char one[2] = { *k, 0 };
+        press(a, one);
+        m = a->map;
+        const char *what = "";
+        int bad = fd_check(m, m->w == w && m->h == h ? seen : NULL, 1, &what);
+        if (bad && g_fd_fails < 3) {
+            g_fd_fails++;
+            CHECK(!"fog disagrees with the definition");
+            fprintf(stderr, "    op %d kind %d key %d: %s at (%d,%d)\n", op, kind, (unsigned char)*k,
+                    what, (bad - 1) % m->w, (bad - 1) / m->w);
+        }
+    }
+}
+
+static void test_fog_diff(void)
+{
+    Sandbox sb = sandbox_enter("fogdiff");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    const char *env = getenv("VTT_FOGDIFF_OPS");
+    int ops = env ? atoi(env) : 12000;
+    g_fd_rng = 0x9E3779B97F4A7C15ull;
+
+    char path[600];
+    snprintf(path, sizeof path, "%s/d.vtt", sb.dir);
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    Key f1 = { KEY_F1, 0, 0 }, f2 = { KEY_F2, 0, 0 };
+    int open = 0, fails = 0, maps = 0, gen_fails = 0;
+    int mix[20] = { 0 };
+
+    CASE("random keystrokes on random maps: fog agrees with the definition after every one");
+    g_fd_fails = 0;
+    for (int op = 0; op < ops && fails + g_fd_fails < 3 && gen_fails < 3; op++) {
+        if (!open || fd_rand(400) == 0) {                   /* a fresh map now and then */
+            if (open) app_free(&a);
+            fd_write_map(path);
+            app_init(&a, NULL, &r);
+            if (app_open_map(&a, path) != 0) { open = 0; continue; }
+            app_key(&a, f2);
+            open = 1;
+            maps++;
+        }
+        Map *m = a.map;
+        FdSnap before;
+        fd_snap(m, &before);
+
+        int kind = (int)fd_rand(20);
+        mix[kind]++;
+        char keys[64];
+        int  n = m->tokens.n;
+        const Token *t = n ? &m->tokens.v[fd_rand((unsigned)n)] : NULL;
+        switch (kind) {
+        case 0: case 1: case 2: case 3:                      /* carry a creature */
+            if (!t) break;
+            a.ed.cx = t->x; a.ed.cy = t->y;
+            snprintf(keys, sizeof keys, "\r%s%s\r",
+                     (const char *[]){ "h", "j", "k", "l", "hh", "jl", "kk", "lj" }[fd_rand(8)],
+                     (const char *[]){ "", "h", "j", "k", "l" }[fd_rand(5)]);
+            fd_press(&a, keys, op, kind);
+            break;
+        case 4:                                              /* a group, by box */
+            a.ed.cx = (int)fd_rand((unsigned)m->w); a.ed.cy = (int)fd_rand((unsigned)m->h);
+            snprintf(keys, sizeof keys, "v%s\r%s\r", (const char *[]){ "ll", "jj", "lljj", "hhkk" }[fd_rand(4)],
+                     (const char *[]){ "j", "k", "h", "l" }[fd_rand(4)]);
+            fd_press(&a, keys, op, kind);
+            break;
+        case 5:                                              /* add one */
+            a.ed.cx = (int)fd_rand((unsigned)m->w); a.ed.cy = (int)fd_rand((unsigned)m->h);
+            if (n < 10) fd_press(&a, fd_rand(3) ? "ipN\r" : "ieN\r", op, kind);
+            fd_press(&a, "\x1b", op, kind);
+            break;
+        case 6:                                              /* delete, resize, change side */
+            if (!t) break;
+            {
+                int idx = (int)(t - m->tokens.v);
+                int what = (int)fd_rand(3);
+                if (what == 0) { a.ed.cx = t->x; a.ed.cy = t->y; fd_press(&a, "d", op, kind); }
+                else if (what == 1) { play_focus(&a.play, idx); fd_press(&a, "b\x1b", op, kind); }
+                else {
+                    Token nt = *t;
+                    nt.kind = nt.kind == TOKEN_PLAYER ? TOKEN_ENEMY : TOKEN_PLAYER;
+                    undo_begin(&a.undo); undo_edit_token(&a.undo, m, idx, nt); undo_end(&a.undo);
+                    app_fog_sync(&a);
+                }
+            }
+            break;
+        case 7:                                              /* a door */
+            a.ed.cx = (int)fd_rand((unsigned)m->w); a.ed.cy = (int)fd_rand((unsigned)m->h);
+            fd_press(&a, fd_rand(2) ? "o" : "O", op, kind);
+            break;
+        case 8:                                              /* a wall, in build mode */
+            app_key(&a, f1);
+            a.ed.cx = (int)fd_rand((unsigned)m->w); a.ed.cy = (int)fd_rand((unsigned)m->h);
+            fd_press(&a, (const char *[]){ "H", "J", "K", "L", "tH", "ttJ", "tttK" }[fd_rand(7)], op, kind);
+            app_key(&a, f2);
+            break;
+        case 9:                                              /* paint or scrub fog */
+            app_key(&a, f1);
+            a.ed.cx = (int)fd_rand((unsigned)m->w); a.ed.cy = (int)fd_rand((unsigned)m->h);
+            snprintf(keys, sizeof keys, ":fog P%u\r%s", 1 + fd_rand(3), fd_rand(3) ? "gf" : "gc");
+            press(&a, keys);
+            press(&a, "\x1b");
+            app_key(&a, f2);
+            break;
+        case 10:                                             /* the GM's hand */
+            a.ed.cx = (int)fd_rand((unsigned)m->w); a.ed.cy = (int)fd_rand((unsigned)m->h);
+            press(&a, (const char *[]){ "gr", "gh", "gR", "gH" }[fd_rand(4)]);
+            break;
+        case 11:                                             /* a patch's settings */
+            snprintf(keys, sizeof keys, ":fog P%u %s\r", 1 + fd_rand(3),
+                     (const char *[]){ "0", "1", "2", "3", "6", "manual", "--soft-edge", "--no-soft-edge",
+                                       "disable", "enable", "memory on" }[fd_rand(11)]);
+            fd_press(&a, keys, op, kind);
+            break;
+        case 12:                                             /* memory off, clear, hide, delete */
+            snprintf(keys, sizeof keys, ":fog P%u %s\r", 1 + fd_rand(3),
+                     (const char *[]){ "memory off", "clear", "hide", "delete" }[fd_rand(fd_rand(8) ? 3 : 4)]);
+            press(&a, keys);
+            break;
+        case 13:                                             /* the switch, the metric */
+            fd_press(&a, (const char *[]){ ":fog off\r", ":fog on\r", ":fog --soft-edge\r", ":metric chebyshev\r",
+                                        ":metric euclidean\r", ":metric alt\r", ":metric manhattan\r" }[fd_rand(7)], op, kind);
+            break;
+        case 14: case 15: case 16:                           /* undo, redo */
+            press(&a, fd_rand(3) ? "u" : "\x12");
+            break;
+        case 17:                                             /* resize */
+            snprintf(keys, sizeof keys, ":resize %dx%d\r", iclamp(m->w + (int)fd_rand(5) - 2, 8, 30),
+                     iclamp(m->h + (int)fd_rand(5) - 2, 6, 20));
+            press(&a, keys);
+            break;
+        case 18:                                             /* save and open again */
+            {
+                char err[128];
+                if (mapio_save(m, path, err, sizeof err) == 0) {
+                    app_free(&a);
+                    app_init(&a, NULL, &r);
+                    if (app_open_map(&a, path) != 0) { open = 0; continue; }
+                    app_key(&a, f2);
+                }
+            }
+            break;
+        default:                                             /* stray keys, cancelled */
+            a.ed.cx = (int)fd_rand((unsigned)m->w); a.ed.cy = (int)fd_rand((unsigned)m->h);
+            press(&a, (const char *[]){ "\r", "\rl", "v", "f", "F", "t", "\x1b" }[fd_rand(7)]);
+            press(&a, "\x1b");
+            break;
+        }
+        m = a.map;
+
+        FdSnap after;
+        fd_snap(m, &after);
+        if (kind != 18 && fd_snap_differs(&before, &after) && after.gen == before.gen) {
+            gen_fails++;
+            CHECK(!"a change to the map that did not move Map.gen");
+            fprintf(stderr, "    op %d kind %d\n", op, kind);
+        }
+        const char *what = "";
+        int bad = fd_check(m, NULL, 0, &what);
+        if (bad) {
+            fails++;
+            CHECK(!"fog disagrees with the definition");
+            fprintf(stderr, "    op %d kind %d: %s at (%d,%d)\n", op, kind, what,
+                    (bad - 1) % m->w, (bad - 1) / m->w);
+        }
+    }
+    CHECK_EQ(fails + g_fd_fails, 0);
+    CHECK_EQ(gen_fails, 0);
+    CHECK(maps >= 2);
+    if (env) {
+        fprintf(stderr, "    fogdiff: %d ops over %d maps; mix", ops, maps);
+        for (int i = 0; i < 20; i++) fprintf(stderr, " %d", mix[i]);
+        fprintf(stderr, "\n");
+    }
+    if (open) app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
 /* The cell a boundary draws its middle in: the vertical one west of tile
  * (tx,ty), or the horizontal one north of it. */
 static const Cell *edge_cell(const Renderer *r, const App *a, int tx, int ty, int vertical)
@@ -10484,6 +10871,7 @@ int main(void)
         { "fog",    test_fog },
         { "fogsight", test_fog_sight },
         { "fogedge", test_fog_edge },
+        { "fogdiff", test_fog_diff },
         { "webpage", test_webpage },
         { "turns",  test_turns },
         { "turnkeys", test_turn_keys },
