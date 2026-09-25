@@ -334,14 +334,14 @@ instead of a list of call sites that could miss one, and a missed one would be a
 scenario, so `tools/sight.sh` measures `fog.sight` per fog scenario (median of three,
 every recompute counted):
 
-| scenario               | before | after step 2 | calls |
+| scenario               | before | now          | calls |
 |------------------------|--------|--------------|-------|
 | fog sight              | 33.7us |        6.0us |  3599 |
 | fog lantern            | 33.9us |        6.1us |  3723 |
 | fog reveal 12          | 73.8us |       21.4us |  3599 |
 | fog full rebuild       | 33.2us |       27.5us |  1201 |
 | fog warren             | 51.8us |       13.8us |  3601 |
-| fog warren reveal 12   |     -- |       43.8us |  3601 |
+| fog warren 12          |     -- |       43.8us |  3601 |
 | fog warren, party      | 54.9us |       30.6us |  2001 |
 | fog door               | 47.6us |       42.6us |  1201 |
 
@@ -354,8 +354,9 @@ times the area, and costs about twice as much. `fog full rebuild` changes a patc
 setting each keystroke, which no incremental scheme can skip; `fog door` toggles a door.
 Each recompute here is one keystroke's; a frame never pays for it.
 
-The "before" column is sight as first built; "after step 2" recomputes only the creatures
-that moved (below). A step on the open map is 6.0µs where it was 34, and 14µs in the
+The "before" column is sight as first built; "now" is the build as committed, which
+recomputes only the creatures that moved (below) and walks lines with the shared
+\`sight_walk\` -- measured after step 3, with the mask taken out again. A step on the open map is 6.0µs where it was 34, and 14µs in the
 warren where it was 52. The rows that must rebuild everything -- a setting changed, a door
 toggled -- got cheaper too, 28 and 43 against 33 and 48, because the rebuild now skips the
 line walks the old loop skipped and works distance out a row at a time. `warren, party`
@@ -364,13 +365,14 @@ against 55. Those walks are what step 3 is for. The p99 column is the full rebui
 a loop (the script's `:fog all 6`), and for `reveal 12` the first step after one, which
 settles the squares the rebuild left unasked.
 
-`fog warren reveal 12` came in with step 3, so it has no "before": it is the walled case
+`fog warren 12` came in with step 3, so it has no "before": it is the walled case
 the line walks matter most in, a reach of 625 squares in a map of rooms.
 
 **Cheaper line walks: measured and declined.** Step 3 read a creature's reach into an
 opacity mask with prefix sums, so a square with no wall between it and the creature
 skipped its walk and every other walk read bits instead of the map. Exact -- every line
-pair on 200 random walled maps agreed -- and worth nothing: the warren 13.9 -> 13.8µs, the
+pair on 200 random walled maps agreed -- and worth nothing, in its own back-to-back A/B
+against step 2 (so these pairs differ a little from the table, a separate run): the warren 13.9 -> 13.8µs, the
 walled reveal 12 44.6 -> 43.2 against a bar of half, the door row 42.9 -> 48.1, worse.
 In rooms a blocked line stops at the first wall a step or two out, so the walks were
 already short, and building the mask cost what it saved. What stayed is `sight_walk`,

@@ -9987,6 +9987,8 @@ static void write_sight_map(const char *dir, const char *name, int reveal, int m
     fclose(f);
 }
 
+/* The random maps below share fogdiff's generator (defined with it); each
+ * suite seeds it itself, so their order does not change either's maps. */
 static uint64_t g_fd_rng;
 static unsigned fd_rand(unsigned n);
 

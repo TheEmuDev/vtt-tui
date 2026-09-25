@@ -141,7 +141,6 @@ static inline int sight_walk(const void *ctx, SightOpaque opaque,
     return 0;
 }
 
-
 /* The same question, from the ruler's anchor to its live end. */
 int ruler_sight_blocked(const Ruler *r, const Map *m);
 
