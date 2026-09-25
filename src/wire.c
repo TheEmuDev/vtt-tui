@@ -215,7 +215,7 @@ static void dispatch(WireDec *d, const uint8_t *p)
     case 'F': if (s->full) s->full(d->ctx, (int)get16(p + 1), (int)get16(p + 3)); break;
     case 'P': if (s->pal)  s->pal(d->ctx, p[1], ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 8) | p[4]); break;
     case 'E': if (s->end)  s->end(d->ctx);  break;
-    case 'Z': if (s->ping) s->ping(d->ctx); break;
+    case 'Z': if (s->keepalive) s->keepalive(d->ctx); break;
     case 'R': {
         int n = (int)get16(p + 5);
         uint16_t glyphs[WIRE_RUN_MAX];

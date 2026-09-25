@@ -24,8 +24,10 @@
 #define NET_REQ_CAP     4096
 #define NET_FRAME_CAP   (128 * 1024)
 #define NET_CODE_LEN    6
-#define NET_PING_MS     15000
+#define NET_KEEPALIVE_MS     15000
 #define NET_IDLE_MS     60000     /* a client silent this long is gone */
+#define NET_PING_RATE_MS 1000     /* a phone's pings: one a second, the rest dropped */
+#define NET_PING_COORD_MAX 4095   /* the largest screen cell a ping may name */
 
 typedef enum {
     CL_NEW = 0,     /* connected; first bytes not yet seen */
@@ -47,7 +49,19 @@ typedef struct {
 
     int        pal_known;     /* palette entries this client has been told */
     uint64_t   last_rx_ms, last_tx_ms;
+
+    uint32_t   id;            /* this connection, for as long as it lasts */
+    int        greeted;       /* a watcher's hello has been read */
+    uint64_t   next_ping_ms;  /* the earliest its next ping is taken */
 } NetClient;
+
+/* A ping: a client pointing at a cell of the frame it is shown. The app
+ * decides what square that is; the server only reads, limits and hands
+ * over. One per client at a time -- a newer one replaces it. */
+typedef struct {
+    uint32_t who;
+    int      sx, sy;
+} NetPing;
 
 typedef struct {
     int       listen_fd;
@@ -73,11 +87,20 @@ typedef struct {
      * the process, which the operating system sees to. */
     int             stay;
     int             stale;      /* a frame was withheld: next live frame is FULL */
+    int             no_pings;   /* :serve --no-pings: taps are read and dropped */
+
+    /* What the clients have said since the app last looked. Fixed: one
+     * entry a client, so nothing a client sends can grow it. */
+    NetPing         inbox[NET_MAX_CLIENTS];
+    int             ninbox;
+    uint32_t        next_id;
 
     /* Counters for the profiler: per frame, and over the server's life. */
     uint32_t frame_bytes;
     uint64_t total_bytes;
     uint32_t dropped;
+    uint32_t pings_dropped;     /* over the rate, or switched off */
+    uint32_t bad_msgs;          /* upstream messages that did not parse */
 } Net;
 
 void net_init(Net *n);
@@ -96,6 +119,12 @@ static inline int net_is_live(const Net *n) { return n->live; }
  * client with a FULL). NULL when not serving. */
 Renderer *net_players_renderer(Net *n, const Renderer *gm);
 static inline void net_set_stay(Net *n, int stay) { n->stay = stay != 0; }
+static inline void net_set_pings(Net *n, int on)   { n->no_pings = !on; }
+static inline int  net_pings_on(const Net *n)      { return !n->no_pings; }
+
+/* Hands over the pings read since the last call, oldest client first, and
+ * empties the inbox. Returns how many were written to out. */
+int net_take_pings(Net *n, NetPing *out, int max);
 
 /* The address to hand players: http://<lan ip>:<port>/?k=<code>. */
 void net_url(const Net *n, char *buf, size_t bufsz);

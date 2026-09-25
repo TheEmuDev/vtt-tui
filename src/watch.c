@@ -86,9 +86,9 @@ static void on_end(void *ctx)
     paint(wt);
 }
 
-static void on_ping(void *ctx) { (void)ctx; }
+static void on_keepalive(void *ctx) { (void)ctx; }
 
-static const WireSink SINK = { on_full, on_pal, on_run, on_end, on_ping };
+static const WireSink SINK = { on_full, on_pal, on_run, on_end, on_keepalive };
 
 /* host:port, host:port?k=CODE, or host:port/CODE. */
 static int parse_target(const char *target, char *host, size_t hs, char *port, size_t ps,

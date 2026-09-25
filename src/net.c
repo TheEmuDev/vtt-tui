@@ -424,13 +424,69 @@ static void http_request(Net *n, int i, uint64_t now_ms)
     http_respond(n, i, 404, "text/plain", "vtt: not found\n", 15, now_ms);
 }
 
-/* WebSocket frames from the browser: close and ping are answered, data is
- * not expected yet and is ignored. Masked, as the RFC requires of clients. */
+/* One message from a client: "P <col> <row>", a line, the only thing a
+ * client may say. Anything else is counted and ignored rather than closed
+ * on, so a newer page does not lose its picture to an older server. */
+static int parse_num(const uint8_t **p, const uint8_t *end, int *out)
+{
+    int v = 0, digits = 0;
+    while (*p < end && **p >= '0' && **p <= '9') {
+        if (++digits > 4) return 0;
+        v = v * 10 + (**p - '0');
+        (*p)++;
+    }
+    *out = v;
+    return digits > 0 && v <= NET_PING_COORD_MAX;
+}
+
+static void net_msg(Net *n, int i, const uint8_t *p, size_t len, uint64_t now_ms)
+{
+    PROF_ZONE("net.cmd");
+    const uint8_t *end = p + len;
+    if (end > p && end[-1] == '\n') end--;
+    if (end > p && end[-1] == '\r') end--;
+    int sx, sy;
+    if (end - p < 5 || p[0] != 'P' || p[1] != ' ') { n->bad_msgs++; return; }
+    p += 2;
+    if (!parse_num(&p, end, &sx) || p >= end || *p++ != ' ' || !parse_num(&p, end, &sy) || p != end) {
+        n->bad_msgs++;
+        return;
+    }
+
+    NetClient *c = &n->cl[i];
+    if (n->no_pings || now_ms < c->next_ping_ms) { n->pings_dropped++; return; }
+    c->next_ping_ms = now_ms + NET_PING_RATE_MS;
+
+    int k = 0;
+    while (k < n->ninbox && n->inbox[k].who != c->id) k++;
+    if (k == n->ninbox) {
+        if (n->ninbox == NET_MAX_CLIENTS) { n->pings_dropped++; return; }
+        n->ninbox++;
+    }
+    n->inbox[k].who = c->id;
+    n->inbox[k].sx  = sx;
+    n->inbox[k].sy  = sy;
+}
+
+int net_take_pings(Net *n, NetPing *out, int max)
+{
+    int k = n->ninbox < max ? n->ninbox : max;
+    memcpy(out, n->inbox, (size_t)k * sizeof *out);
+    n->ninbox = 0;
+    return k;
+}
+
+/* WebSocket frames from the browser: close and ping are answered, a data
+ * frame is a message (net_msg). Masked, as the RFC requires of clients;
+ * unmasked is tolerated. Anything our page never sends -- a fragment, a
+ * reserved opcode, a control frame over 125 bytes, a frame bigger than the
+ * request buffer -- closes the client. */
 static void ws_frames(Net *n, int i, uint64_t now_ms)
 {
     NetClient *c = &n->cl[i];
     for (;;) {
         if (c->in_len < 2) return;
+        int      fin = c->in[0] & 0x80;
         uint8_t  op  = c->in[0] & 0x0F;
         int      msk = c->in[1] & 0x80;
         uint64_t len = c->in[1] & 0x7F;
@@ -439,18 +495,24 @@ static void ws_frames(Net *n, int i, uint64_t now_ms)
         else if (len == 127) { client_close(n, i); return; }    /* nothing that big is expected */
         if (msk) hl += 4;
         if (hl + len > NET_REQ_CAP) { client_close(n, i); return; }
+        if (!fin || op == 0 || (op > 2 && op < 8) || op > 10) { client_close(n, i); return; }
+        if (op >= 8 && len > 125) { client_close(n, i); return; }
         if (c->in_len < hl + len) return;
+
+        /* Unmasked in place: the frame is consumed below either way. */
+        uint8_t *body = c->in + hl;
+        if (msk)
+            for (size_t k = 0; k < len; k++) body[k] ^= c->in[hl - 4 + (k & 3)];
 
         if (op == 8) { client_close(n, i); return; }
         if (op == 9) {
             /* pong: the payload back, unmasked */
-            uint8_t hdr[4] = { 0x8A, (uint8_t)len, 0, 0 };
-            uint8_t body[125];
-            for (size_t k = 0; k < len && k < sizeof body; k++)
-                body[k] = msk ? c->in[hl + k] ^ c->in[hl - 4 + (k & 3)] : c->in[hl + k];
+            uint8_t hdr[2] = { 0x8A, (uint8_t)len };
             if (client_queue(n, i, hdr, 2) < 0) return;
-            if (len && client_queue(n, i, body, len) < 0) return;
+            if (len && client_queue(n, i, body, (size_t)len) < 0) return;
             client_flush(n, i, now_ms);
+        } else if (op == 1 || op == 2) {
+            net_msg(n, i, body, (size_t)len, now_ms);
         }
         size_t used = hl + (size_t)len;
         memmove(c->in, c->in + used, c->in_len - used);
@@ -482,17 +544,38 @@ static void client_read(Net *n, int i, uint64_t now_ms)
 
     switch (c->kind) {
     case CL_RAW: {
-        /* "VTT1" then the code and a newline; the code may be blank from
-         * this machine. Anything after the hello is ignored. */
-        if (c->in_len > 4 + NET_CODE_LEN + 1 + 64) { client_close(n, i); return; }
-        uint8_t *nl = memchr(c->in + 4, '\n', c->in_len - 4);
-        if (!nl) return;
-        c->in[c->in_len] = '\0';
-        *nl = '\0';
-        if (!c->local && strcmp((char *)c->in + 4, n->code) != 0) { client_close(n, i); return; }
-        c->in_len = 0;
-        c->kind   = CL_RAW;
-        if (c->pal_known == 0 && c->out_len == 0) client_send_full(n, i, now_ms);
+        if (!c->greeted) {
+            /* "VTT1" then the code and a newline; the code may be blank
+             * from this machine. */
+            if (c->in_len > 4 + NET_CODE_LEN + 1 + 64) { client_close(n, i); return; }
+            uint8_t *nl = memchr(c->in + 4, '\n', c->in_len - 4);
+            if (!nl) return;
+            size_t rest = c->in_len - (size_t)(nl + 1 - c->in);
+            *nl = '\0';
+            c->in[c->in_len] = '\0';
+            if (!c->local && strcmp((char *)c->in + 4, n->code) != 0) { client_close(n, i); return; }
+            memmove(c->in, nl + 1, rest);
+            c->in_len  = rest;
+            c->greeted = 1;
+            /* The FULL can overflow and close this client, which shifts the
+             * next one into its slot: the id says whether it is still us. */
+            uint32_t id = c->id;
+            if (c->pal_known == 0 && c->out_len == 0) client_send_full(n, i, now_ms);
+            if (i >= n->ncl || n->cl[i].id != id) return;
+        }
+        /* After the hello, lines: the same messages a browser sends. A
+         * line too long to be one is thrown away rather than waited on. */
+        for (;;) {
+            uint8_t *nl = memchr(c->in, '\n', c->in_len);
+            if (!nl) {
+                if (c->in_len > 64) { n->bad_msgs++; c->in_len = 0; }
+                break;
+            }
+            size_t used = (size_t)(nl + 1 - c->in);
+            net_msg(n, i, c->in, used, now_ms);
+            memmove(c->in, c->in + used, c->in_len - used);
+            c->in_len -= used;
+        }
         break;
     }
     case CL_HTTP:
@@ -528,6 +611,7 @@ static void accept_client(Net *n, uint64_t now_ms)
     c->kind  = CL_NEW;
     c->local = (ntohl(addr.sin_addr.s_addr) >> 24) == 127;
     c->last_rx_ms = c->last_tx_ms = now_ms;
+    c->id    = ++n->next_id;
 }
 
 /* -------------------------------------------------------------- polling */
@@ -561,12 +645,12 @@ void net_service(Net *n, const struct pollfd *fds, int count, uint64_t now_ms)
         if (i < n->ncl && n->cl[i].fd == fd && (fds[k].revents & POLLIN)) client_read(n, i, now_ms);
     }
 
-    /* Keep-alives out, and the silent gone. Only stream clients are pinged;
+    /* Keep-alives out, and the silent gone. Only stream clients get them;
      * an HTTP request still being read has its own short life. */
     for (int i = 0; i < n->ncl; i++) {
         NetClient *c = &n->cl[i];
         int stream = c->kind == CL_WS || c->kind == CL_RAW;
-        if (stream && now_ms - c->last_tx_ms >= NET_PING_MS) {
+        if (stream && now_ms - c->last_tx_ms >= NET_KEEPALIVE_MS) {
             uint8_t z = 'Z';
             if (client_send_frame(n, i, &z, 1) == 0) { client_flush(n, i, now_ms); c->last_tx_ms = now_ms; }
             else continue;

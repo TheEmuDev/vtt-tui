@@ -78,7 +78,7 @@ typedef struct {
     void (*run)(void *ctx, int x, int y, int n, uint8_t fg, uint8_t bg, uint8_t attr,
                 const uint16_t *glyphs);
     void (*end)(void *ctx);
-    void (*ping)(void *ctx);
+    void (*keepalive)(void *ctx);
 } WireSink;
 
 /* Consumes bytes as they arrive; a record split across reads is held until

@@ -8521,7 +8521,7 @@ static void test_turn_keys(void)
 /* ---------------------------------------------------------------- wire */
 
 typedef struct {
-    int      w, h, fulls, ends, pings;
+    int      w, h, fulls, ends, keepalives;
     uint32_t pal[256];
     Cell     grid[64 * 32];
     int      runs, glyphs;
@@ -8530,7 +8530,7 @@ typedef struct {
 static void wc_full(void *ctx, int w, int h) { WireCatch *c = ctx; c->w = w; c->h = h; c->fulls++; }
 static void wc_pal(void *ctx, int i, uint32_t rgb) { ((WireCatch *)ctx)->pal[i] = rgb; }
 static void wc_end(void *ctx) { ((WireCatch *)ctx)->ends++; }
-static void wc_ping(void *ctx) { ((WireCatch *)ctx)->pings++; }
+static void wc_keepalive(void *ctx) { ((WireCatch *)ctx)->keepalives++; }
 static void wc_run(void *ctx, int x, int y, int n, uint8_t fg, uint8_t bg, uint8_t attr,
                    const uint16_t *g)
 {
@@ -8543,7 +8543,7 @@ static void wc_run(void *ctx, int x, int y, int n, uint8_t fg, uint8_t bg, uint8
         c->glyphs++;
     }
 }
-static const WireSink WC_SINK = { wc_full, wc_pal, wc_run, wc_end, wc_ping };
+static const WireSink WC_SINK = { wc_full, wc_pal, wc_run, wc_end, wc_keepalive };
 
 static void test_wire(void)
 {
@@ -8777,6 +8777,211 @@ static int ws_recv_until(Net *n, int fd, WireDec *d, WireCatch *c, int ends, uin
     return c->ends >= ends ? 0 : -1;
 }
 
+/* A raw client past its hello, its FULL drained. */
+static int netmsg_raw(Net *n, uint64_t now)
+{
+    int fd = net_connect(n->port);
+    if (fd < 0) return -1;
+    if (write(fd, "VTT1\n", 5) != 5) { close(fd); return -1; }
+    WireCatch c;
+    memset(&c, 0, sizeof c);
+    WireDec d;
+    wire_dec_init(&d, &WC_SINK, &c);
+    net_recv_until(n, fd, &d, &c, 1, now);
+    return fd;
+}
+
+/* A browser past its upgrade, whatever it was sent read and thrown away. */
+static int netmsg_ws(Net *n, uint64_t now)
+{
+    int fd = net_connect(n->port);
+    if (fd < 0) return -1;
+    char up[300];
+    snprintf(up, sizeof up,
+             "GET /ws?k=%s HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+             "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n", n->code);
+    if (write(fd, up, strlen(up)) != (ssize_t)strlen(up)) { close(fd); return -1; }
+    char buf[65536];
+    for (int i = 0; i < 20; i++) {
+        net_pump(n, now);
+        struct pollfd p = { fd, POLLIN, 0 };
+        if (poll(&p, 1, 20) > 0 && read(fd, buf, sizeof buf) <= 0) break;
+    }
+    return fd;
+}
+
+/* One WebSocket frame from a client: masked unless told otherwise. */
+static void ws_send(int fd, uint8_t b0, const void *payload, size_t len, int masked)
+{
+    uint8_t f[300];
+    size_t  k = 0;
+    f[k++] = b0;
+    if (len < 126) f[k++] = (uint8_t)((masked ? 0x80 : 0) | len);
+    else { f[k++] = (uint8_t)((masked ? 0x80 : 0) | 126); f[k++] = (uint8_t)(len >> 8); f[k++] = (uint8_t)len; }
+    static const uint8_t key[4] = { 0x37, 0xFA, 0x21, 0x3D };
+    if (masked) { memcpy(f + k, key, 4); k += 4; }
+    for (size_t i = 0; i < len && k < sizeof f; i++)
+        f[k++] = masked ? ((const uint8_t *)payload)[i] ^ key[i & 3] : ((const uint8_t *)payload)[i];
+    CHECK_EQ((size_t)write(fd, f, k), k);
+}
+
+static int netmsg_client_open(const Net *n, uint32_t id)
+{
+    for (int i = 0; i < n->ncl; i++) if (n->cl[i].id == id) return 1;
+    return 0;
+}
+
+/* What the phones may say: "P col row", read, limited and handed over. */
+static void test_net_msg(void)
+{
+    Renderer r;
+    rnd_init(&r);
+    rnd_resize(&r, 60, 16);
+    rnd_begin(&r);
+    rnd_flush(&r, NULL);
+    Net n;
+    net_init(&n);
+    char err[128];
+    CHECK_EQ(net_start(&n, 0, &r, err, sizeof err), 0);
+    uint64_t now = 0;
+    NetPing got[NET_MAX_CLIENTS];
+
+    CASE("a watcher's line after its hello is a ping, handed over once, with the client's id");
+    int w = netmsg_raw(&n, now);
+    CHECK(w >= 0);
+    CHECK_EQ(n.ncl, 1);
+    uint32_t wid = n.cl[0].id;
+    CHECK(write(w, "P 5 3\n", 6) == 6);
+    for (int i = 0; i < 10 && n.ninbox == 0; i++) net_pump(&n, now);
+    CHECK_EQ(net_take_pings(&n, got, NET_MAX_CLIENTS), 1);
+    CHECK_EQ(got[0].who, wid);
+    CHECK_EQ(got[0].sx, 5);
+    CHECK_EQ(got[0].sy, 3);
+    CHECK_EQ(net_take_pings(&n, got, NET_MAX_CLIENTS), 0);
+
+    CASE("one a second: the next within it is dropped and counted, and taken at the second");
+    CHECK(write(w, "P 6 3\n", 6) == 6);
+    for (int i = 0; i < 5; i++) net_pump(&n, now + 999);
+    CHECK_EQ(net_take_pings(&n, got, NET_MAX_CLIENTS), 0);
+    CHECK_EQ(n.pings_dropped, 1u);
+    CHECK(write(w, "P 7 3\r\n", 7) == 7);
+    for (int i = 0; i < 10 && n.ninbox == 0; i++) net_pump(&n, now + 1000);
+    CHECK_EQ(net_take_pings(&n, got, NET_MAX_CLIENTS), 1);
+    CHECK_EQ(got[0].sx, 7);
+    now = 5000;
+
+    CASE("a browser's text, binary and unmasked frames all arrive");
+    int b = netmsg_ws(&n, now);
+    CHECK(b >= 0);
+    CHECK_EQ(n.ncl, 2);
+    uint32_t bid = n.cl[1].id;
+    CHECK(bid != wid);
+    ws_send(b, 0x81, "P 10 4", 6, 1);
+    for (int i = 0; i < 10 && n.ninbox == 0; i++) net_pump(&n, now);
+    CHECK_EQ(net_take_pings(&n, got, NET_MAX_CLIENTS), 1);
+    CHECK_EQ(got[0].who, bid);
+    CHECK_EQ(got[0].sx, 10);
+    ws_send(b, 0x82, "P 11 4", 6, 1);
+    for (int i = 0; i < 10 && n.ninbox == 0; i++) net_pump(&n, now + 1000);
+    CHECK_EQ(net_take_pings(&n, got, NET_MAX_CLIENTS), 1);
+    ws_send(b, 0x81, "P 12 4", 6, 0);
+    for (int i = 0; i < 10 && n.ninbox == 0; i++) net_pump(&n, now + 2000);
+    CHECK_EQ(net_take_pings(&n, got, NET_MAX_CLIENTS), 1);
+    CHECK_EQ(got[0].sx, 12);
+    now = 10000;
+
+    CASE("what does not parse is counted and ignored; the client stays");
+    static const char *junk[] = { "P x y", "P 5", "Q 1 2", "P 99999 1", "", "P 1 2 3", "P  1 2", "P 1 -2" };
+    uint32_t bad0 = n.bad_msgs;
+    for (size_t j = 0; j < sizeof junk / sizeof *junk; j++) {
+        ws_send(b, 0x81, junk[j], strlen(junk[j]), 1);
+        for (int i = 0; i < 5; i++) net_pump(&n, now);
+    }
+    char big[200];
+    memset(big, 'z', sizeof big);
+    ws_send(b, 0x81, big, sizeof big, 1);
+    CHECK(write(w, "garbage\n", 8) == 8);
+    for (int i = 0; i < 5; i++) net_pump(&n, now);
+    CHECK_EQ(n.bad_msgs - bad0, (uint32_t)(sizeof junk / sizeof *junk) + 2);
+    CHECK_EQ(net_take_pings(&n, got, NET_MAX_CLIENTS), 0);
+    CHECK(netmsg_client_open(&n, bid));
+    CHECK(netmsg_client_open(&n, wid));
+
+    CASE("a watcher that sends one byte after its hello is still served, and a line too long is dropped");
+    CHECK(write(w, "P", 1) == 1);
+    for (int i = 0; i < 5; i++) net_pump(&n, now);
+    CHECK(netmsg_client_open(&n, wid));
+    CHECK(write(w, " 2 2\n", 5) == 5);                      /* the rest of the line */
+    for (int i = 0; i < 10 && n.ninbox == 0; i++) net_pump(&n, now);
+    CHECK_EQ(net_take_pings(&n, got, NET_MAX_CLIENTS), 1);
+    CHECK_EQ(got[0].sx, 2);
+    char longline[100];
+    memset(longline, 'P', sizeof longline);
+    CHECK(write(w, longline, sizeof longline) == (ssize_t)sizeof longline);
+    for (int i = 0; i < 5; i++) net_pump(&n, now);
+    CHECK(netmsg_client_open(&n, wid));
+    CHECK_EQ(n.cl[0].in_len, 0u);
+    now = 20000;
+
+    CASE("a flood: five hundred pings in one write, one taken, nothing grows, the server lives");
+    {
+        static char flood[500 * 6];
+        for (int i = 0; i < 500; i++) memcpy(flood + i * 6, "P 1 1\n", 6);
+        size_t off = 0;
+        for (int tries = 0; tries < 200 && off < sizeof flood; tries++) {
+            ssize_t put = write(w, flood + off, sizeof flood - off);
+            if (put > 0) off += (size_t)put;
+            net_pump(&n, now);
+        }
+        for (int i = 0; i < 20; i++) net_pump(&n, now);
+        CHECK_EQ(net_take_pings(&n, got, NET_MAX_CLIENTS), 1);
+        CHECK(n.ninbox == 0);
+        CHECK(netmsg_client_open(&n, wid));
+    }
+    now = 30000;
+
+    CASE("switched off, pings are dropped and counted; a WebSocket ping is still answered");
+    net_set_pings(&n, 0);
+    CHECK_EQ(net_pings_on(&n), 0);
+    uint32_t dropped0 = n.pings_dropped;
+    ws_send(b, 0x81, "P 3 3", 5, 1);
+    ws_send(b, 0x89, "hi", 2, 1);
+    int pong = 0;
+    for (int i = 0; i < 20 && !pong; i++) {
+        net_pump(&n, now);
+        uint8_t buf[256];
+        struct pollfd p = { b, POLLIN, 0 };
+        if (poll(&p, 1, 20) > 0) {
+            ssize_t got_n = read(b, buf, sizeof buf);
+            for (ssize_t k = 0; k + 3 < got_n; k++)
+                if (buf[k] == 0x8A && buf[k + 1] == 2 && buf[k + 2] == 'h' && buf[k + 3] == 'i') pong = 1;
+        }
+    }
+    CHECK(pong);
+    CHECK_EQ(n.pings_dropped - dropped0, 1u);
+    CHECK_EQ(net_take_pings(&n, got, NET_MAX_CLIENTS), 0);
+    net_set_pings(&n, 1);
+
+    CASE("framing a page never sends closes the client: a control frame over 125 bytes, a fragment, a reserved op, 64-bit length");
+    static const uint8_t b0s[] = { 0x89, 0x01, 0x83 };
+    for (size_t j = 0; j < 4; j++) {
+        int c = netmsg_ws(&n, now);
+        CHECK(c >= 0);
+        uint32_t cid = n.cl[n.ncl - 1].id;
+        if (j < 3) ws_send(c, b0s[j], big, j == 0 ? 200 : 5, 1);
+        else { uint8_t f[10] = { 0x81, 0x80 | 127, 0, 0, 0, 0, 0, 0, 0, 1 }; CHECK(write(c, f, 10) == 10); }
+        for (int i = 0; i < 10 && netmsg_client_open(&n, cid); i++) net_pump(&n, now);
+        CHECK(!netmsg_client_open(&n, cid));
+        close(c);
+    }
+    CHECK(netmsg_client_open(&n, bid));
+
+    close(b);
+    close(w);
+    net_stop(&n);
+    rnd_free(&r);
+}
+
 static void test_net_server(void)
 {
     Renderer r;
@@ -8853,13 +9058,13 @@ static void test_net_server(void)
     CHECK_EQ(c.grid[3 * 64 + 1].ch, 'b');
 
     CASE("a keep-alive goes out when the line has been quiet");
-    CHECK_EQ(net_recv_until(&n, w, &d, &c, 3, now + NET_PING_MS + 1), 0);
-    for (int i = 0; i < 5 && c.pings == 0; i++) {
-        net_pump(&n, now + NET_PING_MS + 1);
+    CHECK_EQ(net_recv_until(&n, w, &d, &c, 3, now + NET_KEEPALIVE_MS + 1), 0);
+    for (int i = 0; i < 5 && c.keepalives == 0; i++) {
+        net_pump(&n, now + NET_KEEPALIVE_MS + 1);
         uint8_t z;
         if (read(w, &z, 1) == 1) wire_dec_feed(&d, &z, 1);
     }
-    CHECK_EQ(c.pings, 1);
+    CHECK_EQ(c.keepalives, 1);
 
     CASE("a browser gets the page, or a refusal without the code once it is not local");
     int b = net_connect(n.port);
@@ -11037,6 +11242,7 @@ int main(void)
         { "wire",   test_wire },
         { "netprim", test_net_primitives },
         { "netserver", test_net_server },
+        { "netmsg", test_net_msg },
         { "serve",  test_serve_commands },
         { "servelife", test_serve_lifetime },
         { "pframe", test_players_frame },
