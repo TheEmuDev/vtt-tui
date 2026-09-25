@@ -212,6 +212,21 @@ function connect(){
   ws.onerror=()=>ws.close();
 }
 connect();
+
+/* ---- pointing: a tap names the cell under it, and the GM's vtt decides
+ * which square that is. A click, so a pinch is never a tap; one a second,
+ * which is also all the server takes. */
+let lastPing=0;
+cv.addEventListener('click',e=>{
+  if(!cols||!ws||ws.readyState!==1)return;
+  const r=cv.getBoundingClientRect();
+  const x=Math.floor((e.clientX-r.left)/r.width*cols),y=Math.floor((e.clientY-r.top)/r.height*rows);
+  if(x<0||y<0||x>=cols||y>=rows)return;
+  const now=Date.now();
+  if(now-lastPing<1000)return;
+  lastPing=now;
+  ws.send('P '+x+' '+y);
+});
 </script>
 </body>
 </html>

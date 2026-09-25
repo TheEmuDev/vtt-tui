@@ -107,7 +107,7 @@ the players' way -- prompts, modals, the profiler and the note hint absent,
 fog and counters to follow -- and streams that. Same wire, same page, same
 watcher. See `docs/FOG.md`.
 
-**2. Pings.** *Server and app built; the page's tap next.* Budgets, set before code and
+**2. Pings.** *Built 2026-09-24* (server, app and page; checked by tapping in Chrome). Budgets, set before code and
 met: parsing a tap under 1µs (0.1), a ring under 2µs to draw (0.6), under 16 bytes up
 the wire a tap, the downstream cost read off the bench's bytes column (a few hundred bytes
 a tap). Decisions taken: the page sends the screen cell and the server turns it into a

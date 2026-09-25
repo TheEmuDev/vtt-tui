@@ -950,7 +950,7 @@ same Wi-Fi as the GM's machine.
    size of the GM's terminal and how long each frame took to draw; that is the only thing
    on the page that is not the GM's screen.
 
-The page is 10 KB, served by `vtt` itself, and fetches nothing from anywhere. It fits the
+The page is 11 KB, served by `vtt` itself, and fetches nothing from anywhere. It fits the
 GM's whole terminal to the screen, is crisp again after a pinch, keeps the screen awake,
 and reconnects by itself if the Wi-Fi drops or the GM restarts the server.
 
@@ -984,9 +984,17 @@ A **ping** rings a square on every screen -- the GM's and every phone's -- for t
 and the status line says where: `ping at C4`. It is for "this one" at a table where
 everyone is looking at a different screen.
 
+A player pings by **tapping a square** on the phone. The page sends the cell that was
+tapped, and the GM's `vtt` works out which square is under it, so a tap lands where the
+player saw it whatever the GM's zoom. One a second per phone -- a pinch to zoom is never
+a tap -- and a phone's next ping moves its ring rather than adding another. A tap on the
+margins, the bars or the side panel names nothing. `:serve --no-pings` stops the phones'
+taps for as long as that server lasts, and `--pings` lets them in again. The
+terminal mirror only watches.
+
 The GM pings with `g p`: the cursor's squares, or the `v` box when one is open. It needs
 no server; the GM's own screen is a thing the table looks at too. A new `g p` moves the
-GM's ring rather than adding another.
+GM's ring rather than adding another, and `:serve --no-pings` does not stop it.
 
 A ping is a gesture, not something that happened to the encounter, so it is not written to
 the [session log](#session-log-log) and is gone when the ring is. Over

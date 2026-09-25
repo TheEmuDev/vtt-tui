@@ -4,6 +4,20 @@ Things worth building that were consciously not built, with the reason, so
 the reason can be re-examined rather than the idea re-invented. Add to the
 top; move an entry to the README when it ships.
 
+## More ways to point
+
+*Set aside 2026-09-24, when pings were built.* Three extensions nobody needs yet:
+
+- **A pinging watcher.** `vtt --watch` could send a ping from a mouse click. It would
+  need terminal mouse reporting (`?1000h`, SGR 1006) in the shared input parser, which
+  is a feature of its own touching the GM's keys; the server already takes a watcher's
+  `P col row` line, so the watcher side is the only work.
+- **`:ping C6`**, a ping at a named square without moving the cursor. Worth it if the GM
+  finds themself walking the cursor across the map just to point.
+- **`g P`**, the GM's ping drawn even on ground the players cannot see, for "something is
+  over here". Today a ring in the dark is the GM's alone, because a ring drawn in the
+  players' blank traces a square they are not meant to know about.
+
 ## A Fear pool for Daggerheart
 
 *Set aside 2026-09-20.* The GM's Fear is a number that changes every few

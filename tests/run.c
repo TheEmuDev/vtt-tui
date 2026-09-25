@@ -11417,6 +11417,10 @@ static void test_webpage(void)
     CHECK(strstr(WEBPAGE, "href=\"http") == NULL);
     CHECK(strstr(WEBPAGE, "@import") == NULL);
 
+    CASE("a tap sends the cell under it, a line the server reads as a ping");
+    CHECK(strstr(WEBPAGE, "addEventListener('click'") != NULL);
+    CHECK(strstr(WEBPAGE, "ws.send('P '+x+' '+y)") != NULL);
+
     CASE("the embedded wasm module is the one tools/blit_wasm.py assembles");
     const char *w = strstr(WEBPAGE, "const WASM='");
     CHECK(w != NULL);
