@@ -167,6 +167,7 @@ int net_start(Net *n, uint16_t port, const Renderer *r, char *err, size_t errsz)
     n->frame_bytes = 0;
     n->total_bytes = 0;
     n->dropped     = 0;
+    n->idle_dropped = 0;
     make_code(n->code);
     wire_enc_init(&n->enc, NET_FRAME_CAP);
 
@@ -479,7 +480,8 @@ int net_take_pings(Net *n, NetPing *out, int max)
     return k;
 }
 
-/* WebSocket frames from the browser: close and ping are answered, a data
+/* WebSocket frames from the browser: close and ping are answered, a pong is
+ * life (the read that brought it has already stamped last_rx_ms), a data
  * frame is a message (net_msg). Masked, as the RFC requires of clients;
  * unmasked is tolerated. Anything our page never sends -- a fragment, a
  * reserved opcode, a control frame over 125 bytes, a frame bigger than the
@@ -648,21 +650,32 @@ void net_service(Net *n, const struct pollfd *fds, int count, uint64_t now_ms)
         if (i < n->ncl && n->cl[i].fd == fd && (fds[k].revents & POLLIN)) client_read(n, i, now_ms);
     }
 
-    /* Keep-alives out, and the silent gone. Only stream clients get them;
-     * an HTTP request still being read has its own short life. */
+    /* Keep-alives out, and the silent gone. A browser is asked whether it is
+     * there -- a WebSocket ping, which the browser answers itself -- once it
+     * has been silent NET_KEEPALIVE_MS, and no oftener: by what it has not
+     * said, not by what it has been sent, or a phone watching a busy map
+     * would never be asked and be dropped anyway. A watcher gets a 'Z' when
+     * its line has been quiet, and is never dropped for silence. An HTTP
+     * request still being read has its own short life. Any failure closes
+     * the client and shifts the next into slot i, so the loop goes round
+     * again for that one rather than skip it. */
     for (int i = 0; i < n->ncl; i++) {
         NetClient *c = &n->cl[i];
-        int stream = c->kind == CL_WS || c->kind == CL_RAW;
-        if (stream && now_ms - c->last_tx_ms >= NET_KEEPALIVE_MS) {
+        if (c->kind == CL_WS && now_ms - c->last_rx_ms >= NET_KEEPALIVE_MS &&
+            now_ms - c->probed_ms >= NET_KEEPALIVE_MS) {
+            static const uint8_t ping[2] = { 0x89, 0x00 };      /* FIN, ping, no payload */
+            if (client_queue(n, i, ping, 2) < 0 || client_flush(n, i, now_ms) < 0) { i--; continue; }
+            c->probed_ms = now_ms;
+        } else if (c->kind == CL_RAW && now_ms - c->last_tx_ms >= NET_KEEPALIVE_MS) {
             uint8_t z = 'Z';
-            /* A failure closes the client and shifts the next into slot i:
-             * go round again for that one rather than skip it. */
             if (client_send_frame(n, i, &z, 1) < 0 || client_flush(n, i, now_ms) < 0) { i--; continue; }
             c->last_tx_ms = now_ms;
         }
-        if (i < n->ncl && n->cl[i].fd >= 0 && now_ms - n->cl[i].last_rx_ms >= NET_IDLE_MS &&
-            n->cl[i].kind != CL_RAW)          /* a watcher never speaks; only its socket can die */
+        if (c->kind != CL_RAW && now_ms - c->last_rx_ms >= NET_IDLE_MS) {
+            if (c->kind == CL_WS) n->idle_dropped++;
             client_close(n, i);
+            i--;
+        }
     }
 }
 

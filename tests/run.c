@@ -8766,9 +8766,9 @@ static int ws_recv_until(Net *n, int fd, WireDec *d, WireCatch *c, int ends, uin
             size_t   hl = 2;
             if (pl == 126) { if (len - off < 4) break; pl = ((uint64_t)buf[off + 2] << 8) | buf[off + 3]; hl = 4; }
             if (len - off < hl + pl) break;
-            CHECK_EQ(op, 2);
             CHECK_EQ(buf[off] & 0x80, 0x80);
-            wire_dec_feed(d, buf + off + hl, (size_t)pl);
+            if (op == 9) c->keepalives++;                  /* the server asking if we are there */
+            else { CHECK_EQ(op, 2); wire_dec_feed(d, buf + off + hl, (size_t)pl); }
             off += hl + (size_t)pl;
         }
         memmove(buf, buf + off, len - off);
@@ -8829,6 +8829,142 @@ static int netmsg_client_open(const Net *n, uint32_t id)
 {
     for (int i = 0; i < n->ncl; i++) if (n->cl[i].id == id) return 1;
     return 0;
+}
+
+/* What arrived on a browser's socket: WebSocket pings, and 'Z' records in
+ * binary frames. Reads what is there now, without waiting long. */
+static void ws_count(int fd, int *pings, int *zs)
+{
+    uint8_t buf[65536];
+    ssize_t len = 0;
+    struct pollfd p = { fd, POLLIN, 0 };
+    while (poll(&p, 1, 30) > 0) {
+        ssize_t got = read(fd, buf + len, sizeof buf - (size_t)len);
+        if (got <= 0) break;
+        len += got;
+        if ((size_t)len == sizeof buf) break;
+    }
+    for (ssize_t off = 0; off + 2 <= len; ) {
+        uint8_t op = buf[off] & 0x0F;
+        size_t  pl = buf[off + 1] & 0x7F, hl = 2;
+        if (pl == 126) { pl = ((size_t)buf[off + 2] << 8) | buf[off + 3]; hl = 4; }
+        if (op == 9) (*pings)++;
+        if (op == 2 && pl == 1 && buf[(size_t)off + hl] == 'Z') (*zs)++;
+        off += (ssize_t)(hl + pl);
+    }
+}
+
+static const NetClient *net_client_by_id(const Net *n, uint32_t id)
+{
+    for (int i = 0; i < n->ncl; i++) if (n->cl[i].id == id) return &n->cl[i];
+    return NULL;
+}
+
+/* A quiet phone stays: the server asks a silent browser whether it is
+ * there, the browser answers by itself, and only one that stops answering
+ * is dropped. */
+static void test_net_live(void)
+{
+    Renderer r;
+    rnd_init(&r);
+    rnd_resize(&r, 60, 16);
+    rnd_begin(&r);
+    rnd_flush(&r, NULL);
+    Net n;
+    net_init(&n);
+    char err[128];
+    CHECK_EQ(net_start(&n, 0, &r, err, sizeof err), 0);
+    uint64_t t0 = 100000;
+    int pings = 0, zs = 0;
+
+    int w = netmsg_raw(&n, t0);                              /* a watcher alongside, silent throughout */
+    uint32_t wid = n.cl[0].id;
+    int b = netmsg_ws(&n, t0);
+    uint32_t bid = n.cl[n.ncl - 1].id;
+    CHECK(net_client_by_id(&n, bid) != NULL);
+    ws_count(b, &pings, &zs);                                /* whatever came with the upgrade */
+    pings = zs = 0;
+
+    CASE("a silent browser is asked at fifteen seconds, not before, and never sent a 'Z'");
+    net_pump(&n, t0 + NET_KEEPALIVE_MS - 1);
+    ws_count(b, &pings, &zs);
+    CHECK_EQ(pings, 0);
+    net_pump(&n, t0 + NET_KEEPALIVE_MS);
+    ws_count(b, &pings, &zs);
+    CHECK_EQ(pings, 1);
+    CHECK_EQ(zs, 0);
+
+    CASE("a pong is life, and the next question waits another fifteen seconds");
+    uint64_t t1 = t0 + NET_KEEPALIVE_MS + 100;
+    ws_send(b, 0x8A, "", 0, 1);
+    for (int i = 0; i < 10 && net_client_by_id(&n, bid)->last_rx_ms != t1; i++) net_pump(&n, t1);
+    CHECK_EQ(net_client_by_id(&n, bid)->last_rx_ms, t1);
+    pings = 0;
+    net_pump(&n, t1 + NET_KEEPALIVE_MS - 1);
+    ws_count(b, &pings, &zs);
+    CHECK_EQ(pings, 0);
+    net_pump(&n, t1 + NET_KEEPALIVE_MS);
+    ws_count(b, &pings, &zs);
+    CHECK_EQ(pings, 1);
+    net_pump(&n, t0 + NET_IDLE_MS + 1);                      /* past a minute from the start: answered, so still here */
+    CHECK(net_client_by_id(&n, bid) != NULL);
+
+    CASE("frames going out are not the browser speaking: a busy map's silent phone is still asked");
+    uint64_t tb = t0 + NET_IDLE_MS + 1;                      /* asked just now, above */
+    ws_count(b, &pings, &zs);
+    pings = 0;
+    for (uint64_t t = tb + 5000; t <= tb + NET_KEEPALIVE_MS; t += 5000) {
+        rnd_begin(&r);
+        char txt[16];
+        snprintf(txt, sizeof txt, "t %d", (int)(t % 1000000));
+        draw_text(&r, 1, 1, txt, -1, style(0xD8D8E0, 0x0E0E12, 0));
+        net_frame_begin(&n); rnd_flush(&r, NULL); net_frame_end(&n, t);
+        net_pump(&n, t);
+    }
+    ws_count(b, &pings, &zs);
+    CHECK_EQ(pings, 1);
+
+    CASE("a tap resets the clock too");
+    uint64_t t2 = tb + NET_KEEPALIVE_MS + 1000;
+    ws_send(b, 0x81, "P 1 1", 5, 1);
+    for (int i = 0; i < 10 && net_client_by_id(&n, bid)->last_rx_ms != t2; i++) net_pump(&n, t2);
+    net_take_pings(&n, (NetPing[NET_MAX_CLIENTS]){ 0 }, NET_MAX_CLIENTS);
+    pings = 0;
+    net_pump(&n, t2 + NET_KEEPALIVE_MS - 1);
+    ws_count(b, &pings, &zs);
+    CHECK_EQ(pings, 0);
+
+    CASE("unanswered, a browser is dropped at a minute of silence, counted as idle, not as slow");
+    uint32_t dropped0 = n.dropped;
+    net_pump(&n, t2 + NET_IDLE_MS - 1);
+    CHECK(net_client_by_id(&n, bid) != NULL);
+    net_pump(&n, t2 + NET_IDLE_MS);
+    CHECK(net_client_by_id(&n, bid) == NULL);
+    CHECK_EQ(n.idle_dropped, 1u);
+    CHECK_EQ(n.dropped, dropped0);
+
+    CASE("the watcher beside it was never dropped for silence, and got its 'Z's");
+    CHECK(net_client_by_id(&n, wid) != NULL);
+    {
+        WireCatch c;
+        memset(&c, 0, sizeof c);
+        WireDec d;
+        wire_dec_init(&d, &WC_SINK, &c);
+        uint8_t buf[65536];
+        struct pollfd p = { w, POLLIN, 0 };
+        while (poll(&p, 1, 30) > 0) {
+            ssize_t got = read(w, buf, sizeof buf);
+            if (got <= 0) break;
+            wire_dec_feed(&d, buf, (size_t)got);
+        }
+        CHECK(c.keepalives >= 2);
+        CHECK_EQ(d.bad, 0);
+    }
+
+    close(b);
+    close(w);
+    net_stop(&n);
+    rnd_free(&r);
 }
 
 /* What the phones may say: "P col row", read, limited and handed over. */
@@ -11530,6 +11666,7 @@ int main(void)
         { "netprim", test_net_primitives },
         { "netserver", test_net_server },
         { "netmsg", test_net_msg },
+        { "netlive", test_net_live },
         { "serve",  test_serve_commands },
         { "servelife", test_serve_lifetime },
         { "pframe", test_players_frame },

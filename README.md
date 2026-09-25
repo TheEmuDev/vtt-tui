@@ -952,7 +952,9 @@ same Wi-Fi as the GM's machine.
 
 The page is 11 KB, served by `vtt` itself, and fetches nothing from anywhere. It fits the
 GM's whole terminal to the screen, is crisp again after a pinch, keeps the screen awake,
-and reconnects by itself if the Wi-Fi drops or the GM restarts the server.
+and reconnects by itself if the Wi-Fi drops or the GM restarts the server. A phone left
+on the table is never disconnected for being quiet; one that goes to sleep is let go after
+a minute and comes back with one full frame when it wakes.
 
 If the phone says it cannot reach the address, one of two things is in the way. The GM
 machine's firewall may not allow the port -- open it, or pick one that is open. Or the

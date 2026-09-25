@@ -335,6 +335,15 @@ One more thing worth knowing: a keystroke that is not only moves still rebuilds 
 -- a counter, a clock, a note, the round, which cannot change sight. That is the price of one rule
 instead of a list of call sites that could miss one, and a missed one would be a leak.
 
+**A quiet phone costs 32 bytes a minute, not a reconnect.** A browser never speaks on
+its own, and the server used to drop one after a minute of silence: a phone whose player
+never tapped reconnected every minute -- a TCP handshake, a 300-byte upgrade, a 150-byte
+reply and a 5 KB FULL, about 5.5 KB a minute and a visible blink. Now a browser silent
+for 15 s is sent a two-byte WebSocket ping and answers with a six-byte pong on its own:
+32 bytes a minute, and the FULL is paid once when a sleeping phone wakes. No row: the
+check is a compare inside the loop that already runs once a second with clients
+attached, and the bench's clients are watchers, which are unchanged.
+
 **A ping costs a tenth of a microsecond to read and half of one to draw.** `net.cmd`
 parses a tap in 0.1µs and `ping.draw` rings a square in 0.6µs. `play, pings, 4 watchers`
 is the worst case on purpose: every one of four phones taps every frame, a second of

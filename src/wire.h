@@ -15,7 +15,8 @@
  *       u8 fg,bg,attr,           sharing colours, then n x u16 glyph; a 0 glyph is
  *       u16 glyph[n]             the second half of the wide one before it
  *   'E'                          end of frame: present it
- *   'Z'                          keep-alive; nothing to draw
+ *   'Z'                          keep-alive to a watcher; nothing to draw (a browser gets
+ *                                a WebSocket ping instead)
  *
  * All integers little-endian. Glyphs are sixteen-bit: everything the grid
  * draws is in the basic plane, and a rare astral glyph goes out as the

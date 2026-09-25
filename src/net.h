@@ -24,8 +24,13 @@
 #define NET_REQ_CAP     4096
 #define NET_FRAME_CAP   (128 * 1024)
 #define NET_CODE_LEN    6
+/* A browser silent this long is sent a WebSocket ping, which browsers answer
+ * by themselves, hidden tab or not; a watcher whose line has been quiet this
+ * long is sent a 'Z' record. A browser, or a request, silent for NET_IDLE_MS
+ * -- four unanswered pings -- is gone; a watcher never speaks, so only its
+ * socket failing drops it. */
 #define NET_KEEPALIVE_MS     15000
-#define NET_IDLE_MS     60000     /* a client silent this long is gone */
+#define NET_IDLE_MS     60000
 #define NET_PING_RATE_MS 1000     /* a phone's pings: one a second, the rest dropped */
 #define NET_PING_COORD_MAX 4095   /* the largest screen cell a ping may name */
 
@@ -53,6 +58,7 @@ typedef struct {
     uint32_t   id;            /* this connection, for as long as it lasts */
     int        greeted;       /* a watcher's hello has been read */
     uint64_t   next_ping_ms;  /* the earliest its next ping is taken */
+    uint64_t   probed_ms;     /* a browser: when we last asked if it was there */
 } NetClient;
 
 /* A ping: a client pointing at a cell of the frame it is shown. The app
@@ -99,6 +105,7 @@ typedef struct {
     uint32_t frame_bytes;
     uint64_t total_bytes;
     uint32_t dropped;
+    uint32_t idle_dropped;      /* browsers gone silent: asleep, or off the Wi-Fi */
     uint32_t pings_dropped;     /* over the rate, or switched off */
     uint32_t bad_msgs;          /* upstream messages that did not parse */
 } Net;

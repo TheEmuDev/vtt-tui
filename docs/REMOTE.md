@@ -45,7 +45,14 @@ measured against them.
 - **The watcher is `vtt --watch host:port`**: the same decoder painting into
   the same renderer, at the GM's size, centred or clipped. `q` closes it.
 - **Access.** LAN only, a join code in the URL, at most eight clients,
-  request-size and idle timeouts. No TLS, deliberately.
+  a request-size limit. No TLS, deliberately.
+- **Liveness.** A browser silent for 15 s is sent a WebSocket ping, which
+  browsers answer by themselves, hidden tab or not; four unanswered (a
+  minute) and it is dropped, counted in `Net.idle_dropped` beside
+  `dropped` (too slow to keep up), and resynced with a FULL when it comes
+  back. A watcher gets a `'Z'` record when its line is quiet and is never
+  dropped for silence. Before 2026-09-25 a browser was sent the `'Z'`,
+  never answered, and was dropped and reconnected every minute.
 - **The server belongs to the encounter.** Closing the map closes it and drops
   every client, because the players were watching that map. `--stay-alive`
   keeps one server, and one join code, across a session of several
