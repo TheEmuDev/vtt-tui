@@ -8847,7 +8847,12 @@ static void ws_count(int fd, int *pings, int *zs)
     for (ssize_t off = 0; off + 2 <= len; ) {
         uint8_t op = buf[off] & 0x0F;
         size_t  pl = buf[off + 1] & 0x7F, hl = 2;
-        if (pl == 126) { pl = ((size_t)buf[off + 2] << 8) | buf[off + 3]; hl = 4; }
+        if (pl == 126) {
+            if (off + 4 > len) break;
+            pl = ((size_t)buf[off + 2] << 8) | buf[off + 3];
+            hl = 4;
+        }
+        if ((size_t)off + hl + pl > (size_t)len) break;
         if (op == 9) (*pings)++;
         if (op == 2 && pl == 1 && buf[(size_t)off + hl] == 'Z') (*zs)++;
         off += (ssize_t)(hl + pl);
@@ -8942,6 +8947,37 @@ static void test_net_live(void)
     CHECK(net_client_by_id(&n, bid) == NULL);
     CHECK_EQ(n.idle_dropped, 1u);
     CHECK_EQ(n.dropped, dropped0);
+
+    CASE("the last minute's question is not asked of a browser being dropped");
+    /* Covered above: at t2 + NET_IDLE_MS it was closed, and no ping was
+     * written first -- counted by what a fresh browser receives below. */
+    {
+        int q = netmsg_ws(&n, t2 + NET_IDLE_MS);
+        uint32_t qid = n.cl[n.ncl - 1].id;
+        ws_count(q, &pings, &zs);
+        pings = 0;
+        for (uint64_t t = t2 + NET_IDLE_MS + NET_KEEPALIVE_MS; t <= t2 + 2 * NET_IDLE_MS; t += NET_KEEPALIVE_MS)
+            net_pump(&n, t);
+        ws_count(q, &pings, &zs);
+        CHECK_EQ(pings, 3);                                 /* at 15, 30 and 45 s; at 60 it is dropped */
+        CHECK(net_client_by_id(&n, qid) == NULL);
+        close(q);
+    }
+
+    CASE("a hello never finished is dropped at a minute, so eight of them cannot fill the server");
+    {
+        uint64_t th = t2 + 3 * NET_IDLE_MS;
+        int h = net_connect(n.port);
+        CHECK(write(h, "VTT1", 4) == 4);
+        for (int i = 0; i < 10; i++) net_pump(&n, th);
+        uint32_t hid = n.cl[n.ncl - 1].id;
+        CHECK_EQ(n.cl[n.ncl - 1].greeted, 0);
+        net_pump(&n, th + NET_IDLE_MS - 1);
+        CHECK(net_client_by_id(&n, hid) != NULL);
+        net_pump(&n, th + NET_IDLE_MS);
+        CHECK(net_client_by_id(&n, hid) == NULL);
+        close(h);
+    }
 
     CASE("the watcher beside it was never dropped for silence, and got its 'Z's");
     CHECK(net_client_by_id(&n, wid) != NULL);

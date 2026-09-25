@@ -47,11 +47,13 @@ measured against them.
 - **Access.** LAN only, a join code in the URL, at most eight clients,
   a request-size limit. No TLS, deliberately.
 - **Liveness.** A browser silent for 15 s is sent a WebSocket ping, which
-  browsers answer by themselves, hidden tab or not; four unanswered (a
-  minute) and it is dropped, counted in `Net.idle_dropped` beside
+  browsers answer by themselves, hidden tab or not; a minute without an
+  answer (three pings) and it is dropped, counted in `Net.idle_dropped` beside
   `dropped` (too slow to keep up), and resynced with a FULL when it comes
-  back. A watcher gets a `'Z'` record when its line is quiet and is never
-  dropped for silence. Before 2026-09-25 a browser was sent the `'Z'`,
+  back. A watcher gets a `'Z'` record when its line is quiet and, once its
+  hello is read, is never dropped for silence. A request or a hello not
+  finished within a minute is dropped, so connections that never finish
+  cannot hold the eight slots. Before 2026-09-25 a browser was sent the `'Z'`,
   never answered, and was dropped and reconnected every minute.
 - **The server belongs to the encounter.** Closing the map closes it and drops
   every client, because the players were watching that map. `--stay-alive`

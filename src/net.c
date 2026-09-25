@@ -655,26 +655,31 @@ void net_service(Net *n, const struct pollfd *fds, int count, uint64_t now_ms)
      * has been silent NET_KEEPALIVE_MS, and no oftener: by what it has not
      * said, not by what it has been sent, or a phone watching a busy map
      * would never be asked and be dropped anyway. A watcher gets a 'Z' when
-     * its line has been quiet, and is never dropped for silence. An HTTP
-     * request still being read has its own short life. Any failure closes
-     * the client and shifts the next into slot i, so the loop goes round
-     * again for that one rather than skip it. */
+     * its line has been quiet, and once greeted is never dropped for
+     * silence. A request or a hello still being read has its own short
+     * life: eight connections that say "VTT1" and nothing more must not
+     * hold every slot. The drop is tested first, so the last question is
+     * not asked of a client about to be closed. Any failure closes the
+     * client and shifts the next into slot i, so the loop goes round again
+     * for that one rather than skip it. */
     for (int i = 0; i < n->ncl; i++) {
         NetClient *c = &n->cl[i];
+        int watcher = c->kind == CL_RAW && c->greeted;
+        if (!watcher && now_ms - c->last_rx_ms >= NET_IDLE_MS) {
+            if (c->kind == CL_WS) n->idle_dropped++;
+            client_close(n, i);
+            i--;
+            continue;
+        }
         if (c->kind == CL_WS && now_ms - c->last_rx_ms >= NET_KEEPALIVE_MS &&
             now_ms - c->probed_ms >= NET_KEEPALIVE_MS) {
             static const uint8_t ping[2] = { 0x89, 0x00 };      /* FIN, ping, no payload */
             if (client_queue(n, i, ping, 2) < 0 || client_flush(n, i, now_ms) < 0) { i--; continue; }
             c->probed_ms = now_ms;
-        } else if (c->kind == CL_RAW && now_ms - c->last_tx_ms >= NET_KEEPALIVE_MS) {
+        } else if (watcher && now_ms - c->last_tx_ms >= NET_KEEPALIVE_MS) {
             uint8_t z = 'Z';
             if (client_send_frame(n, i, &z, 1) < 0 || client_flush(n, i, now_ms) < 0) { i--; continue; }
             c->last_tx_ms = now_ms;
-        }
-        if (c->kind != CL_RAW && now_ms - c->last_rx_ms >= NET_IDLE_MS) {
-            if (c->kind == CL_WS) n->idle_dropped++;
-            client_close(n, i);
-            i--;
         }
     }
 }

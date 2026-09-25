@@ -26,9 +26,10 @@
 #define NET_CODE_LEN    6
 /* A browser silent this long is sent a WebSocket ping, which browsers answer
  * by themselves, hidden tab or not; a watcher whose line has been quiet this
- * long is sent a 'Z' record. A browser, or a request, silent for NET_IDLE_MS
- * -- four unanswered pings -- is gone; a watcher never speaks, so only its
- * socket failing drops it. */
+ * long is sent a 'Z' record. A browser silent for NET_IDLE_MS -- three
+ * unanswered pings -- is gone, and so is a request or a watcher's hello not
+ * finished by then; a greeted watcher never speaks, so only its socket
+ * failing drops it. */
 #define NET_KEEPALIVE_MS     15000
 #define NET_IDLE_MS     60000
 #define NET_PING_RATE_MS 1000     /* a phone's pings: one a second, the rest dropped */
