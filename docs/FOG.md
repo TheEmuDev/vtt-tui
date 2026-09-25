@@ -720,6 +720,36 @@ frame. It should now be:
       and only its creatures change. Windows at the rim stay windows. The rim is anchored on LIT, so ground the GM holds lit with
       `g r` has none, as settled under 9. `:fog` lists `soft` on each patch
       that shows it.
+   d. **Sight, faster.** Planned (by a Fable 5.1 planner) and signed off
+      2026-09-24, four commits, each measured alone:
+      0. The warren fixture and rows (`play, fog warren`, `warren, party`,
+         `fog door`, `fog full rebuild`, `fog reveal 12`) and
+         `tools/sight.sh`, since the zone table cannot show `fog.sight` per
+         scenario. Baseline: 34µs open map, 52µs warren, 74µs reveal 12.
+      1. `fogdiff`: a permanent differential test, the fog bits checked
+         against a brute force written from the definition after every
+         keystroke of 12,000 random ops on random maps. It found nothing in
+         the current code, and catches each of three planted bugs.
+      2. **Only the creatures that moved.** Each creature's own light is
+         cached (`vis` bytes over its reach box, on the Map, never saved).
+         The proof that a keystroke was nothing but moves is arithmetic:
+         `map_touch` is the only writer of `Map.gen`, every change touches,
+         and a move touches exactly once and changes nothing else -- so
+         "gen advanced by k, and exactly k creatures differ from the
+         snapshot, in position only, with the settings unchanged" leaves no
+         touch for anything else. Then only the movers' old and new boxes
+         are cleared and relit; anything unprovable rebuilds everything, as
+         today. No list of call sites to keep in step. Merge only if the
+         stepping rows at least halve and the full-rebuild rows rise under
+         15%.
+      3. **Cheaper line walks, same rule**, only if 2 leaves them worth it:
+         one shared walk loop for fog, ruler and range; an opacity mask over
+         the reach; prefix sums so a square with no wall between it and the
+         creature skips its walk. Merge only if the warren drops 30% or a
+         walled reveal-12 halves, with the ruler and range rows unmoved.
+      Shadowcasting was declined: the ruler's line test is Bresenham from
+      each square with a permissive corner, which no angular method
+      reproduces square for square, and fog, ruler and range must agree.
 
 The reason for the change is that both halves of request 4 live in the
 players' frame, and so does the point of fog: built the old way round, fog

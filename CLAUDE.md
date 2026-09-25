@@ -15,9 +15,11 @@ maintainer; this file is what survives a context reset, so keep it true.
   `docs/PERFORMANCE.md`. Bytes written matter more than frame time. Cost follows
   the window, not the map: cull with `grid_visible_tiles` first.
 - **Push only when told** ("push it"). Commit freely; never push on your own.
-- **A subagent reviews every finished change** before it is reported done; verify
-  its findings and fix what holds up. The reviewer is Fable 5.1 for now (Agent
-  `model: "fable"`); the user will name a different one when that changes.
+- **Model roles** (set 2026-09-24): a **Fable 5.1** subagent (Agent
+  `model: "fable"`) writes every plan, which goes to the user for sign-off;
+  **Opus 5.5** implements; a **Fable 5.1** subagent reviews every finished
+  change before it is reported done -- verify its findings and fix what holds
+  up. The user will name different models when that changes.
 - **Rules-agnostic core.** Game-specific behaviour lives behind the `Ruleset`
   table in `ruler.c` (bands, `action_roll`, `spotlight`, `countdown`), documented under the README's
   *Rulesets* section with a subsection per game. Nothing else may know a game.
@@ -31,6 +33,8 @@ maintainer; this file is what survives a context reset, so keep it true.
 make            release build (-O2), profiler compiled in
 make test       ASan+UBSan build, unit + golden-frame tests (VTT_UPDATE_GOLDEN=1 regenerates)
 make perf       one perf run; publish the per-row MEDIAN of three quiet runs (tools/median.py a b c)
+tools/sight.sh  fog.sight per fog scenario (the zone table keeps only each zone's worst)
+VTT_FOGDIFF_OPS=36000 ./build/run-tests   the long run of the fog differential test
 make fuzz       libFuzzer on the map loader (clang), FUZZ_SECONDS=600 for longer
 tools/embed.sh  after editing web/index.html; tools/blit_wasm.py after editing the blitter
 ./vtt map.vtt --serve 7777      serve; a raw client: printf 'VTT1\n' | nc 127.0.0.1 7777

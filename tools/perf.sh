@@ -104,6 +104,44 @@ awk 'BEGIN {
     for (y = 0; y <= h; y++) { s = ""; for (x = 0; x < w; x++) s = s " "; print s }
 }' > "$VOIDY"
 
+# Rooms 6x5 in walls, one gap in every wall, and a closed door at the first
+# room's east gap: the only fixture where a sight line can be stopped. A
+# player at (6k+1, 5j+1) in each of twelve rooms with four free squares east
+# of it, and an enemy at (6k+3, 5j+3) beside it. The three players on row 11
+# (H12, N12, T12) are the group the party row carries.
+WARREN="$DIR/warren.vtt"
+awk 'BEGIN {
+    w = 40; h = 25;
+    printf "VTT 2\nname Warren\nsize %d %d\nzoom 1\nruleset daggerheart\ntiles\n", w, h;
+    for (y = 0; y < h; y++) { s = ""; for (x = 0; x < w; x++) s = s "."; print s }
+    print "vedges";
+    for (y = 0; y < h; y++) {
+        s = "";
+        for (x = 0; x <= w; x++) {
+            c = " ";
+            if (x > 0 && x < w && x % 6 == 0 && y % 5 != 2) c = "|";
+            if (x == 6 && y == 2) c = "+";
+            s = s c;
+        }
+        print s;
+    }
+    print "hedges";
+    for (y = 0; y <= h; y++) {
+        s = "";
+        for (x = 0; x < w; x++)
+            s = s ((y > 0 && y < h && y % 5 == 0 && x % 6 != 3) ? "-" : " ");
+        print s;
+    }
+    n = 0;
+    for (j = 0; j < 3; j++)
+        for (k = 0; k < 6; k++) {
+            if ((j == 1 && k > 2) || (j == 2 && (k < 1 || k > 3))) continue;
+            printf "token player %d %d 1 \"P%d\"\n", 6 * k + 1, 5 * j + 1, n;
+            printf "token enemy %d %d 1 \"E%d\"\n",  6 * k + 3, 5 * j + 3, n;
+            n++;
+        }
+}' > "$WARREN"
+
 LONG=$(awk 'BEGIN{ for (i = 0; i < 60; i++) printf "l" }')
 
 # ------------------------------------------------------------ frame times
@@ -194,6 +232,11 @@ run "play, fog by hand"    "$MOB"    80x24  ':fog all\r:play\rgrghllgrghhh'
 run "play, fog range, 4 watchers" "$MOB" 80x24 ':fog all\r:play\rtgR6rllhh' "--bench-clients 4"
 run "play, fog sight"      "$MOB"    80x24  ':fog all 6\r:play\rf\rllllhhhh\r'
 run "play, fog lantern"    "$MOB"    80x24  ':fog all 6\r:fog All memory off\r:play\rf\rllllhhhh\r'
+run "play, fog warren"     "$WARREN" 80x24  ':fog all 6\r:play\rf\rllllhhhh\r'
+run "play, fog warren, party" "$WARREN" 80x24 ':fog all 6\r:play\r:H12\rvllllllllllll\rjjkk\r'
+run "play, fog door"       "$WARREN" 80x24  ':fog all 6\r:play\r:F3\roo'
+run "play, fog full rebuild" "$MOB"  80x24  ':fog all 6\r:play\r:fog All 5\r:fog All 6\r'
+run "play, fog reveal 12"  "$MOB"    80x24  ':fog all 12\r:play\rf\rllllhhhh\r'
 run "play, fog sight, 4 watchers" "$MOB" 80x24 ':fog all 6\r:play\rf\rllllhhhh\r' "--bench-clients 4"
 run "play, fog soft edge, 4 watchers" "$MOB" 80x24 ':fog all 6\r:fog --soft-edge\r:play\rf\rllllhhhh\r' "--bench-clients 4"
 run "build, fog paint"     "$MOB"    80x24  ':fog Crypt\r3bgfgcllgfgchh'
