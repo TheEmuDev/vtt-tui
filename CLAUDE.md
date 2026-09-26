@@ -33,6 +33,7 @@ maintainer; this file is what survives a context reset, so keep it true.
 make            release build (-O2), profiler compiled in
 make test       ASan+UBSan build, unit + golden-frame tests (VTT_UPDATE_GOLDEN=1 regenerates)
 make perf       one perf run; publish the per-row MEDIAN of three quiet runs (tools/median.py a b c)
+./vtt map.vtt --dump-map [--region B2:K12]      the whole map as text in the file's alphabet
 tools/sight.sh  fog.sight per fog scenario (the zone table keeps only each zone's worst)
 VTT_FOGDIFF_OPS=36000 ./build/run-tests   the long run of the fog differential test
 make fuzz       libFuzzer on the map loader (clang), FUZZ_SECONDS=600 for longer
@@ -65,6 +66,7 @@ Bench scripts replay whole; no toggles — use loop-neutral pairs (`llllhhhh`,
 | `clock.c/h` | clocks: fixed slots on the map (`Map.clocks`), `down` per clock, `OP_CLOCK` for ticks only and it carries the slot's `gen` so a reused slot ignores old ops; `:clock`/`:tick` in `app_cmd.c`; drawn under the turn panel |
 | `counter.c/h` | counters on creatures: `Token.counters[4]`, `counter_apply` parses the `s v` prompt, `<`/`>` step `Play.counter` (`app_current_counter` falls back to the ruleset's first, `Ruleset.counters`); GM-only via `play_status(gm)`, `turn_draw_panel(counter)` and `app_note_gm`/`app_set_status_gm` (`App.status_gm`) -- every message about a creature's numbers, refusals included, uses one of those two |
 | `fog.c/h` | fog of war: `Map.fog` byte per tile (patch id + SEEN/LIT/RIM/HELD), `Map.fog_patches[15]`; `fog_ground_hidden`/`fog_creature_hidden`/`fog_token_hidden` are the questions every view asks; `map_fog_set` is the only writer (grows the patch extent); deleted patches are tombstoned (`dead`) because undo can put their number back. Sight: `fog_recompute` works LIT/RIM (and SEEN under memory) out from player creatures via `sight_blocked` + `dist_tiles`, caching each creature's own light in `Map.sight` (`SightEntry.vis`: NO/YES/ASK, ASK settled lazily); a keystroke proven to be only moves (gen moved by k, exactly k creatures elsewhere, nothing else sight reads changed -- see the comment at `map_touch`) relights only around the movers, anything else rebuilds all. `app_fog_sync` runs it after each `app_key` when `Map.gen` != `Map.sight.gen`, and on open/recover. `fogdiff` in tests checks every bit against a brute force after random ops; `fog_sight_counts` says which path ran. Every line-of-sight question -- fog, ruler, range -- goes through `sight_walk` (ruler.h), one inline loop with an opacity callback. LIT/RIM are never undo-recorded (`undo_set_fog` strips them) and never saved. Drawn by `grid_draw(..., FogView)`; the players' frame skips hidden ground, walls between hidden tiles (`g_fog_blank`), hidden creatures, the cursor in the dark, and masks names via `turn_status_view`. Soft edge: `fog_rim_shown` (RIM + the patch's or map's `soft_edge`); `seg_fog` in grid.c dims boundaries at the rim (doors become walls, no grid lines); `fog_token_silhouette` + `grid_draw_token_silhouette` draw a hidden creature on the rim as a `Theme.dim` square with `?`; turn.c `side_style` greys `?` rows |
+| `maptools.c` | headless map tools behind `--dump-map` (and `--check`, `--describe`): read a `Map`, write text, change nothing; `run_tool` in main.c dispatches before any terminal or profiler |
 | `keys.c` | key tables for the bar and the `?` page |
 | autosave (`app.c`) | `map_touch` bumps `Map.gen`; `app_tick`/`app_autosave_due` in main's loop write `path.autosave` after 1.5 s quiet (a failed write still counts as attempted, or the loop spins); `offer_recovery` on open; dropped by save, `:q!`, discard, quit-with-y, delete; renamed with the map; `autosave_on` is set only in the interactive loop |
 | `dice.c`, `slog.c` | `:roll` (xoshiro, duality), the session log; named rolls are `Map.rolls`, expanded in `app_cmd.c` |
@@ -86,6 +88,7 @@ Bench scripts replay whole; no toggles — use loop-neutral pairs (`llllhhhh`,
 - Rendered cells: `rnd_begin(&r); app_draw(&a);` then read `r.back[]`; `rnd_dump` for text.
 - Checks are `CHECK` / `CHECK_EQ` under a `CASE("...")`; failures print `FAIL file:line`.
 - Golden frames live under `tests/`; regenerate only when the change is intended.
+  `golden_bytes(name, data, len)` compares any text (a map tool's report) the same way.
 
 ## Conventions
 

@@ -13,6 +13,7 @@
 #include "dice.h"
 #include "draw.h"
 #include "input.h"
+#include "maptools.h"
 #include "prof.h"
 #include "render.h"
 #include "term.h"
@@ -42,7 +43,12 @@ typedef struct {
     int         serve_stay;         /* --stay-alive: and keep it past the map */
     int         serve_no_pings;     /* --no-pings: and ignore the phones' taps */
     int         bench_pings;        /* --bench-pings: the bench's watchers tap every frame */
+    int         tool;               /* --dump-map, --check, --describe: a map tool, and exit */
+    int         json;               /* --json: the tool's report as JSON */
+    const char *region;             /* --region A1:P9 */
 } Options;
+
+enum { TOOL_NONE, TOOL_DUMP, TOOL_CHECK, TOOL_DESCRIBE };
 
 static void usage(void)
 {
@@ -63,6 +69,10 @@ static void usage(void)
         "  --watch HOST:PORT  mirror a serving vtt in this terminal, read-only\n"
         "  --bench-clients N  attach N loopback watchers to a --bench run\n"
         "  --bench-pings      and have each of them ping every frame\n"
+        "\n"
+        "  map tools (print a report and exit; see README, Map tools):\n"
+        "  --dump-map         the whole map as text, with a legend\n"
+        "  --region A1:P9     only that part of it\n"
         "  -h, --help         this message\n",
         stdout);
 }
@@ -100,6 +110,13 @@ static int parse_args(Options *o, int argc, char **argv)
             if (sscanf(argv[++i], "%dx%d", &o->width, &o->height) != 2)
                 die("bad --size (expected WxH)");
         }
+        else if (!strcmp(a, "--dump-map") || !strcmp(a, "--check") || !strcmp(a, "--describe")) {
+            int t = !strcmp(a, "--dump-map") ? TOOL_DUMP : !strcmp(a, "--check") ? TOOL_CHECK : TOOL_DESCRIBE;
+            if (o->tool && o->tool != t) die("one map tool at a time");
+            o->tool = t;
+        }
+        else if (!strcmp(a, "--json")) o->json = 1;
+        else if (!strcmp(a, "--region") && i + 1 < argc) o->region = argv[++i];
         else if (a[0] == '-') die("unknown option: %s (try --help)", a);
         else o->map_path = a;
     }
@@ -490,10 +507,44 @@ static int run_interactive(const Options *o)
     return 0;
 }
 
+/* ------------------------------------------------------------ map tools */
+
+/* A tool reads the map, prints its report and exits: no terminal, no
+ * profiler, nothing written. Exit 2 when the map cannot be read. */
+static int run_tool(const Options *o)
+{
+    if (!o->map_path) { fputs("vtt: a map tool needs a map file\n", stderr); return 2; }
+    char err[256];
+    Map *m = mapio_load(o->map_path, err, sizeof err);
+    if (!m) { fprintf(stderr, "vtt: %s\n", err); return 2; }
+
+    int x0 = 0, y0 = 0, x1 = m->w - 1, y1 = m->h - 1;
+    if (o->region) {
+        char a[16] = "", b[16] = "";
+        const char *colon = strchr(o->region, ':');
+        size_t la = colon ? (size_t)(colon - o->region) : strlen(o->region);
+        if (la < sizeof a) { memcpy(a, o->region, la); a[la] = '\0'; }
+        str_lcpy(b, colon ? colon + 1 : a, sizeof b);
+        if (!map_coord_parse(a, &x0, &y0) || !map_coord_parse(b, &x1, &y1)) {
+            fprintf(stderr, "vtt: --region wants two squares, like B2:K12\n");
+            map_free(m);
+            return 2;
+        }
+        if (x1 < x0) { int t = x0; x0 = x1; x1 = t; }
+        if (y1 < y0) { int t = y0; y0 = y1; y1 = t; }
+    }
+
+    int rc = 0;
+    if (o->tool == TOOL_DUMP) maptools_dump(stdout, m, x0, y0, x1, y1);
+    map_free(m);
+    return rc;
+}
+
 int main(int argc, char **argv)
 {
     Options o;
     if (parse_args(&o, argc, argv)) return 0;
+    if (o.tool) return run_tool(&o);
 
     draw_set_ascii(o.ascii);
     if (o.watch) return watch_main(o.watch, o.ascii);

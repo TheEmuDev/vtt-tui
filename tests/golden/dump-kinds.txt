@@ -1,0 +1,25 @@
+   A B C D E F G H I J K L M N O P
+
+1  . . . . . . . . . . . . . . . .
+      -----------------
+2  . .|. . . . . . . .|. . . . . .
+      |               |
+3  . .|. ~ ~ . . " : .%. . . . . .
+      |               |
+4  . .+. ~ ~ . . " : .|. . . . . .
+      |               |
+5  . .|. ~ ~ . . " . .S. . . . . .
+      |               |
+6  . .|. ~ ~ . . " . ^|. . . . . .
+      -------/---------
+7  . . . . = = = . . . . . . . . .
+
+8  . . . . . . . . . . . . . . . .
+
+
+key
+  .  floor   ~  water   :  rough   "  brush   =  wood   ^  hazard   (blank) void
+  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door
+  S and s are the GM's: the players see a wall and an open door
+
+map  Kinds  16x8  scale 5 ft  metric alt  ruleset none

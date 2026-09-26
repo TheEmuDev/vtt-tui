@@ -1,0 +1,31 @@
+   A B C D E F G H I J K L M N O P
+  ---------------------------------
+1 |. . . . . . . . . . . . . . . .|
+  | -----------                   |
+2 |.|. . . . .|. . . . . . . . . .|
+  | |         |   -------------   |
+3 |.|. 1 . . .|. .|. . . . . .|. .|
+  | |         |   |           |   |
+4 |.|. . . . . . .|. . . . . .|. .|
+  | |         |   |           |   |
+5 |.|. . . . .|. .|. . 2 2 . .|. .|
+  | -----------   |           |   |
+6 |. . . . . . . .|. . 2 2 . .|. .|
+  |               |           |   |
+7 |. . . . . . . .|. . . . . .|. .|
+  |               ----- -------   |
+8 |. . . . . . . . . . . . . . . .|
+  |                               |
+9 |. . . . . . . . . . . . . . . .|
+  ---------------------------------
+
+creatures
+  1  Aria             player       C3
+  2  Ogre             enemy 2x2    K5-L6
+
+key
+  .  floor   ~  water   :  rough   "  brush   =  wood   ^  hazard   (blank) void
+  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door
+  S and s are the GM's: the players see a wall and an open door
+
+map  Two Rooms  16x9  scale 5 ft  metric alt  ruleset none

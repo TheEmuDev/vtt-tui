@@ -1,0 +1,33 @@
+   A B C D E
+  -----------
+1 |1 . .S. .|
+  |     |   |
+2 |. ~ ~|2 2|
+  |     |   |
+3 |. . .+2 2|
+  -----------
+
+creatures
+  1  Aria             player       A1
+     note: wants the amulet
+  2  Ogre             enemy 2x2    D2-E3
+
+notes
+  B3    pressure plate
+
+key
+  .  floor   ~  water   :  rough   "  brush   =  wood   ^  hazard   (blank) void
+  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door
+  S and s are the GM's: the players see a wall and an open door
+
+fog on, soft edge off
+  A  Cellar           reveal 2      memory on  soft edge map 7 squares, 2 seen
+  B  Pit              reveal manual memory off soft edge map 3 squares, 0 seen
+  . no fog   A-O a patch, unseen   a-o seen   1-9 !"#$%& lit by hand
+
+  ABCDE
+1 ..AAA
+2 .aAAB
+3 ..1BB
+
+map  Cellar  5x3  scale 5 ft  metric chebyshev  ruleset none

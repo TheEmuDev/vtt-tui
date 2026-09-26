@@ -27,6 +27,7 @@
 #include "grid.h"
 #include "map.h"
 #include "mapio.h"
+#include "maptools.h"
 #include "theme.h"
 #include "token.h"
 #include "play.h"
@@ -1573,6 +1574,49 @@ static void test_token_draw(void)
  * event loop does, so `esc` followed by a command is expressible.
  *
  * Run with VTT_UPDATE_GOLDEN=1 to rewrite the expectations. */
+/* Compares `data` with tests/golden/NAME.txt, or writes it there under
+ * VTT_UPDATE_GOLDEN=1: the frame goldens and the map tools' reports alike. */
+static void golden_bytes(const char *name, const char *data, size_t len)
+{
+    char path[256];
+    snprintf(path, sizeof path, "tests/golden/%s.txt", name);
+
+    if (getenv("VTT_UPDATE_GOLDEN")) {
+        FILE *f = fopen(path, "w");
+        if (f) { fwrite(data, 1, len, f); fclose(f); }
+        fprintf(stderr, "  wrote %s\n", path);
+    } else {
+        FILE *f = fopen(path, "rb");
+        g_checks++;
+        if (!f) {
+            g_fails++;
+            fprintf(stderr, "  FAIL [%s] missing golden %s "
+                            "(VTT_UPDATE_GOLDEN=1 make test to create)\n", name, path);
+        } else {
+            char  *want = xmalloc(len + 4096);
+            size_t n    = fread(want, 1, len + 4096, f);
+            fclose(f);
+            if (n != len || memcmp(want, data, n) != 0) {
+                g_fails++;
+                fprintf(stderr, "  FAIL [%s] differs from %s\n", name, path);
+                /* Show the first differing line, which is usually enough to
+                 * see what moved. */
+                size_t i = 0, line = 1, ls = 0;
+                while (i < n && i < len && want[i] == data[i]) {
+                    if (want[i] == '\n') { line++; ls = i + 1; }
+                    i++;
+                }
+                size_t le = ls;
+                while (le < len && data[le] != '\n') le++;
+                fprintf(stderr, "    line %zu\n      want: %.*s\n      got : %.*s\n",
+                        line, (int)(le - ls), want + ls, (int)(le - ls), data + ls);
+            }
+            free(want);
+        }
+    }
+
+}
+
 static void golden(const char *name, int w, int h, const char *map_path,
                    const char *const *segments, int nsegments, int ascii)
 {
@@ -1607,43 +1651,7 @@ static void golden(const char *name, int w, int h, const char *map_path,
     ByteBuf out;
     bb_init(&out, 16384);
     rnd_dump(&r, &out);
-
-    char path[256];
-    snprintf(path, sizeof path, "tests/golden/%s.txt", name);
-
-    if (getenv("VTT_UPDATE_GOLDEN")) {
-        FILE *f = fopen(path, "w");
-        if (f) { fwrite(out.data, 1, out.len, f); fclose(f); }
-        fprintf(stderr, "  wrote %s\n", path);
-    } else {
-        FILE *f = fopen(path, "rb");
-        g_checks++;
-        if (!f) {
-            g_fails++;
-            fprintf(stderr, "  FAIL [%s] missing golden %s "
-                            "(VTT_UPDATE_GOLDEN=1 make test to create)\n", name, path);
-        } else {
-            char  *want = xmalloc(out.len + 4096);
-            size_t n    = fread(want, 1, out.len + 4096, f);
-            fclose(f);
-            if (n != out.len || memcmp(want, out.data, n) != 0) {
-                g_fails++;
-                fprintf(stderr, "  FAIL [%s] frame differs from %s\n", name, path);
-                /* Show the first differing line, which is usually enough to
-                 * see what moved. */
-                size_t i = 0, line = 1, ls = 0;
-                while (i < n && i < out.len && want[i] == out.data[i]) {
-                    if (want[i] == '\n') { line++; ls = i + 1; }
-                    i++;
-                }
-                size_t le = ls;
-                while (le < out.len && out.data[le] != '\n') le++;
-                fprintf(stderr, "    line %zu\n      want: %.*s\n      got : %.*s\n",
-                        line, (int)(le - ls), want + ls, (int)(le - ls), out.data + ls);
-            }
-            free(want);
-        }
-    }
+    golden_bytes(name, out.data, out.len);
 
     bb_free(&out);
     app_free(&a);
@@ -8704,6 +8712,92 @@ static void test_net_primitives(void)
     CHECK_EQ(strcmp(acc, "s3pPLMBiTxaQ9kYGzzhZRbK+xOo="), 0);
 }
 
+/* ------------------------------------------------------------ map tools */
+
+/* What a map tool printed, as a string the caller frees. */
+typedef void (*DumpFn)(FILE *out, const Map *m, int x0, int y0, int x1, int y1);
+
+static char *tool_text(const Map *m, int x0, int y0, int x1, int y1, size_t *len)
+{
+    char  *buf = NULL;
+    size_t n   = 0;
+    FILE  *f   = open_memstream(&buf, &n);
+    maptools_dump(f, m, x0, y0, x1, y1);
+    fclose(f);
+    if (len) *len = n;
+    return buf;
+}
+
+static void test_map_tools_dump(void)
+{
+    char err[256];
+
+    CASE("the dump: whole fixtures and a region, as the goldens have them");
+    static const struct { const char *file, *golden; int x0, y0, x1, y1; } cases[] = {
+        { "tests/fixtures/two-rooms.vtt", "dump-two-rooms", 0, 0, 99, 99 },
+        { "tests/fixtures/kinds.vtt",     "dump-kinds",     0, 0, 99, 99 },
+        { "tests/fixtures/two-rooms.vtt", "dump-region",    1, 1, 6, 5 },
+    };
+    for (size_t i = 0; i < sizeof cases / sizeof *cases; i++) {
+        Map *m = mapio_load(cases[i].file, err, sizeof err);
+        CHECK(m != NULL);
+        if (!m) continue;
+        size_t n;
+        char *t = tool_text(m, cases[i].x0, cases[i].y0, cases[i].x1, cases[i].y1, &n);
+        golden_bytes(cases[i].golden, t, n);
+        CHECK(strstr(t, " \n") == NULL);                    /* no trailing blanks */
+        free(t);
+        map_free(m);
+    }
+
+    CASE("fog, notes and a creature's note get their own sections");
+    {
+        Sandbox sb = sandbox_enter("dumpfog");
+        CHECK_EQ(sb.ok, 1);
+        char path[600];
+        snprintf(path, sizeof path, "%s/f.vtt", sb.dir);
+        FILE *f = fopen(path, "w");
+        fputs("VTT 6\nname Cellar\nsize 5 3\nscale 5\nmetric chebyshev\ntiles\n.....\n.~~..\n.....\n"
+              "vedges\n|  S |\n|  | |\n|  + |\nhedges\n-----\n     \n     \n-----\n"
+              "token player 0 0 1 \"Aria\"\ntokennote \"wants the amulet\"\n"
+              "token enemy 3 1 2 \"Ogre\"\nnote 1 2 \"pressure plate\"\n"
+              "fog on\nfogpatch 1 Cellar reveal 2 memory on\nfogpatch 2 Pit reveal manual memory off\n"
+              "fog\n..AAA\n.aAAB\n..1BB\n", f);
+        fclose(f);
+        Map *m = mapio_load(path, err, sizeof err);
+        CHECK(m != NULL);
+        if (m) {
+            size_t n;
+            char *t = tool_text(m, 0, 0, 99, 99, &n);
+            golden_bytes("dump-fog", t, n);
+            CHECK(strstr(t, "wants the amulet") != NULL);
+            CHECK(strstr(t, "pressure plate") != NULL);
+            CHECK(strstr(t, "reveal manual") != NULL);
+            free(t);
+            map_free(m);
+        }
+        sandbox_leave(&sb);
+    }
+
+    CASE("past Z the columns take two header rows, and every one is labelled");
+    {
+        Map *m = map_new(30, 2, "wide");
+        char *t = tool_text(m, 0, 0, 99, 99, NULL);
+        const char *nl = strchr(t, '\n');
+        CHECK(nl != NULL);
+        if (nl) {
+            char first[256];
+            size_t fl = (size_t)(nl - t) < sizeof first - 1 ? (size_t)(nl - t) : sizeof first - 1;
+            memcpy(first, t, fl);
+            first[fl] = '\0';
+            CHECK(strstr(first, "A A A A") != NULL);                      /* AA..AD's first letters */
+            CHECK(strstr(nl, "Y Z A B C D") != NULL);                     /* ...and their last */
+        }
+        free(t);
+        map_free(m);
+    }
+}
+
 /* ------------------------------------------------------------ map diagnostics */
 
 typedef struct { char codes[64][8]; int lines[64]; int n; } DiagLog;
@@ -11862,6 +11956,7 @@ int main(void)
         { "undo",   test_undo },
         { "wire",   test_wire },
         { "mapdiag", test_map_diag },
+        { "mapdump", test_map_tools_dump },
         { "netprim", test_net_primitives },
         { "netserver", test_net_server },
         { "netmsg", test_net_msg },

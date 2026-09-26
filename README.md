@@ -53,6 +53,10 @@ vtt [options] [map.vtt]
   --watch HOST:PORT  mirror a serving vtt in this terminal, read-only
   --bench-clients N  attach N loopback watchers to a --bench run
   --bench-pings      and have each of them ping every frame
+
+  map tools (print a report and exit; see Map tools below):
+  --dump-map         the whole map as text, with a legend
+  --region A1:P9     only that part of it
 ```
 
 `--dump-frame` honours `--script`, so a whole session can be replayed and its final frame
@@ -1235,6 +1239,36 @@ version 6 counters and fog, on the same terms: the writer always picks the lowes
 says everything in the map. Each version
 still loads everything older, and an unrecognised character reads as empty rather than
 failing the load.
+
+## Map tools (`--dump-map`, `--check`, `--describe`)
+
+Reports on a map file, printed without opening the app, for checking a map written by hand
+-- by a GM in a text editor, or by an AI agent from a GM's description. They read the file
+and change nothing. [docs/AGENTS.md](docs/AGENTS.md) is the recipe for writing a map by
+hand, for an agent to be pointed at.
+
+**`vtt map.vtt --dump-map`** prints the whole map as text, whatever its size, in the file
+format's own characters: one character a square and one a boundary, column letters above
+and row numbers down the side, so a square can be named back (`C3`). `--region B2:K12`
+prints part of it.
+
+```
+   A B C D E
+  -----------
+1 |1 . .S. .|
+  |     |   |
+2 |. ~ ~|2 2|
+  |     |   |
+3 |. . .+2 2|
+  -----------
+```
+
+Floor is `.`, void is blank, terrain and boundaries are the characters the file uses (`|`
+and `-` walls, `+` a door, `S` a secret door -- shown, since this is the GM's tool). A wall's
+corners take its line, never `+`, so a `+` is always a door. Creatures are `1`-`9`, `a`-`z`,
+`A`-`Z` on every square they cover, listed underneath with their names, sizes and squares;
+notes are listed too, and when the map has fog a second grid shows each square's patch in
+the fog section's own letters.
 
 ## Performance
 
