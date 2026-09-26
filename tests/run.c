@@ -12522,6 +12522,121 @@ static int ctl_child_done(void *ctx)
     return st[1] || (st[1] = waitpid((pid_t)st[0], &st[2], WNOHANG) > 0);
 }
 
+static void test_ctl_marked(void)
+{
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    app_open_map(&a, "tests/fixtures/two-rooms.vtt");
+    CHECK(a.map != NULL);
+    if (!a.map) { app_free(&a); rnd_free(&r); return; }
+    a.ed.cx = 2;
+    a.ed.cy = 2;
+    char *t;
+
+    CASE("marked: the cursor, and a brush's whole footprint");
+    t = ctl_ask(&a, "marked");
+    CHECK_EQ(strcmp(t, "ok\nscreen build, normal mode\ncursor C3\n"), 0);
+    free(t);
+    press(&a, "2b");
+    t = ctl_ask(&a, "marked");
+    CHECK(strstr(t, "cursor C3:D4\n") != NULL);
+    free(t);
+    press(&a, "1b");
+
+    CASE("marked: a v box and a V circle");
+    press(&a, "vllj");
+    t = ctl_ask(&a, "marked");
+    CHECK(strstr(t, "screen build, visual mode\n") != NULL);
+    CHECK(strstr(t, "cursor E4\n") != NULL);
+    CHECK(strstr(t, "box C3:E4, 3x2\n") != NULL);
+    free(t);
+    press(&a, "\x1b");
+    a.ed.cx = 2; a.ed.cy = 2;
+    press(&a, "Vll");
+    t = ctl_ask(&a, "marked");
+    CHECK(strstr(t, "box circle round C3, radius 2, over A1:E5\n") != NULL);
+    free(t);
+    t = ctl_ask(&a, "marked json");
+    CHECK(json_valid(t + 3));
+    CHECK(strstr(t, "\"box\":{\"shape\":\"circle\",\"between\":\"squares\"") != NULL);
+    CHECK(strstr(t, "\"centre\":\"C3\"") != NULL);
+    free(t);
+    press(&a, "\x1b");
+
+    CASE("marked: wall mode's corner, and a box anchored between corners");
+    a.ed.cx = 2; a.ed.cy = 2;
+    press(&a, "w");
+    t = ctl_ask(&a, "marked");
+    CHECK(strstr(t, "screen build, wall mode\n") != NULL);
+    CHECK(strstr(t, "corner at the top left of ") != NULL);
+    free(t);
+    int wx = a.ed.wx, wy = a.ed.wy;
+    press(&a, "vlljj");
+    t = ctl_ask(&a, "marked");
+    char want[64], a0[MAP_COORD_MAX], a1[MAP_COORD_MAX];
+    map_coord_name(wx, wy, a0, sizeof a0);
+    map_coord_name(wx + 1, wy + 1, a1, sizeof a1);
+    snprintf(want, sizeof want, "box %s:%s, 2x2\n", a0, a1);
+    CHECK(strstr(t, want) != NULL);
+    free(t);
+    press(&a, "\x1b\x1b");
+    CHECK_EQ(a.ed.mode, ED_NORMAL);
+
+    CASE("marked: the ruler's points and its length");
+    a.ed.cx = 2; a.ed.cy = 2;
+    press(&a, "mlll");
+    t = ctl_ask(&a, "marked");
+    CHECK(strstr(t, "ruler C3 to F3, 15 ft\n") != NULL);
+    free(t);
+    press(&a, "\x1b");
+
+    CASE("marked: the creatures selected in play, and a play box");
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+    CHECK_EQ(a.screen, SCREEN_PLAY);
+    play_focus(&a.play, 0);
+    t = ctl_ask(&a, "marked");
+    CHECK(strstr(t, "screen play\n") != NULL);
+    char sel[64];
+    snprintf(sel, sizeof sel, "selected %s ", a.map->tokens.v[0].label);
+    CHECK(strstr(t, sel) != NULL);
+    free(t);
+
+    CASE("marked: pings -- the GM's and a phone's -- kept after their rings come down");
+    app_tick(&a, 1000);
+    a.ed.cx = 2; a.ed.cy = 2;
+    press(&a, "gp");
+    CHECK_EQ(a.npings, 1);
+    app_ping(&a, 3, 5, 4, 5, 4);
+    app_tick(&a, 13500);
+    CHECK_EQ(a.npings, 0);                         /* the rings are down */
+    t = ctl_ask(&a, "marked");
+    CHECK(strstr(t, "pinged by the GM at C3, 12 s ago\n") != NULL);
+    CHECK(strstr(t, "pinged by phone 3 at F5, 12 s ago\n") != NULL);
+    free(t);
+    app_tick(&a, 20000);
+    press(&a, "gp");                              /* the GM's record moves, not doubles */
+    CHECK_EQ(a.npinged, 2);
+    t = ctl_ask(&a, "marked json");
+    CHECK(json_valid(t + 3));
+    CHECK(strstr(t, "{\"by\":\"gm\",\"phone\":null,\"at\":{\"region\":\"C3\"") != NULL);
+    CHECK(strstr(t, "\"seconds_ago\":0}") != NULL);
+    CHECK(strstr(t, "{\"by\":\"phone\",\"phone\":3,") != NULL);
+    free(t);
+
+    CASE("the record goes with the map");
+    app_key(&a, f2);                              /* :q! is build mode's */
+    press(&a, ":q!\r");
+    CHECK(a.map == NULL);
+    CHECK_EQ(a.npinged, 0);
+
+    app_free(&a);
+    rnd_free(&r);
+}
+
 static void test_ctl_live(void)
 {
     Sandbox sb = sandbox_enter("ctl");
@@ -12767,6 +12882,7 @@ int main(void)
         { "fogdiff", test_fog_diff },
         { "pings", test_pings },
         { "ctl",   test_ctl },
+        { "ctlmarked", test_ctl_marked },
         { "ctllive", test_ctl_live },
         { "webpage", test_webpage },
         { "turns",  test_turns },

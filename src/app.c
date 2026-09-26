@@ -174,6 +174,7 @@ int app_open_map(App *a, const char *path)
     a->screen = SCREEN_EDITOR;
     a->autosave_gen = a->seen_gen = m->gen;
     a->npings = 0;                 /* squares of the old map mean nothing here */
+    a->npinged = 0;
     fog_recompute(m);
 
     char msg[192];
@@ -260,6 +261,19 @@ void app_ping(App *a, uint32_t who, int x0, int y0, int x1, int y1)
     p->who = who;
     p->x0 = x0; p->y0 = y0; p->x1 = x1; p->y1 = y1;
     p->until_ms = a->now_ms + PING_SHOW_MS;
+
+    /* The record: the same source's replaced, else a free slot, else the
+     * oldest. */
+    k = 0;
+    while (k < a->npinged && a->pinged[k].who != who) k++;
+    if (k == a->npinged) {
+        if (a->npinged < PING_MAX) a->npinged++;
+        else
+            for (int i = k = 0; i < a->npinged; i++)
+                if (a->pinged[i].until_ms < a->pinged[k].until_ms) k = i;
+    }
+    a->pinged[k] = *p;
+    a->pinged[k].until_ms = a->now_ms;
 
     /* On the status line, not in the log: a gesture, not something that
      * happened to the encounter. Over fog the players' frame shows no
@@ -1348,7 +1362,7 @@ void app_close_map(App *a)
     slog_close(&a->slog);
     map_free(a->map);
     a->map = NULL;
-    a->npings = 0;
+    a->npings = a->npinged = 0;
     undo_clear(&a->undo);
     a->screen = SCREEN_MENU;
 }

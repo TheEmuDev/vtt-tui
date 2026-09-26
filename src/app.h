@@ -136,6 +136,11 @@ typedef struct {
      * same source replacing it. Not the map's: nothing here is saved. */
     Ping     pings[PING_MAX];
     int      npings;
+    /* The last ping from each source, kept after its ring comes down, for
+     * the control channel's `marked`: "the spot I pinged a minute ago".
+     * until_ms here is when it was made. Cleared with the map. */
+    Ping     pinged[PING_MAX];
+    int      npinged;
 
     TextPrompt prompt;
     PromptWhat prompt_what;

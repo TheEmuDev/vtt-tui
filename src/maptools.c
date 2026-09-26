@@ -7,6 +7,7 @@
 #include "mapio.h"
 #include "dice.h"
 #include "fog.h"
+#include "json.h"
 #include "ruler.h"
 #include "util.h"
 
@@ -365,69 +366,6 @@ void rooms_free(Rooms *r)
     memset(r, 0, sizeof *r);
 }
 
-/* ------------------------------------------------------------------ json */
-
-/* Enough JSON to write a report: objects, arrays, strings, numbers. No
- * library, and nothing to parse -- only to write, correctly escaped. */
-typedef struct {
-    FILE *f;
-    int   depth;
-    int   first[32];      /* nothing written yet at this depth */
-    int   after_key;
-} Json;
-
-static void j_sep(Json *j)
-{
-    if (j->after_key) { j->after_key = 0; return; }
-    if (j->depth > 0) {
-        if (!j->first[j->depth]) fputc(',', j->f);
-        j->first[j->depth] = 0;
-    }
-}
-
-static void j_open(Json *j, char c)
-{
-    j_sep(j);
-    fputc(c, j->f);
-    if (j->depth < 31) j->first[++j->depth] = 1;
-}
-
-static void j_close(Json *j, char c)
-{
-    fputc(c, j->f);
-    if (j->depth > 0) j->depth--;
-}
-
-static void j_str_raw(FILE *f, const char *s)
-{
-    fputc('"', f);
-    for (const unsigned char *p = (const unsigned char *)s; *p; p++) {
-        if (*p == '"' || *p == '\\') { fputc('\\', f); fputc(*p, f); }
-        else if (*p == '\n') fputs("\\n", f);
-        else if (*p == '\t') fputs("\\t", f);
-        else if (*p < 0x20)  fprintf(f, "\\u%04x", *p);
-        else                 fputc(*p, f);
-    }
-    fputc('"', f);
-}
-
-static void j_key(Json *j, const char *k)
-{
-    j_sep(j);
-    j_str_raw(j->f, k);
-    fputc(':', j->f);
-    j->after_key = 1;
-}
-
-static void j_str(Json *j, const char *s) { j_sep(j); j_str_raw(j->f, s); }
-static void j_int(Json *j, long v)        { j_sep(j); fprintf(j->f, "%ld", v); }
-static void j_num(Json *j, double v)      { j_sep(j); fprintf(j->f, "%g", v); }
-static void j_bool(Json *j, int v)        { j_sep(j); fputs(v ? "true" : "false", j->f); }
-static void j_null(Json *j)               { j_sep(j); fputs("null", j->f); }
-
-static void j_kstr(Json *j, const char *k, const char *v) { j_key(j, k); j_str(j, v); }
-static void j_kint(Json *j, const char *k, long v)        { j_key(j, k); j_int(j, v); }
-
 /* -------------------------------------------------------------- describe */
 
 static const char *kind_name(const Token *t) { return t->kind == TOKEN_ENEMY ? "enemy" : "player"; }
@@ -488,78 +426,79 @@ void maptools_describe(FILE *out, const Map *m, int json)
     int      opcap = 0;
 
     if (json) {
-        Json j = { out, 0, { 0 }, 0 };
-        j_open(&j, '{');
-        j_key(&j, "map");
-        j_open(&j, '{');
-        j_kstr(&j, "name", m->name);
-        j_kint(&j, "width", m->w);
-        j_kint(&j, "height", m->h);
-        j_key(&j, "scale_ft"); j_num(&j, m->scale_ft);
-        j_kstr(&j, "metric", dist_metric_name((DistMetric)m->metric));
-        j_key(&j, "ruleset"); if (m->ruleset[0]) j_str(&j, m->ruleset); else j_null(&j);
-        j_kint(&j, "round", m->round);
-        j_key(&j, "fog"); j_bool(&j, m->fog_on);
-        j_kint(&j, "creatures", m->tokens.n);
-        j_kint(&j, "rooms", r.n);
-        j_key(&j, "start_room"); if (r.start >= 0) j_int(&j, r.start + 1); else j_null(&j);
-        j_close(&j, '}');
+        Json j;
+        json_init(&j, out);
+        json_open(&j, '{');
+        json_key(&j, "map");
+        json_open(&j, '{');
+        json_kstr(&j, "name", m->name);
+        json_kint(&j, "width", m->w);
+        json_kint(&j, "height", m->h);
+        json_key(&j, "scale_ft"); json_num(&j, m->scale_ft);
+        json_kstr(&j, "metric", dist_metric_name((DistMetric)m->metric));
+        json_key(&j, "ruleset"); if (m->ruleset[0]) json_str(&j, m->ruleset); else json_null(&j);
+        json_kint(&j, "round", m->round);
+        json_key(&j, "fog"); json_bool(&j, m->fog_on);
+        json_kint(&j, "creatures", m->tokens.n);
+        json_kint(&j, "rooms", r.n);
+        json_key(&j, "start_room"); if (r.start >= 0) json_int(&j, r.start + 1); else json_null(&j);
+        json_close(&j, '}');
 
-        j_key(&j, "rooms");
-        j_open(&j, '[');
+        json_key(&j, "rooms");
+        json_open(&j, '[');
         for (int i = 0; i < r.n; i++) {
             const Room *rm = &r.v[i];
-            j_open(&j, '{');
-            j_kint(&j, "id", i + 1);
-            room_name(&r, i, buf, sizeof buf); j_kstr(&j, "name", buf);
-            j_kint(&j, "x", rm->fx); j_kint(&j, "y", rm->fy);
-            bounds_name(rm->x0, rm->y0, rm->x1, rm->y1, buf, sizeof buf); j_kstr(&j, "bounds", buf);
-            j_kint(&j, "squares", rm->squares);
-            j_key(&j, "reachable"); j_bool(&j, r.reach[i]);
+            json_open(&j, '{');
+            json_kint(&j, "id", i + 1);
+            room_name(&r, i, buf, sizeof buf); json_kstr(&j, "name", buf);
+            json_kint(&j, "x", rm->fx); json_kint(&j, "y", rm->fy);
+            bounds_name(rm->x0, rm->y0, rm->x1, rm->y1, buf, sizeof buf); json_kstr(&j, "bounds", buf);
+            json_kint(&j, "squares", rm->squares);
+            json_key(&j, "reachable"); json_bool(&j, r.reach[i]);
             int terrain[TILE_COUNT] = { 0 };
             for (int y = rm->y0; y <= rm->y1; y++)
                 for (int x = rm->x0; x <= rm->x1; x++)
                     if (rooms_at(&r, m, x, y) == i) terrain[map_tile(m, x, y)]++;
-            j_key(&j, "terrain"); j_open(&j, '{');
-            for (int t = 1; t < TILE_COUNT; t++) if (terrain[t]) j_kint(&j, tile_name((uint8_t)t), terrain[t]);
-            j_close(&j, '}');
+            json_key(&j, "terrain"); json_open(&j, '{');
+            for (int t = 1; t < TILE_COUNT; t++) if (terrain[t]) json_kint(&j, tile_name((uint8_t)t), terrain[t]);
+            json_close(&j, '}');
             int no = room_openings(m, &r, i, &op, &opcap);
-            j_key(&j, "doors"); j_open(&j, '[');
+            json_key(&j, "doors"); json_open(&j, '[');
             for (int k = 0; k < no; k++) {
-                j_open(&j, '{');
-                j_kstr(&j, "kind", edge_name(op[k].kind));
+                json_open(&j, '{');
+                json_kstr(&j, "kind", edge_name(op[k].kind));
                 maptools_edge_name(m, op[k].vertical, op[k].x, op[k].y, buf, sizeof buf);
-                j_kstr(&j, "where", buf);
-                j_key(&j, "to");
-                if (op[k].to >= 0) j_int(&j, op[k].to + 1); else j_str(&j, op[k].to == -1 ? "void" : "off-map");
-                j_close(&j, '}');
+                json_kstr(&j, "where", buf);
+                json_key(&j, "to");
+                if (op[k].to >= 0) json_int(&j, op[k].to + 1); else json_str(&j, op[k].to == -1 ? "void" : "off-map");
+                json_close(&j, '}');
             }
-            j_close(&j, ']');
-            j_key(&j, "creatures"); j_open(&j, '[');
+            json_close(&j, ']');
+            json_key(&j, "creatures"); json_open(&j, '[');
             for (int t = 0; t < m->tokens.n; t++) {
                 const Token *tk = &m->tokens.v[t];
                 if (rooms_at(&r, m, tk->x, tk->y) != i) continue;
-                j_open(&j, '{');
-                j_kstr(&j, "label", tk->label);
-                j_kstr(&j, "kind", kind_name(tk));
-                j_kint(&j, "size", tk->size);
-                map_coord_name(tk->x, tk->y, buf, sizeof buf); j_kstr(&j, "at", buf);
-                j_kint(&j, "x", tk->x); j_kint(&j, "y", tk->y);
-                if (tk->note[0]) j_kstr(&j, "note", tk->note);
-                j_close(&j, '}');
+                json_open(&j, '{');
+                json_kstr(&j, "label", tk->label);
+                json_kstr(&j, "kind", kind_name(tk));
+                json_kint(&j, "size", tk->size);
+                map_coord_name(tk->x, tk->y, buf, sizeof buf); json_kstr(&j, "at", buf);
+                json_kint(&j, "x", tk->x); json_kint(&j, "y", tk->y);
+                if (tk->note[0]) json_kstr(&j, "note", tk->note);
+                json_close(&j, '}');
             }
-            j_close(&j, ']');
-            j_key(&j, "notes"); j_open(&j, '[');
+            json_close(&j, ']');
+            json_key(&j, "notes"); json_open(&j, '[');
             for (int nt = 0; nt < m->nnotes; nt++) {
                 const Note *n = &m->notes[nt];
                 if (rooms_at(&r, m, n->x, n->y) != i) continue;
-                j_open(&j, '{');
-                map_coord_name(n->x, n->y, buf, sizeof buf); j_kstr(&j, "at", buf);
-                j_kstr(&j, "text", n->text);
-                j_close(&j, '}');
+                json_open(&j, '{');
+                map_coord_name(n->x, n->y, buf, sizeof buf); json_kstr(&j, "at", buf);
+                json_kstr(&j, "text", n->text);
+                json_close(&j, '}');
             }
-            j_close(&j, ']');
-            j_key(&j, "fog"); j_open(&j, '[');
+            json_close(&j, ']');
+            json_key(&j, "fog"); json_open(&j, '[');
             for (int p = 1; p <= FOG_PATCH_MAX; p++) {
                 const FogPatch *fp = &m->fog_patches[p - 1];
                 if (!fp->name[0] || fp->dead) continue;
@@ -572,29 +511,29 @@ void maptools_describe(FILE *out, const Map *m, int json)
                         seen += (f & (FOG_SEEN | FOG_HELD)) != 0;
                     }
                 if (!painted) continue;
-                j_open(&j, '{');
-                j_kstr(&j, "patch", fp->name);
-                j_kint(&j, "painted", painted);
-                j_kint(&j, "seen", seen);
-                j_close(&j, '}');
+                json_open(&j, '{');
+                json_kstr(&j, "patch", fp->name);
+                json_kint(&j, "painted", painted);
+                json_kint(&j, "seen", seen);
+                json_close(&j, '}');
             }
-            j_close(&j, ']');
-            j_close(&j, '}');
+            json_close(&j, ']');
+            json_close(&j, '}');
         }
-        j_close(&j, ']');
+        json_close(&j, ']');
 
-        j_key(&j, "outside");                   /* creatures and notes on no room */
-        j_open(&j, '[');
+        json_key(&j, "outside");                   /* creatures and notes on no room */
+        json_open(&j, '[');
         for (int t = 0; t < m->tokens.n; t++) {
             const Token *tk = &m->tokens.v[t];
             if (rooms_at(&r, m, tk->x, tk->y) >= 0) continue;
-            j_open(&j, '{');
-            j_kstr(&j, "label", tk->label);
-            map_coord_name(tk->x, tk->y, buf, sizeof buf); j_kstr(&j, "at", buf);
-            j_close(&j, '}');
+            json_open(&j, '{');
+            json_kstr(&j, "label", tk->label);
+            map_coord_name(tk->x, tk->y, buf, sizeof buf); json_kstr(&j, "at", buf);
+            json_close(&j, '}');
         }
-        j_close(&j, ']');
-        j_close(&j, '}');
+        json_close(&j, ']');
+        json_close(&j, '}');
         fputc('\n', out);
     } else {
         fprintf(out, "map  %s  %dx%d  scale %g ft  metric %s  ruleset %s\n", m->name, m->w, m->h, m->scale_ft,
@@ -903,33 +842,34 @@ static int check_report(FILE *out, Findings *pfs, const char *file, int json)
     }
 
     if (json) {
-        Json j = { out, 0, { 0 }, 0 };
-        j_open(&j, '{');
-        j_key(&j, "file");
-        if (file) j_str(&j, file); else j_null(&j);
-        j_kint(&j, "errors", errors);
-        j_kint(&j, "warnings", warnings);
-        j_kint(&j, "notes", notes);
-        j_key(&j, "findings");
-        j_open(&j, '[');
+        Json j;
+        json_init(&j, out);
+        json_open(&j, '{');
+        json_key(&j, "file");
+        if (file) json_str(&j, file); else json_null(&j);
+        json_kint(&j, "errors", errors);
+        json_kint(&j, "warnings", warnings);
+        json_kint(&j, "notes", notes);
+        json_key(&j, "findings");
+        json_open(&j, '[');
         for (int i = 0; i < fs.n; i++) {
             const Finding *f = &fs.v[i];
-            j_open(&j, '{');
-            j_kstr(&j, "code", f->code);
-            j_kstr(&j, "slug", f->slug);
-            j_kstr(&j, "severity", severity(f));
-            j_key(&j, "line");  if (f->line > 0) j_int(&j, f->line); else j_null(&j);
-            j_key(&j, "column"); if (f->col >= 0) j_int(&j, f->col); else j_null(&j);
-            j_key(&j, "where"); if (f->where[0]) j_str(&j, f->where); else j_null(&j);
-            j_key(&j, "x");     if (f->x >= 0) j_int(&j, f->x); else j_null(&j);
-            j_key(&j, "y");     if (f->y >= 0) j_int(&j, f->y); else j_null(&j);
-            j_key(&j, "edge");
-            if (f->edge) { char e[2] = { (char)f->edge, 0 }; j_str(&j, e); } else j_null(&j);
-            j_kstr(&j, "message", f->msg);
-            j_close(&j, '}');
+            json_open(&j, '{');
+            json_kstr(&j, "code", f->code);
+            json_kstr(&j, "slug", f->slug);
+            json_kstr(&j, "severity", severity(f));
+            json_key(&j, "line");  if (f->line > 0) json_int(&j, f->line); else json_null(&j);
+            json_key(&j, "column"); if (f->col >= 0) json_int(&j, f->col); else json_null(&j);
+            json_key(&j, "where"); if (f->where[0]) json_str(&j, f->where); else json_null(&j);
+            json_key(&j, "x");     if (f->x >= 0) json_int(&j, f->x); else json_null(&j);
+            json_key(&j, "y");     if (f->y >= 0) json_int(&j, f->y); else json_null(&j);
+            json_key(&j, "edge");
+            if (f->edge) { char e[2] = { (char)f->edge, 0 }; json_str(&j, e); } else json_null(&j);
+            json_kstr(&j, "message", f->msg);
+            json_close(&j, '}');
         }
-        j_close(&j, ']');
-        j_close(&j, '}');
+        json_close(&j, ']');
+        json_close(&j, '}');
         fputc('\n', out);
     } else {
         for (int i = 0; i < fs.n; i++) {
