@@ -46,6 +46,10 @@ typedef struct {
     int         tool;               /* --dump-map, --check, --describe: a map tool, and exit */
     int         json;               /* --json: the tool's report as JSON */
     const char *region;             /* --region A1:P9 */
+    int         agent;              /* --agent: open the control channel at startup */
+    int         ctl;                /* --ctl [REQUEST]: be the channel's client */
+    const char *ctl_req;            /* NULL: the request is on stdin */
+    long        ctl_pid;            /* --ctl-pid N: which vtt; 0 the only one */
 } Options;
 
 enum { TOOL_NONE, TOOL_DUMP, TOOL_CHECK, TOOL_DESCRIBE };
@@ -69,6 +73,10 @@ static void usage(void)
         "  --watch HOST:PORT  mirror a serving vtt in this terminal, read-only\n"
         "  --bench-clients N  attach N loopback watchers to a --bench run\n"
         "  --bench-pings      and have each of them ping every frame\n"
+        "  --agent            open the control channel at startup (:agent on does it later)\n"
+        "  --ctl [REQUEST]    send a request to the vtt taking them, print the answer\n"
+        "                     (no REQUEST, or -: read it from stdin; docs/CONTROL.md)\n"
+        "  --ctl-pid N        with several running, the one with pid N\n"
         "\n"
         "  map tools (print a report and exit; see README, Map tools):\n"
         "  --dump-map         the whole map as text, with a legend\n"
@@ -101,6 +109,19 @@ static int parse_args(Options *o, int argc, char **argv)
         else if (!strcmp(a, "--stay-alive")) o->serve_stay = 1;
         else if (!strcmp(a, "--no-pings"))   o->serve_no_pings = 1;
         else if (!strcmp(a, "--bench-pings")) o->bench_pings = 1;
+        else if (!strcmp(a, "--agent"))      o->agent = 1;
+        else if (!strcmp(a, "--ctl")) {
+            o->ctl = 1;
+            if (i + 1 < argc && strncmp(argv[i + 1], "--", 2) != 0) {
+                o->ctl_req = argv[++i];
+                if (!strcmp(o->ctl_req, "-")) o->ctl_req = NULL;
+            }
+        }
+        else if (!strcmp(a, "--ctl-pid") && i + 1 < argc) {
+            o->ctl = 1;
+            o->ctl_pid = strtol(argv[++i], NULL, 10);
+            if (o->ctl_pid <= 0) die("bad --ctl-pid (expected a process id)");
+        }
         else if (!strcmp(a, "--serve")) {
             o->serve = 1;
             if (i + 1 < argc && argv[i + 1][0] >= '0' && argv[i + 1][0] <= '9') o->serve_port = atoi(argv[++i]);
@@ -393,6 +414,10 @@ static int run_interactive(const Options *o)
             app_set_status(&a, msg);
         }
     }
+    if (o->agent) {
+        char err[CTL_PATH_MAX + 64];
+        if (ctl_start(&a.ctl, err, sizeof err) < 0) app_set_status_gm(&a, err);
+    }
 
     /* Paint once before blocking so the first frame is up immediately. */
     prof_frame_begin();
@@ -403,7 +428,7 @@ static int run_interactive(const Options *o)
 
     /* stdin, the signal pipe, then whatever the remote view is listening
      * on: its entries are rebuilt every time round, since clients come and go. */
-    struct pollfd fds[2 + 1 + NET_MAX_CLIENTS];
+    struct pollfd fds[2 + 1 + NET_MAX_CLIENTS + 1 + CTL_MAX_CONN];
     fds[0].fd = t.in_fd;
     fds[0].events = POLLIN;
     fds[1].fd = term_signal_fd(&t);
@@ -424,13 +449,18 @@ static int run_interactive(const Options *o)
         /* And when a ping's ring is due to come down. */
         int pd = app_ping_due(&a, prof_now_ns() / 1000000u);
         if (pd >= 0 && (timeout < 0 || pd < timeout)) timeout = pd;
+        /* And for an agent's connection that has gone quiet. */
+        int nctl = ctl_pollfds(&a.ctl, fds + 2 + nnet, 1 + CTL_MAX_CONN);
+        int cd = ctl_due(&a.ctl, prof_now_ns() / 1000000u);
+        if (cd >= 0 && (timeout < 0 || cd < timeout)) timeout = cd;
 
-        int nready = poll(fds, (nfds_t)(2 + nnet), timeout);
+        int nready = poll(fds, (nfds_t)(2 + nnet + nctl), timeout);
         if (nready < 0) {
             if (errno == EINTR) continue;
             break;
         }
         if (nnet > 0) net_service(&a.net, fds + 2, nnet, prof_now_ns() / 1000000u);
+        if (nctl > 0) ctl_service(&a.ctl, fds + 2 + nnet, nctl, prof_now_ns() / 1000000u);
         app_tick(&a, prof_now_ns() / 1000000u);
 
         if (nready > 0 && (fds[1].revents & POLLIN)) {
@@ -544,6 +574,7 @@ int main(int argc, char **argv)
     Options o;
     if (parse_args(&o, argc, argv)) return 0;
     if (o.tool) return run_tool(&o);
+    if (o.ctl)  return ctl_client_main(o.ctl_req, o.ctl_pid);
 
     draw_set_ascii(o.ascii);
     if (o.watch) return watch_main(o.watch, o.ascii);

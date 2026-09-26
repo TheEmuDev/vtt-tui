@@ -1,0 +1,77 @@
+#ifndef VTT_CTL_H
+#define VTT_CTL_H
+
+#include <poll.h>
+#include <stddef.h>
+#include <stdint.h>
+
+/* The control channel's socket: a Unix socket only this user can reach,
+ * one request a connection. The client writes its request and shuts its
+ * side; the request is handed to the app whole, the answer queued, written
+ * without blocking, and the connection closed. What a request says is
+ * app_ctl.c's business; this file only moves bytes. docs/CONTROL.md. */
+
+#define CTL_MAX_CONN   4
+#define CTL_REQ_CAP    (64 * 1024)
+#define CTL_TIMEOUT_MS 10000
+#define CTL_PATH_MAX   108          /* sun_path */
+
+typedef enum {
+    CTL_READING = 0,    /* the request is still coming */
+    CTL_READY,          /* read to the end, waiting for the app */
+    CTL_WRITING,        /* the answer is going out */
+} CtlState;
+
+typedef struct {
+    int       fd;
+    CtlState  state;
+    char     *in;               /* CTL_REQ_CAP + 1, nul-terminated when READY */
+    size_t    in_len;
+    char     *out;              /* the answer, owned; sent from out_off */
+    size_t    out_len, out_off;
+    uint64_t  since_ms;         /* connected; the deadline runs from here */
+} CtlConn;
+
+typedef struct {
+    int      listen_fd;
+    char     path[CTL_PATH_MAX];
+    CtlConn  c[CTL_MAX_CONN];
+    int      nc;
+    uint32_t requests;          /* answered, over the channel's life */
+    uint32_t dropped;           /* too big, too slow, or refused for want of a slot */
+} Ctl;
+
+void ctl_init(Ctl *c);
+
+/* Makes the directory if it has to, refuses one that is not ours alone,
+ * and listens at <dir>/<pid>.sock. Returns 0, or -1 with why in err. */
+int  ctl_start(Ctl *c, char *err, size_t errsz);
+/* Closes every connection and removes the socket file. */
+void ctl_stop(Ctl *c);
+
+static inline int ctl_active(const Ctl *c) { return c->listen_fd >= 0; }
+
+/* The directory the sockets live in; 0, or -1 when there is none to use. */
+int  ctl_dir(char *buf, size_t sz);
+
+/* Event loop integration, as the remote view's: append the listener and
+ * the connections, then service what poll said is ready, plus deadlines. */
+int  ctl_pollfds(Ctl *c, struct pollfd *fds, int max);
+void ctl_service(Ctl *c, const struct pollfd *fds, int count, uint64_t now_ms);
+
+/* Milliseconds until the next deadline, or -1 with nothing open. */
+int  ctl_due(const Ctl *c, uint64_t now_ms);
+
+/* The next request read to the end: its connection's index, the text in
+ * *req (nul-terminated, length *len). -1 when none is waiting. */
+int  ctl_next(Ctl *c, const char **req, size_t *len);
+
+/* The answer to connection i, taken over (malloc'd; freed here). The
+ * connection closes once it is written. */
+void ctl_answer(Ctl *c, int i, char *out, size_t len);
+
+/* `vtt --ctl`: sends `req` (NULL reads stdin) to the vtt of `pid` (0: the
+ * only one running), prints the answer. Returns the exit status. */
+int  ctl_client_main(const char *req, long pid);
+
+#endif /* VTT_CTL_H */

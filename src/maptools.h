@@ -75,4 +75,9 @@ void maptools_describe(FILE *out, const Map *m, int json);
  * status: 0 clean, 1 an error or warning, 2 the file cannot be read. */
 int  maptools_check(FILE *out, const char *path, int json);
 
+/* The same checks on a map already in memory -- the live one, for the
+ * control channel -- so without the file's own findings and line numbers.
+ * JSON's "file" is the map's path, or null for one never saved. */
+int  maptools_check_map(FILE *out, const Map *m, int json);
+
 #endif /* VTT_MAPTOOLS_H */

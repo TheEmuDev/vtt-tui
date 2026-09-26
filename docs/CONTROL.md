@@ -1,0 +1,93 @@
+# The control channel: an agent in the GM's live session
+
+An AI agent (or any script) talking to a running `vtt`: reading the map the GM
+has open, asking what the GM is pointing at, and editing it, every change one
+undo batch the GM takes back with `u`. The map tools (`--dump-map`, `--check`,
+`--describe`) read files; this is the same reading, and writing, on the map in
+memory while the GM watches. Signed off 2026-09-26.
+
+## Decisions
+
+| question | answer |
+|---|---|
+| transport | a Unix socket and a one-shot client, `vtt --ctl`. Never the network: `:serve`'s port is on the Wi-Fi. An MCP server could wrap `vtt --ctl` later without touching vtt. |
+| on | off until `:agent on` (or `--agent` at start); `:agent off` closes it |
+| where edits land | build mode only, so nothing an agent does reaches the players' phones in play. Reads work anywhere a map is open. |
+| freedom | free editing, undo as the safety net; no drafts to approve |
+| a request | one undo batch, all or nothing: a line that fails rolls the whole request back and says which line and why |
+| fog | `fog paint` only; making and setting patches stays `:fog`'s |
+| not here | saving, opening, closing maps (the files stay the GM's); checkpoints and diffs; a room-level description language; MCP; undoing part of an agent's batch (IDEAS.md) |
+
+## Shape
+
+- **The socket** is `$XDG_RUNTIME_DIR/vtt/<pid>.sock`, else `/tmp/vtt-<uid>/<pid>.sock`,
+  in a directory made `0700` and refused if it is anyone else's or open to anyone else.
+  Nothing but the same user can connect.
+- **One connection, one request.** The client writes the request and shuts its side;
+  vtt reads to the end, runs it between keystrokes, queues the answer and closes. The
+  answer's first line is `ok`, `error: ...` or `busy: ...`; the rest is what the request
+  printed. `vtt --ctl` prints the answer and exits 0 on `ok`, 1 otherwise, 2 when there
+  is no vtt to talk to.
+- **Finding the vtt.** With one running, `vtt --ctl` finds it; with several, it names
+  them with their maps and `--ctl-pid N` picks one. A socket nobody answers on is a
+  crashed vtt's and is removed.
+- **Bounded.** A request is at most 64 KB and four connections are held at once; one
+  that has not finished its request, or not taken its answer, in ten seconds is dropped.
+  An answer is written without blocking, so a stuck caller never stalls the GM's
+  screen. Off, it costs nothing; on and idle, one more descriptor in `poll`.
+- **Where it lives.** `ctl.c` owns the socket and the client; `app_ctl.c` reads a
+  request and runs it against the App. main's loop hands finished requests over.
+
+## The language
+
+A request is lines. Words are separated by spaces; `"..."` is one word (with `\"` and
+`\\`); a line starting with `#` and a blank line are ignored. Squares are named as the
+app names them (`C3`, `AB12`); a region is `B2:K12`; a boundary is named by the
+squares either side, `G5|H5` across a vertical one and `C3/C4` across a horizontal one,
+as `--describe` names them. Lines run in order, so a read sees the edits before it.
+
+**Reads** (anywhere a map is open):
+
+| line | answer |
+|---|---|
+| `status` | the map, its file, unsaved or not; the screen and mode; undo depth; whether edits are taken now and why not |
+| `dump [REGION]` | `--dump-map` of the live map |
+| `describe [json]` | `--describe` |
+| `check [json]` | `--check` of the map in memory (so no file line numbers) |
+| `marked [json]` | what the GM is pointing at: the cursor, a `v` box (rect or circle), wall mode's corner and anchor, the selected creatures and a selection box, the ruler's ends, the GM's last `g p` and each phone's last ping with their age. A ping stays on record after its ring fades. |
+
+**Edits** (build mode, nothing half-done on the GM's side):
+
+| line | does |
+|---|---|
+| `room REGION` | floor over the region, walls round it |
+| `tile REGION KIND` | KIND: void floor water rough brush wood hazard |
+| `wall REGION [EDGE]` | the region's outline as EDGE (default wall; `none` clears) |
+| `edge BOUNDARY EDGE` | one boundary. EDGE: none wall door open window secret opensecret |
+| `token add player\|enemy SQ [size N] "Label"` | a creature |
+| `token move WHO SQ`, `token del WHO` | WHO is a label, or a square it stands on |
+| `token set WHO label "..."\|size N\|note "..."` | |
+| `note SQ "text"`, `note SQ` | a GM-only note on a square, or clears it |
+| `fog paint REGION N` | paints the region into fog patch N (0 scrubs) |
+| `undo` | takes back the agent's last request, only while nothing came after it |
+
+Edits are refused, with `busy:` and the reason, when a prompt or dialog is open, a
+creature is picked up, a key prefix is waiting, or the screen is not build mode.
+
+**The GM sees it happen.** The status line says what the request did (`agent: room B2:K12,
+3 changes - u takes it back`), the session log records it, and a ring marks the changed
+area for a moment. The GM's cursor and camera never move.
+
+## Build order
+
+1. The socket, `:agent`, `--agent`, `vtt --ctl`; `status`, `dump`, `describe`, `check`.
+2. `marked`, and the GM's last ping kept on record.
+3. The edits, all or nothing, the busy refusals, `undo`, the status line and ring.
+4. docs/AGENTS.md *Working in a live session*, README, `tools/perf.sh` rows (a 40x40
+   room with a dozen creatures, and a 512x512 dump), the request parser under the
+   fuzzer; then the review.
+
+## Instrumentation
+
+`PROF_ZONE("ctl")` round running a request. perf.sh rows run requests through
+the same function headlessly (`--bench-ctl FILE`).

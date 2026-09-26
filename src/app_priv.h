@@ -70,6 +70,9 @@ int  app_spawn_mirror(App *a, char *msg, size_t msgsz);
 void app_exec_command(App *a, const char *line);
 void app_command_key(App *a, Key k);
 
+/* app_ctl.c: :agent on, :agent off, :agent to ask. */
+void app_agent_command(App *a, const char *rest);
+
 /* app_play.c */
 void app_play_key(App *a, Key k);
 

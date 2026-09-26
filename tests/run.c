@@ -21,6 +21,7 @@
 #include <netinet/in.h>
 #include <poll.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <sys/time.h>
 #include "dice.h"
 #include "wire.h"
@@ -12308,6 +12309,428 @@ static void test_webpage(void)
     if (w) CHECK(strncmp(w + 12, "AGFzbQEAAAAB", 12) == 0);   /* \0asm, version 1, a type section */
 }
 
+/* ------------------------------------------------------------ control */
+
+/* One request through app_ctl_exec, the answer as a string. */
+static char *ctl_ask(App *a, const char *req)
+{
+    size_t len = strlen(req);
+    char  *ans = app_ctl_exec(a, req, &len);
+    CHECK(ans != NULL);
+    if (ans) CHECK_EQ(strlen(ans), len);
+    return ans;
+}
+
+static void test_ctl(void)
+{
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+
+    CASE("with no map open, status answers and everything else says why not");
+    char *t = ctl_ask(&a, "status\n");
+    CHECK(strncmp(t, "ok\nmap none open\n", 17) == 0);
+    CHECK(strstr(t, "edits not now: no map is open") != NULL);
+    free(t);
+    t = ctl_ask(&a, "dump\n");
+    CHECK_EQ(strcmp(t, "error: line 1: no map is open\n"), 0);
+    free(t);
+
+    app_open_map(&a, "tests/fixtures/two-rooms.vtt");
+    CHECK(a.map != NULL);
+    if (!a.map) { app_free(&a); rnd_free(&r); return; }
+
+    CASE("status: the map, its file, the screen, undo, and edits taken in build mode");
+    t = ctl_ask(&a, "status");
+    CHECK(strncmp(t, "ok\nmap Two Rooms  16x9\n", 23) == 0);
+    CHECK(strstr(t, "file tests/fixtures/two-rooms.vtt\n") != NULL);
+    CHECK(strstr(t, "screen build, normal mode\n") != NULL);
+    CHECK(strstr(t, "undo 0 back, 0 forward\n") != NULL);
+    CHECK(strstr(t, "edits taken\n") != NULL);
+    free(t);
+
+    CASE("dump, describe and check are the map tools' own reports");
+    {
+        char *want = NULL;
+        size_t wn = 0;
+        FILE *f = open_memstream(&want, &wn);
+        maptools_dump(f, a.map, 1, 1, 6, 5);
+        fclose(f);
+        t = ctl_ask(&a, "dump B2:G6\n");
+        CHECK(strncmp(t, "ok\n", 3) == 0 && strcmp(t + 3, want) == 0);
+        free(t);
+        free(want);
+
+        f = open_memstream(&want, &wn);
+        maptools_describe(f, a.map, 1);
+        fclose(f);
+        t = ctl_ask(&a, "describe json");
+        CHECK(strcmp(t + 3, want) == 0);
+        CHECK(json_valid(t + 3));
+        free(t);
+        free(want);
+
+        f = open_memstream(&want, &wn);
+        maptools_check_map(f, a.map, 0);
+        fclose(f);
+        t = ctl_ask(&a, "check");
+        CHECK(strcmp(t + 3, want) == 0);
+        free(t);
+        free(want);
+        t = ctl_ask(&a, "check json");
+        CHECK(json_valid(t + 3));
+        CHECK(strstr(t, "\"file\":\"tests/fixtures/two-rooms.vtt\"") != NULL);
+        free(t);
+    }
+
+    CASE("lines run in order; blank lines and # lines are skipped");
+    t = ctl_ask(&a, "# the map first\n\n   \nstatus\ndump A1\n");
+    CHECK(strncmp(t, "ok\nmap Two Rooms", 16) == 0);
+    CHECK(strstr(t, "region A1:A1") != NULL);
+    free(t);
+
+    CASE("an error names its line and sends nothing else");
+    t = ctl_ask(&a, "status\ndump B2:ZZ99:4\n");
+    CHECK(strncmp(t, "error: line 2: B2:ZZ99:4 is not a region", 40) == 0);
+    CHECK(strchr(t, '\n') == t + strlen(t) - 1);
+    free(t);
+    t = ctl_ask(&a, "describe yaml\n");
+    CHECK_EQ(strcmp(t, "error: line 1: describe takes nothing but json after it\n"), 0);
+    free(t);
+    t = ctl_ask(&a, "frobnicate\n");
+    CHECK_EQ(strcmp(t, "error: line 1: unknown request frobnicate\n"), 0);
+    free(t);
+    t = ctl_ask(&a, "status now\n");
+    CHECK(strncmp(t, "error: line 1: status takes nothing", 35) == 0);
+    free(t);
+
+    CASE("words: quotes, escapes, and the mistakes a quote can make");
+    {
+        static const struct { const char *req, *err; } bad[] = {
+            { "dump \"B2\n",           "a quote is not closed" },
+            { "dump \"B2\"x\n",        "a closing quote runs into the next word" },
+            { "dump B\"2\n",           "a quote in the middle of a word" },
+            { "a b c d e f g h i j k l m\n", "more than 12 words" },
+        };
+        for (size_t i = 0; i < sizeof bad / sizeof *bad; i++) {
+            t = ctl_ask(&a, bad[i].req);
+            CHECK(strstr(t, bad[i].err) != NULL);
+            free(t);
+        }
+        t = ctl_ask(&a, "dump \"B2:C3\"\n");      /* a quoted word is a word */
+        CHECK(strncmp(t, "ok\n", 3) == 0);
+        free(t);
+        char big[1100];
+        memset(big, 'x', sizeof big - 1);
+        big[sizeof big - 1] = '\0';
+        t = ctl_ask(&a, big);
+        CHECK(strstr(t, "the line is over 1023 characters") != NULL);
+        free(t);
+        char word[300] = "dump ";
+        memset(word + 5, 'B', 290);
+        word[295] = '\0';
+        t = ctl_ask(&a, word);
+        CHECK(strstr(t, "a word over 255 characters") != NULL);
+        free(t);
+    }
+
+    CASE("a nul byte inside the request is refused whole");
+    {
+        const char req[] = "status\0dump\n";
+        size_t len = sizeof req - 1;
+        t = app_ctl_exec(&a, req, &len);
+        CHECK(t && strcmp(t, "error: a nul byte in the request\n") == 0);
+        free(t);
+    }
+
+    CASE("edits are refused, with the reason, whenever the GM is part way through something");
+    CHECK(app_ctl_busy(&a) == NULL);
+    press(&a, ":");
+    CHECK(app_ctl_busy(&a) != NULL && strstr(app_ctl_busy(&a), ": command"));
+    press(&a, "\x1b");
+    CHECK(app_ctl_busy(&a) == NULL);
+    press(&a, "g");
+    CHECK(app_ctl_busy(&a) != NULL && strstr(app_ctl_busy(&a), "part way"));
+    press(&a, "\x1b");
+    CHECK(app_ctl_busy(&a) == NULL);
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+    CHECK_EQ(a.screen, SCREEN_PLAY);
+    CHECK(app_ctl_busy(&a) != NULL && strstr(app_ctl_busy(&a), "play mode"));
+    t = ctl_ask(&a, "status");
+    CHECK(strstr(t, "screen play\n") != NULL);
+    CHECK(strstr(t, "edits not now: the GM is in play mode") != NULL);
+    free(t);
+
+    CASE(":agent with the channel off says so; on and off from the command line");
+    app_key(&a, f2);
+    press(&a, ":agent\r");
+    CHECK(strstr(a.status, "the agent channel is off") != NULL);
+    CHECK_EQ(a.status_gm, 1);
+    press(&a, ":agent sideways\r");
+    CHECK(strstr(a.status, ":agent on, :agent off") != NULL);
+    press(&a, ":agent off\r");
+    CHECK(strstr(a.status, "already off") != NULL);
+
+    app_free(&a);
+    rnd_free(&r);
+}
+
+/* Services the app's channel until `until` says stop or two seconds pass. */
+static void ctl_pump(App *a, int (*until)(void *), void *ctx)
+{
+    for (int spin = 0; spin < 400 && !(until && until(ctx)); spin++) {
+        struct pollfd fds[1 + CTL_MAX_CONN];
+        int n = ctl_pollfds(&a->ctl, fds, 1 + CTL_MAX_CONN);
+        poll(fds, (nfds_t)n, 5);
+        uint64_t now = prof_now_ns() / 1000000u;
+        ctl_service(&a->ctl, fds, n, now);
+        app_tick(a, now);
+    }
+}
+
+static int ctl_raw_connect(const char *path)
+{
+    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    struct sockaddr_un sa;
+    memset(&sa, 0, sizeof sa);
+    sa.sun_family = AF_UNIX;
+    str_lcpy(sa.sun_path, path, sizeof sa.sun_path);
+    if (connect(fd, (struct sockaddr *)&sa, sizeof sa) < 0) { close(fd); return -1; }
+    return fd;
+}
+
+typedef struct { int fd; char buf[8192]; size_t n; int done; } CtlReader;
+
+static int ctl_read_some(void *ctx)
+{
+    CtlReader *rd = ctx;
+    for (;;) {
+        struct pollfd p = { rd->fd, POLLIN, 0 };
+        if (poll(&p, 1, 0) <= 0) return rd->done;
+        ssize_t k = read(rd->fd, rd->buf + rd->n, sizeof rd->buf - 1 - rd->n);
+        if (k <= 0) { rd->done = 1; rd->buf[rd->n] = '\0'; return 1; }
+        rd->n += (size_t)k;
+    }
+}
+
+static int ctl_child_done(void *ctx)
+{
+    int *st = ctx;
+    return st[1] || (st[1] = waitpid((pid_t)st[0], &st[2], WNOHANG) > 0);
+}
+
+static void test_ctl_live(void)
+{
+    Sandbox sb = sandbox_enter("ctl");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    char saved_rt[1024] = "";
+    const char *rt = getenv("XDG_RUNTIME_DIR");
+    if (rt) str_lcpy(saved_rt, rt, sizeof saved_rt);
+    setenv("XDG_RUNTIME_DIR", sb.dir, 1);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+    app_open_map(&a, "tests/fixtures/two-rooms.vtt");
+
+    CASE("a directory open to others is refused, and nothing listens");
+    char dir[600];
+    snprintf(dir, sizeof dir, "%s/vtt", sb.dir);
+    mkdir(dir, 0755);
+    chmod(dir, 0755);
+    press(&a, ":agent on\r");
+    CHECK(strstr(a.status, "not this user's alone") != NULL);
+    CHECK_EQ(ctl_active(&a.ctl), 0);
+    chmod(dir, 0700);
+
+    CASE(":agent on listens at <dir>/<pid>.sock, only for this user");
+    press(&a, ":agent on\r");
+    CHECK_EQ(ctl_active(&a.ctl), 1);
+    char want[700];
+    snprintf(want, sizeof want, "%s/%ld.sock", dir, (long)getpid());
+    CHECK_EQ(strcmp(a.ctl.path, want), 0);
+    struct stat st;
+    CHECK(stat(want, &st) == 0 && S_ISSOCK(st.st_mode) && (st.st_mode & 077) == 0);
+    CHECK(strstr(a.status, "agent channel on") != NULL);
+
+    CASE("a request over the socket: written, shut, answered, closed");
+    {
+        CtlReader rd = { ctl_raw_connect(a.ctl.path), "", 0, 0 };
+        CHECK(rd.fd >= 0);
+        CHECK(write(rd.fd, "status\n", 7) == 7);
+        shutdown(rd.fd, SHUT_WR);
+        ctl_pump(&a, ctl_read_some, &rd);
+        CHECK_EQ(rd.done, 1);
+        CHECK(strncmp(rd.buf, "ok\nmap Two Rooms", 16) == 0);
+        close(rd.fd);
+        CHECK_EQ(a.ctl.requests, 1u);
+        CHECK_EQ(a.ctl.nc, 0);
+    }
+
+    CASE("an answer too big for the socket's buffer goes out in pieces");
+    {
+        CtlReader rd = { ctl_raw_connect(a.ctl.path), "", 0, 0 };
+        /* Forty dumps of the whole map: far past what one send takes. */
+        char req[400] = "";
+        for (int i = 0; i < 40; i++) strcat(req, "dump\n");
+        CHECK(write(rd.fd, req, strlen(req)) == (ssize_t)strlen(req));
+        shutdown(rd.fd, SHUT_WR);
+        size_t total = 0;
+        int    got_ok = 0, spins = 0;
+        while (spins++ < 400) {
+            struct pollfd fds[1 + CTL_MAX_CONN];
+            int n = ctl_pollfds(&a.ctl, fds, 1 + CTL_MAX_CONN);
+            poll(fds, (nfds_t)n, 5);
+            uint64_t now = prof_now_ns() / 1000000u;
+            ctl_service(&a.ctl, fds, n, now);
+            app_tick(&a, now);
+            char chunk[65536];
+            ssize_t k;
+            while ((k = recv(rd.fd, chunk, sizeof chunk, MSG_DONTWAIT)) > 0) {
+                if (!total) got_ok = !strncmp(chunk, "ok\n", 3);
+                total += (size_t)k;
+            }
+            if (k == 0) break;
+        }
+        CHECK_EQ(got_ok, 1);
+        CHECK(total > 40000);
+        close(rd.fd);
+        CHECK_EQ(a.ctl.nc, 0);
+    }
+
+    CASE("a request over 64 KB is answered with why, not run");
+    {
+        CtlReader rd = { ctl_raw_connect(a.ctl.path), "", 0, 0 };
+        fcntl(rd.fd, F_SETFL, fcntl(rd.fd, F_GETFL) | O_NONBLOCK);
+        char *big = malloc(CTL_REQ_CAP + 100);
+        memset(big, '#', CTL_REQ_CAP + 100);
+        /* Written as the server takes it: the socket buffer is smaller
+         * than the request. */
+        size_t off = 0;
+        for (int spin = 0; spin < 400 && off < CTL_REQ_CAP + 100; spin++) {
+            ssize_t k = write(rd.fd, big + off, CTL_REQ_CAP + 100 - off);
+            if (k > 0) off += (size_t)k;
+            struct pollfd fds[1 + CTL_MAX_CONN];
+            int n = ctl_pollfds(&a.ctl, fds, 1 + CTL_MAX_CONN);
+            poll(fds, (nfds_t)n, 5);
+            ctl_service(&a.ctl, fds, n, prof_now_ns() / 1000000u);
+        }
+        free(big);
+        fcntl(rd.fd, F_SETFL, fcntl(rd.fd, F_GETFL) & ~O_NONBLOCK);
+        ctl_pump(&a, ctl_read_some, &rd);
+        CHECK_EQ(strcmp(rd.buf, "error: the request is over 64 KB\n"), 0);
+        close(rd.fd);
+    }
+
+    CASE("past four connections, the next is closed at once; a silent one is dropped at the deadline");
+    {
+        int fd[CTL_MAX_CONN + 1];
+        for (int i = 0; i <= CTL_MAX_CONN; i++) fd[i] = ctl_raw_connect(a.ctl.path);
+        uint32_t dropped = a.ctl.dropped;
+        struct pollfd fds[1 + CTL_MAX_CONN];
+        int n = ctl_pollfds(&a.ctl, fds, 1 + CTL_MAX_CONN);
+        poll(fds, (nfds_t)n, 5);
+        uint64_t now = prof_now_ns() / 1000000u;
+        ctl_service(&a.ctl, fds, n, now);
+        CHECK_EQ(a.ctl.nc, CTL_MAX_CONN);
+        CHECK_EQ(a.ctl.dropped, dropped + 1);
+        CHECK(ctl_due(&a.ctl, now) > CTL_TIMEOUT_MS - 1000);
+        /* Nothing ready; only the clock has moved. */
+        memset(fds, 0, sizeof fds);
+        fds[0].fd = a.ctl.listen_fd;
+        ctl_service(&a.ctl, fds, 1, now + CTL_TIMEOUT_MS);
+        CHECK_EQ(a.ctl.nc, 0);
+        CHECK_EQ(ctl_due(&a.ctl, now), -1);
+        for (int i = 0; i <= CTL_MAX_CONN; i++) close(fd[i]);
+    }
+
+    CASE("vtt --ctl: finds the one vtt, prints the report, exits 0; 1 on an error");
+    {
+        char out[700];
+        snprintf(out, sizeof out, "%s/ctl-out.txt", sb.dir);
+        for (int round = 0; round < 2; round++) {
+            fflush(stdout);
+            pid_t pid = fork();
+            if (pid == 0) {
+                int o = open(out, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+                dup2(o, 1);
+                dup2(o, 2);
+                int rc = ctl_client_main(round ? "bogus" : "status", 0);
+                fflush(stdout);
+                _exit(rc);
+            }
+            int stc[3] = { (int)pid, 0, 0 };
+            ctl_pump(&a, ctl_child_done, stc);
+            CHECK_EQ(stc[1], 1);
+            CHECK(WIFEXITED(stc[2]) && WEXITSTATUS(stc[2]) == round);
+            FILE *f = fopen(out, "r");
+            char  text[512] = "";
+            size_t k = f ? fread(text, 1, sizeof text - 1, f) : 0;
+            text[k] = '\0';
+            if (f) fclose(f);
+            if (!round) CHECK(strncmp(text, "map Two Rooms", 13) == 0);
+            else        CHECK(strstr(text, "vtt: error: line 1: unknown request bogus") != NULL);
+        }
+        unlink(out);
+    }
+
+    CASE(":agent off closes it and removes the socket; --ctl then finds nobody (exit 2)");
+    press(&a, ":agent off\r");
+    CHECK_EQ(ctl_active(&a.ctl), 0);
+    CHECK(access(want, F_OK) != 0);
+    {
+        fflush(stdout);
+        pid_t pid = fork();
+        if (pid == 0) {
+            int o = open("/dev/null", O_WRONLY);
+            dup2(o, 2);
+            _exit(ctl_client_main("status", 0));
+        }
+        int stc = 0;
+        waitpid(pid, &stc, 0);
+        CHECK(WIFEXITED(stc) && WEXITSTATUS(stc) == 2);
+    }
+
+    CASE("a socket file nobody answers on is a crashed vtt's, and --ctl removes it");
+    {
+        char stale[700];
+        snprintf(stale, sizeof stale, "%s/99999999.sock", dir);
+        int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+        struct sockaddr_un sa;
+        memset(&sa, 0, sizeof sa);
+        sa.sun_family = AF_UNIX;
+        str_lcpy(sa.sun_path, stale, sizeof sa.sun_path);
+        CHECK(bind(fd, (struct sockaddr *)&sa, sizeof sa) == 0);
+        close(fd);                             /* bound, never listened: refused */
+        CHECK(access(stale, F_OK) == 0);
+        fflush(stdout);
+        pid_t pid = fork();
+        if (pid == 0) {
+            int o = open("/dev/null", O_WRONLY);
+            dup2(o, 2);
+            _exit(ctl_client_main("status", 0));
+        }
+        int stc = 0;
+        waitpid(pid, &stc, 0);
+        CHECK(WIFEXITED(stc) && WEXITSTATUS(stc) == 2);
+        CHECK(access(stale, F_OK) != 0);
+    }
+
+    app_free(&a);
+    rnd_free(&r);
+    rmdir(dir);
+    if (saved_rt[0]) setenv("XDG_RUNTIME_DIR", saved_rt, 1);
+    else             unsetenv("XDG_RUNTIME_DIR");
+    sandbox_leave(&sb);
+    rmdir(sb.dir);
+}
+
 int main(void)
 {
     prof_init();
@@ -12343,6 +12766,8 @@ int main(void)
         { "sightwalk", test_sight_walk },
         { "fogdiff", test_fog_diff },
         { "pings", test_pings },
+        { "ctl",   test_ctl },
+        { "ctllive", test_ctl_live },
         { "webpage", test_webpage },
         { "turns",  test_turns },
         { "turnkeys", test_turn_keys },

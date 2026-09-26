@@ -748,6 +748,7 @@ void app_exec_command(App *a, const char *line)
         return;
     }
     if (!strcmp(verb, "serve")) { serve_command(a, rest); return; }
+    if (!strcmp(verb, "agent")) { app_agent_command(a, rest); return; }
     if (!strcmp(verb, "mirror")) {
         /* A second window on this machine, running the watcher against our
          * own server, which is started if it is not. It is detached so it

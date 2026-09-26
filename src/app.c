@@ -36,6 +36,7 @@ void app_init(App *a, Term *t, Renderer *r)
     undo_init(&a->undo);
     slog_init(&a->slog);
     net_init(&a->net);
+    ctl_init(&a->ctl);
 
     /* The frame clear paints the theme background, so no screen-sized fill
      * is needed at the top of any draw. */
@@ -51,6 +52,7 @@ void app_free(App *a)
     undo_free(&a->undo);
     slog_close(&a->slog);
     net_stop(&a->net);
+    ctl_stop(&a->ctl);
 }
 
 void app_set_status(App *a, const char *msg)
@@ -299,6 +301,15 @@ void app_tick(App *a, uint64_t now_ms)
         NetPing in[NET_MAX_CLIENTS];
         int n = net_take_pings(&a->net, in, NET_MAX_CLIENTS);
         for (int i = 0; i < n; i++) app_ping_cell(a, in[i].who, in[i].sx, in[i].sy);
+    }
+    if (ctl_active(&a->ctl)) {
+        const char *req;
+        size_t      len;
+        int         i;
+        while ((i = ctl_next(&a->ctl, &req, &len)) >= 0) {
+            char *ans = app_ctl_exec(a, req, &len);
+            ctl_answer(&a->ctl, i, ans, ans ? len : 0);     /* none: out of memory, just close */
+        }
     }
     for (int i = 0; i < a->npings; ) {
         if (a->pings[i].until_ms <= now_ms) { a->pings[i] = a->pings[--a->npings]; a->dirty = 1; }

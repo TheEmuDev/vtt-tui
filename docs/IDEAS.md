@@ -4,6 +4,15 @@ Things worth building that were consciously not built, with the reason, so
 the reason can be re-examined rather than the idea re-invented. Add to the
 top; move an entry to the README when it ships.
 
+## Undoing part of an agent's request
+
+*Set aside 2026-09-26, when the control channel was planned (CONTROL.md).* A request
+from an agent is one undo batch, all or nothing: `u` takes back the whole room, doors
+and creatures together. The GM may want to keep the room and lose one door. That wants
+the batch split by line (each line its own sub-batch, `U` or a count stepping through
+them) or a list of the request's lines to pick from. All or nothing is enough until an
+agent's requests grow large enough that redoing one by hand is a chore.
+
 ## Moves from a player's phone
 
 *Set aside 2026-09-25, after a full plan.* REMOTE.md's phase two step 3: a phone

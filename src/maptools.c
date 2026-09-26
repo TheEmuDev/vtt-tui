@@ -803,99 +803,97 @@ static const char *severity(const Finding *f)
     return f->code[0] == 'E' ? "error" : f->code[0] == 'W' ? "warning" : "note";
 }
 
-int maptools_check(FILE *out, const char *path, int json)
+/* Everything the linter finds in a map, as against in its file. */
+static void check_map(const Map *m, Findings *fs)
 {
-    Findings fs = { 0 };
-    char err[256];
-    Map *m = mapio_load_diag(path, err, sizeof err, file_finding, &fs);
-    if (!m) {
-        Finding *f = add_finding(&fs, "E001", "unreadable");
-        str_lcpy(f->msg, err, sizeof f->msg);
-    } else {
-        char where[64], msg[256];
-        for (int y = 0; y < m->h; y++)
-            for (int x = 0; x <= m->w; x++) check_edge(m, &fs, 1, x, y);
-        for (int y = 0; y <= m->h; y++)
-            for (int x = 0; x < m->w; x++) check_edge(m, &fs, 0, x, y);
+    char where[64], msg[256];
+    for (int y = 0; y < m->h; y++)
+        for (int x = 0; x <= m->w; x++) check_edge(m, fs, 1, x, y);
+    for (int y = 0; y <= m->h; y++)
+        for (int x = 0; x < m->w; x++) check_edge(m, fs, 0, x, y);
 
-        for (int i = 0; i < m->tokens.n; i++) {
-            const Token *t = &m->tokens.v[i];
-            const char  *label = t->label[0] ? t->label : "(unnamed)";
-            map_coord_name(t->x, t->y, where, sizeof where);
-            if (t->x + t->size > m->w || t->y + t->size > m->h) {
-                snprintf(msg, sizeof msg, "%s is %dx%d and hangs off the map's edge", label, t->size, t->size);
-                map_finding(&fs, "E111", "token-overhang", t->x, t->y, 0, where, msg);
-            }
-            int on_void = 0;
-            for (int y = t->y; y < t->y + t->size && !on_void; y++)
-                for (int x = t->x; x < t->x + t->size && !on_void; x++)
-                    on_void = map_in_bounds(m, x, y) && !map_walkable(m, x, y);
-            if (on_void) {
-                snprintf(msg, sizeof msg, "%s stands on void", label);
-                map_finding(&fs, "E110", "token-on-void", t->x, t->y, 0, where, msg);
-            }
-            for (int j = i + 1; j < m->tokens.n; j++) {
-                const Token *u = &m->tokens.v[j];
-                if (t->x < u->x + u->size && u->x < t->x + t->size && t->y < u->y + u->size && u->y < t->y + t->size) {
-                    snprintf(msg, sizeof msg, "%s and %s share a square", label, u->label[0] ? u->label : "(unnamed)");
-                    map_finding(&fs, "E112", "token-overlap", t->x, t->y, 0, where, msg);
-                }
-                if (t->label[0] && !strcmp(t->label, u->label)) {
-                    char w2[MAP_COORD_MAX];
-                    map_coord_name(u->x, u->y, w2, sizeof w2);
-                    snprintf(msg, sizeof msg, "two creatures called %s, here and at %s", label, w2);
-                    map_finding(&fs, "W113", "duplicate-label", t->x, t->y, 0, where, msg);
-                }
-            }
+    for (int i = 0; i < m->tokens.n; i++) {
+        const Token *t = &m->tokens.v[i];
+        const char  *label = t->label[0] ? t->label : "(unnamed)";
+        map_coord_name(t->x, t->y, where, sizeof where);
+        if (t->x + t->size > m->w || t->y + t->size > m->h) {
+            snprintf(msg, sizeof msg, "%s is %dx%d and hangs off the map's edge", label, t->size, t->size);
+            map_finding(fs, "E111", "token-overhang", t->x, t->y, 0, where, msg);
         }
-
-        Rooms r;
-        rooms_build(m, &r);
-        char sname[MAP_COORD_MAX] = "";
-        if (r.start >= 0) map_coord_name(r.v[r.start].fx, r.v[r.start].fy, sname, sizeof sname);
-        for (int i = 0; i < r.n; i++) {
-            if (r.reach[i]) continue;
-            map_coord_name(r.v[i].fx, r.v[i].fy, where, sizeof where);
-            snprintf(msg, sizeof msg, "%d square%s, no door leads to it from room %s", r.v[i].squares,
-                     r.v[i].squares == 1 ? "" : "s", sname);
-            char w2[80];
-            snprintf(w2, sizeof w2, "room %s", where);
-            map_finding(&fs, "W120", "unreachable-room", r.v[i].fx, r.v[i].fy, 0, w2, msg);
+        int on_void = 0;
+        for (int y = t->y; y < t->y + t->size && !on_void; y++)
+            for (int x = t->x; x < t->x + t->size && !on_void; x++)
+                on_void = map_in_bounds(m, x, y) && !map_walkable(m, x, y);
+        if (on_void) {
+            snprintf(msg, sizeof msg, "%s stands on void", label);
+            map_finding(fs, "E110", "token-on-void", t->x, t->y, 0, where, msg);
         }
-        for (int i = 0; i < m->tokens.n; i++) {
-            const Token *t = &m->tokens.v[i];
-            int room = rooms_at(&r, m, t->x, t->y);
-            if (t->kind != TOKEN_PLAYER || room < 0 || r.reach[room]) continue;
-            map_coord_name(t->x, t->y, where, sizeof where);
-            snprintf(msg, sizeof msg, "%s cannot reach the rest of the party in room %s",
-                     t->label[0] ? t->label : "(unnamed)", sname);
-            map_finding(&fs, "W121", "party-split", t->x, t->y, 0, where, msg);
-        }
-        rooms_free(&r);
-
-        for (int id = 1; id <= FOG_PATCH_MAX; id++) {
-            const FogPatch *p = &m->fog_patches[id - 1];
-            if (!p->name[0] || p->dead) continue;
-            int seen;
-            if (fog_count(m, id, &seen) == 0) {
-                snprintf(msg, sizeof msg, "fog patch %s has no square painted in the fog section", p->name);
-                map_finding(&fs, "W130", "fog-patch-empty", -1, -1, 0, p->name, msg);
+        for (int j = i + 1; j < m->tokens.n; j++) {
+            const Token *u = &m->tokens.v[j];
+            if (t->x < u->x + u->size && u->x < t->x + t->size && t->y < u->y + u->size && u->y < t->y + t->size) {
+                snprintf(msg, sizeof msg, "%s and %s share a square", label, u->label[0] ? u->label : "(unnamed)");
+                map_finding(fs, "E112", "token-overlap", t->x, t->y, 0, where, msg);
             }
-            if (p->disabled) {
-                snprintf(msg, sizeof msg, "fog patch %s is disabled: it hides nothing", p->name);
-                map_finding(&fs, "N131", "fog-patch-disabled", -1, -1, 0, p->name, msg);
+            if (t->label[0] && !strcmp(t->label, u->label)) {
+                char w2[MAP_COORD_MAX];
+                map_coord_name(u->x, u->y, w2, sizeof w2);
+                snprintf(msg, sizeof msg, "two creatures called %s, here and at %s", label, w2);
+                map_finding(fs, "W113", "duplicate-label", t->x, t->y, 0, where, msg);
             }
         }
-        for (int i = 0; i < m->nnotes; i++) {
-            const Note *n = &m->notes[i];
-            if (map_walkable(m, n->x, n->y)) continue;
-            map_coord_name(n->x, n->y, where, sizeof where);
-            snprintf(msg, sizeof msg, "a note on void: %.60s", n->text);
-            map_finding(&fs, "W140", "note-on-void", n->x, n->y, 0, where, msg);
-        }
-        map_free(m);
     }
 
+    Rooms r;
+    rooms_build(m, &r);
+    char sname[MAP_COORD_MAX] = "";
+    if (r.start >= 0) map_coord_name(r.v[r.start].fx, r.v[r.start].fy, sname, sizeof sname);
+    for (int i = 0; i < r.n; i++) {
+        if (r.reach[i]) continue;
+        map_coord_name(r.v[i].fx, r.v[i].fy, where, sizeof where);
+        snprintf(msg, sizeof msg, "%d square%s, no door leads to it from room %s", r.v[i].squares,
+                 r.v[i].squares == 1 ? "" : "s", sname);
+        char w2[80];
+        snprintf(w2, sizeof w2, "room %s", where);
+        map_finding(fs, "W120", "unreachable-room", r.v[i].fx, r.v[i].fy, 0, w2, msg);
+    }
+    for (int i = 0; i < m->tokens.n; i++) {
+        const Token *t = &m->tokens.v[i];
+        int room = rooms_at(&r, m, t->x, t->y);
+        if (t->kind != TOKEN_PLAYER || room < 0 || r.reach[room]) continue;
+        map_coord_name(t->x, t->y, where, sizeof where);
+        snprintf(msg, sizeof msg, "%s cannot reach the rest of the party in room %s",
+                 t->label[0] ? t->label : "(unnamed)", sname);
+        map_finding(fs, "W121", "party-split", t->x, t->y, 0, where, msg);
+    }
+    rooms_free(&r);
+
+    for (int id = 1; id <= FOG_PATCH_MAX; id++) {
+        const FogPatch *p = &m->fog_patches[id - 1];
+        if (!p->name[0] || p->dead) continue;
+        int seen;
+        if (fog_count(m, id, &seen) == 0) {
+            snprintf(msg, sizeof msg, "fog patch %s has no square painted in the fog section", p->name);
+            map_finding(fs, "W130", "fog-patch-empty", -1, -1, 0, p->name, msg);
+        }
+        if (p->disabled) {
+            snprintf(msg, sizeof msg, "fog patch %s is disabled: it hides nothing", p->name);
+            map_finding(fs, "N131", "fog-patch-disabled", -1, -1, 0, p->name, msg);
+        }
+    }
+    for (int i = 0; i < m->nnotes; i++) {
+        const Note *n = &m->notes[i];
+        if (map_walkable(m, n->x, n->y)) continue;
+        map_coord_name(n->x, n->y, where, sizeof where);
+        snprintf(msg, sizeof msg, "a note on void: %.60s", n->text);
+        map_finding(fs, "W140", "note-on-void", n->x, n->y, 0, where, msg);
+    }
+}
+
+/* Sorts and prints the findings, `file` naming what was checked (NULL for
+ * none), and frees them. Returns the exit status. */
+static int check_report(FILE *out, Findings *pfs, const char *file, int json)
+{
+    Findings fs = *pfs;
     if (fs.n) qsort(fs.v, (size_t)fs.n, sizeof *fs.v, finding_cmp);
     int errors = 0, warnings = 0, notes = 0;
     for (int i = 0; i < fs.n; i++) {
@@ -907,7 +905,8 @@ int maptools_check(FILE *out, const char *path, int json)
     if (json) {
         Json j = { out, 0, { 0 }, 0 };
         j_open(&j, '{');
-        j_kstr(&j, "file", path);
+        j_key(&j, "file");
+        if (file) j_str(&j, file); else j_null(&j);
         j_kint(&j, "errors", errors);
         j_kint(&j, "warnings", warnings);
         j_kint(&j, "notes", notes);
@@ -950,4 +949,26 @@ int maptools_check(FILE *out, const char *path, int json)
     int unreadable = fs.n && !strcmp(fs.v[0].code, "E001");
     free(fs.v);
     return unreadable ? 2 : errors || warnings ? 1 : 0;
+}
+
+int maptools_check(FILE *out, const char *path, int json)
+{
+    Findings fs = { 0 };
+    char err[256];
+    Map *m = mapio_load_diag(path, err, sizeof err, file_finding, &fs);
+    if (!m) {
+        Finding *f = add_finding(&fs, "E001", "unreadable");
+        str_lcpy(f->msg, err, sizeof f->msg);
+    } else {
+        check_map(m, &fs);
+        map_free(m);
+    }
+    return check_report(out, &fs, path, json);
+}
+
+int maptools_check_map(FILE *out, const Map *m, int json)
+{
+    Findings fs = { 0 };
+    check_map(m, &fs);
+    return check_report(out, &fs, m->path[0] ? m->path : NULL, json);
 }

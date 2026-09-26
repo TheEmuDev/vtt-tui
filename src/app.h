@@ -2,6 +2,7 @@
 #define VTT_APP_H
 
 #include "clock.h"
+#include "ctl.h"
 #include "editor.h"
 #include "input.h"
 #include "map.h"
@@ -115,6 +116,10 @@ typedef struct {
     /* The remote view's server, off until :serve. main polls it. */
     Net net;
 
+    /* The control channel, off until :agent on (docs/CONTROL.md). main
+     * polls it; app_tick runs what it has read. */
+    Ctl ctl;
+
     /* The recovery autosave: a copy of the map written beside its file once
      * the changes have been quiet for a moment, removed by a save or a
      * deliberate discard, and offered back the next time the map is opened
@@ -185,6 +190,14 @@ void app_frame(App *a, Term *t, uint64_t now_ms);
 /* Could the players' frame differ from the GM's right now? Conservative:
  * true unless nothing GM-only is on screen. This is a privacy boundary. */
 int  app_view_differs(const App *a);
+
+/* The control channel (app_ctl.c). Runs one request against the app and
+ * returns the answer, verdict line first, malloc'd, its length in *len.
+ * app_tick hands it every request the socket has read. */
+char *app_ctl_exec(App *a, const char *req, size_t *len);
+/* Why an agent's edit would be refused right now, or NULL when it would
+ * be taken. */
+const char *app_ctl_busy(const App *a);
 void app_set_status(App *a, const char *msg);
 void app_note(App *a, const char *msg);     /* status line + session log */
 void app_note_gm(App *a, const char *msg);  /* the same, kept off the players' frame */
