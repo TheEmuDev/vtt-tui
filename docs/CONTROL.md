@@ -85,11 +85,11 @@ area for a moment. The GM's cursor and camera never move.
 
 ## As built: what the plan did not say
 
-- **One batch, no nesting.** `undo_begin` inside an open batch is ignored but `undo_end`
-  closes it, so the edits call no helper that opens and closes its own batch
-  (`ed_wall_shape`, the turn helpers). That is why `token del` refuses the creature
-  holding the turn -- passing it on is `turn_advance`, which would split the request --
-  and why `room` and `wall` draw their outline themselves.
+- **One batch.** A request opens one undo batch at its first edit; helpers that open their
+  own inside it (`ed_wall_shape`, which `room` and `wall` use) nest in it since undo
+  batches nest. `token del` refuses the creature holding the turn: passing the turn on
+  would move the fight, which is the GM's, as a side effect of a map edit (the user's
+  call, 2026-09-26).
 - **Rolling back** is `undo_abort`: the open batch's ops are applied backwards and
   forgotten. A redo tail the GM had (from an undo of their own) is let go by the first
   op, as any edit would, and does not come back with the rollback.

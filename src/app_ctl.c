@@ -563,18 +563,11 @@ static int label_ok(const Map *m, const char *label, int skip, char *err, size_t
     return 1;
 }
 
-/* The outline of a box of squares: every boundary between a square in it
- * and one outside. */
+/* The outline of a box of squares, as build mode walls a shape. */
 static void outline(Undo *u, Map *m, int x0, int y0, int x1, int y1, uint8_t kind)
 {
-    for (int y = y0; y <= y1; y++) {
-        undo_set_vedge(u, m, x0, y, kind);
-        undo_set_vedge(u, m, x1 + 1, y, kind);
-    }
-    for (int x = x0; x <= x1; x++) {
-        undo_set_hedge(u, m, x, y0, kind);
-        undo_set_hedge(u, m, x, y1 + 1, kind);
-    }
+    EdShape sh = ed_shape(ED_SHAPE_RECT, x0, y0, x1, y1, 0);
+    ed_wall_shape(m, u, &sh, kind);
 }
 
 #define BAD(...) do { snprintf(err, errsz, __VA_ARGS__); return -1; } while (0)
@@ -628,8 +621,8 @@ static int token_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *er
     }
     if (!strcmp(sub, "del")) {
         if (n != 3) BAD("token del WHO");
-        /* Passing the turn on is the fight's business, and a helper that
-         * would close this request's batch part way: the GM's call. */
+        /* Passing the turn on moves the fight, and the fight is the GM's:
+         * an edit to the map must not advance it as a side effect. */
         if (t.turn & TURN_ACTING) BAD("%.30s holds the turn - the GM passes it on first", t.label);
         undo_del_token(u, m, i);
         range_token_removed(&a->play.range, i, t.x, t.y);

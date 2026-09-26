@@ -12852,6 +12852,18 @@ static void test_ctl_edits(void)
     free(after);
     free(before);
 
+    CASE("a room, drawn through the editor's own helper, is rolled back with the rest");
+    before = ctl_snapshot(m);
+    t = ctl_ask(&a, "room A6:C8\nwall E6:F7 door\ntoken move Nobody A1\n");
+    CHECK(strncmp(t, "error: line 3:", 14) == 0);
+    free(t);
+    after = ctl_snapshot(m);
+    CHECK_EQ(strcmp(before, after), 0);
+    CHECK_EQ(a.undo.open, 0);
+    CHECK_EQ(a.undo.nest, 0);
+    free(after);
+    free(before);
+
     CASE("the mistakes an edit can make, each named");
     {
         static const struct { const char *req, *err; } bad[] = {
