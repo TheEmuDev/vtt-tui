@@ -2,7 +2,8 @@
 #define VTT_APP_PRIV_H
 
 /* Shared between app.c and the files split out of it: app_cmd.c holds the
- * : command line and app_play.c the play-mode key handler. Nothing here is
+ * : command line, app_play.c the play-mode key handler, app_draw.c the
+ * frame and app_ctl.c the control channel's requests. Nothing here is
  * for main.c or the tests, which see app.h alone. */
 
 #include "app.h"
@@ -44,6 +45,17 @@ static inline int take_count_raw(Editor *e)
 }
 
 /* app.c */
+/* The main menu, in order. */
+#define APP_MENU_COUNT 3
+extern const char *const APP_MENU_ITEMS[APP_MENU_COUNT];
+static inline int app_menu_visible_rows(const App *a) { return imax(1, a->rnd->h - 10); }
+/* Which key map describes where the GM is now: the bar and the ? page agree. */
+KeyMapId app_keymap_id(const App *a);
+/* The ? page's maps, the one for where it was opened first. */
+int  app_help_order(const App *a, const KeyMap *out[KEYS_COUNT]);
+/* The creature a pending "clear which marker" question is about, or NULL. */
+const Token *app_clear_status_target(const App *a);
+
 void app_open_prompt(App *a, PromptWhat what, const char *title,
                      const char *hint, const char *initial);
 void app_clear_token_status(App *a, int idx, int which);
@@ -69,6 +81,9 @@ int  app_spawn_mirror(App *a, char *msg, size_t msgsz);
 /* app_cmd.c */
 void app_exec_command(App *a, const char *line);
 void app_command_key(App *a, Key k);
+
+/* app_draw.c: the status message and its coloured spans, as the bars draw it. */
+void app_draw_status_msg(App *a, int x, int y, int maxw);
 
 /* app_ctl.c: :agent on, :agent off, :agent to ask. */
 void app_agent_command(App *a, const char *rest);
