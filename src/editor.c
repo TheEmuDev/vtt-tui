@@ -172,7 +172,7 @@ void ed_wall_step(Editor *e, Map *m, Undo *u, int dx, int dy, int times)
     /* The batch is opened here but deliberately not closed: a pen-down
      * stroke stays one undo step until the pen lifts, so `u` takes back the
      * whole run you just drew rather than one segment of it. */
-    if (e->pen) undo_begin(u);
+    if (e->pen) undo_stroke(u);
 
     uint8_t kind = e->erase ? (uint8_t)EDGE_NONE : e->material;
 

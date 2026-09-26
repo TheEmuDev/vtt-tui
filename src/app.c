@@ -1475,7 +1475,7 @@ static void wall_key(App *a, Key k)
 
     if (k.kind == KEY_ESC) {
         if (e->has_anchor) { e->has_anchor = 0; app_set_status(a, "anchor cleared"); return; }
-        undo_end(&a->undo);            /* close any stroke still in progress */
+        undo_stroke_end(&a->undo);     /* close any stroke still in progress */
         e->mode = ED_NORMAL;
         e->pen = e->erase = 0;
         e->cx = iclamp(e->wx, 0, m->w - 1);
@@ -1488,7 +1488,7 @@ static void wall_key(App *a, Key k)
         if (!e->has_anchor) { app_set_status(a, "set an anchor with v or V first"); return; }
 
         EdShape s = ed_shape(e->shape, e->ax, e->ay, e->wx, e->wy, 1);
-        undo_end(&a->undo);            /* the shape is its own step */
+        undo_stroke_end(&a->undo);     /* the shape is its own step */
         ed_wall_shape(m, &a->undo, &s, e->erase ? EDGE_NONE : EDGE_WALL);
         e->has_anchor = 0;
 
@@ -1522,7 +1522,7 @@ static void wall_key(App *a, Key k)
         e->pen = !e->pen;
         /* Lifting the pen ends the stroke, which is what makes the whole run
          * a single undo step. */
-        if (!e->pen) undo_end(&a->undo);
+        if (!e->pen) undo_stroke_end(&a->undo);
         app_set_status(a, e->pen ? "pen down - movement lays wall" : "pen up");
         break;
 
@@ -1530,7 +1530,7 @@ static void wall_key(App *a, Key k)
         /* Erasing is the same tool with the sign flipped, so the pen comes
          * down with it rather than making the user press two keys. Switching
          * direction starts a new stroke. */
-        undo_end(&a->undo);
+        undo_stroke_end(&a->undo);
         e->erase = !e->erase;
         if (e->erase) e->pen = 1;
         app_set_status(a, e->erase ? "erasing - movement clears wall" : "laying wall");
@@ -1559,7 +1559,7 @@ static void wall_key(App *a, Key k)
 
     case 't': {
         /* Changing what the pen lays starts a new stroke. */
-        undo_end(&a->undo);
+        undo_stroke_end(&a->undo);
         ed_cycle_material(e);
         char msg[64];
         snprintf(msg, sizeof msg, "pen lays: %s", edge_name(e->material));

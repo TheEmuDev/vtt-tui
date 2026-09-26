@@ -2943,6 +2943,19 @@ static int file_exists(const char *dir, const char *name)
  * translation, so a test types what a terminal would send: Ctrl-U arrives as
  * 0x15 and becomes MOD_CTRL 'u', and a trailing ESC resolves on the timeout
  * exactly as the event loop resolves it. */
+/* Between keys nothing may be left open in the undo log but a wall stroke
+ * (undo_balanced): every test that types keys checks it, a failure only --
+ * as a CHECK it would add one to the count for every key in the suite. */
+static void press_balanced(const App *a, Key k)
+{
+    static int told;
+    if (undo_balanced(&a->undo)) return;
+    g_fails++;
+    if (told++ < 3)
+        fprintf(stderr, "  FAIL [%s] the undo log is left open (nest %d) after key %d/%u\n",
+                g_case, a->undo.nest, (int)k.kind, (unsigned)k.ch);
+}
+
 static void press(App *a, const char *keys)
 {
     InputParser p;
@@ -2950,8 +2963,8 @@ static void press(App *a, const char *keys)
     input_feed(&p, keys, strlen(keys));
 
     Key k;
-    while (input_next(&p, &k)) app_key(a, k);
-    while (input_pending(&p) && input_timeout(&p, &k)) app_key(a, k);
+    while (input_next(&p, &k)) { app_key(a, k); press_balanced(a, k); }
+    while (input_pending(&p) && input_timeout(&p, &k)) { app_key(a, k); press_balanced(a, k); }
 }
 
 /* The browser reads the working directory AND the user's map directory, so a
@@ -12321,6 +12334,76 @@ static char *ctl_ask(App *a, const char *req)
     return ans;
 }
 
+static void test_undo_nesting(void)
+{
+    Map *m = map_new(6, 4, "n");
+    Undo u;
+    undo_init(&u);
+
+    CASE("a helper's batch inside an operation's is part of it: one step, closed by the outermost end");
+    undo_begin(&u);
+    undo_set_tile(&u, m, 0, 0, TILE_WATER);
+    undo_begin(&u);                                   /* a helper */
+    undo_set_tile(&u, m, 1, 0, TILE_WATER);
+    undo_end(&u);
+    CHECK_EQ(u.open, 1);                              /* still the operation's */
+    CHECK_EQ(undo_balanced(&u), 0);
+    undo_begin(&u);                                   /* a second helper */
+    undo_set_tile(&u, m, 2, 0, TILE_WATER);
+    undo_end(&u);
+    undo_end(&u);
+    CHECK_EQ(u.open, 0);
+    CHECK_EQ(undo_balanced(&u), 1);
+    CHECK_EQ(u.nmarks, 1);
+    undo_undo(&u, m);
+    CHECK(map_tile(m, 0, 0) == TILE_VOID && map_tile(m, 2, 0) == TILE_VOID);
+
+    CASE("a stroke stays open across calls, is balanced between keys, and ends when told");
+    undo_clear(&u);
+    undo_stroke(&u);
+    undo_set_hedge(&u, m, 0, 1, EDGE_WALL);
+    undo_stroke(&u);                                  /* the next step */
+    undo_set_hedge(&u, m, 1, 1, EDGE_WALL);
+    CHECK_EQ(undo_balanced(&u), 1);
+    undo_stroke_end(&u);
+    CHECK_EQ(u.open, 0);
+    CHECK_EQ(u.nmarks, 1);
+
+    CASE("another tool mid-stroke ends the stroke: two steps, as before nesting");
+    undo_clear(&u);
+    undo_stroke(&u);
+    undo_set_hedge(&u, m, 2, 1, EDGE_WALL);
+    undo_begin(&u);                                   /* a fill */
+    undo_set_tile(&u, m, 3, 3, TILE_WATER);
+    undo_end(&u);
+    CHECK_EQ(u.open, 0);
+    CHECK_EQ(u.nmarks, 2);
+
+    CASE("undo and redo close whatever is open, however deep");
+    undo_clear(&u);
+    undo_begin(&u);
+    undo_begin(&u);
+    undo_set_tile(&u, m, 4, 3, TILE_WATER);
+    undo_undo(&u, m);
+    CHECK_EQ(u.open, 0);
+    CHECK_EQ(u.nest, 0);
+    CHECK_EQ(map_tile(m, 4, 3), TILE_VOID);
+
+    CASE("abort forgets a nested batch whole");
+    undo_clear(&u);
+    undo_begin(&u);
+    undo_set_tile(&u, m, 5, 3, TILE_WATER);
+    undo_begin(&u);
+    undo_set_tile(&u, m, 5, 2, TILE_WATER);
+    undo_end(&u);
+    undo_abort(&u, m);
+    CHECK(u.open == 0 && u.nest == 0 && u.nmarks == 0 && u.nops == 0);
+    CHECK(map_tile(m, 5, 3) == TILE_VOID && map_tile(m, 5, 2) == TILE_VOID);
+
+    undo_free(&u);
+    map_free(m);
+}
+
 static void test_ctl(void)
 {
     Renderer r;
@@ -13285,6 +13368,7 @@ int main(void)
         { "grid",   test_grid },
         { "editor", test_editor },
         { "undo",   test_undo },
+        { "undonest", test_undo_nesting },
         { "wire",   test_wire },
         { "mapdiag", test_map_diag },
         { "mapdump", test_map_tools_dump },

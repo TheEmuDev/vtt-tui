@@ -20,14 +20,30 @@ void undo_clear(Undo *u)
 {
     u->nops = u->ntoks = u->nmarks = u->depth = 0;
     u->open = u->started = u->trimmed = 0;
+    u->nest = u->stroke = 0;
     u->stamp++;
 }
 
 void undo_begin(Undo *u)
 {
-    if (u->open) return;
+    if (u->open && u->stroke && u->nest == 0) undo_end(u);
+    if (u->open) { u->nest++; return; }
     u->open    = 1;
     u->started = 0;
+    u->nest    = 0;
+    u->stroke  = 0;
+}
+
+void undo_stroke(Undo *u)
+{
+    if (u->open) return;
+    undo_begin(u);
+    u->stroke = 1;
+}
+
+void undo_stroke_end(Undo *u)
+{
+    if (u->open && u->stroke && u->nest == 0) undo_end(u);
 }
 
 /* Drops whole batches from the front until the log is under UNDO_TRIM_TO.
@@ -62,7 +78,9 @@ static void trim(Undo *u)
 void undo_end(Undo *u)
 {
     if (!u->open) return;
-    u->open = 0;
+    if (u->nest) { u->nest--; return; }
+    u->open   = 0;
+    u->stroke = 0;
 
     /* A batch that recorded nothing must not consume an undo step. */
     if (!u->started) return;
@@ -393,7 +411,7 @@ static int batch_end(const Undo *u, int batch)
 void undo_abort(Undo *u, Map *m)
 {
     if (!u->open) return;
-    u->open = 0;
+    u->open = u->nest = u->stroke = 0;
     if (!u->started) return;
     int lo = u->marks[u->nmarks];
     for (int i = u->nops - 1; i >= lo; i--) apply(u, m, &u->ops[i], 0);
@@ -405,7 +423,7 @@ void undo_abort(Undo *u, Map *m)
 
 int undo_undo(Undo *u, Map *m)
 {
-    if (u->open) undo_end(u);
+    if (u->open) { u->nest = 0; undo_end(u); }
     if (u->depth == 0) return 0;
     PROF_ZONE("undo.step");
     u->stamp++;
@@ -438,7 +456,7 @@ static int batch_is_moves_of(const Undo *u, int b, const int *idx, int nidx)
 
 int undo_rewind_moves(Undo *u, Map *m, int depth, const int *idx, int nidx)
 {
-    if (u->open) undo_end(u);
+    if (u->open) { u->nest = 0; undo_end(u); }
     if (depth < 0) depth = 0;
 
     int undone = 0;
@@ -451,7 +469,7 @@ int undo_rewind_moves(Undo *u, Map *m, int depth, const int *idx, int nidx)
 
 int undo_redo(Undo *u, Map *m)
 {
-    if (u->open) undo_end(u);
+    if (u->open) { u->nest = 0; undo_end(u); }
     if (u->depth >= u->nmarks) return 0;
     PROF_ZONE("undo.step");
     u->stamp++;

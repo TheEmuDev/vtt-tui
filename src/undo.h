@@ -59,6 +59,8 @@ typedef struct {
 
     int  depth;          /* batches currently applied; the redo boundary */
     int  open;           /* a batch is being built */
+    int  nest;           /* undo_begin calls inside it still to be ended */
+    int  stroke;         /* the open batch is a stroke (undo_stroke) */
     int  started;        /* the open batch has recorded at least one op */
     int  trimmed;        /* batches dropped from the front so far (for tests
                             and the profiler; never consulted by the log) */
@@ -72,10 +74,27 @@ void undo_init(Undo *u);
 void undo_free(Undo *u);
 void undo_clear(Undo *u);
 
-/* Opens a batch. Nested calls are ignored, so a helper that records can be
- * called from inside a larger operation without splitting it. */
+/* Opens a batch. Calls nest: a helper that opens and ends its own batch can
+ * be called from inside a larger operation, and only the outermost end
+ * closes it, so the operation stays one step. Opened while a stroke is open,
+ * it ends the stroke first -- another tool is a break in the drawing. An end
+ * with nothing nested closes whatever is open. */
 void undo_begin(Undo *u);
 void undo_end(Undo *u);
+
+/* A stroke: one batch held open across keystrokes, wall mode's pen-down
+ * run, so u takes back the whole run. undo_stroke opens one if nothing is
+ * open and may be called on every step; undo_stroke_end closes it. */
+void undo_stroke(Undo *u);
+void undo_stroke_end(Undo *u);
+
+/* Between keystrokes nothing may be open but a stroke: an operation that
+ * began a batch and never ended it would swallow the next one. The tests
+ * check this after every key. */
+static inline int undo_balanced(const Undo *u)
+{
+    return !u->open || (u->stroke && u->nest == 0);
+}
 
 /* Takes back everything the open batch has recorded and closes it, as if
  * it had never been begun: for an operation that fails part way. The redo
