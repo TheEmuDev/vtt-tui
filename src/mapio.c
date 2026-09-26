@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -219,13 +220,39 @@ int mapio_autosave_newer(const char *path, const char *autosave, long *when)
 
 /* ------------------------------------------------------------------ load */
 
-/* Reads one line without its newline. Returns -1 at EOF. */
-/* One line per call, however long it is: what does not fit the buffer is
+/* A file being read, and who to tell about what it forgives. The line
+ * number is the one just read. */
+typedef struct {
+    FILE     *f;
+    int       line;
+    MapioDiag sink;
+    void     *ctx;
+} Loader;
+
+static void diag(Loader *ld, int line, int col, const char *code, const char *slug,
+                 const char *fmt, ...) __attribute__((format(printf, 6, 7)));
+
+static void diag(Loader *ld, int line, int col, const char *code, const char *slug,
+                 const char *fmt, ...)
+{
+    if (!ld->sink) return;
+    char msg[256];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(msg, sizeof msg, fmt, ap);
+    va_end(ap);
+    ld->sink(ld->ctx, line, col, code, slug, msg);
+}
+
+/* Reads one line without its newline. Returns -1 at EOF.
+ * One line per call, however long it is: what does not fit the buffer is
  * discarded rather than handed back as a line of its own, so an oversized
  * record cannot desynchronise the ones after it. */
-static int read_line(FILE *f, char *buf, size_t bufsz)
+static int read_line(Loader *ld, char *buf, size_t bufsz)
 {
+    FILE *f = ld->f;
     if (!fgets(buf, (int)bufsz, f)) return -1;
+    ld->line++;
     size_t n = strlen(buf);
     if (n && buf[n - 1] != '\n') {
         int c;
@@ -255,6 +282,81 @@ static void parse_edge_row(const char *line, uint8_t *row, int n)
         int k = (size_t)i < len ? edge_from_file_char(line[i]) : EDGE_NONE;
         row[i] = (uint8_t)(k >= 0 ? k : EDGE_NONE);
     }
+}
+
+/* The words a record line starts with. A section's row that begins with
+ * one is a record the section swallowed because it was short. */
+static int looks_like_record(const char *line)
+{
+    static const char *const words[] = {
+        "tiles", "vedges", "hedges", "fog", "fogpatch", "token", "tokenstatus",
+        "tokenturn", "tokencounter", "tokennote", "note", "spotlight", "clock",
+        "roll", "round", "name", "size", "zoom", "scale", "ruleset", "metric", NULL,
+    };
+    size_t n = 0;
+    while (line[n] >= 'a' && line[n] <= 'z') n++;
+    if (!n || (line[n] && line[n] != ' ')) return 0;
+    for (int i = 0; words[i]; i++)
+        if (strlen(words[i]) == n && !strncmp(words[i], line, n)) return 1;
+    return 0;
+}
+
+/* Is every character one a row of some section could hold? For an unknown
+ * line that is really a row one too many. */
+static int looks_like_row(const char *line)
+{
+    if (!*line) return 0;
+    for (const char *p = line; *p; p++)
+        if (tile_from_file_char(*p) < 0 && edge_from_file_char(*p) < 0 && *p != '-') return 0;
+    return 1;
+}
+
+/* One section of rows, read by index as it always is, with what it
+ * forgives told: rows too long, characters it does not know, a record it
+ * swallowed, the file ending inside it. Short rows are the format's own
+ * leniency, counted once for the section. `kind` 0 tiles, 1 edges, 2 fog. */
+typedef struct { const char *name; int rows, width, kind; int shorts, first_short; } Section;
+
+static int section_row(Loader *ld, Section *sec, int y, char *line, size_t cap)
+{
+    if (read_line(ld, line, cap) < 0) {
+        diag(ld, ld->line, -1, "E011", "section-short",
+             "the file ends inside '%s' after %d of %d rows", sec->name, y, sec->rows);
+        return -1;
+    }
+    if (!ld->sink) return 0;
+    if (looks_like_record(line)) {
+        diag(ld, ld->line, -1, "E011", "section-short",
+             "'%.24s' read as %s row %d of %d: the section is short", line, sec->name, y + 1, sec->rows);
+        return 0;
+    }
+    int len = (int)strlen(line);
+    if (len > sec->width)
+        diag(ld, ld->line, sec->width, "E010", "row-long",
+             "%s row %d is %d characters, the map needs %d; the rest is ignored",
+             sec->name, y + 1, len, sec->width);
+    else if (len < sec->width && !sec->shorts++)
+        sec->first_short = ld->line;
+    for (int x = 0; x < len && x < sec->width; x++) {
+        char c = line[x];
+        int  ok = sec->kind == 0 ? tile_from_file_char(c) >= 0
+                : sec->kind == 1 ? edge_from_file_char(c) >= 0 || c == '-'
+                : 1;
+        if (!ok) {
+            diag(ld, ld->line, x, "E013", "bad-char", "'%c' in %s row %d, column %d, reads as %s",
+                 c, sec->name, y + 1, x + 1, sec->kind == 0 ? "void" : "no boundary");
+            break;
+        }
+    }
+    return 0;
+}
+
+static void section_done(Loader *ld, const Section *sec)
+{
+    if (sec->shorts)
+        diag(ld, sec->first_short, -1, "N021", "row-short",
+             "%d %s row%s shorter than %d; the rest reads as %s", sec->shorts, sec->name,
+             sec->shorts == 1 ? " is" : "s are", sec->width, sec->kind == 0 ? "void" : "empty");
 }
 
 /* Copies the text between the first quote and the last, so a label may hold
@@ -449,11 +551,18 @@ static int parse_token_line(Map *m, const char *line)
 
 Map *mapio_load(const char *path, char *err, size_t errsz)
 {
+    return mapio_load_diag(path, err, errsz, NULL, NULL);
+}
+
+Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, void *ctx)
+{
     FILE *f = fopen(path, "r");
     if (!f) {
         snprintf(err, errsz, "cannot open %s: %s", path, strerror(errno));
         return NULL;
     }
+    Loader  L  = { f, 0, sink, ctx };
+    Loader *ld = &L;
 
     char   line[MAP_MAX_DIM + 64];
     int    version = 0, w = 0, h = 0, zoom = 1;
@@ -462,7 +571,7 @@ Map *mapio_load(const char *path, char *err, size_t errsz)
     int    metric = MAP_METRIC_DEFAULT;
     char   ruleset[MAP_RULESET_MAX] = "";
 
-    if (read_line(f, line, sizeof line) < 0 || sscanf(line, "VTT %d", &version) != 1) {
+    if (read_line(ld, line, sizeof line) < 0 || sscanf(line, "VTT %d", &version) != 1) {
         snprintf(err, errsz, "%s is not a vtt map", path);
         fclose(f);
         return NULL;
@@ -476,22 +585,27 @@ Map *mapio_load(const char *path, char *err, size_t errsz)
 
     /* Header lines may appear in any order; the body sections must follow. */
     long body_start = ftell(f);
-    while (read_line(f, line, sizeof line) >= 0) {
+    int  body_line  = ld->line;
+    int  zoom_line = 0, scale_line = 0, ruleset_line = 0;
+    while (read_line(ld, line, sizeof line) >= 0) {
         if (!strncmp(line, "name ", 5))       str_lcpy(name, line + 5, sizeof name);
         else if (!strncmp(line, "size ", 5))  sscanf(line, "size %d %d", &w, &h);
-        else if (!strncmp(line, "zoom ", 5))  sscanf(line, "zoom %d", &zoom);
-        else if (!strncmp(line, "scale ", 6)) sscanf(line, "scale %lf", &scale);
-        else if (!strncmp(line, "ruleset ", 8))
+        else if (!strncmp(line, "zoom ", 5))  { sscanf(line, "zoom %d", &zoom); zoom_line = ld->line; }
+        else if (!strncmp(line, "scale ", 6)) { sscanf(line, "scale %lf", &scale); scale_line = ld->line; }
+        else if (!strncmp(line, "ruleset ", 8)) {
             str_lcpy(ruleset, line + 8, sizeof ruleset);
+            ruleset_line = ld->line;
+        }
         else if (!strncmp(line, "metric ", 7)) {
             char mn[32] = { 0 };
-            if (sscanf(line, "metric %31s", mn) == 1) {
-                int got = dist_metric_from_name(mn);
-                if (got >= 0) metric = got;
-            }
+            int  got = sscanf(line, "metric %31s", mn) == 1 ? dist_metric_from_name(mn) : -1;
+            if (got >= 0) metric = got;
+            else diag(ld, ld->line, -1, "W017", "unknown-metric",
+                      "'%.40s': chebyshev, euclidean, alt or manhattan; chebyshev is used", line + 7);
         }
-        else { fseek(f, body_start, SEEK_SET); break; }
+        else { fseek(f, body_start, SEEK_SET); ld->line = body_line; break; }
         body_start = ftell(f);
+        body_line  = ld->line;
     }
 
     if (w < MAP_MIN_DIM || h < MAP_MIN_DIM || w > MAP_MAX_DIM || h > MAP_MAX_DIM) {
@@ -502,17 +616,31 @@ Map *mapio_load(const char *path, char *err, size_t errsz)
 
     Map *m = map_new(w, h, name);
     m->zoom = iclamp(zoom, 0, 3);
+    if (m->zoom != zoom) diag(ld, zoom_line, -1, "W020", "clamped", "zoom %d is not 0-3; %d is used", zoom, m->zoom);
 
     /* A nonsensical scale would make every measurement nonsense, so fall back
      * rather than trust it. */
     m->scale_ft = (scale > 0.0 && scale < 100000.0) ? scale : MAP_SCALE_DEFAULT;
+    if (m->scale_ft != scale)
+        diag(ld, scale_line, -1, "W020", "clamped", "scale %g is not a length; %g ft is used", scale, m->scale_ft);
     m->metric   = metric;
     if (ruleset_by_name(ruleset)) str_lcpy(m->ruleset, ruleset, sizeof m->ruleset);
+    else if (ruleset[0])
+        diag(ld, ruleset_line, -1, "W016", "unknown-ruleset", "no ruleset called '%.40s'; the map has none", ruleset);
+    int fog_line = 0;
 
-    while (read_line(f, line, sizeof line) >= 0) {
+    /* A record that did not parse is dropped, as ever; told, it names the
+     * line. */
+#define RECORD(call, what) do { if ((call) < 0) \
+        diag(ld, ld->line, -1, "E014", "bad-record", "%s dropped: '%.60s'", (what), line); } while (0)
+
+    int stray_at = -1;
+    while (read_line(ld, line, sizeof line) >= 0) {
         if (!strcmp(line, "fog")) {
+            Section sec = { "fog", h, w, 2, 0, 0 };
+            fog_line = ld->line;
             for (int y = 0; y < h; y++) {
-                if (read_line(f, line, sizeof line) < 0) break;
+                if (section_row(ld, &sec, y, line, sizeof line) < 0) break;
                 parse_fog_row(m, y, line);
             }
         } else if (!strcmp(line, "fog on")) {
@@ -520,46 +648,72 @@ Map *mapio_load(const char *path, char *err, size_t errsz)
         } else if (!strcmp(line, "fog soft-edge")) {
             m->fog_soft_edge = 1;
         } else if (!strncmp(line, "fogpatch ", 9)) {
-            parse_fogpatch_line(m, line);
+            RECORD(parse_fogpatch_line(m, line), "fog patch");
         } else if (!strcmp(line, "tiles")) {
+            Section sec = { "tiles", h, w, 0, 0, 0 };
             for (int y = 0; y < h; y++) {
-                if (read_line(f, line, sizeof line) < 0) break;
+                if (section_row(ld, &sec, y, line, sizeof line) < 0) break;
                 parse_tile_row(line, m->tiles + (size_t)y * (size_t)w, w);
             }
+            section_done(ld, &sec);
         } else if (!strcmp(line, "vedges")) {
+            Section sec = { "vedges", h, w + 1, 1, 0, 0 };
             for (int y = 0; y < h; y++) {
-                if (read_line(f, line, sizeof line) < 0) break;
+                if (section_row(ld, &sec, y, line, sizeof line) < 0) break;
                 parse_edge_row(line, m->vedges + (size_t)y * (size_t)(w + 1), w + 1);
             }
         } else if (!strcmp(line, "hedges")) {
+            Section sec = { "hedges", h + 1, w, 1, 0, 0 };
             for (int y = 0; y <= h; y++) {
-                if (read_line(f, line, sizeof line) < 0) break;
+                if (section_row(ld, &sec, y, line, sizeof line) < 0) break;
                 parse_edge_row(line, m->hedges + (size_t)y * (size_t)w, w);
             }
         } else if (!strncmp(line, "token ", 6)) {
-            parse_token_line(m, line);
+            int before = m->tokens.n;
+            RECORD(parse_token_line(m, line), "token");
+            if (m->tokens.n > before) {
+                int size = 0;
+                if (sscanf(line, "token %*s %*d %*d %d", &size) == 1 && size != m->tokens.v[before].size)
+                    diag(ld, ld->line, -1, "W020", "clamped", "token size %d is not 1-%d; %d is used",
+                         size, TOKEN_SIZE_MAX, m->tokens.v[before].size);
+            }
         } else if (!strncmp(line, "tokenstatus ", 12)) {
-            parse_status_line(m, line);
+            RECORD(parse_status_line(m, line), "marker");
         } else if (!strncmp(line, "tokenturn ", 10)) {
-            parse_turn_line(m, line);
+            RECORD(parse_turn_line(m, line), "turn");
         } else if (!strncmp(line, "tokencounter ", 13)) {
-            parse_counter_line(m, line);
+            RECORD(parse_counter_line(m, line), "counter");
         } else if (!strncmp(line, "tokennote ", 10)) {
-            parse_token_note_line(m, line);
+            RECORD(parse_token_note_line(m, line), "creature note");
         } else if (!strncmp(line, "note ", 5)) {
-            parse_note_line(m, line);
+            RECORD(parse_note_line(m, line), "note");
         } else if (!strcmp(line, "spotlight gm")) {
             m->spotlight = SPOTLIGHT_GM;
         } else if (!strncmp(line, "clock ", 6)) {
-            parse_clock_line(m, line);
+            RECORD(parse_clock_line(m, line), "clock");
         } else if (!strncmp(line, "roll ", 5)) {
-            parse_roll_line(m, line);
+            RECORD(parse_roll_line(m, line), "named roll");
         } else if (!strncmp(line, "round ", 6)) {
             int round = 0;
-            if (sscanf(line, "round %d", &round) == 1) m->round = iclamp(round, 0, INT16_MAX);
+            if (sscanf(line, "round %d", &round) == 1) {
+                m->round = iclamp(round, 0, INT16_MAX);
+                if (m->round != round)
+                    diag(ld, ld->line, -1, "W020", "clamped", "round %d is out of range; %d is used", round, m->round);
+            }
+        } else if (ld->sink && looks_like_row(line)) {
+            /* The first of a run: a swallowed header strands every row of
+             * the section it began, and one finding says so. */
+            if (stray_at != ld->line - 1)
+                diag(ld, ld->line, -1, "W019", "stray-row",
+                     "rows outside any section, ignored: is the section before them one row too long, "
+                     "or its header swallowed by a short one?");
+            stray_at = ld->line;
+        } else if (ld->sink && line[0]) {
+            /* Unknown lines are ignored so a newer writer stays loadable. */
+            diag(ld, ld->line, -1, "W015", "unknown-line", "ignored: '%.60s'", line);
         }
-        /* Unknown lines are ignored so a newer writer stays loadable. */
     }
+#undef RECORD
     fclose(f);
     turn_sanitize(m);
     /* A fog row that names a patch no fogpatch line created is no fog; and
@@ -567,12 +721,21 @@ Map *mapio_load(const char *path, char *err, size_t errsz)
      * in -- a fogpatch line after the section, or twice, would otherwise
      * leave painted ground under an empty extent, and hide nothing. */
     for (int i = 0; i < FOG_PATCH_MAX; i++) { m->fog_patches[i].x0 = 0; m->fog_patches[i].x1 = -1; }
+    unsigned told = 0;
     for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++) {
             uint8_t fb = m->fog[(size_t)y * (size_t)w + (size_t)x];
             int id = fb & FOG_ID;
             if (!id) continue;
-            if (!m->fog_patches[id - 1].name[0]) m->fog[(size_t)y * (size_t)w + (size_t)x] = 0;
+            if (!m->fog_patches[id - 1].name[0]) {
+                m->fog[(size_t)y * (size_t)w + (size_t)x] = 0;
+                if (!(told & (1u << id))) {
+                    told |= 1u << id;
+                    diag(ld, fog_line ? fog_line + 1 + y : 0, x, "W018", "fog-unknown-patch",
+                         "fog row %d names patch %d ('%c'), which no fogpatch line creates; read as no fog",
+                         y + 1, id, 'A' + id - 1);
+                }
+            }
             else map_fog_set(m, x, y, fb);
         }
 

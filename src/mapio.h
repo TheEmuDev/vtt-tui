@@ -25,6 +25,16 @@ int  mapio_autosave_newer(const char *path, const char *autosave, long *when);
 /* Returns NULL on failure with a human-readable reason in err. */
 Map *mapio_load(const char *path, char *err, size_t errsz);
 
+/* The same load, telling `sink` about everything it forgives: the loader
+ * reads a damaged map as best it can and says nothing, which is right for
+ * opening one and wrong for writing one. `line` is 1-based (0 when a
+ * finding has no line), `col` 0-based (-1 for none); `code` is a stable
+ * identifier like "E011" and `slug` its name, "section-short". What loads
+ * is exactly what mapio_load would load. vtt --check is built on it. */
+typedef void (*MapioDiag)(void *ctx, int line, int col, const char *code,
+                          const char *slug, const char *msg);
+Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, void *ctx);
+
 typedef struct {
     char name[128];
     char path[MAP_PATH_MAX];

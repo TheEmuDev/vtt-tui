@@ -1201,6 +1201,29 @@ and `note x y` puts one on a square.
 | wood | `=` | | secret door | `S` |
 | hazard | `^` | | open secret | `s` |
 
+**The boundary rows are the easy part to get wrong by hand.** A wall sits *between* two
+squares, so a map `w` wide has `w + 1` vertical boundaries a row (one each side of every
+square), and `h + 1` rows of horizontal ones (one above every row and one below the last).
+A 3x2 room with a door in its east wall, and a window in the middle of its south wall:
+
+```
+size 3 2
+tiles
+...
+...
+vedges          # 2 rows of 4: west wall, two gaps, east wall
+|  |
+|  +
+hedges          # 3 rows of 3: above row 1, between the rows, below row 2
+---
+
+-%-
+```
+
+The rows are read by count, not by looking for the next header: a `vedges` section one
+row short reads the `hedges` line as its last row, and every section after it shifts. The
+map still loads. [`vtt --check`](#map-tools-dump-map-check-describe) names the line.
+
 Version 2 added terrain and the boundary kinds. A version 1 reader would take a closed door
 for an opening and water for a hole, so it refuses the file rather than misreading a sealed
 room as open. Version 3 added status markers: an older reader would ignore those lines and

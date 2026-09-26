@@ -8704,6 +8704,168 @@ static void test_net_primitives(void)
     CHECK_EQ(strcmp(acc, "s3pPLMBiTxaQ9kYGzzhZRbK+xOo="), 0);
 }
 
+/* ------------------------------------------------------------ map diagnostics */
+
+typedef struct { char codes[64][8]; int lines[64]; int n; } DiagLog;
+
+static void diag_collect(void *ctx, int line, int col, const char *code, const char *slug, const char *msg)
+{
+    (void)col; (void)slug; (void)msg;
+    DiagLog *d = ctx;
+    if (d->n < 64) { str_lcpy(d->codes[d->n], code, sizeof d->codes[0]); d->lines[d->n] = line; d->n++; }
+}
+
+static int diag_has(const DiagLog *d, const char *code)
+{
+    for (int i = 0; i < d->n; i++) if (!strcmp(d->codes[i], code)) return 1;
+    return 0;
+}
+
+static int diag_line(const DiagLog *d, const char *code)
+{
+    for (int i = 0; i < d->n; i++) if (!strcmp(d->codes[i], code)) return d->lines[i];
+    return -1;
+}
+
+/* Loads `text` through the diagnostic loader; returns the map (freed by
+ * the caller) and what it said. */
+static Map *diag_load(const char *dir, const char *text, DiagLog *d)
+{
+    char path[600], err[256];
+    snprintf(path, sizeof path, "%s/d.vtt", dir);
+    FILE *f = fopen(path, "w");
+    if (!f) return NULL;
+    fputs(text, f);
+    fclose(f);
+    memset(d, 0, sizeof *d);
+    return mapio_load_diag(path, err, sizeof err, diag_collect, d);
+}
+
+/* The loader forgives a damaged map and, asked, says what it forgave: with
+ * the line, and without changing what loads. */
+static void test_map_diag(void)
+{
+    Sandbox sb = sandbox_enter("mapdiag");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    DiagLog d;
+    char err[256];
+
+    CASE("the shipped fixtures load without a word");
+    static const char *const clean[] = { "tests/fixtures/two-rooms.vtt", "tests/fixtures/kinds.vtt",
+                                         "tests/fixtures/crowd.vtt" };
+    char here[1024];
+    for (size_t i = 0; i < 3; i++) {
+        snprintf(here, sizeof here, "%s/%s", sb.cwd, clean[i]);
+        memset(&d, 0, sizeof d);
+        Map *m = mapio_load_diag(here, err, sizeof err, diag_collect, &d);
+        CHECK(m != NULL);
+        int loud = 0;
+        for (int k = 0; k < d.n; k++) loud += d.codes[k][0] != 'N';
+        CHECK_EQ(loud, 0);
+        map_free(m);
+    }
+
+    CASE("a vedges section one row short swallows the hedges header, and says so at that line");
+    Map *m = diag_load(sb.dir,
+        "VTT 2\nsize 3 2\ntiles\n...\n...\n"
+        "vedges\n|  |\n"                                   /* one row, not two */
+        "hedges\n---\n   \n---\n", &d);
+    CHECK(m != NULL);
+    CHECK(diag_has(&d, "E011"));
+    CHECK_EQ(diag_line(&d, "E011"), 8);                    /* 'hedges' is line 8 */
+    CHECK(diag_has(&d, "W019"));                           /* the stranded hedges rows */
+    int strays = 0;
+    for (int k = 0; k < d.n; k++) strays += !strcmp(d.codes[k], "W019");
+    CHECK_EQ(strays, 1);                                   /* one finding for the run */
+    map_free(m);
+
+    CASE("a section one row long leaves a stray row; a row too long is cut, and says where");
+    m = diag_load(sb.dir,
+        "VTT 2\nsize 3 2\ntiles\n...\n....\n...\n"         /* second row long, then one too many */
+        "vedges\n|  |\n|  |\nhedges\n---\n   \n---\n", &d);
+    CHECK(diag_has(&d, "E010"));
+    CHECK_EQ(diag_line(&d, "E010"), 5);
+    CHECK(diag_has(&d, "W019"));
+    CHECK_EQ(diag_line(&d, "W019"), 6);
+    map_free(m);
+
+    CASE("a character no row knows reads as empty and is named with its column");
+    m = diag_load(sb.dir, "VTT 2\nsize 3 1\ntiles\n.X.\nvedges\n| Q|\nhedges\n---\n---\n", &d);
+    CHECK(diag_has(&d, "E013"));
+    CHECK_EQ(map_tile(m, 1, 0), TILE_VOID);                /* loaded exactly as before */
+    int bad = 0;
+    for (int k = 0; k < d.n; k++) bad += !strcmp(d.codes[k], "E013");
+    CHECK_EQ(bad, 2);
+    map_free(m);
+
+    CASE("records that do not parse are named, dropped as ever");
+    m = diag_load(sb.dir,
+        "VTT 6\nsize 3 2\ntiles\n...\n...\n"
+        "tokenstatus red \"Early\"\n"                      /* no token yet */
+        "token player 9 9 1 \"Off\"\n"                     /* off the map */
+        "token enemy 0 0 7 \"Big\"\n"                      /* size clamped */
+        "note 5 5 \"nowhere\"\n"
+        "clock 3 4\n"
+        "fogpatch 99 Bad reveal 1\n"
+        "mystery line\n", &d);
+    CHECK(m != NULL);
+    int records = 0;
+    for (int k = 0; k < d.n; k++) records += !strcmp(d.codes[k], "E014");
+    CHECK_EQ(records, 5);
+    CHECK_EQ(diag_line(&d, "E014"), 6);
+    CHECK(diag_has(&d, "W020"));
+    CHECK(diag_has(&d, "W015"));
+    CHECK_EQ(m->tokens.n, 1);
+    map_free(m);
+
+    CASE("header settings it does not know or cannot use");
+    m = diag_load(sb.dir, "VTT 5\nsize 2 1\nzoom 9\nscale -3\nruleset nosuch\nmetric bent\ntiles\n..\n", &d);
+    CHECK(diag_has(&d, "W016"));
+    CHECK(diag_has(&d, "W017"));
+    CHECK_EQ(diag_line(&d, "W017"), 6);
+    int clamps = 0;
+    for (int k = 0; k < d.n; k++) clamps += !strcmp(d.codes[k], "W020");
+    CHECK_EQ(clamps, 2);
+    CHECK_EQ(m->zoom, 3);
+    map_free(m);
+
+    CASE("short rows are the format's leniency: one note a section, not a failure");
+    m = diag_load(sb.dir, "VTT 2\nsize 4 3\ntiles\n..\n.\n....\n", &d);
+    CHECK(diag_has(&d, "N021"));
+    int notes = 0;
+    for (int k = 0; k < d.n; k++) notes += !strcmp(d.codes[k], "N021");
+    CHECK_EQ(notes, 1);
+    CHECK_EQ(diag_line(&d, "N021"), 4);
+    map_free(m);
+
+    CASE("a fog row naming a patch no line creates, told once for that patch");
+    m = diag_load(sb.dir, "VTT 6\nsize 3 2\ntiles\n...\n...\nfog on\nfogpatch 1 Crypt\nfog\nAC.\n.CC\n", &d);
+    int unknown = 0;
+    for (int k = 0; k < d.n; k++) unknown += !strcmp(d.codes[k], "W018");
+    CHECK_EQ(unknown, 1);
+    CHECK_EQ(diag_line(&d, "W018"), 9);
+    CHECK_EQ(fog_at(m, 1, 0) & FOG_ID, 0);
+    map_free(m);
+
+    CASE("a file that ends inside a section says so");
+    m = diag_load(sb.dir, "VTT 2\nsize 2 3\ntiles\n..\n", &d);
+    CHECK(diag_has(&d, "E011"));
+    map_free(m);
+
+    CASE("without a sink the loader is silent and loads the same map");
+    char path[600];
+    snprintf(path, sizeof path, "%s/d.vtt", sb.dir);
+    Map *a1 = mapio_load(path, err, sizeof err);
+    Map *a2 = mapio_load_diag(path, err, sizeof err, diag_collect, &d);
+    CHECK(a1 && a2);
+    if (a1 && a2) CHECK_EQ(memcmp(a1->tiles, a2->tiles, (size_t)a1->w * (size_t)a1->h), 0);
+    map_free(a1);
+    map_free(a2);
+
+    sandbox_leave(&sb);
+}
+
 /* A loopback client of the server under test. */
 static int net_connect(uint16_t port)
 {
@@ -11699,6 +11861,7 @@ int main(void)
         { "editor", test_editor },
         { "undo",   test_undo },
         { "wire",   test_wire },
+        { "mapdiag", test_map_diag },
         { "netprim", test_net_primitives },
         { "netserver", test_net_server },
         { "netmsg", test_net_msg },
