@@ -129,6 +129,24 @@ Bench scripts replay whole; no toggles — use loop-neutral pairs (`llllhhhh`,
   `grep -n` in a subshell); `ESC` + letter in a script means Alt; scratch files go in
   the session scratchpad, not the repo.
 
+## Watch list
+
+Tech debt looked at in the 2026-09-26 health check and left on purpose. Each
+has the point at which it stops being cheap to ignore; check it whenever the
+code it names is touched, and move an item out of here once it is fixed.
+
+- **`tests/run.c` is one file** (13k+ lines, 100+ suites). Fine while it builds
+  in seconds and the suite table stays the index. Split by area (net, fog, map
+  tools, control, play) when a change regularly means scrolling through
+  unrelated suites, or the ASan build of it passes about 30 s.
+- **`app_exec_command` is a chain of `strcmp`s** (about 34 verbs). Fine while
+  each verb parses its own words. Make it a table once several commands share
+  flag parsing (`--x`/`--no-x`, like `:serve`'s), or it passes about 50 verbs.
+- **Squares and regions are parsed in two places:** `maptools_region` (clips,
+  takes a bare row `5:6`) and app_ctl.c's `region` (strict, refuses off-map).
+  Two is within the rule of three; a third caller makes them one function
+  with a clip flag, before the third copy is written.
+
 ## Docs to keep in step
 
 `README.md` (keys tables, feature sections, *Rulesets*, *File format*),
