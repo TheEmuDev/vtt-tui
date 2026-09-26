@@ -543,7 +543,9 @@ keystroke is 0.2µs.
 **`stamp.show` is the preview of a stamp on the cursor**, and it is the stamp's size, not
 the map's: its squares, boundaries and creatures are swapped into the map for the one draw
 and swapped straight back, with nothing touched that sight or the autosave watch. A 20×20
-stamp is about 10µs at worst on a 200×200 map (`build, stamp 20x20`); `stamp.place`, the
+stamp is under 10µs a draw at the p99 and about 20µs at worst on a 200×200 map
+(`build, stamp 20x20`); turning or mirroring one (`stamp.turn`) is a new stamp built once,
+on the key, never a frame's work; `stamp.place`, the
 real thing, is one batch of undo edits, a fill's cost.
 
 **`ctl` is an agent's request, and it is dearest when it reads the most.** A 40×40

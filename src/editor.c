@@ -261,6 +261,9 @@ void ed_wall_shape(Map *m, Undo *u, const EdShape *s, uint8_t kind)
 {
     undo_begin(u);
     if (s->kind != ED_SHAPE_CIRCLE) {
+        /* A box of no squares -- wall mode's anchor on the cursor's own
+         * line -- has no outline, as the tile walk found none. */
+        if (s->x1 < s->x0 || s->y1 < s->y0) { undo_end(u); return; }
         /* A box's outline is its four sides: walk those, not every tile
          * inside asking whether its neighbours are in. The same faces. */
         for (int y = s->y0; y <= s->y1; y++) {

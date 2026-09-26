@@ -226,9 +226,14 @@ has no boundary, the map's boundary stays -- so a pillar adds its walls and noth
 It is all or nothing: a stamp that would run off the map, stand a creature on void or on
 another creature, or bring more square notes than the map holds is refused where it is,
 and the preview stays up to be moved. A copied creature arrives fresh, with no markers and
-no place in a fight, and a label already on the map gets a number (`Ogre 2`).
+no place in a fight -- its note and counters come with it, as they are part of what it is --
+and a label already on the map gets a number (`Ogre 2`). The status line always reads the
+turn first and the mirror after (`turned 90, mirrored`), which is the order an agent's
+`stamp ... rotate 90 mirror` applies them. `:` works over a stamp and comes back to it, so
+`:J6` jumps it there.
 
-`:stamp save Table` keeps the stamp in hand under a name; `:stamp Table` picks it up again,
+`:stamp save Table` keeps the stamp in hand under a name (a stamp of that name already
+kept is replaced); `:stamp Table` picks it up again,
 on the cursor; `:stamp Table -f` puts it down at the cursor at once, with no preview;
 `:stamp` lists them. The one in hand survives closing the map, so a piece of one map goes
 down on another. Saved stamps are ordinary map files, one a stamp, in

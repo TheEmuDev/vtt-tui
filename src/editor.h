@@ -89,6 +89,7 @@ typedef struct {
     int    labels;
 
     TextPrompt cmd;            /* the `:` line */
+    int    cmd_from_stamp;     /* it was opened over a stamp, and goes back to it */
 } Editor;
 
 void ed_init(Editor *e, const Map *m);

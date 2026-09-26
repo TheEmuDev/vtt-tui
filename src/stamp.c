@@ -278,7 +278,10 @@ int stamp_list(char (*names)[MAP_NAME_MAX], int max)
     stamp_dir(dir, sizeof dir);
     DIR *d = opendir(dir);
     if (!d) return 0;
-    int n = 0;
+    /* All of them, sorted, then the first max: a listing cut short is cut
+     * at the end of the alphabet, not wherever the directory happened to. */
+    char (*all)[MAP_NAME_MAX] = NULL;
+    int n = 0, cap = 0;
     struct dirent *e;
     while ((e = readdir(d))) {
         size_t len = strlen(e->d_name);
@@ -287,11 +290,16 @@ int stamp_list(char (*names)[MAP_NAME_MAX], int max)
         memcpy(name, e->d_name, len - 4);
         name[len - 4] = '\0';
         if (!stamp_name_ok(name)) continue;
-        if (n < max) str_lcpy(names[n], name, MAP_NAME_MAX);
-        n++;
+        if (n == cap) {
+            cap = cap ? cap * 2 : 32;
+            all = xrealloc(all, (size_t)cap * MAP_NAME_MAX);
+        }
+        str_lcpy(all[n++], name, MAP_NAME_MAX);
     }
     closedir(d);
-    if (n > 1) qsort(names, (size_t)imin(n, max), MAP_NAME_MAX, name_cmp);
+    if (n > 1) qsort(all, (size_t)n, MAP_NAME_MAX, name_cmp);
+    for (int i = 0; i < n && i < max; i++) str_lcpy(names[i], all[i], MAP_NAME_MAX);
+    free(all);
     return n;
 }
 
@@ -355,6 +363,18 @@ void stamp_show(Map *m, const Map *s, int x, int y, StampShow *sv)
     m->tokens.v = sv->both;
     m->tokens.n = n;
     m->tokens.cap = n;
+
+    /* Its notes, after the map's while there is room: the marks are drawn
+     * by square, so one shown twice on a square is one mark. */
+    sv->nnotes = m->nnotes;
+    for (int i = 0; i < s->nnotes && m->nnotes < MAP_NOTES_MAX; i++) {
+        int nx = x + s->notes[i].x, ny = y + s->notes[i].y;
+        if (!map_in_bounds(m, nx, ny)) continue;
+        m->notes[m->nnotes] = s->notes[i];
+        m->notes[m->nnotes].x = (int16_t)nx;
+        m->notes[m->nnotes].y = (int16_t)ny;
+        m->nnotes++;
+    }
     sv->shown = 1;
 }
 
@@ -374,6 +394,7 @@ void stamp_unshow(Map *m, StampShow *sv)
             m->hedges[(size_t)(sv->y + yy) * (size_t)m->w + (size_t)(sv->x + xx)] =
                 sv->hedges[(size_t)yy * (size_t)sv->w + (size_t)xx];
     m->tokens = sv->tokens;
+    m->nnotes = sv->nnotes;
     free(sv->tiles); free(sv->vedges); free(sv->hedges); free(sv->both);
     memset(sv, 0, sizeof *sv);
 }

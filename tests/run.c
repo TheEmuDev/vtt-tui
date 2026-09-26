@@ -12408,6 +12408,37 @@ static void test_stamps(void)
         free(a); free(b); map_free(m1); map_free(m2);
     }
 
+    CASE("mirroring moves a creature by its size: a 2x2 at the west edge of 4 wide lands at x 2");
+    {
+        Map *one = map_new(4, 2, "one");
+        Token t;
+        memset(&t, 0, sizeof t);
+        t.size = 2;
+        tokens_add(&one->tokens, t);
+        Map *mm = stamp_mirrored(one);
+        CHECK(mm->tokens.v[0].x == 2 && mm->tokens.v[0].y == 0);
+        map_free(mm);
+        map_free(one);
+    }
+
+    CASE("an empty box has no outline: a box of corners in one line lays nothing");
+    {
+        Map *m = map_new(6, 4, "m");
+        Undo u;
+        undo_init(&u);
+        EdShape line = ed_shape(ED_SHAPE_RECT, 2, 1, 2, 3, 1);   /* two corners, one column */
+        ed_wall_shape(m, &u, &line, EDGE_WALL);
+        CHECK_EQ(u.nmarks, 0);
+        for (int y = 0; y < 4; y++) CHECK_EQ(map_vedge(m, 2, y), EDGE_NONE);
+        EdShape box = ed_shape(ED_SHAPE_RECT, 1, 1, 3, 3, 1);    /* a 2x2 between corners */
+        ed_wall_shape(m, &u, &box, EDGE_WALL);
+        CHECK(map_vedge(m, 1, 1) == EDGE_WALL && map_vedge(m, 3, 2) == EDGE_WALL &&
+              map_hedge(m, 2, 1) == EDGE_WALL && map_hedge(m, 1, 3) == EDGE_WALL);
+        CHECK(map_vedge(m, 2, 1) == EDGE_NONE);
+        undo_free(&u);
+        map_free(m);
+    }
+
     CASE("copying: squares, every boundary round them, creatures wholly inside, notes; fresh creatures");
     {
         Map *m = map_new(8, 6, "m");
@@ -12510,6 +12541,11 @@ static void test_stamps(void)
         char *after = stamp_text(m);
         CHECK_EQ(strcmp(before, after), 0);
         CHECK(m->gen == gen && m->tokens.shape == shape);
+        stamp_show(m, s, 2, 2, &sv);                    /* its note shows with it, and goes */
+        CHECK(map_note_at(m, 5, 2) && !strcmp(map_note_at(m, 5, 2), "well"));
+        stamp_unshow(m, &sv);
+        CHECK(map_note_at(m, 5, 2) == NULL);
+        CHECK_EQ(m->nnotes, 0);
         free(before); free(after);
         map_free(m);
     }
@@ -12539,6 +12575,15 @@ static void test_stamps(void)
             map_free(l);
         }
         CHECK(stamp_load("Nothing", err, sizeof err) == NULL);
+        CASE("a listing cut short is the start of the alphabet, not the directory's order");
+        char nm[16];
+        for (int i = 20; i >= 1; i--) {
+            snprintf(nm, sizeof nm, "b%02d", i);
+            stamp_save(s, nm, err, sizeof err);
+        }
+        char few[3][MAP_NAME_MAX];
+        CHECK_EQ(stamp_list(few, 3), 22);
+        CHECK(!strcmp(few[0], "Altar") && !strcmp(few[1], "Piece") && !strcmp(few[2], "b01"));
         CHECK(strstr(err, "no stamp called Nothing") != NULL);
         char dir[600], cmd[700];
         stamp_dir(dir, sizeof dir);
@@ -13413,6 +13458,36 @@ static void test_stamp_keys(void)
     press(&a, "p\x1b");
     CHECK_EQ(a.ed.mode, ED_NORMAL);
     CHECK_EQ(a.undo.depth, depth);
+
+    CASE("the readout is turned-then-mirrored whatever order the keys came in, as the channel applies it");
+    {
+        Map *base = stamp_copy(a.stamp, 0, 0, a.stamp->w - 1, a.stamp->h - 1);
+        static const char *const seqs[] = { "pr|", "p|r", "p|rr|r", "prr|R" };
+        for (size_t i = 0; i < sizeof seqs / sizeof *seqs; i++) {
+            map_free(a.stamp);
+            a.stamp = stamp_copy(base, 0, 0, base->w - 1, base->h - 1);
+            a.stamp_turns = a.stamp_mirrored = 0;
+            press(&a, seqs[i]);
+            Map *t = stamp_turned(base, a.stamp_turns);
+            Map *want = a.stamp_mirrored ? stamp_mirrored(t) : stamp_copy(t, 0, 0, t->w - 1, t->h - 1);
+            char *x = stamp_text(a.stamp), *y = stamp_text(want);
+            CHECK_EQ(strcmp(x, y), 0);
+            free(x); free(y);
+            map_free(t); map_free(want);
+            press(&a, "\x1b");
+        }
+        map_free(a.stamp);
+        a.stamp = base;
+        a.stamp_turns = a.stamp_mirrored = 0;
+    }
+
+    CASE(": over a stamp comes back to it: :J6 jumps it there");
+    press(&a, "p:J6\r");
+    CHECK_EQ(a.ed.mode, ED_STAMP);
+    CHECK(a.ed.cx == 9 && a.ed.cy == 5);
+    press(&a, ":\x1b");
+    CHECK_EQ(a.ed.mode, ED_STAMP);
+    press(&a, "\x1b");
 
     CASE("a stamp that would run off the map is refused where it is, and the preview stays up");
     a.ed.cx = 11; a.ed.cy = 7;

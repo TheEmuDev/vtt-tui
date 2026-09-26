@@ -850,6 +850,7 @@ static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FIL
             map_free(st);
         }
         if (!k) fputs("no stamps\n", out);
+        else if (k > 64) fprintf(out, "... and %d more\n", k - 64);
         return 0;
     }
     if (!strcmp(v, "marked")) {

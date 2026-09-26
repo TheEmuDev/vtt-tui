@@ -857,7 +857,11 @@ void app_command_key(App *a, Key k)
     int r = ui_prompt_key(&a->ed.cmd, k);
     if (r == 0) return;
 
+    int back = a->ed.cmd_from_stamp;
+    a->ed.cmd_from_stamp = 0;
     a->ed.mode = ED_NORMAL;
     if (r == 1) app_exec_command(a, a->ed.cmd.buf);
     else        app_set_status(a, "");
+    if (back && a->stamp && a->map && a->screen == SCREEN_EDITOR && a->ed.mode == ED_NORMAL)
+        a->ed.mode = ED_STAMP;
 }

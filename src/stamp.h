@@ -50,13 +50,14 @@ int  stamp_list(char (*names)[MAP_NAME_MAX], int max);
 
 /* The preview: the stamp shown on the map at (x,y) for one draw, without a
  * change to the map -- no undo, no Map.gen, no sight. Swaps the stamp's
- * squares, boundaries and creatures in; stamp_unshow puts the map back
+ * squares, boundaries, creatures and notes in; stamp_unshow puts the map back
  * exactly. Clipped to the map, so the preview can hang off the edge. */
 typedef struct {
     uint8_t  *tiles, *vedges, *hedges;   /* what was there, over the stamp's box */
     int       x, y, w, h;                /* the box on the map, clipped */
     int       sx, sy;                    /* its first square in the stamp */
     TokenList tokens;                    /* the map's own list, set aside */
+    int       nnotes;                    /* the map's notes; the stamp's go after */
     Token    *both;                      /* the map's creatures and the stamp's */
     int       shown;
 } StampShow;

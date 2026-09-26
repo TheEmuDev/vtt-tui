@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "app_priv.h"
+#include "prof.h"
 #include "stamp.h"
 
 /* The stamp in hand, replaced; the old one freed. */
@@ -30,9 +31,11 @@ void app_stamp_yank(App *a)
 {
     Editor *e = &a->ed;
     int x0 = e->cx, y0 = e->cy, x1 = e->cx + e->brush - 1, y1 = e->cy + e->brush - 1;
+    int circle = 0;
     if (e->mode == ED_VISUAL) {
         /* A circle's box: see-through placing makes the corners harmless
-         * only where they are void, so say so rather than pretend. */
+         * only where they are void, so the status says so. */
+        circle = e->shape == ED_SHAPE_CIRCLE;
         EdShape sh = ed_shape(e->shape, e->anchor_x, e->anchor_y, e->cx, e->cy, 0);
         x0 = sh.x0; y0 = sh.y0; x1 = sh.x1; y1 = sh.y1;
         e->mode = ED_NORMAL;
@@ -41,7 +44,8 @@ void app_stamp_yank(App *a)
     if (!s) { app_set_status(a, "nothing to copy there"); return; }
     hold(a, s, NULL);
     char msg[96];
-    snprintf(msg, sizeof msg, "copied %dx%d%s - p shows it on the cursor", s->w, s->h,
+    snprintf(msg, sizeof msg, "copied %dx%d%s%s - p shows it on the cursor", s->w, s->h,
+             circle ? ", the circle's whole box," : "",
              s->tokens.n ? " with its creatures" : "");
     app_set_status(a, msg);
 }
@@ -73,16 +77,16 @@ static void place(App *a)
 
 static void turn(App *a, int quarters)
 {
+    PROF_ZONE("stamp.turn");
     Map *t = quarters ? stamp_turned(a->stamp, quarters) : stamp_mirrored(a->stamp);
     map_free(a->stamp);
     a->stamp = t;
-    if (quarters) a->stamp_turns = ((a->stamp_turns + quarters) % 4 + 4) % 4;
-    else {
-        /* A mirror after a turn is the mirror before the opposite turn:
-         * keep the readout as "turned, then mirrored". */
-        a->stamp_mirrored = !a->stamp_mirrored;
-        a->stamp_turns = (4 - a->stamp_turns) % 4;
-    }
+    /* The readout means turned first, then mirrored -- the order the
+     * channel's `stamp NAME SQ rotate N mirror` applies them, so what the
+     * GM reads an agent can send. A mirror is last whenever it comes; a
+     * turn after a mirror is the opposite turn before it. */
+    if (!quarters) a->stamp_mirrored = !a->stamp_mirrored;
+    else a->stamp_turns = ((a->stamp_turns + (a->stamp_mirrored ? -quarters : quarters)) % 4 + 4) % 4;
     char what[96];
     describe(a, what, sizeof what);
     app_set_status(a, what);
@@ -113,6 +117,13 @@ void app_stamp_key(App *a, Key k)
     case 'R': turn(a, -take_count(e)); break;
     case '|': turn(a, 0); break;
     case 'p': place(a); break;
+    case ':':
+        /* The command line, and back to the stamp after it: :J6 jumps the
+         * stamp there, :stamp save keeps it. */
+        e->mode = ED_COMMAND;
+        e->cmd_from_stamp = 1;
+        ui_prompt_open(&e->cmd, "", "", "");
+        break;
     default:  app_set_status(a, "p puts the stamp down, r turns it, | mirrors, esc puts it away"); break;
     }
 }
