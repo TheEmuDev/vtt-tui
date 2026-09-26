@@ -42,8 +42,7 @@ int tokens_at(const TokenList *l, int x, int y)
     /* Newest first: a token dropped on top of another is the one you grab. */
     for (int i = l->n - 1; i >= 0; i--) {
         const Token *t = &l->v[i];
-        if (x >= t->x && y >= t->y && x < t->x + t->size && y < t->y + t->size)
-            return i;
+        if (token_meets(t, x, y, 1, 1)) return i;
     }
     return -1;
 }

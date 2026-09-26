@@ -295,7 +295,7 @@ static void do_marked(App *a, FILE *out, int json)
                 const Token *t = &m->tokens.v[a->play.group[i]];
                 json_open(&j, '{');
                 json_kstr(&j, "label", t->label);
-                json_kstr(&j, "kind", t->kind == TOKEN_ENEMY ? "enemy" : "player");
+                json_kstr(&j, "kind", token_kind_name(t->kind));
                 j_region(&j, "at", t->x, t->y, t->x + t->size - 1, t->y + t->size - 1);
                 json_close(&j, '}');
             }
@@ -361,7 +361,7 @@ static void do_marked(App *a, FILE *out, int json)
         for (int i = 0; i < a->play.ngroup; i++) {
             const Token *t = &m->tokens.v[a->play.group[i]];
             region_name(t->x, t->y, t->x + t->size - 1, t->y + t->size - 1, r, sizeof r);
-            fprintf(out, "%s %s %s", i ? ";" : "", t->label[0] ? t->label : "(unnamed)", r);
+            fprintf(out, "%s %s %s", i ? ";" : "", token_name(t), r);
         }
         fputc('\n', out);
     }
@@ -514,12 +514,9 @@ static int who(const Map *m, const char *w, char *err, size_t errsz)
     if (found >= 0) return found;
     int x, y;
     if (map_coord_parse(w, &x, &y) && map_in_bounds(m, x, y)) {
-        for (int i = m->tokens.n - 1; i >= 0; i--) {
-            const Token *t = &m->tokens.v[i];
-            if (x >= t->x && x < t->x + t->size && y >= t->y && y < t->y + t->size) return i;
-        }
-        snprintf(err, errsz, "no creature stands on %.40s", w);
-        return -1;
+        int i = tokens_at(&m->tokens, x, y);
+        if (i < 0) snprintf(err, errsz, "no creature stands on %.40s", w);
+        return i;
     }
     snprintf(err, errsz, nloose > 1 ? "more than one creature is called %.40s" : "no creature called %.40s", w);
     return -1;
@@ -543,13 +540,10 @@ static int fits(const Map *m, int x, int y, int size, int skip, char *err, size_
                 snprintf(err, errsz, "%s is void - a creature needs ground", v);
                 return 0;
             }
-    for (int i = 0; i < m->tokens.n; i++) {
-        const Token *t = &m->tokens.v[i];
-        if (i == skip) continue;
-        if (x < t->x + t->size && t->x < x + size && y < t->y + t->size && t->y < y + size) {
-            snprintf(err, errsz, "%s is taken by %.30s", at, t->label[0] ? t->label : "a creature");
-            return 0;
-        }
+    int other = tokens_overlapping(&m->tokens, x, y, size, skip, TOKEN_ANY_KIND);
+    if (other >= 0) {
+        snprintf(err, errsz, "%s is taken by %.30s", at, token_name(&m->tokens.v[other]));
+        return 0;
     }
     return 1;
 }

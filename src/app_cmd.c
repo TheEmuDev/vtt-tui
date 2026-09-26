@@ -722,7 +722,7 @@ void app_exec_command(App *a, const char *line)
             const Token *t = &m->tokens.v[i];
             if (!t->note[0]) continue;
             off += snprintf(msg + off, sizeof msg - (size_t)off, "%s%.16s", n++ ? ", " : "notes on ",
-                            t->label[0] ? t->label : token_kind_name(t->kind));
+                            token_name(t));
         }
         for (int i = 0; i < m->nnotes && off < (int)sizeof msg - 28; i++) {
             char at[MAP_COORD_MAX];

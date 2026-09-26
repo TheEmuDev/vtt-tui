@@ -241,6 +241,21 @@ static void drop_autosave(const App *a)
     unlink(autosave);
 }
 
+/* The slot for `who` in a set of PING_MAX: its own, else a free one, else
+ * the one with the earliest until_ms. */
+static Ping *ping_slot(Ping *v, int *n, uint32_t who)
+{
+    int k = 0;
+    while (k < *n && v[k].who != who) k++;
+    if (k == *n) {
+        if (*n < PING_MAX) (*n)++;
+        else
+            for (int i = k = 0; i < *n; i++)
+                if (v[i].until_ms < v[k].until_ms) k = i;
+    }
+    return &v[k];
+}
+
 void app_ping(App *a, uint32_t who, int x0, int y0, int x1, int y1)
 {
     if (!a->map) return;
@@ -250,31 +265,15 @@ void app_ping(App *a, uint32_t who, int x0, int y0, int x1, int y1)
 
     /* The same source's ring moves; a new source takes a free slot, or the
      * one closest to going -- only reachable after phones reconnect. */
-    int k = 0;
-    while (k < a->npings && a->pings[k].who != who) k++;
-    if (k == a->npings) {
-        if (a->npings < PING_MAX) a->npings++;
-        else
-            for (int i = k = 0; i < a->npings; i++)
-                if (a->pings[i].until_ms < a->pings[k].until_ms) k = i;
-    }
-    Ping *p = &a->pings[k];
+    Ping *p = ping_slot(a->pings, &a->npings, who);
     p->who = who;
     p->x0 = x0; p->y0 = y0; p->x1 = x1; p->y1 = y1;
     p->until_ms = a->now_ms + PING_SHOW_MS;
 
-    /* The record: the same source's replaced, else a free slot, else the
-     * oldest. */
-    k = 0;
-    while (k < a->npinged && a->pinged[k].who != who) k++;
-    if (k == a->npinged) {
-        if (a->npinged < PING_MAX) a->npinged++;
-        else
-            for (int i = k = 0; i < a->npinged; i++)
-                if (a->pinged[i].until_ms < a->pinged[k].until_ms) k = i;
-    }
-    a->pinged[k] = *p;
-    a->pinged[k].until_ms = a->now_ms;
+    /* And the record `marked` reads, kept after the ring comes down. */
+    Ping *rec = ping_slot(a->pinged, &a->npinged, who);
+    *rec = *p;
+    rec->until_ms = a->now_ms;
 
     /* On the status line, not in the log: a gesture, not something that
      * happened to the encounter. Over fog the players' frame shows no
@@ -743,7 +742,7 @@ void app_note_prompt(App *a, int idx, int x, int y)
     if (idx >= 0 && idx < a->map->tokens.n) {
         const Token *t = &a->map->tokens.v[idx];
         a->pending_token = idx;
-        snprintf(title, sizeof title, "note on %.20s", t->label[0] ? t->label : token_kind_name(t->kind));
+        snprintf(title, sizeof title, "note on %.20s", token_name(t));
         had = t->note;
     } else {
         a->pending_token = -1;
@@ -866,7 +865,7 @@ static void prompt_accept(App *a)
         if (idx < 0 || idx >= a->map->tokens.n) return;
 
         const Token *t   = &a->map->tokens.v[idx];
-        const char  *who = t->label[0] ? t->label : token_kind_name(t->kind);
+        const char  *who = token_name(t);
         char msg[96];
 
         /* A number joins the order, or moves within it; a blank leaves. */
@@ -913,7 +912,7 @@ static void prompt_accept(App *a)
         char msg[96];
         snprintf(msg, sizeof msg, "%s marker on %.24s: %.30s",
                  status_color_name(a->play.status_color),
-                 t.label[0] ? t.label : token_kind_name(t.kind), text);
+                 token_name(&t), text);
         app_note(a, msg);
         return;
     }
@@ -939,7 +938,7 @@ static void prompt_accept(App *a)
         undo_begin(&a->undo);
         undo_edit_token(&a->undo, a->map, idx, t);
         undo_end(&a->undo);
-        snprintf(out, sizeof out, "%.24s: %s", t.label[0] ? t.label : token_kind_name(t.kind), msg);
+        snprintf(out, sizeof out, "%.24s: %s", token_name(&t), msg);
         app_note_gm(a, out);
         return;
     }
@@ -954,7 +953,7 @@ static void prompt_accept(App *a)
         if (idx >= 0) {
             if (idx >= a->map->tokens.n) return;
             Token t = a->map->tokens.v[idx];
-            const char *who = t.label[0] ? t.label : token_kind_name(t.kind);
+            const char *who = token_name(&t);
             int had = t.note[0] != '\0';
             if (!*text && !had) { app_set_status(a, "nothing noted"); return; }
             str_lcpy(t.note, text, sizeof t.note);

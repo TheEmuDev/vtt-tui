@@ -96,8 +96,9 @@ int    tokens_covered_next(const TokenList *l, int x, int y, int size, int after
 
 /* Does this token's footprint meet a w x h block at (x,y)? Two blocks miss
  * each other when either axis does. The one overlap test in the codebase:
- * the searches, the ring walk and the visual box all lean on it, so they
- * cannot disagree about what "covers" means. */
+ * the searches, the ring walk, the visual box, tokens_at, the linter and
+ * the control channel all lean on it, so they cannot disagree about what
+ * "covers" means. */
 static inline int token_meets(const Token *t, int x, int y, int w, int h)
 {
     if (x + w <= t->x || t->x + t->size <= x) return 0;
@@ -136,6 +137,13 @@ int    tokens_overlapping_set(const TokenList *l, int x, int y, int size,
                               const int *skip, int nskip, int kind);
 
 const char *token_kind_name(uint8_t kind);
+
+/* What to call a creature in a message: its label, or its side when it has
+ * none. */
+static inline const char *token_name(const Token *t)
+{
+    return t->label[0] ? t->label : token_kind_name(t->kind);
+}
 
 /* A label no other token carries, so pasting a copy of "Goblin" gives you
  * "Goblin 2" rather than two creatures you cannot tell apart in the readout.

@@ -1,5 +1,6 @@
 #include "util.h"
 
+#include <fcntl.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -239,4 +240,13 @@ const char *str_casestr(const char *hay, const char *needle)
         if (!*n) return hay;
     }
     return NULL;
+}
+
+int fd_nonblock_cloexec(int fd)
+{
+    int fl = fcntl(fd, F_GETFL, 0);
+    if (fl < 0 || fcntl(fd, F_SETFL, fl | O_NONBLOCK) < 0) return -1;
+    int fd_fl = fcntl(fd, F_GETFD, 0);
+    if (fd_fl >= 0) (void)fcntl(fd, F_SETFD, fd_fl | FD_CLOEXEC);
+    return 0;
 }

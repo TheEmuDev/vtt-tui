@@ -75,4 +75,9 @@ size_t str_lcpy(char *dst, const char *src, size_t dstsz);
  * matches at the start, as strstr has it. */
 const char *str_casestr(const char *hay, const char *needle);
 
+/* Makes a descriptor non-blocking and close-on-exec: every socket and pipe
+ * the event loop polls, so a :mirror child inherits none of them. 0, or -1
+ * when fcntl refuses. */
+int fd_nonblock_cloexec(int fd);
+
 #endif /* VTT_UTIL_H */

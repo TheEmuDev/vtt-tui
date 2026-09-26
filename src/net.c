@@ -2,7 +2,6 @@
 
 #include <arpa/inet.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <stdio.h>
@@ -103,16 +102,6 @@ void net_ws_accept(const char *key, char out[32])
 
 /* -------------------------------------------------------------- sockets */
 
-static int set_nonblock(int fd)
-{
-    int fl = fcntl(fd, F_GETFL, 0);
-    if (fl < 0) return -1;
-    if (fcntl(fd, F_SETFL, fl | O_NONBLOCK) < 0) return -1;
-    int fd_fl = fcntl(fd, F_GETFD, 0);
-    if (fd_fl >= 0) (void)fcntl(fd, F_SETFD, fd_fl | FD_CLOEXEC);
-    return 0;
-}
-
 void net_init(Net *n)
 {
     memset(n, 0, sizeof *n);
@@ -147,7 +136,7 @@ int net_start(Net *n, uint16_t port, const Renderer *r, char *err, size_t errsz)
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
     addr.sin_port        = htons(port);
     if (bind(fd, (struct sockaddr *)&addr, sizeof addr) < 0 || listen(fd, 8) < 0 ||
-        set_nonblock(fd) < 0) {
+        fd_nonblock_cloexec(fd) < 0) {
         snprintf(err, errsz, "port %u: %s", (unsigned)port, strerror(errno));
         close(fd);
         return -1;
@@ -602,7 +591,7 @@ static void accept_client(Net *n, uint64_t now_ms)
     socklen_t alen = sizeof addr;
     int fd = accept(n->listen_fd, (struct sockaddr *)&addr, &alen);
     if (fd < 0) return;
-    if (n->ncl >= NET_MAX_CLIENTS || set_nonblock(fd) < 0) { close(fd); return; }
+    if (n->ncl >= NET_MAX_CLIENTS || fd_nonblock_cloexec(fd) < 0) { close(fd); return; }
 
     int one = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);

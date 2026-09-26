@@ -9,6 +9,8 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
+#include "util.h"
+
 #define ESC_ALT_ON    "\x1b[?1049h"
 #define ESC_ALT_OFF   "\x1b[?1049l"
 #define ESC_CURS_HIDE "\x1b[?25l"
@@ -43,14 +45,6 @@ static void on_fatal(int sig)
     /* Re-raise with the default disposition so the exit status is honest. */
     signal(sig, SIG_DFL);
     raise(sig);
-}
-
-static void set_nonblock_cloexec(int fd)
-{
-    int fl = fcntl(fd, F_GETFL, 0);
-    if (fl >= 0) (void)fcntl(fd, F_SETFL, fl | O_NONBLOCK);
-    int fd_fl = fcntl(fd, F_GETFD, 0);
-    if (fd_fl >= 0) (void)fcntl(fd, F_SETFD, fd_fl | FD_CLOEXEC);
 }
 
 int term_init(Term *t)
@@ -93,8 +87,8 @@ int term_init(Term *t)
         term_shutdown(t);
         return -1;
     }
-    set_nonblock_cloexec(t->sig_pipe[0]);
-    set_nonblock_cloexec(t->sig_pipe[1]);
+    (void)fd_nonblock_cloexec(t->sig_pipe[0]);
+    (void)fd_nonblock_cloexec(t->sig_pipe[1]);
     g_winch_fd = t->sig_pipe[1];
 
     struct sigaction sa;

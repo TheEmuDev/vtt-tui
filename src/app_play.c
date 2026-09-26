@@ -61,7 +61,7 @@ static int play_put_down(App *a, const char *how)
                 const Token *u = &m->tokens.v[on];
                 char msg[112];
                 snprintf(msg, sizeof msg, "%.24s is on this square - move off to put down",
-                         u->label[0] ? u->label : token_kind_name(u->kind));
+                         token_name(u));
                 app_set_status(a, msg);
                 return 0;
             }
@@ -88,7 +88,7 @@ static void report_choice(App *a)
 
     char msg[128];
     snprintf(msg, sizeof msg, "%.24s at %s - enter for the next, move to take it",
-             t->label[0] ? t->label : token_kind_name(t->kind), at);
+             token_name(t), at);
     app_set_status(a, msg);
 }
 
@@ -155,8 +155,7 @@ static void group_name(const Map *m, const int *idx, int n, char *buf, size_t bu
 {
     if (n == 1) {
         const Token *t = &m->tokens.v[idx[0]];
-        snprintf(buf, bufsz, "%.30s", t->label[0] ? t->label
-                                                  : token_kind_name(t->kind));
+        snprintf(buf, bufsz, "%.30s", token_name(t));
         return;
     }
     snprintf(buf, bufsz, "%d creatures", n);
@@ -248,7 +247,7 @@ static void counters_prompt(App *a)
     a->pending_token = idx;
 
     char title[64], hint[96], have[80];
-    snprintf(title, sizeof title, "counters on %.24s", t->label[0] ? t->label : token_kind_name(t->kind));
+    snprintf(title, sizeof title, "counters on %.24s", token_name(t));
     counter_format(t, have, sizeof have);
     if (have[0]) {
         snprintf(hint, sizeof hint, "%.60s  -  hp -2, hp 4/6, -hp", have);
@@ -270,7 +269,7 @@ static void counter_step(App *a, int delta)
     int idx = play_target_token(a);
     if (idx < 0) { app_set_status(a, "no creature here - < and > step its counter"); return; }
     Token t = a->map->tokens.v[idx];
-    const char *who = t.label[0] ? t.label : token_kind_name(t.kind);
+    const char *who = token_name(&t);
 
     char cur[COUNTER_NAME_MAX], msg[96];
     app_current_counter(a, cur, sizeof cur);
@@ -336,7 +335,7 @@ static void status_add(App *a)
     char title[64];
     snprintf(title, sizeof title, "%s marker on %.20s",
              status_color_name(pl->status_color),
-             t->label[0] ? t->label : token_kind_name(t->kind));
+             token_name(t));
     app_open_prompt(a, PROMPT_STATUS_LABEL, title, "s c changes the colour", "");
 }
 
@@ -366,7 +365,7 @@ static void status_drop(App *a)
 
     a->pending_token = idx;
     snprintf(a->modal_title, sizeof a->modal_title, "Clear marker on %.24s",
-             t->label[0] ? t->label : token_kind_name(t->kind));
+             token_name(t));
     a->modal = MODAL_CLEAR_STATUS;
 }
 
@@ -386,7 +385,7 @@ static void turn_prompt(App *a)
 
     char title[64], initial[16] = "";
     snprintf(title, sizeof title, "Initiative for %.20s",
-             t->label[0] ? t->label : token_kind_name(t->kind));
+             token_name(t));
     if (t->turn & TURN_IN) snprintf(initial, sizeof initial, "%d", t->init);
     app_open_prompt(a, PROMPT_INITIATIVE, title,
                     "highest acts first; blank takes it out of the order", initial);
@@ -404,7 +403,7 @@ static void turn_hand_over(App *a)
     const Token *t = &a->map->tokens.v[idx];
     char msg[96];
     snprintf(msg, sizeof msg, "%.30s takes the turn",
-             t->label[0] ? t->label : token_kind_name(t->kind));
+             token_name(t));
     app_note(a, msg);
 }
 
@@ -850,8 +849,7 @@ void app_play_key(App *a, Key k)
         char msg[96];
         if (pl->nyank == 1)
             snprintf(msg, sizeof msg, "pasted %.30s at %s",
-                     m->tokens.v[pasted].label[0] ? m->tokens.v[pasted].label
-                                                  : token_kind_name(m->tokens.v[pasted].kind),
+                     token_name(&m->tokens.v[pasted]),
                      at);
         else
             snprintf(msg, sizeof msg, "pasted %d creatures at %s", pl->nyank, at);
@@ -916,7 +914,7 @@ void app_play_key(App *a, Key k)
         const Token *t = &m->tokens.v[got];
         char msg[96];
         snprintf(msg, sizeof msg, "round %d - %.30s's turn", m->round,
-                 t->label[0] ? t->label : token_kind_name(t->kind));
+                 token_name(t));
         app_note(a, msg);
         break;
     }

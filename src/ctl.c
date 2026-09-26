@@ -2,7 +2,6 @@
 
 #include <dirent.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -59,15 +58,6 @@ static int sock_path(char *buf, size_t sz, const char *dir, long pid)
     return n < 0 || (size_t)n >= sz ? -1 : 0;
 }
 
-static int set_nonblock(int fd)
-{
-    int fl = fcntl(fd, F_GETFL, 0);
-    if (fl < 0 || fcntl(fd, F_SETFL, fl | O_NONBLOCK) < 0) return -1;
-    int fd_fl = fcntl(fd, F_GETFD, 0);
-    if (fd_fl >= 0) (void)fcntl(fd, F_SETFD, fd_fl | FD_CLOEXEC);
-    return 0;
-}
-
 /* ---------------------------------------------------------------- server */
 
 void ctl_init(Ctl *c)
@@ -92,7 +82,7 @@ int ctl_start(Ctl *c, char *err, size_t errsz)
 
     int fd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (fd < 0) { snprintf(err, errsz, "socket: %s", strerror(errno)); return -1; }
-    if (set_nonblock(fd) < 0) {
+    if (fd_nonblock_cloexec(fd) < 0) {
         snprintf(err, errsz, "socket: %s", strerror(errno));
         close(fd);
         return -1;
@@ -253,7 +243,7 @@ void ctl_service(Ctl *c, const struct pollfd *fds, int count, uint64_t now_ms)
         for (;;) {
             int fd = accept(c->listen_fd, NULL, NULL);
             if (fd < 0) break;
-            if (c->nc == CTL_MAX_CONN || set_nonblock(fd) < 0) {
+            if (c->nc == CTL_MAX_CONN || fd_nonblock_cloexec(fd) < 0) {
                 close(fd);
                 c->dropped++;
                 continue;

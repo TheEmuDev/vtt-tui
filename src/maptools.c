@@ -34,6 +34,10 @@ static int digits(int v)
 
 /* The glyph a creature's squares show, in file order: 1-9, a-z, A-Z, then
  * '#' for the rest, which the legend still lists. */
+/* A report names an unlabelled creature as such: a reader checking a map
+ * wants to know the label is missing, not which side it is on. */
+static const char *label_or_unnamed(const Token *t) { return t->label[0] ? t->label : "(unnamed)"; }
+
 static char token_glyph(int i)
 {
     static const char g[] = "123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -168,7 +172,7 @@ void maptools_dump(FILE *out, const Map *m, int x0, int y0, int x1, int y1)
             str_lcpy(where, at, sizeof where);
             str_lcpy(kind, t->kind == TOKEN_ENEMY ? "enemy" : "player", sizeof kind);
         }
-        fprintf(out, "  %c  %-16s %-12s %s\n", token_glyph(i), t->label[0] ? t->label : "(unnamed)", kind, where);
+        fprintf(out, "  %c  %-16s %-12s %s\n", token_glyph(i), label_or_unnamed(t), kind, where);
         if (t->note[0]) fprintf(out, "     note: %s\n", t->note);
     }
 
@@ -368,7 +372,6 @@ void rooms_free(Rooms *r)
 
 /* -------------------------------------------------------------- describe */
 
-static const char *kind_name(const Token *t) { return t->kind == TOKEN_ENEMY ? "enemy" : "player"; }
 
 static void room_name(const Rooms *r, int i, char *buf, size_t sz)
 {
@@ -480,7 +483,7 @@ void maptools_describe(FILE *out, const Map *m, int json)
                 if (rooms_at(&r, m, tk->x, tk->y) != i) continue;
                 json_open(&j, '{');
                 json_kstr(&j, "label", tk->label);
-                json_kstr(&j, "kind", kind_name(tk));
+                json_kstr(&j, "kind", token_kind_name(tk->kind));
                 json_kint(&j, "size", tk->size);
                 map_coord_name(tk->x, tk->y, buf, sizeof buf); json_kstr(&j, "at", buf);
                 json_kint(&j, "x", tk->x); json_kint(&j, "y", tk->y);
@@ -586,7 +589,7 @@ void maptools_describe(FILE *out, const Map *m, int json)
                 const Token *tk = &m->tokens.v[t];
                 if (rooms_at(&r, m, tk->x, tk->y) != i) continue;
                 map_coord_name(tk->x, tk->y, buf, sizeof buf);
-                fprintf(out, "  %-12s %-8s %s%s%s\n", kind_name(tk), buf, tk->label,
+                fprintf(out, "  %-12s %-8s %s%s%s\n", token_kind_name(tk->kind), buf, tk->label,
                         tk->size > 1 ? (tk->size == 2 ? "  2x2" : "  3x3") : "", tk->note[0] ? "  (note)" : "");
             }
             for (int nt = 0; nt < m->nnotes; nt++) {
@@ -616,7 +619,7 @@ void maptools_describe(FILE *out, const Map *m, int json)
             if (rooms_at(&r, m, tk->x, tk->y) >= 0) continue;
             if (!outside++) fputs("\noutside any room\n", out);
             map_coord_name(tk->x, tk->y, buf, sizeof buf);
-            fprintf(out, "  %-12s %-8s %s\n", kind_name(tk), buf, tk->label);
+            fprintf(out, "  %-12s %-8s %s\n", token_kind_name(tk->kind), buf, tk->label);
         }
     }
     free(op);
@@ -753,7 +756,7 @@ static void check_map(const Map *m, Findings *fs)
 
     for (int i = 0; i < m->tokens.n; i++) {
         const Token *t = &m->tokens.v[i];
-        const char  *label = t->label[0] ? t->label : "(unnamed)";
+        const char  *label = label_or_unnamed(t);
         map_coord_name(t->x, t->y, where, sizeof where);
         if (t->x + t->size > m->w || t->y + t->size > m->h) {
             snprintf(msg, sizeof msg, "%s is %dx%d and hangs off the map's edge", label, t->size, t->size);
@@ -769,8 +772,8 @@ static void check_map(const Map *m, Findings *fs)
         }
         for (int j = i + 1; j < m->tokens.n; j++) {
             const Token *u = &m->tokens.v[j];
-            if (t->x < u->x + u->size && u->x < t->x + t->size && t->y < u->y + u->size && u->y < t->y + t->size) {
-                snprintf(msg, sizeof msg, "%s and %s share a square", label, u->label[0] ? u->label : "(unnamed)");
+            if (token_meets(t, u->x, u->y, u->size, u->size)) {
+                snprintf(msg, sizeof msg, "%s and %s share a square", label, label_or_unnamed(u));
                 map_finding(fs, "E112", "token-overlap", t->x, t->y, 0, where, msg);
             }
             if (t->label[0] && !strcmp(t->label, u->label)) {
@@ -801,7 +804,7 @@ static void check_map(const Map *m, Findings *fs)
         if (t->kind != TOKEN_PLAYER || room < 0 || r.reach[room]) continue;
         map_coord_name(t->x, t->y, where, sizeof where);
         snprintf(msg, sizeof msg, "%s cannot reach the rest of the party in room %s",
-                 t->label[0] ? t->label : "(unnamed)", sname);
+                 label_or_unnamed(t), sname);
         map_finding(fs, "W121", "party-split", t->x, t->y, 0, where, msg);
     }
     rooms_free(&r);
