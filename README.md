@@ -58,7 +58,8 @@ vtt [options] [map.vtt]
   --dump-map         the whole map as text, with a legend
   --region A1:P9     only that part of it
   --describe         the rooms, their doors and what is in them
-  --json             --describe (or --check) as JSON
+  --check            find mistakes: exit 0 clean, 1 findings, 2 unreadable
+  --json             --describe or --check as JSON
 ```
 
 `--dump-frame` honours `--script`, so a whole session can be replayed and its final frame
@@ -1292,8 +1293,53 @@ horizontal one. Doors of every kind lead from room to room; windows do not. The 
 starts in the first player creature's room (or the largest), and a room that cannot be
 reached from it through doors is marked `NOT REACHABLE`.
 
-**`--json`** gives `--describe` as JSON, for a program rather than a reader: the same
-fields, with 0-based file coordinates beside the square names.
+**`vtt map.vtt --check`** finds the mistakes a hand-written map makes, one line each with a
+stable code first, and exits 0 when there are none, 1 when there are, 2 when the file is
+not a map:
+
+```
+E011 section-short     line 29   'hedges' read as vedges row 9 of 9: the section is short
+E101 door-in-void      G5|H5     door between two squares that are not map
+W120 unreachable-room  room K2   18 squares, no door leads to it from room B2
+2 errors, 1 warning
+```
+
+The app opens a damaged map as best it can and says nothing -- right for opening one, wrong
+for writing one -- so the file's own mistakes come with their line numbers. Errors are what
+leaves the map other than meant; warnings what is probably a mistake; notes (which do not
+fail the check) what is allowed but worth knowing.
+
+| code | finds |
+|---|---|
+| `E001 unreadable` | not a map, a bad size, a newer format |
+| `E010 row-long` | a row longer than its section's width |
+| `E011 section-short` | a section that swallowed the next line, or the file ending inside one |
+| `E013 bad-char` | a character no row of that section uses (read as empty) |
+| `E014 bad-record` | a line that did not parse and was dropped: a token off the map, a marker before any token |
+| `E101 door-in-void` | a door or window with no map on either side |
+| `E110 token-on-void` | a creature on a square that is not map |
+| `E111 token-overhang` | a creature too big for where it stands, hanging off the edge |
+| `E112 token-overlap` | two creatures on one square |
+| `W015 unknown-line` | a line nothing reads |
+| `W016 unknown-ruleset`, `W017 unknown-metric` | a setting this build does not know |
+| `W018 fog-unknown-patch` | a fog row naming a patch no `fogpatch` line creates |
+| `W019 stray-row` | rows outside any section: one too many, or a header swallowed |
+| `W020 clamped` | a setting out of range, used as the nearest value that is not |
+| `W102 door-to-void` | a door or window leading into void or off the map |
+| `W103 wall-in-void` | a wall with no map on either side |
+| `W104 door-loose` | a door or window with no wall at either end: in the wrong row or column |
+| `W113 duplicate-label` | two creatures with one name |
+| `W120 unreachable-room` | a room no door leads to from where the party starts |
+| `W121 party-split` | a player creature in such a room |
+| `W130 fog-patch-empty` | a fog patch with nothing painted |
+| `W140 note-on-void` | a note on a square that is not map |
+| `N021 row-short` | rows shorter than the map, read as trailing blanks -- the format allows it |
+| `N131 fog-patch-disabled` | a patch that hides nothing until enabled |
+
+Nothing checked knows a game: every rule is about the map's geometry or the file.
+
+**`--json`** gives `--describe` or `--check` as JSON, for a program rather than a reader:
+the same fields, with 0-based file coordinates beside the square names.
 
 ## Performance
 

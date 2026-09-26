@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "clock.h"
+#include "mapio.h"
 #include "dice.h"
 #include "fog.h"
 #include "ruler.h"
@@ -661,4 +662,261 @@ void maptools_describe(FILE *out, const Map *m, int json)
     }
     free(op);
     rooms_free(&r);
+}
+
+/* ----------------------------------------------------------------- check */
+
+typedef struct {
+    char code[8];
+    char slug[24];
+    char where[80];         /* a square, a boundary, a room; empty for a file finding */
+    int  line;              /* 1-based; 0 for a map finding */
+    int  x, y, edge;        /* 0-based; edge 'v', 'h' or 0 */
+    char msg[256];
+} Finding;
+
+typedef struct { Finding *v; int n, cap; } Findings;
+
+static Finding *add_finding(Findings *fs, const char *code, const char *slug)
+{
+    if (fs->n == fs->cap) { fs->cap = fs->cap ? fs->cap * 2 : 16; fs->v = xrealloc(fs->v, (size_t)fs->cap * sizeof *fs->v); }
+    Finding *f = &fs->v[fs->n++];
+    memset(f, 0, sizeof *f);
+    str_lcpy(f->code, code, sizeof f->code);
+    str_lcpy(f->slug, slug, sizeof f->slug);
+    f->x = f->y = -1;
+    return f;
+}
+
+static void file_finding(void *ctx, int line, int col, const char *code, const char *slug, const char *msg)
+{
+    Finding *f = add_finding(ctx, code, slug);
+    f->line = line;
+    f->x    = col;
+    str_lcpy(f->msg, msg, sizeof f->msg);
+}
+
+static void map_finding(Findings *fs, const char *code, const char *slug, int x, int y, int edge,
+                        const char *where, const char *msg)
+{
+    Finding *f = add_finding(fs, code, slug);
+    f->x = x; f->y = y; f->edge = edge;
+    str_lcpy(f->where, where, sizeof f->where);
+    str_lcpy(f->msg, msg, sizeof f->msg);
+}
+
+static int void_at(const Map *m, int x, int y) { return !map_in_bounds(m, x, y) || !map_walkable(m, x, y); }
+
+/* Does any boundary other than this one meet the corner (cx,cy)? */
+static int corner_busy(const Map *m, int cx, int cy, int skip_v, int skip_x, int skip_y)
+{
+    const struct { int v, x, y; } at[4] = { { 1, cx, cy - 1 }, { 1, cx, cy }, { 0, cx - 1, cy }, { 0, cx, cy } };
+    for (int i = 0; i < 4; i++) {
+        if (at[i].v == skip_v && at[i].x == skip_x && at[i].y == skip_y) continue;
+        uint8_t k = at[i].v ? (at[i].y >= 0 && at[i].y < m->h && at[i].x >= 0 && at[i].x <= m->w ? map_vedge(m, at[i].x, at[i].y) : EDGE_NONE)
+                            : (at[i].x >= 0 && at[i].x < m->w && at[i].y >= 0 && at[i].y <= m->h ? map_hedge(m, at[i].x, at[i].y) : EDGE_NONE);
+        if (k != EDGE_NONE) return 1;
+    }
+    return 0;
+}
+
+/* One boundary's findings: a door or wall with nothing either side, a door
+ * with nothing on one, a door on its own in open floor. */
+static void check_edge(const Map *m, Findings *fs, int vertical, int x, int y)
+{
+    uint8_t k = vertical ? map_vedge(m, x, y) : map_hedge(m, x, y);
+    if (k == EDGE_NONE) return;
+    int ax = vertical ? x - 1 : x, ay = vertical ? y : y - 1;
+    int va = void_at(m, ax, ay), vb = void_at(m, x, y);
+    char where[32], msg[160];
+    maptools_edge_name(m, vertical, x, y, where, sizeof where);
+    int opening = k != EDGE_WALL;
+    const char *kn = edge_name(k);
+    if (va && vb) {
+        snprintf(msg, sizeof msg, "%s between two squares that are not map", kn);
+        if (opening) map_finding(fs, "E101", "door-in-void", x, y, vertical ? 'v' : 'h', where, msg);
+        else         map_finding(fs, "W103", "wall-in-void", x, y, vertical ? 'v' : 'h', where, msg);
+        return;
+    }
+    if (!opening) return;
+    if (va || vb) {
+        int onmap = map_in_bounds(m, va ? ax : x, va ? ay : y);
+        snprintf(msg, sizeof msg, "%s leads %s", kn, onmap ? "into void" : "off the map");
+        map_finding(fs, "W102", "door-to-void", x, y, vertical ? 'v' : 'h', where, msg);
+        return;
+    }
+    /* Its two ends: a door meets a wall at both in any room ever drawn. */
+    int c0x = x, c0y = y, c1x = vertical ? x : x + 1, c1y = vertical ? y + 1 : y;
+    if (!corner_busy(m, c0x, c0y, vertical, x, y) && !corner_busy(m, c1x, c1y, vertical, x, y)) {
+        snprintf(msg, sizeof msg, "%s with no wall at either end: is it in the row or column it was meant for?", kn);
+        map_finding(fs, "W104", "door-loose", x, y, vertical ? 'v' : 'h', where, msg);
+    }
+}
+
+static int finding_cmp(const void *pa, const void *pb)
+{
+    const Finding *a = pa, *b = pb;
+    int fa = a->line > 0 || !a->where[0], fb = b->line > 0 || !b->where[0];
+    if (fa != fb) return fa ? -1 : 1;                    /* the file's own first */
+    if (fa) return a->line - b->line;
+    int ra = a->code[0] == 'E' ? 0 : a->code[0] == 'W' ? 1 : 2;
+    int rb = b->code[0] == 'E' ? 0 : b->code[0] == 'W' ? 1 : 2;
+    if (ra != rb) return ra - rb;                        /* errors, warnings, notes */
+    int c = strcmp(a->code, b->code);
+    if (c) return c;
+    if (a->y != b->y) return a->y - b->y;
+    return a->x - b->x;
+}
+
+static const char *severity(const Finding *f)
+{
+    return f->code[0] == 'E' ? "error" : f->code[0] == 'W' ? "warning" : "note";
+}
+
+int maptools_check(FILE *out, const char *path, int json)
+{
+    Findings fs = { 0 };
+    char err[256];
+    Map *m = mapio_load_diag(path, err, sizeof err, file_finding, &fs);
+    if (!m) {
+        Finding *f = add_finding(&fs, "E001", "unreadable");
+        str_lcpy(f->msg, err, sizeof f->msg);
+    } else {
+        char where[64], msg[256];
+        for (int y = 0; y < m->h; y++)
+            for (int x = 0; x <= m->w; x++) check_edge(m, &fs, 1, x, y);
+        for (int y = 0; y <= m->h; y++)
+            for (int x = 0; x < m->w; x++) check_edge(m, &fs, 0, x, y);
+
+        for (int i = 0; i < m->tokens.n; i++) {
+            const Token *t = &m->tokens.v[i];
+            const char  *label = t->label[0] ? t->label : "(unnamed)";
+            map_coord_name(t->x, t->y, where, sizeof where);
+            if (t->x + t->size > m->w || t->y + t->size > m->h) {
+                snprintf(msg, sizeof msg, "%s is %dx%d and hangs off the map's edge", label, t->size, t->size);
+                map_finding(&fs, "E111", "token-overhang", t->x, t->y, 0, where, msg);
+            }
+            int on_void = 0;
+            for (int y = t->y; y < t->y + t->size && !on_void; y++)
+                for (int x = t->x; x < t->x + t->size && !on_void; x++)
+                    on_void = map_in_bounds(m, x, y) && !map_walkable(m, x, y);
+            if (on_void) {
+                snprintf(msg, sizeof msg, "%s stands on void", label);
+                map_finding(&fs, "E110", "token-on-void", t->x, t->y, 0, where, msg);
+            }
+            for (int j = i + 1; j < m->tokens.n; j++) {
+                const Token *u = &m->tokens.v[j];
+                if (t->x < u->x + u->size && u->x < t->x + t->size && t->y < u->y + u->size && u->y < t->y + t->size) {
+                    snprintf(msg, sizeof msg, "%s and %s share a square", label, u->label[0] ? u->label : "(unnamed)");
+                    map_finding(&fs, "E112", "token-overlap", t->x, t->y, 0, where, msg);
+                }
+                if (t->label[0] && !strcmp(t->label, u->label)) {
+                    char w2[MAP_COORD_MAX];
+                    map_coord_name(u->x, u->y, w2, sizeof w2);
+                    snprintf(msg, sizeof msg, "two creatures called %s, here and at %s", label, w2);
+                    map_finding(&fs, "W113", "duplicate-label", t->x, t->y, 0, where, msg);
+                }
+            }
+        }
+
+        Rooms r;
+        rooms_build(m, &r);
+        char sname[MAP_COORD_MAX] = "";
+        if (r.start >= 0) map_coord_name(r.v[r.start].fx, r.v[r.start].fy, sname, sizeof sname);
+        for (int i = 0; i < r.n; i++) {
+            if (r.reach[i]) continue;
+            map_coord_name(r.v[i].fx, r.v[i].fy, where, sizeof where);
+            snprintf(msg, sizeof msg, "%d square%s, no door leads to it from room %s", r.v[i].squares,
+                     r.v[i].squares == 1 ? "" : "s", sname);
+            char w2[80];
+            snprintf(w2, sizeof w2, "room %s", where);
+            map_finding(&fs, "W120", "unreachable-room", r.v[i].fx, r.v[i].fy, 0, w2, msg);
+        }
+        for (int i = 0; i < m->tokens.n; i++) {
+            const Token *t = &m->tokens.v[i];
+            int room = rooms_at(&r, m, t->x, t->y);
+            if (t->kind != TOKEN_PLAYER || room < 0 || r.reach[room]) continue;
+            map_coord_name(t->x, t->y, where, sizeof where);
+            snprintf(msg, sizeof msg, "%s cannot reach the rest of the party in room %s",
+                     t->label[0] ? t->label : "(unnamed)", sname);
+            map_finding(&fs, "W121", "party-split", t->x, t->y, 0, where, msg);
+        }
+        rooms_free(&r);
+
+        for (int id = 1; id <= FOG_PATCH_MAX; id++) {
+            const FogPatch *p = &m->fog_patches[id - 1];
+            if (!p->name[0] || p->dead) continue;
+            int seen;
+            if (fog_count(m, id, &seen) == 0) {
+                snprintf(msg, sizeof msg, "fog patch %s has no square painted in the fog section", p->name);
+                map_finding(&fs, "W130", "fog-patch-empty", -1, -1, 0, p->name, msg);
+            }
+            if (p->disabled) {
+                snprintf(msg, sizeof msg, "fog patch %s is disabled: it hides nothing", p->name);
+                map_finding(&fs, "N131", "fog-patch-disabled", -1, -1, 0, p->name, msg);
+            }
+        }
+        for (int i = 0; i < m->nnotes; i++) {
+            const Note *n = &m->notes[i];
+            if (map_walkable(m, n->x, n->y)) continue;
+            map_coord_name(n->x, n->y, where, sizeof where);
+            snprintf(msg, sizeof msg, "a note on void: %.60s", n->text);
+            map_finding(&fs, "W140", "note-on-void", n->x, n->y, 0, where, msg);
+        }
+        map_free(m);
+    }
+
+    if (fs.n) qsort(fs.v, (size_t)fs.n, sizeof *fs.v, finding_cmp);
+    int errors = 0, warnings = 0, notes = 0;
+    for (int i = 0; i < fs.n; i++) {
+        errors   += fs.v[i].code[0] == 'E';
+        warnings += fs.v[i].code[0] == 'W';
+        notes    += fs.v[i].code[0] == 'N';
+    }
+
+    if (json) {
+        Json j = { out, 0, { 0 }, 0 };
+        j_open(&j, '{');
+        j_kstr(&j, "file", path);
+        j_kint(&j, "errors", errors);
+        j_kint(&j, "warnings", warnings);
+        j_kint(&j, "notes", notes);
+        j_key(&j, "findings");
+        j_open(&j, '[');
+        for (int i = 0; i < fs.n; i++) {
+            const Finding *f = &fs.v[i];
+            j_open(&j, '{');
+            j_kstr(&j, "code", f->code);
+            j_kstr(&j, "slug", f->slug);
+            j_kstr(&j, "severity", severity(f));
+            j_key(&j, "line");  if (f->line > 0) j_int(&j, f->line); else j_null(&j);
+            j_key(&j, "where"); if (f->where[0]) j_str(&j, f->where); else j_null(&j);
+            j_key(&j, "x");     if (f->x >= 0) j_int(&j, f->x); else j_null(&j);
+            j_key(&j, "y");     if (f->y >= 0) j_int(&j, f->y); else j_null(&j);
+            j_key(&j, "edge");
+            if (f->edge) { char e[2] = { (char)f->edge, 0 }; j_str(&j, e); } else j_null(&j);
+            j_kstr(&j, "message", f->msg);
+            j_close(&j, '}');
+        }
+        j_close(&j, ']');
+        j_close(&j, '}');
+        fputc('\n', out);
+    } else {
+        for (int i = 0; i < fs.n; i++) {
+            const Finding *f = &fs.v[i];
+            char loc[40];
+            if (f->line > 0) snprintf(loc, sizeof loc, "line %d", f->line);
+            else             str_lcpy(loc, f->where, sizeof loc);
+            fprintf(out, "%s %-18s %-9s %s\n", f->code, f->slug, loc, f->msg);
+        }
+        if (!fs.n) fputs("no findings\n", out);
+        else {
+            fprintf(out, "%d error%s, %d warning%s", errors, errors == 1 ? "" : "s", warnings, warnings == 1 ? "" : "s");
+            if (notes) fprintf(out, ", %d note%s", notes, notes == 1 ? "" : "s");
+            fputc('\n', out);
+        }
+    }
+    int unreadable = fs.n && !strcmp(fs.v[0].code, "E001");
+    free(fs.v);
+    return unreadable ? 2 : errors || warnings ? 1 : 0;
 }

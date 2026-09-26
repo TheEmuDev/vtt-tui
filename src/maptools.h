@@ -58,4 +58,13 @@ void maptools_edge_name(const Map *m, int vertical, int x, int y, char *buf, siz
  * text, or JSON with `json`. */
 void maptools_describe(FILE *out, const Map *m, int json);
 
+/* A linter. Loads `path` itself, so the file's own mistakes come with
+ * their line numbers (mapio_load_diag), then checks the map: doors and
+ * walls in void, loose doors, creatures on void, off the map or on top of
+ * each other, repeated names, rooms the party cannot reach, fog patches
+ * with nothing painted, notes on void. One line a finding, a stable code
+ * first (E error, W warning, N note); JSON with `json`. Returns the exit
+ * status: 0 clean, 1 an error or warning, 2 the file cannot be read. */
+int  maptools_check(FILE *out, const char *path, int json);
+
 #endif /* VTT_MAPTOOLS_H */

@@ -1,0 +1,26 @@
+W020 clamped            line 4    zoom 7 is not 0-3; 3 is used
+W016 unknown-ruleset    line 5    no ruleset called 'nosuch'; the map has none
+E010 row-long           line 8    tiles row 2 is 9 characters, the map needs 8; the rest is ignored
+E013 bad-char           line 8    'X' in tiles row 2, column 5, reads as void
+N021 row-short          line 9    1 tiles row is shorter than 8; the rest reads as void
+W019 stray-row          line 25   rows outside any section, ignored: is the section before them one row too long, or its header swallowed by a short one?
+E014 bad-record         line 26   marker dropped: 'tokenstatus red "Early"'
+W015 unknown-line       line 33   ignored: 'mystery line'
+W018 fog-unknown-patch  line 38   fog row 1 names patch 3 ('C'), which no fogpatch line creates; read as no fog
+E011 section-short      line 39   the file ends inside 'fog' after 2 of 5 rows
+E101 door-in-void       E4|F4     door between two squares that are not map
+E110 token-on-void      F3        Ogre stands on void
+E111 token-overhang     H5        Giant is 2x2 and hangs off the map's edge
+E112 token-overlap      F3        Ogre and Ogre share a square
+W102 door-to-void       F3|G3     door leads into void
+W103 wall-in-void       H3|-      wall between two squares that are not map
+W104 door-loose         C1/C2     door with no wall at either end: is it in the row or column it was meant for?
+W113 duplicate-label    F3        two creatures called Ogre, here and at G3
+W120 unreachable-room   room E1   14 squares, no door leads to it from room A1
+W120 unreachable-room   room E3   1 square, no door leads to it from room A1
+W121 party-split        G2        Bram cannot reach the rest of the party in room A1
+W130 fog-patch-empty    Crypt     fog patch Crypt has no square painted in the fog section
+W130 fog-patch-empty    Mist      fog patch Mist has no square painted in the fog section
+W140 note-on-void       F3        a note on void: on the gap
+N131 fog-patch-disabled Mist      fog patch Mist is disabled: it hides nothing
+8 errors, 15 warnings, 2 notes

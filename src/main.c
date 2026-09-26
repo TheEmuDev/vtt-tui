@@ -74,6 +74,7 @@ static void usage(void)
         "  --dump-map         the whole map as text, with a legend\n"
         "  --region A1:P9     only that part of it\n"
         "  --describe         the rooms, their doors and what is in them\n"
+        "  --check            find mistakes: exit 0 clean, 1 findings, 2 unreadable\n"
         "  --json             --describe (or --check) as JSON\n"
         "  -h, --help         this message\n",
         stdout);
@@ -516,6 +517,8 @@ static int run_interactive(const Options *o)
 static int run_tool(const Options *o)
 {
     if (!o->map_path) { fputs("vtt: a map tool needs a map file\n", stderr); return 2; }
+    /* The linter loads the file itself, to hear what the loader forgives. */
+    if (o->tool == TOOL_CHECK) return maptools_check(stdout, o->map_path, o->json);
     char err[256];
     Map *m = mapio_load(o->map_path, err, sizeof err);
     if (!m) { fprintf(stderr, "vtt: %s\n", err); return 2; }

@@ -8902,6 +8902,86 @@ static void test_map_tools_describe(void)
     map_free(m);
 }
 
+static char *check_text(const char *path, int json, int *rc, size_t *len)
+{
+    char  *buf = NULL;
+    size_t n   = 0;
+    FILE  *f   = open_memstream(&buf, &n);
+    *rc = maptools_check(f, path, json);
+    fclose(f);
+    if (len) *len = n;
+    return buf;
+}
+
+static void test_map_tools_check(void)
+{
+    int    rc;
+    size_t n;
+
+    CASE("the shipped fixtures are clean: exit 0");
+    static const char *const clean[] = { "tests/fixtures/two-rooms.vtt", "tests/fixtures/kinds.vtt",
+                                         "tests/fixtures/crowd.vtt" };
+    for (int i = 0; i < 3; i++) {
+        char *t = check_text(clean[i], 0, &rc, NULL);
+        CHECK_EQ(rc, 0);
+        CHECK(strstr(t, "no findings") != NULL);
+        free(t);
+    }
+
+    CASE("the broken fixture: one of every mistake, each found, in a stable order; exit 1");
+    char *t = check_text("tests/fixtures/broken.vtt", 0, &rc, &n);
+    CHECK_EQ(rc, 1);
+    golden_bytes("check-broken", t, n);
+    static const char *const codes[] = {
+        "E010", "E011", "E013", "E014", "E101", "E110", "E111", "E112", "W015", "W016", "W018", "W019",
+        "W020", "W102", "W103", "W104", "W113", "W120", "W121", "W130", "W140", "N021", "N131",
+    };
+    for (size_t i = 0; i < sizeof codes / sizeof *codes; i++) {
+        char want[16];
+        snprintf(want, sizeof want, "\n%s ", codes[i]);
+        if (!strstr(t, want) && strncmp(t, want + 1, 5) != 0) {
+            CHECK(!"a code the broken fixture should raise");
+            fprintf(stderr, "    missing %s\n", codes[i]);
+        }
+    }
+    CHECK(strstr(t, "8 errors, 15 warnings, 2 notes") != NULL);
+    free(t);
+
+    CASE("--json: the same findings, valid, with coordinates beside the names");
+    t = check_text("tests/fixtures/broken.vtt", 1, &rc, &n);
+    CHECK_EQ(rc, 1);
+    CHECK(json_valid(t));
+    CHECK(strstr(t, "\"code\":\"E101\"") != NULL);
+    CHECK(strstr(t, "\"edge\":\"v\"") != NULL);
+    golden_bytes("check-broken-json", t, n);
+    free(t);
+
+    CASE("the dump and the account read the broken map without fault (ASan is the check)");
+    {
+        char err[256];
+        Map *m = mapio_load("tests/fixtures/broken.vtt", err, sizeof err);
+        CHECK(m != NULL);
+        if (m) {
+            FILE *sink = fopen("/dev/null", "w");
+            maptools_dump(sink, m, 0, 0, m->w - 1, m->h - 1);
+            maptools_describe(sink, m, 0);
+            maptools_describe(sink, m, 1);
+            fclose(sink);
+            map_free(m);
+        }
+    }
+
+    CASE("a file that is not a map: E001 and exit 2");
+    t = check_text("/nonexistent/map.vtt", 0, &rc, NULL);
+    CHECK_EQ(rc, 2);
+    CHECK(strncmp(t, "E001 unreadable", 15) == 0);
+    free(t);
+    t = check_text("/nonexistent/map.vtt", 1, &rc, NULL);
+    CHECK_EQ(rc, 2);
+    CHECK(json_valid(t));
+    free(t);
+}
+
 static void test_map_tools_dump(void)
 {
     char err[256];
@@ -12132,6 +12212,7 @@ int main(void)
         { "mapdiag", test_map_diag },
         { "mapdump", test_map_tools_dump },
         { "mapdescribe", test_map_tools_describe },
+        { "mapcheck", test_map_tools_check },
         { "netprim", test_net_primitives },
         { "netserver", test_net_server },
         { "netmsg", test_net_msg },

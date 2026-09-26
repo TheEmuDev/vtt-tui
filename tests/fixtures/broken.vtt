@@ -1,0 +1,39 @@
+VTT 6
+name Broken
+size 8 5
+zoom 7
+ruleset nosuch
+tiles
+........
+....X....
+..... .
+....  ..
+........
+vedges
+|   |   |
+|   |   |
+|   | + |
+|   |+  |
+|   |   |
+hedges
+--------
+  +     
+        
+        
+        
+--------
+|  |
+tokenstatus red "Early"
+token player 1 1 1 "Aria"
+token player 6 1 1 "Bram"
+token enemy 5 2 2 "Ogre"
+token enemy 6 2 1 "Ogre"
+token enemy 7 4 2 "Giant"
+note 5 2 "on the gap"
+mystery line
+fog on
+fogpatch 1 Crypt reveal 2
+fogpatch 2 Mist reveal 1 disabled
+fog
+..C.....
+........

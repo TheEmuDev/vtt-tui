@@ -7,10 +7,12 @@ and the tools to check it. The README's *File format* section is the full refere
 ## The loop
 
 1. Write the `.vtt` file.
-2. `vtt map.vtt --dump-map` and read it back: is every wall where the description says,
+2. `vtt map.vtt --check`: every line it prints is a mistake, with the file line or the
+   square. Fix until it says `no findings` (notes, `N...`, may stay).
+3. `vtt map.vtt --dump-map` and read it back: is every wall where the description says,
    is every door in a wall, is every creature on the floor? `vtt map.vtt --describe`
    says what rooms that makes and how they connect.
-3. Fix, and dump again, until it is right. Then show the GM the dump, name squares
+4. Fix, and dump again, until it is right. Then show the GM the dump, name squares
    (`C3`, `the door at F7`) and take corrections the same way.
 
 ## A complete small map
@@ -92,8 +94,6 @@ last thing on it.
 - Fog: `fog on`, `fogpatch N Name reveal R memory on` (N 1-15, R squares or `manual`), then
   a `fog` section of `H` rows of `W` characters: `.` no fog, `A`-`O` patch 1-15.
 
-## Reading the dump
-
 ## Reading the map back
 
 `vtt map.vtt --describe` lists the rooms -- areas of ground joined by open floor, every
@@ -102,6 +102,12 @@ order (`room 2 (C2)`), with its extent, terrain, every door and window on its ed
 room it leads to, and the creatures, notes and fog in it. A room the party cannot reach
 through doors says `NOT REACHABLE`. Check it against the description: one room where two
 were meant means a wall with a gap in it. `--json` gives the same as JSON.
+
+The linter's codes that matter most when writing by hand: `E011 section-short` (a
+section one row short swallowed the next header -- count the `vedges` and `hedges` rows),
+`E010 row-long` (a `vedges` row is `W + 1`, not more), `W104 door-loose` (a door with no wall
+at either end: usually in the wrong row), `E110`/`E111` (a creature on void or off the
+edge), `W120` (a room nothing leads to). The README lists them all.
 
 `vtt map.vtt --dump-map` prints the lattice in the file's own characters: squares at odd
 positions, boundaries between them, a wall's corners drawn as its line (`-` or `|`, never

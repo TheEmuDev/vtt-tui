@@ -14,6 +14,7 @@
 
 #include "map.h"
 #include "mapio.h"
+#include "maptools.h"
 
 static const char *spill(const uint8_t *data, size_t size, char *path, size_t pathsz)
 {
@@ -34,9 +35,20 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     char in[64], err[256];
     if (!spill(data, size, in, sizeof in)) return 0;
 
+    /* The linter reads the same bytes the loader does, and must survive
+     * whatever it is given; so must the dump and the account of anything
+     * that loads. */
+    FILE *sink = fopen("/dev/null", "w");
+    if (sink) maptools_check(sink, in, 1);
+
     Map *m = mapio_load(in, err, sizeof err);
     unlink(in);
-    if (!m) return 0;
+    if (!m) { if (sink) fclose(sink); return 0; }
+    if (sink) {
+        maptools_dump(sink, m, 0, 0, m->w - 1, m->h - 1);
+        maptools_describe(sink, m, 1);
+        fclose(sink);
+    }
 
     char out[64];
     snprintf(out, sizeof out, "%s.out", in);
