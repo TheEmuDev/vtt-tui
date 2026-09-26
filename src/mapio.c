@@ -315,7 +315,7 @@ static int looks_like_row(const char *line)
  * forgives told: rows too long, characters it does not know, a record it
  * swallowed, the file ending inside it. Short rows are the format's own
  * leniency, counted once for the section. `kind` 0 tiles, 1 edges, 2 fog. */
-typedef struct { const char *name; int rows, width, kind; int shorts, first_short; } Section;
+typedef struct { const char *name; int rows, width, kind; int shorts, first_short; int rows_w; } Section;
 
 static int section_row(Loader *ld, Section *sec, int y, char *line, size_t cap)
 {
@@ -325,12 +325,26 @@ static int section_row(Loader *ld, Section *sec, int y, char *line, size_t cap)
         return -1;
     }
     if (!ld->sink) return 0;
-    if (looks_like_record(line)) {
+    /* A fog row's seen patches are lowercase letters, so a real one can
+     * spell "fog" or "name"; only a line a fog row could not be is a
+     * swallowed record there. */
+    int fog_row = sec->kind == 2 && (int)strlen(line) <= sec->width;
+    for (const char *p = line; fog_row && *p; p++)
+        fog_row = *p == '.' || *p == ' ' || (*p >= 'A' && *p <= 'O') || (*p >= 'a' && *p <= 'o') ||
+                  (*p && strchr("123456789!\"#$%&", *p));
+    if (!fog_row && looks_like_record(line)) {
         diag(ld, ld->line, -1, "E011", "section-short",
              "'%.24s' read as %s row %d of %d: the section is short", line, sec->name, y + 1, sec->rows);
         return 0;
     }
     int len = (int)strlen(line);
+    /* The easy mistake: a vedges row written w long, as if it were a row
+     * of squares -- its last boundary is the east edge's neighbour, and
+     * the east edge itself is missing. */
+    if (sec->kind == 1 && sec->width == sec->rows_w + 1 && len == sec->rows_w && line[len - 1] != ' ')
+        diag(ld, ld->line, len, "W022", "edge-row-short",
+             "vedges row %d is %d characters: a vedges row is %d, one more than the map is wide, "
+             "and the east boundary is the last; is it missing?", y + 1, len, sec->width);
     if (len > sec->width)
         diag(ld, ld->line, sec->width, "E010", "row-long",
              "%s row %d is %d characters, the map needs %d; the rest is ignored",
@@ -608,6 +622,12 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
         body_line  = ld->line;
     }
 
+    if (w == 0 && h == 0) {
+        snprintf(err, errsz, "no size line before the sections (header lines -- name, size, "
+                             "scale... -- come first)");
+        fclose(f);
+        return NULL;
+    }
     if (w < MAP_MIN_DIM || h < MAP_MIN_DIM || w > MAP_MAX_DIM || h > MAP_MAX_DIM) {
         snprintf(err, errsz, "bad map size %dx%d", w, h);
         fclose(f);
@@ -637,12 +657,13 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
     int stray_at = -1;
     while (read_line(ld, line, sizeof line) >= 0) {
         if (!strcmp(line, "fog")) {
-            Section sec = { "fog", h, w, 2, 0, 0 };
+            Section sec = { "fog", h, w, 2, 0, 0, w };
             fog_line = ld->line;
             for (int y = 0; y < h; y++) {
                 if (section_row(ld, &sec, y, line, sizeof line) < 0) break;
                 parse_fog_row(m, y, line);
             }
+            section_done(ld, &sec);
         } else if (!strcmp(line, "fog on")) {
             m->fog_on = 1;
         } else if (!strcmp(line, "fog soft-edge")) {
@@ -650,24 +671,26 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
         } else if (!strncmp(line, "fogpatch ", 9)) {
             RECORD(parse_fogpatch_line(m, line), "fog patch");
         } else if (!strcmp(line, "tiles")) {
-            Section sec = { "tiles", h, w, 0, 0, 0 };
+            Section sec = { "tiles", h, w, 0, 0, 0, w };
             for (int y = 0; y < h; y++) {
                 if (section_row(ld, &sec, y, line, sizeof line) < 0) break;
                 parse_tile_row(line, m->tiles + (size_t)y * (size_t)w, w);
             }
             section_done(ld, &sec);
         } else if (!strcmp(line, "vedges")) {
-            Section sec = { "vedges", h, w + 1, 1, 0, 0 };
+            Section sec = { "vedges", h, w + 1, 1, 0, 0, w };
             for (int y = 0; y < h; y++) {
                 if (section_row(ld, &sec, y, line, sizeof line) < 0) break;
                 parse_edge_row(line, m->vedges + (size_t)y * (size_t)(w + 1), w + 1);
             }
+            section_done(ld, &sec);
         } else if (!strcmp(line, "hedges")) {
-            Section sec = { "hedges", h + 1, w, 1, 0, 0 };
+            Section sec = { "hedges", h + 1, w, 1, 0, 0, w };
             for (int y = 0; y <= h; y++) {
                 if (section_row(ld, &sec, y, line, sizeof line) < 0) break;
                 parse_edge_row(line, m->hedges + (size_t)y * (size_t)w, w);
             }
+            section_done(ld, &sec);
         } else if (!strncmp(line, "token ", 6)) {
             int before = m->tokens.n;
             RECORD(parse_token_line(m, line), "token");
@@ -700,6 +723,10 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
                 if (m->round != round)
                     diag(ld, ld->line, -1, "W020", "clamped", "round %d is out of range; %d is used", round, m->round);
             }
+        } else if (ld->sink && !line[strspn(line, " ")]) {
+            /* Only spaces: a blank line, whatever an editor left in it --
+             * though inside a run of stranded rows it is one of them. */
+            if (stray_at == ld->line - 1) stray_at = ld->line;
         } else if (ld->sink && looks_like_row(line)) {
             /* The first of a run: a swallowed header strands every row of
              * the section it began, and one finding says so. */
@@ -710,7 +737,14 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
             stray_at = ld->line;
         } else if (ld->sink && line[0]) {
             /* Unknown lines are ignored so a newer writer stays loadable. */
-            diag(ld, ld->line, -1, "W015", "unknown-line", "ignored: '%.60s'", line);
+            static const char *const header[] = { "name ", "size ", "zoom ", "scale ", "ruleset ", "metric ", NULL };
+            int is_header = 0;
+            for (int k = 0; header[k] && !is_header; k++) is_header = !strncmp(line, header[k], strlen(header[k]));
+            if (is_header)
+                diag(ld, ld->line, -1, "W015", "unknown-line",
+                     "ignored: '%.40s' is a header line, and header lines come before the sections", line);
+            else
+                diag(ld, ld->line, -1, "W015", "unknown-line", "ignored: '%.60s'", line);
         }
     }
 #undef RECORD

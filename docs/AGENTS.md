@@ -30,7 +30,7 @@ tiles
 ......
 vedges
 |     |
-|  |  +
+|  +  |
 |  |  |
 |     |
 hedges
@@ -43,6 +43,9 @@ token player 1 1 1 "Aria"
 token enemy 4 2 1 "Ghoul"
 note 2 3 "loose flagstone"
 ```
+
+`vedges` has 4 rows of 7 characters; `hedges` has 5 rows of 6 -- its second and fourth rows
+are six spaces each (no boundary), easy to lose sight of.
 
 `VTT 6` first; then header lines (`name`, `size W H`, `scale` feet per square, `metric`
 chebyshev / euclidean / alt / manhattan, optionally `ruleset daggerheart`); then the
@@ -72,6 +75,15 @@ still loads, silently wrong. The dump shows it at once: the room will not close.
 Short rows are allowed (trailing spaces may be dropped by an editor, and read as void or
 no boundary), so a row may end early -- but never contain too few characters *before* the
 last thing on it.
+
+**Other things the format does not forgive:**
+
+- Header lines (`name`, `size`, `scale`, `metric`, `ruleset`) come before the first
+  section; after it they are ignored.
+- There are no comments. A `#` line is an unknown line; inside a section it is a row.
+- A blank line inside a section is a row (of void, or of no boundaries).
+- A door on the map's own edge is a way out, and `--check` notes it (`N105`) rather than
+  warning.
 
 ## Characters
 

@@ -8891,6 +8891,31 @@ static void test_map_tools_describe(void)
     rooms_free(&r);
     map_free(m);
 
+    CASE("the account of the worst case is written in full");
+    m = map_new(512, 512, "cells");
+    for (int y = 0; y < 512; y++)
+        for (int x = 0; x < 512; x++) {
+            map_set_tile(m, x, y, TILE_FLOOR);
+            map_set_vedge(m, x, y, EDGE_WALL);
+            map_set_hedge(m, x, y, EDGE_WALL);
+        }
+    t = describe_text(m, 0, &n);
+    CHECK(strstr(t, "room 262144 (SR512)") != NULL);
+    free(t);
+    map_free(m);
+
+    CASE("a door in a stub of wall inside one room is listed once");
+    m = map_new(3, 3, "stub");
+    for (int y = 0; y < 3; y++) for (int x = 0; x < 3; x++) map_set_tile(m, x, y, TILE_FLOOR);
+    map_set_vedge(m, 1, 1, EDGE_DOOR_CLOSED);             /* a door standing alone in the room */
+    t = describe_text(m, 0, &n);
+    const char *first = strstr(t, "B2|");
+    CHECK(first == NULL || strstr(first + 1, "B2|") == NULL);
+    const char *door = strstr(t, "A2|B2");
+    CHECK(door != NULL && strstr(door + 1, "A2|B2") == NULL);
+    free(t);
+    map_free(m);
+
     CASE("one open 512x512 room is one room, filled without recursion");
     m = map_new(512, 512, "open");
     for (int y = 0; y < 512; y++)
@@ -8969,6 +8994,44 @@ static void test_map_tools_check(void)
             fclose(sink);
             map_free(m);
         }
+    }
+
+    CASE("rules that must not fire: an outer wall on the map's edge, a door with a wall at one end");
+    {
+        Sandbox sb = sandbox_enter("checkok");
+        char path[600];
+        snprintf(path, sizeof path, "%s/ok.vtt", sb.dir);
+        FILE *f = fopen(path, "w");
+        /* A room walled on the map's edge, an inner wall with a door at its
+         * open end (one wall end), a door off the map (a way out), and a
+         * disabled fog patch: only notes. */
+        fputs("VTT 6\nsize 5 3\ntiles\n.....\n.....\n.....\n"
+              "vedges\n|  | |\n|  + +\n|    |\nhedges\n-----\n     \n     \n-----\n"
+              "fog on\nfogpatch 1 Mist disabled\nfog\nA....\n.....\n.....\n", f);
+        fclose(f);
+        t = check_text(path, 0, &rc, NULL);
+        CHECK_EQ(rc, 0);                                   /* notes only: clean */
+        CHECK(strstr(t, "W103") == NULL && strstr(t, "W102") == NULL && strstr(t, "W104") == NULL);
+        CHECK(strstr(t, "N105 door-off-map") != NULL);
+        CHECK(strstr(t, "N131") != NULL);
+        free(t);
+        sandbox_leave(&sb);
+    }
+
+    CASE("--region: either order, one square, a row alone, and what is not a square");
+    {
+        Map *m = map_new(10, 8, "r");
+        int x0, y0, x1, y1;
+        CHECK_EQ(maptools_region(m, "C4:B2", &x0, &y0, &x1, &y1), 1);
+        CHECK(x0 == 1 && y0 == 1 && x1 == 2 && y1 == 3);
+        CHECK_EQ(maptools_region(m, "d5", &x0, &y0, &x1, &y1), 1);
+        CHECK(x0 == 3 && x1 == 3 && y0 == 4 && y1 == 4);
+        CHECK_EQ(maptools_region(m, "5:6", &x0, &y0, &x1, &y1), 1);
+        CHECK(x0 == 0 && x1 == 9 && y0 == 4 && y1 == 5);
+        CHECK_EQ(maptools_region(m, "B2:", &x0, &y0, &x1, &y1), 0);
+        CHECK_EQ(maptools_region(m, "hello", &x0, &y0, &x1, &y1), 0);
+        CHECK_EQ(maptools_region(m, ":B2", &x0, &y0, &x1, &y1), 0);
+        map_free(m);
     }
 
     CASE("a file that is not a map: E001 and exit 2");
@@ -9201,7 +9264,60 @@ static void test_map_diag(void)
     CHECK(diag_has(&d, "E011"));
     map_free(m);
 
+    CASE("a fog row spelling a word is a fog row, not a swallowed record");
+    m = diag_load(sb.dir, "VTT 6\nsize 4 2\ntiles\n....\n....\nfog on\n"
+                          "fogpatch 6 Six\nfogpatch 7 Seven\nfogpatch 15 Last\nfogpatch 14 Four\n"
+                          "fog\nfog.\nname\n", &d);
+    CHECK(!diag_has(&d, "E011"));
+    map_free(m);
+
+    CASE("short wall and fog rows are noted too, and a vedges row as wide as the map is a warning");
+    m = diag_load(sb.dir, "VTT 2\nsize 4 2\ntiles\n....\n....\nvedges\n|  |\n|   |\nhedges\n---\n    \n----\n", &d);
+    CHECK(diag_has(&d, "W022"));
+    CHECK_EQ(diag_line(&d, "W022"), 7);
+    int shorts = 0;
+    for (int k = 0; k < d.n; k++) shorts += !strcmp(d.codes[k], "N021");
+    CHECK_EQ(shorts, 2);                                   /* vedges row 1, hedges row 1 */
+    map_free(m);
+
+    CASE("a line of spaces between sections is blank, not a stray row");
+    m = diag_load(sb.dir, "VTT 2\nsize 2 1\ntiles\n..\n   \nvedges\n| |\n", &d);
+    CHECK(!diag_has(&d, "W019"));
+    map_free(m);
+
+    CASE("a header line after the sections says why it is ignored; no size at all says so");
+    m = diag_load(sb.dir, "VTT 2\nsize 2 1\ntiles\n..\nname Late\n", &d);
+    CHECK(diag_has(&d, "W015"));
+    map_free(m);
+    m = diag_load(sb.dir, "VTT 2\ntiles\n..\nsize 2 1\n", &d);
+    CHECK(m == NULL);
+
+    CASE("the broken fixture loads byte-for-byte the same through either loader");
+    {
+        char here2[1024], o1[700], o2[700];
+        snprintf(here2, sizeof here2, "%s/tests/fixtures/broken.vtt", sb.cwd);
+        Map *b1 = mapio_load(here2, err, sizeof err);
+        Map *b2 = mapio_load_diag(here2, err, sizeof err, diag_collect, &d);
+        CHECK(b1 && b2);
+        snprintf(o1, sizeof o1, "%s/o1.vtt", sb.dir);
+        snprintf(o2, sizeof o2, "%s/o2.vtt", sb.dir);
+        if (b1 && b2) {
+            CHECK_EQ(mapio_write(b1, o1, err, sizeof err), 0);
+            CHECK_EQ(mapio_write(b2, o2, err, sizeof err), 0);
+            FILE *f1 = fopen(o1, "rb"), *f2 = fopen(o2, "rb");
+            char  x1[8192], x2[8192];
+            size_t n1 = f1 ? fread(x1, 1, sizeof x1, f1) : 0, n2 = f2 ? fread(x2, 1, sizeof x2, f2) : 1;
+            if (f1) fclose(f1);
+            if (f2) fclose(f2);
+            CHECK(n1 > 0);
+            CHECK(n1 == n2 && !memcmp(x1, x2, n1));
+        }
+        map_free(b1);
+        map_free(b2);
+    }
+
     CASE("without a sink the loader is silent and loads the same map");
+    map_free(diag_load(sb.dir, "VTT 2\nsize 3 2\ntiles\n.X.\n...\nvedges\n|  |\n", &d));
     char path[600];
     snprintf(path, sizeof path, "%s/d.vtt", sb.dir);
     Map *a1 = mapio_load(path, err, sizeof err);

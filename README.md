@@ -1164,7 +1164,7 @@ zoom 1
 scale 5         # feet per tile
 metric alt
 ruleset daggerheart
-tiles           # one line per row
+tiles           # one line per row  (these # notes are this page's: a map file has no comments)
 vedges          # w+1 chars per row
 hedges          # w chars per row, h+1 rows
 token player 2 2 1 "Aria"
@@ -1211,21 +1211,25 @@ and `note x y` puts one on a square.
 **The boundary rows are the easy part to get wrong by hand.** A wall sits *between* two
 squares, so a map `w` wide has `w + 1` vertical boundaries a row (one each side of every
 square), and `h + 1` rows of horizontal ones (one above every row and one below the last).
-A 3x2 room with a door in its east wall, and a window in the middle of its south wall:
+A 4x2 room with a closet behind a door in its north-east corner:
 
 ```
-size 3 2
+size 4 2
 tiles
-...
-...
-vedges          # 2 rows of 4: west wall, two gaps, east wall
-|  |
-|  +
-hedges          # 3 rows of 3: above row 1, between the rows, below row 2
----
-
--%-
+....
+....
+vedges
+|  +|
+|  ||
+hedges
+----
+    
+----
 ```
+
+`vedges` is 2 rows of 5 (west wall, two gaps, the closet's door or wall, east wall);
+`hedges` is 3 rows of 4 -- above row 1, between the rows (all gaps: four spaces), below
+row 2.
 
 The rows are read by count, not by looking for the next header: a `vedges` section one
 row short reads the `hedges` line as its last row, and every section after it shifts. The
@@ -1325,7 +1329,8 @@ fail the check) what is allowed but worth knowing.
 | `W018 fog-unknown-patch` | a fog row naming a patch no `fogpatch` line creates |
 | `W019 stray-row` | rows outside any section: one too many, or a header swallowed |
 | `W020 clamped` | a setting out of range, used as the nearest value that is not |
-| `W102 door-to-void` | a door or window leading into void or off the map |
+| `W022 edge-row-short` | a `vedges` row as long as the map is wide: one short, the east boundary missing |
+| `W102 door-to-void` | a door or window leading into void |
 | `W103 wall-in-void` | a wall with no map on either side |
 | `W104 door-loose` | a door or window with no wall at either end: in the wrong row or column |
 | `W113 duplicate-label` | two creatures with one name |
@@ -1333,13 +1338,15 @@ fail the check) what is allowed but worth knowing.
 | `W121 party-split` | a player creature in such a room |
 | `W130 fog-patch-empty` | a fog patch with nothing painted |
 | `W140 note-on-void` | a note on a square that is not map |
-| `N021 row-short` | rows shorter than the map, read as trailing blanks -- the format allows it |
+| `N021 row-short` | rows shorter than their section, read as trailing blanks -- the format allows it |
+| `N105 door-off-map` | a door or window on the map's edge: usually a way out |
 | `N131 fog-patch-disabled` | a patch that hides nothing until enabled |
 
 Nothing checked knows a game: every rule is about the map's geometry or the file.
 
 **`--json`** gives `--describe` or `--check` as JSON, for a program rather than a reader:
-the same fields, with 0-based file coordinates beside the square names.
+the same fields, with 0-based file coordinates (`x`, `y`, and for a boundary `edge`, `v` or
+`h`) beside the square names, and a file finding's `line` and `column`.
 
 ## Performance
 

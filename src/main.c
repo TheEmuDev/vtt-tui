@@ -517,6 +517,8 @@ static int run_interactive(const Options *o)
 static int run_tool(const Options *o)
 {
     if (!o->map_path) { fputs("vtt: a map tool needs a map file\n", stderr); return 2; }
+    if (o->json && o->tool == TOOL_DUMP) { fputs("vtt: --json is for --check and --describe\n", stderr); return 2; }
+    if (o->region && o->tool != TOOL_DUMP) { fputs("vtt: --region is for --dump-map\n", stderr); return 2; }
     /* The linter loads the file itself, to hear what the loader forgives. */
     if (o->tool == TOOL_CHECK) return maptools_check(stdout, o->map_path, o->json);
     char err[256];
@@ -524,19 +526,10 @@ static int run_tool(const Options *o)
     if (!m) { fprintf(stderr, "vtt: %s\n", err); return 2; }
 
     int x0 = 0, y0 = 0, x1 = m->w - 1, y1 = m->h - 1;
-    if (o->region) {
-        char a[16] = "", b[16] = "";
-        const char *colon = strchr(o->region, ':');
-        size_t la = colon ? (size_t)(colon - o->region) : strlen(o->region);
-        if (la < sizeof a) { memcpy(a, o->region, la); a[la] = '\0'; }
-        str_lcpy(b, colon ? colon + 1 : a, sizeof b);
-        if (!map_coord_parse(a, &x0, &y0) || !map_coord_parse(b, &x1, &y1)) {
-            fprintf(stderr, "vtt: --region wants two squares, like B2:K12\n");
-            map_free(m);
-            return 2;
-        }
-        if (x1 < x0) { int t = x0; x0 = x1; x1 = t; }
-        if (y1 < y0) { int t = y0; y0 = y1; y1 = t; }
+    if (o->region && !maptools_region(m, o->region, &x0, &y0, &x1, &y1)) {
+        fprintf(stderr, "vtt: --region wants two squares, like B2:K12\n");
+        map_free(m);
+        return 2;
     }
 
     int rc = 0;

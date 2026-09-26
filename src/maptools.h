@@ -10,14 +10,22 @@
  * Everything here reads a Map and writes text; nothing draws, nothing
  * changes the map. Documented in README *Map tools* and docs/AGENTS.md.
  *
- * Cost: linear in the map's squares, no recursion; a 512x512 map is well
- * under 50 ms. One-shot tools, so no profiler zones. */
+ * Cost: the room fill is linear in the map's squares with no recursion;
+ * the account and the linter then pass over each room's bounding box, so
+ * many rooms with large overlapping boxes cost more than linear. A 512x512
+ * map of 262,144 rooms is about a third of a second. One-shot tools, so
+ * no profiler zones. */
 
 /* The whole map, or the region x0..x1, y0..y1 (inclusive, clipped), as a
  * text lattice in the file format's own alphabet: one character a square,
  * one a boundary, column letters and row numbers round it, then a legend
  * for creatures, notes and fog. */
 void maptools_dump(FILE *out, const Map *m, int x0, int y0, int x1, int y1);
+
+/* "B2:K12" (either order, case aside; one square alone is that square)
+ * into squares. A row without a column -- "5:6" -- keeps every column, as
+ * :6 keeps the column. Returns 0 when it is not two squares. */
+int  maptools_region(const Map *m, const char *spec, int *x0, int *y0, int *x1, int *y1);
 
 /* Rooms: the 4-connected areas of walkable squares that nothing but open
  * ground joins -- every wall, window and door (open or closed, secret or

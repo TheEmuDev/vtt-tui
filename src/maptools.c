@@ -220,6 +220,22 @@ void maptools_dump(FILE *out, const Map *m, int x0, int y0, int x1, int y1)
     }
 }
 
+int maptools_region(const Map *m, const char *spec, int *x0, int *y0, int *x1, int *y1)
+{
+    char a[16] = "", b[16] = "";
+    const char *colon = strchr(spec, ':');
+    size_t la = colon ? (size_t)(colon - spec) : strlen(spec);
+    if (!la || la >= sizeof a) return 0;
+    memcpy(a, spec, la);
+    a[la] = '\0';
+    str_lcpy(b, colon ? colon + 1 : a, sizeof b);
+    int ax = 0, ay = 0, bx = m->w - 1, by = m->h - 1;
+    if (!map_coord_parse(a, &ax, &ay) || !map_coord_parse(b, &bx, &by)) return 0;
+    *x0 = imin(ax, bx); *x1 = imax(ax, bx);
+    *y0 = imin(ay, by); *y1 = imax(ay, by);
+    return 1;
+}
+
 /* ----------------------------------------------------------------- rooms */
 
 void maptools_edge_name(const Map *m, int vertical, int x, int y, char *buf, size_t sz)
@@ -449,9 +465,13 @@ static int room_openings(const Map *m, const Rooms *r, int room, Opening **buf, 
                 uint8_t k = side[s].v ? map_vedge(m, side[s].ex, side[s].ey) : map_hedge(m, side[s].ex, side[s].ey);
                 if (k == EDGE_NONE || k == EDGE_WALL) continue;
                 if (n == *cap) { *cap = *cap ? *cap * 2 : 32; *buf = xrealloc(*buf, (size_t)*cap * sizeof **buf); }
+                int to = !map_in_bounds(m, side[s].ox, side[s].oy) ? -2 : rooms_at(r, m, side[s].ox, side[s].oy);
+                /* A door in a stub of wall inside one room is seen from
+                 * both its squares; list it once, from the first. */
+                if (to == room && (side[s].oy < y || (side[s].oy == y && side[s].ox < x))) continue;
                 Opening *o = &(*buf)[n++];
                 o->kind = k; o->vertical = side[s].v; o->x = side[s].ex; o->y = side[s].ey;
-                o->to = !map_in_bounds(m, side[s].ox, side[s].oy) ? -2 : rooms_at(r, m, side[s].ox, side[s].oy);
+                o->to = to;
             }
         }
     return n;
@@ -671,7 +691,8 @@ typedef struct {
     char slug[24];
     char where[80];         /* a square, a boundary, a room; empty for a file finding */
     int  line;              /* 1-based; 0 for a map finding */
-    int  x, y, edge;        /* 0-based; edge 'v', 'h' or 0 */
+    int  col;               /* 0-based column of a file finding, -1 for none */
+    int  x, y, edge;        /* 0-based square of a map finding; edge 'v', 'h' or 0 */
     char msg[256];
 } Finding;
 
@@ -684,7 +705,7 @@ static Finding *add_finding(Findings *fs, const char *code, const char *slug)
     memset(f, 0, sizeof *f);
     str_lcpy(f->code, code, sizeof f->code);
     str_lcpy(f->slug, slug, sizeof f->slug);
-    f->x = f->y = -1;
+    f->x = f->y = f->col = -1;
     return f;
 }
 
@@ -692,7 +713,7 @@ static void file_finding(void *ctx, int line, int col, const char *code, const c
 {
     Finding *f = add_finding(ctx, code, slug);
     f->line = line;
-    f->x    = col;
+    f->col  = col;
     str_lcpy(f->msg, msg, sizeof f->msg);
 }
 
@@ -740,9 +761,16 @@ static void check_edge(const Map *m, Findings *fs, int vertical, int x, int y)
     }
     if (!opening) return;
     if (va || vb) {
+        /* Into void on the map is a mistake; off its edge is usually a way
+         * out of the dungeon, and worth a note only. */
         int onmap = map_in_bounds(m, va ? ax : x, va ? ay : y);
-        snprintf(msg, sizeof msg, "%s leads %s", kn, onmap ? "into void" : "off the map");
-        map_finding(fs, "W102", "door-to-void", x, y, vertical ? 'v' : 'h', where, msg);
+        if (onmap) {
+            snprintf(msg, sizeof msg, "%s leads into void", kn);
+            map_finding(fs, "W102", "door-to-void", x, y, vertical ? 'v' : 'h', where, msg);
+        } else {
+            snprintf(msg, sizeof msg, "%s leads off the map: a way out?", kn);
+            map_finding(fs, "N105", "door-off-map", x, y, vertical ? 'v' : 'h', where, msg);
+        }
         return;
     }
     /* Its two ends: a door meets a wall at both in any room ever drawn. */
@@ -758,14 +786,16 @@ static int finding_cmp(const void *pa, const void *pb)
     const Finding *a = pa, *b = pb;
     int fa = a->line > 0 || !a->where[0], fb = b->line > 0 || !b->where[0];
     if (fa != fb) return fa ? -1 : 1;                    /* the file's own first */
-    if (fa) return a->line - b->line;
+    if (fa && a->line != b->line) return a->line - b->line;
+    if (fa) { int c = strcmp(a->code, b->code); return c ? c : strcmp(a->msg, b->msg); }
     int ra = a->code[0] == 'E' ? 0 : a->code[0] == 'W' ? 1 : 2;
     int rb = b->code[0] == 'E' ? 0 : b->code[0] == 'W' ? 1 : 2;
     if (ra != rb) return ra - rb;                        /* errors, warnings, notes */
     int c = strcmp(a->code, b->code);
     if (c) return c;
     if (a->y != b->y) return a->y - b->y;
-    return a->x - b->x;
+    if (a->x != b->x) return a->x - b->x;
+    return strcmp(a->msg, b->msg);          /* a total order: the report never depends on qsort */
 }
 
 static const char *severity(const Finding *f)
@@ -890,6 +920,7 @@ int maptools_check(FILE *out, const char *path, int json)
             j_kstr(&j, "slug", f->slug);
             j_kstr(&j, "severity", severity(f));
             j_key(&j, "line");  if (f->line > 0) j_int(&j, f->line); else j_null(&j);
+            j_key(&j, "column"); if (f->col >= 0) j_int(&j, f->col); else j_null(&j);
             j_key(&j, "where"); if (f->where[0]) j_str(&j, f->where); else j_null(&j);
             j_key(&j, "x");     if (f->x >= 0) j_int(&j, f->x); else j_null(&j);
             j_key(&j, "y");     if (f->y >= 0) j_int(&j, f->y); else j_null(&j);
