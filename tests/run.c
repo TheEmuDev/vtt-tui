@@ -12393,7 +12393,7 @@ static void test_ctl(void)
 
     CASE("an error names its line and sends nothing else");
     t = ctl_ask(&a, "status\ndump B2:ZZ99:4\n");
-    CHECK(strncmp(t, "error: line 2: B2:ZZ99:4 is not a region", 40) == 0);
+    CHECK(strncmp(t, "error: line 2: ZZ99:4 is not a square", 37) == 0);
     CHECK(strchr(t, '\n') == t + strlen(t) - 1);
     free(t);
     t = ctl_ask(&a, "describe yaml\n");
@@ -12504,7 +12504,7 @@ static int ctl_raw_connect(const char *path)
     return fd;
 }
 
-typedef struct { int fd; char buf[8192]; size_t n; int done; } CtlReader;
+typedef struct { int fd; char buf[8192]; size_t n; int done, reset; } CtlReader;
 
 static int ctl_read_some(void *ctx)
 {
@@ -12513,6 +12513,7 @@ static int ctl_read_some(void *ctx)
         struct pollfd p = { rd->fd, POLLIN, 0 };
         if (poll(&p, 1, 0) <= 0) return rd->done;
         ssize_t k = read(rd->fd, rd->buf + rd->n, sizeof rd->buf - 1 - rd->n);
+        if (k < 0) rd->reset = 1;          /* the answer must end in a clean EOF */
         if (k <= 0) { rd->done = 1; rd->buf[rd->n] = '\0'; return 1; }
         rd->n += (size_t)k;
     }
@@ -12586,6 +12587,22 @@ static void test_ctl_marked(void)
     free(t);
     press(&a, "\x1b\x1b");
     CHECK_EQ(a.ed.mode, ED_NORMAL);
+
+    CASE("marked: a wall-mode line of corners holds no squares, and a corner on the east edge is named from inside");
+    a.ed.cx = 15; a.ed.cy = 2;
+    press(&a, "wl");
+    t = ctl_ask(&a, "marked");
+    CHECK(strstr(t, "corner at the top right of P") != NULL);
+    free(t);
+    press(&a, "vjj");
+    t = ctl_ask(&a, "marked");
+    CHECK(strstr(t, "box a line of corners, no squares inside it\n") != NULL);
+    free(t);
+    t = ctl_ask(&a, "marked json");
+    CHECK(json_valid(t + 3));
+    CHECK(strstr(t, "\"squares\":null") != NULL);
+    free(t);
+    press(&a, "\x1b\x1b");
 
     CASE("marked: the ruler's points and its length");
     a.ed.cx = 2; a.ed.cy = 2;
@@ -12864,6 +12881,24 @@ static void test_ctl_edits(void)
     free(t);
     CHECK_EQ(fog_at(m, 2, 2) & FOG_ID, 0);
 
+    CASE("a read after an edit in the same request sees it, and does not take the request's batch for the GM's");
+    t = ctl_ask(&a, "tile E7 water\nstatus\ndump E7\n");
+    CHECK(strstr(t, "edits taken\n") != NULL);
+    CHECK(strstr(t, "and this request's changes one more") != NULL);
+    CHECK(strstr(t, "7  ~") != NULL);
+    free(t);
+
+    CASE("dump refuses a region off the map; a half region and a size after the label say what is wrong");
+    t = ctl_ask(&a, "dump B2:ZZ99\n");
+    CHECK(strstr(t, "ZZ99 is not a square on this map") != NULL);
+    free(t);
+    t = ctl_ask(&a, "room B2:\n");
+    CHECK(strstr(t, "B2:: a region is two squares") != NULL);
+    free(t);
+    t = ctl_ask(&a, "token add enemy C3 \"X\" size 2\n");
+    CHECK(strstr(t, "the size goes before the label") != NULL);
+    free(t);
+
     CASE("a request that changes nothing is no undo step");
     depth = a.undo.depth;
     t = ctl_ask(&a, "tile B2 floor\n");
@@ -12892,9 +12927,21 @@ static void test_ctl_edits(void)
     free(t);
     CHECK_EQ(map_tile(m, 1, 1), TILE_WATER);
     t = ctl_ask(&a, "tile B3 water\nundo\n");
-    CHECK(strstr(t, "error: line 2: undo comes before any edit") != NULL);
+    CHECK_EQ(strcmp(t, "error: undo goes in a request of its own\n"), 0);
     free(t);
-    CHECK_EQ(map_tile(m, 1, 2), TILE_FLOOR);           /* rolled back with it */
+    CHECK_EQ(map_tile(m, 1, 2), TILE_FLOOR);           /* nothing ran */
+    t = ctl_ask(&a, "tile B3 water\n");
+    free(t);
+    t = ctl_ask(&a, "# first\nundo\nundo\n");
+    CHECK_EQ(strcmp(t, "error: undo goes in a request of its own\n"), 0);
+    free(t);
+    CHECK_EQ(map_tile(m, 1, 2), TILE_WATER);           /* not taken back half way */
+    CASE("the agent's undo also stops at a change the GM made outside the log");
+    CHECK(map_note_set(m, 7, 7, "the GM's own"));      /* as s n on a square does */
+    t = ctl_ask(&a, "undo\n");
+    CHECK(strstr(t, "something has happened since") != NULL);
+    free(t);
+    CHECK_EQ(map_tile(m, 1, 2), TILE_WATER);
 
     CASE("busy: edits wait while the GM is part way through something; reads do not");
     before = ctl_snapshot(m);
@@ -13064,9 +13111,12 @@ static void test_ctl_live(void)
             ctl_service(&a.ctl, fds, n, prof_now_ns() / 1000000u);
         }
         free(big);
+        CHECK_EQ(off, (size_t)CTL_REQ_CAP + 100);    /* the server kept reading */
+        shutdown(rd.fd, SHUT_WR);
         fcntl(rd.fd, F_SETFL, fcntl(rd.fd, F_GETFL) & ~O_NONBLOCK);
         ctl_pump(&a, ctl_read_some, &rd);
         CHECK_EQ(strcmp(rd.buf, "error: the request is over 64 KB\n"), 0);
+        CHECK_EQ(rd.reset, 0);
         close(rd.fd);
     }
 
@@ -13120,6 +13170,52 @@ static void test_ctl_live(void)
             else        CHECK(strstr(text, "vtt: error: line 1: unknown request bogus") != NULL);
         }
         unlink(out);
+    }
+
+    CASE("vtt --ctl with a request over 64 KB, or far past the socket's buffer: the answer says why, exit 1");
+    for (int round = 0; round < 2; round++) {
+        size_t big = round ? 300 * 1024 : CTL_REQ_CAP + 5000;
+        char  *req = malloc(big + 1);
+        memset(req, '#', big);
+        req[big] = '\0';
+        char out[700];
+        snprintf(out, sizeof out, "%s/ctl-big.txt", sb.dir);
+        fflush(stdout);
+        pid_t pid = fork();
+        if (pid == 0) {
+            int o = open(out, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+            dup2(o, 2);
+            int rc = ctl_client_main(req, 0);
+            _exit(rc);
+        }
+        int stc[3] = { (int)pid, 0, 0 };
+        ctl_pump(&a, ctl_child_done, stc);
+        CHECK(WIFEXITED(stc[2]) && WEXITSTATUS(stc[2]) == 1);
+        FILE *f = fopen(out, "r");
+        char  text[256] = "";
+        size_t k = f ? fread(text, 1, sizeof text - 1, f) : 0;
+        text[k] = '\0';
+        if (f) fclose(f);
+        CHECK(strstr(text, "the request is over 64 KB") != NULL);
+        unlink(out);
+        free(req);
+    }
+
+    CASE("--ctl will not talk through a directory that is not this user's alone");
+    {
+        chmod(dir, 0755);
+        fflush(stdout);
+        pid_t pid = fork();
+        if (pid == 0) {
+            int o = open("/dev/null", O_WRONLY);
+            dup2(o, 2);
+            _exit(ctl_client_main("status", 0));
+        }
+        int stc = 0;
+        waitpid(pid, &stc, 0);
+        CHECK(WIFEXITED(stc) && WEXITSTATUS(stc) == 2);
+        CHECK(access(want, F_OK) == 0);            /* and removed nothing */
+        chmod(dir, 0700);
     }
 
     CASE(":agent off closes it and removes the socket; --ctl then finds nobody (exit 2)");

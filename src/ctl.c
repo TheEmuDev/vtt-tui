@@ -26,23 +26,31 @@ int ctl_dir(char *buf, size_t sz)
 }
 
 /* Ours alone: a real directory (not a link to one), owned by this user,
- * that nobody else can list or enter. Made if it is not there. */
-static int dir_ready(const char *dir, char *err, size_t errsz)
+ * that nobody else can list or enter. The server makes it if it is not
+ * there; the client only checks, since a socket in a directory anyone else
+ * could write to may be anyone's -- and whatever answers is printed as
+ * the vtt's answer to an agent that believes it. */
+static int dir_ours(const char *dir, char *err, size_t errsz)
 {
-    if (mkdir(dir, 0700) < 0 && errno != EEXIST) {
-        snprintf(err, errsz, "cannot make %s: %s", dir, strerror(errno));
-        return -1;
-    }
     struct stat st;
     if (lstat(dir, &st) < 0) {
         snprintf(err, errsz, "cannot read %s: %s", dir, strerror(errno));
         return -1;
     }
     if (!S_ISDIR(st.st_mode) || st.st_uid != getuid() || (st.st_mode & 077)) {
-        snprintf(err, errsz, "%s is not this user's alone - not listening there", dir);
+        snprintf(err, errsz, "%s is not this user's alone - not using it", dir);
         return -1;
     }
     return 0;
+}
+
+static int dir_ready(const char *dir, char *err, size_t errsz)
+{
+    if (mkdir(dir, 0700) < 0 && errno != EEXIST) {
+        snprintf(err, errsz, "cannot make %s: %s", dir, strerror(errno));
+        return -1;
+    }
+    return dir_ours(dir, err, errsz);
 }
 
 static int sock_path(char *buf, size_t sz, const char *dir, long pid)
@@ -94,15 +102,26 @@ int ctl_start(Ctl *c, char *err, size_t errsz)
     memset(&sa, 0, sizeof sa);
     sa.sun_family = AF_UNIX;
     str_lcpy(sa.sun_path, path, sizeof sa.sun_path);
-    /* A file of this name is a vtt that had this pid and did not tidy up. */
-    unlink(path);
+    /* Bound and listening under a name --ctl does not look at, then moved
+     * into place: a client finding it between bind and listen would be
+     * refused, take it for a crashed vtt's, and remove it. A file of the
+     * final name is a vtt that had this pid and did not tidy up; rename
+     * replaces it. */
+    char tmp[CTL_PATH_MAX];
+    if (snprintf(tmp, sizeof tmp, "%s/%ld.new", dir, (long)getpid()) >= (int)sizeof tmp) {
+        snprintf(err, errsz, "the socket path is too long");
+        close(fd);
+        return -1;
+    }
+    str_lcpy(sa.sun_path, tmp, sizeof sa.sun_path);
+    unlink(tmp);
     mode_t old = umask(077);
     int rc = bind(fd, (struct sockaddr *)&sa, sizeof sa);
     umask(old);
-    if (rc < 0 || listen(fd, CTL_MAX_CONN) < 0) {
+    if (rc < 0 || listen(fd, CTL_MAX_CONN) < 0 || rename(tmp, path) < 0) {
         snprintf(err, errsz, "cannot listen at %s: %s", path, strerror(errno));
         close(fd);
-        unlink(path);
+        unlink(tmp);
         return -1;
     }
     c->listen_fd = fd;
@@ -168,13 +187,17 @@ static int conn_read(Ctl *c, int i)
     CtlConn *k = &c->c[i];
     for (;;) {
         if (k->in_len == CTL_REQ_CAP) {
-            /* Full, and still more coming: say why and stop listening. */
-            char probe;
-            ssize_t r = recv(k->fd, &probe, 1, 0);
-            if (r == 0) break;
+            /* Full. Whatever else comes is read and thrown away until the
+             * client shuts its side, then the answer says why: closing with
+             * bytes unread would reset the connection, and the client would
+             * lose the answer with it. The deadline still stands. */
+            char sink[4096];
+            ssize_t r = recv(k->fd, sink, sizeof sink, 0);
+            if (r > 0) { k->over = 1; continue; }
             if (r < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) return 0;
             if (r < 0 && errno == EINTR) continue;
             if (r < 0) { conn_close(c, i); return -1; }
+            if (!k->over) break;               /* exactly the cap: a request */
             c->dropped++;
             answer_text(c, i, "error: the request is over 64 KB\n");
             return 0;
@@ -285,7 +308,7 @@ void ctl_answer(Ctl *c, int i, char *out, size_t len)
     k->out = out;
     k->out_len = len;
     k->out_off = 0;
-    if (k->state == CTL_READY) c->requests++;
+    if (k->state == CTL_READY && k->in_len) c->requests++;    /* not a --ctl liveness probe */
     k->state = CTL_WRITING;
     /* Most answers go at once; a big one finishes under poll. */
     (void)conn_write(c, i);
@@ -318,7 +341,7 @@ static char *exchange(int fd, const char *req, size_t len, size_t *out_len)
         ssize_t w = send(fd, req + off, len - off, MSG_NOSIGNAL);
         if (w > 0) { off += (size_t)w; continue; }
         if (w < 0 && errno == EINTR) continue;
-        return NULL;
+        break;                     /* the server has stopped reading: its answer says why */
     }
     shutdown(fd, SHUT_WR);
 
@@ -340,6 +363,7 @@ static char *exchange(int fd, const char *req, size_t len, size_t *out_len)
         if (r > 0) { n += (size_t)r; continue; }
         if (r == 0) break;
         if (errno == EINTR) continue;
+        if (n > 0) break;          /* a reset after the answer: keep what came */
         free(buf);
         return NULL;
     }
@@ -396,8 +420,12 @@ static int find_live(const char *dir, long *pids, int max)
 
 int ctl_client_main(const char *req, long pid)
 {
-    char dir[CTL_PATH_MAX];
+    char dir[CTL_PATH_MAX], err[CTL_PATH_MAX + 64];
     if (ctl_dir(dir, sizeof dir) < 0) { fputs("vtt: no socket directory\n", stderr); return 2; }
+    if (access(dir, F_OK) == 0 && dir_ours(dir, err, sizeof err) < 0) {
+        fprintf(stderr, "vtt: %s\n", err);
+        return 2;
+    }
 
     if (!pid) {
         long pids[CTL_LIST_MAX];

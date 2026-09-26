@@ -27,6 +27,7 @@ typedef struct {
     CtlState  state;
     char     *in;               /* CTL_REQ_CAP + 1, nul-terminated when READY */
     size_t    in_len;
+    int       over;             /* more than CTL_REQ_CAP came: being drained */
     char     *out;              /* the answer, owned; sent from out_off */
     size_t    out_len, out_off;
     uint64_t  since_ms;         /* connected; the deadline runs from here */

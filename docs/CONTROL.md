@@ -71,7 +71,7 @@ as `--describe` names them. Lines run in order, so a read sees the edits before 
 | `token set WHO label "..."\|size N\|note "..."` | |
 | `note SQ "text"`, `note SQ` | a GM-only note on a square, or clears it |
 | `fog paint REGION N` | paints the region into fog patch N (0 scrubs) |
-| `undo` | takes back the agent's last request, only while nothing came after it |
+| `undo` | takes back the agent's last request, only while nothing came after it; alone in its request, since it cannot roll back with other lines |
 
 Edits are refused, with `busy:` and the reason, when a prompt or dialog is open, the `:`
 line is being typed, a key prefix is waiting, a wall stroke is open (wall mode's pen keeps
@@ -94,8 +94,17 @@ area for a moment. The GM's cursor and camera never move.
   forgotten. A redo tail the GM had (from an undo of their own) is let go by the first
   op, as any edit would, and does not come back with the rollback.
 - **The agent's `undo`** compares `Undo.stamp`, which every record, undo, redo and clear
-  moves, with the stamp its last request left; any difference means something came
-  after, and only the GM's `u` may take it back.
+  moves, and `Map.gen`, which every change moves (the GM's own square notes and fog
+  settings go round the log), with what its last request left; any difference means
+  something came after, and only the GM's `u` may take it back. It goes in a request of
+  its own: it cannot be rolled back with the lines around it.
+- **The client checks the directory too.** `/tmp/vtt-<uid>` could be made by anyone
+  first, and a socket in it answered by anyone, straight into an agent that believes the
+  answer; `vtt --ctl` refuses a directory that is not this user's alone, as the server
+  does. The server binds under `<pid>.new` and renames into place once listening, so a
+  client never finds it refusing and removes it as stale.
+- **An oversized request is read to its end** and thrown away before the answer: closing
+  with bytes unread would reset the connection and lose the answer.
 - **Square notes undo.** They did not before: `OP_NOTE` (`undo_set_note`) carries the text
   before and after in two token slots' `note`. The GM's own `s n` on a square still sets
   the note directly and is not undone by `u`.

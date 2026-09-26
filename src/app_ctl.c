@@ -97,7 +97,8 @@ const char *app_ctl_busy(const App *a)
 
 /* ----------------------------------------------------------------- reads */
 
-static void do_status(App *a, FILE *out)
+/* `own`: this request has edits in an open batch, which is not the GM's. */
+static void do_status(App *a, FILE *out, int own)
 {
     const Map *m = a->map;
     if (m) {
@@ -108,8 +109,9 @@ static void do_status(App *a, FILE *out)
     else fputs("map none open\n", out);
     if (a->screen == SCREEN_EDITOR) fprintf(out, "screen build, %s mode\n", mode_name(a->ed.mode));
     else                            fprintf(out, "screen %s\n", screen_name(a->screen));
-    fprintf(out, "undo %d back, %d forward\n", a->undo.depth, a->undo.nmarks - a->undo.depth);
-    const char *busy = app_ctl_busy(a);
+    fprintf(out, "undo %d back, %d forward%s\n", a->undo.depth, a->undo.nmarks - a->undo.depth,
+            own ? ", and this request's changes one more" : "");
+    const char *busy = own ? NULL : app_ctl_busy(a);
     fprintf(out, "edits %s%s\n", busy ? "not now: " : "taken", busy ? busy : "");
 }
 
@@ -155,8 +157,21 @@ typedef struct {
     int      bx0, by0, bx1, by1;     /* the box's squares, or the disc's bounding box */
     int      ox, oy, radius;         /* a circle's centre square and radius */
     int      box_corners;            /* the box is wall mode's, between corners */
+    int      box_empty;              /* it holds no squares: a straight line of corners */
     const Ruler *ruler;              /* NULL when not measuring */
 } Marked;
+
+/* A lattice corner by the square it touches: the top left of one, or on
+ * the map's east or south edge the top right, bottom left or bottom right
+ * of the last. */
+static void corner_name(const Map *m, int wx, int wy, char *buf, size_t sz)
+{
+    char at[MAP_COORD_MAX];
+    int  east = wx >= m->w, south = wy >= m->h;
+    map_coord_name(east ? m->w - 1 : wx, south ? m->h - 1 : wy, at, sizeof at);
+    snprintf(buf, sz, "%s of %s", east && south ? "bottom right" : east ? "top right"
+                                  : south ? "bottom left" : "top left", at);
+}
 
 /* The squares a shape really takes: a circle's own box is a bound, not
  * the squares inside it. Clipped to the map. */
@@ -171,7 +186,9 @@ static void shape_squares(const Map *m, const EdShape *sh, Marked *mk)
             mk->bx0 = imin(mk->bx0, x); mk->bx1 = imax(mk->bx1, x);
             mk->by0 = imin(mk->by0, y); mk->by1 = imax(mk->by1, y);
         }
-    if (mk->bx1 < mk->bx0) { mk->bx0 = mk->bx1 = x0; mk->by0 = mk->by1 = y0; }
+    /* A wall-mode anchor on the cursor's own line holds no squares at all:
+     * say so, rather than name one it does not hold. */
+    mk->box_empty = mk->bx1 < mk->bx0 || mk->by1 < mk->by0;
 }
 
 static void gather_marked(const App *a, Marked *mk)
@@ -249,8 +266,9 @@ static void do_marked(App *a, FILE *out, int json)
             json_open(&j, '{');
             json_kint(&j, "x", mk.wx);
             json_kint(&j, "y", mk.wy);
-            map_coord_name(mk.wx, mk.wy, at, sizeof at);
-            json_kstr(&j, "top_left_of", at);
+            char cn[48];
+            corner_name(m, mk.wx, mk.wy, cn, sizeof cn);
+            json_kstr(&j, "at", cn);
             json_close(&j, '}');
         } else json_null(&j);
         json_key(&j, "box");
@@ -259,7 +277,8 @@ static void do_marked(App *a, FILE *out, int json)
             json_kstr(&j, "shape", mk.box == ED_SHAPE_CIRCLE + 1 ? "circle" : "rect");
             json_key(&j, "between");
             json_str(&j, mk.box_corners ? "corners" : "squares");
-            j_region(&j, "squares", mk.bx0, mk.by0, mk.bx1, mk.by1);
+            if (mk.box_empty) { json_key(&j, "squares"); json_null(&j); }
+            else j_region(&j, "squares", mk.bx0, mk.by0, mk.bx1, mk.by1);
             if (mk.box == ED_SHAPE_CIRCLE + 1) {
                 json_kint(&j, "radius", mk.radius);
                 if (!mk.box_corners) {
@@ -320,10 +339,13 @@ static void do_marked(App *a, FILE *out, int json)
     region_name(mk.cx0, mk.cy0, mk.cx1, mk.cy1, r, sizeof r);
     fprintf(out, "cursor %s\n", r);
     if (mk.corner) {
-        map_coord_name(mk.wx, mk.wy, at, sizeof at);
-        fprintf(out, "corner at the top left of %s\n", at);
+        char cn[48];
+        corner_name(m, mk.wx, mk.wy, cn, sizeof cn);
+        fprintf(out, "corner at the %s\n", cn);
     }
-    if (mk.box) {
+    if (mk.box && mk.box_empty)
+        fputs("box a line of corners, no squares inside it\n", out);
+    else if (mk.box) {
         region_name(mk.bx0, mk.by0, mk.bx1, mk.by1, r, sizeof r);
         if (mk.box == ED_SHAPE_CIRCLE + 1 && !mk.box_corners) {
             map_coord_name(mk.ox, mk.oy, at, sizeof at);
@@ -400,6 +422,10 @@ static int region(const Map *m, const char *w, int *x0, int *y0, int *x1, int *y
     char *colon = strchr(a, ':');
     const char *b = a;
     if (colon) { *colon = '\0'; b = colon + 1; }
+    if (!a[0] || !b[0]) {
+        snprintf(err, errsz, "%.40s: a region is two squares, like B2:K12, or one", w);
+        return 0;
+    }
     int ax, ay, bx, by;
     if (!square(m, a, &ax, &ay, err, errsz) || !square(m, b, &bx, &by, err, errsz)) return 0;
     *x0 = imin(ax, bx); *x1 = imax(ax, bx);
@@ -577,6 +603,7 @@ static int token_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *er
         int x, y, size = 1;
         if (!square(m, w[3], &x, &y, err, errsz)) return -1;
         if (n == 7) {
+            if (!strcmp(w[5], "size")) BAD("the size goes before the label: token add enemy C3 size 2 \"Ogre\"");
             if (strcmp(w[4], "size") != 0 || !word_int(w[5], 1, 3, &size))
                 BAD("size is 1, 2 or 3 squares wide, as: size 2");
         }
@@ -761,7 +788,9 @@ static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FIL
         if (n > 1) { snprintf(err, errsz, "undo takes nothing after it"); return -1; }
         if (ed->lines) { snprintf(err, errsz, "undo comes before any edit in a request"); return -1; }
         if (!a->ctl_undoable) { snprintf(err, errsz, "there is no change of the agent's to take back"); return -1; }
-        if (a->undo.stamp != a->ctl_stamp) {
+        /* The log as the edit left it, and the map: a note or a fog setting
+         * the GM changes outside the log still moves Map.gen. */
+        if (a->undo.stamp != a->ctl_stamp || m->gen != a->ctl_gen) {
             snprintf(err, errsz, "something has happened since the agent's last change - only the GM's u takes it back now");
             return -1;
         }
@@ -778,16 +807,15 @@ static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FIL
 
     if (!strcmp(v, "status")) {
         if (n > 1) { snprintf(err, errsz, "status takes nothing after it"); return -1; }
-        do_status(a, out);
+        do_status(a, out, ed->lines > 0);
         return 0;
     }
     if (!strcmp(v, "dump")) {
         int x0 = 0, y0 = 0, x1 = m->w - 1, y1 = m->h - 1;
         if (n > 2) { snprintf(err, errsz, "dump takes one region, like B2:K12"); return -1; }
-        if (n == 2 && !maptools_region(m, w[1], &x0, &y0, &x1, &y1)) {
-            snprintf(err, errsz, "%.40s is not a region on this map, like B2:K12", w[1]);
-            return -1;
-        }
+        /* Refused off the map, as an edit is: clipped, a mistyped region
+         * would quietly read the wrong squares. */
+        if (n == 2 && !region(m, w[1], &x0, &y0, &x1, &y1, err, errsz)) return -1;
         maptools_dump(out, m, x0, y0, x1, y1);
         return 0;
     }
@@ -813,6 +841,29 @@ static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FIL
     return -1;
 }
 
+/* 0 when the request holds `undo` and any other line. */
+static int undo_alone(const char *p)
+{
+    int lines = 0, undo = 0;
+    while (*p) {
+        const char *end = strchr(p, '\n');
+        size_t      ll  = end ? (size_t)(end - p) : strlen(p);
+        char line[1024], w[CTL_WORDS][CTL_WORD_MAX], e[200];
+        int  n = -1;
+        if (ll < sizeof line) {
+            memcpy(line, p, ll);
+            line[ll] = '\0';
+            n = split_words(line, w, e, sizeof e);
+        }
+        if (n != 0 && !(n > 0 && w[0][0] == '#')) {
+            lines++;
+            undo |= n > 0 && !strcmp(w[0], "undo");
+        }
+        p = end ? end + 1 : p + ll;
+    }
+    return !undo || lines == 1;
+}
+
 /* A request's edits are in: close the batch and tell both sides. */
 static void finish_edits(App *a, Edits *ed, FILE *out)
 {
@@ -825,6 +876,7 @@ static void finish_edits(App *a, Edits *ed, FILE *out)
         return;
     }
     a->ctl_stamp    = a->undo.stamp;
+    a->ctl_gen      = a->map->gen;
     a->ctl_undoable = 1;
     fprintf(out, "changed %s: %d line%s, one undo step\n", area, ed->lines, ed->lines == 1 ? "" : "s");
 
@@ -859,6 +911,11 @@ char *app_ctl_exec(App *a, const char *req, size_t *len)
         snprintf(verdict, sizeof verdict, "error: a nul byte in the request");
         p = "";
     }
+    /* `undo` goes alone: it cannot be rolled back with the lines around it,
+     * so a request that holds it holds nothing else. */
+    if (strcmp(verdict, "ok") == 0 && !undo_alone(p))
+        snprintf(verdict, sizeof verdict, "error: undo goes in a request of its own");
+    if (strcmp(verdict, "ok") != 0) p = "";
     while (*p) {
         const char *end = strchr(p, '\n');
         size_t      ll  = end ? (size_t)(end - p) : strlen(p);

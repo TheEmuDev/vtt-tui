@@ -57,7 +57,7 @@ vtt [options] [map.vtt]
   --agent            open the control channel at startup (:agent on does it later)
   --ctl [REQUEST]    send a request to the vtt taking them, print the answer
                      (no REQUEST, or -: read it from stdin)
-  --ctl-pid N        with several running, the one with pid N
+  --ctl-pid N [REQ]  with several running, the one with pid N
 
   map tools (print a report and exit; see Map tools below):
   --dump-map         the whole map as text, with a legend
@@ -1387,7 +1387,7 @@ the squares either side: `G5|H5` across a vertical one, `C3/C4` across a horizon
 | request | what it does |
 |---|---|
 | `status` | the map, its file, the screen and mode, the undo history, whether edits are taken now |
-| `dump [REGION]` `describe [json]` `check [json]` | the [map tools](#map-tools---dump-map---check---describe) on the live map (`check` has no file line numbers) |
+| `dump [REGION]` `describe [json]` `check [json]` | the [map tools](#map-tools---dump-map---check---describe) on the live map (`check` has no file line numbers); a region off the map is refused, not clipped |
 | `marked [json]` | what the GM is pointing at: the cursor (a brush's whole footprint), a `v` or `V` box, wall mode's corner and anchored box, the creatures selected in play and a play box, the ruler, and the last ping from the GM and from each phone, with its age -- kept after the ring comes down |
 | `room REGION` | floor over it, walls round it; walls inside are left alone |
 | `tile REGION KIND` | `void` `floor` `water` `rough` `brush` `wood` `hazard` |
@@ -1398,7 +1398,7 @@ the squares either side: `G5|H5` across a vertical one, `C3/C4` across a horizon
 | `token set WHO label "..."` / `size N` / `note "..."` | change one thing about a creature |
 | `note SQUARE "text"`, `note SQUARE` | a GM-only note on a square, or take it off |
 | `fog paint REGION N` | into fog patch N (0 scrubs); `:fog` makes patches |
-| `undo` | takes back the agent's last request, while nothing has happened since; first in a request |
+| `undo` | takes back the agent's last request, while nothing has happened since; alone in its request |
 
 **Every request is one undo step, all or nothing.** `u` takes back everything a request
 did at once. A line that fails -- a square off the map, a label already used, a creature

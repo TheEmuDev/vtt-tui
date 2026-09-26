@@ -155,8 +155,8 @@ README *Control channel* lists every request; this is how to use them.
 5. Read back what you did (`dump` the region, `check`), and tell the GM in squares.
 6. Suggestions the GM has not agreed to go on the map as notes (`note F7 "secret door?"`),
    which the players never see; the GM keeps or clears them.
-7. If the GM does not like a change and nothing has happened since, `vtt --ctl undo` takes
-   it back; otherwise ask them to press `u`. Never try to repair a change by undoing the
+7. If the GM does not like a change and nothing has happened since, `vtt --ctl undo` (a
+   request of its own) takes it back; otherwise ask them to press `u`. Never try to repair a change by undoing the
    GM's own work.
 
 Exit status: 0 done, 1 an error or `busy:` (read stderr), 2 no vtt is listening -- ask the

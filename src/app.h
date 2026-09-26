@@ -149,6 +149,7 @@ typedef struct {
      * that edit is still there to take back: the agent's `undo` works only
      * while the log is exactly as the edit left it. */
     unsigned ctl_stamp;
+    unsigned ctl_gen;           /* Map.gen then, for changes outside the log */
     int      ctl_undoable;
 
     TextPrompt prompt;

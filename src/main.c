@@ -78,7 +78,7 @@ static void usage(void)
         "  --agent            open the control channel at startup (:agent on does it later)\n"
         "  --ctl [REQUEST]    send a request to the vtt taking them, print the answer\n"
         "                     (no REQUEST, or -: read it from stdin; docs/CONTROL.md)\n"
-        "  --ctl-pid N        with several running, the one with pid N\n"
+        "  --ctl-pid N [REQ]  with several running, the one with pid N\n"
         "\n"
         "  map tools (print a report and exit; see README, Map tools):\n"
         "  --dump-map         the whole map as text, with a legend\n"
@@ -124,6 +124,11 @@ static int parse_args(Options *o, int argc, char **argv)
             o->ctl = 1;
             o->ctl_pid = strtol(argv[++i], NULL, 10);
             if (o->ctl_pid <= 0) die("bad --ctl-pid (expected a process id)");
+            /* And the request, if it comes after: --ctl-pid 42 'status'. */
+            if (!o->ctl_req && i + 1 < argc && strncmp(argv[i + 1], "--", 2) != 0) {
+                o->ctl_req = argv[++i];
+                if (!strcmp(o->ctl_req, "-")) o->ctl_req = NULL;
+            }
         }
         else if (!strcmp(a, "--serve")) {
             o->serve = 1;
