@@ -133,7 +133,10 @@ second per client, the rest dropped. Cost: one 4-byte message, one small
 overlay. This is the whole of "a touch map" that an in-person table needs: the
 player points, the GM looks. Pan and zoom the page does already.
 
-**3. A move from the player's own device, on their turn.** Decisions:
+**3. A move from the player's own device, on their turn.** *Set aside
+2026-09-25*: at an in-person table a ping does the job -- the player points, the
+GM moves the creature. The full plan is in `docs/IDEAS.md` under *Moves from a
+player's phone*; what follows is the original sketch. Decisions:
 
 - *Identity.* The page asks for a name once (kept in the browser), sent with
   the WebSocket request. `:serve who` lists the phones by name. The GM binds a

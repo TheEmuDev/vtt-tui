@@ -4,6 +4,48 @@ Things worth building that were consciously not built, with the reason, so
 the reason can be re-examined rather than the idea re-invented. Add to the
 top; move an entry to the README when it ships.
 
+## Moves from a player's phone
+
+*Set aside 2026-09-25, after a full plan.* REMOTE.md's phase two step 3: a phone
+bound to a creature gets a step pad on that creature's turn and walks it under the
+GM's rules. Why not now: at an in-person table, a ping does the job. The player taps
+where they want to go, the GM sees the ring and moves the creature, and the whole
+table watches it happen. Moving from the phone saves the GM a few keystrokes at the
+cost of names, bindings, a pad, turn gating and a new fog rule. It becomes worth it
+when players are not at the table -- remote play -- or when the GM's hands are the
+bottleneck.
+
+The plan, as signed off by nobody but ready to be (a Fable 5.1 planner, checked
+against the code of 2026-09-25):
+
+- **Carry.** A phone step rides the GM's own carry (`Play.sel`/`grabbed`/trail): pick
+  up as `enter` does, step as `l` does, one undo batch a step, `esc` rewinds the walk,
+  the GM's cursor follows the creature. No second carry: `play_step`, the trail, the
+  move label, `undo_rewind_moves` and `play_status` all read `Play`.
+- **Identity.** The page asks for a name once (`localStorage`, or `?n=` in the URL the
+  GM hands out) and sends it as `&n=` on `/ws`; a raw hello may carry one
+  (`VTT1<code> <name>`) so tests and the bench can be phones. `:serve who` lists them,
+  `:serve as NAME LABEL` binds a name to a creature by label (unique substring),
+  `:serve as NAME off` unbinds. Bindings live in `App`, last the session, are never
+  saved. Table trust: names are self-declared, the join code is the only gate.
+- **Protocol.** Up: `M dx dy` (four directions), `D` (done); 10 a second and four
+  queued per client, in a FIFO beside the ping inbox. Down: WebSocket *text* frames,
+  not wire records -- `S <bits> <label>` (bound, acting, in hand; sent only when it
+  changes) and `N <notice>` from a fixed vocabulary that never names a creature.
+- **Gate.** Only while the bound creature is `TURN_ACTING`, in play mode, with no
+  modal, box, ruler or chooser open and the GM not carrying something else (the `:`
+  line open does not refuse). Put down on `D`, on the turn passing (`a` puts a phone's
+  carry down first instead of refusing), on disconnect, on the GM's `enter`/`esc`.
+- **Fog.** A phone step into any square hidden from the party is refused as `dark`,
+  whatever is there -- otherwise a hidden enemy blocking the step would reveal itself.
+  The GM still carries creatures into the dark by hand.
+- **Page.** A 3x3 pad (four arrows, `done` in the middle) fixed bottom-right over the
+  key bar, `pointerdown`, a sibling of the canvas so it never triggers a ping. About
+  1.3 KB of page: strip comment-only lines in `tools/embed.sh` to stay under 12 KB.
+- **Costs.** Zones `remote.step`, `remote.sync`; `--bench-moves`; rows on `$FIGHT`
+  with and without fog. Three commits: net (names, `M`/`D`), app (bindings, gate,
+  put-down, fog rule), page (pad).
+
 ## More ways to point
 
 *Set aside 2026-09-24, when pings were built.* Three extensions nobody needs yet:
