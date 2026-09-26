@@ -106,8 +106,8 @@ area for a moment. The GM's cursor and camera never move.
 - **An oversized request is read to its end** and thrown away before the answer: closing
   with bytes unread would reset the connection and lose the answer.
 - **Square notes undo.** They did not before: `OP_NOTE` (`undo_set_note`) carries the text
-  before and after in two token slots' `note`. The GM's own `s n` on a square still sets
-  the note directly and is not undone by `u`.
+  before and after in two token slots' `note`. The GM's own `s n` on a square goes
+  through it too (since the health check), so `u` takes back a note whoever wrote it.
 - **Bounded.** A request records at most `CTL_OPS_MAX` (twice the largest map's squares)
   undo ops; the undo log never trims an open batch, so this is what bounds the memory one
   request can take.

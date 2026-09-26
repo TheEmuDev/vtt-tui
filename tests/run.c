@@ -13020,11 +13020,24 @@ static void test_ctl_edits(void)
     free(t);
     CHECK_EQ(map_tile(m, 1, 2), TILE_WATER);           /* not taken back half way */
     CASE("the agent's undo also stops at a change the GM made outside the log");
-    CHECK(map_note_set(m, 7, 7, "the GM's own"));      /* as s n on a square does */
+    CHECK(map_note_set(m, 7, 7, "the GM's own"));      /* outside the log, as a fog setting is */
     t = ctl_ask(&a, "undo\n");
     CHECK(strstr(t, "something has happened since") != NULL);
     free(t);
     CHECK_EQ(map_tile(m, 1, 2), TILE_WATER);
+
+    CASE("the GM's own note on a square is one u away, and ctrl-r puts it back");
+    a.ed.cx = 3; a.ed.cy = 6;
+    press(&a, "sntrap?\r");
+    CHECK(map_note_at(m, 3, 6) && !strcmp(map_note_at(m, 3, 6), "trap?"));
+    press(&a, "u");
+    CHECK(map_note_at(m, 3, 6) == NULL);
+    press(&a, "\x12");
+    CHECK(map_note_at(m, 3, 6) != NULL);
+    press(&a, "sn\025\r");                            /* cleared, and back with u */
+    CHECK(map_note_at(m, 3, 6) == NULL);
+    press(&a, "u");
+    CHECK(map_note_at(m, 3, 6) != NULL);
 
     CASE("busy: edits wait while the GM is part way through something; reads do not");
     before = ctl_snapshot(m);

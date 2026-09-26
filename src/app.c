@@ -935,7 +935,11 @@ static void prompt_accept(App *a)
         map_coord_name(a->pending_tx, a->pending_ty, at, sizeof at);
         int had = map_note_at(a->map, a->pending_tx, a->pending_ty) != NULL;
         if (!*text && !had) { app_set_status(a, "nothing noted"); return; }
-        if (!map_note_set(a->map, a->pending_tx, a->pending_ty, text)) {
+        /* Through the log, like a creature's note: u takes it back. */
+        undo_begin(&a->undo);
+        int noted = undo_set_note(&a->undo, a->map, a->pending_tx, a->pending_ty, text);
+        undo_end(&a->undo);
+        if (!noted) {
             snprintf(msg, sizeof msg, "no room: a map holds %d notes on squares", MAP_NOTES_MAX);
             app_set_status(a, msg);
             return;

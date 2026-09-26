@@ -168,7 +168,7 @@ Maps are found in the current directory and in `~/.local/share/vtt/maps`.
 | `f` `x` | fill selection with floor / clear it to void |
 | `b` `B` | brush size, 1×1 → 2×2 → 3×3 — `2b` names it |
 | `space` | toggle the cursor tile between floor and void |
-| `s n` | a note on this square |
+| `s n` | a note on this square; `u` takes it back |
 | `g f` `g c` | paint the current [fog](#fog-of-war-fog) patch over the brush or the box / scrub fog off it |
 | `u`, `Ctrl-r` | undo / redo |
 | `+` `-` | zoom in / out |
@@ -267,7 +267,7 @@ A whole pen-down stroke is one undo step.
 | `s a` | add a status marker (prompts for a word) |
 | `s c` | change the colour the next marker will use |
 | `s d` | take a marker off (asks which, when there is more than one) |
-| `s n` | a note on the selected creature, or on this square when there is none |
+| `s n` | a note on the selected creature, or on this square when there is none; `u` takes either back |
 | `s v` | the selected creature's counters: `hp 6`, `hp -2`, `stress 0/6`, `-hp` |
 | `<` `>` | one off / one on its current counter — `3<` takes three (see *Counters* below) |
 | `g r` `g h` | light / darken the [fog](#fog-of-war-fog) under the cursor or the box, by hand |
