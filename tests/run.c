@@ -12465,7 +12465,9 @@ static void test_ctl(void)
     free(t);
 
     CASE(":agent with the channel off says so; on and off from the command line");
-    app_key(&a, f2);
+    Key f1 = { KEY_F1, 0, 0 };
+    app_key(&a, f1);
+    CHECK_EQ(a.screen, SCREEN_EDITOR);
     press(&a, ":agent\r");
     CHECK(strstr(a.status, "the agent channel is off") != NULL);
     CHECK_EQ(a.status_gm, 1);
@@ -12628,13 +12630,338 @@ static void test_ctl_marked(void)
     free(t);
 
     CASE("the record goes with the map");
-    app_key(&a, f2);                              /* :q! is build mode's */
+    Key f1 = { KEY_F1, 0, 0 };
+    app_key(&a, f1);
     press(&a, ":q!\r");
     CHECK(a.map == NULL);
     CHECK_EQ(a.npinged, 0);
 
     app_free(&a);
     rnd_free(&r);
+}
+
+/* A w x h map of floor, no walls, in dir; opened in build mode. */
+static int ctl_blank_map(App *a, const char *dir, int w, int h)
+{
+    char path[700];
+    snprintf(path, sizeof path, "%s/blank.vtt", dir);
+    FILE *f = fopen(path, "w");
+    if (!f) return 0;
+    fprintf(f, "VTT 6\nname Blank\nsize %d %d\ntiles\n", w, h);
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) fputc('.', f);
+        fputc('\n', f);
+    }
+    fclose(f);
+    return app_open_map(a, path) == 0 && a->map != NULL;
+}
+
+/* The map's squares, boundaries, creatures and notes, to compare before and
+ * after a request that must have changed nothing. */
+static char *ctl_snapshot(const Map *m)
+{
+    char  *buf = NULL;
+    size_t n   = 0;
+    FILE  *f   = open_memstream(&buf, &n);
+    maptools_dump(f, m, 0, 0, m->w - 1, m->h - 1);
+    for (int i = 0; i < m->nnotes; i++) fprintf(f, "note %d %d %s\n", m->notes[i].x, m->notes[i].y, m->notes[i].text);
+    for (int y = 0; y < m->h; y++)
+        for (int x = 0; x < m->w; x++) fputc('a' + (fog_at(m, x, y) & FOG_ID), f);
+    fclose(f);
+    return buf;
+}
+
+static void test_ctl_edits(void)
+{
+    Sandbox sb = sandbox_enter("ctledit");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK(ctl_blank_map(&a, sb.dir, 12, 8));
+    if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    Map *m = a.map;
+    char *t, *before, *after;
+
+    CASE("room: floor, walls round it, one undo step; the GM is told and shown where");
+    int depth = a.undo.depth;
+    t = ctl_ask(&a, "room B2:D4\n");
+    CHECK_EQ(strcmp(t, "ok\nchanged B2:D4: 1 line, one undo step\n"), 0);
+    free(t);
+    CHECK_EQ(a.undo.depth, depth + 1);
+    CHECK_EQ(map_vedge(m, 1, 1), EDGE_WALL);
+    CHECK_EQ(map_vedge(m, 4, 3), EDGE_WALL);
+    CHECK_EQ(map_vedge(m, 2, 2), EDGE_NONE);         /* inside is left alone */
+    CHECK_EQ(map_hedge(m, 1, 1), EDGE_WALL);
+    CHECK_EQ(map_hedge(m, 3, 4), EDGE_WALL);
+    CHECK_EQ(strcmp(a.status, "agent: room B2:D4 - u takes it back"), 0);
+    CHECK_EQ(a.status_gm, 1);
+    CHECK(a.agent_ring.until_ms != 0);
+    CHECK(a.agent_ring.x0 == 1 && a.agent_ring.y0 == 1 && a.agent_ring.x1 == 3 && a.agent_ring.y1 == 3);
+    CHECK_EQ(app_view_differs(&a), 1);                /* the ring is the GM's */
+    app_tick(&a, a.now_ms + PING_SHOW_MS);
+    CHECK_EQ(a.agent_ring.until_ms, 0u);
+
+    CASE("many lines are still one step: u takes all of them back together");
+    before = ctl_snapshot(m);
+    depth = a.undo.depth;
+    t = ctl_ask(&a, "# a crypt\n"
+                    "room F2:K6\n"
+                    "tile G3:H4 water\n"
+                    "edge E4|F4 door\n"
+                    "edge G6/G7 window\n"
+                    "token add enemy J5 \"Ghoul\"\n"
+                    "token add player G5 size 2 \"Aria\"\n"
+                    "note K2 \"secret door here?\"\n");
+    CHECK(strncmp(t, "ok\nchanged E2:K7: 7 lines, one undo step\n", 42) == 0);
+    free(t);
+    CHECK_EQ(a.undo.depth, depth + 1);
+    CHECK_EQ(map_tile(m, 7, 3), TILE_WATER);
+    CHECK_EQ(map_vedge(m, 5, 3), EDGE_DOOR_CLOSED);
+    CHECK_EQ(map_hedge(m, 6, 6), EDGE_WINDOW);
+    CHECK_EQ(m->tokens.n, 2);
+    CHECK(map_note_at(m, 10, 1) && !strcmp(map_note_at(m, 10, 1), "secret door here?"));
+    CHECK(strstr(a.status, "agent: room F2:K6 and 6 more - u takes them back") != NULL);
+    press(&a, "u");
+    after = ctl_snapshot(m);
+    CHECK_EQ(strcmp(before, after), 0);
+    CHECK_EQ(m->tokens.n, 0);
+    CHECK(map_note_at(m, 10, 1) == NULL);
+    free(after);
+    press(&a, "\x12");                               /* ctrl-r: all of it again */
+    CHECK_EQ(m->tokens.n, 2);
+    CHECK(map_note_at(m, 10, 1) != NULL);
+    free(before);
+
+    CASE("all or nothing: a bad line undoes the lines before it and says which");
+    before = ctl_snapshot(m);
+    depth = a.undo.depth;
+    int nmarks = a.undo.nmarks;
+    t = ctl_ask(&a, "tile A1:L8 hazard\ntoken del Ghoul\nnote A1 \"x\"\ntoken add enemy B7 \"Aria\"\n");
+    CHECK_EQ(strcmp(t, "error: line 4: there is already a creature called Aria\n"), 0);
+    free(t);
+    after = ctl_snapshot(m);
+    CHECK_EQ(strcmp(before, after), 0);
+    CHECK_EQ(a.undo.depth, depth);
+    CHECK_EQ(a.undo.nmarks, nmarks);
+    CHECK_EQ(a.undo.open, 0);
+    CHECK_EQ(m->tokens.n, 2);
+    free(after);
+    free(before);
+
+    CASE("the mistakes an edit can make, each named");
+    {
+        static const struct { const char *req, *err; } bad[] = {
+            { "room B2:Z99\n",              "Z99 is not a square on this map (A1 to L8)" },
+            { "room\n",                     "room REGION" },
+            { "tile B2 lava\n",             "lava: a tile is void, floor" },
+            { "wall B2:C3 portcullis\n",    "portcullis: a boundary is none, wall" },
+            { "edge C3|E3 door\n",          "the squares are not side by side" },
+            { "edge C3/D3 door\n",          "the squares are not side by side" },
+            { "edge -|- door\n",            "a boundary needs a square on one side" },
+            { "edge C3 door\n",             "is not a boundary" },
+            { "edge -|B1 door\n",           "the squares are not side by side" },
+            { "token add dragon C3 \"X\"\n", "a creature is a player or an enemy" },
+            { "token add enemy C3 size 4 \"X\"\n", "size is 1, 2 or 3" },
+            { "token add enemy L8 size 2 \"X\"\n", "hangs off the map" },
+            { "token add enemy J5 \"X\"\n", "J5 is taken by Ghoul" },
+            { "token add enemy C3 \"\"\n",  "a creature needs a label" },
+            { "token add enemy C3 \"abcdefghijabcdefghijabcdefghij12\"\n", "the label is over 31 characters" },
+            { "token move Nobody C3\n",     "no creature called Nobody" },
+            { "token move A1 C3\n",         "no creature stands on A1" },
+            { "token move Ghoul G5\n",      "G5 is taken by Aria" },
+            { "token set Ghoul colour red\n", "token set changes a label, a size or a note" },
+            { "token fly Ghoul\n",          "token fly: add, move, del or set" },
+            { "note Z1 \"x\"\n",            "is not a square" },
+            { "fog paint B2:C3 1\n",        "there is no fog patch 1" },
+            { "fog paint B2:C3 16\n",       "a fog patch is 1 to 15" },
+            { "fog B2:C3 1\n",              "fog paint REGION N" },
+        };
+        before = ctl_snapshot(m);
+        for (size_t i = 0; i < sizeof bad / sizeof *bad; i++) {
+            t = ctl_ask(&a, bad[i].req);
+            CHECK(strncmp(t, "error: line 1: ", 15) == 0 && strstr(t, bad[i].err) != NULL);
+            if (!strstr(t, bad[i].err)) fprintf(stderr, "    got: %s", t);
+            free(t);
+        }
+        after = ctl_snapshot(m);
+        CHECK_EQ(strcmp(before, after), 0);
+        free(after);
+        free(before);
+    }
+
+    CASE("void is not ground: a creature cannot be put there");
+    t = ctl_ask(&a, "tile A8 void\ntoken add enemy A8 \"X\"\n");
+    CHECK(strstr(t, "A8 is void - a creature needs ground") != NULL);
+    free(t);
+
+    CASE("edges off the map's side, named with -");
+    t = ctl_ask(&a, "edge -|A1 door\nedge L8|- window\nedge -/C1 wall\nedge C8/- wall\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    CHECK_EQ(map_vedge(m, 0, 0), EDGE_DOOR_CLOSED);
+    CHECK_EQ(map_vedge(m, 12, 7), EDGE_WINDOW);
+    CHECK_EQ(map_hedge(m, 2, 0), EDGE_WALL);
+    CHECK_EQ(map_hedge(m, 2, 8), EDGE_WALL);
+
+    CASE("creatures: by label (any case), by a square they stand on; moved, changed, taken off");
+    t = ctl_ask(&a, "token move ghoul I5\ntoken set H6 label \"Aria the Bold\"\ntoken set Ghoul size 2\n"
+                    "token set Ghoul note \"hates fire\"\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    {
+        int g = -1, p = -1;
+        for (int i = 0; i < m->tokens.n; i++) {
+            if (!strcmp(m->tokens.v[i].label, "Ghoul")) g = i;
+            if (!strcmp(m->tokens.v[i].label, "Aria the Bold")) p = i;
+        }
+        CHECK(g >= 0 && p >= 0);
+        if (g >= 0) {
+            CHECK(m->tokens.v[g].x == 8 && m->tokens.v[g].y == 4 && m->tokens.v[g].size == 2);
+            CHECK_EQ(strcmp(m->tokens.v[g].note, "hates fire"), 0);
+        }
+    }
+    t = ctl_ask(&a, "token move Ghoul H5\n");            /* onto Aria */
+    CHECK(strstr(t, "H5 is taken by Aria the Bold") != NULL);
+    free(t);
+
+    CASE("the creature holding the turn is the GM's to pass on before it goes");
+    m->tokens.v[0].turn = TURN_IN | TURN_ACTING;
+    m->round = 1;
+    char req[64];
+    snprintf(req, sizeof req, "token del \"%s\"\n", m->tokens.v[0].label);
+    t = ctl_ask(&a, req);
+    CHECK(strstr(t, "holds the turn - the GM passes it on first") != NULL);
+    free(t);
+    m->tokens.v[0].turn = 0;
+    m->round = 0;
+    t = ctl_ask(&a, "token del Ghoul\ntoken del \"Aria the Bold\"\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    CHECK_EQ(m->tokens.n, 0);
+
+    CASE("notes on squares: one set, one taken off, both undone by u");
+    t = ctl_ask(&a, "note C3 \"trap?\"\nnote K2\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    CHECK(map_note_at(m, 2, 2) && map_note_at(m, 10, 1) == NULL);
+    press(&a, "u");
+    CHECK(map_note_at(m, 2, 2) == NULL);
+    CHECK(map_note_at(m, 10, 1) && !strcmp(map_note_at(m, 10, 1), "secret door here?"));
+    press(&a, "\x12");
+
+    CASE("fog paint: into a patch, and 0 scrubs; the patch must be there");
+    str_lcpy(m->fog_patches[0].name, "Mist", sizeof m->fog_patches[0].name);
+    t = ctl_ask(&a, "fog paint B2:C3 1\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    CHECK_EQ(fog_at(m, 1, 1) & FOG_ID, 1);
+    CHECK_EQ(fog_at(m, 2, 2) & FOG_ID, 1);
+    t = ctl_ask(&a, "fog paint C3 0\n");
+    free(t);
+    CHECK_EQ(fog_at(m, 2, 2) & FOG_ID, 0);
+
+    CASE("a request that changes nothing is no undo step");
+    depth = a.undo.depth;
+    t = ctl_ask(&a, "tile B2 floor\n");
+    CHECK_EQ(strcmp(t, "ok\nno change: the map already looked like that\n"), 0);
+    free(t);
+    CHECK_EQ(a.undo.depth, depth);
+
+    CASE("the agent's undo: its own last change, only while nothing came after");
+    t = ctl_ask(&a, "tile B2 water\n");
+    free(t);
+    t = ctl_ask(&a, "undo\n");
+    CHECK_EQ(strcmp(t, "ok\ntook back the last change\n"), 0);
+    free(t);
+    CHECK_EQ(map_tile(m, 1, 1), TILE_FLOOR);
+    CHECK(strstr(a.status, "the agent took back its last change") != NULL);
+    t = ctl_ask(&a, "undo\n");
+    CHECK(strstr(t, "there is no change of the agent's to take back") != NULL);
+    free(t);
+    t = ctl_ask(&a, "tile B2 water\n");
+    free(t);
+    a.ed.cx = 5; a.ed.cy = 5;
+    press(&a, " ");                                  /* the GM paints a square */
+    press(&a, "u");                                  /* and takes it back again */
+    t = ctl_ask(&a, "undo\n");
+    CHECK(strstr(t, "something has happened since") != NULL);
+    free(t);
+    CHECK_EQ(map_tile(m, 1, 1), TILE_WATER);
+    t = ctl_ask(&a, "tile B3 water\nundo\n");
+    CHECK(strstr(t, "error: line 2: undo comes before any edit") != NULL);
+    free(t);
+    CHECK_EQ(map_tile(m, 1, 2), TILE_FLOOR);           /* rolled back with it */
+
+    CASE("busy: edits wait while the GM is part way through something; reads do not");
+    before = ctl_snapshot(m);
+    press(&a, ":");
+    t = ctl_ask(&a, "status\ntile B2 hazard\n");
+    CHECK_EQ(strcmp(t, "busy: the GM is typing a : command\n"), 0);
+    free(t);
+    press(&a, "\x1b");
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+    t = ctl_ask(&a, "tile B2 hazard\n");
+    CHECK_EQ(strcmp(t, "busy: the GM is in play mode - edits are build mode's\n"), 0);
+    free(t);
+    t = ctl_ask(&a, "dump B2\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    Key f1 = { KEY_F1, 0, 0 };
+    app_key(&a, f1);
+    a.ed.cx = 5; a.ed.cy = 5;
+    press(&a, "w");                                  /* wall mode ... */
+    a.ed.pen = 1;
+    undo_begin(&a.undo);                             /* ... with a stroke open */
+    t = ctl_ask(&a, "tile B2 hazard\n");
+    CHECK_EQ(strcmp(t, "busy: the GM is laying wall\n"), 0);
+    free(t);
+    undo_end(&a.undo);
+    a.ed.pen = 0;
+    press(&a, "\x1b");
+    after = ctl_snapshot(m);
+    CHECK_EQ(strcmp(before, after), 0);
+    free(after);
+    free(before);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
+static void test_ctl_cap(void)
+{
+    Sandbox sb = sandbox_enter("ctlcap");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK(ctl_blank_map(&a, sb.dir, MAP_MAX_DIM, MAP_MAX_DIM));
+
+    CASE("a request may change twice the largest map's squares and no more");
+    char last[MAP_COORD_MAX], req[128];
+    map_coord_name(MAP_MAX_DIM - 1, MAP_MAX_DIM - 1, last, sizeof last);
+    snprintf(req, sizeof req, "tile A1:%s water\ntile A1:%s floor\n", last, last);
+    char *t = ctl_ask(&a, req);
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    snprintf(req, sizeof req, "tile A1:%s water\ntile A1:%s floor\ntile A1 hazard\n", last, last);
+    t = ctl_ask(&a, req);
+    CHECK(strstr(t, "error: line 3: the request changes more than 524288 things at once") != NULL);
+    free(t);
+    CHECK_EQ(map_tile(a.map, 0, 0), TILE_FLOOR);
+    CHECK_EQ(map_tile(a.map, 5, 5), TILE_FLOOR);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
 }
 
 static void test_ctl_live(void)
@@ -12883,6 +13210,8 @@ int main(void)
         { "pings", test_pings },
         { "ctl",   test_ctl },
         { "ctlmarked", test_ctl_marked },
+        { "ctledit", test_ctl_edits },
+        { "ctlcap", test_ctl_cap },
         { "ctllive", test_ctl_live },
         { "webpage", test_webpage },
         { "turns",  test_turns },

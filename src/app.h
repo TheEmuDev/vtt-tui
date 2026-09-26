@@ -141,6 +141,15 @@ typedef struct {
      * until_ms here is when it was made. Cleared with the map. */
     Ping     pinged[PING_MAX];
     int      npinged;
+    /* Round what the control channel's last edit changed, for the same two
+     * seconds; the GM's screen alone (never the players' frame), and only
+     * while until_ms is set. */
+    Ping     agent_ring;
+    /* The undo log's stamp just after the channel's last edit, and whether
+     * that edit is still there to take back: the agent's `undo` works only
+     * while the log is exactly as the edit left it. */
+    unsigned ctl_stamp;
+    int      ctl_undoable;
 
     TextPrompt prompt;
     PromptWhat prompt_what;

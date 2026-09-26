@@ -6,8 +6,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include "app_priv.h"
+#include "fog.h"
 #include "json.h"
 #include "maptools.h"
 #include "prof.h"
@@ -89,6 +91,7 @@ const char *app_ctl_busy(const App *a)
     if (a->modal != MODAL_NONE)          return "a question is open on the GM's screen";
     if (a->ed.mode == ED_COMMAND)        return "the GM is typing a : command";
     if (a->pending || a->ed.pending_g)   return "the GM is part way through a key";
+    if (a->undo.open)                    return "the GM is laying wall";
     return NULL;
 }
 
@@ -358,13 +361,420 @@ static void do_marked(App *a, FILE *out, int json)
     }
 }
 
+/* ----------------------------------------------------------------- edits */
+
+/* What a request's edits have done so far: how many lines, the area they
+ * touched (for the GM's ring), and the first line, for the status. */
+typedef struct {
+    int      lines;
+    int      x0, y0, x1, y1;          /* x1 < x0 while nothing is touched */
+    char     first[48];
+    unsigned ops0;                    /* the undo stamp when the first edit began */
+    int      deleted;                 /* a creature went: indices behind it shifted */
+} Edits;
+
+static void touched(Edits *ed, int x0, int y0, int x1, int y1)
+{
+    if (ed->x1 < ed->x0) { ed->x0 = x0; ed->y0 = y0; ed->x1 = x1; ed->y1 = y1; return; }
+    ed->x0 = imin(ed->x0, x0); ed->y0 = imin(ed->y0, y0);
+    ed->x1 = imax(ed->x1, x1); ed->y1 = imax(ed->y1, y1);
+}
+
+/* A square on the map, by name. */
+static int square(const Map *m, const char *w, int *x, int *y, char *err, size_t errsz)
+{
+    if (map_coord_parse(w, x, y) && map_in_bounds(m, *x, *y)) return 1;
+    char edge[MAP_COORD_MAX];
+    map_coord_name(m->w - 1, m->h - 1, edge, sizeof edge);
+    snprintf(err, errsz, "%.40s is not a square on this map (A1 to %s)", w, edge);
+    return 0;
+}
+
+/* A region for an edit: both ends on the map, never clipped -- an edit that
+ * runs off the edge is a mistake to report, not to half do. */
+static int region(const Map *m, const char *w, int *x0, int *y0, int *x1, int *y1,
+                  char *err, size_t errsz)
+{
+    char a[CTL_WORD_MAX];
+    str_lcpy(a, w, sizeof a);
+    char *colon = strchr(a, ':');
+    const char *b = a;
+    if (colon) { *colon = '\0'; b = colon + 1; }
+    int ax, ay, bx, by;
+    if (!square(m, a, &ax, &ay, err, errsz) || !square(m, b, &bx, &by, err, errsz)) return 0;
+    *x0 = imin(ax, bx); *x1 = imax(ax, bx);
+    *y0 = imin(ay, by); *y1 = imax(ay, by);
+    return 1;
+}
+
+static int tile_kind(const char *w)
+{
+    for (int k = 0; k < TILE_COUNT; k++)
+        if (!strcmp(w, tile_name((uint8_t)k))) return k;
+    return -1;
+}
+
+/* The words for boundaries, in EdgeKind order: the file's names with the
+ * spaces taken out, so each is one word. */
+static const char *const EDGE_WORDS[EDGE_COUNT] = {
+    "none", "wall", "door", "open", "window", "secret", "opensecret",
+};
+
+static int edge_kind(const char *w)
+{
+    for (int k = 0; k < EDGE_COUNT; k++)
+        if (!strcmp(w, EDGE_WORDS[k])) return k;
+    return -1;
+}
+
+/* "G5|H5" or "C3/C4", '-' for off the map on that side, as
+ * maptools_edge_name writes them. Sets the lattice position and which
+ * array. */
+static int boundary(const Map *m, const char *w, int *vertical, int *x, int *y,
+                    char *err, size_t errsz)
+{
+    char a[CTL_WORD_MAX];
+    str_lcpy(a, w, sizeof a);
+    char *sep = strpbrk(a, "|/");
+    if (!sep) {
+        snprintf(err, errsz, "%.40s is not a boundary: G5|H5 across a vertical one, C3/C4 a horizontal", w);
+        return 0;
+    }
+    int v = *sep == '|';
+    *sep = '\0';
+    const char *l = a, *r = sep + 1;
+    int lx = -1, ly = -1, rx = -1, ry = -1;
+    int loff = !strcmp(l, "-"), roff = !strcmp(r, "-");
+    if ((loff && roff) || (!loff && !square(m, l, &lx, &ly, err, errsz)) ||
+        (!roff && !square(m, r, &rx, &ry, err, errsz))) {
+        if (loff && roff) snprintf(err, errsz, "a boundary needs a square on one side");
+        return 0;
+    }
+    /* The far side of an edge off the map is implied by the near one. */
+    if (loff) { lx = v ? rx - 1 : rx; ly = v ? ry : ry - 1; }
+    if (roff) { rx = v ? lx + 1 : lx; ry = v ? ly : ly + 1; }
+    int ok = v ? (ly == ry && rx == lx + 1) : (lx == rx && ry == ly + 1);
+    if (!ok || (loff && map_in_bounds(m, lx, ly)) || (roff && map_in_bounds(m, rx, ry))) {
+        snprintf(err, errsz, "%.40s: the squares are not side by side%s", w,
+                 v ? " (| is between a square and the one east of it)"
+                   : " (/ is between a square and the one south of it)");
+        return 0;
+    }
+    *vertical = v;
+    *x = rx;
+    *y = ry;
+    return 1;
+}
+
+static int word_int(const char *w, int lo, int hi, int *out)
+{
+    char *end;
+    long  v = strtol(w, &end, 10);
+    if (!*w || *end || v < lo || v > hi) return 0;
+    *out = (int)v;
+    return 1;
+}
+
+/* A creature by label (exact, else the one label that matches ignoring
+ * case), or by a square it stands on. */
+static int who(const Map *m, const char *w, char *err, size_t errsz)
+{
+    int found = -1, loose = -1, nloose = 0;
+    for (int i = 0; i < m->tokens.n; i++) {
+        if (!strcmp(m->tokens.v[i].label, w)) { found = i; break; }
+        if (!strcasecmp(m->tokens.v[i].label, w)) { loose = i; nloose++; }
+    }
+    if (found < 0 && nloose == 1) found = loose;
+    if (found >= 0) return found;
+    int x, y;
+    if (map_coord_parse(w, &x, &y) && map_in_bounds(m, x, y)) {
+        for (int i = m->tokens.n - 1; i >= 0; i--) {
+            const Token *t = &m->tokens.v[i];
+            if (x >= t->x && x < t->x + t->size && y >= t->y && y < t->y + t->size) return i;
+        }
+        snprintf(err, errsz, "no creature stands on %.40s", w);
+        return -1;
+    }
+    snprintf(err, errsz, nloose > 1 ? "more than one creature is called %.40s" : "no creature called %.40s", w);
+    return -1;
+}
+
+/* Can a creature `size` wide stand at (x,y): on the map, on ground, and on
+ * nobody else (`skip` is the creature itself, when it is moving)? */
+static int fits(const Map *m, int x, int y, int size, int skip, char *err, size_t errsz)
+{
+    char at[MAP_COORD_MAX];
+    map_coord_name(x, y, at, sizeof at);
+    if (x + size > m->w || y + size > m->h) {
+        snprintf(err, errsz, "%dx%d at %s hangs off the map", size, size, at);
+        return 0;
+    }
+    for (int yy = y; yy < y + size; yy++)
+        for (int xx = x; xx < x + size; xx++)
+            if (!map_walkable(m, xx, yy)) {
+                char v[MAP_COORD_MAX];
+                map_coord_name(xx, yy, v, sizeof v);
+                snprintf(err, errsz, "%s is void - a creature needs ground", v);
+                return 0;
+            }
+    for (int i = 0; i < m->tokens.n; i++) {
+        const Token *t = &m->tokens.v[i];
+        if (i == skip) continue;
+        if (x < t->x + t->size && t->x < x + size && y < t->y + t->size && t->y < y + size) {
+            snprintf(err, errsz, "%s is taken by %.30s", at, t->label[0] ? t->label : "a creature");
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int label_ok(const Map *m, const char *label, int skip, char *err, size_t errsz)
+{
+    if (!label[0]) { snprintf(err, errsz, "a creature needs a label"); return 0; }
+    if (strlen(label) >= TOKEN_LABEL_MAX) {
+        snprintf(err, errsz, "the label is over %d characters", TOKEN_LABEL_MAX - 1);
+        return 0;
+    }
+    for (int i = 0; i < m->tokens.n; i++)
+        if (i != skip && !strcmp(m->tokens.v[i].label, label)) {
+            snprintf(err, errsz, "there is already a creature called %.30s", label);
+            return 0;
+        }
+    return 1;
+}
+
+/* The outline of a box of squares: every boundary between a square in it
+ * and one outside. */
+static void outline(Undo *u, Map *m, int x0, int y0, int x1, int y1, uint8_t kind)
+{
+    for (int y = y0; y <= y1; y++) {
+        undo_set_vedge(u, m, x0, y, kind);
+        undo_set_vedge(u, m, x1 + 1, y, kind);
+    }
+    for (int x = x0; x <= x1; x++) {
+        undo_set_hedge(u, m, x, y0, kind);
+        undo_set_hedge(u, m, x, y1 + 1, kind);
+    }
+}
+
+#define BAD(...) do { snprintf(err, errsz, __VA_ARGS__); return -1; } while (0)
+
+static int token_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err, size_t errsz)
+{
+    Map  *m = a->map;
+    Undo *u = &a->undo;
+    if (n < 2) BAD("token add, token move, token del or token set");
+    const char *sub = w[1];
+
+    if (!strcmp(sub, "add")) {
+        /* token add player|enemy SQ [size N] "Label" */
+        if (n != 5 && n != 7) BAD("token add player|enemy SQUARE [size N] \"Label\"");
+        Token t;
+        memset(&t, 0, sizeof t);
+        if (!strcmp(w[2], "player"))     t.kind = TOKEN_PLAYER;
+        else if (!strcmp(w[2], "enemy")) t.kind = TOKEN_ENEMY;
+        else BAD("%.20s: a creature is a player or an enemy", w[2]);
+        int x, y, size = 1;
+        if (!square(m, w[3], &x, &y, err, errsz)) return -1;
+        if (n == 7) {
+            if (strcmp(w[4], "size") != 0 || !word_int(w[5], 1, 3, &size))
+                BAD("size is 1, 2 or 3 squares wide, as: size 2");
+        }
+        const char *label = w[n - 1];
+        if (!label_ok(m, label, -1, err, errsz) || !fits(m, x, y, size, -1, err, errsz)) return -1;
+        t.x = (int16_t)x;
+        t.y = (int16_t)y;
+        t.size = (uint8_t)size;
+        str_lcpy(t.label, label, sizeof t.label);
+        undo_add_token(u, m, t);
+        touched(ed, x, y, x + size - 1, y + size - 1);
+        return 0;
+    }
+
+    if (n < 3) BAD("token %.10s wants a creature: its label, or a square it stands on", sub);
+    int i = who(m, w[2], err, errsz);
+    if (i < 0) return -1;
+    Token t = m->tokens.v[i];
+    touched(ed, t.x, t.y, t.x + t.size - 1, t.y + t.size - 1);
+
+    if (!strcmp(sub, "move")) {
+        if (n != 4) BAD("token move WHO SQUARE");
+        int x, y;
+        if (!square(m, w[3], &x, &y, err, errsz) || !fits(m, x, y, t.size, i, err, errsz)) return -1;
+        undo_move_token(u, m, i, x, y);
+        touched(ed, x, y, x + t.size - 1, y + t.size - 1);
+        return 0;
+    }
+    if (!strcmp(sub, "del")) {
+        if (n != 3) BAD("token del WHO");
+        /* Passing the turn on is the fight's business, and a helper that
+         * would close this request's batch part way: the GM's call. */
+        if (t.turn & TURN_ACTING) BAD("%.30s holds the turn - the GM passes it on first", t.label);
+        undo_del_token(u, m, i);
+        range_token_removed(&a->play.range, i, t.x, t.y);
+        ed->deleted = 1;
+        turn_settle(m, u);
+        play_focus(&a->play, -1);
+        a->play.visual = 0;
+        return 0;
+    }
+    if (!strcmp(sub, "set")) {
+        if (n != 5) BAD("token set WHO label \"...\", size N, or note \"...\"");
+        if (!strcmp(w[3], "label")) {
+            if (!label_ok(m, w[4], i, err, errsz)) return -1;
+            str_lcpy(t.label, w[4], sizeof t.label);
+        }
+        else if (!strcmp(w[3], "size")) {
+            int size;
+            if (!word_int(w[4], 1, 3, &size)) BAD("size is 1, 2 or 3");
+            if (!fits(m, t.x, t.y, size, i, err, errsz)) return -1;
+            t.size = (uint8_t)size;
+            touched(ed, t.x, t.y, t.x + size - 1, t.y + size - 1);
+        }
+        else if (!strcmp(w[3], "note")) {
+            if (strlen(w[4]) >= TOKEN_NOTE_MAX) BAD("the note is over %d characters", TOKEN_NOTE_MAX - 1);
+            str_lcpy(t.note, w[4], sizeof t.note);
+        }
+        else BAD("token set changes a label, a size or a note");
+        undo_edit_token(u, m, i, t);
+        return 0;
+    }
+    BAD("token %.20s: add, move, del or set", sub);
+}
+
+/* One edit line: 0, or -1 with why. The caller has the batch open. */
+static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err, size_t errsz)
+{
+    Map  *m = a->map;
+    Undo *u = &a->undo;
+    const char *v = w[0];
+    int x0, y0, x1, y1;
+
+    if (!strcmp(v, "room")) {
+        if (n != 2) BAD("room REGION, like room B2:K12");
+        if (!region(m, w[1], &x0, &y0, &x1, &y1, err, errsz)) return -1;
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++) undo_set_tile(u, m, x, y, TILE_FLOOR);
+        outline(u, m, x0, y0, x1, y1, EDGE_WALL);
+    }
+    else if (!strcmp(v, "tile")) {
+        int k;
+        if (n != 3) BAD("tile REGION KIND");
+        if (!region(m, w[1], &x0, &y0, &x1, &y1, err, errsz)) return -1;
+        if ((k = tile_kind(w[2])) < 0) BAD("%.20s: a tile is void, floor, water, rough, brush, wood or hazard", w[2]);
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++) undo_set_tile(u, m, x, y, (uint8_t)k);
+    }
+    else if (!strcmp(v, "wall")) {
+        int k = EDGE_WALL;
+        if (n != 2 && n != 3) BAD("wall REGION [KIND]");
+        if (!region(m, w[1], &x0, &y0, &x1, &y1, err, errsz)) return -1;
+        if (n == 3 && (k = edge_kind(w[2])) < 0)
+            BAD("%.20s: a boundary is none, wall, door, open, window, secret or opensecret", w[2]);
+        outline(u, m, x0, y0, x1, y1, (uint8_t)k);
+    }
+    else if (!strcmp(v, "edge")) {
+        int vert, x, y, k;
+        if (n != 3) BAD("edge BOUNDARY KIND, like edge G5|H5 door");
+        if (!boundary(m, w[1], &vert, &x, &y, err, errsz)) return -1;
+        if ((k = edge_kind(w[2])) < 0)
+            BAD("%.20s: a boundary is none, wall, door, open, window, secret or opensecret", w[2]);
+        if (vert) undo_set_vedge(u, m, x, y, (uint8_t)k);
+        else      undo_set_hedge(u, m, x, y, (uint8_t)k);
+        x0 = imin(imax(vert ? x - 1 : x, 0), m->w - 1); x1 = imin(x, m->w - 1);
+        y0 = imin(imax(vert ? y : y - 1, 0), m->h - 1); y1 = imin(y, m->h - 1);
+    }
+    else if (!strcmp(v, "note")) {
+        int x, y;
+        if (n != 2 && n != 3) BAD("note SQUARE \"text\", or note SQUARE to take it off");
+        if (!square(m, w[1], &x, &y, err, errsz)) return -1;
+        const char *text = n == 3 ? w[2] : "";
+        if (strlen(text) >= NOTE_MAX) BAD("the note is over %d characters", NOTE_MAX - 1);
+        if (!undo_set_note(u, m, x, y, text)) BAD("no room: a map holds %d notes on squares", MAP_NOTES_MAX);
+        x0 = x1 = x; y0 = y1 = y;
+    }
+    else if (!strcmp(v, "fog")) {
+        int id;
+        if (n != 4 || strcmp(w[1], "paint") != 0) BAD("fog paint REGION N (0 scrubs)");
+        if (!region(m, w[2], &x0, &y0, &x1, &y1, err, errsz)) return -1;
+        if (!word_int(w[3], 0, FOG_PATCH_MAX, &id)) BAD("a fog patch is 1 to %d, or 0 to scrub", FOG_PATCH_MAX);
+        if (id && (!m->fog_patches[id - 1].name[0] || m->fog_patches[id - 1].dead))
+            BAD("there is no fog patch %d - :fog makes one", id);
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++) fog_paint(m, u, x, y, id);
+    }
+    else if (!strcmp(v, "token")) {
+        if (token_line(a, w, n, ed, err, errsz) < 0) return -1;
+        x1 = -1; x0 = y0 = y1 = 0;           /* token_line has said where */
+    }
+    else return 1;                           /* not an edit */
+
+    if (x1 >= x0) touched(ed, x0, y0, x1, y1);
+    return 0;
+}
+
+#undef BAD
+
 /* ------------------------------------------------------------------- run */
 
-/* Runs one line. 0, or -1 with why in err. */
-static int run_line(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, size_t errsz)
+/* A request may change this much and no more: twice the largest map's
+ * squares. Past it the request is refused and rolled back; it is what
+ * bounds the memory one 64 KB request can make the undo log take. */
+#define CTL_OPS_MAX (2UL * MAP_MAX_DIM * MAP_MAX_DIM)
+
+static int is_edit(const char *v)
+{
+    static const char *const EDITS[] = { "room", "tile", "wall", "edge", "note", "fog", "token" };
+    for (size_t i = 0; i < sizeof EDITS / sizeof *EDITS; i++)
+        if (!strcmp(v, EDITS[i])) return 1;
+    return 0;
+}
+
+/* Runs one line. 0; -1 with why in err; -2 when an edit is refused because
+ * the GM is busy, the reason in err. */
+static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FILE *out,
+                    Edits *ed, char *err, size_t errsz)
 {
     Map *m = a->map;
     const char *v = w[0];
+
+    if (is_edit(v)) {
+        if (!ed->lines) {
+            /* Asked once, at the first edit: after it the open batch is
+             * this request's own. */
+            const char *busy = app_ctl_busy(a);
+            if (busy) { str_lcpy(err, busy, errsz); return -2; }
+            undo_begin(&a->undo);
+            ed->ops0 = a->undo.stamp;
+            while (*line == ' ' || *line == '\t') line++;
+            str_lcpy(ed->first, line, sizeof ed->first);
+        }
+        ed->lines++;
+        if (edit_line(a, w, n, ed, err, errsz) < 0) return -1;
+        if ((unsigned long)(a->undo.stamp - ed->ops0) > CTL_OPS_MAX) {
+            snprintf(err, errsz, "the request changes more than %lu things at once", CTL_OPS_MAX);
+            return -1;
+        }
+        return 0;
+    }
+    if (!strcmp(v, "undo")) {
+        if (n > 1) { snprintf(err, errsz, "undo takes nothing after it"); return -1; }
+        if (ed->lines) { snprintf(err, errsz, "undo comes before any edit in a request"); return -1; }
+        if (!a->ctl_undoable) { snprintf(err, errsz, "there is no change of the agent's to take back"); return -1; }
+        if (a->undo.stamp != a->ctl_stamp) {
+            snprintf(err, errsz, "something has happened since the agent's last change - only the GM's u takes it back now");
+            return -1;
+        }
+        const char *busy = app_ctl_busy(a);
+        if (busy) { str_lcpy(err, busy, errsz); return -2; }
+        undo_undo(&a->undo, m);
+        a->ctl_undoable = 0;
+        app_fog_sync(a);
+        a->dirty = 1;
+        app_note_gm(a, "the agent took back its last change - ctrl-r puts it back");
+        fputs("took back the last change\n", out);
+        return 0;
+    }
 
     if (!strcmp(v, "status")) {
         if (n > 1) { snprintf(err, errsz, "status takes nothing after it"); return -1; }
@@ -403,6 +813,34 @@ static int run_line(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err,
     return -1;
 }
 
+/* A request's edits are in: close the batch and tell both sides. */
+static void finish_edits(App *a, Edits *ed, FILE *out)
+{
+    int changed = a->undo.stamp != ed->ops0;     /* a stamp a recorded op */
+    undo_end(&a->undo);
+    char area[2 * MAP_COORD_MAX + 2] = "";
+    if (ed->x1 >= ed->x0) region_name(ed->x0, ed->y0, ed->x1, ed->y1, area, sizeof area);
+    if (!changed) {
+        fprintf(out, "no change: the map already looked like that\n");
+        return;
+    }
+    a->ctl_stamp    = a->undo.stamp;
+    a->ctl_undoable = 1;
+    fprintf(out, "changed %s: %d line%s, one undo step\n", area, ed->lines, ed->lines == 1 ? "" : "s");
+
+    char msg[160];
+    if (ed->lines == 1) snprintf(msg, sizeof msg, "agent: %s - u takes it back", ed->first);
+    else snprintf(msg, sizeof msg, "agent: %s and %d more - u takes them back", ed->first, ed->lines - 1);
+    app_note_gm(a, msg);
+    if (ed->x1 >= ed->x0) {
+        Ping *r = &a->agent_ring;
+        r->who = PING_GM;
+        r->x0 = ed->x0; r->y0 = ed->y0; r->x1 = ed->x1; r->y1 = ed->y1;
+        r->until_ms = a->now_ms + PING_SHOW_MS;
+        if (!r->until_ms) r->until_ms = 1;
+    }
+}
+
 char *app_ctl_exec(App *a, const char *req, size_t *len)
 {
     PROF_ZONE("ctl");
@@ -411,8 +849,11 @@ char *app_ctl_exec(App *a, const char *req, size_t *len)
     FILE  *out  = open_memstream(&body, &blen);
     if (!out) return NULL;
 
-    char verdict[320] = "ok";
-    int  lineno = 0;
+    char  verdict[320] = "ok";
+    int   lineno = 0;
+    Edits ed;
+    memset(&ed, 0, sizeof ed);
+    ed.x1 = -1;
     const char *p = req;
     if (strlen(req) != *len) {
         snprintf(verdict, sizeof verdict, "error: a nul byte in the request");
@@ -436,9 +877,22 @@ char *app_ctl_exec(App *a, const char *req, size_t *len)
 
         if (n == 0 || (n > 0 && w[0][0] == '#')) continue;
         if (n > 0 && !a->map && strcmp(w[0], "status") != 0) snprintf(err, sizeof err, "no map is open");
-        if (!err[0] && run_line(a, w, n, out, err, sizeof err) == 0) continue;
-        snprintf(verdict, sizeof verdict, "error: line %d: %s", lineno, err);
+        int rc = err[0] ? -1 : run_line(a, line, w, n, out, &ed, err, sizeof err);
+        if (rc == 0) continue;
+        if (rc == -2) snprintf(verdict, sizeof verdict, "busy: %s", err);
+        else          snprintf(verdict, sizeof verdict, "error: line %d: %s", lineno, err);
         break;
+    }
+
+    if (ed.lines) {
+        if (strcmp(verdict, "ok") != 0) {
+            undo_abort(&a->undo, a->map);                 /* all or nothing */
+            /* The overlay followed the deletion; the creature is back. */
+            if (ed.deleted) range_clear(&a->play.range);
+        }
+        else finish_edits(a, &ed, out);
+        app_fog_sync(a);
+        a->dirty = 1;
     }
     fclose(out);
 

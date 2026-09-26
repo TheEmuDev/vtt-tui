@@ -175,6 +175,7 @@ int app_open_map(App *a, const char *path)
     a->autosave_gen = a->seen_gen = m->gen;
     a->npings = 0;                 /* squares of the old map mean nothing here */
     a->npinged = 0;
+    a->agent_ring.until_ms = 0;
     fog_recompute(m);
 
     char msg[192];
@@ -302,9 +303,10 @@ int app_ping_cell(App *a, uint32_t who, int sx, int sy)
 
 int app_ping_due(const App *a, uint64_t now_ms)
 {
-    if (!a->npings) return -1;
-    uint64_t at = a->pings[0].until_ms;
-    for (int i = 1; i < a->npings; i++) if (a->pings[i].until_ms < at) at = a->pings[i].until_ms;
+    uint64_t at = a->agent_ring.until_ms;
+    for (int i = 0; i < a->npings; i++)
+        if (!at || a->pings[i].until_ms < at) at = a->pings[i].until_ms;
+    if (!at) return -1;
     return now_ms >= at ? 0 : (int)(at - now_ms);
 }
 
@@ -328,6 +330,10 @@ void app_tick(App *a, uint64_t now_ms)
     for (int i = 0; i < a->npings; ) {
         if (a->pings[i].until_ms <= now_ms) { a->pings[i] = a->pings[--a->npings]; a->dirty = 1; }
         else i++;
+    }
+    if (a->agent_ring.until_ms && a->agent_ring.until_ms <= now_ms) {
+        a->agent_ring.until_ms = 0;
+        a->dirty = 1;
     }
     if (!a->map) return;
     if (a->map->gen != a->seen_gen) {
@@ -1363,6 +1369,7 @@ void app_close_map(App *a)
     map_free(a->map);
     a->map = NULL;
     a->npings = a->npinged = 0;
+    a->agent_ring.until_ms = 0;
     undo_clear(&a->undo);
     a->screen = SCREEN_MENU;
 }
@@ -2152,6 +2159,14 @@ static void draw_editor(App *a)
         }
         rnd_clip_restore(r, saved);
     }
+    /* And the agent's last change, for the GM alone. */
+    if (a->agent_ring.until_ms && a->view == VIEW_GM) {
+        const Ping *p = &a->agent_ring;
+        ClipRect saved = rnd_clip_push(r, a->ed.view.view.x, a->ed.view.view.y,
+                                       a->ed.view.view.w, a->ed.view.view.h);
+        grid_draw_tile_ring(r, &a->ed.view, m, p->x0, p->y0, p->x1, p->y1, th->ping_bg, NULL, NULL);
+        rnd_clip_restore(r, saved);
+    }
 
     /* The panel is the turn order with the clocks under it; each draws its
      * own rows, so whichever is absent leaves no gap. */
@@ -2322,6 +2337,7 @@ int app_view_differs(const App *a)
     if (a->status_gm && a->status[0]) return 1;
     if (a->screen == SCREEN_PLAY && a->map && fog_any(a->map)) return 1;
     if (prof_overlay_visible()) return 1;
+    if (a->agent_ring.until_ms) return 1;       /* the GM's alone */
     if (a->screen == SCREEN_PLAY && a->map) {
         const Map  *m  = a->map;
         const Play *pl = &a->play;

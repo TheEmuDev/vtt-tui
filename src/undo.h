@@ -15,6 +15,8 @@ typedef enum {
     OP_SPOTLIGHT,        /* which side has the spotlight: x before, y after */
     OP_CLOCK,            /* a clock's filled segments: x is the slot, y its generation, before/after */
     OP_FOG,              /* a tile's fog byte: before/after */
+    OP_NOTE,             /* a square's note: two token slots carry the text before
+                            and after in .note ("" for none); x, y the square */
 } OpKind;
 
 /* One op is one cell or one token changing. Tile ops dominate -- a brush
@@ -60,6 +62,10 @@ typedef struct {
     int  started;        /* the open batch has recorded at least one op */
     int  trimmed;        /* batches dropped from the front so far (for tests
                             and the profiler; never consulted by the log) */
+    unsigned stamp;      /* bumped by anything that changes the log: a record,
+                            an undo, a redo, a clear. Equal stamps mean the log
+                            is as it was, which is how the control channel
+                            knows its batch is still the last thing done. */
 } Undo;
 
 void undo_init(Undo *u);
@@ -70,6 +76,11 @@ void undo_clear(Undo *u);
  * called from inside a larger operation without splitting it. */
 void undo_begin(Undo *u);
 void undo_end(Undo *u);
+
+/* Takes back everything the open batch has recorded and closes it, as if
+ * it had never been begun: for an operation that fails part way. The redo
+ * tail its first op let go of does not come back. */
+void undo_abort(Undo *u, Map *m);
 
 /* Records and applies. Each is a no-op when nothing would change. */
 void undo_set_tile(Undo *u, Map *m, int x, int y, uint8_t kind);
@@ -90,6 +101,9 @@ void undo_set_spotlight(Undo *u, Map *m, int side);
 void undo_set_fog(Undo *u, Map *m, int x, int y, uint8_t f);
 /* A clock's value; the slot must hold a clock. */
 void undo_set_clock(Undo *u, Map *m, int slot, int value);
+/* A square's note ("" takes it off). Returns 0, recording nothing, when
+ * the map holds all the notes it can. */
+int  undo_set_note(Undo *u, Map *m, int x, int y, const char *text);
 
 int  undo_undo(Undo *u, Map *m);
 

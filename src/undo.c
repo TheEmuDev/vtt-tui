@@ -20,6 +20,7 @@ void undo_clear(Undo *u)
 {
     u->nops = u->ntoks = u->nmarks = u->depth = 0;
     u->open = u->started = u->trimmed = 0;
+    u->stamp++;
 }
 
 void undo_begin(Undo *u)
@@ -96,6 +97,7 @@ static void batch_start(Undo *u)
 static Op *push(Undo *u)
 {
     batch_start(u);
+    u->stamp++;
 
     if (u->nops == u->cap_ops) {
         u->cap_ops = u->cap_ops ? u->cap_ops * 2 : 256;
@@ -266,6 +268,28 @@ void undo_set_fog(Undo *u, Map *m, int x, int y, uint8_t f)
     map_touch(m);
 }
 
+int undo_set_note(Undo *u, Map *m, int x, int y, const char *text)
+{
+    if (!map_in_bounds(m, x, y)) return 0;
+    while (*text == ' ') text++;
+    const char *was = map_note_at(m, x, y);
+    if (!strcmp(was ? was : "", text)) return 1;
+    Token before, after;
+    memset(&before, 0, sizeof before);
+    memset(&after, 0, sizeof after);
+    str_lcpy(before.note, was ? was : "", sizeof before.note);
+    str_lcpy(after.note, text, sizeof after.note);
+    if (!map_note_set(m, x, y, text)) return 0;
+
+    Op *o = push(u);
+    o->kind = OP_NOTE;
+    o->x    = (int16_t)x;
+    o->y    = (int16_t)y;
+    push_token(u, &before);
+    push_token(u, &after);
+    return 1;
+}
+
 void undo_set_clock(Undo *u, Map *m, int slot, int value)
 {
     if (slot < 0 || slot >= CLOCK_MAX || !m->clocks[slot].name[0]) return;
@@ -344,6 +368,10 @@ static void apply(const Undo *u, Map *m, const Op *o, int forward)
             m->clocks[o->x].value = v > m->clocks[o->x].size ? m->clocks[o->x].size : v;
         }
         break;
+    case OP_NOTE:
+        /* Putting a note back takes the slot its removal freed. */
+        (void)map_note_set(m, o->x, o->y, forward ? tok[1].note : tok[0].note);
+        break;
     case OP_TOKEN_MOVE:
         if (o->x >= 0 && o->x < m->tokens.n) {
             Token *t = &m->tokens.v[o->x];
@@ -362,11 +390,25 @@ static int batch_end(const Undo *u, int batch)
     return batch + 1 < u->nmarks ? u->marks[batch + 1] : u->nops;
 }
 
+void undo_abort(Undo *u, Map *m)
+{
+    if (!u->open) return;
+    u->open = 0;
+    if (!u->started) return;
+    int lo = u->marks[u->nmarks];
+    for (int i = u->nops - 1; i >= lo; i--) apply(u, m, &u->ops[i], 0);
+    u->ntoks = u->ops[lo].tok;
+    u->nops  = lo;
+    u->started = 0;
+    u->stamp++;
+}
+
 int undo_undo(Undo *u, Map *m)
 {
     if (u->open) undo_end(u);
     if (u->depth == 0) return 0;
     PROF_ZONE("undo.step");
+    u->stamp++;
 
     u->depth--;
     int lo = u->marks[u->depth];
@@ -412,6 +454,7 @@ int undo_redo(Undo *u, Map *m)
     if (u->open) undo_end(u);
     if (u->depth >= u->nmarks) return 0;
     PROF_ZONE("undo.step");
+    u->stamp++;
 
     int lo = u->marks[u->depth];
     int hi = batch_end(u, u->depth);
