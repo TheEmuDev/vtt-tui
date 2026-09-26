@@ -310,11 +310,12 @@ int undo_set_note(Undo *u, Map *m, int x, int y, const char *text)
 
 /* An area in a token slot: the undo log's side array holds tokens, and an
  * area is a name and four numbers, which a token has room for. */
-static Token area_slot(const Area *ar)
+static Token area_slot(const Map *m, const Area *ar)
 {
     Token t;
     memset(&t, 0, sizeof t);
     if (!ar) return t;
+    t.size = (uint8_t)(ar - m->areas);     /* its place in naming order */
     str_lcpy(t.label, ar->name, sizeof t.label);
     t.x = ar->x0;
     t.y = ar->y0;
@@ -325,8 +326,15 @@ static Token area_slot(const Area *ar)
 
 static void area_from_slot(Map *m, const Token *want, const Token *other)
 {
-    if (want->label[0]) map_area_set(m, want->label, want->x, want->y, want->counters[0].value, want->counters[0].max);
-    else                (void)map_area_remove(m, other->label);
+    if (!want->label[0]) { (void)map_area_remove(m, other->label); return; }
+    int i = map_area_set(m, want->label, want->x, want->y, want->counters[0].value, want->counters[0].max);
+    /* Put back where it was: naming order is precedence among equals. */
+    int at = want->size;
+    if (i > at && at < m->nareas) {
+        Area keep = m->areas[i];
+        memmove(&m->areas[at + 1], &m->areas[at], (size_t)(i - at) * sizeof keep);
+        m->areas[at] = keep;
+    }
 }
 
 static void record_area(Undo *u, const Token *before, const Token *after)
@@ -340,12 +348,12 @@ static void record_area(Undo *u, const Token *before, const Token *after)
 int undo_set_area(Undo *u, Map *m, const char *name, int x0, int y0, int x1, int y1)
 {
     int   i = map_area_find(m, name);
-    Token before = area_slot(i >= 0 ? &m->areas[i] : NULL);
+    Token before = area_slot(m, i >= 0 ? &m->areas[i] : NULL);
     /* A rename by case keeps the old spelling's slot: say it as removed and
      * added, so undo puts the old spelling back. */
     int   j = map_area_set(m, name, x0, y0, x1, y1);
     if (j < 0) return 0;
-    Token after = area_slot(&m->areas[j]);
+    Token after = area_slot(m, &m->areas[j]);
     if (i >= 0 && !memcmp(&before, &after, sizeof before)) return 1;
     record_area(u, &before, &after);
     return 1;
@@ -355,7 +363,7 @@ int undo_remove_area(Undo *u, Map *m, const char *name)
 {
     int i = map_area_find(m, name);
     if (i < 0) return 0;
-    Token before = area_slot(&m->areas[i]), after = area_slot(NULL);
+    Token before = area_slot(m, &m->areas[i]), after = area_slot(m, NULL);
     map_area_remove(m, name);
     record_area(u, &before, &after);
     return 1;

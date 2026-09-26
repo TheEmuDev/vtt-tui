@@ -13570,6 +13570,9 @@ static void test_areas(void)
     CHECK_EQ(map_area_name_ok("Great Hall"), 1);
     CHECK_EQ(map_area_name_ok("C3"), 0);
     CHECK_EQ(map_area_name_ok("AB12"), 0);
+    CHECK_EQ(map_area_name_ok("Cell1"), 1);            /* a fourth letter is past any map */
+    CHECK_EQ(map_area_name_ok("Room2"), 1);
+    CHECK_EQ(map_area_name_ok("5"), 0);                 /* a row */
     CHECK_EQ(map_area_name_ok("a:b"), 0);
     CHECK_EQ(map_area_name_ok("say \"hi\""), 0);
     CHECK_EQ(map_area_name_ok(""), 0);
@@ -13599,7 +13602,7 @@ static void test_areas(void)
         undo_begin(&u); CHECK_EQ(undo_remove_area(&u, m, "Crypt"), 1); undo_end(&u);
         CHECK_EQ(m->nareas, 1);
         undo_undo(&u, m);
-        CHECK_EQ(map_area_find(m, "Crypt") >= 0, 1);
+        CHECK_EQ(map_area_find(m, "Crypt"), 0);         /* back in its place, first */
         undo_undo(&u, m);
         int v = map_area_find(m, "vault");
         CHECK(v >= 0 && !strcmp(m->areas[v].name, "Vault") && m->areas[v].x1 == 1);
@@ -13741,6 +13744,14 @@ static void test_room_language(void)
     CHECK(strstr(t, "error: line 4: no room in Closet for a 1x1 creature") != NULL);
     free(t);
     CHECK_EQ(map_area_find(m, "Closet"), -1);               /* rolled back with it */
+
+    CASE("a bare row is not a square; a mistyped room says it is neither");
+    t = ctl_ask(&a, "note 5 \"x\"\n");
+    CHECK(strstr(t, "5 is not a square on this map") != NULL);
+    free(t);
+    t = ctl_ask(&a, "token add enemy Cryptt \"X\"\n");
+    CHECK(strstr(t, "nor a room's name") != NULL);
+    free(t);
 
     CASE("a note on a room goes on its middle square");
     t = ctl_ask(&a, "note Crypt \"the lid is loose\"\n");
@@ -13903,6 +13914,77 @@ static void test_corridors(void)
     sandbox_leave(&sb);
 }
 
+static void test_corridor_edges(void)
+{
+    Sandbox sb = sandbox_enter("corridor2");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    char path[700];
+    snprintf(path, sizeof path, "%s/void.vtt", sb.dir);
+    {
+        Map *v = map_new(30, 30, "void");
+        char err[200];
+        mapio_write(v, path, err, sizeof err);
+        map_free(v);
+    }
+    app_open_map(&a, path);
+    Map *m = a.map;
+    if (!m) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    char *t;
+
+    CASE("a corridor running past a room keeps that room's doors and windows");
+    t = ctl_ask(&a, "room Ka B2 3x3\nroom Kb 3x3 east of Ka gap 3\nroom Kc E4 3x1\ndoor Kc north 2\ndoor Kc north 3 window\n"
+                    "corridor Ka Kb\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    if (strncmp(t, "ok\n", 3)) fprintf(stderr, "    %s", t);
+    free(t);
+    {
+        int kc = map_area_find(m, "Kc");
+        if (kc >= 0) {
+            CHECK_EQ(map_hedge(m, m->areas[kc].x0 + 1, m->areas[kc].y0), EDGE_DOOR_CLOSED);
+            CHECK_EQ(map_hedge(m, m->areas[kc].x0 + 2, m->areas[kc].y0), EDGE_WINDOW);
+        }
+    }
+
+    CASE("a bend is never wider than the sides it leaves and enters; the changed area is the corridor's");
+    t = ctl_ask(&a, "room Na B10 4x4\nroom Nb L17 1x2\n");     /* Nb is one wide and two tall */
+    free(t);
+    char *snap = ctl_snapshot(m);
+    t = ctl_ask(&a, "corridor Na Nb width 3\n");
+    CHECK(strstr(t, "too narrow for a bend 3 wide") != NULL);
+    free(t);
+    t = ctl_ask(&a, "corridor Na Nb width 2\n");            /* down first: Na's four, Nb's two */
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    press(&a, "u");
+    char *snap2 = ctl_snapshot(m);
+    CHECK_EQ(strcmp(snap, snap2), 0);
+    free(snap); free(snap2);
+    t = ctl_ask(&a, "corridor Na Nb\n");
+    CHECK(strstr(t, "ok\nchanged ") != NULL);
+    free(t);
+
+    CASE("an area holding both rooms whole is no obstacle, and the rooms keep their own names");
+    t = ctl_ask(&a, "room Ha B24 2x2\nroom Hb 2x2 east of Ha gap 3\narea Floor A23:Z27\ncorridor Ha Hb\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    if (strncmp(t, "ok\n", 3)) fprintf(stderr, "    %s", t);
+    free(t);
+    {
+        int ha = map_area_find(m, "Ha");
+        CHECK(ha >= 0 && map_area_at(m, m->areas[ha].x0, m->areas[ha].y0) == ha);
+    }
+
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
 static void test_apply(void)
 {
     Sandbox sb = sandbox_enter("apply");
@@ -13959,6 +14041,34 @@ static void test_apply(void)
         CHECK_EQ(WEXITSTATUS(system(cmd)), 0);
         snprintf(cmd, sizeof cmd, "%s '%s' --check > /dev/null", vtt, gm);
         CHECK_EQ(WEXITSTATUS(system(cmd)), 0);
+    }
+
+    CASE("--apply over a newer autosave works on the file as saved, and says so");
+    {
+        char as[800], ep[700];
+        snprintf(as, sizeof as, "%s.autosave", map);
+        snprintf(cmd, sizeof cmd, "cp '%s' '%s' && touch -d '+1 minute' '%s'", map, as, as);
+        CHECK_EQ(system(cmd), 0);
+        snprintf(ep, sizeof ep, "%s/one.txt", sb.dir);
+        f = fopen(ep, "w");
+        fputs("note A1 \"x\"\n", f);
+        fclose(f);
+        snprintf(cmd, sizeof cmd, "%s '%s' --apply '%s' > /dev/null 2>&1", vtt, map, ep);
+        CHECK_EQ(WEXITSTATUS(system(cmd)), 0);
+        unlink(as);
+    }
+
+    CASE("--new with a failing plan leaves no file behind");
+    {
+        char nm[700], bp[700];
+        snprintf(nm, sizeof nm, "%s/never.vtt", sb.dir);
+        snprintf(bp, sizeof bp, "%s/bad.txt", sb.dir);
+        f = fopen(bp, "w");
+        fputs("room A Z99 2x2\n", f);
+        fclose(f);
+        snprintf(cmd, sizeof cmd, "%s '%s' --apply '%s' --new 10x10 > /dev/null 2>&1", vtt, nm, bp);
+        CHECK_EQ(WEXITSTATUS(system(cmd)), 1);
+        CHECK(access(nm, F_OK) != 0);
     }
 
     CASE("--apply: a failing plan changes nothing and saves nothing (exit 1)");
@@ -14260,6 +14370,7 @@ int main(void)
         { "areas", test_areas },
         { "roomlang", test_room_language },
         { "corridors", test_corridors },
+        { "corridor2", test_corridor_edges },
         { "apply", test_apply },
         { "wire",   test_wire },
         { "mapdiag", test_map_diag },

@@ -630,6 +630,7 @@ static int run_apply(const Options *o)
     if (len > CTL_REQ_CAP) { fprintf(stderr, "vtt: %s is over 64 KB\n", o->apply); free(req); return 2; }
     req[len] = '\0';
 
+    int made = 0;                   /* this run made the file: a failure takes it away */
     if (access(o->map_path, F_OK) != 0) {
         if (!o->new_w) {
             fprintf(stderr, "vtt: %s is not there - --new WxH makes it\n", o->map_path);
@@ -646,6 +647,7 @@ static int run_apply(const Options *o)
         int wrc = mapio_write(nm, o->map_path, err, sizeof err);
         map_free(nm);
         if (wrc < 0) { fprintf(stderr, "vtt: %s\n", err); free(req); return 2; }
+        made = 1;
     }
 
     Renderer r;
@@ -657,6 +659,12 @@ static int run_apply(const Options *o)
     if (app_open_map(&a, o->map_path) != 0 || !a.map) {
         fprintf(stderr, "vtt: cannot open %s\n", o->map_path);
     } else {
+        /* An autosave newer than the map asks the GM, and there is none:
+         * the plan works on the file as saved, and says so. */
+        if (a.modal == MODAL_CONFIRM_RECOVER) {
+            a.modal = MODAL_NONE;
+            fprintf(stderr, "vtt: %s has an autosave newer than it; applying to the file as saved\n", o->map_path);
+        }
         char *ans = app_ctl_exec(&a, req, &len);
         if (!ans) fputs("vtt: out of memory\n", stderr);
         else {
@@ -674,6 +682,7 @@ static int run_apply(const Options *o)
     app_free(&a);
     rnd_free(&r);
     free(req);
+    if (rc != 0 && made) unlink(o->map_path);
     return rc;
 }
 

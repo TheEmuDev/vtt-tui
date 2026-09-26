@@ -286,7 +286,8 @@ int         map_note_set(Map *m, int x, int y, const char *text);
  * for a place. */
 int  map_area_name_ok(const char *name);
 int  map_area_find(const Map *m, const char *name);           /* index, or -1 */
-/* The first area, in naming order, holding the square; -1 for none. */
+/* The smallest area holding the square (the first named, among equals);
+ * -1 for none. */
 int  map_area_at(const Map *m, int x, int y);
 /* Names a box (clipped to the map): replaces the area of that name, or adds
  * one. Returns its index, or -1 when the box is off the map, the name is

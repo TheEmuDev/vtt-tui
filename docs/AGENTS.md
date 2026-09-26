@@ -36,8 +36,11 @@ sees the edits before it.
   a square and the one east of it), `C3/C4` across a horizontal one (between a square and
   the one south of it), `-` for off the map (`-|A1` is A1's west edge).
 - **A room's name** works wherever a region does (its box) and wherever a creature's square
-  does (the free square nearest the room's middle). Names are 1-31 characters, no quote or
-  colon, and never something that reads as a square; `"Great Hall"` in quotes.
+  does (the free square nearest the room's middle), and a note on a room goes on its
+  middle square. Names are 1-31 characters, no quote or colon, and never something that
+  could be a square (`C3`, `AB12`) or a row (`5`); `Room1` and `Cell2` are fine, `"Great
+  Hall"` goes in quotes. An area may hold others (a floor holding its rooms): a square is
+  in the smallest area that holds it.
 
 **Rooms and areas.** An area is a named box; a room is a floored area with a wall round it.
 
@@ -49,7 +52,7 @@ sees the edits before it.
 | `room B2:I7` | an unnamed room |
 | `area Upper B1:Z20`, `area Upper off` | name a box without drawing anything (a floor, a region you drew by hand), or take the name off |
 | `door Crypt east [N\|middle] [KIND]` | a door on a room's side: the Nth square along it from the top or left (`middle` by default); KIND below, a door by default |
-| `corridor Crypt Vault [width 1-3] [KIND]` | dug between two named rooms: straight when they overlap enough, otherwise one bend; walled along; a door at each end when one wide, open ends when wider. Rooms sharing a wall just get the doorway. It only digs through void: ground or another named room in the way refuses it |
+| `corridor Crypt Vault [width 1-3] [KIND]` | dug between two named rooms through void: **straight** when one is beside or above the other and they share at least `width` rows (or columns) -- refused when they share fewer; **one bend** when they are apart both ways, leaving the first room's side and entering the second's, each side at least `width` long. Walled along (a door or window already on a boundary it runs past stays); a door at each end when one wide, open ends when wider. Rooms sharing a wall just get the doorway. Ground, or a named room that does not hold both, in the way refuses it |
 
 **Squares and boundaries.**
 
@@ -75,7 +78,7 @@ sees the edits before it.
 
 | line | answers |
 |---|---|
-| `dump [REGION]` | the map as text: squares in the file's characters, boundaries between, creatures as `1`-`9` `a`-`z`, a legend with creatures, notes and areas |
+| `dump [REGION]` | the map as text: squares in the file's characters, boundaries between, creatures as `1`-`9` `a`-`z` `A`-`Z`, a legend with creatures, notes and areas |
 | `describe [json]` | the rooms walls make, named by their areas, with doors and where they lead, and what is in each |
 | `check [json]` | mistakes: loose doors, creatures on void, rooms nothing reaches ([codes](../README.md#map-tools---dump-map---check---describe)) |
 | `stamps` | the GM's saved stamps and their sizes |
@@ -103,14 +106,17 @@ sees the edits before it.
    ```
 
    `vtt crypt.vtt --apply plan.txt --new 40x24` makes the file (void to start) and exits 0,
-   or 1 with the failing line on stderr and nothing saved.
+   or 1 with the failing line on stderr and nothing saved (a file `--new` made is taken away
+   again). A map with an autosave newer than it is applied to as saved, with a line on
+   stderr saying so.
 2. **Read it back.** `vtt crypt.vtt --dump-map` and look: is every room where the
    description puts it, every door in a wall, every creature on the floor?
    `vtt crypt.vtt --describe` says what rooms the walls make and how they join -- a room
    `NOT REACHABLE` is a missing door. `vtt crypt.vtt --check` must say `no findings`.
 3. **Fix with another plan** against the same file (it opens what is there), not by
-   rewriting the first: `room Crypt ...` again moves the name, `wall Crypt none` clears an
-   outline, `tile ... void` digs out.
+   rewriting the first. To move a room, clear it first, then draw it again:
+   `wall Crypt none`, `tile Crypt void`, then `room Crypt ...` (the name moves with the new
+   box; the old floor and walls would otherwise stay).
 4. **Show the GM the dump** and name squares and rooms back ("the door at I4", "the Crypt").
 
 **What to know about the geometry.**

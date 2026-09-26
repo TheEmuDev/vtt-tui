@@ -421,10 +421,15 @@ static void touched(Edits *ed, int x0, int y0, int x1, int y1)
 /* A square on the map, by name. */
 static int square(const Map *m, const char *w, int *x, int *y, char *err, size_t errsz)
 {
+    /* A bare row ("5") sets only y: it is not a square. */
+    *x = -1;
     if (map_coord_parse(w, x, y) && map_in_bounds(m, *x, *y)) return 1;
     char edge[MAP_COORD_MAX];
     map_coord_name(m->w - 1, m->h - 1, edge, sizeof edge);
-    snprintf(err, errsz, "%.40s is not a square on this map (A1 to %s)", w, edge);
+    int letters = 0;
+    for (const char *p = w; *p; p++) letters |= (*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z');
+    snprintf(err, errsz, "%.40s is not a square on this map (A1 to %s)%s", w, edge,
+             letters && m->nareas ? ", nor a room's name" : "");
     return 0;
 }
 
@@ -648,7 +653,13 @@ typedef struct {
     int  nleg;
     Face end[CORR_ENDS];
     int  nend;
+    const Area *a, *b;                /* the rooms it joins */
 } Corridor;
+
+static int area_holds(const Area *outer, const Area *in)
+{
+    return in->x0 >= outer->x0 && in->x1 <= outer->x1 && in->y0 >= outer->y0 && in->y1 <= outer->y1;
+}
 
 static int in_box(const Box *b, int x, int y) { return x >= b->x0 && x <= b->x1 && y >= b->y0 && y <= b->y1; }
 
@@ -707,8 +718,13 @@ static int straight(const Area *a, const Area *b, int w, int horiz, Corridor *c)
 /* One bend for rooms apart on both axes: out of a's side at its middle,
  * along to the middle of b, and into b. `across_first` says which side of
  * a it leaves by: its east or west, else its north or south. */
-static void bent(const Area *a, const Area *b, int w, int across_first, Corridor *c)
+static int bent(const Area *a, const Area *b, int w, int across_first, Corridor *c)
 {
+    /* The side it leaves and the side it enters must each be as long as
+     * the corridor is wide, or its mouth would open onto what is beside
+     * the room. */
+    int aw = a->x1 - a->x0 + 1, ah = a->y1 - a->y0 + 1, bw = b->x1 - b->x0 + 1, bh = b->y1 - b->y0 + 1;
+    if (across_first ? (ah < w || bw < w) : (aw < w || bh < w)) return 0;
     if (across_first) {
         int hy = a->y0 + (a->y1 - a->y0 + 1 - w) / 2;          /* rows of the first leg */
         int vx = b->x0 + (b->x1 - b->x0 + 1 - w) / 2;          /* columns of the second */
@@ -730,6 +746,7 @@ static void bent(const Area *a, const Area *b, int w, int across_first, Corridor
         add_ends(c, 0, vx, down ? a->y1 + 1 : a->y0, w);
         add_ends(c, 1, east ? b->x0 : b->x1 + 1, hy, w);
     }
+    return 1;
 }
 
 /* Every square of the corridor is void and in no named area: a corridor
@@ -742,8 +759,15 @@ static int corridor_clear(const Map *m, const Corridor *c, char *err, size_t err
                 char at[MAP_COORD_MAX];
                 map_coord_name(x, y, at, sizeof at);
                 if (!map_in_bounds(m, x, y)) { snprintf(err, errsz, "it would run off the map"); return 0; }
-                int ai = map_area_at(m, x, y);
-                if (ai >= 0) { snprintf(err, errsz, "it would cut through %.30s at %s", m->areas[ai].name, at); return 0; }
+                /* An area holding both rooms whole (a floor, a district) is
+                 * the corridor's too; any other is a room in the way. */
+                for (int ai = 0; ai < m->nareas; ai++) {
+                    const Area *ar = &m->areas[ai];
+                    if (x < ar->x0 || x > ar->x1 || y < ar->y0 || y > ar->y1) continue;
+                    if (area_holds(ar, c->a) && area_holds(ar, c->b)) continue;
+                    snprintf(err, errsz, "it would cut through %.30s at %s", ar->name, at);
+                    return 0;
+                }
                 if (map_walkable(m, x, y)) { snprintf(err, errsz, "it would cross ground already at %s", at); return 0; }
             }
     return 1;
@@ -755,11 +779,13 @@ static void dig(Map *m, Undo *u, const Corridor *c, uint8_t end_kind)
         for (int y = c->leg[i].y0; y <= c->leg[i].y1; y++)
             for (int x = c->leg[i].x0; x <= c->leg[i].x1; x++) {
                 undo_set_tile(u, m, x, y, TILE_FLOOR);
-                /* Each face out of the corridor: an end, or wall. */
-                if (!in_legs(c, x - 1, y)) undo_set_vedge(u, m, x,     y, EDGE_WALL);
-                if (!in_legs(c, x + 1, y)) undo_set_vedge(u, m, x + 1, y, EDGE_WALL);
-                if (!in_legs(c, x, y - 1)) undo_set_hedge(u, m, x, y,     EDGE_WALL);
-                if (!in_legs(c, x, y + 1)) undo_set_hedge(u, m, x, y + 1, EDGE_WALL);
+                /* Each face out of the corridor is walled where it has
+                 * nothing: a door or window already there -- a room the
+                 * corridor runs past -- stays, and now opens onto it. */
+                if (!in_legs(c, x - 1, y) && map_vedge(m, x, y) == EDGE_NONE)     undo_set_vedge(u, m, x,     y, EDGE_WALL);
+                if (!in_legs(c, x + 1, y) && map_vedge(m, x + 1, y) == EDGE_NONE) undo_set_vedge(u, m, x + 1, y, EDGE_WALL);
+                if (!in_legs(c, x, y - 1) && map_hedge(m, x, y) == EDGE_NONE)     undo_set_hedge(u, m, x, y,     EDGE_WALL);
+                if (!in_legs(c, x, y + 1) && map_hedge(m, x, y + 1) == EDGE_NONE) undo_set_hedge(u, m, x, y + 1, EDGE_WALL);
             }
     for (int i = 0; i < c->nend; i++) {
         if (c->end[i].vert) undo_set_vedge(u, m, c->end[i].x, c->end[i].y, end_kind);
@@ -975,25 +1001,39 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
         if (!horiz && !vert) BAD("%.30s and %.30s overlap", ra->name, rb->name);
         Corridor c;
         memset(&c, 0, sizeof c);
+        c.a = ra; c.b = rb;
         if (horiz != vert) {
             if (!straight(ra, rb, width, horiz, &c))
                 BAD("%.30s and %.30s share fewer than %d %s: no straight corridor fits", ra->name, rb->name,
                     width, horiz ? "rows" : "columns");
             if (!corridor_clear(m, &c, err, errsz)) return -1;
         } else {
-            bent(ra, rb, width, 1, &c);
-            if (!corridor_clear(m, &c, err, errsz)) {
-                memset(&c, 0, sizeof c);
-                bent(ra, rb, width, 0, &c);
+            /* Across first, then down first; the first way's reason if
+             * neither will do. */
+            Corridor c2;
+            memset(&c2, 0, sizeof c2);
+            c2.a = ra; c2.b = rb;
+            int ok1 = bent(ra, rb, width, 1, &c), ok2 = bent(ra, rb, width, 0, &c2);
+            if (!ok1 && !ok2)
+                BAD("%.30s and %.30s are too narrow for a bend %d wide", ra->name, rb->name, width);
+            if (!ok1 || !corridor_clear(m, &c, err, errsz)) {
                 char e2[200];
-                if (!corridor_clear(m, &c, e2, sizeof e2)) return -1;   /* the first way's reason */
+                if (!ok2 || !corridor_clear(m, &c2, e2, sizeof e2)) {
+                    /* The first way's reason, unless there was no first way. */
+                    if (!ok1) str_lcpy(err, e2, errsz);
+                    return -1;
+                }
+                c = c2;
             }
         }
         dig(m, u, &c, (uint8_t)k);
-        x0 = imin(ra->x1, rb->x1); y0 = imin(ra->y1, rb->y1);
-        x1 = imax(ra->x0, rb->x0); y1 = imax(ra->y0, rb->y0);
-        if (x0 > x1) { int t = x0; x0 = x1; x1 = t; }
-        if (y0 > y1) { int t = y0; y0 = y1; y1 = t; }
+        /* What changed: the legs, and the doors at their ends. */
+        x1 = -1; x0 = y0 = y1 = 0;
+        for (int i = 0; i < c.nleg; i++) touched(ed, c.leg[i].x0, c.leg[i].y0, c.leg[i].x1, c.leg[i].y1);
+        for (int i = 0; i < c.nend; i++) {
+            int ex = imin(c.end[i].x, m->w - 1), ey = imin(c.end[i].y, m->h - 1);
+            touched(ed, imax(ex - c.end[i].vert, 0), imax(ey - !c.end[i].vert, 0), ex, ey);
+        }
     }
     else if (!strcmp(v, "door")) {
         /* door ROOM SIDE [N|middle] [KIND]: on the boundary of a side. */

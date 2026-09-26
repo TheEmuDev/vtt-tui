@@ -1394,6 +1394,10 @@ fail the check) what is allowed but worth knowing.
 
 Nothing checked knows a game: every rule is about the map's geometry or the file.
 
+Named areas (`:area`, or an agent's `room NAME`) name what they hold: `--describe` calls a
+room by the smallest area holding its first square (`room 2 Crypt (J3)`, JSON `"area"`) and
+lists every area (JSON `"areas"`), and `--dump-map` lists them under the creatures and notes.
+
 **`--json`** gives `--describe` or `--check` as JSON, for a program rather than a reader:
 the same fields, with 0-based file coordinates (`x`, `y`, and for a boundary `edge`, `v` or
 `h`) beside the square names, and a file finding's `line` and `column`.

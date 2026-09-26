@@ -205,8 +205,11 @@ int map_area_name_ok(const char *name)
     if (n == 0 || n >= AREA_NAME_MAX || name[0] == ' ' || name[n - 1] == ' ') return 0;
     for (const char *p = name; *p; p++)
         if (*p == '"' || *p == ':' || (unsigned char)*p < 0x20) return 0;
-    int x, y;
-    return !map_coord_parse(name, &x, &y);
+    /* Refused only if it could name a square on the largest map: "C3" and
+     * "AB12" are squares, "Cell1" (a fourth-letter column) is a name. */
+    int x = -1, y = -1;
+    if (!map_coord_parse(name, &x, &y)) return 1;
+    return x >= MAP_MAX_DIM || y >= MAP_MAX_DIM;
 }
 
 int map_area_find(const Map *m, const char *name)
@@ -218,11 +221,16 @@ int map_area_find(const Map *m, const char *name)
 
 int map_area_at(const Map *m, int x, int y)
 {
+    /* The smallest holding it: a room inside a named floor is the room. */
+    int best = -1;
+    long best_n = 0;
     for (int i = 0; i < m->nareas; i++) {
         const Area *ar = &m->areas[i];
-        if (x >= ar->x0 && x <= ar->x1 && y >= ar->y0 && y <= ar->y1) return i;
+        if (x < ar->x0 || x > ar->x1 || y < ar->y0 || y > ar->y1) continue;
+        long n = (long)(ar->x1 - ar->x0 + 1) * (ar->y1 - ar->y0 + 1);
+        if (best < 0 || n < best_n) { best = i; best_n = n; }
     }
-    return -1;
+    return best;
 }
 
 int map_area_set(Map *m, const char *name, int x0, int y0, int x1, int y1)
