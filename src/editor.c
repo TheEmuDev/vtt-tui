@@ -260,6 +260,20 @@ int ed_shape_radius(const EdShape *s)
 void ed_wall_shape(Map *m, Undo *u, const EdShape *s, uint8_t kind)
 {
     undo_begin(u);
+    if (s->kind != ED_SHAPE_CIRCLE) {
+        /* A box's outline is its four sides: walk those, not every tile
+         * inside asking whether its neighbours are in. The same faces. */
+        for (int y = s->y0; y <= s->y1; y++) {
+            undo_set_vedge(u, m, s->x0,     y, kind);
+            undo_set_vedge(u, m, s->x1 + 1, y, kind);
+        }
+        for (int x = s->x0; x <= s->x1; x++) {
+            undo_set_hedge(u, m, x, s->y0,     kind);
+            undo_set_hedge(u, m, x, s->y1 + 1, kind);
+        }
+        undo_end(u);
+        return;
+    }
     for (int y = s->y0; y <= s->y1; y++) {
         for (int x = s->x0; x <= s->x1; x++) {
             if (!ed_shape_has(s, x, y)) continue;
