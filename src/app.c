@@ -1952,6 +1952,10 @@ static void app_key_dispatch(App *a, Key k)
     if (a->map && (k.kind == KEY_F1 || k.kind == KEY_F2)) {
         int to_play = (k.kind == KEY_F2);
         a->screen   = to_play ? SCREEN_PLAY : SCREEN_EDITOR;
+        /* Leaving wall mode lifts the pen, as esc does: the stroke is one
+         * step, and the next run is another. */
+        undo_stroke_end(&a->undo);
+        a->ed.pen   = a->ed.erase = 0;
         a->ed.mode  = ED_NORMAL;
         /* Neither a half-typed prefix nor a half-typed count means anything
          * on the other side; play movement reads the count, so a stray one

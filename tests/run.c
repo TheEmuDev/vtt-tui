@@ -13051,6 +13051,22 @@ static void test_ctl_edits(void)
     press(&a, "u");
     CHECK(map_note_at(m, 3, 6) != NULL);
 
+    CASE("F1 or F2 mid-stroke lifts the pen: the run is one step and the channel is not kept waiting");
+    a.ed.cx = 6; a.ed.cy = 7;                        /* ground no earlier case walled */
+    int d0 = a.undo.depth;
+    press(&a, "w ll");
+    CHECK(map_hedge(m, 6, 7) == EDGE_WALL || map_hedge(m, 7, 7) == EDGE_WALL);
+    CHECK_EQ(a.undo.open, 1);
+    Key f2k = { KEY_F2, 0, 0 }, f1k = { KEY_F1, 0, 0 };
+    app_key(&a, f2k);
+    app_key(&a, f1k);
+    CHECK_EQ(a.undo.open, 0);
+    CHECK_EQ(a.ed.pen, 0);
+    CHECK_EQ(a.undo.depth, d0 + 1);
+    CHECK(app_ctl_busy(&a) == NULL);
+    press(&a, "u");
+    CHECK_EQ(a.undo.depth, d0);
+
     CASE("busy: edits wait while the GM is part way through something; reads do not");
     before = ctl_snapshot(m);
     press(&a, ":");
@@ -13071,11 +13087,11 @@ static void test_ctl_edits(void)
     a.ed.cx = 5; a.ed.cy = 5;
     press(&a, "w");                                  /* wall mode ... */
     a.ed.pen = 1;
-    undo_begin(&a.undo);                             /* ... with a stroke open */
+    undo_stroke(&a.undo);                            /* ... with a stroke open */
     t = ctl_ask(&a, "tile B2 hazard\n");
     CHECK_EQ(strcmp(t, "busy: the GM is laying wall\n"), 0);
     free(t);
-    undo_end(&a.undo);
+    undo_stroke_end(&a.undo);
     a.ed.pen = 0;
     press(&a, "\x1b");
     after = ctl_snapshot(m);

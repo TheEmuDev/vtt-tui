@@ -361,7 +361,7 @@ static void do_marked(App *a, FILE *out, int json)
         for (int i = 0; i < a->play.ngroup; i++) {
             const Token *t = &m->tokens.v[a->play.group[i]];
             region_name(t->x, t->y, t->x + t->size - 1, t->y + t->size - 1, r, sizeof r);
-            fprintf(out, "%s %s %s", i ? ";" : "", token_name(t), r);
+            fprintf(out, "%s %s %s", i ? ";" : "", t->label[0] ? t->label : "(unnamed)", r);
         }
         fputc('\n', out);
     }
@@ -542,7 +542,8 @@ static int fits(const Map *m, int x, int y, int size, int skip, char *err, size_
             }
     int other = tokens_overlapping(&m->tokens, x, y, size, skip, TOKEN_ANY_KIND);
     if (other >= 0) {
-        snprintf(err, errsz, "%s is taken by %.30s", at, token_name(&m->tokens.v[other]));
+        const Token *t = &m->tokens.v[other];
+        snprintf(err, errsz, "%s is taken by %.30s", at, t->label[0] ? t->label : "a creature");
         return 0;
     }
     return 1;

@@ -32,12 +32,12 @@ static int digits(int v)
     return d;
 }
 
-/* The glyph a creature's squares show, in file order: 1-9, a-z, A-Z, then
- * '#' for the rest, which the legend still lists. */
 /* A report names an unlabelled creature as such: a reader checking a map
  * wants to know the label is missing, not which side it is on. */
 static const char *label_or_unnamed(const Token *t) { return t->label[0] ? t->label : "(unnamed)"; }
 
+/* The glyph a creature's squares show, in file order: 1-9, a-z, A-Z, then
+ * '#' for the rest, which the legend still lists. */
 static char token_glyph(int i)
 {
     static const char g[] = "123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
