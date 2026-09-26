@@ -34,6 +34,7 @@ make            release build (-O2), profiler compiled in
 make test       ASan+UBSan build, unit + golden-frame tests (VTT_UPDATE_GOLDEN=1 regenerates)
 make perf       one perf run; publish the per-row MEDIAN of three quiet runs (tools/median.py a b c)
 ./vtt map.vtt --dump-map [--region B2:K12]      the whole map as text in the file's alphabet
+./vtt map.vtt --describe [--json]    rooms (rooms_build: every door splits), doors, contents
 tools/sight.sh  fog.sight per fog scenario (the zone table keeps only each zone's worst)
 VTT_FOGDIFF_OPS=36000 ./build/run-tests   the long run of the fog differential test
 make fuzz       libFuzzer on the map loader (clang), FUZZ_SECONDS=600 for longer

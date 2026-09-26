@@ -57,6 +57,8 @@ vtt [options] [map.vtt]
   map tools (print a report and exit; see Map tools below):
   --dump-map         the whole map as text, with a legend
   --region A1:P9     only that part of it
+  --describe         the rooms, their doors and what is in them
+  --json             --describe (or --check) as JSON
 ```
 
 `--dump-frame` honours `--script`, so a whole session can be replayed and its final frame
@@ -1269,6 +1271,29 @@ corners take its line, never `+`, so a `+` is always a door. Creatures are `1`-`
 `A`-`Z` on every square they cover, listed underneath with their names, sizes and squares;
 notes are listed too, and when the map has fog a second grid shows each square's patch in
 the fog section's own letters.
+
+**`vtt map.vtt --describe`** is the map as a list of rooms:
+
+```
+room 2 (C2)  C2:J6  40 squares
+  terrain  floor 25  water 8  rough 2  brush 4  hazard 1
+  window       J3|K3    to room 1 (A1)
+  door         B4|C4    to room 1 (A1)
+  secret door  J5|K5    to room 1 (A1)
+  enemy        E4       Ghoul
+```
+
+A **room** is an area of ground that open floor joins: every wall, window and door -- open
+or closed, secret or not -- is a room's edge, so opening a door in play does not change what
+the rooms are. Rooms are numbered in reading order of their first square and named by it
+(`room 2 (C2)`), which stays the same when the map is edited somewhere else. A boundary is
+named by the squares either side of it: `J3|K3` across a vertical one, `F6/F7` across a
+horizontal one. Doors of every kind lead from room to room; windows do not. The party
+starts in the first player creature's room (or the largest), and a room that cannot be
+reached from it through doors is marked `NOT REACHABLE`.
+
+**`--json`** gives `--describe` as JSON, for a program rather than a reader: the same
+fields, with 0-based file coordinates beside the square names.
 
 ## Performance
 

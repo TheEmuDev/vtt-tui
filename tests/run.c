@@ -1,6 +1,7 @@
 /* Minimal test harness. Zero dependencies here too: a counter, a macro, and
  * a list of functions. */
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8728,6 +8729,179 @@ static char *tool_text(const Map *m, int x0, int y0, int x1, int y1, size_t *len
     return buf;
 }
 
+/* A small JSON validator: enough to prove what the tools write parses --
+ * objects, arrays, strings with escapes, numbers, literals. */
+static const char *jv_value(const char *p, int depth);
+
+static const char *jv_ws(const char *p) { while (*p == ' ' || *p == '\n' || *p == '\t' || *p == '\r') p++; return p; }
+
+static const char *jv_string(const char *p)
+{
+    if (*p++ != '"') return NULL;
+    while (*p && *p != '"') {
+        if ((unsigned char)*p < 0x20) return NULL;
+        if (*p == '\\') {
+            p++;
+            if (*p == 'u') { for (int i = 1; i <= 4; i++) if (!isxdigit((unsigned char)p[i])) return NULL; p += 5; continue; }
+            if (!strchr("\"\\/bfnrt", *p)) return NULL;
+        }
+        p++;
+    }
+    return *p == '"' ? p + 1 : NULL;
+}
+
+static const char *jv_value(const char *p, int depth)
+{
+    if (depth > 64) return NULL;
+    p = jv_ws(p);
+    if (*p == '{' || *p == '[') {
+        char close = *p == '{' ? '}' : ']';
+        int  obj = *p == '{';
+        p = jv_ws(p + 1);
+        if (*p == close) return p + 1;
+        for (;;) {
+            if (obj) {
+                p = jv_string(jv_ws(p));
+                if (!p) return NULL;
+                p = jv_ws(p);
+                if (*p++ != ':') return NULL;
+            }
+            p = jv_value(p, depth + 1);
+            if (!p) return NULL;
+            p = jv_ws(p);
+            if (*p == ',') { p++; continue; }
+            return *p == close ? p + 1 : NULL;
+        }
+    }
+    if (*p == '"') return jv_string(p);
+    if (!strncmp(p, "true", 4)) return p + 4;
+    if (!strncmp(p, "false", 5)) return p + 5;
+    if (!strncmp(p, "null", 4)) return p + 4;
+    const char *q = p;
+    if (*q == '-') q++;
+    if (!isdigit((unsigned char)*q)) return NULL;
+    while (isdigit((unsigned char)*q) || *q == '.' || *q == 'e' || *q == 'E' || *q == '+' || *q == '-') q++;
+    return q;
+}
+
+static int json_valid(const char *s)
+{
+    const char *end = jv_value(s, 0);
+    return end && *jv_ws(end) == '\0';
+}
+
+static char *describe_text(const Map *m, int json, size_t *len)
+{
+    char  *buf = NULL;
+    size_t n   = 0;
+    FILE  *f   = open_memstream(&buf, &n);
+    maptools_describe(f, m, json);
+    fclose(f);
+    if (len) *len = n;
+    return buf;
+}
+
+/* A map built by hand: rooms and what joins them. */
+static Map *rooms_fixture(void)
+{
+    /* Three rooms in a row, 3 wide each, walls between: A|B through a door,
+     * B|C through a window only. And a sealed D below A, and a void gap. */
+    Map *m = map_new(11, 5, "rooms");
+    for (int y = 0; y < 5; y++)
+        for (int x = 0; x < 11; x++) map_set_tile(m, x, y, x == 3 || x == 7 ? TILE_VOID : TILE_FLOOR);
+    map_set_tile(m, 3, 1, TILE_FLOOR);                      /* the door squares across the gaps */
+    map_set_tile(m, 7, 1, TILE_FLOOR);
+    for (int y = 0; y < 5; y++) { map_set_vedge(m, 3, y, EDGE_WALL); map_set_vedge(m, 4, y, EDGE_WALL); }
+    map_set_vedge(m, 3, 1, EDGE_DOOR_CLOSED);               /* A <-> corridor square */
+    map_set_vedge(m, 4, 1, EDGE_DOOR_OPEN);                 /* corridor square <-> B */
+    for (int y = 0; y < 5; y++) { map_set_vedge(m, 7, y, EDGE_WALL); map_set_vedge(m, 8, y, EDGE_WALL); }
+    map_set_vedge(m, 7, 1, EDGE_WINDOW);
+    map_set_vedge(m, 8, 1, EDGE_WINDOW);
+    for (int x = 0; x < 3; x++) map_set_hedge(m, x, 3, EDGE_WALL);   /* D: rows 3-4 of A's column */
+    Token t = { 0 };
+    t.x = 1; t.y = 1; t.size = 1; t.kind = TOKEN_PLAYER;
+    str_lcpy(t.label, "Aria \"the Bold\"", sizeof t.label);         /* a quote to escape */
+    tokens_add(&m->tokens, t);
+    return m;
+}
+
+static void test_map_tools_describe(void)
+{
+    char err[256];
+
+    CASE("rooms: doors of any kind join them for reaching, windows and walls do not, every door splits");
+    Map *m = rooms_fixture();
+    Rooms r;
+    rooms_build(m, &r);
+    /* A (rows 0-2 of x 0-2), the corridor square D2... names in reading order. */
+    CHECK_EQ(r.n, 6);
+    int a = rooms_at(&r, m, 0, 0), cor1 = rooms_at(&r, m, 3, 1), b = rooms_at(&r, m, 5, 0);
+    int cor2 = rooms_at(&r, m, 7, 1), c = rooms_at(&r, m, 9, 0), d = rooms_at(&r, m, 0, 4);
+    CHECK(a != cor1 && cor1 != b && b != cor2 && cor2 != c && d != a);
+    CHECK_EQ(r.start, a);                                   /* Aria's room */
+    CHECK(r.reach[a] && r.reach[cor1] && r.reach[b]);       /* a closed door and an open one */
+    CHECK(!r.reach[cor2] && !r.reach[c]);                   /* windows only */
+    CHECK(!r.reach[d]);                                     /* sealed by a wall */
+    CHECK_EQ(r.v[a].fx, 0);
+    CHECK_EQ(r.v[a].squares, 9);
+    rooms_free(&r);
+
+    CASE("describe names rooms by their first square and says where each door leads; JSON parses");
+    size_t n;
+    char *t = describe_text(m, 0, &n);
+    CHECK(strstr(t, "room 1 (A1)") != NULL);
+    CHECK(strstr(t, "not reachable") != NULL);
+    CHECK(strstr(t, "NOT REACHABLE") != NULL);
+    CHECK(strstr(t, "door         C2|D2    to room") != NULL);
+    free(t);
+    t = describe_text(m, 1, &n);
+    CHECK(json_valid(t));
+    CHECK(strstr(t, "\"label\":\"Aria \\\"the Bold\\\"\"") != NULL);   /* escaped */
+    CHECK(strstr(t, "\"reachable\":false") != NULL);
+    free(t);
+    map_free(m);
+
+    CASE("the goldens: the fixture with every boundary kind, as text and as JSON");
+    m = mapio_load("tests/fixtures/kinds.vtt", err, sizeof err);
+    CHECK(m != NULL);
+    if (m) {
+        t = describe_text(m, 0, &n);
+        golden_bytes("describe-kinds", t, n);
+        free(t);
+        t = describe_text(m, 1, &n);
+        CHECK(json_valid(t));
+        golden_bytes("describe-kinds-json", t, n);
+        free(t);
+        map_free(m);
+    }
+
+    CASE("the worst case: 512x512 with a wall on every boundary is 262,144 rooms, linearly");
+    m = map_new(512, 512, "cells");
+    for (int y = 0; y < 512; y++)
+        for (int x = 0; x < 512; x++) {
+            map_set_tile(m, x, y, TILE_FLOOR);
+            map_set_vedge(m, x, y, EDGE_WALL);
+            map_set_hedge(m, x, y, EDGE_WALL);
+        }
+    uint64_t t0 = prof_now_ns();
+    rooms_build(m, &r);
+    uint64_t took = prof_now_ns() - t0;
+    CHECK_EQ(r.n, 512 * 512);
+    CHECK(took < 2000000000ull);                            /* generous: ASan, a busy machine */
+    rooms_free(&r);
+    map_free(m);
+
+    CASE("one open 512x512 room is one room, filled without recursion");
+    m = map_new(512, 512, "open");
+    for (int y = 0; y < 512; y++)
+        for (int x = 0; x < 512; x++) map_set_tile(m, x, y, TILE_FLOOR);
+    rooms_build(m, &r);
+    CHECK_EQ(r.n, 1);
+    CHECK_EQ(r.v[0].squares, 512 * 512);
+    rooms_free(&r);
+    map_free(m);
+}
+
 static void test_map_tools_dump(void)
 {
     char err[256];
@@ -11957,6 +12131,7 @@ int main(void)
         { "wire",   test_wire },
         { "mapdiag", test_map_diag },
         { "mapdump", test_map_tools_dump },
+        { "mapdescribe", test_map_tools_describe },
         { "netprim", test_net_primitives },
         { "netserver", test_net_server },
         { "netmsg", test_net_msg },

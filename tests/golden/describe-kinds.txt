@@ -1,0 +1,16 @@
+map  Kinds  16x8  scale 5 ft  metric alt  ruleset none
+  0 creatures, 2 rooms, starting in room 1 (A1)
+
+room 1 (A1)  A1:P8  88 squares
+  terrain  floor 85  wood 3
+  window       J3|K3    to room 2 (C2)
+  door         B4|C4    to room 2 (C2)
+  secret door  J5|K5    to room 2 (C2)
+  open door    F6/F7    to room 2 (C2)
+
+room 2 (C2)  C2:J6  40 squares
+  terrain  floor 25  water 8  rough 2  brush 4  hazard 1
+  window       J3|K3    to room 1 (A1)
+  door         B4|C4    to room 1 (A1)
+  secret door  J5|K5    to room 1 (A1)
+  open door    F6/F7    to room 1 (A1)

@@ -73,6 +73,8 @@ static void usage(void)
         "  map tools (print a report and exit; see README, Map tools):\n"
         "  --dump-map         the whole map as text, with a legend\n"
         "  --region A1:P9     only that part of it\n"
+        "  --describe         the rooms, their doors and what is in them\n"
+        "  --json             --describe (or --check) as JSON\n"
         "  -h, --help         this message\n",
         stdout);
 }
@@ -535,7 +537,8 @@ static int run_tool(const Options *o)
     }
 
     int rc = 0;
-    if (o->tool == TOOL_DUMP) maptools_dump(stdout, m, x0, y0, x1, y1);
+    if (o->tool == TOOL_DUMP)          maptools_dump(stdout, m, x0, y0, x1, y1);
+    else if (o->tool == TOOL_DESCRIBE) maptools_describe(stdout, m, o->json);
     map_free(m);
     return rc;
 }
