@@ -327,6 +327,7 @@ const char *ed_mode_name(EdMode m)
     case ED_WALL:    return "WALL";
     case ED_VISUAL:  return "VISUAL";
     case ED_COMMAND: return "COMMAND";
+    case ED_STAMP:   return "STAMP";
     case ED_NORMAL:
     default:         return "NORMAL";
     }

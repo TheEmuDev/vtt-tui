@@ -13,6 +13,7 @@
 #include "json.h"
 #include "maptools.h"
 #include "prof.h"
+#include "stamp.h"
 #include "util.h"
 
 /* ----------------------------------------------------------------- words */
@@ -78,6 +79,7 @@ static const char *mode_name(EdMode m)
     case ED_WALL:    return "wall";
     case ED_VISUAL:  return "visual";
     case ED_COMMAND: return "command line";
+    case ED_STAMP:   return "stamp";
     }
     return "?";
 }
@@ -718,6 +720,29 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
         for (int y = y0; y <= y1; y++)
             for (int x = x0; x <= x1; x++) fog_paint(m, u, x, y, id);
     }
+    else if (!strcmp(v, "stamp")) {
+        /* stamp NAME SQUARE [rotate 90|180|270] [mirror] */
+        int x, y, quarters = 0, mirror = 0;
+        if (n < 3) BAD("stamp NAME SQUARE [rotate 90|180|270] [mirror]");
+        if (!square(m, w[2], &x, &y, err, errsz)) return -1;
+        for (int i = 3; i < n; i++) {
+            int deg;
+            if (!strcmp(w[i], "mirror")) mirror = 1;
+            else if (!strcmp(w[i], "rotate") && i + 1 < n && word_int(w[i + 1], 0, 270, &deg) && deg % 90 == 0) {
+                quarters = deg / 90;
+                i++;
+            }
+            else BAD("stamp NAME SQUARE [rotate 90|180|270] [mirror]");
+        }
+        Map *st = stamp_load(w[1], err, errsz);
+        if (!st) return -1;
+        if (quarters) { Map *t = stamp_turned(st, quarters); map_free(st); st = t; }
+        if (mirror)   { Map *t = stamp_mirrored(st); map_free(st); st = t; }
+        int ok = stamp_place(m, u, st, x, y, err, errsz);
+        x0 = x; y0 = y; x1 = x + st->w - 1; y1 = y + st->h - 1;
+        map_free(st);
+        if (!ok) return -1;
+    }
     else if (!strcmp(v, "token")) {
         if (token_line(a, w, n, ed, err, errsz) < 0) return -1;
         x1 = -1; x0 = y0 = y1 = 0;           /* token_line has said where */
@@ -739,7 +764,7 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
 
 static int is_edit(const char *v)
 {
-    static const char *const EDITS[] = { "room", "tile", "wall", "edge", "note", "fog", "token" };
+    static const char *const EDITS[] = { "room", "tile", "wall", "edge", "note", "fog", "token", "stamp" };
     for (size_t i = 0; i < sizeof EDITS / sizeof *EDITS; i++)
         if (!strcmp(v, EDITS[i])) return 1;
     return 0;
@@ -811,6 +836,20 @@ static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FIL
         int j = want_json(w, n, 1, err, errsz);
         if (j < 0) return -1;
         maptools_describe(out, m, j);
+        return 0;
+    }
+    if (!strcmp(v, "stamps")) {
+        /* The saved stamps, one a line with its size: what `stamp` can put down. */
+        if (n > 1) { snprintf(err, errsz, "stamps takes nothing after it"); return -1; }
+        char names[64][MAP_NAME_MAX], e2[160];
+        int  k = stamp_list(names, 64);
+        for (int i = 0; i < k && i < 64; i++) {
+            Map *st = stamp_load(names[i], e2, sizeof e2);
+            if (!st) continue;
+            fprintf(out, "%s  %dx%d%s\n", names[i], st->w, st->h, st->tokens.n ? "  with creatures" : "");
+            map_free(st);
+        }
+        if (!k) fputs("no stamps\n", out);
         return 0;
     }
     if (!strcmp(v, "marked")) {

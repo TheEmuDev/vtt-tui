@@ -2,6 +2,7 @@
 
 #include <fcntl.h>
 #include <stdarg.h>
+#include <sys/stat.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -249,4 +250,18 @@ int fd_nonblock_cloexec(int fd)
     int fd_fl = fcntl(fd, F_GETFD, 0);
     if (fd_fl >= 0) (void)fcntl(fd, F_SETFD, fd_fl | FD_CLOEXEC);
     return 0;
+}
+
+void dir_make(const char *dir)
+{
+    char   partial[4096];
+    size_t n = str_lcpy(partial, dir, sizeof partial);
+    if (n >= sizeof partial) return;
+    for (size_t i = 1; i < n; i++) {
+        if (partial[i] != '/') continue;
+        partial[i] = '\0';
+        mkdir(partial, 0755);
+        partial[i] = '/';
+    }
+    mkdir(partial, 0755);
 }

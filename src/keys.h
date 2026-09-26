@@ -32,6 +32,7 @@ typedef enum {
     KEYS_BUILD,
     KEYS_VISUAL,
     KEYS_WALL,
+    KEYS_STAMP,
     KEYS_RULER,
     KEYS_BROWSER,
     KEYS_MENU,

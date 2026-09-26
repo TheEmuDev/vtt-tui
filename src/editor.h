@@ -13,6 +13,7 @@ typedef enum {
     ED_WALL,       /* cursor on lattice corners; movement lays wall */
     ED_VISUAL,     /* rectangular tile selection */
     ED_COMMAND,    /* the `:` line */
+    ED_STAMP,      /* a stamp on the cursor, to be placed */
 } EdMode;
 
 #define ED_SCROLLOFF 2

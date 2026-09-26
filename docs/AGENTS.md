@@ -153,9 +153,12 @@ README *Control channel* lists every request; this is how to use them.
    A request is all or nothing: if a line fails, nothing changed, and the answer says which
    line and why. Fix it and send the whole request again.
 5. Read back what you did (`dump` the region, `check`), and tell the GM in squares.
-6. Suggestions the GM has not agreed to go on the map as notes (`note F7 "secret door?"`),
+6. For anything the GM's table has a stamp for (`vtt --ctl stamps`), put the stamp down
+   (`stamp Table F4 rotate 90`) rather than drawing it square by square; `vtt
+   ~/.local/share/vtt/stamps/Table.vtt --dump-map` shows what one looks like first.
+7. Suggestions the GM has not agreed to go on the map as notes (`note F7 "secret door?"`),
    which the players never see; the GM keeps or clears them.
-7. If the GM does not like a change and nothing has happened since, `vtt --ctl undo` (a
+8. If the GM does not like a change and nothing has happened since, `vtt --ctl undo` (a
    request of its own) takes it back; otherwise ask them to press `u`. Never try to repair a change by undoing the
    GM's own work.
 

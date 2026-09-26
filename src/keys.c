@@ -156,6 +156,10 @@ static const KeyDoc BUILD[] = {
     KEY("T",      "cycle which terrain f paints"),
     { "v  V",     "select a box / a circle, to paint many at once", NULL, NULL },
 
+    GROUP("Stamps"),
+    KEY("y  p",   "copy the brush's squares or the box / show the copy on the cursor to place"),
+    KEY(":stamp", "list your stamps   :stamp Table picks one   :stamp save Table keeps the copy"),
+
     GROUP("Undo and elsewhere"),
     KEY("u",      "undo    ctrl-r redo"),
     KEY("m",      "measure (the ruler)"),
@@ -173,7 +177,19 @@ static const KeyDoc VISUAL[] = {
     { "v  V",     "box or circle; a circle is centred where you started", "v/V", "shape" },
     { "f",        "paint the selected terrain over it", NULL, "floor" },
     { "x",        "clear it to void",                  NULL, "clear" },
+    { "y",        "copy it: ground, walls, creatures, notes", NULL, NULL },
     { "esc",      "drop the selection",                NULL, "cancel" },
+    { "?",        "this page",                         NULL, "keys" },
+};
+
+static const KeyDoc STAMP[] = {
+    GROUP("Placing a stamp"),
+    { "h j k l",  "move it: the cursor is its top-left square", "hjkl", "move" },
+    { "r  R",     "turn it a quarter clockwise / back", "r/R", "turn" },
+    KEY("|",      "mirror it left to right"),
+    { "p  enter", "put it down here; one u takes it back", "p", "place" },
+    { "esc",      "put it away without placing",       NULL, "cancel" },
+    KEY(":stamp save Table", "keep what you copied as a stamp   :stamp Table -f places it at once"),
     { "?",        "this page",                         NULL, "keys" },
 };
 
@@ -239,6 +255,7 @@ static const KeyMap MAPS[KEYS_COUNT] = {
     MAP(KEYS_PLAY_GRABBED, "Play mode, carrying", PLAY_GRABBED),
     MAP(KEYS_BUILD,        "Build mode",          BUILD),
     MAP(KEYS_VISUAL,       "Build mode, visual",  VISUAL),
+    MAP(KEYS_STAMP,        "Build mode, stamp",   STAMP),
     MAP(KEYS_WALL,         "Build mode, tracing", WALL),
     MAP(KEYS_RULER,        "Ruler",               RULER),
     MAP(KEYS_BROWSER,      "Open a map",          BROWSER),

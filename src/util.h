@@ -80,4 +80,8 @@ const char *str_casestr(const char *hay, const char *needle);
  * when fcntl refuses. */
 int fd_nonblock_cloexec(int fd);
 
+/* Makes a directory and any parents it lacks (mode 0755), as mkdir -p; one
+ * that is there already is fine. Errors are left to whatever then writes. */
+void dir_make(const char *dir);
+
 #endif /* VTT_UTIL_H */

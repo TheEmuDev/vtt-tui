@@ -165,6 +165,7 @@ Maps are found in the current directory and in `~/.local/share/vtt/maps`.
 | `w` | wall-tracing mode |
 | `m` | measure (ruler) |
 | `v` `V` | select a box / a circle |
+| `y` `p` | copy the brush's squares or the box / show the copy on the cursor, then `p` puts it down — see [Stamps](#build-mode) |
 | `f` `x` | fill selection with floor / clear it to void |
 | `b` `B` | brush size, 1×1 → 2×2 → 3×3 — `2b` names it |
 | `space` | toggle the cursor tile between floor and void |
@@ -204,6 +205,36 @@ metric because it measures reach — a tower is a tower whatever the movement ru
 
 Wall tracing anchors on a lattice corner rather than a square, which is where its cursor
 lives, so its circles sit between squares and come out even across rather than odd.
+
+**Stamps.** A piece of map to put down again: a pillar, a table and its benches, a stretch
+of cave wall, a whole guard post. `y` copies what the brush covers, or the `v` box: its
+ground, every wall, door and window round and between its squares, the creatures wholly
+inside it and the notes on its squares. Fog is a map's and is never copied. `p` then shows
+the copy on the cursor -- drawn as if it were down, with a ring round the ground it would
+cover -- and changes nothing yet:
+
+| key | while a stamp is on the cursor |
+|-----|---------------------------------|
+| `h` `j` `k` `l` | move it; the cursor is its top-left square |
+| `r` `R` | turn it a quarter clockwise / back; walls, doors and creatures turn with it |
+| `\|` | mirror it left to right |
+| `p` or `enter` | put it down here, as one step `u` takes back |
+| `esc` | put it away, placing nothing |
+
+Placing is **see-through**: where the stamp has void, the map's ground stays, and where it
+has no boundary, the map's boundary stays -- so a pillar adds its walls and nothing else.
+It is all or nothing: a stamp that would run off the map, stand a creature on void or on
+another creature, or bring more square notes than the map holds is refused where it is,
+and the preview stays up to be moved. A copied creature arrives fresh, with no markers and
+no place in a fight, and a label already on the map gets a number (`Ogre 2`).
+
+`:stamp save Table` keeps the stamp in hand under a name; `:stamp Table` picks it up again,
+on the cursor; `:stamp Table -f` puts it down at the cursor at once, with no preview;
+`:stamp` lists them. The one in hand survives closing the map, so a piece of one map goes
+down on another. Saved stamps are ordinary map files, one a stamp, in
+`$XDG_DATA_HOME/vtt/stamps/` (else `~/.local/share/vtt/stamps/`): `vtt Table.vtt` opens one
+to edit, and the [map tools](#map-tools---dump-map---check---describe) read them. A name is
+letters, digits, `-` and `_`.
 
 **Jumping.** `:c6` puts the cursor on `C6` and centres the view there — a jump is for going
 somewhere else, and arriving pinned against an edge shows half of where you went. `:12` moves
@@ -1137,6 +1168,7 @@ with no verdict, ruleset or not.
 | `:serve [PORT] [--stay-alive] [--no-pings]` | the [remote view](#remote-view-serve-mirror); `:serve off` closes it |
 | `:player preview` | see the players' frame on your own screen; `q` returns |
 | `:mirror` | a second terminal window mirroring play mode |
+| `:stamp NAME` | pick up a saved [stamp](#build-mode); `-f` puts it down at once, `:stamp save NAME` keeps the one in hand, `:stamp` lists them |
 | `:agent on` | let an agent read and edit this map through the [control channel](#control-channel-agent-vtt---ctl); `:agent off` closes it, `:agent` asks |
 | `:roll 2d6+3` | roll dice — see [Dice](#dice-roll) |
 | `:roll NAME = EXPR` | save a roll under a name; `:rolls` lists them |
@@ -1398,6 +1430,8 @@ the squares either side: `G5|H5` across a vertical one, `C3/C4` across a horizon
 | `token set WHO label "..."` / `size N` / `note "..."` | change one thing about a creature |
 | `note SQUARE "text"`, `note SQUARE` | a GM-only note on a square, or take it off |
 | `fog paint REGION N` | into fog patch N (0 scrubs); `:fog` makes patches |
+| `stamp NAME SQUARE [rotate 90\|180\|270] [mirror]` | a saved [stamp](#build-mode), its top-left square here, turned and mirrored in that order; see-through and all or nothing as the GM's `p` |
+| `stamps` | the saved stamps and their sizes (a read) |
 | `undo` | takes back the agent's last request, while nothing has happened since; alone in its request |
 
 **Every request is one undo step, all or nothing.** `u` takes back everything a request

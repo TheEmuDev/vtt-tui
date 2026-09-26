@@ -30,6 +30,7 @@
 #include "map.h"
 #include "mapio.h"
 #include "maptools.h"
+#include "stamp.h"
 #include "theme.h"
 #include "token.h"
 #include "play.h"
@@ -12334,6 +12335,222 @@ static char *ctl_ask(App *a, const char *req)
     return ans;
 }
 
+/* ---------------------------------------------------------------- stamps */
+
+/* A map's squares, boundaries, creatures and notes as text, for comparing. */
+static char *stamp_text(const Map *m)
+{
+    size_t n;
+    char  *t = tool_text(m, 0, 0, m->w - 1, m->h - 1, &n);
+    return t;
+}
+
+/* A small asymmetric piece: an L of wall with a door in it, a window, water
+ * in one corner, a 2x2 creature and a note, so every turn is told apart. */
+static Map *stamp_fixture(void)
+{
+    Map *s = map_new(4, 3, "piece");
+    for (int y = 0; y < 3; y++)
+        for (int x = 0; x < 4; x++) map_set_tile(s, x, y, TILE_FLOOR);
+    map_set_tile(s, 3, 0, TILE_WATER);
+    map_set_tile(s, 0, 2, TILE_VOID);
+    map_set_vedge(s, 0, 0, EDGE_WALL);
+    map_set_vedge(s, 0, 1, EDGE_DOOR_CLOSED);
+    map_set_hedge(s, 0, 0, EDGE_WALL);
+    map_set_hedge(s, 1, 0, EDGE_WALL);
+    map_set_hedge(s, 2, 3, EDGE_WINDOW);
+    map_set_vedge(s, 4, 2, EDGE_WALL);
+    Token t;
+    memset(&t, 0, sizeof t);
+    t.x = 1; t.y = 1; t.size = 2; t.kind = TOKEN_ENEMY;
+    str_lcpy(t.label, "Ogre", sizeof t.label);
+    tokens_add(&s->tokens, t);
+    map_note_set(s, 3, 0, "well");
+    return s;
+}
+
+static void test_stamps(void)
+{
+    char err[160];
+    Map *s = stamp_fixture();
+    char *orig = stamp_text(s);
+
+    CASE("turning: each quarter as the goldens have it, four quarters the start again");
+    static const char *const names[] = { "stamp-turn0", "stamp-turn1", "stamp-turn2", "stamp-turn3" };
+    for (int q = 0; q < 4; q++) {
+        Map *t = stamp_turned(s, q);
+        CHECK_EQ(t->w, q % 2 ? 3 : 4);
+        char *txt = stamp_text(t);
+        golden_bytes(names[q], txt, strlen(txt));
+        free(txt);
+        map_free(t);
+    }
+    {
+        Map *t = s;
+        Map *owned[4];
+        for (int q = 0; q < 4; q++) { owned[q] = stamp_turned(t, 1); t = owned[q]; }
+        char *txt = stamp_text(t);
+        CHECK_EQ(strcmp(txt, orig), 0);
+        free(txt);
+        for (int q = 0; q < 4; q++) map_free(owned[q]);
+        Map *back = stamp_turned(s, -1), *fwd = stamp_turned(s, 3);
+        char *a = stamp_text(back), *b = stamp_text(fwd);
+        CHECK_EQ(strcmp(a, b), 0);                          /* -1 is 3 */
+        free(a); free(b); map_free(back); map_free(fwd);
+    }
+
+    CASE("mirroring: as the golden has it, twice the start again");
+    {
+        Map *m1 = stamp_mirrored(s), *m2 = stamp_mirrored(m1);
+        char *a = stamp_text(m1), *b = stamp_text(m2);
+        golden_bytes("stamp-mirror", a, strlen(a));
+        CHECK_EQ(strcmp(b, orig), 0);
+        free(a); free(b); map_free(m1); map_free(m2);
+    }
+
+    CASE("copying: squares, every boundary round them, creatures wholly inside, notes; fresh creatures");
+    {
+        Map *m = map_new(8, 6, "m");
+        Map *p = NULL;
+        Undo u;
+        undo_init(&u);
+        for (int y = 0; y < 6; y++)
+            for (int x = 0; x < 8; x++) map_set_tile(m, x, y, TILE_FLOOR);
+        CHECK_EQ(stamp_place(m, &u, s, 2, 2, err, sizeof err), 1);
+        m->tokens.v[0].turn = TURN_IN | TURN_ACTING;
+        token_add_status(&m->tokens.v[0], 1, "Poisoned");
+        p = stamp_copy(m, 2, 2, 5, 4);
+        CHECK(p != NULL);
+        if (p) {
+            CHECK_EQ(p->tokens.n, 1);
+            CHECK(p->tokens.v[0].turn == 0 && p->tokens.v[0].nstatus == 0);
+            CHECK_EQ(map_vedge(p, 0, 1), EDGE_DOOR_CLOSED);
+            CHECK_EQ(map_hedge(p, 2, 3), EDGE_WINDOW);
+            CHECK(map_note_at(p, 3, 0) != NULL);
+            map_free(p);
+        }
+        p = stamp_copy(m, 2, 2, 3, 4);                 /* cuts the Ogre in half: left out */
+        CHECK(p && p->tokens.n == 0);
+        map_free(p);
+        undo_free(&u);
+        map_free(m);
+    }
+
+    CASE("placing: see-through void and blank boundaries, one undo step, labels kept apart");
+    {
+        Map *m = map_new(10, 8, "m");
+        Undo u;
+        undo_init(&u);
+        for (int y = 0; y < 8; y++)
+            for (int x = 0; x < 10; x++) map_set_tile(m, x, y, TILE_BRUSH);
+        map_set_hedge(m, 5, 5, EDGE_WALL);             /* under the stamp, where it has no boundary */
+        Token og;
+        memset(&og, 0, sizeof og);
+        og.x = 9; og.y = 7; og.size = 1;
+        str_lcpy(og.label, "Ogre", sizeof og.label);
+        tokens_add(&m->tokens, og);
+        char *before = stamp_text(m);
+        CHECK_EQ(stamp_place(m, &u, s, 3, 3, err, sizeof err), 1);
+        CHECK_EQ(map_tile(m, 3, 5), TILE_BRUSH);        /* the stamp's void square: the map's */
+        CHECK_EQ(map_tile(m, 6, 3), TILE_WATER);
+        CHECK_EQ(map_hedge(m, 5, 5), EDGE_WALL);        /* see-through boundary */
+        CHECK_EQ(map_vedge(m, 3, 4), EDGE_DOOR_CLOSED);
+        CHECK_EQ(m->tokens.n, 2);
+        CHECK_EQ(strcmp(m->tokens.v[1].label, "Ogre 2"), 0);
+        CHECK_EQ(u.nmarks, 1);
+        undo_undo(&u, m);
+        char *after = stamp_text(m);
+        CHECK_EQ(strcmp(before, after), 0);
+        free(before); free(after);
+
+        CASE("placing is refused whole: off the map, a creature on void or on another, notes full");
+        before = stamp_text(m);
+        CHECK_EQ(stamp_place(m, &u, s, 7, 3, err, sizeof err), 0);
+        CHECK(strstr(err, "runs off the map") != NULL);
+        Map *hole = stamp_copy(s, 0, 0, 3, 2);
+        map_set_tile(hole, 1, 2, TILE_VOID);            /* the Ogre's square in the stamp goes see-through */
+        map_set_tile(m, 4, 5, TILE_VOID);               /* and the map has no ground there */
+        CHECK_EQ(stamp_place(m, &u, hole, 3, 3, err, sizeof err), 0);
+        CHECK(strstr(err, "Ogre would stand on void at E6") != NULL);
+        map_set_tile(m, 4, 5, TILE_BRUSH);
+        CHECK_EQ(stamp_place(m, &u, s, 8, 5, err, sizeof err), 0);
+        CHECK(strstr(err, "runs off the map") != NULL);
+        m->tokens.v[0].x = 4; m->tokens.v[0].y = 4;     /* where the stamp's Ogre would go */
+        CHECK_EQ(stamp_place(m, &u, s, 3, 3, err, sizeof err), 0);
+        CHECK(strstr(err, "would land on Ogre") != NULL);
+        m->tokens.v[0].x = 9; m->tokens.v[0].y = 7;
+        for (int i = 0; m->nnotes < MAP_NOTES_MAX; i++) map_note_set(m, i % 10, i / 10, "x");
+        map_note_set(m, 6, 3, "");                       /* the stamp's note square is free */
+        map_note_set(m, 9, 7, "y");
+        CHECK_EQ(stamp_place(m, &u, s, 3, 3, err, sizeof err), 0);
+        CHECK(strstr(err, "no room") != NULL);
+        map_free(hole);
+        free(before);
+        undo_free(&u);
+        map_free(m);
+    }
+
+    CASE("the preview: shown for a draw and put back exactly, touching nothing");
+    {
+        Map *m = map_new(10, 8, "m");
+        for (int y = 0; y < 8; y++)
+            for (int x = 0; x < 10; x++) map_set_tile(m, x, y, TILE_BRUSH);
+        Token og;
+        memset(&og, 0, sizeof og);
+        og.x = 0; og.y = 0; og.size = 1;
+        tokens_add(&m->tokens, og);
+        char *before = stamp_text(m);
+        unsigned gen = m->gen, shape = m->tokens.shape;
+        StampShow sv;
+        stamp_show(m, s, 8, 6, &sv);                    /* hangs off the corner */
+        CHECK_EQ(map_tile(m, 8, 6), TILE_FLOOR);          /* the stamp's corner, clipped */
+        CHECK_EQ(map_vedge(m, 8, 7), EDGE_DOOR_CLOSED);
+        CHECK_EQ(m->tokens.n, 1);                        /* its Ogre would hang off the map: not shown */
+        stamp_unshow(m, &sv);
+        char *after = stamp_text(m);
+        CHECK_EQ(strcmp(before, after), 0);
+        CHECK(m->gen == gen && m->tokens.shape == shape);
+        free(before); free(after);
+        map_free(m);
+    }
+
+    CASE("files: saved by name, listed, loaded back the same; names are never paths");
+    {
+        Sandbox sb = sandbox_enter("stamps");
+        CHECK_EQ(stamp_name_ok("pillar-row_2"), 1);
+        CHECK_EQ(stamp_name_ok("../x"), 0);
+        CHECK_EQ(stamp_name_ok(""), 0);
+        CHECK_EQ(stamp_name_ok("a b"), 0);
+        CHECK_EQ(stamp_save(s, "../evil", err, sizeof err), -1);
+        CHECK_EQ(stamp_save(s, "Piece", err, sizeof err), 0);
+        CHECK_EQ(stamp_save(s, "Altar", err, sizeof err), 0);
+        char names[4][MAP_NAME_MAX];
+        CHECK_EQ(stamp_list(names, 4), 2);
+        CHECK(!strcmp(names[0], "Altar") && !strcmp(names[1], "Piece"));
+        Map *l = stamp_load("Piece", err, sizeof err);
+        CHECK(l != NULL);
+        if (l) {
+            CHECK_EQ(strcmp(l->name, "Piece"), 0);    /* the file says its name */
+            str_lcpy(l->name, s->name, sizeof l->name);
+            char *a = stamp_text(l);
+            CHECK_EQ(strcmp(a, orig), 0);
+            if (strcmp(a, orig)) fprintf(stderr, "%s\n---\n%s", a, orig);
+            free(a);
+            map_free(l);
+        }
+        CHECK(stamp_load("Nothing", err, sizeof err) == NULL);
+        CHECK(strstr(err, "no stamp called Nothing") != NULL);
+        char dir[600], cmd[700];
+        stamp_dir(dir, sizeof dir);
+        snprintf(cmd, sizeof cmd, "rm -rf '%s'", sb.dir);
+        sandbox_leave(&sb);
+        if (system(cmd) != 0) { }
+    }
+
+    free(orig);
+    map_free(s);
+}
+
 static void test_undo_nesting(void)
 {
     Map *m = map_new(6, 4, "n");
@@ -13135,6 +13352,135 @@ static void test_ctl_cap(void)
     sandbox_leave(&sb);
 }
 
+static void test_stamp_keys(void)
+{
+    Sandbox sb = sandbox_enter("stampkeys");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK(ctl_blank_map(&a, sb.dir, 12, 8));
+    if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    Map *m = a.map;
+
+    CASE("p with nothing in hand says how to get something");
+    press(&a, "p");
+    CHECK_EQ(a.ed.mode, ED_NORMAL);
+    CHECK(strstr(a.status, "nothing to paste") != NULL);
+
+    CASE("y copies the box; p shows it on the cursor without changing the map; p again puts it down");
+    map_set_tile(m, 1, 1, TILE_WATER);
+    map_set_vedge(m, 1, 1, EDGE_WALL);
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "vly");
+    CHECK_EQ(a.ed.mode, ED_NORMAL);
+    CHECK(a.stamp && a.stamp->w == 2 && a.stamp->h == 1);
+    CHECK(strstr(a.status, "copied 2x1") != NULL);
+    int depth = a.undo.depth;
+    unsigned gen = m->gen;
+    press(&a, "p5l3j");
+    CHECK_EQ(a.ed.mode, ED_STAMP);
+    CHECK(a.ed.cx == 7 && a.ed.cy == 4);          /* vl left the cursor on C2 */
+    rnd_begin(&r);
+    app_draw(&a);                                   /* the preview draws, and goes */
+    CHECK_EQ(map_tile(m, 7, 4), TILE_FLOOR);
+    CHECK_EQ(m->gen, gen);
+    CHECK_EQ(a.undo.depth, depth);
+    press(&a, "p");
+    CHECK_EQ(a.ed.mode, ED_NORMAL);
+    CHECK_EQ(map_tile(m, 7, 4), TILE_WATER);
+    CHECK_EQ(map_vedge(m, 7, 4), EDGE_WALL);
+    CHECK_EQ(a.undo.depth, depth + 1);
+    CHECK(strstr(a.status, "stamped the copy 2x1 at H5") != NULL);
+    press(&a, "u");
+    CHECK_EQ(map_tile(m, 7, 4), TILE_FLOOR);
+
+    CASE("r and | turn and mirror the stamp in hand; enter places; esc puts it away placing nothing");
+    press(&a, "pr");
+    CHECK(a.stamp->w == 1 && a.stamp->h == 2);
+    CHECK(strstr(a.status, "turned 90") != NULL);
+    press(&a, "|");
+    CHECK(strstr(a.status, "mirrored") != NULL);
+    press(&a, "R");
+    CHECK(a.stamp->w == 2 && a.stamp->h == 1);
+    press(&a, "\r");
+    CHECK_EQ(a.ed.mode, ED_NORMAL);
+    CHECK_EQ(a.undo.depth, depth + 1);
+    depth = a.undo.depth;
+    press(&a, "p\x1b");
+    CHECK_EQ(a.ed.mode, ED_NORMAL);
+    CHECK_EQ(a.undo.depth, depth);
+
+    CASE("a stamp that would run off the map is refused where it is, and the preview stays up");
+    a.ed.cx = 11; a.ed.cy = 7;
+    press(&a, "pp");
+    CHECK_EQ(a.ed.mode, ED_STAMP);
+    CHECK(strstr(a.status, "runs off the map") != NULL);
+    press(&a, "\x1b");
+
+    CASE(":stamp save keeps it, :stamp lists, :stamp NAME picks it up, -f puts it down at once");
+    press(&a, ":stamp save Pool\r");
+    CHECK(strstr(a.status, "stamp Pool kept") != NULL);
+    press(&a, ":stamp save ../x\r");
+    CHECK(strstr(a.status, "letters, digits") != NULL);
+    press(&a, ":stamp\r");
+    CHECK(strstr(a.status, "stamps: Pool") != NULL);
+    map_free(a.stamp);
+    a.stamp = NULL;
+    press(&a, ":stamp Pool\r");
+    CHECK_EQ(a.ed.mode, ED_STAMP);
+    CHECK(strstr(a.status, "Pool 2x1") != NULL);
+    press(&a, "\x1b");
+    a.ed.cx = 3; a.ed.cy = 6;
+    press(&a, ":stamp Pool -f\r");
+    CHECK_EQ(a.ed.mode, ED_NORMAL);
+    CHECK_EQ(map_tile(m, 3, 6), TILE_WATER);
+    CHECK(strstr(a.status, "stamped Pool 2x1 at D7") != NULL);
+    press(&a, ":stamp Nothing\r");
+    CHECK(strstr(a.status, "no stamp called Nothing") != NULL);
+    press(&a, ":stamp Pool now\r");
+    CHECK(strstr(a.status, ":stamp NAME, :stamp NAME -f") != NULL);
+
+    CASE("the agent: stamps lists them, stamp puts one down turned or mirrored, inside the request's one step");
+    char *t = ctl_ask(&a, "stamps\n");
+    CHECK_EQ(strcmp(t, "ok\nPool  2x1\n"), 0);
+    free(t);
+    depth = a.undo.depth;
+    t = ctl_ask(&a, "stamp Pool J2 rotate 90\nstamp Pool A8 mirror\n");
+    CHECK(strncmp(t, "ok\nchanged", 10) == 0);
+    free(t);
+    CHECK_EQ(a.undo.depth, depth + 1);
+    CHECK_EQ(map_tile(m, 9, 1), TILE_WATER);          /* turned: the water on top */
+    CHECK_EQ(map_hedge(m, 9, 1), EDGE_WALL);           /* its west wall is now its top */
+    CHECK_EQ(map_tile(m, 1, 7), TILE_WATER);           /* mirrored: the water on the right */
+    CHECK_EQ(map_vedge(m, 2, 7), EDGE_WALL);
+    t = ctl_ask(&a, "stamp Pool L8\n");
+    CHECK(strstr(t, "runs off the map") != NULL);
+    free(t);
+    t = ctl_ask(&a, "stamp Pool B2 rotate 45\n");
+    CHECK(strstr(t, "stamp NAME SQUARE [rotate") != NULL);
+    free(t);
+    t = ctl_ask(&a, "stamp Nope B2\n");
+    CHECK(strstr(t, "no stamp called Nope") != NULL);
+    free(t);
+
+    CASE("stamps are build mode's");
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+    press(&a, ":stamp Pool\r");
+    CHECK(strstr(a.status, "stamps are build mode's") != NULL);
+
+    app_free(&a);
+    rnd_free(&r);
+    char cmd[1200];
+    snprintf(cmd, sizeof cmd, "rm -rf '%s'", sb.dir);
+    sandbox_leave(&sb);
+    if (system(cmd) != 0) { }
+}
+
 static void test_ctl_live(void)
 {
     Sandbox sb = sandbox_enter("ctl");
@@ -13410,6 +13756,8 @@ int main(void)
         { "editor", test_editor },
         { "undo",   test_undo },
         { "undonest", test_undo_nesting },
+        { "stamps", test_stamps },
+        { "stampkeys", test_stamp_keys },
         { "wire",   test_wire },
         { "mapdiag", test_map_diag },
         { "mapdump", test_map_tools_dump },

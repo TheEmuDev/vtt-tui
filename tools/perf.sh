@@ -250,6 +250,7 @@ run "play, fog full rebuild" "$MOB"  80x24  ':fog all 6\r:play\r:fog All 5\r:fog
 run "play, fog reveal 12"  "$MOB"    80x24  ':fog all 12\r:play\rf\rllllhhhh\r'
 run "play, fog sight, 4 watchers" "$MOB" 80x24 ':fog all 6\r:play\rf\rllllhhhh\r' "--bench-clients 4"
 run "play, fog soft edge, 4 watchers" "$MOB" 80x24 ':fog all 6\r:fog --soft-edge\r:play\rf\rllllhhhh\r' "--bench-clients 4"
+run "build, stamp 20x20"   "$VOIDY"  80x24  'v19l19jy19h19k20lppu20h'
 run "build, fog paint"     "$MOB"    80x24  ':fog Crypt\r3bgfgcllgfgchh'
 run "play, counters"       "$MOB"    80x24  ':play\rtsvhp 9\r><><><><'
 run "play, clocks"         "$MOB"    80x24  ':play\r:clock Dragon 6\r:clock Ritual 8\r:tick Dragon 2\r:tick -2\r'

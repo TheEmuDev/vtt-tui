@@ -12,6 +12,7 @@
 #include "draw.h"
 #include "fog.h"
 #include "prof.h"
+#include "stamp.h"
 
 /* The status message, then its coloured spans over the top. A span is drawn
  * only when all of it survived the ellipsis; half a number in gold would be
@@ -165,8 +166,25 @@ static void draw_editor(App *a)
 
     int playing = (a->screen == SCREEN_PLAY);
 
+    /* A stamp on the cursor is drawn as if it were down: swapped into the
+     * map for this one draw and straight back out, with a ring round the
+     * ground it would cover. */
+    StampShow sv;
+    int stamping = !playing && a->ed.mode == ED_STAMP && a->stamp;
+    if (stamping) { PROF_ZONE("stamp.show"); stamp_show(m, a->stamp, a->ed.cx, a->ed.cy, &sv); }
+
     if (playing) play_draw(r, m, &a->ed, &a->play, th, a->ascii, a->view == VIEW_PLAYERS);
     else         ed_draw(r, m, &a->ed, th, a->ascii);
+
+    if (stamping) {
+        stamp_unshow(m, &sv);
+        ClipRect saved = rnd_clip_push(r, a->ed.view.view.x, a->ed.view.view.y,
+                                       a->ed.view.view.w, a->ed.view.view.h);
+        grid_draw_tile_ring(r, &a->ed.view, m, a->ed.cx, a->ed.cy,
+                            imin(a->ed.cx + a->stamp->w - 1, m->w - 1),
+                            imin(a->ed.cy + a->stamp->h - 1, m->h - 1), th->ping_bg, NULL, NULL);
+        rnd_clip_restore(r, saved);
+    }
 
     /* The ruler is the GM's instrument; over fog its line would cross, and
      * its numbers measure, ground the players cannot see. */
@@ -269,6 +287,9 @@ static void draw_editor(App *a)
         ui_keybar(r, th, keys_map(KEYS_VISUAL));
         break;
     }
+    case ED_STAMP:
+        ui_keybar(r, th, keys_map(KEYS_STAMP));
+        break;
     case ED_COMMAND:
         break;
     case ED_NORMAL:

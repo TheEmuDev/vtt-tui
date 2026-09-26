@@ -85,6 +85,12 @@ void app_command_key(App *a, Key k);
 /* app_draw.c: the status message and its coloured spans, as the bars draw it. */
 void app_draw_status_msg(App *a, int x, int y, int maxw);
 
+/* app_stamp.c: y, p, the stamp mode's keys, :stamp. */
+void app_stamp_yank(App *a);
+void app_stamp_lift(App *a);
+void app_stamp_key(App *a, Key k);
+void app_stamp_command(App *a, const char *rest);
+
 /* app_ctl.c: :agent on, :agent off, :agent to ask. */
 void app_agent_command(App *a, const char *rest);
 

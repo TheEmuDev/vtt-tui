@@ -1,0 +1,21 @@
+   A B C D
+  | -%-
+1 |. 1 1
+  |       |
+2  . 1 1 .+
+          |
+3  ~ . . .|
+      -----
+
+creatures
+  1  Ogre             enemy 2x2    B1-C2
+
+notes
+  A3    well
+
+key
+  .  floor   ~  water   :  rough   "  brush   =  wood   ^  hazard   (blank) void
+  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door
+  S and s are the GM's: the players see a wall and an open door
+
+map  piece  4x3  scale 5 ft  metric alt  ruleset none

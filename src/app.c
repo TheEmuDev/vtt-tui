@@ -51,6 +51,8 @@ void app_free(App *a)
     slog_close(&a->slog);
     net_stop(&a->net);
     ctl_stop(&a->ctl);
+    map_free(a->stamp);
+    a->stamp = NULL;
 }
 
 void app_set_status(App *a, const char *msg)
@@ -378,15 +380,7 @@ int app_save_map(App *a, const char *path)
     char *slash = strrchr(dir, '/');
     if (slash) {
         *slash = '\0';
-        char partial[MAP_PATH_MAX];
-        size_t n = str_lcpy(partial, dir, sizeof partial);
-        for (size_t i = 1; i < n; i++) {
-            if (partial[i] != '/') continue;
-            partial[i] = '\0';
-            mkdir(partial, 0755);
-            partial[i] = '/';
-        }
-        mkdir(dir, 0755);
+        dir_make(dir);
     }
 
     char err[MAPIO_ERR_MAX] = { 0 };
@@ -1137,6 +1131,7 @@ KeyMapId app_keymap_id(const App *a)
     case SCREEN_EDITOR:
         if (a->ed.mode == ED_WALL)   return KEYS_WALL;
         if (a->ed.mode == ED_VISUAL) return KEYS_VISUAL;
+        if (a->ed.mode == ED_STAMP)  return KEYS_STAMP;
         return KEYS_BUILD;
     default:             return KEYS_PLAY;
     }
@@ -1699,6 +1694,7 @@ static void editor_key(App *a, Key k)
     if (!m) { a->screen = SCREEN_MENU; return; }
 
     if (e->mode == ED_COMMAND) { app_command_key(a, k); return; }
+    if (e->mode == ED_STAMP)   { app_stamp_key(a, k); return; }
     if (app_ruler_key(a, k))       { return; }
     if (e->mode == ED_WALL)    { wall_key(a, k); return; }
 
@@ -1865,6 +1861,9 @@ static void editor_key(App *a, Key k)
         break;
 
     case 'm': app_ruler_begin(a); break;
+
+    case 'y': app_stamp_yank(a); break;
+    case 'p': app_stamp_lift(a); break;
 
     case 'w':
         e->mode  = ED_WALL;
