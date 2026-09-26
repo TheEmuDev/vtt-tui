@@ -13,6 +13,7 @@
 
 #include "app.h"
 #include "render.h"
+#include "stamp.h"
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size);
 
@@ -27,6 +28,13 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
         rnd_resize(&rnd, 80, 24);
         app_init(&app, NULL, &rnd);
         if (app_open_map(&app, "tests/fixtures/kinds.vtt") != 0 || !app.map) abort();
+        /* Stamps from a folder of the fuzzer's own, never the user's, with
+         * one in it to put down. */
+        setenv("XDG_DATA_HOME", "/tmp/vtt-fuzz-ctl-data", 1);
+        Map *st = stamp_copy(app.map, 0, 0, 3, 2);
+        char err[160];
+        if (!st || stamp_save(st, "Piece", err, sizeof err) != 0) abort();
+        map_free(st);
         ready = 1;
     }
     char *req = malloc(size + 1);
