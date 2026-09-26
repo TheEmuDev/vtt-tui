@@ -15,11 +15,11 @@ maintainer; this file is what survives a context reset, so keep it true.
   `docs/PERFORMANCE.md`. Bytes written matter more than frame time. Cost follows
   the window, not the map: cull with `grid_visible_tiles` first.
 - **Push only when told** ("push it"). Commit freely; never push on your own.
-- **Model roles** (set 2026-09-24): a **Fable 5.1** subagent (Agent
-  `model: "fable"`) writes every plan, which goes to the user for sign-off;
-  **Opus 5.5** implements; a **Fable 5.1** subagent reviews every finished
-  change before it is reported done -- verify its findings and fix what holds
-  up. The user will name different models when that changes.
+- **Model roles** (set 2026-09-26): **Opus 5.5** plans -- the plan goes to
+  the user for sign-off -- and implements; a **Fable 5.1** subagent (Agent
+  `model: "fable"`) reviews every finished change before it is reported
+  done -- verify its findings and fix what holds up. The user will name
+  different models when that changes.
 - **Rules-agnostic core.** Game-specific behaviour lives behind the `Ruleset`
   table in `ruler.c` (bands, `action_roll`, `spotlight`, `countdown`), documented under the README's
   *Rulesets* section with a subsection per game. Nothing else may know a game.
