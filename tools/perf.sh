@@ -154,7 +154,7 @@ HUGE=$(genmap huge 512 512 0 0)
 } > "$DIR/room.ctl"
 echo 'dump' > "$DIR/dump.ctl"
 # The room language: five named rooms placed by each other, five corridors
-# (one two wide, one bent-free), creatures by room, on a void canvas.
+# (one two wide), creatures by room, on a void canvas.
 VOIDMAP="$DIR/void.vtt"
 printf 'VTT 2\nname Void\nsize 100 60\nzoom 1\n' > "$VOIDMAP"
 cat > "$DIR/plan.ctl" <<'PLAN'
