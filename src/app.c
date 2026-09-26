@@ -1876,6 +1876,7 @@ static void editor_key(App *a, Key k)
         break;
 
     case ':':
+        e->cmd_from_visual = e->mode == ED_VISUAL;
         e->mode = ED_COMMAND;
         ui_prompt_open(&e->cmd, "", "", "");
         break;

@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include "util.h"
 
@@ -181,8 +182,78 @@ int map_resize(Map *m, int w, int h)
     for (int i = m->nnotes - 1; i >= 0; i--)
         if (m->notes[i].x >= w || m->notes[i].y >= h)
             m->notes[i] = m->notes[--m->nnotes];
+    /* Areas are cut to what is left; one left with nothing goes. */
+    for (int i = m->nareas - 1; i >= 0; i--) {
+        Area *ar = &m->areas[i];
+        if (ar->x0 >= w || ar->y0 >= h) {
+            memmove(&m->areas[i], &m->areas[i + 1], (size_t)(m->nareas - i - 1) * sizeof *ar);
+            m->nareas--;
+            continue;
+        }
+        ar->x1 = (int16_t)imin(ar->x1, w - 1);
+        ar->y1 = (int16_t)imin(ar->y1, h - 1);
+    }
     map_touch(m);
     return 0;
+}
+
+/* ----------------------------------------------------------------- areas */
+
+int map_area_name_ok(const char *name)
+{
+    size_t n = strlen(name);
+    if (n == 0 || n >= AREA_NAME_MAX || name[0] == ' ' || name[n - 1] == ' ') return 0;
+    for (const char *p = name; *p; p++)
+        if (*p == '"' || *p == ':' || (unsigned char)*p < 0x20) return 0;
+    int x, y;
+    return !map_coord_parse(name, &x, &y);
+}
+
+int map_area_find(const Map *m, const char *name)
+{
+    for (int i = 0; i < m->nareas; i++)
+        if (!strcasecmp(m->areas[i].name, name)) return i;
+    return -1;
+}
+
+int map_area_at(const Map *m, int x, int y)
+{
+    for (int i = 0; i < m->nareas; i++) {
+        const Area *ar = &m->areas[i];
+        if (x >= ar->x0 && x <= ar->x1 && y >= ar->y0 && y <= ar->y1) return i;
+    }
+    return -1;
+}
+
+int map_area_set(Map *m, const char *name, int x0, int y0, int x1, int y1)
+{
+    if (!map_area_name_ok(name)) return -1;
+    if (x0 > x1) { int t = x0; x0 = x1; x1 = t; }
+    if (y0 > y1) { int t = y0; y0 = y1; y1 = t; }
+    x0 = imax(x0, 0); y0 = imax(y0, 0);
+    x1 = imin(x1, m->w - 1); y1 = imin(y1, m->h - 1);
+    if (x1 < x0 || y1 < y0) return -1;
+    int i = map_area_find(m, name);
+    if (i < 0) {
+        if (m->nareas >= MAP_AREAS_MAX) return -1;
+        i = m->nareas++;
+    }
+    Area *ar = &m->areas[i];
+    str_lcpy(ar->name, name, sizeof ar->name);
+    ar->x0 = (int16_t)x0; ar->y0 = (int16_t)y0;
+    ar->x1 = (int16_t)x1; ar->y1 = (int16_t)y1;
+    map_touch(m);
+    return i;
+}
+
+int map_area_remove(Map *m, const char *name)
+{
+    int i = map_area_find(m, name);
+    if (i < 0) return 0;
+    memmove(&m->areas[i], &m->areas[i + 1], (size_t)(m->nareas - i - 1) * sizeof m->areas[0]);
+    m->nareas--;
+    map_touch(m);
+    return 1;
 }
 
 uint8_t map_tile(const Map *m, int x, int y)

@@ -47,6 +47,18 @@ typedef struct {
  * list, since a map with more than a few dozen is a novel. Not drawn in
  * play mode, where the map is what the players may see. */
 #define MAP_NOTES_MAX 64
+
+/* A named area: a box of squares with a name the GM or an agent gave it --
+ * "Crypt", "Upper floor". It is a name and nothing else: walls are what
+ * make a room, and an area neither draws nor blocks anything. It is what
+ * the map tools, `marked` and the control channel's room language call a
+ * place by. Names are compared ignoring case. */
+#define AREA_NAME_MAX 32
+#define MAP_AREAS_MAX 64
+typedef struct {
+    char    name[AREA_NAME_MAX];
+    int16_t x0, y0, x1, y1;       /* inclusive, on the map */
+} Area;
 #define NOTE_MAX      TOKEN_NOTE_MAX
 typedef struct {
     int16_t x, y;
@@ -185,6 +197,8 @@ typedef struct {
     NamedRoll rolls[ROLL_MAX];
     Note notes[MAP_NOTES_MAX];
     int  nnotes;
+    Area areas[MAP_AREAS_MAX];    /* in the order they were named */
+    int  nareas;
     uint8_t *fog;                         /* w*h, see FOG_* */
     int      fog_on;                      /* the master switch */
     int      fog_soft_edge;               /* the map's default for patches that follow it */
@@ -266,6 +280,20 @@ void map_fog_set(Map *m, int x, int y, uint8_t f);
  * when there was no room for a new one. */
 const char *map_note_at(const Map *m, int x, int y);
 int         map_note_set(Map *m, int x, int y, const char *text);
+
+/* Areas. A name is 1-31 characters, no quote or colon, and not something
+ * that reads as a square (A1, C12) or a row: a name must never be taken
+ * for a place. */
+int  map_area_name_ok(const char *name);
+int  map_area_find(const Map *m, const char *name);           /* index, or -1 */
+/* The first area, in naming order, holding the square; -1 for none. */
+int  map_area_at(const Map *m, int x, int y);
+/* Names a box (clipped to the map): replaces the area of that name, or adds
+ * one. Returns its index, or -1 when the box is off the map, the name is
+ * bad or the map holds all it can. Touches the map. */
+int  map_area_set(Map *m, const char *name, int x0, int y0, int x1, int y1);
+/* Returns 1 if there was one to remove. Touches the map. */
+int  map_area_remove(Map *m, const char *name);
 
 /* Fills a tile rectangle, clipped to the map. */
 void map_fill_tiles(Map *m, int x0, int y0, int x1, int y1, uint8_t kind);

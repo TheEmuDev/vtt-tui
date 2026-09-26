@@ -308,6 +308,59 @@ int undo_set_note(Undo *u, Map *m, int x, int y, const char *text)
     return 1;
 }
 
+/* An area in a token slot: the undo log's side array holds tokens, and an
+ * area is a name and four numbers, which a token has room for. */
+static Token area_slot(const Area *ar)
+{
+    Token t;
+    memset(&t, 0, sizeof t);
+    if (!ar) return t;
+    str_lcpy(t.label, ar->name, sizeof t.label);
+    t.x = ar->x0;
+    t.y = ar->y0;
+    t.counters[0].value = ar->x1;
+    t.counters[0].max   = ar->y1;
+    return t;
+}
+
+static void area_from_slot(Map *m, const Token *want, const Token *other)
+{
+    if (want->label[0]) map_area_set(m, want->label, want->x, want->y, want->counters[0].value, want->counters[0].max);
+    else                (void)map_area_remove(m, other->label);
+}
+
+static void record_area(Undo *u, const Token *before, const Token *after)
+{
+    Op *o = push(u);
+    o->kind = OP_AREA;
+    push_token(u, before);
+    push_token(u, after);
+}
+
+int undo_set_area(Undo *u, Map *m, const char *name, int x0, int y0, int x1, int y1)
+{
+    int   i = map_area_find(m, name);
+    Token before = area_slot(i >= 0 ? &m->areas[i] : NULL);
+    /* A rename by case keeps the old spelling's slot: say it as removed and
+     * added, so undo puts the old spelling back. */
+    int   j = map_area_set(m, name, x0, y0, x1, y1);
+    if (j < 0) return 0;
+    Token after = area_slot(&m->areas[j]);
+    if (i >= 0 && !memcmp(&before, &after, sizeof before)) return 1;
+    record_area(u, &before, &after);
+    return 1;
+}
+
+int undo_remove_area(Undo *u, Map *m, const char *name)
+{
+    int i = map_area_find(m, name);
+    if (i < 0) return 0;
+    Token before = area_slot(&m->areas[i]), after = area_slot(NULL);
+    map_area_remove(m, name);
+    record_area(u, &before, &after);
+    return 1;
+}
+
 void undo_set_clock(Undo *u, Map *m, int slot, int value)
 {
     if (slot < 0 || slot >= CLOCK_MAX || !m->clocks[slot].name[0]) return;
@@ -385,6 +438,10 @@ static void apply(const Undo *u, Map *m, const Op *o, int forward)
             uint8_t v = forward ? o->after : o->before;
             m->clocks[o->x].value = v > m->clocks[o->x].size ? m->clocks[o->x].size : v;
         }
+        break;
+    case OP_AREA:
+        if (forward) area_from_slot(m, &tok[1], &tok[0]);
+        else         area_from_slot(m, &tok[0], &tok[1]);
         break;
     case OP_NOTE:
         /* Putting a note back takes the slot its removal freed. */

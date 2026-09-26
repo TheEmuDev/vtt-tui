@@ -1,0 +1,55 @@
+                                                        A A A A
+    A B C D E F G H I J K L M N O P Q R S T U V W X Y Z A B C D
+
+ 1
+     -------%---------
+ 2   |. . . . . . . .|
+     |               |     -------------
+ 3   |. . . . . . . .|     |. . . . . .|
+     |               -------           |
+ 4   |. . . 2 2 . . .+. . .+. . 1 . . .|
+     |               -------           |
+ 5   |. . . 2 2 . . .|     |. . . . . .|
+     |               |     |           |
+ 6   |. . . . . . . .|     |. . . . . .|
+     |               |     -------------
+ 7   |. . . . . . . .|
+     ---   -----------
+ 8     |. .|
+       |   |
+ 9     |. .|
+     ---   ---
+10   |~ ~ ~ ~|
+     |       |
+11   |~ ~ ~ ~|
+     |       |
+12   |~ ~ ~ ~|
+     ---------
+13
+
+14
+
+15
+
+16
+
+17
+
+18
+
+
+creatures
+  1  Ghoul            enemy        O4
+  2  Aria             player 2x2   E4-F5
+
+areas
+  Crypt            B2:I7
+  Vault            M3:R6
+  Well             B10:E12
+
+key
+  .  floor   ~  water   :  rough   "  brush   =  wood   ^  hazard   (blank) void
+  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door
+  S and s are the GM's: the players see a wall and an open door
+
+map  crypt  30x18  scale 5 ft  metric alt  ruleset none

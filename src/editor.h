@@ -90,6 +90,7 @@ typedef struct {
 
     TextPrompt cmd;            /* the `:` line */
     int    cmd_from_stamp;     /* it was opened over a stamp, and goes back to it */
+    int    cmd_from_visual;    /* it was opened over a v box, which :area names */
 } Editor;
 
 void ed_init(Editor *e, const Map *m);

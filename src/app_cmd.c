@@ -578,6 +578,70 @@ static void fog_command(App *a, const char *rest)
 
 /* --------------------------------------------------------- command line */
 
+/* :areas lists the named areas; :area NAME names the v box (build mode),
+ * or jumps to the area of that name; :area NAME off takes the name off. */
+static void area_command(App *a, const char *verb, const char *rest)
+{
+    Map *m = a->map;
+    char msg[256], b0[MAP_COORD_MAX], b1[MAP_COORD_MAX];
+    if (!strcmp(verb, "areas") || !*rest) {
+        if (!m->nareas) { app_set_status_gm(a, "no named areas - v a box, then :area NAME"); return; }
+        int off = snprintf(msg, sizeof msg, "areas:");
+        for (int i = 0; i < m->nareas && off < (int)sizeof msg - 48; i++) {
+            map_coord_name(m->areas[i].x0, m->areas[i].y0, b0, sizeof b0);
+            map_coord_name(m->areas[i].x1, m->areas[i].y1, b1, sizeof b1);
+            off += snprintf(msg + off, sizeof msg - (size_t)off, "%s %s %s:%s", i ? "," : "", m->areas[i].name, b0, b1);
+        }
+        app_set_status_gm(a, msg);
+        return;
+    }
+    char name[AREA_NAME_MAX + 8];
+    str_lcpy(name, rest, sizeof name);
+    size_t n = strlen(name);
+    int off = n > 4 && !strcmp(name + n - 4, " off");
+    if (off) name[n - 4] = '\0';
+    if (!map_area_name_ok(name)) {
+        snprintf(msg, sizeof msg, "an area's name is 1-%d characters, no quote or colon, and not a square", AREA_NAME_MAX - 1);
+        app_set_status_gm(a, msg);
+        return;
+    }
+    int ai = map_area_find(m, name);
+    if (off) {
+        if (ai < 0) { snprintf(msg, sizeof msg, "no area called %.40s", name); app_set_status_gm(a, msg); return; }
+        undo_begin(&a->undo);
+        undo_remove_area(&a->undo, m, name);
+        undo_end(&a->undo);
+        snprintf(msg, sizeof msg, "%.40s is no longer named", name);
+        app_note_gm(a, msg);
+        return;
+    }
+    if (a->screen == SCREEN_EDITOR && a->ed.cmd_from_visual) {
+        EdShape sh = ed_shape(a->ed.shape, a->ed.anchor_x, a->ed.anchor_y, a->ed.cx, a->ed.cy, 0);
+        undo_begin(&a->undo);
+        int ok = undo_set_area(&a->undo, m, name, sh.x0, sh.y0, sh.x1, sh.y1);
+        undo_end(&a->undo);
+        a->ed.mode = ED_NORMAL;
+        if (!ok) { snprintf(msg, sizeof msg, "a map holds %d named areas", MAP_AREAS_MAX); app_set_status_gm(a, msg); return; }
+        ai = map_area_find(m, name);
+        map_coord_name(m->areas[ai].x0, m->areas[ai].y0, b0, sizeof b0);
+        map_coord_name(m->areas[ai].x1, m->areas[ai].y1, b1, sizeof b1);
+        snprintf(msg, sizeof msg, "%.40s is %s:%s", m->areas[ai].name, b0, b1);
+        app_note_gm(a, msg);
+        return;
+    }
+    if (ai < 0) {
+        snprintf(msg, sizeof msg, "no area called %.40s - in build mode, v a box and :area %.40s names it", name, name);
+        app_set_status_gm(a, msg);
+        return;
+    }
+    if (a->play.grabbed) { app_set_status_gm(a, "put the creature down before jumping"); return; }
+    a->ed.cx = m->areas[ai].x0;
+    a->ed.cy = m->areas[ai].y0;
+    grid_center_on(&a->ed.view, m, (m->areas[ai].x0 + m->areas[ai].x1) / 2, (m->areas[ai].y0 + m->areas[ai].y1) / 2);
+    snprintf(msg, sizeof msg, "jumped to %.40s", m->areas[ai].name);
+    app_set_status_gm(a, msg);
+}
+
 void app_exec_command(App *a, const char *line)
 {
     while (*line == ' ') line++;
@@ -750,6 +814,7 @@ void app_exec_command(App *a, const char *line)
     if (!strcmp(verb, "serve")) { serve_command(a, rest); return; }
     if (!strcmp(verb, "agent")) { app_agent_command(a, rest); return; }
     if (!strcmp(verb, "stamp")) { app_stamp_command(a, rest); return; }
+    if (!strcmp(verb, "area") || !strcmp(verb, "areas")) { area_command(a, verb, rest); return; }
     if (!strcmp(verb, "mirror")) {
         /* A second window on this machine, running the watcher against our
          * own server, which is started if it is not. It is detached so it
@@ -862,6 +927,7 @@ void app_command_key(App *a, Key k)
     a->ed.mode = ED_NORMAL;
     if (r == 1) app_exec_command(a, a->ed.cmd.buf);
     else        app_set_status(a, "");
+    a->ed.cmd_from_visual = 0;
     if (back && a->stamp && a->map && a->screen == SCREEN_EDITOR && a->ed.mode == ED_NORMAL)
         a->ed.mode = ED_STAMP;
 }

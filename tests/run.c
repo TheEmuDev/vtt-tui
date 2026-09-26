@@ -12560,9 +12560,9 @@ static void test_stamps(void)
         CHECK_EQ(stamp_save(s, "../evil", err, sizeof err), -1);
         CHECK_EQ(stamp_save(s, "Piece", err, sizeof err), 0);
         CHECK_EQ(stamp_save(s, "Altar", err, sizeof err), 0);
-        char names[4][MAP_NAME_MAX];
-        CHECK_EQ(stamp_list(names, 4), 2);
-        CHECK(!strcmp(names[0], "Altar") && !strcmp(names[1], "Piece"));
+        char listed[4][MAP_NAME_MAX];
+        CHECK_EQ(stamp_list(listed, 4), 2);
+        CHECK(!strcmp(listed[0], "Altar") && !strcmp(listed[1], "Piece"));
         Map *l = stamp_load("Piece", err, sizeof err);
         CHECK(l != NULL);
         if (l) {
@@ -13556,6 +13556,394 @@ static void test_stamp_keys(void)
     if (system(cmd) != 0) { }
 }
 
+static void test_areas(void)
+{
+    char err[256];
+    CASE("area names: never a square, a quote or a colon; found ignoring case");
+    CHECK_EQ(map_area_name_ok("Crypt"), 1);
+    CHECK_EQ(map_area_name_ok("Great Hall"), 1);
+    CHECK_EQ(map_area_name_ok("C3"), 0);
+    CHECK_EQ(map_area_name_ok("AB12"), 0);
+    CHECK_EQ(map_area_name_ok("a:b"), 0);
+    CHECK_EQ(map_area_name_ok("say \"hi\""), 0);
+    CHECK_EQ(map_area_name_ok(""), 0);
+    CHECK_EQ(map_area_name_ok(" Hall"), 0);
+    Map *m = map_new(10, 8, "a");
+    CHECK_EQ(map_area_set(m, "Crypt", 5, 4, 1, 1), 0);          /* either order */
+    CHECK(m->areas[0].x0 == 1 && m->areas[0].x1 == 5 && m->areas[0].y1 == 4);
+    CHECK_EQ(map_area_find(m, "crypt"), 0);
+    CHECK_EQ(map_area_at(m, 3, 3), 0);
+    CHECK_EQ(map_area_at(m, 6, 3), -1);
+    CHECK_EQ(map_area_set(m, "Off", 20, 20, 30, 30), -1);       /* nothing on the map */
+    CHECK_EQ(map_area_set(m, "Edge", 8, 6, 20, 20), 1);         /* clipped */
+    CHECK(m->areas[1].x1 == 9 && m->areas[1].y1 == 7);
+
+    CASE("resizing cuts areas to what is left, and drops one left with nothing");
+    map_resize(m, 7, 5);
+    CHECK_EQ(m->nareas, 1);
+    CHECK(m->areas[0].x1 == 5 && m->areas[0].y1 == 4);
+
+    CASE("areas through the undo log: named, renamed by case, taken off, and each undone");
+    {
+        Undo u;
+        undo_init(&u);
+        undo_begin(&u); CHECK_EQ(undo_set_area(&u, m, "Vault", 0, 0, 1, 1), 1); undo_end(&u);
+        undo_begin(&u); CHECK_EQ(undo_set_area(&u, m, "VAULT", 0, 0, 2, 2), 1); undo_end(&u);
+        CHECK_EQ(strcmp(m->areas[1].name, "VAULT"), 0);
+        undo_begin(&u); CHECK_EQ(undo_remove_area(&u, m, "Crypt"), 1); undo_end(&u);
+        CHECK_EQ(m->nareas, 1);
+        undo_undo(&u, m);
+        CHECK_EQ(map_area_find(m, "Crypt") >= 0, 1);
+        undo_undo(&u, m);
+        int v = map_area_find(m, "vault");
+        CHECK(v >= 0 && !strcmp(m->areas[v].name, "Vault") && m->areas[v].x1 == 1);
+        undo_undo(&u, m);
+        CHECK_EQ(map_area_find(m, "Vault"), -1);
+        undo_redo(&u, m);
+        undo_redo(&u, m);
+        CHECK_EQ(map_area_find(m, "Vault") >= 0, 1);
+        undo_free(&u);
+    }
+
+    CASE("the file: version 7 with areas, 6 or less without; read back the same");
+    {
+        Sandbox sb = sandbox_enter("areas");
+        char path[600];
+        snprintf(path, sizeof path, "%s/a.vtt", sb.dir);
+        CHECK_EQ(mapio_write(m, path, err, sizeof err), 0);
+        FILE *f = fopen(path, "r");
+        char first[32] = "";
+        if (f) { if (!fgets(first, sizeof first, f)) first[0] = 0; fclose(f); }
+        CHECK_EQ(strcmp(first, "VTT 7\n"), 0);
+        Map *l = mapio_load(path, err, sizeof err);
+        CHECK(l && l->nareas == m->nareas);
+        if (l) {
+            for (int i = 0; i < l->nareas; i++)
+                CHECK(!strcmp(l->areas[i].name, m->areas[i].name) && l->areas[i].x0 == m->areas[i].x0 &&
+                      l->areas[i].y1 == m->areas[i].y1);
+            map_free(l);
+        }
+        Map *plain = map_new(3, 3, "p");
+        CHECK_EQ(mapio_write(plain, path, err, sizeof err), 0);
+        f = fopen(path, "r");
+        if (f) { if (!fgets(first, sizeof first, f)) first[0] = 0; fclose(f); }
+        CHECK(strcmp(first, "VTT 7\n") != 0);
+        map_free(plain);
+        f = fopen(path, "w");
+        fputs("VTT 7\nsize 4 4\ntiles\n....\n....\n....\n....\n"
+              "area 0 0 1 1 \"Hall\"\narea 2 2 3 3 \"hall\"\narea 0 0 1 1 \"C3\"\n", f);
+        fclose(f);
+        l = mapio_load(path, err, sizeof err);
+        CHECK(l && l->nareas == 1);                     /* a second Hall and a square's name are dropped */
+        map_free(l);
+        sandbox_leave(&sb);
+    }
+    map_free(m);
+}
+
+static void test_room_language(void)
+{
+    Sandbox sb = sandbox_enter("roomlang");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    char path[700];
+    snprintf(path, sizeof path, "%s/void.vtt", sb.dir);
+    {
+        Map *v = map_new(30, 20, "void");
+        char err[200];
+        mapio_write(v, path, err, sizeof err);
+        map_free(v);
+    }
+    app_open_map(&a, path);
+    Map *m = a.map;
+    CHECK(m != NULL);
+    if (!m) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    char *t;
+
+    CASE("room NAME REGION and room NAME SQUARE WxH draw and name");
+    t = ctl_ask(&a, "room Crypt B2 8x6\nroom Hall B12:E14\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    int ci = map_area_find(m, "Crypt");
+    CHECK(ci >= 0 && m->areas[ci].x0 == 1 && m->areas[ci].x1 == 8 && m->areas[ci].y1 == 6);
+    CHECK_EQ(map_vedge(m, 9, 3), EDGE_WALL);
+    CHECK(map_area_find(m, "Hall") >= 0);
+
+    CASE("relative rooms: each side, gap, and the three alignments");
+    {
+        static const struct { const char *req; int x0, y0; } rel[] = {
+            { "room A 4x2 east of Crypt\n",               9, 3 },   /* middle of rows 1-6 */
+            { "room B 4x2 east of Crypt gap 2 top\n",    11, 1 },
+            { "room C 4x2 east of Crypt gap 7 bottom\n", 16, 5 },
+            { "room D 2x2 south of Crypt gap 1 right\n",  7, 8 },
+            { "room E 2x2 south of Crypt gap 1 left\n",   1, 8 },
+            { "room F 3x1 south of Crypt gap 1\n",        3, 8 },
+        };
+        for (size_t i = 0; i < sizeof rel / sizeof *rel; i++) {
+            t = ctl_ask(&a, rel[i].req);
+            CHECK(strncmp(t, "ok\n", 3) == 0);
+            if (strncmp(t, "ok\n", 3)) fprintf(stderr, "    %s -> %s", rel[i].req, t);
+            free(t);
+            char nm[2] = { (char)('A' + i), 0 };
+            int k = map_area_find(m, nm);
+            CHECK(k >= 0 && m->areas[k].x0 == rel[i].x0 && m->areas[k].y0 == rel[i].y0);
+            if (k >= 0 && (m->areas[k].x0 != rel[i].x0 || m->areas[k].y0 != rel[i].y0))
+                fprintf(stderr, "    %s at %d,%d\n", nm, m->areas[k].x0, m->areas[k].y0);
+        }
+        press(&a, "u");                                /* one at a time, back */
+    }
+    t = ctl_ask(&a, "room G 4x2 north of Crypt\n");
+    CHECK(strstr(t, "would run off the north side of the map") != NULL);
+    free(t);
+    t = ctl_ask(&a, "room G 4x2 east of Crypt top\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    t = ctl_ask(&a, "room H 4x2 north of Crypt gap 0 top\n");
+    CHECK(strstr(t, "lines up left, middle or right") != NULL);
+    free(t);
+    t = ctl_ask(&a, "room I 4x2 east of Nowhere\n");
+    CHECK(strstr(t, "no room called Nowhere") != NULL);
+    free(t);
+    t = ctl_ask(&a, "room C3 4x2 east of Crypt\n");
+    CHECK(strstr(t, "not a square") != NULL);
+    free(t);
+
+    CASE("door by side: the middle by default, a numbered square, a kind");
+    t = ctl_ask(&a, "door Crypt west\ndoor Crypt north 1 window\ndoor Crypt south 8 secret\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    CHECK_EQ(map_vedge(m, 1, 3), EDGE_DOOR_CLOSED);        /* 6 rows: the third */
+    CHECK_EQ(map_hedge(m, 1, 1), EDGE_WINDOW);
+    CHECK_EQ(map_hedge(m, 8, 7), EDGE_SECRET_CLOSED);
+    t = ctl_ask(&a, "door Crypt south 9\n");
+    CHECK(strstr(t, "1-8, from the left") != NULL);
+    free(t);
+
+    CASE("a name where a region goes is the area's box; where a creature goes, the free square nearest its middle");
+    t = ctl_ask(&a, "tile Hall water\ntoken add enemy Crypt \"Ghoul\"\ntoken add player Crypt size 2 \"Ogre\"\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    CHECK(map_tile(m, 1, 11) == TILE_WATER && map_tile(m, 4, 13) == TILE_WATER);
+    CHECK(m->tokens.v[0].x == 4 && m->tokens.v[0].y == 3);  /* 8x6 at B2: E4 */
+    CHECK(m->tokens.v[1].x >= 1 && m->tokens.v[1].x <= 7 && m->tokens.v[1].y >= 1 && m->tokens.v[1].y <= 5);
+    t = ctl_ask(&a, "tile J18 floor\narea Closet J18:J18\ntoken add enemy Closet \"A\"\ntoken add enemy Closet \"B\"\n");
+    CHECK(strstr(t, "error: line 4: no room in Closet for a 1x1 creature") != NULL);
+    free(t);
+    CHECK_EQ(map_area_find(m, "Closet"), -1);               /* rolled back with it */
+
+    CASE("area NAME REGION names without drawing; area NAME off takes it off");
+    t = ctl_ask(&a, "area Nook J18:K19\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    CHECK_EQ(map_tile(m, 9, 17), TILE_VOID);
+    t = ctl_ask(&a, "area Nook off\n");
+    free(t);
+    CHECK_EQ(map_area_find(m, "Nook"), -1);
+    t = ctl_ask(&a, "area Nook off\n");
+    CHECK(strstr(t, "no area called Nook") != NULL);
+    free(t);
+
+    CASE("describe names rooms by their areas; marked says which area the cursor is in");
+    t = ctl_ask(&a, "describe\n");
+    CHECK(strstr(t, "room 1 Crypt (B2)") != NULL);
+    free(t);
+    a.ed.cx = 3; a.ed.cy = 3;
+    t = ctl_ask(&a, "marked\n");
+    CHECK(strstr(t, "cursor D4, in Crypt\n") != NULL);
+    free(t);
+    t = ctl_ask(&a, "dump\n");
+    CHECK(strstr(t, "\nareas\n  Crypt            B2:I7\n") != NULL);
+    free(t);
+
+    CASE(":area names the v box, jumps to one, lists them, takes one off; undoable");
+    a.ed.cx = 20; a.ed.cy = 15;
+    press(&a, "vll:area Ledge\r");
+    int li = map_area_find(m, "Ledge");
+    CHECK(li >= 0 && m->areas[li].x0 == 20 && m->areas[li].x1 == 22);
+    CHECK_EQ(a.status_gm, 1);
+    press(&a, "u");
+    CHECK_EQ(map_area_find(m, "Ledge"), -1);
+    press(&a, ":area Crypt\r");
+    CHECK(a.ed.cx == 1 && a.ed.cy == 1);
+    CHECK(strstr(a.status, "jumped to Crypt") != NULL);
+    press(&a, ":areas\r");
+    CHECK(strstr(a.status, "areas: Crypt B2:I7") != NULL);
+    press(&a, ":area Nowhere\r");
+    CHECK(strstr(a.status, "no area called Nowhere") != NULL);
+    press(&a, ":area Hall off\r");
+    CHECK_EQ(map_area_find(m, "Hall"), -1);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
+static void test_corridors(void)
+{
+    Sandbox sb = sandbox_enter("corridor");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    char path[700];
+    snprintf(path, sizeof path, "%s/void.vtt", sb.dir);
+    {
+        Map *v = map_new(30, 20, "void");
+        char err[200];
+        mapio_write(v, path, err, sizeof err);
+        map_free(v);
+    }
+    app_open_map(&a, path);
+    Map *m = a.map;
+    if (!m) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    char *t;
+    t = ctl_ask(&a, "room A B2 4x4\nroom B 4x4 east of A gap 3\nroom C 4x4 south of A gap 4 left\n"
+                    "room D 4x4 east of C gap 5\nroom E 2x2 east of B gap 0\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+
+    CASE("straight across: floor between, walls along, a door at each end");
+    t = ctl_ask(&a, "corridor A B\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    /* A is B2:E5 (x 1-4, y 1-4), B x 8-11: the corridor x 5-7 on the middle row y 2. */
+    for (int x = 5; x <= 7; x++) {
+        CHECK_EQ(map_tile(m, x, 2), TILE_FLOOR);
+        CHECK_EQ(map_hedge(m, x, 2), EDGE_WALL);
+        CHECK_EQ(map_hedge(m, x, 3), EDGE_WALL);
+    }
+    CHECK_EQ(map_vedge(m, 5, 2), EDGE_DOOR_CLOSED);
+    CHECK_EQ(map_vedge(m, 8, 2), EDGE_DOOR_CLOSED);
+
+    CASE("straight down, two wide: open ends");
+    t = ctl_ask(&a, "corridor A C width 2\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    for (int y = 5; y <= 8; y++) {
+        CHECK(map_tile(m, 2, y) == TILE_FLOOR && map_tile(m, 3, y) == TILE_FLOOR);
+        CHECK(map_vedge(m, 2, y) == EDGE_WALL && map_vedge(m, 4, y) == EDGE_WALL);
+    }
+    CHECK(map_hedge(m, 2, 5) == EDGE_NONE && map_hedge(m, 3, 5) == EDGE_NONE);
+    CHECK(map_hedge(m, 2, 9) == EDGE_NONE && map_hedge(m, 3, 9) == EDGE_NONE);
+
+    CASE("rooms already sharing a wall: only the doorway");
+    int depth = a.undo.depth;
+    t = ctl_ask(&a, "corridor B E\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    CHECK_EQ(a.undo.depth, depth + 1);
+    int bi = map_area_find(m, "B");
+    CHECK_EQ(map_vedge(m, m->areas[bi].x1 + 1, m->areas[map_area_find(m, "E")].y0), EDGE_DOOR_CLOSED);
+
+    CASE("one bend for rooms apart both ways: out of the side, along, and in");
+    t = ctl_ask(&a, "room P Q8 2x2\nroom Q X14 2x2\ncorridor P Q\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    if (strncmp(t, "ok\n", 3)) fprintf(stderr, "    %s", t);
+    free(t);
+    /* P x 16-17 y 7-8, Q x 23-24 y 13-14: along row 7 from x 18 to 23,
+     * then down column 23 to row 12. */
+    CHECK(map_tile(m, 18, 7) == TILE_FLOOR && map_tile(m, 23, 7) == TILE_FLOOR && map_tile(m, 23, 12) == TILE_FLOOR);
+    CHECK_EQ(map_tile(m, 22, 8), TILE_VOID);
+    CHECK_EQ(map_vedge(m, 18, 7), EDGE_DOOR_CLOSED);
+    CHECK_EQ(map_hedge(m, 23, 13), EDGE_DOOR_CLOSED);
+    CHECK(map_hedge(m, 20, 7) == EDGE_WALL && map_hedge(m, 20, 8) == EDGE_WALL);
+    CHECK(map_vedge(m, 24, 7) == EDGE_WALL && map_hedge(m, 23, 7) == EDGE_WALL);
+    CHECK(map_vedge(m, 23, 10) == EDGE_WALL && map_vedge(m, 24, 10) == EDGE_WALL);
+    CHECK_EQ(map_hedge(m, 23, 8), EDGE_NONE);                /* the bend is open inside */
+
+    CASE("when the first way round is blocked, the bend goes the other way");
+    t = ctl_ask(&a, "room R B18 2x2\nroom S H14 2x2\ntile C14:G15 floor\ncorridor R S\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    if (strncmp(t, "ok\n", 3)) fprintf(stderr, "    %s", t);
+    free(t);
+
+    CASE("refused whole: through ground, through a named room, too little shared, overlapping");
+    char *before = ctl_snapshot(m);
+    t = ctl_ask(&a, "room G S2 2x2\nroom K 2x2 south of G gap 6\ntile S5:T6 floor\ncorridor G K\n");
+    CHECK(strstr(t, "error: line 4: it would cross ground already at") != NULL);
+    free(t);
+    t = ctl_ask(&a, "room G S2 2x2\nroom K 2x2 south of G gap 6\narea Pit S5:T6\ncorridor G K\n");
+    CHECK(strstr(t, "it would cut through Pit at") != NULL);
+    free(t);
+    t = ctl_ask(&a, "room G S2 2x2\nroom K S9 2x2\ncorridor G K width 3\n");
+    CHECK(strstr(t, "share fewer than 3 columns") != NULL);
+    free(t);
+    t = ctl_ask(&a, "area Big A1:Z5\ncorridor A Big\n");
+    CHECK(strstr(t, "overlap") != NULL);
+    free(t);
+    t = ctl_ask(&a, "corridor A A\n");
+    CHECK(strstr(t, "a corridor joins two rooms") != NULL);
+    free(t);
+    char *after = ctl_snapshot(m);
+    free(before);
+    free(after);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
+static void test_apply(void)
+{
+    Sandbox sb = sandbox_enter("apply");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    char vtt[] = "./vtt";
+    CHECK(access(vtt, X_OK) == 0);
+    char plan[700], map[700], cmd[2400];
+    snprintf(plan, sizeof plan, "%s/plan.txt", sb.dir);
+    snprintf(map, sizeof map, "%s/crypt.vtt", sb.dir);
+    FILE *f = fopen(plan, "w");
+    fputs("# a crypt\nroom Crypt B2 8x6\nroom Vault 6x4 east of Crypt gap 3\n"
+          "room Well 4x3 south of Crypt gap 2 left\ncorridor Crypt Vault\ncorridor Crypt Well width 2\n"
+          "door Crypt north middle window\ntoken add enemy Vault \"Ghoul\"\n"
+          "token add player Crypt size 2 \"Aria\"\ntile Well water\n", f);
+    fclose(f);
+
+    CASE("--apply: a new map from a plan, saved; the result as the golden has it");
+    snprintf(cmd, sizeof cmd, "%s '%s' --apply '%s' > /dev/null 2>&1", vtt, map, plan);
+    CHECK_EQ(WEXITSTATUS(system(cmd)), 2);                 /* not there, and no --new */
+    snprintf(cmd, sizeof cmd, "%s '%s' --apply '%s' --new 30x18 > /dev/null", vtt, map, plan);
+    CHECK_EQ(WEXITSTATUS(system(cmd)), 0);
+    char err[256];
+    Map *m = mapio_load(map, err, sizeof err);
+    CHECK(m != NULL);
+    if (m) {
+        size_t n;
+        char *txt = tool_text(m, 0, 0, m->w - 1, m->h - 1, &n);
+        golden_bytes("apply-crypt", txt, n);
+        free(txt);
+        CHECK_EQ(m->nareas, 3);
+        map_free(m);
+    }
+
+    CASE("--apply: a failing plan changes nothing and saves nothing (exit 1)");
+    struct stat st0, st1;
+    stat(map, &st0);
+    f = fopen(plan, "w");
+    fputs("tile Crypt hazard\ntoken add enemy Z99 \"X\"\n", f);
+    fclose(f);
+    snprintf(cmd, sizeof cmd, "%s '%s' --apply '%s' > /dev/null 2>&1", vtt, map, plan);
+    CHECK_EQ(WEXITSTATUS(system(cmd)), 1);
+    stat(map, &st1);
+    CHECK(st0.st_mtime == st1.st_mtime && st0.st_size == st1.st_size);
+    m = mapio_load(map, err, sizeof err);
+    CHECK(m && map_tile(m, 1, 1) == TILE_FLOOR);
+    map_free(m);
+
+    snprintf(cmd, sizeof cmd, "rm -rf '%s'", sb.dir);
+    sandbox_leave(&sb);
+    if (system(cmd) != 0) { }
+}
+
 static void test_ctl_live(void)
 {
     Sandbox sb = sandbox_enter("ctl");
@@ -13833,6 +14221,10 @@ int main(void)
         { "undonest", test_undo_nesting },
         { "stamps", test_stamps },
         { "stampkeys", test_stamp_keys },
+        { "areas", test_areas },
+        { "roomlang", test_room_language },
+        { "corridors", test_corridors },
+        { "apply", test_apply },
         { "wire",   test_wire },
         { "mapdiag", test_map_diag },
         { "mapdump", test_map_tools_dump },

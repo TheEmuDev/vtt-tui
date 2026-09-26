@@ -51,6 +51,8 @@ typedef struct {
     const char *ctl_req;            /* NULL: the request is on stdin */
     long        ctl_pid;            /* --ctl-pid N: which vtt; 0 the only one */
     const char *bench_ctl;          /* --bench-ctl FILE: a request run each bench loop */
+    const char *apply;              /* --apply FILE: run a request against the map, save it */
+    int         new_w, new_h;       /* --new WxH: the map --apply starts from, when it is not there */
 } Options;
 
 enum { TOOL_NONE, TOOL_DUMP, TOOL_CHECK, TOOL_DESCRIBE };
@@ -86,6 +88,9 @@ static void usage(void)
         "  --describe         the rooms, their doors and what is in them\n"
         "  --check            find mistakes: exit 0 clean, 1 findings, 2 unreadable\n"
         "  --json             --describe (or --check) as JSON\n"
+        "  --apply FILE       run FILE's control-channel requests against the map and save it\n"
+        "                     (all or nothing; docs/AGENTS.md)\n"
+        "  --new WxH          with --apply, the size of a new, empty map when the file is not there\n"
         "  -h, --help         this message\n",
         stdout);
 }
@@ -113,6 +118,12 @@ static int parse_args(Options *o, int argc, char **argv)
         else if (!strcmp(a, "--bench-pings")) o->bench_pings = 1;
         else if (!strcmp(a, "--agent"))      o->agent = 1;
         else if (!strcmp(a, "--bench-ctl") && i + 1 < argc) o->bench_ctl = argv[++i];
+        else if (!strcmp(a, "--apply") && i + 1 < argc) o->apply = argv[++i];
+        else if (!strcmp(a, "--new") && i + 1 < argc) {
+            if (sscanf(argv[++i], "%dx%d", &o->new_w, &o->new_h) != 2 || o->new_w < 1 || o->new_h < 1 ||
+                o->new_w > MAP_MAX_DIM || o->new_h > MAP_MAX_DIM)
+                die("bad --new (expected WxH, each 1-%d)", MAP_MAX_DIM);
+        }
         else if (!strcmp(a, "--ctl")) {
             o->ctl = 1;
             if (i + 1 < argc && strncmp(argv[i + 1], "--", 2) != 0) {
@@ -602,12 +613,77 @@ static int run_tool(const Options *o)
     return rc;
 }
 
+/* --apply: a plan run against a map with no terminal, as the control
+ * channel would run it in a live session, then saved. The map is opened in
+ * build mode, so edits are taken; all or nothing, so a failing plan saves
+ * nothing. Exit 0 saved, 1 the plan failed, 2 the map could not be read or
+ * written. */
+static int run_apply(const Options *o)
+{
+    if (!o->map_path) { fputs("vtt: --apply needs a map file\n", stderr); return 2; }
+    char err[256];
+    FILE *pf = fopen(o->apply, "rb");
+    if (!pf) { fprintf(stderr, "vtt: cannot read %s\n", o->apply); return 2; }
+    char  *req = xmalloc(CTL_REQ_CAP + 2);
+    size_t len = fread(req, 1, CTL_REQ_CAP + 1, pf);
+    fclose(pf);
+    if (len > CTL_REQ_CAP) { fprintf(stderr, "vtt: %s is over 64 KB\n", o->apply); free(req); return 2; }
+    req[len] = '\0';
+
+    if (access(o->map_path, F_OK) != 0) {
+        if (!o->new_w) {
+            fprintf(stderr, "vtt: %s is not there - --new WxH makes it\n", o->map_path);
+            free(req);
+            return 2;
+        }
+        /* A new map is void: a plan draws what is there, from nothing. */
+        char name[MAP_NAME_MAX];
+        const char *base = strrchr(o->map_path, '/');
+        str_lcpy(name, base ? base + 1 : o->map_path, sizeof name);
+        char *dot = strrchr(name, '.');
+        if (dot && !strcmp(dot, ".vtt")) *dot = '\0';
+        Map *nm = map_new(o->new_w, o->new_h, name);
+        int wrc = mapio_write(nm, o->map_path, err, sizeof err);
+        map_free(nm);
+        if (wrc < 0) { fprintf(stderr, "vtt: %s\n", err); free(req); return 2; }
+    }
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+    int rc = 2;
+    if (app_open_map(&a, o->map_path) != 0 || !a.map) {
+        fprintf(stderr, "vtt: cannot open %s\n", o->map_path);
+    } else {
+        char *ans = app_ctl_exec(&a, req, &len);
+        if (!ans) fputs("vtt: out of memory\n", stderr);
+        else {
+            size_t first = strcspn(ans, "\n");
+            fputs(ans[first] ? ans + first + 1 : ans + first, stdout);
+            if (strncmp(ans, "ok\n", 3) != 0) {
+                fprintf(stderr, "vtt: %.*s - nothing saved\n", (int)first, ans);
+                rc = 1;
+            } else if (mapio_save(a.map, o->map_path, err, sizeof err) < 0) {
+                fprintf(stderr, "vtt: %s\n", err);
+            } else rc = 0;
+            free(ans);
+        }
+    }
+    app_free(&a);
+    rnd_free(&r);
+    free(req);
+    return rc;
+}
+
 int main(int argc, char **argv)
 {
     Options o;
     if (parse_args(&o, argc, argv)) return 0;
     if (o.tool) return run_tool(&o);
     if (o.ctl)  return ctl_client_main(o.ctl_req, o.ctl_pid);
+    if (o.apply) return run_apply(&o);
 
     draw_set_ascii(o.ascii);
     if (o.watch) return watch_main(o.watch, o.ascii);

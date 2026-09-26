@@ -185,6 +185,17 @@ void maptools_dump(FILE *out, const Map *m, int x0, int y0, int x1, int y1)
         fprintf(out, "  %-5s %s\n", at, n->text);
     }
 
+    shown = 0;
+    for (int i = 0; i < m->nareas; i++) {
+        const Area *ar = &m->areas[i];
+        if (ar->x1 < x0 || ar->x0 > x1 || ar->y1 < y0 || ar->y0 > y1) continue;
+        char b0[MAP_COORD_MAX], b1[MAP_COORD_MAX];
+        if (!shown++) fputs("\nareas\n", out);
+        map_coord_name(ar->x0, ar->y0, b0, sizeof b0);
+        map_coord_name(ar->x1, ar->y1, b1, sizeof b1);
+        fprintf(out, "  %-16s %s:%s\n", ar->name, b0, b1);
+    }
+
     fputs("\nkey\n"
           "  .  floor   ~  water   :  rough   \"  brush   =  wood   ^  hazard   (blank) void\n"
           "  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door\n"
@@ -378,6 +389,17 @@ static void room_name(const Rooms *r, int i, char *buf, size_t sz)
     map_coord_name(r->v[i].fx, r->v[i].fy, buf, sz);
 }
 
+/* How the account refers to a room: "Crypt (B2)" when an area names it
+ * (the area holding its first square), else "(B2)". */
+static void room_ref(const Map *m, const Rooms *r, int i, char *buf, size_t sz)
+{
+    char sq[MAP_COORD_MAX];
+    room_name(r, i, sq, sizeof sq);
+    int ai = map_area_at(m, r->v[i].fx, r->v[i].fy);
+    if (ai >= 0) snprintf(buf, sz, "%s (%s)", m->areas[ai].name, sq);
+    else         snprintf(buf, sz, "(%s)", sq);
+}
+
 static void bounds_name(int x0, int y0, int x1, int y1, char *buf, size_t sz)
 {
     char a[MAP_COORD_MAX], b[MAP_COORD_MAX];
@@ -454,6 +476,11 @@ void maptools_describe(FILE *out, const Map *m, int json)
             json_open(&j, '{');
             json_kint(&j, "id", i + 1);
             room_name(&r, i, buf, sizeof buf); json_kstr(&j, "name", buf);
+            {
+                int ai = map_area_at(m, rm->fx, rm->fy);
+                json_key(&j, "area");
+                if (ai >= 0) json_str(&j, m->areas[ai].name); else json_null(&j);
+            }
             json_kint(&j, "x", rm->fx); json_kint(&j, "y", rm->fy);
             bounds_name(rm->x0, rm->y0, rm->x1, rm->y1, buf, sizeof buf); json_kstr(&j, "bounds", buf);
             json_kint(&j, "squares", rm->squares);
@@ -525,6 +552,20 @@ void maptools_describe(FILE *out, const Map *m, int json)
         }
         json_close(&j, ']');
 
+        json_key(&j, "areas");                     /* the names given to boxes */
+        json_open(&j, '[');
+        for (int i = 0; i < m->nareas; i++) {
+            const Area *ar = &m->areas[i];
+            json_open(&j, '{');
+            json_kstr(&j, "name", ar->name);
+            bounds_name(ar->x0, ar->y0, ar->x1, ar->y1, buf, sizeof buf);
+            json_kstr(&j, "bounds", buf);
+            json_kint(&j, "x0", ar->x0); json_kint(&j, "y0", ar->y0);
+            json_kint(&j, "x1", ar->x1); json_kint(&j, "y1", ar->y1);
+            json_close(&j, '}');
+        }
+        json_close(&j, ']');
+
         json_key(&j, "outside");                   /* creatures and notes on no room */
         json_open(&j, '[');
         for (int t = 0; t < m->tokens.n; t++) {
@@ -558,15 +599,15 @@ void maptools_describe(FILE *out, const Map *m, int json)
         for (int i = 0; i < FOG_PATCH_MAX; i++) patches += m->fog_patches[i].name[0] && !m->fog_patches[i].dead;
         if (patches) fprintf(out, "  fog %s, %d patch%s\n", m->fog_on ? "on" : "off", patches, patches == 1 ? "" : "es");
         fprintf(out, "  %d creature%s, %d room%s", m->tokens.n, m->tokens.n == 1 ? "" : "s", r.n, r.n == 1 ? "" : "s");
-        if (r.start >= 0) { room_name(&r, r.start, buf, sizeof buf); fprintf(out, ", starting in room %d (%s)", r.start + 1, buf); }
+        if (r.start >= 0) { room_ref(m, &r, r.start, buf, sizeof buf); fprintf(out, ", starting in room %d %s", r.start + 1, buf); }
         if (unreachable) fprintf(out, ", %d not reachable from it", unreachable);
         fputc('\n', out);
 
         for (int i = 0; i < r.n; i++) {
             const Room *rm = &r.v[i];
-            room_name(&r, i, buf, sizeof buf);
+            room_ref(m, &r, i, buf, sizeof buf);
             bounds_name(rm->x0, rm->y0, rm->x1, rm->y1, buf2, sizeof buf2);
-            fprintf(out, "\nroom %d (%s)  %s  %d square%s%s\n", i + 1, buf, buf2, rm->squares,
+            fprintf(out, "\nroom %d %s  %s  %d square%s%s\n", i + 1, buf, buf2, rm->squares,
                     rm->squares == 1 ? "" : "s", r.reach[i] ? "" : "  NOT REACHABLE");
             int terrain[TILE_COUNT] = { 0 };
             for (int y = rm->y0; y <= rm->y1; y++)
@@ -579,8 +620,8 @@ void maptools_describe(FILE *out, const Map *m, int json)
             for (int k = 0; k < no; k++) {
                 maptools_edge_name(m, op[k].vertical, op[k].x, op[k].y, buf, sizeof buf);
                 if (op[k].to >= 0) {
-                    room_name(&r, op[k].to, buf2, sizeof buf2);
-                    fprintf(out, "  %-12s %-8s to room %d (%s)\n", edge_name(op[k].kind), buf, op[k].to + 1, buf2);
+                    room_ref(m, &r, op[k].to, buf2, sizeof buf2);
+                    fprintf(out, "  %-12s %-8s to room %d %s\n", edge_name(op[k].kind), buf, op[k].to + 1, buf2);
                 } else {
                     fprintf(out, "  %-12s %-8s to %s\n", edge_name(op[k].kind), buf, op[k].to == -1 ? "void" : "the map's edge");
                 }

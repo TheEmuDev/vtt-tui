@@ -25,7 +25,7 @@
  * v3 added status markers on tokens. An older reader would ignore those lines
  * and silently drop them, which loses combat state from a saved fight, so it
  * refuses too. Each version still loads everything older. */
-#define FORMAT_VERSION 6
+#define FORMAT_VERSION 7
 
 /* Version 4 added the turn order. A map with no fight in it is still written
  * as version 3, which says everything it needs and stays loadable by the
@@ -38,6 +38,8 @@
 #define FORMAT_BEFORE_TURNS    3
 #define FORMAT_BEFORE_CLOCKS   4
 #define FORMAT_BEFORE_COUNTERS 5
+/* Version 6 added counters and fog; 7 named areas. */
+#define FORMAT_BEFORE_AREAS    6
 
 /* Fog rows: a held tile of patch 1..15 is one of these, in order. */
 static const char FOG_HELD_CHARS[FOG_PATCH_MAX + 1] = "123456789!\"#$%&";
@@ -81,7 +83,8 @@ int mapio_write(const Map *m, const char *path, char *err, size_t errsz)
     for (int i = 0; i < FOG_PATCH_MAX; i++)
         patches += m->fog_patches[i].name[0] && !m->fog_patches[i].dead;
     if (patches) v6 = 1;
-    fprintf(f, "VTT %d\n", v6 ? FORMAT_VERSION : v5 ? FORMAT_BEFORE_COUNTERS
+    int v7 = m->nareas > 0;
+    fprintf(f, "VTT %d\n", v7 ? FORMAT_VERSION : v6 ? FORMAT_BEFORE_AREAS : v5 ? FORMAT_BEFORE_COUNTERS
                           : fight ? FORMAT_BEFORE_CLOCKS : FORMAT_BEFORE_TURNS);
     fprintf(f, "name %s\n", m->name);
     fprintf(f, "size %d %d\n", m->w, m->h);
@@ -138,6 +141,9 @@ int mapio_write(const Map *m, const char *path, char *err, size_t errsz)
             fprintf(f, "roll %s \"%s\"\n", m->rolls[i].name, m->rolls[i].expr);
     for (int i = 0; i < m->nnotes; i++)
         fprintf(f, "note %d %d \"%s\"\n", m->notes[i].x, m->notes[i].y, m->notes[i].text);
+    for (int i = 0; i < m->nareas; i++)
+        fprintf(f, "area %d %d %d %d \"%s\"\n", m->areas[i].x0, m->areas[i].y0,
+                m->areas[i].x1, m->areas[i].y1, m->areas[i].name);
 
     /* Fog: the switches, the patches, then one row a map row, a character a
      * tile. Lit and rim are not written: they are where the party stands
@@ -290,7 +296,7 @@ static int looks_like_record(const char *line)
 {
     static const char *const words[] = {
         "tiles", "vedges", "hedges", "fog", "fogpatch", "token", "tokenstatus",
-        "tokenturn", "tokencounter", "tokennote", "note", "spotlight", "clock",
+        "tokenturn", "tokencounter", "tokennote", "note", "area", "spotlight", "clock",
         "roll", "round", "name", "size", "zoom", "scale", "ruleset", "metric", NULL,
     };
     size_t n = 0;
@@ -487,6 +493,18 @@ static int parse_note_line(Map *m, const char *line)
     char text[NOTE_MAX];
     parse_quoted(consumed > 0 ? line + consumed : NULL, text, sizeof text);
     return map_in_bounds(m, x, y) && map_note_set(m, x, y, text) ? 0 : -1;
+}
+
+/* "area X0 Y0 X1 Y1 "Name"": refused for a bad name, a box off the map, a
+ * name already used, or a full list. */
+static int parse_area_line(Map *m, const char *line)
+{
+    int x0, y0, x1, y1, consumed = 0;
+    if (sscanf(line, "area %d %d %d %d %n", &x0, &y0, &x1, &y1, &consumed) < 4) return -1;
+    char name[AREA_NAME_MAX];
+    parse_quoted(consumed > 0 ? line + consumed : NULL, name, sizeof name);
+    if (map_area_find(m, name) >= 0) return -1;
+    return map_area_set(m, name, x0, y0, x1, y1) >= 0 ? 0 : -1;
 }
 
 static int parse_turn_line(Map *m, const char *line)
@@ -710,6 +728,8 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
             RECORD(parse_token_note_line(m, line), "creature note");
         } else if (!strncmp(line, "note ", 5)) {
             RECORD(parse_note_line(m, line), "note");
+        } else if (!strncmp(line, "area ", 5)) {
+            RECORD(parse_area_line(m, line), "area");
         } else if (!strcmp(line, "spotlight gm")) {
             m->spotlight = SPOTLIGHT_GM;
         } else if (!strncmp(line, "clock ", 6)) {

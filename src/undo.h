@@ -17,6 +17,9 @@ typedef enum {
     OP_FOG,              /* a tile's fog byte: before/after */
     OP_NOTE,             /* a square's note: two token slots carry the text before
                             and after in .note ("" for none); x, y the square */
+    OP_AREA,             /* a named area: two token slots carry it before and
+                            after (.label the name, "" for none; the box in
+                            x, y and counters[0].value/max) */
 } OpKind;
 
 /* One op is one cell or one token changing. Tile ops dominate -- a brush
@@ -123,6 +126,10 @@ void undo_set_clock(Undo *u, Map *m, int slot, int value);
 /* A square's note ("" takes it off). Returns 0, recording nothing, when
  * the map holds all the notes it can. */
 int  undo_set_note(Undo *u, Map *m, int x, int y, const char *text);
+/* Names a box, or with remove set takes the name off. Returns 0, recording
+ * nothing, when map_area_set would refuse (bad name, full, off the map). */
+int  undo_set_area(Undo *u, Map *m, const char *name, int x0, int y0, int x1, int y1);
+int  undo_remove_area(Undo *u, Map *m, const char *name);
 
 int  undo_undo(Undo *u, Map *m);
 
