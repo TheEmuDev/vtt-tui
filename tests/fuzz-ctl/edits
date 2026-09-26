@@ -1,0 +1,13 @@
+room B2:D4
+tile C3 water
+wall A1:E3 door
+edge B2|C2 window
+edge -/A1 wall
+token add enemy B2 size 2 "Ogre"
+token move Ogre C3
+token set Ogre note "x"
+token del Ogre
+note A1 "hi"
+fog paint A1:B2 1
+# c
+undo

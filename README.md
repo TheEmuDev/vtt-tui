@@ -53,6 +53,11 @@ vtt [options] [map.vtt]
   --watch HOST:PORT  mirror a serving vtt in this terminal, read-only
   --bench-clients N  attach N loopback watchers to a --bench run
   --bench-pings      and have each of them ping every frame
+  --bench-ctl FILE   run a control-channel request at the top of every --bench loop
+  --agent            open the control channel at startup (:agent on does it later)
+  --ctl [REQUEST]    send a request to the vtt taking them, print the answer
+                     (no REQUEST, or -: read it from stdin)
+  --ctl-pid N        with several running, the one with pid N
 
   map tools (print a report and exit; see Map tools below):
   --dump-map         the whole map as text, with a legend
@@ -1132,6 +1137,7 @@ with no verdict, ruleset or not.
 | `:serve [PORT] [--stay-alive] [--no-pings]` | the [remote view](#remote-view-serve-mirror); `:serve off` closes it |
 | `:player preview` | see the players' frame on your own screen; `q` returns |
 | `:mirror` | a second terminal window mirroring play mode |
+| `:agent on` | let an agent read and edit this map through the [control channel](#control-channel-agent-vtt---ctl); `:agent off` closes it, `:agent` asks |
 | `:roll 2d6+3` | roll dice — see [Dice](#dice-roll) |
 | `:roll NAME = EXPR` | save a roll under a name; `:rolls` lists them |
 | `:log` | the session log, on or off — see [Session log](#session-log-log) |
@@ -1347,6 +1353,66 @@ Nothing checked knows a game: every rule is about the map's geometry or the file
 **`--json`** gives `--describe` or `--check` as JSON, for a program rather than a reader:
 the same fields, with 0-based file coordinates (`x`, `y`, and for a boundary `edge`, `v` or
 `h`) beside the square names, and a file finding's `line` and `column`.
+
+## Control channel (`:agent`, `vtt --ctl`)
+
+An AI agent (or any script) working in the GM's live session: reading the map that is
+open, asking what the GM is pointing at, and editing it while the GM watches. The map
+tools above read files; this is the same reading, and writing, on the map in memory.
+[docs/AGENTS.md](docs/AGENTS.md) *Working in a live session* is the recipe to point an
+agent at; [docs/CONTROL.md](docs/CONTROL.md) is the design.
+
+`:agent on` opens it (`--agent` at startup); `:agent off` closes it. It listens on a Unix
+socket in `$XDG_RUNTIME_DIR/vtt/` that only the same user can reach -- never the
+network. `vtt --ctl 'status'` sends one request and prints the answer; with no request it
+reads one from stdin, so a heredoc sends many lines. It exits 0 when the answer is `ok`,
+1 on an error or when the GM is busy (the reason on stderr), 2 when no vtt is listening.
+With several listening, it names them and `--ctl-pid N` picks one.
+
+```
+$ vtt --ctl <<'EOF'
+room K2:O6
+edge J4|K4 door
+token add enemy M4 "Ghoul"
+note N5 "trap?"
+EOF
+changed J2:O6: 4 lines, one undo step
+```
+
+A request is lines; `#` lines and blank ones are skipped; `"..."` is one word. Squares
+are named as the app names them (`C3`), a region is `B2:K12`, and a boundary is named by
+the squares either side: `G5|H5` across a vertical one, `C3/C4` across a horizontal one,
+`-` for off the map (`-|A1`).
+
+| request | what it does |
+|---|---|
+| `status` | the map, its file, the screen and mode, the undo history, whether edits are taken now |
+| `dump [REGION]` `describe [json]` `check [json]` | the [map tools](#map-tools---dump-map---check---describe) on the live map (`check` has no file line numbers) |
+| `marked [json]` | what the GM is pointing at: the cursor (a brush's whole footprint), a `v` or `V` box, wall mode's corner and anchored box, the creatures selected in play and a play box, the ruler, and the last ping from the GM and from each phone, with its age -- kept after the ring comes down |
+| `room REGION` | floor over it, walls round it; walls inside are left alone |
+| `tile REGION KIND` | `void` `floor` `water` `rough` `brush` `wood` `hazard` |
+| `wall REGION [KIND]` | the region's outline: `wall` (the default) `door` `open` `window` `secret` `opensecret`, or `none` to clear it |
+| `edge BOUNDARY KIND` | one boundary, the same kinds |
+| `token add player\|enemy SQUARE [size N] "Label"` | a creature, 1-3 squares wide, on ground, on nobody, its label unused |
+| `token move WHO SQUARE`, `token del WHO` | WHO is a label (any case, if only one matches), or a square it stands on |
+| `token set WHO label "..."` / `size N` / `note "..."` | change one thing about a creature |
+| `note SQUARE "text"`, `note SQUARE` | a GM-only note on a square, or take it off |
+| `fog paint REGION N` | into fog patch N (0 scrubs); `:fog` makes patches |
+| `undo` | takes back the agent's last request, while nothing has happened since; first in a request |
+
+**Every request is one undo step, all or nothing.** `u` takes back everything a request
+did at once. A line that fails -- a square off the map, a label already used, a creature
+on void -- rolls the whole request back, and the answer names the line and why. The GM's
+status line says what the agent did (`agent: room K2:O6 and 3 more - u takes them back`),
+the session log records it, and a ring marks the changed squares for two seconds; the
+GM's cursor and camera never move. Square notes set here undo like everything else.
+
+**Edits wait for the GM.** They are taken in build mode only, so nothing an agent does
+reaches the players mid-play, and refused (`busy:`, exit 1) while a prompt or question is
+open, the `:` line is being typed, a key is half pressed, or a wall is being traced.
+Reads are answered anywhere a map is open. A creature holding the turn in a fight is the
+GM's to pass on before an agent may remove it. One request changes at most twice the
+largest map's squares.
 
 ## Performance
 

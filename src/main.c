@@ -50,6 +50,7 @@ typedef struct {
     int         ctl;                /* --ctl [REQUEST]: be the channel's client */
     const char *ctl_req;            /* NULL: the request is on stdin */
     long        ctl_pid;            /* --ctl-pid N: which vtt; 0 the only one */
+    const char *bench_ctl;          /* --bench-ctl FILE: a request run each bench loop */
 } Options;
 
 enum { TOOL_NONE, TOOL_DUMP, TOOL_CHECK, TOOL_DESCRIBE };
@@ -73,6 +74,7 @@ static void usage(void)
         "  --watch HOST:PORT  mirror a serving vtt in this terminal, read-only\n"
         "  --bench-clients N  attach N loopback watchers to a --bench run\n"
         "  --bench-pings      and have each of them ping every frame\n"
+        "  --bench-ctl FILE   run a control-channel request at the top of every --bench loop\n"
         "  --agent            open the control channel at startup (:agent on does it later)\n"
         "  --ctl [REQUEST]    send a request to the vtt taking them, print the answer\n"
         "                     (no REQUEST, or -: read it from stdin; docs/CONTROL.md)\n"
@@ -110,6 +112,7 @@ static int parse_args(Options *o, int argc, char **argv)
         else if (!strcmp(a, "--no-pings"))   o->serve_no_pings = 1;
         else if (!strcmp(a, "--bench-pings")) o->bench_pings = 1;
         else if (!strcmp(a, "--agent"))      o->agent = 1;
+        else if (!strcmp(a, "--bench-ctl") && i + 1 < argc) o->bench_ctl = argv[++i];
         else if (!strcmp(a, "--ctl")) {
             o->ctl = 1;
             if (i + 1 < argc && strncmp(argv[i + 1], "--", 2) != 0) {
@@ -318,8 +321,32 @@ static int run_headless(const Options *o)
             }
         }
 
+        /* A request run as a frame of its own before the keys, which are
+         * then what puts the map back (u), so every loop starts alike. */
+        char  *ctl_req = NULL;
+        size_t ctl_len = 0;
+        if (o->bench_ctl) {
+            FILE *f = fopen(o->bench_ctl, "rb");
+            if (!f) die("cannot read %s", o->bench_ctl);
+            ctl_req = malloc(CTL_REQ_CAP + 1);
+            if (!ctl_req) die("out of memory");
+            ctl_len = fread(ctl_req, 1, CTL_REQ_CAP, f);
+            ctl_req[ctl_len] = '\0';
+            fclose(f);
+        }
+
         uint64_t bench_clock_ms = 1000;
         for (int loop = 0; loop < o->bench_loops && a.running; loop++) {
+            if (ctl_req) {
+                prof_frame_begin();
+                size_t len = ctl_len;
+                char  *ans = app_ctl_exec(&a, ctl_req, &len);
+                if (loop == 0 && ans && strncmp(ans, "ok\n", 3) != 0) die("--bench-ctl: %.200s", ans);
+                free(ans);
+                app_frame(&a, NULL, 0);
+                prof_frame_end();
+                prof_set_counters(r.cells_changed, r.bytes_written);
+            }
             input_init(&p);
             input_feed(&p, sc.bytes, sc.len);
 
@@ -361,6 +388,7 @@ static int run_headless(const Options *o)
             a.running = 1;      /* a 'q' in the script must not end the bench */
         }
         for (int i = 0; i < ncf; i++) close(cfd[i]);
+        free(ctl_req);
         script_free(&sc);
         prof_report();
     }

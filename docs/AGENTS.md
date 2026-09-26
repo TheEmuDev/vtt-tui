@@ -125,3 +125,40 @@ edge), `W120` (a room nothing leads to). The README lists them all.
 positions, boundaries between them, a wall's corners drawn as its line (`-` or `|`, never
 `+`, so a `+` is always a door). Creatures show as `1`-`9`, `a`-`z`, `A`-`Z` and are listed
 underneath with their squares. `--region B2:K12` prints part of a big map.
+
+## Working in a live session
+
+When the GM has the map open in `vtt` and has typed `:agent on`, work on the map in memory
+instead of the file: the GM sees every change as it lands, and `u` takes each one back.
+README *Control channel* lists every request; this is how to use them.
+
+1. `vtt --ctl status` first: which map, whether it is saved, and whether edits are taken
+   (`edits taken`, or `not now:` and why -- usually the GM is in play mode).
+2. Read before writing: `vtt --ctl 'dump'` (or `'dump B2:K12'` on a big map) and
+   `vtt --ctl 'describe'`. Name squares back to the GM from the dump.
+3. When the GM says "here" or "this room", ask `vtt --ctl marked`: the cursor, the box
+   they drew with `v`, the creatures they selected, where they last pinged (`g p`). Work
+   from those squares rather than guessing.
+4. Send each change the GM asked for as **one request** -- a heredoc, one line an edit --
+   so it is one `u` for the GM:
+
+   ```
+   vtt --ctl <<'EOF'
+   room K2:O6
+   edge J4|K4 door
+   token add enemy M4 "Ghoul"
+   EOF
+   ```
+
+   A request is all or nothing: if a line fails, nothing changed, and the answer says which
+   line and why. Fix it and send the whole request again.
+5. Read back what you did (`dump` the region, `check`), and tell the GM in squares.
+6. Suggestions the GM has not agreed to go on the map as notes (`note F7 "secret door?"`),
+   which the players never see; the GM keeps or clears them.
+7. If the GM does not like a change and nothing has happened since, `vtt --ctl undo` takes
+   it back; otherwise ask them to press `u`. Never try to repair a change by undoing the
+   GM's own work.
+
+Exit status: 0 done, 1 an error or `busy:` (read stderr), 2 no vtt is listening -- ask the
+GM to type `:agent on`. `busy:` means the GM is in the middle of something: wait, ask, and
+send the same request again. Saving is the GM's (`:w`); the channel never writes files.

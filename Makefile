@@ -54,7 +54,7 @@ DEPS      := $(OBJS:.o=.d)
 LIBSRCS   := $(filter-out $(SRCDIR)/main.c,$(SRCS))
 TESTSRCS  := $(filter-out $(TESTDIR)/fuzz_%.c,$(wildcard $(TESTDIR)/*.c))
 
-.PHONY: all debug test bench perf fuzz clean help
+.PHONY: all debug test bench perf fuzz fuzz-ctl clean help
 .DEFAULT_GOAL := all
 
 all: BUILDFLAGS := $(RELFLAGS)
@@ -95,6 +95,13 @@ fuzz:
 	clang $(BASEFLAGS) -O1 -g -DVTT_PROF=0 -fsanitize=fuzzer,address,undefined \
 	    $(LIBSRCS) $(TESTDIR)/fuzz_mapio.c -o $(OBJDIR)/fuzz-mapio $(LDLIBS)
 	$(OBJDIR)/fuzz-mapio -max_total_time=$(FUZZ_SECONDS) -max_len=65536 $(OBJDIR)/fuzz-corpus
+
+# The control channel's requests, against a fixture map (docs/CONTROL.md).
+fuzz-ctl:
+	@mkdir -p $(OBJDIR)/fuzz-ctl-corpus && cp $(TESTDIR)/fuzz-ctl/* $(OBJDIR)/fuzz-ctl-corpus/
+	clang $(BASEFLAGS) -O1 -g -DVTT_PROF=0 -fsanitize=fuzzer,address,undefined \
+	    $(LIBSRCS) $(TESTDIR)/fuzz_ctl.c -o $(OBJDIR)/fuzz-ctl $(LDLIBS)
+	$(OBJDIR)/fuzz-ctl -max_total_time=$(FUZZ_SECONDS) -max_len=65536 $(OBJDIR)/fuzz-ctl-corpus
 
 clean:
 	@rm -rf $(OBJDIR) $(BIN)

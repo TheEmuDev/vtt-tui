@@ -144,6 +144,16 @@ awk 'BEGIN {
 
 LONG=$(awk 'BEGIN{ for (i = 0; i < 60; i++) printf "l" }')
 
+# The control channel's requests (docs/CONTROL.md): a 40x40 room over the void
+# canvas with a dozen creatures in it, taken back by the u that follows; and
+# the whole of the largest map dumped.
+HUGE=$(genmap huge 512 512 0 0)
+{
+    echo 'room A1:AN40'
+    for c in C D E F G H I J K L M N; do printf 'token add enemy %s5 "M%s"\n' "$c" "$c"; done
+} > "$DIR/room.ctl"
+echo 'dump' > "$DIR/dump.ctl"
+
 # ------------------------------------------------------------ frame times
 
 # One run answers both questions: the bench reports frame times on stderr, and
@@ -252,6 +262,8 @@ run "play, GM ping"        "$MOB"    80x24  ':play\rgpllgphh'
 run "play, carry, 4 watch" "$MOB"    80x24  ':play\rt\rlllljjjj\r' "--bench-clients 4"
 run "play, logging"        "$MOB"    80x24  ':play\r:log on\rt\rlllljjjj\r'
 run "play, rolling"        "$MOB"    80x24  ':play\r:roll 2d6+3\r:roll +1\r'
+run "agent, room + 12"     "$VOIDY"  80x24  'u' "--bench-ctl $DIR/room.ctl"
+run "agent, dump 512x512"  "$HUGE"   80x24  'lh' "--bench-ctl $DIR/dump.ctl"
 run "help page"            "$WALLED" 80x24  '?jjjj'
 run "profiler overlay"     "$WALLED" 80x24  '\e[24~jjll'
 

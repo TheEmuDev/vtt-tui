@@ -40,6 +40,7 @@ make perf       one perf run; publish the per-row MEDIAN of three quiet runs (to
 tools/sight.sh  fog.sight per fog scenario (the zone table keeps only each zone's worst)
 VTT_FOGDIFF_OPS=36000 ./build/run-tests   the long run of the fog differential test
 make fuzz       libFuzzer on the map loader (clang), FUZZ_SECONDS=600 for longer
+make fuzz-ctl   libFuzzer on control-channel requests (tests/fuzz_ctl.c, corpus tests/fuzz-ctl)
 tools/embed.sh  after editing web/index.html; tools/blit_wasm.py after editing the blitter
 ./vtt map.vtt --serve 7777      serve; a raw client: printf 'VTT1\n' | nc 127.0.0.1 7777
 ./vtt map --bench keys --bench-clients 4   the frame with four watchers attached
@@ -81,7 +82,7 @@ Bench scripts replay whole; no toggles — use loop-neutral pairs (`llllhhhh`,
 | `watch.c` | `vtt --watch host:port`, the read-only terminal mirror; `:mirror` spawns it in `$TERMINAL` |
 | `web/index.html` → `src/webpage.c` | the phone page; edit the HTML, run `tools/embed.sh`. Its copy loop is `tools/blit_wasm.py`, a hand-assembled wasm module pasted in as base64 |
 | `grid.c`, `token.c`, `draw.c`, `render.c`, `term.c` | drawing down to the diffing renderer and the terminal |
-| `tests/run.c` | one file, suites in a table at the bottom; `tests/fuzz_mapio.c` is libFuzzer only |
+| `tests/run.c` | one file, suites in a table at the bottom; `tests/fuzz_mapio.c` and `tests/fuzz_ctl.c` are libFuzzer only |
 
 ## Writing tests
 

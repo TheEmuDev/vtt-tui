@@ -4,7 +4,9 @@ An AI agent (or any script) talking to a running `vtt`: reading the map the GM
 has open, asking what the GM is pointing at, and editing it, every change one
 undo batch the GM takes back with `u`. The map tools (`--dump-map`, `--check`,
 `--describe`) read files; this is the same reading, and writing, on the map in
-memory while the GM watches. Signed off 2026-09-26.
+memory while the GM watches. Signed off 2026-09-26; built the same day. The README's
+*Control channel* is the user's reference and docs/AGENTS.md *Working in a live session*
+the agent's; this page is why it is the way it is.
 
 ## Decisions
 
@@ -71,12 +73,41 @@ as `--describe` names them. Lines run in order, so a read sees the edits before 
 | `fog paint REGION N` | paints the region into fog patch N (0 scrubs) |
 | `undo` | takes back the agent's last request, only while nothing came after it |
 
-Edits are refused, with `busy:` and the reason, when a prompt or dialog is open, a
-creature is picked up, a key prefix is waiting, or the screen is not build mode.
+Edits are refused, with `busy:` and the reason, when a prompt or dialog is open, the `:`
+line is being typed, a key prefix is waiting, a wall stroke is open (wall mode's pen keeps
+an undo batch open across keys, and a request must never land inside the GM's batch), or
+the screen is not build mode. The check is made at a request's first edit; after it the
+open batch is the request's own.
 
 **The GM sees it happen.** The status line says what the request did (`agent: room B2:K12,
 3 changes - u takes it back`), the session log records it, and a ring marks the changed
 area for a moment. The GM's cursor and camera never move.
+
+## As built: what the plan did not say
+
+- **One batch, no nesting.** `undo_begin` inside an open batch is ignored but `undo_end`
+  closes it, so the edits call no helper that opens and closes its own batch
+  (`ed_wall_shape`, the turn helpers). That is why `token del` refuses the creature
+  holding the turn -- passing it on is `turn_advance`, which would split the request --
+  and why `room` and `wall` draw their outline themselves.
+- **Rolling back** is `undo_abort`: the open batch's ops are applied backwards and
+  forgotten. A redo tail the GM had (from an undo of their own) is let go by the first
+  op, as any edit would, and does not come back with the rollback.
+- **The agent's `undo`** compares `Undo.stamp`, which every record, undo, redo and clear
+  moves, with the stamp its last request left; any difference means something came
+  after, and only the GM's `u` may take it back.
+- **Square notes undo.** They did not before: `OP_NOTE` (`undo_set_note`) carries the text
+  before and after in two token slots' `note`. The GM's own `s n` on a square still sets
+  the note directly and is not undone by `u`.
+- **Bounded.** A request records at most `CTL_OPS_MAX` (twice the largest map's squares)
+  undo ops; the undo log never trims an open batch, so this is what bounds the memory one
+  request can take.
+- **The ring** is `App.agent_ring`, drawn on the GM's screen only; `app_view_differs`
+  counts it, so it never reaches the phones even if the GM goes to play mode within the
+  two seconds.
+- **Measured** (docs/PERFORMANCE.md): a 40x40 room with a dozen creatures is tens of
+  microseconds (`ctl` zone); a `dump` of a 512x512 map is about 10 ms, once, when asked.
+- `make fuzz-ctl` runs requests under libFuzzer against a fixture; each input is undone.
 
 ## Build order
 

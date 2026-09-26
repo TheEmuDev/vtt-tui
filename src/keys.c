@@ -160,6 +160,7 @@ static const KeyDoc BUILD[] = {
     KEY("u",      "undo    ctrl-r redo"),
     KEY("m",      "measure (the ruler)"),
     KEY(":roll 2d6+3", "roll dice    :log keeps a record of the session"),
+    KEY(":agent on", "let an AI agent read and edit this map (vtt --ctl); u takes back each change"),
     KEY(":",      "command line -- :w :q :resize :scale :metric ..."),
     KEY("F2",     "play mode    F1 back here    F12 profiler"),
     KEY("q",      "leave the map"),
