@@ -12736,6 +12736,12 @@ static void test_ctl(void)
     CHECK(strstr(t, "region A1:A1") != NULL);
     free(t);
 
+    CASE("a comment is never split: any length, any quotes");
+    t = ctl_ask(&a, "# one two three four five six seven eight nine ten eleven twelve thirteen \"x\n"
+                    "  # indented, with a lone \" quote\nstatus\n");
+    CHECK(strncmp(t, "ok\nmap", 6) == 0);
+    free(t);
+
     CASE("an error names its line and sends nothing else");
     t = ctl_ask(&a, "status\ndump B2:ZZ99:4\n");
     CHECK(strncmp(t, "error: line 2: ZZ99:4 is not a square", 37) == 0);
@@ -13736,6 +13742,12 @@ static void test_room_language(void)
     free(t);
     CHECK_EQ(map_area_find(m, "Closet"), -1);               /* rolled back with it */
 
+    CASE("a note on a room goes on its middle square");
+    t = ctl_ask(&a, "note Crypt \"the lid is loose\"\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    CHECK(map_note_at(m, 4, 3) && !strcmp(map_note_at(m, 4, 3), "the lid is loose"));   /* B2:I7: E4 */
+
     CASE("area NAME REGION names without drawing; area NAME off takes it off");
     t = ctl_ask(&a, "area Nook J18:K19\n");
     CHECK(strncmp(t, "ok\n", 3) == 0);
@@ -13923,6 +13935,30 @@ static void test_apply(void)
         free(txt);
         CHECK_EQ(m->nareas, 3);
         map_free(m);
+    }
+
+    CASE("docs/AGENTS.md's example plan applies, and checks clean");
+    {
+        FILE *doc = fopen("docs/AGENTS.md", "r");
+        CHECK(doc != NULL);
+        char line[512], ex[700];
+        snprintf(ex, sizeof ex, "%s/guide.txt", sb.dir);
+        FILE *out = fopen(ex, "w");
+        int in = 0, lines = 0;
+        while (doc && out && fgets(line, sizeof line, doc)) {
+            if (!in && !strncmp(line, "   # The drowned crypt", 22)) in = 1;
+            else if (in && !strncmp(line, "   ```", 6)) break;
+            if (in) { fputs(line + 3, out); lines++; }
+        }
+        if (doc) fclose(doc);
+        if (out) fclose(out);
+        CHECK(lines > 5);
+        char gm[700];
+        snprintf(gm, sizeof gm, "%s/guide.vtt", sb.dir);
+        snprintf(cmd, sizeof cmd, "%s '%s' --apply '%s' --new 40x24 > /dev/null", vtt, gm, ex);
+        CHECK_EQ(WEXITSTATUS(system(cmd)), 0);
+        snprintf(cmd, sizeof cmd, "%s '%s' --check > /dev/null", vtt, gm);
+        CHECK_EQ(WEXITSTATUS(system(cmd)), 0);
     }
 
     CASE("--apply: a failing plan changes nothing and saves nothing (exit 1)");

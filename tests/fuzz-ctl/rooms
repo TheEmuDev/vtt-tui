@@ -1,0 +1,8 @@
+room X B2 4x4
+room Y 4x4 east of X gap 2
+corridor X Y width 2 open
+door X north 2 window
+area Z C3:D4
+token add enemy X "Q"
+note Y "n"
+tile Z water

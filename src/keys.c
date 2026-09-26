@@ -159,6 +159,7 @@ static const KeyDoc BUILD[] = {
     GROUP("Stamps"),
     KEY("y  p",   "copy the brush's squares or the box / show the copy on the cursor to place"),
     KEY(":stamp", "list your stamps   :stamp Table picks one   :stamp save Table keeps the copy"),
+    KEY(":area Crypt", "name the v box Crypt, or jump to it   :areas lists them"),
 
     GROUP("Undo and elsewhere"),
     KEY("u",      "undo    ctrl-r redo"),

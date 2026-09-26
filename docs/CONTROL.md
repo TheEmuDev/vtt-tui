@@ -72,6 +72,7 @@ as `--describe` names them. Lines run in order, so a read sees the edits before 
 | `token set WHO label "..."\|size N\|note "..."` | |
 | `note SQ "text"`, `note SQ` | a GM-only note on a square, or clears it |
 | `fog paint REGION N` | paints the region into fog patch N (0 scrubs) |
+| `room NAME ...`, `area NAME ...`, `door ROOM SIDE ...`, `corridor A B ...` | the room language (added after stamps): named areas, rooms placed beside rooms, doors by side, corridors; docs/AGENTS.md has the whole of it |
 | `stamp NAME SQUARE [rotate 90\|180\|270] [mirror]` | a saved stamp, top-left square here, turned then mirrored; see-through and all or nothing like the GM's `p` (added with stamps) |
 | `undo` | takes back the agent's last request, only while nothing came after it; alone in its request, since it cannot roll back with other lines |
 

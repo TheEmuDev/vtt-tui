@@ -153,6 +153,26 @@ HUGE=$(genmap huge 512 512 0 0)
     for c in C D E F G H I J K L M N; do printf 'token add enemy %s5 "M%s"\n' "$c" "$c"; done
 } > "$DIR/room.ctl"
 echo 'dump' > "$DIR/dump.ctl"
+# The room language: five named rooms placed by each other, five corridors
+# (one two wide, one bent-free), creatures by room, on a void canvas.
+VOIDMAP="$DIR/void.vtt"
+printf 'VTT 2\nname Void\nsize 100 60\nzoom 1\n' > "$VOIDMAP"
+cat > "$DIR/plan.ctl" <<'PLAN'
+room A B2 10x8
+room B 10x8 east of A gap 6
+room C 10x8 south of A gap 6
+room D 10x8 east of C gap 6
+room E 8x6 east of B gap 6
+corridor A B
+corridor A C width 2
+corridor C D
+corridor B D
+corridor B E
+token add enemy A "G1"
+token add enemy B "G2"
+token add enemy D "G3"
+token add player C size 2 "P1"
+PLAN
 
 # ------------------------------------------------------------ frame times
 
@@ -264,6 +284,7 @@ run "play, carry, 4 watch" "$MOB"    80x24  ':play\rt\rlllljjjj\r' "--bench-clie
 run "play, logging"        "$MOB"    80x24  ':play\r:log on\rt\rlllljjjj\r'
 run "play, rolling"        "$MOB"    80x24  ':play\r:roll 2d6+3\r:roll +1\r'
 run "agent, room + 12"     "$VOIDY"  80x24  'u' "--bench-ctl $DIR/room.ctl"
+run "agent, plan of rooms" "$VOIDMAP" 80x24  'u' "--bench-ctl $DIR/plan.ctl"
 run "agent, dump 512x512"  "$HUGE"   80x24  'lh' "--bench-ctl $DIR/dump.ctl"
 run "help page"            "$WALLED" 80x24  '?jjjj'
 run "profiler overlay"     "$WALLED" 80x24  '\e[24~jjll'

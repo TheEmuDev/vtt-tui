@@ -58,6 +58,13 @@ static int split_words(const char *line, char w[CTL_WORDS][CTL_WORD_MAX], char *
     return n;
 }
 
+/* A line whose first word starts with #. */
+static int is_comment(const char *line)
+{
+    while (*line == ' ' || *line == '\t') line++;
+    return *line == '#';
+}
+
 /* ----------------------------------------------------------------- state */
 
 static const char *screen_name(Screen s)
@@ -1046,7 +1053,13 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
     else if (!strcmp(v, "note")) {
         int x, y;
         if (n != 2 && n != 3) BAD("note SQUARE \"text\", or note SQUARE to take it off");
-        if (!square(m, w[1], &x, &y, err, errsz)) return -1;
+        /* A room's note goes on its middle square. */
+        int ai = map_area_find(m, w[1]);
+        if (ai >= 0) {
+            x = (m->areas[ai].x0 + m->areas[ai].x1) / 2;
+            y = (m->areas[ai].y0 + m->areas[ai].y1) / 2;
+        }
+        else if (!square(m, w[1], &x, &y, err, errsz)) return -1;
         const char *text = n == 3 ? w[2] : "";
         if (strlen(text) >= NOTE_MAX) BAD("the note is over %d characters", NOTE_MAX - 1);
         if (!undo_set_note(u, m, x, y, text)) BAD("no room: a map holds %d notes on squares", MAP_NOTES_MAX);
@@ -1223,7 +1236,7 @@ static int undo_alone(const char *p)
         if (ll < sizeof line) {
             memcpy(line, p, ll);
             line[ll] = '\0';
-            n = split_words(line, w, e, sizeof e);
+            n = is_comment(line) ? 0 : split_words(line, w, e, sizeof e);
         }
         if (n != 0 && !(n > 0 && w[0][0] == '#')) {
             lines++;
@@ -1298,7 +1311,9 @@ char *app_ctl_exec(App *a, const char *req, size_t *len)
         else {
             memcpy(line, p, ll);
             line[ll] = '\0';
-            n = split_words(line, w, err, sizeof err);
+            /* A comment is prose: never split, so its length and its
+             * quotes are nobody's business. */
+            n = is_comment(line) ? 0 : split_words(line, w, err, sizeof err);
         }
         p = end ? end + 1 : p + ll;
 

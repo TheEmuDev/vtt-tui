@@ -1,24 +1,182 @@
-# Writing a vtt map by hand
+# vtt for agents
 
-For an AI agent (or anyone at a text editor) turning a GM's description into a map file.
-The file is plain text; this page is everything needed to write one that loads as meant,
-and the tools to check it. The README's *File format* section is the full reference.
+Everything an AI agent needs to build and change `vtt` maps for a GM: from a description, in
+a file, or live in the GM's session while they watch. Read this page whole before the first
+map; the README is the reference for the rest of the app.
 
-## The loop
+`vtt` is a virtual tabletop in the terminal, used beside a physical table: the GM builds an
+encounter map, then runs the fight on it while the players watch on their phones. It knows
+no game's rules. A map is a grid of squares (`A1` top left; columns `A`..`Z`, `AA`..; rows
+from 1), with walls, doors and windows on the **boundaries between** squares, terrain on the
+squares, creatures (players and enemies, 1-3 squares wide), notes the players never see, and
+fog.
 
-1. Write the `.vtt` file.
-2. `vtt map.vtt --check`: every line it prints is a mistake, with the file line or the
-   square. Fix until it says `no findings` (notes, `N...`, may stay).
-3. `vtt map.vtt --dump-map` and read it back: is every wall where the description says,
-   is every door in a wall, is every creature on the floor? `vtt map.vtt --describe`
-   says what rooms that makes and how they connect.
-4. Fix, and dump again, until it is right. Then show the GM the dump, name squares
-   (`C3`, `the door at F7`) and take corrections the same way.
+## Three ways in
 
-## A complete small map
+| way | when | how |
+|---|---|---|
+| **a plan** | a new map from a description, or a batch of changes to a map file | write requests to a file, `vtt map.vtt --apply plan.txt [--new 40x30]` |
+| **live** | the GM has the map open and has typed `:agent on` | `vtt --ctl` with requests on stdin; the GM sees each change land |
+| **by hand** | only when neither works: the file format itself | [Writing the file by hand](#writing-the-file-by-hand) |
+
+A plan and a live session speak the same language, the one below, and follow the same rules:
+**a request is all or nothing** (if any line fails, nothing changed, and the answer names
+the line and why), and **one request is one undo step** for the GM.
+
+## The request language
+
+One request is lines. Words are separated by spaces; `"..."` is one word (`\"` and `\\`
+inside); blank lines and lines starting with `#` are skipped. Lines run in order, so a read
+sees the edits before it.
+
+**Places.**
+
+- A square is `C3`. A region is `B2:K12` (either corner first) or one square.
+- A boundary is named by the squares either side: `G5|H5` across a vertical one (between
+  a square and the one east of it), `C3/C4` across a horizontal one (between a square and
+  the one south of it), `-` for off the map (`-|A1` is A1's west edge).
+- **A room's name** works wherever a region does (its box) and wherever a creature's square
+  does (the free square nearest the room's middle). Names are 1-31 characters, no quote or
+  colon, and never something that reads as a square; `"Great Hall"` in quotes.
+
+**Rooms and areas.** An area is a named box; a room is a floored area with a wall round it.
+
+| line | does |
+|---|---|
+| `room Crypt B2 8x6` | a room with its top-left square and size, named |
+| `room Crypt B2:I7` | the same, by region |
+| `room Vault 6x4 east of Crypt gap 3 [top\|middle\|bottom]` | placed beside another room: `gap` squares between (0: they share a wall), lined up on the other room's `middle` unless told; `north`/`south` line up `left`/`middle`/`right` |
+| `room B2:I7` | an unnamed room |
+| `area Upper B1:Z20`, `area Upper off` | name a box without drawing anything (a floor, a region you drew by hand), or take the name off |
+| `door Crypt east [N\|middle] [KIND]` | a door on a room's side: the Nth square along it from the top or left (`middle` by default); KIND below, a door by default |
+| `corridor Crypt Vault [width 1-3] [KIND]` | dug between two named rooms: straight when they overlap enough, otherwise one bend; walled along; a door at each end when one wide, open ends when wider. Rooms sharing a wall just get the doorway. It only digs through void: ground or another named room in the way refuses it |
+
+**Squares and boundaries.**
+
+| line | does |
+|---|---|
+| `tile REGION KIND` | `void` `floor` `water` `rough` `brush` `wood` `hazard` |
+| `wall REGION [KIND]` | the region's outline; KIND `wall` (default) `door` `open` (an open door) `window` `secret` `opensecret`, or `none` to clear |
+| `edge BOUNDARY KIND` | one boundary |
+| `stamp NAME SQUARE [rotate 90\|180\|270] [mirror]` | one of the GM's saved stamps (a table, a pillar row), top-left here; void and blank boundaries in it leave the map as it was |
+| `note SQUARE "text"`, `note SQUARE` | a note on a square only the GM sees, or take it off |
+| `fog paint REGION N` | into fog patch N (0 scrubs); the GM makes patches |
+
+**Creatures.**
+
+| line | does |
+|---|---|
+| `token add enemy SQUARE [size 2] "Ghoul"` | `player` or `enemy`; size 1-3; labels unique; on ground and on nobody |
+| `token add enemy Crypt "Ghoul"` | in a room: the free square nearest its middle |
+| `token move Ghoul F6`, `token del Ghoul` | by label (any case), or a square it stands on |
+| `token set Ghoul label "..."`, `size 2`, `note "..."` | |
+
+**Reads.**
+
+| line | answers |
+|---|---|
+| `dump [REGION]` | the map as text: squares in the file's characters, boundaries between, creatures as `1`-`9` `a`-`z`, a legend with creatures, notes and areas |
+| `describe [json]` | the rooms walls make, named by their areas, with doors and where they lead, and what is in each |
+| `check [json]` | mistakes: loose doors, creatures on void, rooms nothing reaches ([codes](../README.md#map-tools---dump-map---check---describe)) |
+| `stamps` | the GM's saved stamps and their sizes |
+| `status` | live only: the map, whether edits are taken now |
+| `marked [json]` | live only: what the GM is pointing at -- the cursor (and the area it is in), a `v` box, selected creatures, the ruler, recent pings |
+| `undo` | live only, alone in its request: take back your last request, while nothing has happened since |
+
+## From a description to a map
+
+1. **Name every place first**, then place the rest by name. A description is rooms and how
+   they join; so is the plan:
+
+   ```
+   # The drowned crypt: an entry hall, the crypt east of it, a flooded well below.
+   room Hall B2 6x4
+   room Crypt 8x6 east of Hall gap 3
+   room Well 4x3 south of Hall gap 2 left
+   corridor Hall Crypt
+   corridor Hall Well width 2
+   tile Well water
+   token add enemy Crypt "Ghoul"
+   token add enemy Crypt "Ghoul 2"
+   token add player Hall "Aria"
+   note Crypt "the sarcophagus lid is loose"
+   ```
+
+   `vtt crypt.vtt --apply plan.txt --new 40x24` makes the file (void to start) and exits 0,
+   or 1 with the failing line on stderr and nothing saved.
+2. **Read it back.** `vtt crypt.vtt --dump-map` and look: is every room where the
+   description puts it, every door in a wall, every creature on the floor?
+   `vtt crypt.vtt --describe` says what rooms the walls make and how they join -- a room
+   `NOT REACHABLE` is a missing door. `vtt crypt.vtt --check` must say `no findings`.
+3. **Fix with another plan** against the same file (it opens what is there), not by
+   rewriting the first: `room Crypt ...` again moves the name, `wall Crypt none` clears an
+   outline, `tile ... void` digs out.
+4. **Show the GM the dump** and name squares and rooms back ("the door at I4", "the Crypt").
+
+**What to know about the geometry.**
+
+- Walls sit **between** squares, so two rooms side by side (`gap 0`) share one wall, and a
+  door in it joins them. `corridor` between them makes that door.
+- A corridor with open ends (wider than one) joins its rooms into one space, and
+  `describe` reports them as one room -- that is right: rooms are what walls divide.
+- A room drawn over another's ground takes it: `room` floors its whole box and walls its
+  outline. Plan rooms apart and join them with corridors or `gap 0` and a door.
+- Creatures need ground under every square of their footprint; `in` a room they find it.
+
+## Working live with the GM
+
+The GM has the map open in `vtt` and has typed `:agent on`. Send requests with `vtt --ctl`
+(requests on stdin, or one as an argument); the GM watches them land, the status line says
+what you did, and `u` takes back each request whole.
+
+1. `vtt --ctl status` first: which map, and `edits taken` or `not now:` and why (the GM is
+   in play mode, or in the middle of something).
+2. Read before writing: `vtt --ctl 'dump'` (or a region), `vtt --ctl 'describe'`.
+3. When the GM says "here", "this room" or "that one", ask `vtt --ctl marked` and work from
+   the squares it names. `marked` says which area the cursor is in.
+4. Send each change the GM asked for as **one request**, so it is one `u`:
+
+   ```
+   vtt --ctl <<'EOF'
+   room Vault 6x4 east of Crypt gap 2
+   corridor Crypt Vault
+   token add enemy Vault "Wight"
+   EOF
+   ```
+5. Read back what you did (`dump` the region, `check`) and tell the GM in squares and names.
+6. Put down the GM's stamps (`vtt --ctl stamps`) for anything they have one for, rather than
+   drawing it square by square.
+7. Suggestions the GM has not agreed to go on the map as notes (`note F7 "secret door?"`);
+   the players never see them.
+8. If the GM does not like a change and nothing has happened since, `vtt --ctl undo` (on its
+   own) takes it back; otherwise ask them to press `u`. Never repair a change by undoing
+   the GM's own work.
+
+Exit status: 0 done; 1 an error or `busy:` (the reason on stderr); 2 no vtt is listening --
+ask the GM to type `:agent on`. `busy:` means the GM is part way through something (typing a
+command, drawing a wall, in play mode): wait, or ask, and send the same request again. The
+channel never saves; saving is the GM's (`:w`). It never takes away the creature whose turn
+it is in a fight: the fight is the GM's.
+
+## Checking a map
+
+`vtt map.vtt --dump-map` prints the lattice: squares at odd positions, boundaries between,
+a wall's corners drawn as its line (`-` or `|`, never `+`, so a `+` is always a door),
+creatures as `1`-`9` `a`-`z` `A`-`Z` listed underneath, then the notes and named areas.
+`--region B2:K12` prints part of a big map. `--describe` lists the rooms, each named by its
+area when one holds its first square (`room 2 Crypt (J3)`), with its extent, terrain, doors
+and windows and the room each leads to, and the creatures, notes and fog in it; `--json`
+gives the same as JSON. `--check` exits 0 clean, 1 with findings, 2 when the file cannot be
+read; the codes that matter most are `W104 door-loose` (a door with no wall at either end),
+`E110`/`E111` (a creature on void or off the edge) and `W120` (a room nothing leads to).
+
+## Writing the file by hand
+
+A last resort, when you must write or repair the file itself. The file is plain text; the
+README's *File format* section is the full reference.
 
 ```
-VTT 6
+VTT 7
 name Crypt Entrance
 size 6 4
 scale 5
@@ -42,19 +200,16 @@ hedges
 token player 1 1 1 "Aria"
 token enemy 4 2 1 "Ghoul"
 note 2 3 "loose flagstone"
+area 0 0 5 3 "Entrance"
 ```
 
-`vedges` has 4 rows of 7 characters; `hedges` has 5 rows of 6 -- its second and fourth rows
-are six spaces each (no boundary), easy to lose sight of.
+`VTT 7` first (a lower number is fine if the map has no areas); then header lines (`name`,
+`size W H`, `scale` feet per square, `metric` chebyshev / euclidean / alt / manhattan,
+optionally `ruleset daggerheart`); then the sections. **Coordinates in the file are 0-based
+x then y**; the app and the tools name squares with letters and 1-based rows (`x 4, y 2` is
+`E3`).
 
-`VTT 6` first; then header lines (`name`, `size W H`, `scale` feet per square, `metric`
-chebyshev / euclidean / alt / manhattan, optionally `ruleset daggerheart`); then the
-sections. Coordinates in the file are **0-based x then y**; the app and the tools name
-squares with letters and 1-based rows (`x 4, y 2` is `E3`).
-
-## The three grids, and the one mistake to avoid
-
-A map `W` wide and `H` tall has:
+A map `W` wide and `H` tall has three grids, and the one mistake to avoid is their sizes:
 
 | section | rows | characters a row | what a row is |
 |---|---|---|---|
@@ -62,34 +217,14 @@ A map `W` wide and `H` tall has:
 | `vedges` | `H` | **`W + 1`** | the boundaries *between* squares in one row, west edge first |
 | `hedges` | **`H + 1`** | `W` | the boundaries above row 1, between each pair of rows, below the last |
 
-A wall sits on the line between two squares, never on a square. So there is one more
-vertical boundary than there are columns, and one more horizontal row of boundaries than
-there are rows. Write `vedges` rows `W + 1` characters long and `hedges` with `H + 1`
-rows, and count them.
-
-**The loader reads rows by count, not by looking for the next header.** A `vedges`
-section one row short swallows the `hedges` line as its last row and every section after
-it shifts; a row one character short moves nothing but leaves the east wall off. The map
-still loads, silently wrong. The dump shows it at once: the room will not close.
-
-Short rows are allowed (trailing spaces may be dropped by an editor, and read as void or
-no boundary), so a row may end early -- but never contain too few characters *before* the
-last thing on it.
-
-**Other things the format does not forgive:**
-
-- Header lines (`name`, `size`, `scale`, `metric`, `ruleset`) come before the first
-  section; after it they are ignored.
-- There are no comments. A `#` line is an unknown line; inside a section it is a row.
-- A blank line inside a section is a row (of void, or of no boundaries).
-- A door on the map's own edge is a way out, and `--check` notes it (`N105`) rather than
-  warning.
-
-## Characters
+The loader reads rows by count, not by looking for the next header: a `vedges` section one
+row short swallows the `hedges` line and every section after it shifts, silently; `--check`
+reports it (`E011`). Header lines come before the first section. There are no comments. A
+blank line inside a section is a row. A door on the map's own edge is a way out (`N105`).
 
 | square | char | | boundary | char |
 |---|---|---|---|---|
-| void (not map) | space | | none | space |
+| void | space | | none | space |
 | floor | `.` | | wall | `\|` (in `hedges`, `-` also) |
 | water | `~` | | door | `+` |
 | rough | `:` | | open door | `/` |
@@ -97,71 +232,7 @@ last thing on it.
 | wood | `=` | | secret door | `S` (players see a wall) |
 | hazard | `^` | | open secret door | `s` |
 
-## Creatures, notes, fog
-
-- `token player X Y SIZE "Label"` or `token enemy ...`; `SIZE` 1-3 squares wide, anchored
-  at its top-left square. Labels should be unique on a map.
-- `note X Y "text"` -- a GM-only note on a square.
-- `tokennote "text"` after a token -- a note on that creature.
-- Fog: `fog on`, `fogpatch N Name reveal R memory on` (N 1-15, R squares or `manual`), then
-  a `fog` section of `H` rows of `W` characters: `.` no fog, `A`-`O` patch 1-15.
-
-## Reading the map back
-
-`vtt map.vtt --describe` lists the rooms -- areas of ground joined by open floor, every
-wall, window and door being a room's edge -- each named by its first square in reading
-order (`room 2 (C2)`), with its extent, terrain, every door and window on its edge and the
-room it leads to, and the creatures, notes and fog in it. A room the party cannot reach
-through doors says `NOT REACHABLE`. Check it against the description: one room where two
-were meant means a wall with a gap in it. `--json` gives the same as JSON.
-
-The linter's codes that matter most when writing by hand: `E011 section-short` (a
-section one row short swallowed the next header -- count the `vedges` and `hedges` rows),
-`E010 row-long` (a `vedges` row is `W + 1`, not more), `W104 door-loose` (a door with no wall
-at either end: usually in the wrong row), `E110`/`E111` (a creature on void or off the
-edge), `W120` (a room nothing leads to). The README lists them all.
-
-`vtt map.vtt --dump-map` prints the lattice in the file's own characters: squares at odd
-positions, boundaries between them, a wall's corners drawn as its line (`-` or `|`, never
-`+`, so a `+` is always a door). Creatures show as `1`-`9`, `a`-`z`, `A`-`Z` and are listed
-underneath with their squares. `--region B2:K12` prints part of a big map.
-
-## Working in a live session
-
-When the GM has the map open in `vtt` and has typed `:agent on`, work on the map in memory
-instead of the file: the GM sees every change as it lands, and `u` takes each one back.
-README *Control channel* lists every request; this is how to use them.
-
-1. `vtt --ctl status` first: which map, whether it is saved, and whether edits are taken
-   (`edits taken`, or `not now:` and why -- usually the GM is in play mode).
-2. Read before writing: `vtt --ctl 'dump'` (or `'dump B2:K12'` on a big map) and
-   `vtt --ctl 'describe'`. Name squares back to the GM from the dump.
-3. When the GM says "here" or "this room", ask `vtt --ctl marked`: the cursor, the box
-   they drew with `v`, the creatures they selected, where they last pinged (`g p`). Work
-   from those squares rather than guessing.
-4. Send each change the GM asked for as **one request** -- a heredoc, one line an edit --
-   so it is one `u` for the GM:
-
-   ```
-   vtt --ctl <<'EOF'
-   room K2:O6
-   edge J4|K4 door
-   token add enemy M4 "Ghoul"
-   EOF
-   ```
-
-   A request is all or nothing: if a line fails, nothing changed, and the answer says which
-   line and why. Fix it and send the whole request again.
-5. Read back what you did (`dump` the region, `check`), and tell the GM in squares.
-6. For anything the GM's table has a stamp for (`vtt --ctl stamps`), put the stamp down
-   (`stamp Table F4 rotate 90`) rather than drawing it square by square; `vtt
-   ~/.local/share/vtt/stamps/Table.vtt --dump-map` shows what one looks like first.
-7. Suggestions the GM has not agreed to go on the map as notes (`note F7 "secret door?"`),
-   which the players never see; the GM keeps or clears them.
-8. If the GM does not like a change and nothing has happened since, `vtt --ctl undo` (a
-   request of its own) takes it back; otherwise ask them to press `u`. Never try to repair a change by undoing the
-   GM's own work.
-
-Exit status: 0 done, 1 an error or `busy:` (read stderr), 2 no vtt is listening -- ask the
-GM to type `:agent on`. `busy:` means the GM is in the middle of something: wait, ask, and
-send the same request again. Saving is the GM's (`:w`); the channel never writes files.
+Creatures: `token player X Y SIZE "Label"` (or `enemy`), anchored at the top-left square;
+`tokennote "text"` after one. Square notes: `note X Y "text"`. Areas: `area X0 Y0 X1 Y1
+"Name"`. Fog: `fog on`, `fogpatch N Name reveal R memory on`, then a `fog` section of `H`
+rows of `W` characters (`.` none, `A`-`O` patch 1-15).

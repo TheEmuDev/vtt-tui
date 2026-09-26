@@ -7,6 +7,9 @@ fight on it with labeled player and enemy tokens. The core knows nothing about a
 ruleset — it is a grid, walls, and tokens — and a map can *name* one to switch on the
 rules-aware readouts, such as range bands. See [Rulesets](#rulesets).
 
+An AI agent can build and change maps too -- from a GM's description, or live in the GM's
+session while they watch: [docs/AGENTS.md](docs/AGENTS.md) is everything an agent needs.
+
 Written in C11 with **zero dependencies**: libc plus POSIX (`termios`, `poll`, `dirent`)
 and `-lm` for one square root. No ncurses, no terminfo. ANSI escape sequences are emitted
 directly.
@@ -58,6 +61,8 @@ vtt [options] [map.vtt]
   --ctl [REQUEST]    send a request to the vtt taking them, print the answer
                      (no REQUEST, or -: read it from stdin)
   --ctl-pid N [REQ]  with several running, the one with pid N
+  --apply FILE       run FILE's control-channel requests against the map and save it
+  --new WxH          with --apply, the size of a new, empty map when the file is not there
 
   map tools (print a report and exit; see Map tools below):
   --dump-map         the whole map as text, with a legend
@@ -1173,6 +1178,7 @@ with no verdict, ruleset or not.
 | `:serve [PORT] [--stay-alive] [--no-pings]` | the [remote view](#remote-view-serve-mirror); `:serve off` closes it |
 | `:player preview` | see the players' frame on your own screen; `q` returns |
 | `:mirror` | a second terminal window mirroring play mode |
+| `:area NAME` | name the `v` box, or jump to the area of that name; `:areas` lists them, `:area NAME off` takes one off. Named areas are what `--describe` and an agent call places by |
 | `:stamp NAME` | pick up a saved [stamp](#build-mode); `-f` puts it down at once, `:stamp save NAME` keeps the one in hand, `:stamp` lists them |
 | `:agent on` | let an agent read and edit this map through the [control channel](#control-channel-agent-vtt---ctl); `:agent off` closes it, `:agent` asks |
 | `:roll 2d6+3` | roll dice — see [Dice](#dice-roll) |
@@ -1239,7 +1245,8 @@ a `roll` line a [named roll](#dice-roll). `tokennote` hangs a note on the token 
 and `fogpatch` lines name the [fog](#fog-of-war-fog) patches whose ground the `fog` section's rows
 hold, one character a square: `.` for none, `A`-`O` for patch 1-15 unseen, `a`-`o` for seen,
 and `1`-`9` then `!"#$%&` for lit by hand,
-and `note x y` puts one on a square.
+and `note x y` puts one on a square. `area X0 Y0 X1 Y1 "Name"` names a box of squares
+(`:area`), drawing nothing.
 
 | terrain | char | | boundary | char |
 |---------|------|-|----------|------|
@@ -1285,7 +1292,7 @@ silently drop them, losing combat state from a saved fight, so it refuses too. V
 added the turn order, for the same reason — but only a map with a fight in it says 4. One
 without is still written as version 3, which says everything it needs to and stays
 loadable by the builds that came before. Version 5 added clocks, named rolls and notes, and
-version 6 counters and fog, on the same terms: the writer always picks the lowest version that
+version 6 counters and fog, version 7 named areas, on the same terms: the writer always picks the lowest version that
 says everything in the map. Each version
 still loads everything older, and an unrecognised character reads as empty rather than
 failing the load.
@@ -1419,7 +1426,12 @@ changed J2:O6: 4 lines, one undo step
 A request is lines; `#` lines and blank ones are skipped; `"..."` is one word. Squares
 are named as the app names them (`C3`), a region is `B2:K12`, and a boundary is named by
 the squares either side: `G5|H5` across a vertical one, `C3/C4` across a horizontal one,
-`-` for off the map (`-|A1`).
+`-` for off the map (`-|A1`). A named area (`Crypt`) goes wherever a region does, and
+wherever a creature's square does, where it means the free square nearest its middle.
+
+`vtt map.vtt --apply plan.txt [--new 40x30]` runs the same language against a map file
+with no terminal -- a new, empty map with `--new` -- and saves it, all or nothing: it is
+how an agent builds a map from a description without a live session.
 
 | request | what it does |
 |---|---|
@@ -1437,6 +1449,11 @@ the squares either side: `G5|H5` across a vertical one, `C3/C4` across a horizon
 | `fog paint REGION N` | into fog patch N (0 scrubs); `:fog` makes patches |
 | `stamp NAME SQUARE [rotate 90\|180\|270] [mirror]` | a saved [stamp](#build-mode), its top-left square here, turned and mirrored in that order; see-through and all or nothing as the GM's `p` |
 | `stamps` | the saved stamps and their sizes (a read) |
+| `room NAME SQUARE WxH`, `room NAME REGION` | a named room: floor, walls round it, and the name on its box |
+| `room NAME WxH east\|west\|north\|south of OTHER [gap N] [top\|middle\|bottom\|left\|right]` | placed beside another room, `gap` squares away (0: a shared wall), lined up on its middle unless told |
+| `area NAME REGION`, `area NAME off` | a name on a box, nothing drawn; or the name taken off |
+| `door ROOM SIDE [N\|middle] [KIND]` | a door on a room's north, south, east or west side, the Nth square along it |
+| `corridor ROOM ROOM [width 1-3] [KIND]` | dug through void between two rooms: straight, or one bend; walled along; doors at the ends when one wide, open when wider. Refused through ground or another named room |
 | `undo` | takes back the agent's last request, while nothing has happened since; alone in its request |
 
 **Every request is one undo step, all or nothing.** `u` takes back everything a request
