@@ -18,6 +18,7 @@ static const KeyDoc PLAY[] = {
     KEY("arrows", "the same"),
     KEY("3j",     "any motion takes a count"),
     KEY(":d6",    "jump to a square by its label"),
+    KEY(":area Crypt", "jump to a named area   :areas lists them"),
     KEY("#",      "column letters and row numbers, on or off"),
     KEY("z",      "centre the view on the cursor"),
     KEY("+ -",    "zoom in and out"),

@@ -246,6 +246,12 @@ down on another. Saved stamps are ordinary map files, one a stamp, in
 to edit, and the [map tools](#map-tools---dump-map---check---describe) read them. A name is
 letters, digits, `-` and `_`.
 
+**Named areas.** `:area Crypt` names the `v` box `Crypt` -- a name on a box, drawing
+nothing -- and later jumps there, from build or play mode; `:areas` lists them and
+`:area Crypt off` takes one off, all through `u`. Names are what `--describe` calls rooms by
+and what an agent places things by (`token add enemy Crypt "Ghoul"`). The messages are the
+GM's alone: a name like "the secret vault" is a place the players have not found.
+
 **Jumping.** `:c6` puts the cursor on `C6` and centres the view there — a jump is for going
 somewhere else, and arriving pinned against an edge shows half of where you went. `:12` moves
 to row 12 and keeps the column, the way vim's `:12` keeps yours.
@@ -1449,7 +1455,7 @@ how an agent builds a map from a description without a live session.
 | `token add player\|enemy SQUARE [size N] "Label"` | a creature, 1-3 squares wide, on ground, on nobody, its label unused |
 | `token move WHO SQUARE`, `token del WHO` | WHO is a label (any case, if only one matches), or a square it stands on |
 | `token set WHO label "..."` / `size N` / `note "..."` | change one thing about a creature |
-| `note SQUARE "text"`, `note SQUARE` | a GM-only note on a square, or take it off |
+| `note SQUARE "text"`, `note SQUARE` | a GM-only note on a square (or a room's middle square), or take it off |
 | `fog paint REGION N` | into fog patch N (0 scrubs); `:fog` makes patches |
 | `stamp NAME SQUARE [rotate 90\|180\|270] [mirror]` | a saved [stamp](#build-mode), its top-left square here, turned and mirrored in that order; see-through and all or nothing as the GM's `p` |
 | `stamps` | the saved stamps and their sizes (a read) |
@@ -1457,7 +1463,7 @@ how an agent builds a map from a description without a live session.
 | `room NAME WxH east\|west\|north\|south of OTHER [gap N] [top\|middle\|bottom\|left\|right]` | placed beside another room, `gap` squares away (0: a shared wall), lined up on its middle unless told |
 | `area NAME REGION`, `area NAME off` | a name on a box, nothing drawn; or the name taken off |
 | `door ROOM SIDE [N\|middle] [KIND]` | a door on a room's north, south, east or west side, the Nth square along it |
-| `corridor ROOM ROOM [width 1-3] [KIND]` | dug through void between two rooms: straight, or one bend; walled along; doors at the ends when one wide, open when wider. Refused through ground or another named room |
+| `corridor ROOM ROOM [width 1-3] [KIND]` | dug through void between two rooms: straight when they share at least `width` rows or columns (refused when fewer), one bend when they are apart both ways (each side it touches at least `width` long); walled along, keeping any door or window already on a boundary it passes; doors at the ends when one wide, open when wider. Refused through ground or a named room that does not hold both |
 | `undo` | takes back the agent's last request, while nothing has happened since; alone in its request |
 
 **Every request is one undo step, all or nothing.** `u` takes back everything a request
