@@ -1113,6 +1113,7 @@ has measurements for every path; `make perf` regenerates them.
 | [docs/FLOORS.md](docs/FLOORS.md) | floors: the view, the players' floor, and room for stacked layers |
 | [docs/FOG.md](docs/FOG.md) | fog of war and sight |
 | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | performance measurements |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | features decided on, in the order they will be built |
 | [docs/IDEAS.md](docs/IDEAS.md) | features considered and not built |
 
 ## License
