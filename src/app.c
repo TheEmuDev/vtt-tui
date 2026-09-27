@@ -1965,6 +1965,7 @@ static void app_key_dispatch(App *a, Key k)
          * would arrive as a multiplier nobody asked for. */
         a->pending  = 0;
         a->ed.count = 0;
+        a->ed.link_on = 0;                   /* a half-made link is build mode's */
         app_set_status(a, to_play ? "play mode - i places, enter grabs, ? for keys"
                                   : "build mode - ? for keys");
         return;

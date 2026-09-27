@@ -13812,17 +13812,72 @@ static void test_links(void)
               "link 5 stairs 1 1 0 3 0 sideways\n", f);  /* not a word it knows */
         fclose(f);
         back = mapio_load(path, err, sizeof err);
-        CHECK(back && back->nlinks == 1 && back->links[0].num == 1);
-        map_free(back);
+        CHECK(back && back->nlinks == 2 && back->links[0].num == 1 && back->links[1].num == 3);
+        map_free(back);                                   /* link 3 over void stays; check says so */
         char *out = NULL;
         size_t n = 0;
         FILE *o = open_memstream(&out, &n);
         CHECK_EQ(maptools_check(o, path, 0), 1);
         fclose(o);
         CHECK(out && strstr(out, "W023") && strstr(out, "link 2 dropped: another link is already there") &&
-              strstr(out, "link 3 dropped: an end is on void"));
+              strstr(out, "W150") && strstr(out, "ladder 3 has an end on void"));
         free(out);
         sandbox_leave(&sb);
+    }
+
+    CASE("ground gone from under an end: the link stays through a save, and --check says W150");
+    {
+        Sandbox sb = sandbox_enter("linkvoid");
+        Map *v = map_new(6, 1, "v");
+        map_fill_tiles(v, 0, 0, 5, 0, TILE_FLOOR);
+        Link st = mklink(1, LINK_STAIRS, 1, 0, 0, 5, 0);
+        link_put(v, &st);
+        map_set_tile(v, 5, 0, TILE_VOID);
+        char path[600];
+        snprintf(path, sizeof path, "%s/v.vtt", sb.dir);
+        CHECK_EQ(mapio_write(v, path, err, sizeof err), 0);
+        Map *back = mapio_load(path, err, sizeof err);
+        CHECK(back && back->nlinks == 1);
+        map_free(back);
+        char *out = NULL;
+        size_t n = 0;
+        FILE *o = open_memstream(&out, &n);
+        CHECK_EQ(maptools_check(o, path, 0), 1);
+        fclose(o);
+        CHECK(out && strstr(out, "W150") && strstr(out, "stairs 1 has an end on void"));
+        free(out);
+        map_free(v);
+        sandbox_leave(&sb);
+    }
+
+    CASE("the fixture: one-way and secret survive a load and a save");
+    {
+        Map *fx = mapio_load("tests/fixtures/links.vtt", err, sizeof err);
+        CHECK(fx && fx->nlinks == 2);
+        if (fx) {
+            int i1 = link_find(fx, 1), i2 = link_find(fx, 2);
+            CHECK(i1 >= 0 && fx->links[i1].secret && fx->links[i1].kind == LINK_LADDER);
+            CHECK(i2 >= 0 && fx->links[i2].oneway && fx->links[i2].size == 2);
+            map_free(fx);
+        }
+    }
+
+    CASE("the players' status line does not name a far end fog hides");
+    {
+        Map *fm = map_new(12, 2, "f");
+        map_fill_tiles(fm, 0, 0, 11, 1, TILE_FLOOR);
+        Link st = mklink(1, LINK_STAIRS, 1, 0, 0, 10, 0);
+        link_put(fm, &st);
+        str_lcpy(fm->fog_patches[0].name, "Up", sizeof fm->fog_patches[0].name);
+        fm->fog_patches[0].reveal = FOG_REVEAL_MANUAL;
+        fm->fog_on = 1;
+        for (int x = 8; x < 12; x++) map_fog_set(fm, x, 0, 1);
+        char st_line[64];
+        link_status(fm, 0, 0, 0, st_line, sizeof st_line);
+        CHECK(strstr(st_line, "stairs 1") && !strstr(st_line, "K1"));
+        link_status(fm, 0, 0, 1, st_line, sizeof st_line);
+        CHECK(strstr(st_line, "stairs 1 to K1") != NULL);
+        map_free(fm);
     }
 
     CASE("resizing drops a link with an end cut off");
@@ -14139,6 +14194,14 @@ static void test_link_keys(void)
         ans = ctl_ask(&a, "link 3 off\n");
         CHECK(ans && !strncmp(ans, "ok", 2) && link_find(m, 3) < 0);
         free(ans);
+        ans = ctl_ask(&a, "area Low H1:L4\nlink Low Low trapdoor\n");  /* both ends in one room */
+        CHECK(ans && !strncmp(ans, "ok", 2));
+        free(ans);
+        int li = link_find(m, 3);
+        CHECK(li >= 0 && m->links[li].kind == LINK_TRAPDOOR &&
+              (m->links[li].x[0] != m->links[li].x[1] || m->links[li].y[0] != m->links[li].y[1]));
+        ans = ctl_ask(&a, "link 3 off\n");
+        free(ans);
     }
     app_key(&a, f2);
 
@@ -14154,6 +14217,41 @@ static void test_link_keys(void)
     CHECK(strstr(line, "stairs") == NULL);
     play_status(&a.play, m, &a.ed, 1, line, sizeof line);
     CHECK(strstr(line, "secret stairs 1 to I2") != NULL);
+    CHECK_EQ(app_view_differs(&a), 1);                    /* so the GM's line is not copied out */
+    a.ed.cx = 6; a.ed.cy = 3;
+    a.status[0] = 0;
+    a.agent_ring.until_ms = 0;                            /* the channel's ring, from above */
+    CHECK_EQ(app_view_differs(&a), 0);
+
+    CASE("g o is the cursor's: a creature selected elsewhere stays put");
+    a.ed.cx = 3; a.ed.cy = 3;
+    press(&a, "ipDain\r");
+    int dain = m->tokens.n - 1;
+    a.ed.cx = 1; a.ed.cy = 1;                             /* move Dain onto the (secret) stairs */
+    m->tokens.v[dain].x = 1; m->tokens.v[dain].y = 1;
+    play_focus(&a.play, dain);
+    a.ed.cx = 3; a.ed.cy = 0;
+    press(&a, "go");
+    CHECK(m->tokens.v[dain].x == 1 && a.ed.cx == 3 && a.ed.cy == 0);
+    CHECK(strstr(a.status, "no link here") != NULL);
+
+    CASE("a half-made link does not survive a trip to play mode and back");
+    app_key(&a, f1);
+    a.ed.cx = 0; a.ed.cy = 3;
+    press(&a, "gl");
+    CHECK_EQ(a.ed.link_on, 1);
+    app_key(&a, f2);
+    app_key(&a, f1);
+    CHECK_EQ(a.ed.link_on, 0);
+
+    CASE(":links says how many it could not fit");
+    for (int k = 0, num = 10; k < 20; k++) {                /* every free left square to the right */
+        Link x = mklink(num, LINK_LADDER, 1, k % 5, k / 5, 7 + k % 5, k / 5);
+        if (!link_problem(m, &x)) { link_put(m, &x); num++; }
+    }
+    CHECK(m->nlinks >= 8);
+    press(&a, ":links\r");
+    CHECK(strstr(a.status, "more") != NULL && strlen(a.status) < sizeof a.status - 1);
 
     app_free(&a);
     rnd_free(&r);

@@ -119,7 +119,24 @@ int link_free_num(const Map *m)
     return 0;
 }
 
+int link_void_square(const Map *m, const Link *l, int *vx, int *vy)
+{
+    for (int e = 0; e < 2; e++)
+        for (int y = l->y[e]; y < l->y[e] + l->size; y++)
+            for (int x = l->x[e]; x < l->x[e] + l->size; x++)
+                if (map_tile(m, x, y) == TILE_VOID) { *vx = x; *vy = y; return 1; }
+    return 0;
+}
+
 const char *link_problem(const Map *m, const Link *l)
+{
+    const char *why = link_misplaced(m, l);
+    if (why) return why;
+    int vx, vy;
+    return link_void_square(m, l, &vx, &vy) ? "an end is on void" : NULL;
+}
+
+const char *link_misplaced(const Map *m, const Link *l)
 {
     if (l->size < 1 || l->size > LINK_SIZE_MAX) return "a link's ends are 1, 2 or 3 squares across";
     if (l->kind >= LINK_KIND_COUNT)             return "not a kind of link";
@@ -128,9 +145,6 @@ const char *link_problem(const Map *m, const Link *l)
     for (int e = 0; e < 2; e++) {
         if (l->x[e] < 0 || l->y[e] < 0 || l->x[e] + s > m->w || l->y[e] + s > m->h)
             return "an end is off the map";
-        for (int y = l->y[e]; y < l->y[e] + s; y++)
-            for (int x = l->x[e]; x < l->x[e] + s; x++)
-                if (map_tile(m, x, y) == TILE_VOID) return "an end is on void";
     }
     if (blocks_meet(l->x[0], l->y[0], s, s, l->x[1], l->y[1], s, s))
         return "the two ends overlap";

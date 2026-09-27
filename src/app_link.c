@@ -129,21 +129,29 @@ void app_link_go(App *a, int li, int end, int enforce, int *moved_dx, int *moved
 static void list_links(App *a)
 {
     Map *m = a->map;
-    char msg[512];
+    char msg[sizeof a->status];
     if (!m->nlinks) {
         app_set_status_gm(a, "no links - in build mode, g l on one end and g l on the other makes one");
         return;
     }
+    /* As many as the status line holds, whole, and how many more: :link N
+     * jumps to any of them. */
     int off = snprintf(msg, sizeof msg, "%d link%s:", m->nlinks, m->nlinks == 1 ? "" : "s");
-    for (int i = 0; i < m->nlinks && off < (int)sizeof msg - 48; i++) {
+    int i = 0;
+    for (; i < m->nlinks; i++) {
         const Link *l = &m->links[i];
-        char name[32], e0[2 * MAP_COORD_MAX + 2], e1[2 * MAP_COORD_MAX + 2];
+        char name[32], e0[2 * MAP_COORD_MAX + 2], e1[2 * MAP_COORD_MAX + 2], one[96];
         link_name(l, name, sizeof name);
         link_end_name(l, 0, e0, sizeof e0);
         link_end_name(l, 1, e1, sizeof e1);
-        off += snprintf(msg + off, sizeof msg - (size_t)off, "%s %s %s%s%s%s", i ? "," : "", name, e0,
-                        l->oneway ? ">" : "-", e1, l->secret ? " secret" : "");
+        int n = snprintf(one, sizeof one, "%s %s %s%s%s%s", i ? "," : "", name, e0,
+                         l->oneway ? ">" : "-", e1, l->secret ? " secret" : "");
+        if (off + n + 24 >= (int)sizeof msg && i + 1 < m->nlinks) break;
+        if (off + n >= (int)sizeof msg) break;
+        memcpy(msg + off, one, (size_t)n + 1);
+        off += n;
     }
+    if (i < m->nlinks) snprintf(msg + off, sizeof msg - (size_t)off, " ... %d more", m->nlinks - i);
     app_set_status_gm(a, msg);
 }
 

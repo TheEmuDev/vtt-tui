@@ -407,7 +407,8 @@ each floor or location on the same map, separated by void, and join them with li
 end and press `g l` again. `esc` cancels after the first press. Each end is the size of the
 brush: set `b` to 2 or 3 first for a 2×2 or 3×3 link, such as a wide portal a whole party can
 step onto. Both ends must be on map squares, must not overlap each other, and cannot share a
-square with another link. A map holds up to 64 links.
+square with another link. A map holds up to 64 links. If you later clear ground under an end,
+the link stays, trips onto it are refused, and `--check` reports it.
 
 Each link has a kind, which sets the symbol drawn on its ends: `≡` stairs, `‡` ladder, `□`
 trapdoor, `◎` portal. New links are stairs; `:link portal` changes the kind the next `g l`
@@ -866,7 +867,7 @@ W120 unreachable-room  room K2   18 squares, no door leads to it from room B2
 | `W019 stray-row` | rows outside any section |
 | `W020 clamped` | a setting out of range, replaced by the nearest valid value |
 | `W022 edge-row-short` | a `vedges` row missing its east boundary |
-| `W023 link-dropped` | a link with an end off the map or on void, its ends overlapping, or on another link's squares |
+| `W023 link-dropped` | a link with an end off the map, its ends overlapping, or on another link's squares |
 | `W102 door-to-void` | a door or window leading into void |
 | `W103 wall-in-void` | a wall with no map on either side |
 | `W104 door-loose` | a door or window with no wall at either end |
@@ -875,6 +876,7 @@ W120 unreachable-room  room K2   18 squares, no door leads to it from room B2
 | `W121 party-split` | a player creature in such a room |
 | `W130 fog-patch-empty` | a fog patch with no squares |
 | `W140 note-on-void` | a note on a square that is not map |
+| `W150 link-on-void` | a link with an end on a square that is not map (nobody can be sent there) |
 | `N021 row-short` | rows shorter than their section, read as trailing blanks |
 | `N105 door-off-map` | a door or window on the edge of the map |
 | `N131 fog-patch-disabled` | a disabled fog patch |

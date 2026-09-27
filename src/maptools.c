@@ -960,6 +960,15 @@ static void check_map(const Map *m, Findings *fs)
         snprintf(msg, sizeof msg, "a note on void: %.60s", n->text);
         map_finding(fs, "W140", "note-on-void", n->x, n->y, 0, where, msg);
     }
+    for (int i = 0; i < m->nlinks; i++) {
+        int vx, vy;
+        if (!link_void_square(m, &m->links[i], &vx, &vy)) continue;
+        char name[32];
+        link_name(&m->links[i], name, sizeof name);
+        map_coord_name(vx, vy, where, sizeof where);
+        snprintf(msg, sizeof msg, "%s has an end on void: nobody can land there", name);
+        map_finding(fs, "W150", "link-on-void", vx, vy, 0, where, msg);
+    }
 }
 
 /* Sorts and prints the findings, `file` naming what was checked (NULL for

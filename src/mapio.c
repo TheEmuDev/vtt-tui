@@ -518,7 +518,7 @@ static int parse_area_line(Map *m, const char *line)
 
 /* "link N KIND SIZE X0 Y0 X1 Y1 [oneway] [secret]": refused for a word it
  * does not know or a number already used. Where the ends are is checked
- * once the whole file is in (link_problem wants the tiles), see the end of
+ * once the whole file is in (link_misplaced wants the size), see the end of
  * mapio_load_diag. */
 static int parse_link_line(Map *m, const char *line)
 {
@@ -840,11 +840,12 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
             else map_fog_set(m, x, y, fb);
         }
 
-    /* Links are checked against the ground now that all of it is in. One
-     * that cannot stand -- an end on void or off the map, two links on one
-     * square -- goes, the later-numbered of a clashing pair first. */
+    /* Links are checked now that the size is certain. One that cannot stand
+     * -- an end off the map, its ends overlapping, two links on one square --
+     * goes, the later-numbered of a clashing pair first. One over void stays:
+     * --check reports it (W150), and a trip onto void is refused anyway. */
     for (int i = m->nlinks - 1; i >= 0; i--) {
-        const char *why = link_problem(m, &m->links[i]);
+        const char *why = link_misplaced(m, &m->links[i]);
         if (!why) continue;
         diag(ld, link_line[m->links[i].num], -1, "W023", "link-dropped", "link %d dropped: %s",
              m->links[i].num, why);

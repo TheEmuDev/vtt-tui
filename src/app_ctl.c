@@ -616,8 +616,10 @@ static int spot(const Map *m, const char *w, int size, int skip, int *x, int *y,
 }
 
 /* Where a link's end goes: its top-left square, or a named area, where the
- * block takes the ground nearest the area's middle that no link has. */
-static int link_spot(const Map *m, const char *w, int size, int *x, int *y, char *err, size_t errsz)
+ * block takes the ground nearest the area's middle that no link has -- nor
+ * the link's other end, when `ox` is not -1 (the block of that size there). */
+static int link_spot(const Map *m, const char *w, int size, int ox, int oy, int *x, int *y,
+                     char *err, size_t errsz)
 {
     int ai = map_area_find(m, w);
     if (ai < 0) return square(m, w, x, y, err, errsz);
@@ -631,6 +633,7 @@ static int link_spot(const Map *m, const char *w, int size, int *x, int *y, char
             for (int k = 0; k < size * size && ground; k++)
                 ground = map_tile(m, xx + k % size, yy + k / size) != TILE_VOID;
             if (!ground || link_meets(m, xx, yy, size, size, NULL) >= 0) continue;
+            if (ox >= 0 && xx < ox + size && ox < xx + size && yy < oy + size && oy < yy + size) continue;
             best = d; *x = xx; *y = yy;
         }
     if (best < 0) snprintf(err, errsz, "no room in %.30s for a %dx%d link end", ar->name, size, size);
@@ -1170,8 +1173,8 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
                 l.size = (uint8_t)sz;
             }
             int ax, ay, bx, by;
-            if (!link_spot(m, w[1], l.size, &ax, &ay, err, errsz)) return -1;
-            if (!link_spot(m, w[2], l.size, &bx, &by, err, errsz)) return -1;
+            if (!link_spot(m, w[1], l.size, -1, -1, &ax, &ay, err, errsz)) return -1;
+            if (!link_spot(m, w[2], l.size, ax, ay, &bx, &by, err, errsz)) return -1;
             l.x[0] = (int16_t)ax; l.y[0] = (int16_t)ay; l.x[1] = (int16_t)bx; l.y[1] = (int16_t)by;
             first = 3;
         }

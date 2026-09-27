@@ -31,6 +31,13 @@ int  link_free_num(const Map *m);
  * The link that already holds l->num is not in its own way, so a change
  * can be checked before it is made. */
 const char *link_problem(const Map *m, const Link *l);
+/* The same without the ground: what the loader holds a link to. Ground can
+ * go from under an end after the link is made (x, tile void), and a link
+ * dropped on the next load for that would be lost without a word -- so it
+ * stays, and --check says so (W150). */
+const char *link_misplaced(const Map *m, const Link *l);
+/* 1 with the first void square under either end. */
+int link_void_square(const Map *m, const Link *l, int *vx, int *vy);
 
 /* Adds the link, or replaces the one with its number. Checks nothing but
  * room: -1 when the map is full. Returns the index. Touches the map. */

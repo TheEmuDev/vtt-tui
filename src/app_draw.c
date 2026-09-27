@@ -11,6 +11,7 @@
 #include "counter.h"
 #include "draw.h"
 #include "fog.h"
+#include "link.h"
 #include "prof.h"
 #include "stamp.h"
 
@@ -402,6 +403,9 @@ int app_view_differs(const App *a)
         int cur = turn_acting(m);                 /* the panel shows the actor's */
         if (cur >= 0 && m->tokens.v[cur].ncounters) return 1;
         if (map_note_at(m, a->ed.cx, a->ed.cy)) return 1;
+        /* The GM's status line names a secret link under the cursor. */
+        int li = link_at(m, a->ed.cx, a->ed.cy, NULL);
+        if (li >= 0 && m->links[li].secret) return 1;
     }
     return 0;
 }

@@ -409,8 +409,9 @@ static void turn_hand_over(App *a)
 }
 
 /* g o: whoever stands on the link end under the cursor -- or on the one
- * the creature under it touches -- goes through. Something in hand is put
- * down first, where it stands; the trip is its own step for u. */
+ * the creature under the cursor touches -- goes through. The cursor, not
+ * the selection: a creature selected across the map is not "here". Something
+ * in hand is put down first, where it stands; the trip is its own step for u. */
 static void link_here(App *a)
 {
     Play   *pl = &a->play;
@@ -422,7 +423,7 @@ static void link_here(App *a)
 
     int end, li = link_at(m, e->cx, e->cy, &end);
     if (li < 0) {
-        int t = play_target_token(a);
+        int t = app_token_under_cursor(a);
         if (t >= 0) {
             const Token *tk = &m->tokens.v[t];
             li = link_meets(m, tk->x, tk->y, tk->size, tk->size, &end);
