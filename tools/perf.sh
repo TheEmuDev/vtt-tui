@@ -316,7 +316,7 @@ run "play, 64 links"       "$LINKS"  80x24  ':play\rjjllkkhh'
 run "play, link there+back" "$LINKS" 80x24  ':play\r:a1\rgogo'
 run "build, one floor"     "$FLOORS" 80x24  ':floor Ground\rjjllkkhh'
 run "play, floors split, 4 watchers" "$FLOORS" 80x24 ':play\r:floor Upper\rjjllkkhh' "--bench-clients 4"
-run "play, floor steps"    "$FLOORS" 80x24  ':play\r][][
+run "play, floor steps"    "$FLOORS" 80x24  ':play\r][]['
 run "play, counters"       "$MOB"    80x24  ':play\rtsvhp 9\r><><><><'
 run "play, clocks"         "$MOB"    80x24  ':play\r:clock Dragon 6\r:clock Ritual 8\r:tick Dragon 2\r:tick -2\r'
 run "play, 1 watcher"      "$MOB"    80x24  ':play\rjjllkkhh' "--bench-clients 1"
