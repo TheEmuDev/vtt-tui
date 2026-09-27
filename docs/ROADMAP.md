@@ -5,7 +5,15 @@ any code, and moves to the README when it ships. Ideas not yet decided live in I
 
 1. **Hidden creatures.** A flag on one creature -- an ambusher, something invisible, a
    mimic -- that keeps it off the players' screens even on lit ground, drawn dimmed on the
-   GM's. Fog hides squares; this hides a creature.
+   GM's. Fog hides squares; this hides a creature. While any creature is hidden, the
+   players' screens show no status messages, as over fog.
+   - **Later, if play testing asks for it: messages marked at the source.** Blocking every
+     message is safe but costly when something stays hidden all session (no rolls, rounds
+     or spotlight news on the phones). The fix: messages that name no creature stay
+     public; those that do go through one helper that keeps them to the GM when a creature
+     they name is hidden; counts count only what the players can see; and a sweep test
+     runs every play key and command with a creature hidden and checks its name never
+     reaches the players' frame.
 2. **Creature templates.** A creature saved once -- label, size, counters, note, named
    rolls -- and placed by name (`i e Ghoul`, the channel's `token add enemy Crypt Ghoul`).
    Stamps for creatures: fight prep without the typing.
