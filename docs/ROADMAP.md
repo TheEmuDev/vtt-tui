@@ -27,7 +27,5 @@ any code, and moves to the README when it ships. Ideas not yet decided live in I
    over (the town to the dungeon): links and floors across a campaign. The largest: it
    touches opening maps, the autosave and the players' connection.
 
-**Housekeeping due alongside** (CLAUDE.md's watch list): the `:` command chain is at 43
-`strcmp`s against a threshold of about 50 -- make it a table when a feature takes it
-over; `tests/run.c` is at 15.6k lines -- split it by area when working in it means
-scrolling through unrelated suites.
+**Housekeeping due alongside** (CLAUDE.md's watch list): `tests/run.c` is at 15.6k lines --
+split it by area. (The `:` command chain became a table, 2026-09-27.)

@@ -650,6 +650,360 @@ static void area_command(App *a, const char *verb, const char *rest)
     app_set_status_gm(a, msg);
 }
 
+/* ------------------------------------------------------ the command table */
+
+static void cmd_w(App *a, const char *verb, const char *rest)
+{
+    Map *m = a->map;
+    char path[MAP_PATH_MAX];
+    if (rest[0]) mapio_resolve_path(rest, path, sizeof path);
+    else if (m->path[0]) str_lcpy(path, m->path, sizeof path);
+    else mapio_resolve_path(m->name, path, sizeof path);
+    app_save_map(a, path);
+}
+
+static void cmd_wq(App *a, const char *verb, const char *rest)
+{
+    Map *m = a->map;
+    char path[MAP_PATH_MAX];
+    if (m->path[0]) str_lcpy(path, m->path, sizeof path);
+    else mapio_resolve_path(m->name, path, sizeof path);
+    if (app_save_map(a, path) == 0) app_close_map(a);
+}
+
+static void cmd_q(App *a, const char *verb, const char *rest)
+{
+    app_leave_map(a);
+}
+
+static void cmd_q_bang(App *a, const char *verb, const char *rest)
+{
+    app_set_status(a, "closed without saving");
+    app_close_map(a);
+}
+
+static void cmd_e(App *a, const char *verb, const char *rest)
+{
+    if (!rest[0]) { app_set_status(a, ":e needs a file name"); return; }
+    char path[MAP_PATH_MAX];
+    mapio_resolve_path(rest, path, sizeof path);
+    app_leave_map_for(a, path);
+}
+
+static void cmd_play(App *a, const char *verb, const char *rest)
+{
+    a->screen = SCREEN_PLAY;   app_set_status(a, "play mode");
+}
+
+static void cmd_build(App *a, const char *verb, const char *rest)
+{
+    a->screen = SCREEN_EDITOR; app_set_status(a, "build mode");
+}
+
+static void cmd_name(App *a, const char *verb, const char *rest)
+{
+    Map *m = a->map;
+    if (!rest[0]) { app_set_status(a, ":name needs a value"); return; }
+    str_lcpy(m->name, rest, sizeof m->name);
+    map_touch(m);
+    app_set_status(a, "renamed");
+}
+
+static void cmd_resize(App *a, const char *verb, const char *rest)
+{
+    Map *m = a->map;
+    int w = 0, h = 0;
+    if (sscanf(rest, "%dx%d", &w, &h) != 2 && sscanf(rest, "%d %d", &w, &h) != 2) {
+        app_set_status(a, ":resize wants a width and a height");
+        return;
+    }
+    if (map_resize(m, w, h) != 0) {
+        app_set_status(a, "resize refused: out of range");
+        return;
+    }
+    /* The history describes cells that may no longer exist. */
+    undo_clear(&a->undo);
+    a->ed.cx = iclamp(a->ed.cx, 0, m->w - 1);
+    a->ed.cy = iclamp(a->ed.cy, 0, m->h - 1);
+    ed_layout(&a->ed, m, a->rnd->w, a->rnd->h);
+
+    char msg[96];
+    snprintf(msg, sizeof msg, "resized to %dx%d (undo history cleared)", w, h);
+    app_set_status(a, msg);
+}
+
+static void cmd_scale(App *a, const char *verb, const char *rest)
+{
+    Map *m = a->map;
+    double v = atof(rest);
+    if (!(v > 0.0 && v < 100000.0)) {
+        app_set_status(a, ":scale wants feet per tile, e.g. :scale 5");
+        return;
+    }
+    m->scale_ft = v;
+    map_touch(m);
+    char msg[64];
+    snprintf(msg, sizeof msg, "one tile is %g ft", v);
+    app_set_status(a, msg);
+}
+
+static void cmd_metric(App *a, const char *verb, const char *rest)
+{
+    Map *m = a->map;
+    int got = rest[0] ? dist_metric_from_name(rest) : -1;
+    if (got < 0) {
+        app_set_status(a, ":metric wants chebyshev, euclidean, alt or manhattan");
+        return;
+    }
+    m->metric = got;
+    map_touch(m);
+    char msg[64];
+    snprintf(msg, sizeof msg, "metric: %s", dist_metric_name((DistMetric)got));
+    app_set_status(a, msg);
+}
+
+static void cmd_ruleset(App *a, const char *verb, const char *rest)
+{
+    Map *m = a->map;
+    const Ruleset *rs = rest[0] ? ruleset_by_name(rest) : ruleset_by_name(m->ruleset);
+    if (!rs) {
+        char msg[128];
+        int  off = snprintf(msg, sizeof msg, "unknown ruleset. try: ");
+        for (int i = 0; ruleset_at(i) && off < (int)sizeof msg - 2; i++)
+            off += snprintf(msg + off, sizeof msg - (size_t)off, "%s%s",
+                            i ? ", " : "", ruleset_at(i)->name);
+        app_set_status(a, msg);
+        return;
+    }
+    str_lcpy(m->ruleset, strcmp(rs->name, "none") ? rs->name : "", sizeof m->ruleset);
+    map_touch(m);
+    /* The overlay's reach is read against the ruleset, so a band index
+     * or a radius from the old one would mean something else now. */
+    range_off(&a->play.range);
+    char msg[128];
+    snprintf(msg, sizeof msg, "ruleset: %s%s", rs->name,
+             rs->verified ? "" : " (range bands unverified)");
+    app_note(a, msg);
+}
+
+static void cmd_roll(App *a, const char *verb, const char *rest)
+{
+    roll_command(a, rest);
+}
+
+static void cmd_rolls(App *a, const char *verb, const char *rest)
+{
+    rolls_list(a);
+}
+
+static void cmd_turns(App *a, const char *verb, const char *rest)
+{
+    Map *m = a->map;
+    /* Bare, it reads the order out; "off" ends the fight. */
+    char msg[160];
+    if (!*rest) {
+        turn_list(m, msg, sizeof msg);
+        app_set_status(a, msg);
+        return;
+    }
+    if (strcmp(rest, "off") != 0) { app_set_status(a, ":turns lists the order, :turns off ends the fight"); return; }
+    if (turn_count(m) == 0 && turn_acting(m) < 0) { app_set_status(a, "there is no fight to end"); return; }
+    int had = turn_clear(m, &a->undo);
+    snprintf(msg, sizeof msg, "the fight is over - %d left the turn order", had);
+    app_note(a, msg);
+}
+
+static void cmd_notes(App *a, const char *verb, const char *rest)
+{
+    Map *m = a->map;
+    /* Where the notes are, not what they say: this line is mirrored. */
+    char msg[200];
+    int  off = 0, n = 0;
+    for (int i = 0; i < m->tokens.n && off < (int)sizeof msg - 28; i++) {
+        const Token *t = &m->tokens.v[i];
+        if (!t->note[0]) continue;
+        off += snprintf(msg + off, sizeof msg - (size_t)off, "%s%.16s", n++ ? ", " : "notes on ",
+                        token_name(t));
+    }
+    for (int i = 0; i < m->nnotes && off < (int)sizeof msg - 28; i++) {
+        char at[MAP_COORD_MAX];
+        map_coord_name(m->notes[i].x, m->notes[i].y, at, sizeof at);
+        off += snprintf(msg + off, sizeof msg - (size_t)off, "%s%s", n++ ? ", " : "notes on ", at);
+    }
+    int total = m->nnotes;
+    for (int i = 0; i < m->tokens.n; i++) total += m->tokens.v[i].note[0] != '\0';
+    if (n < total && off < (int)sizeof msg - 8) snprintf(msg + off, sizeof msg - (size_t)off, ", ...");
+    app_set_status(a, n ? msg : "no notes - s n writes one on a creature or a square");
+}
+
+static void cmd_fog(App *a, const char *verb, const char *rest)
+{
+    fog_command(a, rest);
+}
+
+static void cmd_clock(App *a, const char *verb, const char *rest)
+{
+    clock_command(a, rest);
+}
+
+static void cmd_tick(App *a, const char *verb, const char *rest)
+{
+    tick_command(a, rest);
+}
+
+static void cmd_player(App *a, const char *verb, const char *rest)
+{
+    /* :player preview -- the players' view on the GM's own screen. */
+    if (!strncmp(rest, "floor ", 6)) { app_players_pin(a, rest + 6); return; }
+    if (strcmp(rest, "preview") != 0) {
+        app_set_status(a, ":player preview shows what the players see; q returns   :player floor NAME|auto");
+        return;
+    }
+    if (a->screen != SCREEN_PLAY) { app_set_status(a, "the players' view is play mode's - F2 first"); return; }
+    a->preview = !a->preview;
+    app_set_status(a, a->preview ? "previewing the players' view - q returns to yours"
+                                 : "back to the GM's view");
+}
+
+static void cmd_serve(App *a, const char *verb, const char *rest)
+{
+    serve_command(a, rest);
+}
+
+static void cmd_agent(App *a, const char *verb, const char *rest)
+{
+    app_agent_command(a, rest);
+}
+
+static void cmd_stamp(App *a, const char *verb, const char *rest)
+{
+    app_stamp_command(a, rest);
+}
+
+static void cmd_link(App *a, const char *verb, const char *rest)
+{
+    app_link_command(a, rest);
+}
+
+static void cmd_floor(App *a, const char *verb, const char *rest)
+{
+    app_floor_command(a, verb, rest);
+}
+
+static void cmd_area(App *a, const char *verb, const char *rest)
+{
+    area_command(a, verb, rest);
+}
+
+static void cmd_mirror(App *a, const char *verb, const char *rest)
+{
+    /* A second window on this machine, running the watcher against our
+     * own server, which is started if it is not. It is detached so it
+     * outlives nothing of ours but the server itself. */
+    Net *net = &a->net;
+    if (!net_active(net)) {
+        char err[128];
+        if (net_start(net, 0, a->rnd, err, sizeof err) < 0) { app_set_status(a, err); return; }
+        net_set_live(net, app_remote_live(a));
+    }
+    char msg[192];
+    if (app_spawn_mirror(a, msg, sizeof msg) < 0) { app_set_status(a, msg); return; }
+    app_note(a, msg);
+}
+
+static void cmd_panel(App *a, const char *verb, const char *rest)
+{
+    Play *pl = &a->play;
+    if (!*rest)                    pl->panel = !pl->panel;
+    else if (!strcmp(rest, "on"))  pl->panel = 1;
+    else if (!strcmp(rest, "off")) pl->panel = 0;
+    else { app_set_status(a, ":panel on, :panel off, or :panel to toggle"); return; }
+    app_set_status(a, pl->panel ? "turn panel on - it shows when there is a fight"
+                                : "turn panel off");
+}
+
+static void cmd_log(App *a, const char *verb, const char *rest)
+{
+    Map *m = a->map;
+    /* :log toggles; on/off say which; anything else is a file. */
+    SessionLog *l = &a->slog;
+    int want;
+    char path[MAP_PATH_MAX];
+    if (!*rest)                 { want = !slog_on(l); slog_default_path(m, path, sizeof path); }
+    else if (!strcmp(rest, "on"))  { want = 1; slog_default_path(m, path, sizeof path); }
+    else if (!strcmp(rest, "off")) { want = 0; path[0] = '\0'; }
+    else                        { want = 1; str_lcpy(path, rest, sizeof path); }
+
+    char msg[MAP_PATH_MAX + 32];
+    if (!want) {
+        if (!slog_on(l)) { app_set_status(a, "the log is already off"); return; }
+        snprintf(msg, sizeof msg, "log off - %s", l->path);
+        slog_close(l);
+        app_set_status(a, msg);
+        return;
+    }
+    if (slog_on(l) && !strcmp(l->path, path)) {
+        snprintf(msg, sizeof msg, "already logging to %s", path);
+        app_set_status(a, msg);
+        return;
+    }
+    char err[128];
+    if (slog_open(l, path, m->name, err, sizeof err) != 0) {
+        app_set_status(a, err);
+        return;
+    }
+    snprintf(msg, sizeof msg, "logging to %s", path);
+    app_set_status(a, msg);
+}
+
+static void cmd_zoom(App *a, const char *verb, const char *rest)
+{
+    Map *m = a->map;
+    int z = atoi(rest);
+    ed_set_zoom(&a->ed, m, z);
+}
+
+typedef void CmdFn(App *a, const char *verb, const char *rest);
+
+/* Every : command by name -- a second name where a verb has another spelling
+ * (:w and :write) or a plural that lists (:links). A word that is not here
+ * may still be a square to jump to. */
+static const struct {
+    const char *name, *also;
+    CmdFn      *fn;
+} COMMANDS[] = {
+    { "w", "write", cmd_w },
+    { "wq", "x", cmd_wq },
+    { "q", "quit", cmd_q },
+    { "q!", NULL, cmd_q_bang },
+    { "e", "edit", cmd_e },
+    { "play", NULL, cmd_play },
+    { "build", NULL, cmd_build },
+    { "name", NULL, cmd_name },
+    { "resize", NULL, cmd_resize },
+    { "scale", NULL, cmd_scale },
+    { "metric", NULL, cmd_metric },
+    { "ruleset", NULL, cmd_ruleset },
+    { "roll", NULL, cmd_roll },
+    { "rolls", NULL, cmd_rolls },
+    { "turns", NULL, cmd_turns },
+    { "notes", NULL, cmd_notes },
+    { "fog", NULL, cmd_fog },
+    { "clock", NULL, cmd_clock },
+    { "tick", NULL, cmd_tick },
+    { "player", NULL, cmd_player },
+    { "serve", NULL, cmd_serve },
+    { "agent", NULL, cmd_agent },
+    { "stamp", NULL, cmd_stamp },
+    { "link", "links", cmd_link },
+    { "floor", "floors", cmd_floor },
+    { "area", "areas", cmd_area },
+    { "mirror", NULL, cmd_mirror },
+    { "panel", NULL, cmd_panel },
+    { "log", NULL, cmd_log },
+    { "zoom", NULL, cmd_zoom },
+};
+
 void app_exec_command(App *a, const char *line)
 {
     while (*line == ' ') line++;
@@ -661,236 +1015,11 @@ void app_exec_command(App *a, const char *line)
     const char *rest = consumed > 0 ? line + consumed : "";
     while (*rest == ' ') rest++;
 
-    Map *m = a->map;
-
-    if (!strcmp(verb, "w") || !strcmp(verb, "write")) {
-        char path[MAP_PATH_MAX];
-        if (rest[0]) mapio_resolve_path(rest, path, sizeof path);
-        else if (m->path[0]) str_lcpy(path, m->path, sizeof path);
-        else mapio_resolve_path(m->name, path, sizeof path);
-        app_save_map(a, path);
-        return;
-    }
-    if (!strcmp(verb, "wq") || !strcmp(verb, "x")) {
-        char path[MAP_PATH_MAX];
-        if (m->path[0]) str_lcpy(path, m->path, sizeof path);
-        else mapio_resolve_path(m->name, path, sizeof path);
-        if (app_save_map(a, path) == 0) app_close_map(a);
-        return;
-    }
-    if (!strcmp(verb, "q") || !strcmp(verb, "quit")) { app_leave_map(a); return; }
-    if (!strcmp(verb, "q!")) {
-        app_set_status(a, "closed without saving");
-        app_close_map(a);
-        return;
-    }
-    if (!strcmp(verb, "e") || !strcmp(verb, "edit")) {
-        if (!rest[0]) { app_set_status(a, ":e needs a file name"); return; }
-        char path[MAP_PATH_MAX];
-        mapio_resolve_path(rest, path, sizeof path);
-        app_leave_map_for(a, path);
-        return;
-    }
-    if (!strcmp(verb, "play"))  { a->screen = SCREEN_PLAY;   app_set_status(a, "play mode"); return; }
-    if (!strcmp(verb, "build")) { a->screen = SCREEN_EDITOR; app_set_status(a, "build mode"); return; }
-    if (!strcmp(verb, "name")) {
-        if (!rest[0]) { app_set_status(a, ":name needs a value"); return; }
-        str_lcpy(m->name, rest, sizeof m->name);
-        map_touch(m);
-        app_set_status(a, "renamed");
-        return;
-    }
-    if (!strcmp(verb, "resize")) {
-        int w = 0, h = 0;
-        if (sscanf(rest, "%dx%d", &w, &h) != 2 && sscanf(rest, "%d %d", &w, &h) != 2) {
-            app_set_status(a, ":resize wants a width and a height");
+    for (size_t i = 0; i < sizeof COMMANDS / sizeof *COMMANDS; i++)
+        if (!strcmp(verb, COMMANDS[i].name) || (COMMANDS[i].also && !strcmp(verb, COMMANDS[i].also))) {
+            COMMANDS[i].fn(a, verb, rest);
             return;
         }
-        if (map_resize(m, w, h) != 0) {
-            app_set_status(a, "resize refused: out of range");
-            return;
-        }
-        /* The history describes cells that may no longer exist. */
-        undo_clear(&a->undo);
-        a->ed.cx = iclamp(a->ed.cx, 0, m->w - 1);
-        a->ed.cy = iclamp(a->ed.cy, 0, m->h - 1);
-        ed_layout(&a->ed, m, a->rnd->w, a->rnd->h);
-
-        char msg[96];
-        snprintf(msg, sizeof msg, "resized to %dx%d (undo history cleared)", w, h);
-        app_set_status(a, msg);
-        return;
-    }
-    if (!strcmp(verb, "scale")) {
-        double v = atof(rest);
-        if (!(v > 0.0 && v < 100000.0)) {
-            app_set_status(a, ":scale wants feet per tile, e.g. :scale 5");
-            return;
-        }
-        m->scale_ft = v;
-        map_touch(m);
-        char msg[64];
-        snprintf(msg, sizeof msg, "one tile is %g ft", v);
-        app_set_status(a, msg);
-        return;
-    }
-    if (!strcmp(verb, "metric")) {
-        int got = rest[0] ? dist_metric_from_name(rest) : -1;
-        if (got < 0) {
-            app_set_status(a, ":metric wants chebyshev, euclidean, alt or manhattan");
-            return;
-        }
-        m->metric = got;
-        map_touch(m);
-        char msg[64];
-        snprintf(msg, sizeof msg, "metric: %s", dist_metric_name((DistMetric)got));
-        app_set_status(a, msg);
-        return;
-    }
-    if (!strcmp(verb, "ruleset")) {
-        const Ruleset *rs = rest[0] ? ruleset_by_name(rest) : ruleset_by_name(m->ruleset);
-        if (!rs) {
-            char msg[128];
-            int  off = snprintf(msg, sizeof msg, "unknown ruleset. try: ");
-            for (int i = 0; ruleset_at(i) && off < (int)sizeof msg - 2; i++)
-                off += snprintf(msg + off, sizeof msg - (size_t)off, "%s%s",
-                                i ? ", " : "", ruleset_at(i)->name);
-            app_set_status(a, msg);
-            return;
-        }
-        str_lcpy(m->ruleset, strcmp(rs->name, "none") ? rs->name : "", sizeof m->ruleset);
-        map_touch(m);
-        /* The overlay's reach is read against the ruleset, so a band index
-         * or a radius from the old one would mean something else now. */
-        range_off(&a->play.range);
-        char msg[128];
-        snprintf(msg, sizeof msg, "ruleset: %s%s", rs->name,
-                 rs->verified ? "" : " (range bands unverified)");
-        app_note(a, msg);
-        return;
-    }
-    if (!strcmp(verb, "roll"))  { roll_command(a, rest); return; }
-    if (!strcmp(verb, "rolls")) { rolls_list(a); return; }
-    if (!strcmp(verb, "turns")) {
-        /* Bare, it reads the order out; "off" ends the fight. */
-        char msg[160];
-        if (!*rest) {
-            turn_list(m, msg, sizeof msg);
-            app_set_status(a, msg);
-            return;
-        }
-        if (strcmp(rest, "off") != 0) { app_set_status(a, ":turns lists the order, :turns off ends the fight"); return; }
-        if (turn_count(m) == 0 && turn_acting(m) < 0) { app_set_status(a, "there is no fight to end"); return; }
-        int had = turn_clear(m, &a->undo);
-        snprintf(msg, sizeof msg, "the fight is over - %d left the turn order", had);
-        app_note(a, msg);
-        return;
-    }
-    if (!strcmp(verb, "notes")) {
-        /* Where the notes are, not what they say: this line is mirrored. */
-        char msg[200];
-        int  off = 0, n = 0;
-        for (int i = 0; i < m->tokens.n && off < (int)sizeof msg - 28; i++) {
-            const Token *t = &m->tokens.v[i];
-            if (!t->note[0]) continue;
-            off += snprintf(msg + off, sizeof msg - (size_t)off, "%s%.16s", n++ ? ", " : "notes on ",
-                            token_name(t));
-        }
-        for (int i = 0; i < m->nnotes && off < (int)sizeof msg - 28; i++) {
-            char at[MAP_COORD_MAX];
-            map_coord_name(m->notes[i].x, m->notes[i].y, at, sizeof at);
-            off += snprintf(msg + off, sizeof msg - (size_t)off, "%s%s", n++ ? ", " : "notes on ", at);
-        }
-        int total = m->nnotes;
-        for (int i = 0; i < m->tokens.n; i++) total += m->tokens.v[i].note[0] != '\0';
-        if (n < total && off < (int)sizeof msg - 8) snprintf(msg + off, sizeof msg - (size_t)off, ", ...");
-        app_set_status(a, n ? msg : "no notes - s n writes one on a creature or a square");
-        return;
-    }
-    if (!strcmp(verb, "fog"))   { fog_command(a, rest);   return; }
-    if (!strcmp(verb, "clock")) { clock_command(a, rest); return; }
-    if (!strcmp(verb, "tick"))  { tick_command(a, rest);  return; }
-    if (!strcmp(verb, "player")) {
-        /* :player preview -- the players' view on the GM's own screen. */
-        if (!strncmp(rest, "floor ", 6)) { app_players_pin(a, rest + 6); return; }
-        if (strcmp(rest, "preview") != 0) {
-            app_set_status(a, ":player preview shows what the players see; q returns   :player floor NAME|auto");
-            return;
-        }
-        if (a->screen != SCREEN_PLAY) { app_set_status(a, "the players' view is play mode's - F2 first"); return; }
-        a->preview = !a->preview;
-        app_set_status(a, a->preview ? "previewing the players' view - q returns to yours"
-                                     : "back to the GM's view");
-        return;
-    }
-    if (!strcmp(verb, "serve")) { serve_command(a, rest); return; }
-    if (!strcmp(verb, "agent")) { app_agent_command(a, rest); return; }
-    if (!strcmp(verb, "stamp")) { app_stamp_command(a, rest); return; }
-    if (!strcmp(verb, "link") || !strcmp(verb, "links")) { app_link_command(a, rest); return; }
-    if (!strcmp(verb, "floor") || !strcmp(verb, "floors")) { app_floor_command(a, verb, rest); return; }
-    if (!strcmp(verb, "area") || !strcmp(verb, "areas")) { area_command(a, verb, rest); return; }
-    if (!strcmp(verb, "mirror")) {
-        /* A second window on this machine, running the watcher against our
-         * own server, which is started if it is not. It is detached so it
-         * outlives nothing of ours but the server itself. */
-        Net *net = &a->net;
-        if (!net_active(net)) {
-            char err[128];
-            if (net_start(net, 0, a->rnd, err, sizeof err) < 0) { app_set_status(a, err); return; }
-            net_set_live(net, app_remote_live(a));
-        }
-        char msg[192];
-        if (app_spawn_mirror(a, msg, sizeof msg) < 0) { app_set_status(a, msg); return; }
-        app_note(a, msg);
-        return;
-    }
-    if (!strcmp(verb, "panel")) {
-        Play *pl = &a->play;
-        if (!*rest)                    pl->panel = !pl->panel;
-        else if (!strcmp(rest, "on"))  pl->panel = 1;
-        else if (!strcmp(rest, "off")) pl->panel = 0;
-        else { app_set_status(a, ":panel on, :panel off, or :panel to toggle"); return; }
-        app_set_status(a, pl->panel ? "turn panel on - it shows when there is a fight"
-                                    : "turn panel off");
-        return;
-    }
-    if (!strcmp(verb, "log")) {
-        /* :log toggles; on/off say which; anything else is a file. */
-        SessionLog *l = &a->slog;
-        int want;
-        char path[MAP_PATH_MAX];
-        if (!*rest)                 { want = !slog_on(l); slog_default_path(m, path, sizeof path); }
-        else if (!strcmp(rest, "on"))  { want = 1; slog_default_path(m, path, sizeof path); }
-        else if (!strcmp(rest, "off")) { want = 0; path[0] = '\0'; }
-        else                        { want = 1; str_lcpy(path, rest, sizeof path); }
-
-        char msg[MAP_PATH_MAX + 32];
-        if (!want) {
-            if (!slog_on(l)) { app_set_status(a, "the log is already off"); return; }
-            snprintf(msg, sizeof msg, "log off - %s", l->path);
-            slog_close(l);
-            app_set_status(a, msg);
-            return;
-        }
-        if (slog_on(l) && !strcmp(l->path, path)) {
-            snprintf(msg, sizeof msg, "already logging to %s", path);
-            app_set_status(a, msg);
-            return;
-        }
-        char err[128];
-        if (slog_open(l, path, m->name, err, sizeof err) != 0) {
-            app_set_status(a, err);
-            return;
-        }
-        snprintf(msg, sizeof msg, "logging to %s", path);
-        app_set_status(a, msg);
-        return;
-    }
-    if (!strcmp(verb, "zoom")) {
-        int z = atoi(rest);
-        ed_set_zoom(&a->ed, m, z);
-        return;
-    }
 
     char msg[96];
 
