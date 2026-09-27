@@ -25,7 +25,9 @@ void app_draw_status_msg(App *a, int x, int y, int maxw)
     /* The players' frame carries no GM-only message, and over fog no message
      * at all: most of what the app says names a creature or a square, and
      * one placed in the dark would be announced to the table. */
-    if (a->view == VIEW_PLAYERS && (a->status_gm || a->psplit || (a->map && fog_any(a->map)))) return;
+    if (a->view == VIEW_PLAYERS && (a->status_gm || a->psplit ||
+                                    (a->map && (fog_any(a->map) || tokens_any_hidden(&a->map->tokens)))))
+        return;
 
     draw_text_ellipsis(r, x, y, a->status, maxw, style(th->dim, th->bg, 0));
 
@@ -210,7 +212,8 @@ static void draw_editor_body(App *a)
     /* The ruler is the GM's instrument; over fog its line would cross, and
      * its numbers measure, ground the players cannot see. */
     int fog_players = a->view == VIEW_PLAYERS && fog_any(m);
-    if (a->ruler.active && !fog_players) {
+    /* Nor while anything is hidden: its line could start at the creature. */
+    if (a->ruler.active && !fog_players && !(a->view == VIEW_PLAYERS && tokens_any_hidden(&m->tokens))) {
         ClipRect saved = grid_clip_push(r, &a->ed.view, m);
         ruler_draw(r, m, &a->ed.view, &a->ruler, th, 1);
         rnd_clip_restore(r, saved);
@@ -256,8 +259,11 @@ static void draw_editor_body(App *a)
 
     /* Status line sits directly above the keybinding bar. */
     char status[192];
+    /* The ruler's and the range's lines measure from a creature, and name
+     * it: with anything hidden the players get the plain line, as over fog. */
+    int quiet_players = fog_players || (a->view == VIEW_PLAYERS && tokens_any_hidden(&m->tokens));
     if (a->psplit)                  status[0] = '\0';
-    else if (fog_players && playing) play_status(&a->play, m, &a->ed, 0, status, sizeof status);
+    else if (quiet_players && playing) play_status(&a->play, m, &a->ed, 0, status, sizeof status);
     else if (a->ruler.active)       ruler_status(&a->ruler, m, status, sizeof status);
     else if (playing && a->play.range.active)
                                     range_status(&a->play.range, m, status, sizeof status);
@@ -423,6 +429,7 @@ int app_view_differs(const App *a)
         if (cur >= 0 && m->tokens.v[cur].ncounters) return 1;
         if (map_note_at(m, a->ed.cx, a->ed.cy)) return 1;
         if (app_players_split(a)) return 1;       /* their floor is not the GM's */
+        if (tokens_any_hidden(&m->tokens)) return 1;
         /* The GM's status line names a secret link under the cursor. */
         int li = link_at(m, a->ed.cx, a->ed.cy, NULL);
         if (li >= 0 && m->links[li].secret) return 1;

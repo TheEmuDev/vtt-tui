@@ -3586,3 +3586,167 @@ void test_counters(void)
     rnd_free(&r);
     sandbox_leave(&sb);
 }
+
+/* -------------------------------------------------------- hidden creatures */
+
+/* The players' frame as text, drawn now. */
+static char *players_text(App *a, Renderer *r)
+{
+    rnd_begin(r);
+    app_draw_view(a, VIEW_PLAYERS);
+    ByteBuf f;
+    bb_init(&f, 65536);
+    rnd_dump(r, &f);
+    bb_putc(&f, '\0');
+    return (char *)f.data;
+}
+
+void test_hidden(void)
+{
+    Sandbox sb = sandbox_enter("hidden");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    char path[1200];
+    snprintf(path, sizeof path, "%s/ambush.vtt", sb.dir);
+    FILE *f = fopen(path, "w");
+    fputs("VTT 3\nname ambush\nsize 12 6\nzoom 1\ntiles\n"
+          "............\n............\n............\n............\n............\n............\n"
+          "token player 1 1 1 \"Aria\"\ntoken enemy 6 2 1 \"Zorkmid\"\ntokenstatus red \"Poisoned\"\n", f);
+    fclose(f);
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+    Map *m = a.map;
+
+    CASE("s h hides the creature under the cursor; the GM still sees it, dimmed");
+    a.ed.cx = 6; a.ed.cy = 2;
+    press(&a, "sh");
+    CHECK_EQ(m->tokens.v[1].hidden, 1);
+    CHECK(strstr(a.status, "Zorkmid hidden from the players") != NULL);
+    CHECK_EQ(a.status_gm, 1);
+    CHECK_EQ(app_view_differs(&a), 1);
+    rnd_begin(&r); app_draw(&a);
+    ByteBuf g;
+    bb_init(&g, 65536); rnd_dump(&r, &g); bb_putc(&g, '\0');
+    CHECK(strstr((char *)g.data, "Zorkmid") != NULL || strstr((char *)g.data, "Zor") != NULL);
+    bb_free(&g);
+
+    CASE("the players' frame never learns it: body, label, marker, ring, turn, cursor, trail, range, ruler, messages");
+    {
+        char *t = players_text(&a, &r);
+        CHECK(strstr(t, "Zor") == NULL && strstr(t, "Poisoned") == NULL);
+        free(t);
+        /* Selected, in the turn order and holding the turn, carried, with the
+         * range on it and the ruler from it, and a message about it. */
+        press(&a, "si12\r");
+        a.ed.cx = 1; a.ed.cy = 1;
+        press(&a, "si5\r");
+        press(&a, "a");                                  /* the Zorkmid's turn */
+        CHECK(turn_acting(m) == 1);
+        a.ed.cx = 6; a.ed.cy = 2;
+        press(&a, "\rll");                               /* carried two squares east */
+        press(&a, "r");
+        t = players_text(&a, &r);
+        CHECK(strstr(t, "Zor") == NULL && strstr(t, "Poisoned") == NULL);
+        CHECK(strstr(t, "turn") == NULL || strstr(t, "?") != NULL);
+        CHECK(strstr(t, "hidden") == NULL);
+        free(t);
+        press(&a, "\r");                                 /* down at I3 */
+        press(&a, "m");
+        t = players_text(&a, &r);
+        CHECK(strstr(t, "Zor") == NULL && strstr(t, "RULER") == NULL);
+        free(t);
+        press(&a, "\x1b");
+        /* Its square draws what an empty square draws. */
+        rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+        int sx, sy, ex, ey;
+        grid_tile_interior(&a.ed.view, 8, 2, &sx, &sy);
+        grid_tile_interior(&a.ed.view, 10, 4, &ex, &ey);
+        for (int k = 0; k < ZOOM[a.ed.view.zoom].iw; k++) {
+            Cell *c1 = rnd_at(&r, sx + k, sy), *c2 = rnd_at(&r, ex + k, ey);
+            CHECK(c1 && c2 && c1->ch == c2->ch);
+        }
+        char line[256];
+        play_status(&a.play, m, &a.ed, 0, line, sizeof line);
+        CHECK(strstr(line, "Zor") == NULL && strstr(line, "token") == NULL);
+    }
+
+    CASE(":hidden lists it for the GM; s h again shows it; u hides it again");
+    press(&a, ":hidden\r");
+    CHECK(strstr(a.status, "hidden: Zorkmid I3") != NULL && a.status_gm);
+    a.ed.cx = 8; a.ed.cy = 2;
+    play_focus(&a.play, -1);
+    press(&a, "sh");
+    CHECK_EQ(m->tokens.v[1].hidden, 0);
+    a.status[0] = '\0'; a.status_gm = 0;              /* the GM's own "shown" message aside */
+    CHECK_EQ(app_view_differs(&a), 0);
+    press(&a, "u");
+    CHECK_EQ(m->tokens.v[1].hidden, 1);
+
+    CASE("a v box hides all it holds, or shows them when every one is hidden");
+    play_focus(&a.play, -1);
+    a.ed.cx = 0; a.ed.cy = 0;
+    press(&a, "v");
+    a.ed.cx = 11; a.ed.cy = 5;
+    press(&a, "sh");
+    CHECK(m->tokens.v[0].hidden && m->tokens.v[1].hidden);
+    a.ed.cx = 0; a.ed.cy = 0;
+    press(&a, "v");
+    a.ed.cx = 11; a.ed.cy = 5;
+    press(&a, "sh");
+    CHECK(!m->tokens.v[0].hidden && !m->tokens.v[1].hidden);
+    press(&a, "u");                                      /* both hidden again */
+
+    CASE("the file: version 10 with a hidden creature, read back hidden; copies keep it");
+    {
+        char err[256], p2[1300];
+        snprintf(p2, sizeof p2, "%s/saved.vtt", sb.dir);
+        CHECK_EQ(mapio_write(m, p2, err, sizeof err), 0);
+        FILE *h = fopen(p2, "r");
+        char first[32] = "";
+        if (h) { if (!fgets(first, sizeof first, h)) first[0] = 0; fclose(h); }
+        CHECK_EQ(strcmp(first, "VTT 10\n"), 0);
+        Map *back = mapio_load(p2, err, sizeof err);
+        CHECK(back && back->tokens.v[1].hidden == 1 && back->tokens.v[0].hidden == 1);
+        map_free(back);
+        Map *st = stamp_copy(m, 0, 0, 11, 5);
+        CHECK(st && st->tokens.n == 2 && st->tokens.v[1].hidden);
+        map_free(st);
+        char *d = describe_text(m, 0, NULL);
+        CHECK(d && strstr(d, "(hidden)"));
+        free(d);
+        d = describe_text(m, 1, NULL);
+        CHECK(d && json_valid(d) && strstr(d, "\"hidden\":true"));
+        free(d);
+    }
+
+    CASE("the channel: token add ... hidden, token set WHO hidden on|off");
+    {
+        Key f1 = { KEY_F1, 0, 0 };
+        app_key(&a, f1);
+        char *ans = ctl_ask(&a, "token add enemy K5 hidden \"Lurker\"\ntoken set Aria hidden on\n");
+        CHECK(ans && !strncmp(ans, "ok", 2));
+        free(ans);
+        int lu = -1;
+        for (int i = 0; i < m->tokens.n; i++) if (!strcmp(m->tokens.v[i].label, "Lurker")) lu = i;
+        CHECK(lu >= 0 && m->tokens.v[lu].hidden && m->tokens.v[0].hidden);
+        ans = ctl_ask(&a, "token set Aria hidden maybe\n");
+        CHECK(ans && strstr(ans, "hidden on, or hidden off"));
+        free(ans);
+        ans = ctl_ask(&a, "dump\n");
+        CHECK(ans && strstr(ans, "Lurker") && strstr(ans, "hidden"));
+        free(ans);
+    }
+
+    app_free(&a);
+    rnd_free(&r);
+    char cmd[1300];
+    snprintf(cmd, sizeof cmd, "rm -rf '%s'", sb.dir);
+    sandbox_leave(&sb);
+    if (system(cmd) != 0) { }
+}

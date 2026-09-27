@@ -27,7 +27,7 @@
  * v3 added status markers on tokens. An older reader would ignore those lines
  * and silently drop them, which loses combat state from a saved fight, so it
  * refuses too. Each version still loads everything older. */
-#define FORMAT_VERSION 9
+#define FORMAT_VERSION 10
 
 /* Version 4 added the turn order. A map with no fight in it is still written
  * as version 3, which says everything it needs and stays loadable by the
@@ -40,10 +40,13 @@
 #define FORMAT_BEFORE_TURNS    3
 #define FORMAT_BEFORE_CLOCKS   4
 #define FORMAT_BEFORE_COUNTERS 5
-/* Version 6 added counters and fog; 7 named areas; 8 links; 9 floors. */
+/* Version 6 added counters and fog; 7 named areas; 8 links; 9 floors; 10
+ * hidden creatures -- an older reader would ignore the line and show the
+ * ambusher to the table, so it must refuse the file. */
 #define FORMAT_BEFORE_AREAS    6
 #define FORMAT_BEFORE_LINKS    7
 #define FORMAT_BEFORE_FLOORS   8
+#define FORMAT_BEFORE_HIDDEN   9
 
 /* Fog rows: a held tile of patch 1..15 is one of these, in order. */
 static const char FOG_HELD_CHARS[FOG_PATCH_MAX + 1] = "123456789!\"#$%&";
@@ -91,7 +94,8 @@ int mapio_write(const Map *m, const char *path, char *err, size_t errsz)
     int v8 = m->nlinks > 0;
     int v9 = 0;
     for (int i = 0; i < m->nareas; i++) v9 |= m->areas[i].floor;
-    fprintf(f, "VTT %d\n", v9 ? FORMAT_VERSION : v8 ? FORMAT_BEFORE_FLOORS : v7 ? FORMAT_BEFORE_LINKS : v6 ? FORMAT_BEFORE_AREAS : v5 ? FORMAT_BEFORE_COUNTERS
+    int v10 = tokens_any_hidden(&m->tokens);
+    fprintf(f, "VTT %d\n", v10 ? FORMAT_VERSION : v9 ? FORMAT_BEFORE_HIDDEN : v8 ? FORMAT_BEFORE_FLOORS : v7 ? FORMAT_BEFORE_LINKS : v6 ? FORMAT_BEFORE_AREAS : v5 ? FORMAT_BEFORE_COUNTERS
                           : fight ? FORMAT_BEFORE_CLOCKS : FORMAT_BEFORE_TURNS);
     fprintf(f, "name %s\n", m->name);
     fprintf(f, "size %d %d\n", m->w, m->h);
@@ -124,6 +128,7 @@ int mapio_write(const Map *m, const char *path, char *err, size_t errsz)
                     status_color_name(t->status[j].color), t->status[j].label);
 
         if (t->note[0]) fprintf(f, "tokennote \"%s\"\n", t->note);
+        if (t->hidden)  fputs("tokenhidden\n", f);
         for (int j = 0; j < t->ncounters; j++)
             fprintf(f, "tokencounter %s %d %d\n", t->counters[j].name,
                     t->counters[j].value, t->counters[j].max);
@@ -311,7 +316,7 @@ static int looks_like_record(const char *line)
 {
     static const char *const words[] = {
         "tiles", "vedges", "hedges", "fog", "fogpatch", "token", "tokenstatus",
-        "tokenturn", "tokencounter", "tokennote", "note", "area", "floor", "link", "spotlight", "clock",
+        "tokenturn", "tokencounter", "tokennote", "tokenhidden", "note", "area", "floor", "link", "spotlight", "clock",
         "roll", "round", "name", "size", "zoom", "scale", "ruleset", "metric", NULL,
     };
     size_t n = 0;
@@ -774,6 +779,10 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
             RECORD(parse_turn_line(m, line), "turn");
         } else if (!strncmp(line, "tokencounter ", 13)) {
             RECORD(parse_counter_line(m, line), "counter");
+        } else if (!strcmp(line, "tokenhidden")) {
+            /* On the creature read last, as its other lines are. */
+            if (m->tokens.n) m->tokens.v[m->tokens.n - 1].hidden = 1;
+            else diag(ld, ld->line, -1, "E014", "bad-record", "hidden marker dropped: no creature before it");
         } else if (!strncmp(line, "tokennote ", 10)) {
             RECORD(parse_token_note_line(m, line), "creature note");
         } else if (!strncmp(line, "note ", 5)) {

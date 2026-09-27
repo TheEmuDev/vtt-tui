@@ -37,6 +37,13 @@ void tokens_remove(TokenList *l, int idx)
     l->shape++;
 }
 
+int tokens_any_hidden(const TokenList *l)
+{
+    for (int i = 0; i < l->n; i++)
+        if (l->v[i].hidden) return 1;
+    return 0;
+}
+
 int tokens_at(const TokenList *l, int x, int y)
 {
     /* Newest first: a token dropped on top of another is the one you grab. */
@@ -367,6 +374,12 @@ void grid_draw_token(Renderer *r, const GridView *g, const Token *t,
     uint32_t base   = player ? th->player : th->enemy;
     if (selected) base = player ? th->player_sel : th->enemy_sel;
     token_draw(r, g, t, th, selected, ascii, base, 0);
+}
+
+void grid_draw_token_hidden(Renderer *r, const GridView *g, const Token *t,
+                            const Theme *th, int selected, int ascii)
+{
+    token_draw(r, g, t, th, selected, ascii, th->dim, 0);
 }
 
 void grid_draw_token_silhouette(Renderer *r, const GridView *g, const Token *t,

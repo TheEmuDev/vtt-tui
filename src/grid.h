@@ -121,6 +121,10 @@ void grid_draw_token(Renderer *r, const GridView *g, const Token *t,
  * no ring, no turn bars. The size stays because that is what a silhouette
  * is; the color and the circle-or-square go because either would say its
  * side as plainly as a name. */
+/* A hidden creature on the GM's screen: its body and label in the dim color,
+ * so the GM sees it and sees that the players do not. */
+void grid_draw_token_hidden(Renderer *r, const GridView *g, const Token *t,
+                            const Theme *th, int selected, int ascii);
 void grid_draw_token_silhouette(Renderer *r, const GridView *g, const Token *t,
                                 const Theme *th, int ascii);
 

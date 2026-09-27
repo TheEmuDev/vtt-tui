@@ -197,6 +197,7 @@ void test_cycle_tracks(void);
 void test_cycle_keys(void);
 void test_play_focus(void);
 void test_status_draw(void);
+void test_hidden(void);
 void test_dice(void);
 void test_session_log(void);
 void test_clocks(void);

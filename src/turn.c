@@ -27,10 +27,16 @@ static int64_t walk_key(const Token *t, int idx)
  * fog: a creature the party cannot see is named "?", so the title bar and
  * the panel say someone is acting in the dark without saying who. */
 static const Map *g_mask;
+static int        g_mask_fog;   /* fog_any(g_mask), once a call */
+
+static int masked(const Token *t)
+{
+    return g_mask && fog_token_unseen(g_mask, t, g_mask_fog);
+}
 
 static const char *name_of(const Token *t)
 {
-    if (g_mask && fog_token_hidden(g_mask, t)) return "?";
+    if (masked(t)) return "?";
     return t->label[0] ? t->label : token_kind_name(t->kind);
 }
 
@@ -39,7 +45,7 @@ static const char *name_of(const Token *t)
  * the name does not. */
 static Style side_style(const Token *t, const Theme *th)
 {
-    if (g_mask && fog_token_hidden(g_mask, t)) return style(th->dim, th->bg, 0);
+    if (masked(t)) return style(th->dim, th->bg, 0);
     return style(t->kind == TOKEN_ENEMY ? th->enemy : th->player, th->bg, 0);
 }
 
@@ -259,7 +265,8 @@ static void turn_status_body(const Map *m, char *buf, size_t bufsz);
 
 void turn_status_view(const Map *m, int players, char *buf, size_t bufsz)
 {
-    g_mask = players && fog_any(m) ? m : NULL;
+    g_mask_fog = fog_any(m);
+    g_mask = players && (g_mask_fog || tokens_any_hidden(&m->tokens)) ? m : NULL;
     turn_status_body(m, buf, bufsz);
     g_mask = NULL;
 }
@@ -356,7 +363,8 @@ void turn_draw_panel(Renderer *r, const Map *m, const Theme *th, Rect rc, int as
                      const char *counter)
 {
     /* No counter means the players' frame, which never names the unseen. */
-    g_mask = !counter && fog_any(m) ? m : NULL;
+    g_mask_fog = fog_any(m);
+    g_mask = !counter && (g_mask_fog || tokens_any_hidden(&m->tokens)) ? m : NULL;
     turn_draw_panel_body(r, m, th, rc, ascii, counter);
     g_mask = NULL;
 }
@@ -444,7 +452,7 @@ static void turn_draw_panel_body(Renderer *r, const Map *m, const Theme *th, Rec
      * "1 not in the fight" would announce it. */
     int out = 0;
     for (int i = 0; i < m->tokens.n; i++)
-        if (!(m->tokens.v[i].turn & TURN_IN) && !(g_mask && fog_token_hidden(g_mask, &m->tokens.v[i])))
+        if (!(m->tokens.v[i].turn & TURN_IN) && !masked(&m->tokens.v[i]))
             out++;
     if (out > 0 && y < rc.y + rc.h) {
         char rest[32];

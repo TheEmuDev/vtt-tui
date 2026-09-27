@@ -67,6 +67,14 @@ static inline int fog_creature_hidden(const Map *m, int x, int y)
 /* A creature is hidden when every square it covers is. */
 int fog_token_hidden(const Map *m, const Token *t);
 
+/* The one question every players' view asks of a creature: is it kept from
+ * them -- by its own hidden flag, or by fog over it? `fogp` is fog_any(m),
+ * worked out once a frame by the caller. */
+static inline int fog_token_unseen(const Map *m, const Token *t, int fogp)
+{
+    return t->hidden || (fogp && fog_token_hidden(m, t));
+}
+
 /* Does this patch show its rim? Its own setting, or the map's when it
  * follows the map. */
 static inline int fog_patch_soft(const Map *m, int id)

@@ -309,6 +309,7 @@ Play mode is for running the encounter. `F2` switches to it.
 | `/` `n` `N` | search labels / next / previous match |
 | `s a` `s c` `s d` | add a status marker / choose its color / remove one |
 | `s n` | note on the selected creature, or on the square if none is selected |
+| `s h` | hide the creature from the players, or show it again |
 | `s v` | edit the selected creature's counters |
 | `<` `>` | decrease / increase the current counter by one (`3<` by three) |
 | `s i` | set initiative (a blank answer removes the creature from the turn order) |
@@ -394,6 +395,17 @@ or by a count (`3<`). Values stay between zero and the maximum. Counters are sho
 GM's screen only: in the status line for the selected creature, and in the turn panel for
 the creature whose turn it is. A ruleset can name standard counters (Daggerheart: HP, Stress,
 Armor).
+
+**Hidden creatures.** `s h` hides the creature under the cursor (or the selected creatures, or
+everything in a `v` box) from the players: it is not drawn on their screens, even on lit ground,
+and the turn panel shows it as `?`. On your screen it is drawn dimmed. `s h` again shows it;
+with several selected, `s h` hides them all unless all are already hidden, in which case it
+shows them all. `u` undoes it. `:hidden` lists the hidden creatures and where they are.
+
+While any creature is hidden, the players' screens show no status messages and their status
+line leaves out the count of creatures, as over fog: most messages name a creature, and one
+naming a hidden creature would give it away. A hidden player creature still reveals fog
+around it. Copies, pastes and stamps keep a creature hidden.
 
 **Notes.** `s n` opens a note on the selected creature, or on the cursor's square if no
 creature is selected. Notes are never shown to the players; the status line shows `(note)`
@@ -841,6 +853,7 @@ use. Available: `none`, `daggerheart`.
 | `:panel` | show / hide the side panel |
 | `:clock ...`, `:tick ...` | [clocks](#clocks-clock-tick) |
 | `:notes` | list where notes are |
+| `:hidden` | list the [hidden creatures](#play-mode) |
 | `:fog ...` | [fog of war](#fog-of-war-fog) |
 | `:serve ...` | the [players' view](#the-players-view-serve-mirror); `:serve off` stops it |
 | `:player preview` | show the players' view on your screen; `:player floor NAME\|auto` pins their [floor](#floors) |
@@ -979,7 +992,7 @@ typing a command or drawing a wall. The full request language is in
 Maps are plain text, one record per line:
 
 ```
-VTT 9
+VTT 10
 name Goblin Ambush
 size 16 9
 zoom 1
@@ -995,6 +1008,7 @@ tokenturn 18 acting
 tokennote "wants the amulet"
 tokencounter HP 4 6
 token enemy 10 4 2 "Ogre"
+tokenhidden
 tokenturn 12
 round 2
 spotlight gm
@@ -1062,6 +1076,7 @@ padded with spaces.
 | `tokenstatus COLOR "Word"` | a status marker on the preceding token; COLOR is `red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `violet` or `gray` (`grey` is read as `gray`) |
 | `tokenturn N [acting]`, `tokenturn - acting` | initiative, and whether it is this creature's turn |
 | `tokennote "text"` | a note on the preceding token |
+| `tokenhidden` | the preceding token is hidden from the players |
 | `tokencounter NAME VALUE MAX` | a counter on the preceding token |
 | `round N`, `spotlight gm` | the fight's round; the GM has the spotlight |
 | `clock NAME FILLED SIZE [down]` | a clock |
@@ -1085,8 +1100,9 @@ that can hold its contents:
 | 7 | named areas |
 | 8 | links |
 | 9 | floors |
+| 10 | hidden creatures |
 
-vtt reads every version up to 9 and refuses newer files.
+vtt reads every version up to 10 and refuses newer files.
 
 ## Performance
 

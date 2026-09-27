@@ -59,6 +59,12 @@ typedef struct {
     char    note[TOKEN_NOTE_MAX];
     Counter counters[TOKEN_COUNTER_MAX];
     uint8_t ncounters;
+
+    /* Kept off the players' screens wherever it stands -- an ambusher, the
+     * invisible -- and drawn dimmed on the GM's. Fog hides squares; this
+     * hides a creature. fog_token_unseen (fog.h) is the question every
+     * players' view asks. */
+    uint8_t hidden;
 } Token;
 
 #define TURN_IN     0x01u   /* has a place in the order */
@@ -79,6 +85,9 @@ void   tokens_remove(TokenList *l, int idx);
 /* Index of the topmost token whose footprint covers the tile, or -1.
  * Searched newest-first so the most recently placed token wins. */
 int    tokens_at(const TokenList *l, int x, int y);
+/* Is any creature hidden? The players' frame is then drawn, never copied,
+ * and carries no status messages. */
+int    tokens_any_hidden(const TokenList *l);
 
 /* Walks the ring of tokens a size x size block covers, in list order. `after`
  * is the one currently chosen and the next one round is returned, so repeated
@@ -115,7 +124,7 @@ static inline int token_equal(const Token *a, const Token *b)
     if (strcmp(a->label, b->label) != 0 || a->nstatus != b->nstatus) return 0;
     if (a->turn != b->turn || ((a->turn & TURN_IN) && a->init != b->init)) return 0;
     if (strcmp(a->note, b->note) != 0) return 0;
-    if (a->ncounters != b->ncounters) return 0;
+    if (a->ncounters != b->ncounters || a->hidden != b->hidden) return 0;
     for (int i = 0; i < a->ncounters; i++)
         if (strcmp(a->counters[i].name, b->counters[i].name) != 0 ||
             a->counters[i].value != b->counters[i].value ||

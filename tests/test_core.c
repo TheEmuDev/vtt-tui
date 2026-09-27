@@ -948,6 +948,7 @@ void test_undo(void)
     str_lcpy(f2.label, "Aria", sizeof f2.label);
     f2.note[0] = '\0';                                      /* past the NUL stays garbage */
     f2.ncounters = 0;                                       /* and so do the unused counters */
+    f2.hidden = 0;
     int marks_before = u.nmarks;
     undo_begin(&u); undo_edit_token(&u, m, fi, f2); undo_end(&u);
     CHECK_EQ(u.nmarks, marks_before);

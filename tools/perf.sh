@@ -85,6 +85,9 @@ MOB=$(genmap mob      40 25 0 24)     # 24 tokens, each wearing a marker
 BIGMOB=$(genmap bigmob 200 200 0 24)  # the route search's worst case: big and crowded
 PLAIN=$(genmap plain   40 25 0 24 none) # no ruleset: r is a radius, not a band
 FIGHT=$(genmap fight   40 25 0 24 daggerheart 1)  # all 24 in the turn order
+# MOB with its first enemy hidden: the players' frame is drawn, not copied.
+HIDMOB="$DIR/hidmob.vtt"
+awk '{ print } /"Mob 1"/ { print "tokenhidden" }' "$MOB" | sed 's/^VTT 2$/VTT 10/' > "$HIDMOB"
 
 # Rooms on a void canvas, which is what a map under construction looks like
 # and the only shape that exercises the void marks.
@@ -322,6 +325,7 @@ run "play, clocks"         "$MOB"    80x24  ':play\r:clock Dragon 6\r:clock Ritu
 run "play, 1 watcher"      "$MOB"    80x24  ':play\rjjllkkhh' "--bench-clients 1"
 run "play, 4 watchers"     "$MOB"    80x24  ':play\rjjllkkhh' "--bench-clients 4"
 run "play, 4 watchers, differing" "$MOB" 80x24 ':play\rtsnhidden\rjjllkkhh' "--bench-clients 4"
+run "play, hidden, 4 watchers" "$HIDMOB" 80x24 ':play\rjjllkkhh' "--bench-clients 4"
 run "play, pings, 4 watchers" "$MOB"  80x24  ':play\rjjllkkhh' "--bench-clients 4 --bench-pings"
 run "play, fog pings, 4 watchers" "$MOB" 80x24 ':fog all\r:play\rjjllkkhh' "--bench-clients 4 --bench-pings"
 run "play, GM ping"        "$MOB"    80x24  ':play\rgpllgphh'

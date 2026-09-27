@@ -392,6 +392,33 @@ static void turn_prompt(App *a)
                     "highest acts first; blank takes it out of the order", initial);
 }
 
+/* s h: hide from the players, or show again, what the cursor, the selection
+ * or the box holds. Any of them seen hides them all; all hidden shows them.
+ * One u puts it back. The words are the GM's alone. */
+static void hide_toggle(App *a)
+{
+    Map *m = a->map;
+    int  idx[PLAY_GROUP_MAX];
+    int  n = play_action_group(a, idx, PLAY_GROUP_MAX);
+    if (n <= 0) { app_set_status(a, "no creature here to hide"); return; }
+    if (n > PLAY_GROUP_MAX) n = PLAY_GROUP_MAX;
+    int hide = 0;
+    for (int i = 0; i < n; i++) hide |= !m->tokens.v[idx[i]].hidden;
+    undo_begin(&a->undo);
+    for (int i = 0; i < n; i++) {
+        Token t = m->tokens.v[idx[i]];
+        t.hidden = (uint8_t)hide;
+        undo_edit_token(&a->undo, m, idx[i], t);
+    }
+    undo_end(&a->undo);
+    a->play.visual = 0;
+    char who[48], msg[112];
+    group_name(m, idx, n, who, sizeof who);
+    snprintf(msg, sizeof msg, hide ? "%s hidden from the players - s h again shows %s"
+                                   : "%s shown to the players again", who, n == 1 ? "it" : "them");
+    app_note_gm(a, msg);
+}
+
 /* s t: hand it the turn, whether or not it is in the order -- which is all a
  * game that passes a spotlight instead of rolling initiative needs. */
 static void turn_hand_over(App *a)
@@ -497,7 +524,8 @@ static int pending_key(App *a, Key k)
         if (k.ch == 't') { turn_hand_over(a); return 1; }
         if (k.ch == 'n') { app_note_prompt(a, play_target_token(a), a->ed.cx, a->ed.cy); return 1; }
         if (k.ch == 'v') { counters_prompt(a); return 1; }
-        app_set_status(a, "s wants a add, c color, d drop, i initiative, t take the turn, n note, v counters");
+        if (k.ch == 'h') { hide_toggle(a); return 1; }
+        app_set_status(a, "s wants a add, c color, d drop, i initiative, t take the turn, n note, v counters, h hide");
         return 1;
     }
     return 1;

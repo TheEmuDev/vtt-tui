@@ -86,10 +86,10 @@ magic, go on the same map apart from each other, separated by void, and a link j
 
 | line | does |
 |---|---|
-| `token add enemy SQUARE [size 2] "Ghoul"` | `player` or `enemy`; size 1-3; labels unique; on ground and on nobody |
+| `token add enemy SQUARE [size 2] [hidden] "Ghoul"` | `player` or `enemy`; size 1-3; labels unique; on ground and on nobody; `hidden` keeps it off the players' screens (an ambush) |
 | `token add enemy Crypt "Ghoul"` | in a room: the free square nearest its middle |
 | `token move Ghoul F6`, `token del Ghoul` | by label (any case), or a square it stands on |
-| `token set Ghoul label "..."`, `size 2`, `note "..."` | |
+| `token set Ghoul label "..."`, `size 2`, `note "..."`, `hidden on\|off` | |
 
 **Reads.**
 
@@ -216,7 +216,7 @@ A last resort, when you must write or repair the file itself. The file is plain 
 README's *File format* section is the full reference.
 
 ```
-VTT 9
+VTT 10
 name Crypt Entrance
 size 6 4
 scale 5
@@ -243,7 +243,7 @@ note 2 3 "loose flagstone"
 area 0 0 5 3 "Entrance"
 ```
 
-`VTT 9` first (a lower number is fine if the map has no floors, links or areas); then header lines (`name`,
+`VTT 10` first (a lower number is fine if the map has no hidden creatures, floors, links or areas); then header lines (`name`,
 `size W H`, `scale` feet per square, `metric` chebyshev / euclidean / alt / manhattan,
 optionally `ruleset daggerheart`); then the sections. **Coordinates in the file are 0-based
 x then y**; the app and the tools name squares with letters and 1-based rows (`x 4, y 2` is
@@ -273,7 +273,7 @@ blank line inside a section is a row. A door on the map's own edge is a way out 
 | hazard | `^` | | open secret door | `s` |
 
 Creatures: `token player X Y SIZE "Label"` (or `enemy`), anchored at the top-left square;
-`tokennote "text"` after one. Square notes: `note X Y "text"`. Areas: `area X0 Y0 X1 Y1
+`tokennote "text"` after one, and `tokenhidden` to keep it off the players' screens. Square notes: `note X Y "text"`. Areas: `area X0 Y0 X1 Y1
 "Name"`. Floors: `floor "Name" LEVEL` after the area lines. Links: `link N KIND SIZE X0 Y0 X1 Y1
 [oneway] [secret]`, each end by its top-left square. Fog: `fog on`, `fogpatch N Name reveal R memory on`, then a `fog` section of `H`
 rows of `W` characters (`.` none, `A`-`O` patch 1-15).

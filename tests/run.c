@@ -29,6 +29,7 @@ int main(void)
         { "floorview", test_floor_view },
         { "floorplayers", test_floor_players },
         { "floorcam", test_floor_big_camera },
+        { "hidden", test_hidden },
         { "graymarker", test_gray_marker },
         { "roomlang", test_room_language },
         { "corridors", test_corridors },

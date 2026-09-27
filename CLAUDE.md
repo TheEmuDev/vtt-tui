@@ -120,7 +120,11 @@ Bench scripts replay whole; no toggles — use loop-neutral pairs (`llllhhhh`,
   GM-only things (modals, prompts, the profiler, the `(note)` hint, counters, a status
   message set with `app_note_gm`) check it. Add any
   new GM-only thing to `app_view_differs` too, or it reaches the phones. Build mode is
-  the GM's alone.
+  the GM's alone. Whether the players may see a creature is one question,
+  `fog_token_unseen(m, t, fog_any)` (its `Token.hidden` flag or fog over it): every
+  players' path asks it, never `fog_token_hidden` alone. While any creature is hidden the
+  players' frame is drawn (never copied), carries no status message, and gets the plain
+  status line (no count, no ruler or range line), as over fog.
 - Ideas consciously set aside live in `docs/IDEAS.md` with the reason (the Fear pool).
 - Distances print through `dist_fmt`; coordinates through `map_coord_name`; a
   creature in a message through `token_name` (label, else its side). Overlap is

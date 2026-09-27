@@ -471,7 +471,7 @@ void test_ctl_edits(void)
             { "token move Nobody C3\n",     "no creature called Nobody" },
             { "token move A1 C3\n",         "no creature stands on A1" },
             { "token move Ghoul G5\n",      "G5 is taken by Aria" },
-            { "token set Ghoul color red\n", "token set changes a label, a size or a note" },
+            { "token set Ghoul color red\n", "token set changes a label, a size, a note or hidden" },
             { "token fly Ghoul\n",          "token fly: add, move, del or set" },
             { "note Z1 \"x\"\n",            "is not a square" },
             { "fog paint B2:C3 1\n",        "there is no fog patch 1" },

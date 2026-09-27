@@ -174,7 +174,8 @@ void maptools_dump(FILE *out, const Map *m, int x0, int y0, int x1, int y1)
             str_lcpy(where, at, sizeof where);
             str_lcpy(kind, t->kind == TOKEN_ENEMY ? "enemy" : "player", sizeof kind);
         }
-        fprintf(out, "  %c  %-16s %-12s %s\n", token_glyph(i), label_or_unnamed(t), kind, where);
+        fprintf(out, "  %c  %-16s %-12s %s%s\n", token_glyph(i), label_or_unnamed(t), kind, where,
+                t->hidden ? "  hidden" : "");
         if (t->note[0]) fprintf(out, "     note: %s\n", t->note);
     }
 
@@ -566,6 +567,7 @@ void maptools_describe(FILE *out, const Map *m, int json)
                 map_coord_name(tk->x, tk->y, buf, sizeof buf); json_kstr(&j, "at", buf);
                 json_kint(&j, "x", tk->x); json_kint(&j, "y", tk->y);
                 if (tk->note[0]) json_kstr(&j, "note", tk->note);
+                if (tk->hidden) { json_key(&j, "hidden"); json_bool(&j, 1); }
                 json_close(&j, '}');
             }
             json_close(&j, ']');
@@ -733,8 +735,9 @@ void maptools_describe(FILE *out, const Map *m, int json)
                 const Token *tk = &m->tokens.v[t];
                 if (rooms_at(&r, m, tk->x, tk->y) != i) continue;
                 map_coord_name(tk->x, tk->y, buf, sizeof buf);
-                fprintf(out, "  %-12s %-8s %s%s%s\n", token_kind_name(tk->kind), buf, tk->label,
-                        tk->size > 1 ? (tk->size == 2 ? "  2x2" : "  3x3") : "", tk->note[0] ? "  (note)" : "");
+                fprintf(out, "  %-12s %-8s %s%s%s%s\n", token_kind_name(tk->kind), buf, tk->label,
+                        tk->size > 1 ? (tk->size == 2 ? "  2x2" : "  3x3") : "", tk->note[0] ? "  (note)" : "",
+                        tk->hidden ? "  (hidden)" : "");
             }
             for (int nt = 0; nt < m->nnotes; nt++) {
                 const Note *n = &m->notes[nt];

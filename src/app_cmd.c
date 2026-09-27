@@ -956,6 +956,30 @@ static void cmd_log(App *a, const char *verb, const char *rest)
     app_set_status(a, msg);
 }
 
+static void cmd_hidden(App *a, const char *verb, const char *rest)
+{
+    /* Who the players cannot see, and where: the GM's line alone. */
+    Map *m = a->map;
+    char msg[sizeof a->status];
+    int  off = 0, n = 0, shown = 0;
+    for (int i = 0; i < m->tokens.n; i++) n += m->tokens.v[i].hidden;
+    if (!n) { app_set_status_gm(a, "nothing is hidden - s h hides the creature under the cursor"); return; }
+    off = snprintf(msg, sizeof msg, "hidden:");
+    for (int i = 0; i < m->tokens.n; i++) {
+        const Token *t = &m->tokens.v[i];
+        if (!t->hidden) continue;
+        char at[MAP_COORD_MAX], one[64];
+        map_coord_name(t->x, t->y, at, sizeof at);
+        int w = snprintf(one, sizeof one, "%s %.24s %s", shown ? "," : "", token_name(t), at);
+        if (off + w + 16 >= (int)sizeof msg) break;
+        memcpy(msg + off, one, (size_t)w + 1);
+        off += w;
+        shown++;
+    }
+    if (shown < n) snprintf(msg + off, sizeof msg - (size_t)off, " ... %d more", n - shown);
+    app_set_status_gm(a, msg);
+}
+
 static void cmd_zoom(App *a, const char *verb, const char *rest)
 {
     Map *m = a->map;
@@ -1002,6 +1026,7 @@ static const struct {
     { "panel", NULL, cmd_panel },
     { "log", NULL, cmd_log },
     { "zoom", NULL, cmd_zoom },
+    { "hidden", NULL, cmd_hidden },
 };
 
 void app_exec_command(App *a, const char *line)

@@ -321,6 +321,7 @@ static void do_marked(App *a, FILE *out, int json)
                 json_kstr(&j, "label", t->label);
                 json_kstr(&j, "kind", token_kind_name(t->kind));
                 j_region(&j, "at", t->x, t->y, t->x + t->size - 1, t->y + t->size - 1);
+                if (t->hidden) { json_key(&j, "hidden"); json_bool(&j, 1); }
                 json_close(&j, '}');
             }
         json_close(&j, ']');
@@ -388,7 +389,8 @@ static void do_marked(App *a, FILE *out, int json)
         for (int i = 0; i < a->play.ngroup; i++) {
             const Token *t = &m->tokens.v[a->play.group[i]];
             region_name(t->x, t->y, t->x + t->size - 1, t->y + t->size - 1, r, sizeof r);
-            fprintf(out, "%s %s %s", i ? ";" : "", t->label[0] ? t->label : "(unnamed)", r);
+            fprintf(out, "%s %s %s%s", i ? ";" : "", t->label[0] ? t->label : "(unnamed)", r,
+                    t->hidden ? " (hidden)" : "");
         }
         fputc('\n', out);
     }
@@ -908,18 +910,21 @@ static int token_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *er
     const char *sub = w[1];
 
     if (!strcmp(sub, "add")) {
-        /* token add player|enemy SQ [size N] "Label" */
-        if (n != 5 && n != 7) BAD("token add player|enemy SQUARE [size N] \"Label\"");
+        /* token add player|enemy SQ [size N] [hidden] "Label" */
+        if (n < 5 || n > 8) BAD("token add player|enemy SQUARE [size N] [hidden] \"Label\"");
         Token t;
         memset(&t, 0, sizeof t);
         if (!strcmp(w[2], "player"))     t.kind = TOKEN_PLAYER;
         else if (!strcmp(w[2], "enemy")) t.kind = TOKEN_ENEMY;
         else BAD("%.20s: a creature is a player or an enemy", w[2]);
         int x, y, size = 1;
-        if (n == 7) {
-            if (!strcmp(w[5], "size")) BAD("the size goes before the label: token add enemy C3 size 2 \"Ogre\"");
-            if (strcmp(w[4], "size") != 0 || !word_int(w[5], 1, 3, &size))
-                BAD("size is 1, 2 or 3 squares wide, as: size 2");
+        if (n > 5 && !strcmp(w[n - 2], "size")) BAD("the size goes before the label: token add enemy C3 size 2 \"Ogre\"");
+        /* The words between the square and the label, in any order. */
+        for (int k = 4; k < n - 1; k++) {
+            if (!strcmp(w[k], "hidden")) t.hidden = 1;
+            else if (!strcmp(w[k], "size") && k + 1 < n - 1 && word_int(w[k + 1], 1, 3, &size)) k++;
+            else if (!strcmp(w[k], "size")) BAD("size is 1, 2 or 3 squares wide, as: size 2");
+            else BAD("%.20s: before the label goes size N or hidden", w[k]);
         }
         const char *label = w[n - 1];
         if (!label_ok(m, label, -1, err, errsz) || !spot(m, w[3], size, -1, &x, &y, err, errsz)) return -1;
@@ -960,7 +965,7 @@ static int token_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *er
         return 0;
     }
     if (!strcmp(sub, "set")) {
-        if (n != 5) BAD("token set WHO label \"...\", size N, or note \"...\"");
+        if (n != 5) BAD("token set WHO label \"...\", size N, note \"...\", or hidden on|off");
         if (!strcmp(w[3], "label")) {
             if (!label_ok(m, w[4], i, err, errsz)) return -1;
             str_lcpy(t.label, w[4], sizeof t.label);
@@ -976,7 +981,11 @@ static int token_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *er
             if (strlen(w[4]) >= TOKEN_NOTE_MAX) BAD("the note is over %d characters", TOKEN_NOTE_MAX - 1);
             str_lcpy(t.note, w[4], sizeof t.note);
         }
-        else BAD("token set changes a label, a size or a note");
+        else if (!strcmp(w[3], "hidden")) {
+            if (strcmp(w[4], "on") != 0 && strcmp(w[4], "off") != 0) BAD("hidden on, or hidden off");
+            t.hidden = !strcmp(w[4], "on");
+        }
+        else BAD("token set changes a label, a size, a note or hidden");
         undo_edit_token(u, m, i, t);
         return 0;
     }

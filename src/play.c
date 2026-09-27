@@ -578,14 +578,14 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
     int fogp = players && fog_any(m);
     /* A carried creature's ghost, trail and distance all point back at
      * where it set out from, so a start in the dark hides them as surely as
-     * a creature that is still in it. */
-    int held_hidden = fogp && p->grabbed && p->sel >= 0 && p->sel < m->tokens.n &&
-                      (fog_token_hidden(m, &m->tokens.v[p->sel]) ||
-                       fog_ground_hidden(m, p->origin_x, p->origin_y));
+     * a creature that is still in it -- or one that is hidden. */
+    int held_hidden = players && p->grabbed && p->sel >= 0 && p->sel < m->tokens.n &&
+                      (fog_token_unseen(m, &m->tokens.v[p->sel], fogp) ||
+                       (fogp && fog_ground_hidden(m, p->origin_x, p->origin_y)));
     int cursor_dark = fogp && fog_ground_hidden(m, e->cx, e->cy);
-    int range_hidden = fogp && (p->range.token >= 0
-        ? p->range.token < m->tokens.n && fog_token_hidden(m, &m->tokens.v[p->range.token])
-        : fog_ground_hidden(m, p->range.ax, p->range.ay));
+    int range_hidden = players && (p->range.token >= 0
+        ? p->range.token < m->tokens.n && fog_token_unseen(m, &m->tokens.v[p->range.token], fogp)
+        : fogp && fog_ground_hidden(m, p->range.ax, p->range.ay));
 
     /* The lit row and column say where the cursor is; in the dark that is
      * where the GM is working, which is usually on something hidden. */
@@ -630,7 +630,9 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
      * the players' frame has no cursor at all: its size follows whatever it
      * rests on, which would say what is there. */
     uint8_t csize = play_cursor_size(p, m);
-    int     cursor = !cursor_dark;
+    /* Carrying one the players cannot see, the cursor would walk its size
+     * across their screen: they get none. */
+    int     cursor = !cursor_dark && !held_hidden;
     if (cursor) grid_draw_cursor_area(r, &e->view, m, e->cx, e->cy, csize, th->cursor_bg);
 
     /* Everything in the group is ringed, not just the primary: a formation
@@ -642,22 +644,23 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
          * token, and at one PROF_ZONE per token per frame the instrument cost
          * more than the thing it was measuring. group.box measures the
          * enumeration on the keystroke paths instead. */
-        if (fogp && fog_token_hidden(m, &m->tokens.v[i])) {
+        const Token *t = &m->tokens.v[i];
+        if (players && fog_token_unseen(m, t, fogp)) {
             /* At the soft edge the party sees that something is there, and
-             * its shape, and nothing else. */
-            if (fog_token_silhouette(m, &m->tokens.v[i]))
-                grid_draw_token_silhouette(r, &e->view, &m->tokens.v[i], th, ascii);
+             * its shape, and nothing else -- unless it is hidden. */
+            if (!t->hidden && fog_token_silhouette(m, t))
+                grid_draw_token_silhouette(r, &e->view, t, th, ascii);
             continue;
         }
-        int lit = p->visual ? box_meets(&m->tokens.v[i], p->anchor_x,
-                                        p->anchor_y, e->cx, e->cy)
+        int lit = p->visual ? box_meets(t, p->anchor_x, p->anchor_y, e->cx, e->cy)
                             : play_in_group(p, i);
-        grid_draw_token(r, &e->view, &m->tokens.v[i], th, lit, ascii);
+        if (t->hidden) grid_draw_token_hidden(r, &e->view, t, th, lit, ascii);
+        else           grid_draw_token(r, &e->view, t, th, lit, ascii);
     }
 
     /* After every token, so a marker is never buried under the next one. */
     for (int i = 0; i < m->tokens.n; i++) {
-        if (fogp && fog_token_hidden(m, &m->tokens.v[i])) continue;
+        if (players && fog_token_unseen(m, &m->tokens.v[i], fogp)) continue;
         grid_draw_token_status(r, &e->view, &m->tokens.v[i], th, ascii);
     }
 
@@ -680,7 +683,10 @@ void play_status(const Play *p, const Map *m, const Editor *e, int gm, char *buf
      * and the count of creatures on the map is left out altogether. */
     int fogp = !gm && fog_any(m);
     int sel_ok = p->sel >= 0 && p->sel < m->tokens.n &&
-                 !(fogp && fog_token_hidden(m, &m->tokens.v[p->sel]));
+                 !(!gm && fog_token_unseen(m, &m->tokens.v[p->sel], fogp));
+    /* A hidden creature is counted nowhere the players read, so their line
+     * leaves the count out, as it does over fog. */
+    int quiet = fogp || (!gm && tokens_any_hidden(&m->tokens));
 
     if (sel_ok) {
         const Token *t = &m->tokens.v[p->sel];
@@ -754,7 +760,7 @@ void play_status(const Play *p, const Map *m, const Editor *e, int gm, char *buf
     }
     char link[128];
     link_status(m, e->cx, e->cy, gm, link, sizeof link);
-    if (fogp) {
+    if (quiet) {
         snprintf(buf, bufsz, "PLAY    %s  %s%s  %s", at,
                  map_walkable(m, e->cx, e->cy) ? "floor" : "void", link, walls);
         return;
