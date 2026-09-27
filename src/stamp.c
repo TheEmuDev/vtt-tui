@@ -271,12 +271,17 @@ int stamp_place(Map *m, Undo *u, const Map *s, int x, int y, char *err, size_t e
 
 /* ----------------------------------------------------------------- files */
 
-void stamp_dir(char *buf, size_t sz)
+void stamp_data_dir(const char *sub, char *buf, size_t sz)
 {
     const char *xdg = getenv("XDG_DATA_HOME");
-    if (xdg && xdg[0]) { snprintf(buf, sz, "%s/vtt/stamps", xdg); return; }
+    if (xdg && xdg[0]) { snprintf(buf, sz, "%s/vtt/%s", xdg, sub); return; }
     const char *home = getenv("HOME");
-    snprintf(buf, sz, "%s/.local/share/vtt/stamps", home && home[0] ? home : ".");
+    snprintf(buf, sz, "%s/.local/share/vtt/%s", home && home[0] ? home : ".", sub);
+}
+
+void stamp_dir(char *buf, size_t sz)
+{
+    stamp_data_dir("stamps", buf, sz);
 }
 
 int stamp_name_ok(const char *name)
@@ -332,6 +337,11 @@ int stamp_list(char (*names)[MAP_NAME_MAX], int max)
 {
     char dir[MAP_PATH_MAX];
     stamp_dir(dir, sizeof dir);
+    return stamp_list_in(dir, names, max);
+}
+
+int stamp_list_in(const char *dir, char (*names)[MAP_NAME_MAX], int max)
+{
     DIR *d = opendir(dir);
     if (!d) return 0;
     /* All of them, sorted, then the first max: a listing cut short is cut

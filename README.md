@@ -26,7 +26,8 @@ game-specific readouts such as range bands (see [Rulesets](#rulesets)).
   squares; terrain; box and circle selections; reusable stamps; named areas; floors shown one
   at a time, and links (stairs, ladders, portals) between them.
 - Play mode: creatures of 1-3 squares, movement with route and distance readouts, status
-  markers, counters (HP and the like), notes, a ruler and area-of-effect templates.
+  markers, counters (HP and the like), notes, saved characters to place again, a ruler and
+  area-of-effect templates.
 - Turn order or a spotlight, clocks, dice and named rolls, a session log.
 - Fog of war that the party's creatures reveal as they move.
 - A players' view in any browser on the local network, with tap-to-point.
@@ -273,7 +274,7 @@ turn order; a label already in use gets a number (`Ogre 2`).
 | `:stamp save NAME` | save the current stamp (replacing one of the same name) |
 | `:stamp NAME` | load a saved stamp and preview it |
 | `:stamp NAME -f` | load and place it at the cursor immediately |
-| `:stamp` | list saved stamps |
+| `:stamp` | choose from your saved stamps (see [the picker](#the-picker)) |
 
 Saved stamps are map files in `~/.local/share/vtt/stamps/` (or `$XDG_DATA_HOME/vtt/stamps/`).
 Names may use letters, digits, `-` and `_`. The current stamp is kept when you close a map,
@@ -296,6 +297,7 @@ Play mode is for running the encounter. `F2` switches to it.
 |-----|--------|
 | `h` `j` `k` `l` | move the cursor, or the creature being carried |
 | `i p` `i e` | place a player / an enemy (asks for a label) |
+| `i t p` `i t e` | place a saved character as a player / an enemy ([characters](#characters-character-i-t)) |
 | `b` `B` | cursor size 1×1, 2×2, 3×3; also resizes the selected creature |
 | `enter` | pick up / put down the creature under the cursor |
 | `v` | select several creatures with a box |
@@ -412,6 +414,41 @@ to another floor. Copies, pastes and stamps keep a creature hidden.
 **Notes.** `s n` opens a note on the selected creature, or on the cursor's square if no
 creature is selected. Notes are never shown to the players; the status line shows `(note)`
 when the cursor is on one. `:notes` lists where they are.
+
+## Characters (`:character`, `i t`)
+
+A character is a creature saved to place again, on any map: a Ghoul with its
+counters, note and attacks, typed once. Put the cursor on a creature and save it:
+
+| command | action |
+|---------|--------|
+| `:character save` | save the creature under the cursor, named after its label (`Crypt Ghoul 2` saves as `Crypt-Ghoul`) |
+| `:character save NAME` | save it as NAME, replacing one of the same name |
+| `:character save NAME ROLL...` | save it with named rolls from this map (`:character save ghoul claw bite`) |
+| `:character` `:character NAME` | open the picker (with NAME typed in) and place one on the side it was saved on |
+
+`i t e` opens the picker and places the character you choose at the cursor as an enemy; `i t p`
+places it as a player. It keeps its size, label, note and counters (full, however hurt it was
+when saved); a label already in use gets a number (`Crypt Ghoul 2`). A saved roll the map lacks
+is added to the map; a roll the map already has by that name is kept, and the status line says
+so if the two differ. `u` takes back the creature and the rolls it added. Status markers, the
+turn order and hidden are not saved: a character arrives visible, and `s h` hides it.
+
+Saved characters are map files in `~/.local/share/vtt/characters/` (or
+`$XDG_DATA_HOME/vtt/characters/`). Names may use letters, digits, `-` and `_`.
+
+### The picker
+
+`:stamp`, `:character` and `i t` open a list of what you have saved. Type to narrow it: a name
+or a label matches anywhere, ignoring case, and the closest matches come first.
+
+| key | in the picker |
+|-----|---------------|
+| letters | narrow the list |
+| `tab` `shift-tab` | fill in the highlighted name; press again for the next / previous match |
+| `up` `down` (`Ctrl-p` `Ctrl-n`) | move the highlight |
+| `enter` | take the highlighted one |
+| `esc` | cancel |
 
 ## Links (stairs, ladders, trapdoors, portals)
 
@@ -848,7 +885,8 @@ use. Available: `none`, `daggerheart`.
 | `:ruleset NAME` | set the map's [ruleset](#rulesets) |
 | `:c6`, `:6` | jump to a square / a row |
 | `:area NAME` | name the selection, or jump to a named area; `:areas` lists, `:area NAME off` removes |
-| `:stamp ...` | save, load and list [stamps](#build-mode) |
+| `:stamp ...` | save, load and choose [stamps](#build-mode) |
+| `:character ...` | save and place [characters](#characters-character-i-t) |
 | `:link ...`, `:links` | change, remove, list and jump to [links](#links-stairs-ladders-trapdoors-portals) |
 | `:floor ...`, `:floors` | mark, show and list [floors](#floors) |
 | `:turns` | list the [turn order](#turn-order-a); `:turns off` ends the fight |

@@ -441,6 +441,28 @@ int undo_remove_link(Undo *u, Map *m, int num)
     return 1;
 }
 
+_Static_assert(sizeof(NamedRoll) <= TOKEN_NOTE_MAX, "a named roll fits in a token's note");
+
+void undo_set_roll(Undo *u, Map *m, int slot, const NamedRoll *r)
+{
+    if (slot < 0 || slot >= ROLL_MAX) return;
+    NamedRoll now = *r;
+    if (!now.name[0]) memset(&now, 0, sizeof now);
+    if (!memcmp(&m->rolls[slot], &now, sizeof now)) return;
+    Token before, after;
+    memset(&before, 0, sizeof before);
+    memset(&after, 0, sizeof after);
+    memcpy(before.note, &m->rolls[slot], sizeof now);
+    memcpy(after.note, &now, sizeof now);
+    m->rolls[slot] = now;
+    map_touch(m);
+    Op *o = push(u);
+    o->kind = OP_ROLL;
+    o->x = (int16_t)slot;
+    push_token(u, &before);
+    push_token(u, &after);
+}
+
 void undo_set_clock(Undo *u, Map *m, int slot, int value)
 {
     if (slot < 0 || slot >= CLOCK_MAX || !m->clocks[slot].name[0]) return;
@@ -526,6 +548,10 @@ static void apply(const Undo *u, Map *m, const Op *o, int forward)
     case OP_LINK:
         if (forward) link_from_slot(m, &tok[1], &tok[0]);
         else         link_from_slot(m, &tok[0], &tok[1]);
+        break;
+    case OP_ROLL:
+        if (o->x >= 0 && o->x < ROLL_MAX)
+            memcpy(&m->rolls[o->x], (forward ? tok[1] : tok[0]).note, sizeof(NamedRoll));
         break;
     case OP_NOTE:
         /* Putting a note back takes the slot its removal freed. */

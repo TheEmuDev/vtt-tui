@@ -37,6 +37,9 @@ int  stamp_place(Map *m, Undo *u, const Map *s, int x, int y, char *err, size_t 
 /* The directory stamps live in: $XDG_DATA_HOME/vtt/stamps, else
  * ~/.local/share/vtt/stamps. */
 void stamp_dir(char *buf, size_t sz);
+/* The same for another kind of saved thing: $XDG_DATA_HOME/vtt/<sub>, else
+ * ~/.local/share/vtt/<sub>. Character templates live in "characters". */
+void stamp_data_dir(const char *sub, char *buf, size_t sz);
 
 /* A stamp by name: letters, digits, - and _ only, so a name is always a
  * file in the stamps directory and never a path. */
@@ -47,6 +50,9 @@ int  stamp_name_ok(const char *name);
 int  stamp_save(const Map *s, const char *name, char *err, size_t errsz);
 Map *stamp_load(const char *name, char *err, size_t errsz);
 int  stamp_list(char (*names)[MAP_NAME_MAX], int max);
+/* The listing of any such directory: every NAME.vtt whose NAME passes
+ * stamp_name_ok. names may be NULL with max 0, to count. */
+int  stamp_list_in(const char *dir, char (*names)[MAP_NAME_MAX], int max);
 
 /* The preview: the stamp shown on the map at (x,y) for one draw, without a
  * change to the map -- no undo, no Map.gen, no sight. Swaps the stamp's

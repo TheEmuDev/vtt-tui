@@ -55,6 +55,7 @@ void app_free(App *a)
     ctl_stop(&a->ctl);
     map_free(a->stamp);
     a->stamp = NULL;
+    ui_picker_free(&a->picker);
 }
 
 void app_set_status(App *a, const char *msg)
@@ -1225,6 +1226,10 @@ static int modal_key(App *a, Key k)
 
     case MODAL_MESSAGE:
         a->modal = MODAL_NONE;
+        return 1;
+
+    case MODAL_PICKER:
+        app_pick_key(a, k);
         return 1;
 
     case MODAL_CLEAR_STATUS: {

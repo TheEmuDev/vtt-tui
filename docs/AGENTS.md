@@ -88,6 +88,7 @@ magic, go on the same map apart from each other, separated by void, and a link j
 |---|---|
 | `token add enemy SQUARE [size 2] [hidden] "Ghoul"` | `player` or `enemy`; size 1-3; labels unique; on ground and on nobody; `hidden` keeps it off the players' screens (an ambush) |
 | `token add enemy Crypt "Ghoul"` | in a room: the free square nearest its middle |
+| `token add enemy Crypt from ghoul [hidden]` | one of the GM's saved characters (`characters` lists them), on a square or in a room: its size, label (numbered to stay unique), note, counters, and any of its rolls the map lacks. The answer says the label it got: `placed "Crypt Ghoul 2" at L4` |
 | `token move Ghoul F6`, `token del Ghoul` | by label (any case), or a square it stands on |
 | `token set Ghoul label "..."`, `size 2`, `note "..."`, `hidden on\|off` | |
 
@@ -99,6 +100,7 @@ magic, go on the same map apart from each other, separated by void, and a link j
 | `describe [json]` | the rooms walls make, named by their areas, with doors and links and where they lead, and what is in each |
 | `check [json]` | mistakes: loose doors, creatures on void, rooms nothing reaches ([codes](../README.md#map-tools---dump-map---check---describe)) |
 | `stamps` | the GM's saved stamps and their sizes |
+| `characters` | the GM's saved characters: name, label, side, size, counters, rolls |
 | `links [json]` | every link: its number, kind, ends, size, one-way and secret |
 | `floors` | the floors, top first, with their levels and extents, and which the GM is looking at |
 | `status` | live only: the map, the floor on the GM's screen, whether edits are taken now |
@@ -185,7 +187,8 @@ what you did, and `u` takes back each request whole.
    ```
 5. Read back what you did (`dump` the region, `check`) and tell the GM in squares and names.
 6. Put down the GM's stamps (`vtt --ctl stamps`) for anything they have one for, rather than
-   drawing it square by square.
+   drawing it square by square, and their characters (`vtt --ctl characters`) rather than
+   bare creatures.
 7. Suggestions the GM has not agreed to go on the map as notes (`note F7 "secret door?"`);
    the players never see them.
 8. If the GM does not like a change and nothing has happened since, `vtt --ctl undo` (on its

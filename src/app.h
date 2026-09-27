@@ -41,7 +41,14 @@ typedef enum {
     MODAL_CONFIRM_DELETE,
     MODAL_CLEAR_STATUS,   /* which of a token's markers to take off */
     MODAL_CONFIRM_RECOVER,   /* an autosave newer than the map: take it? */
+    MODAL_PICKER,            /* a list filtered as the GM types: App.picker */
 } ModalKind;
+
+/* App.pending after i t: not a key of its own, so no key can collide. */
+#define PENDING_IT 0x110000u
+
+/* What the picker is choosing from. */
+typedef enum { PICK_CHARACTER, PICK_STAMP } PickWhat;
 
 typedef enum {
     PROMPT_NONE,
@@ -169,6 +176,13 @@ typedef struct {
 
     TextPrompt prompt;
     PromptWhat prompt_what;
+
+    /* The picker (MODAL_PICKER): the character templates or the stamps, and
+     * for a character the side it goes down on, -1 for the side it was
+     * saved on. */
+    UiPicker   picker;
+    PickWhat   pick_what;
+    int        pick_kind;
     char       pending_name[MAP_NAME_MAX];
 
     /* The file a pending delete or rename acts on, held in full so the
@@ -199,7 +213,7 @@ typedef struct {
     int      help_lines;   /* what the last draw measured, for clamping */
 
     /* A prefix key waiting for the one that completes it -- i for placing, s
-     * for markers. 0 when nothing is pending. */
+     * for markers, PENDING_IT for i t. 0 when nothing is pending. */
     uint32_t pending;
 
     ModalKind modal;

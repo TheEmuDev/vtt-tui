@@ -1,7 +1,12 @@
 #include "ui.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <strings.h>
+
+#include "prof.h"
+#include "util.h"
 
 void ui_keybar(Renderer *r, const Theme *th, const KeyMap *km)
 {
@@ -400,6 +405,147 @@ void ui_cmdline_draw(Renderer *r, const Theme *th, const TextPrompt *p, int row,
 
     Cell *cell = rnd_at(r, 2 + (cw - shift), row);
     if (cell) { cell->bg = th->accent; cell->fg = th->bar_bg; }
+}
+
+/* --------------------------------------------------------------- picker */
+
+/* Is `needle` in `hay`, ignoring ASCII case? */
+static int has_ci(const char *hay, const char *needle)
+{
+    size_t nl = strlen(needle);
+    if (!nl) return 1;
+    for (; *hay; hay++)
+        if (!strncasecmp(hay, needle, nl)) return 1;
+    return 0;
+}
+
+static void picker_filter(UiPicker *pk)
+{
+    PROF_ZONE("picker");
+    const char *q = pk->p.buf;
+    size_t ql = strlen(q);
+    pk->nmatch = 0;
+    for (int rank = 0; rank < 4; rank++)
+        for (int i = 0; i < pk->n; i++) {
+            const UiPickItem *it = &pk->items[i];
+            int r;
+            if (!strcasecmp(it->name, q))           r = 0;
+            else if (!strncasecmp(it->name, q, ql)) r = 1;
+            else if (has_ci(it->name, q))           r = 2;
+            else if (has_ci(it->detail, q))         r = 3;
+            else continue;
+            if (ql == 0) r = 1;                     /* nothing typed: the list as it is */
+            if (r == rank) pk->match[pk->nmatch++] = i;
+        }
+    pk->sel = 0;
+}
+
+void ui_picker_open(UiPicker *pk, const char *title, UiPickItem *items, int n,
+                    const char *initial)
+{
+    ui_picker_free(pk);
+    ui_prompt_open(&pk->p, title, "", initial);
+    pk->p.max = UI_PICK_NAME;
+    pk->items = items;
+    pk->n     = n;
+    pk->match = xmalloc(sizeof(int) * (size_t)(n > 0 ? n : 1));
+    picker_filter(pk);
+}
+
+void ui_picker_free(UiPicker *pk)
+{
+    free(pk->items);
+    free(pk->match);
+    memset(pk, 0, sizeof *pk);
+}
+
+int ui_picker_chosen(const UiPicker *pk)
+{
+    return pk->nmatch ? pk->match[pk->sel] : -1;
+}
+
+static void picker_move(UiPicker *pk, int d)
+{
+    if (!pk->nmatch) return;
+    pk->sel = ((pk->sel + d) % pk->nmatch + pk->nmatch) % pk->nmatch;
+}
+
+int ui_picker_key(UiPicker *pk, Key k)
+{
+    if (k.kind == KEY_ENTER) return pk->nmatch ? 1 : 0;
+    if (k.kind == KEY_ESC)   return -1;
+    if (k.kind == KEY_UP   || (k.kind == KEY_CHAR && (k.mods & MOD_CTRL) && k.ch == 'p')) { picker_move(pk, -1); return 0; }
+    if (k.kind == KEY_DOWN || (k.kind == KEY_CHAR && (k.mods & MOD_CTRL) && k.ch == 'n')) { picker_move(pk,  1); return 0; }
+    if (k.kind == KEY_TAB) {
+        if (!pk->nmatch) return 0;
+        /* The first tab fills in what is highlighted; the next ones step on. */
+        if (pk->cycling) picker_move(pk, (k.mods & MOD_SHIFT) ? -1 : 1);
+        pk->cycling = 1;
+        const char *name = pk->items[pk->match[pk->sel]].name;
+        str_lcpy(pk->p.buf, name, sizeof pk->p.buf);
+        pk->p.len = pk->p.cursor = (int)strlen(pk->p.buf);
+        return 0;
+    }
+    char was[UI_PROMPT_MAX];
+    memcpy(was, pk->p.buf, sizeof was);
+    ui_prompt_key(&pk->p, k);
+    pk->p.active = 1;
+    if (strcmp(was, pk->p.buf) != 0) {
+        pk->cycling = 0;
+        picker_filter(pk);
+    }
+    return 0;
+}
+
+void ui_picker_draw(Renderer *r, const Theme *th, const UiPicker *pk,
+                    const BoxGlyphs *frame)
+{
+    /* As tall as the whole list, so typing never resizes the box. */
+    int rows = imax(1, imin(imin(UI_PICK_ROWS, pk->n), r->h - 8));
+    int w = imin(imax(56, text_width(pk->p.title) + 8), r->w - 4);
+    int h = rows + 6;
+    Rect box = rect_center(rect(0, 0, r->w, r->h), w, h);
+
+    Style fs    = style(th->accent, th->bg, 0);
+    Style label = style(th->fg, th->bg, ATTR_BOLD);
+    Style text  = style(th->fg, th->bg, 0);
+    Style dim   = style(th->dim, th->bg, 0);
+    Style hi    = style(th->fg, th->sel_bg, ATTR_BOLD);
+
+    draw_fill(r, box, ' ', text);
+    draw_box(r, box, frame, fs);
+    draw_text(r, box.x + 2, box.y, " ", 1, fs);
+    draw_text(r, box.x + 3, box.y, pk->p.title, box.w - 6, label);
+    draw_text(r, box.x + 3 + imin(text_width(pk->p.title), box.w - 6), box.y, " ", 1, fs);
+
+    Rect field = rect(box.x + 2, box.y + 2, box.w - 4, 1);
+    draw_fill(r, field, ' ', style(th->fg, th->sel_bg, 0));
+    draw_text(r, field.x, field.y, pk->p.buf, field.w - 1, style(th->fg, th->sel_bg, 0));
+    char before[UI_PROMPT_MAX];
+    memcpy(before, pk->p.buf, (size_t)pk->p.cursor);
+    before[pk->p.cursor] = '\0';
+    Cell *c = rnd_at(r, field.x + imin(text_width(before), field.w - 1), field.y);
+    if (c) { c->bg = th->accent; c->fg = th->bg; }
+
+    /* The highlight on screen: the list scrolls a page at a time. */
+    int ly = box.y + 4, top = pk->sel / rows * rows;
+    if (!pk->nmatch) draw_text(r, box.x + 2, ly, "nothing matches", box.w - 4, dim);
+    int namew = 0;
+    for (int i = top; i < pk->nmatch && i < top + rows; i++)
+        namew = imax(namew, text_width(pk->items[pk->match[i]].name));
+    namew = imin(namew, (box.w - 8) / 2);
+    for (int i = top; i < pk->nmatch && i < top + rows; i++) {
+        const UiPickItem *it = &pk->items[pk->match[i]];
+        int y = ly + i - top, on = i == pk->sel;
+        Style s = on ? hi : text;
+        if (on) draw_fill(r, rect(box.x + 1, y, box.w - 2, 1), ' ', hi);
+        draw_text(r, box.x + 2, y, on ? ">" : " ", 1, s);
+        draw_text_ellipsis(r, box.x + 4, y, it->name, namew, s);
+        draw_text_ellipsis(r, box.x + 6 + namew, y, it->detail, box.w - 8 - namew, on ? hi : dim);
+    }
+    char foot[64];
+    snprintf(foot, sizeof foot, " %d of %d   tab complete   enter take   esc cancel ", pk->nmatch, pk->n);
+    draw_text(r, box.x + 2, box.y + h - 1, foot, box.w - 4, dim);
 }
 
 /* ---------------------------------------------------------------- modal */

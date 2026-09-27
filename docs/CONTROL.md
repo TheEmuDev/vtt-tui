@@ -57,6 +57,7 @@ as `--describe` names them. Lines run in order, so a read sees the edits before 
 | `describe [json]` | `--describe` |
 | `check [json]` | `--check` of the map in memory (so no file line numbers) |
 | `stamps` | the saved stamps and their sizes |
+| `characters` | the saved character templates (added with character templates, docs/CHARACTERS.md) |
 | `links [json]` | every link (added with links) |
 | `floors` | the floors and which the GM is looking at (added with floors) |
 | `marked [json]` | what the GM is pointing at: the cursor, a `v` box (rect or circle), wall mode's corner and anchor, the selected creatures and a selection box, the ruler's ends, the GM's last `g p` and each phone's last ping with their age, and the floor on the GM's screen (`floor`). A ping stays on record after its ring fades. |
@@ -70,6 +71,7 @@ as `--describe` names them. Lines run in order, so a read sees the edits before 
 | `wall REGION [EDGE]` | the region's outline as EDGE (default wall; `none` clears) |
 | `edge BOUNDARY EDGE` | one boundary. EDGE: none wall door open window secret opensecret |
 | `token add player\|enemy SQ [size N] [hidden] "Label"` | a creature; `hidden` keeps it off the players' screens (added with hidden creatures) |
+| `token add player\|enemy SQ from NAME [hidden]` | a character template; its rolls go through the log (`OP_ROLL`), so a failed request takes them back too (added with character templates) |
 | `token move WHO SQ`, `token del WHO` | WHO is a label, or a square it stands on |
 | `token set WHO label "..."\|size N\|note "..."\|hidden on\|off` | |
 | `note SQ "text"`, `note SQ` | a GM-only note on a square, or clears it |

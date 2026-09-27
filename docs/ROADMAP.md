@@ -11,9 +11,10 @@ any code, and moves to the README when it ships. Ideas not yet decided live in I
    they name is hidden; counts count only what the players can see; and a sweep test runs
    every play key and command with a creature hidden and checks its name never reaches the
    players' frame.
-2. **Creature templates.** A creature saved once -- label, size, counters, note, named
-   rolls -- and placed by name (`i e Ghoul`, the channel's `token add enemy Crypt Ghoul`).
-   Stamps for creatures: fight prep without the typing.
+2. **Character templates.** A creature saved once -- label, size, counters, note, named
+   rolls -- and placed by name from a picker (`i t e`, `i t p`, the channel's `token add
+   enemy C3 from ghoul`). Stamps for creatures: fight prep without the typing. The picker
+   serves `:stamp` too. Plan: docs/CHARACTERS.md.
 3. **Scenes.** The creatures' places, markers and turn order saved under a name and put
    back: reset an encounter, stage "before" and "after the ambush", give an agent a point
    to diff against (the channel's unplanned checkpoints, CONTROL.md).

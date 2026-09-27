@@ -15,6 +15,7 @@
 #include "link.h"
 #include "maptools.h"
 #include "prof.h"
+#include "character.h"
 #include "stamp.h"
 #include "util.h"
 
@@ -99,6 +100,7 @@ const char *app_ctl_busy(const App *a)
     if (a->screen == SCREEN_PLAY)        return "the GM is in play mode - edits are build mode's";
     if (a->screen != SCREEN_EDITOR)      return "the GM is not in build mode";
     if (a->modal == MODAL_PROMPT)        return "the GM is answering a prompt";
+    if (a->modal == MODAL_PICKER)        return "the GM is choosing from a list";
     if (a->modal != MODAL_NONE)          return "a question is open on the GM's screen";
     if (a->ed.mode == ED_COMMAND)        return "the GM is typing a : command";
     if (a->pending || a->ed.pending_g)   return "the GM is part way through a key";
@@ -422,6 +424,7 @@ typedef struct {
     char     first[48];
     unsigned ops0;                    /* the undo stamp when the first edit began */
     int      deleted;                 /* a creature went: indices behind it shifted */
+    FILE    *out;                     /* the answer, for what an edit has to say */
 } Edits;
 
 static void touched(Edits *ed, int x0, int y0, int x1, int y1)
@@ -909,6 +912,34 @@ static int token_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *er
     if (n < 2) BAD("token add, token move, token del or token set");
     const char *sub = w[1];
 
+    if (!strcmp(sub, "add") && n >= 6 && !strcmp(w[4], "from")) {
+        /* token add player|enemy SQ from NAME [hidden]: a character template,
+         * its size and label (numbered to stay unique), its rolls the map lacks. */
+        int kind;
+        if (!strcmp(w[2], "player"))     kind = TOKEN_PLAYER;
+        else if (!strcmp(w[2], "enemy")) kind = TOKEN_ENEMY;
+        else BAD("%.20s: a creature is a player or an enemy", w[2]);
+        if (n > 7 || (n == 7 && strcmp(w[6], "hidden") != 0))
+            BAD("token add player|enemy SQUARE from NAME [hidden]");
+        Map *c = character_load(w[5], err, errsz);
+        if (!c) return -1;
+        const Token *ct = character_token(c);
+        char label[TOKEN_LABEL_MAX], said[160];
+        tokens_unique_label(&m->tokens, ct->label, label, sizeof label);
+        int x, y, idx = -1;
+        if (!label[0]) snprintf(err, errsz, "%.40s has no label, and the channel names creatures by label", w[5]);
+        else if (spot(m, w[3], ct->size, -1, &x, &y, err, errsz))
+            idx = character_place(m, u, c, kind, x, y, n == 7, said, sizeof said, err, errsz);
+        map_free(c);
+        if (idx < 0) return -1;
+        const Token *t = &m->tokens.v[idx];
+        char at[MAP_COORD_MAX];
+        map_coord_name(t->x, t->y, at, sizeof at);
+        fprintf(ed->out, "placed \"%s\" at %s%s%s\n", t->label, at, said[0] ? " - " : "", said);
+        touched(ed, t->x, t->y, t->x + t->size - 1, t->y + t->size - 1);
+        return 0;
+    }
+
     if (!strcmp(sub, "add")) {
         /* token add player|enemy SQ [size N] [hidden] "Label" */
         if (n < 5 || n > 8) BAD("token add player|enemy SQUARE [size N] [hidden] \"Label\"");
@@ -1314,6 +1345,7 @@ static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FIL
             str_lcpy(ed->first, line, sizeof ed->first);
         }
         ed->lines++;
+        ed->out = out;
         if (edit_line(a, w, n, ed, err, errsz) < 0) return -1;
         if ((unsigned long)(a->undo.stamp - ed->ops0) > CTL_OPS_MAX) {
             snprintf(err, errsz, "the request changes more than %lu things at once", CTL_OPS_MAX);
@@ -1374,6 +1406,27 @@ static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FIL
             map_free(st);
         }
         if (!k) fputs("no stamps\n", out);
+        else if (k > 64) fprintf(out, "... and %d more\n", k - 64);
+        return 0;
+    }
+    if (!strcmp(v, "characters")) {
+        /* The saved character templates: what `token add ... from NAME` places. */
+        if (n > 1) { snprintf(err, errsz, "characters takes nothing after it"); return -1; }
+        char names[64][MAP_NAME_MAX], e2[160];
+        int  k = character_list(names, 64);
+        for (int i = 0; i < k && i < 64; i++) {
+            Map *c = character_load(names[i], e2, sizeof e2);
+            if (!c) { fprintf(out, "%s  (%s)\n", names[i], e2); continue; }
+            const Token *t = character_token(c);
+            fprintf(out, "%s  \"%s\" %s %dx%d", names[i], t->label, token_kind_name(t->kind), t->size, t->size);
+            for (int j = 0; j < t->ncounters; j++)
+                fprintf(out, "%s%s %d", j ? ", " : "  ", t->counters[j].name, t->counters[j].max);
+            for (int j = 0, r = 0; j < ROLL_MAX; j++)
+                if (c->rolls[j].name[0]) fprintf(out, "%s%s = %s", r++ ? ", " : "  rolls ", c->rolls[j].name, c->rolls[j].expr);
+            fputc('\n', out);
+            map_free(c);
+        }
+        if (!k) fputs("no characters\n", out);
         else if (k > 64) fprintf(out, "... and %d more\n", k - 64);
         return 0;
     }

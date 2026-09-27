@@ -154,6 +154,10 @@ static inline const char *token_name(const Token *t)
     return t->label[0] ? t->label : token_kind_name(t->kind);
 }
 
+/* A label without its copy number: "Goblin 2" is Goblin, "Goblin" and
+ * "Room 101B" stay as they are. */
+void token_label_root(const char *label, char *out, size_t outsz);
+
 /* A label no other token carries, so pasting a copy of "Goblin" gives you
  * "Goblin 2" rather than two creatures you cannot tell apart in the readout.
  * A trailing number is continued rather than stacked. An unlabeled token

@@ -81,6 +81,44 @@ void ui_prompt_draw(Renderer *r, const Theme *th, const TextPrompt *p,
 void ui_cmdline_draw(Renderer *r, const Theme *th, const TextPrompt *p, int row,
                      char lead);
 
+/* --------------------------------------------------------------- picker */
+
+/* A prompt with a list under it, filtered on every letter: the character
+ * templates and the stamps. Matches are anywhere in an item's name or its
+ * detail, ignoring case -- the exact name first, then names starting with the
+ * text, then names holding it, then details holding it, in the list's order
+ * within each. Tab fills in the highlighted name and, pressed again, the next
+ * match, without narrowing the list; typing narrows it again. */
+#define UI_PICK_NAME   64
+#define UI_PICK_DETAIL 72
+#define UI_PICK_ROWS   10
+
+typedef struct {
+    char name[UI_PICK_NAME];
+    char detail[UI_PICK_DETAIL];
+} UiPickItem;
+
+typedef struct {
+    TextPrompt  p;
+    UiPickItem *items;     /* owned */
+    int         n;
+    int        *match;     /* indices into items, ranked */
+    int         nmatch;
+    int         sel;       /* into match */
+    int         cycling;   /* tab filled the text: the list is kept as it was */
+} UiPicker;
+
+/* Takes ownership of items (malloc'd, freed by ui_picker_free). */
+void ui_picker_open(UiPicker *pk, const char *title, UiPickItem *items, int n,
+                    const char *initial);
+void ui_picker_free(UiPicker *pk);
+/* 1 accepted (see ui_picker_chosen), -1 canceled, 0 still choosing. */
+int  ui_picker_key(UiPicker *pk, Key k);
+/* The highlighted item's index in items, or -1 when nothing matches. */
+int  ui_picker_chosen(const UiPicker *pk);
+void ui_picker_draw(Renderer *r, const Theme *th, const UiPicker *pk,
+                    const BoxGlyphs *frame);
+
 /* ---------------------------------------------------------------- modal */
 
 void ui_modal(Renderer *r, const Theme *th, const char *title, const char *body,

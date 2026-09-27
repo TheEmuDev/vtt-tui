@@ -22,6 +22,8 @@ typedef enum {
                             x, y and counters[0].value/max) */
     OP_LINK,             /* a link: two token slots carry it before and after
                             (the Link in .note, size 0 for none) */
+    OP_ROLL,             /* a named roll: x is the slot; two token slots carry
+                            the NamedRoll before and after in .note */
 } OpKind;
 
 /* One op is one cell or one token changing. Tile ops dominate -- a brush
@@ -140,6 +142,10 @@ int  undo_set_floor(Undo *u, Map *m, const char *name, int on, int level);
 int  undo_set_link(Undo *u, Map *m, const Link *l);
 int  undo_remove_link(Undo *u, Map *m, int num);
 
+/* A named roll's slot, set to `r` (an empty name clears it). Placing a
+ * character template adds its rolls through this, so u takes back the whole
+ * placement; :roll's own saving stays outside the log. */
+void undo_set_roll(Undo *u, Map *m, int slot, const NamedRoll *r);
 int  undo_undo(Undo *u, Map *m);
 
 /* Unwinds back to `depth`, but only through batches that are nothing but

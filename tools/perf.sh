@@ -91,6 +91,18 @@ awk '{ print } /"Mob 1"/ { print "tokenhidden" }' "$MOB" | sed 's/^VTT 2$/VTT 10
 
 # Rooms on a void canvas, which is what a map under construction looks like
 # and the only shape that exercises the void marks.
+# 500 saved characters for the picker: what a long campaign's worth looks like.
+CHARS="$XDG_DATA_HOME/vtt/characters"
+mkdir -p "$CHARS"
+awk -v dir="$CHARS" 'BEGIN {
+    for (i = 0; i < 500; i++) {
+        f = sprintf("%s/beast-%03d.vtt", dir, i); s = i % 3 + 1
+        printf "VTT 6\nname beast-%03d\nsize %d %d\ntiles\n", i, s, s > f
+        for (y = 0; y < s; y++) { for (x = 0; x < s; x++) printf "." > f; printf "\n" > f }
+        printf "token enemy 0 0 %d \"Beast %d\"\ntokencounter HP %d %d\nroll bite%d \"1d8+%d\"\n", s, i, i % 20 + 1, i % 20 + 1, i % 7, i % 5 > f
+        close(f)
+    }
+}'
 VOIDY="$DIR/voidy.vtt"
 awk 'BEGIN {
     w = 200; h = 200;
@@ -332,6 +344,7 @@ run "play, GM ping"        "$MOB"    80x24  ':play\rgpllgphh'
 run "play, carry, 4 watch" "$MOB"    80x24  ':play\rt\rlllljjjj\r' "--bench-clients 4"
 run "play, logging"        "$MOB"    80x24  ':play\r:log on\rt\rlllljjjj\r'
 run "play, rolling"        "$MOB"    80x24  ':play\r:roll 2d6+3\r:roll +1\r'
+run "play, 500 characters" "$MOB"    80x24  ':play\ritebeast-4\t\t\ru'
 run "agent, room + 12"     "$VOIDY"  80x24  'u' "--bench-ctl $DIR/room.ctl"
 run "agent, plan of rooms" "$VOIDMAP" 80x24  'u' "--bench-ctl $DIR/plan.ctl"
 run "agent, dump 512x512"  "$HUGE"   80x24  'lh' "--bench-ctl $DIR/dump.ctl"

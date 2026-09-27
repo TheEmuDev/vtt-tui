@@ -875,6 +875,11 @@ static void cmd_agent(App *a, const char *verb, const char *rest)
     app_agent_command(a, rest);
 }
 
+static void cmd_character(App *a, const char *verb, const char *rest)
+{
+    app_character_command(a, rest);
+}
+
 static void cmd_stamp(App *a, const char *verb, const char *rest)
 {
     app_stamp_command(a, rest);
@@ -1019,6 +1024,7 @@ static const struct {
     { "serve", NULL, cmd_serve },
     { "agent", NULL, cmd_agent },
     { "stamp", NULL, cmd_stamp },
+    { "character", "characters", cmd_character },
     { "link", "links", cmd_link },
     { "floor", "floors", cmd_floor },
     { "area", "areas", cmd_area },

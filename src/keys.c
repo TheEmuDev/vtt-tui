@@ -27,6 +27,8 @@ static const KeyDoc PLAY[] = {
     GROUP("Creatures"),
     { "i p",      "place a player",                    "i",     "place" },
     KEY("i e",    "place an enemy"),
+    KEY("i t e  i t p", "place a saved character as an enemy / a player: a list to pick from"),
+    KEY(":character save", "save the creature under the cursor as a character   :character NAME picks one"),
     KEY("b  B",   "the cursor's size, cycled; resizes the selected"),
     KEY("2b",     "name the size outright -- 1, 2 or 3"),
     { "enter",    "pick up or put down; a big cursor walks what it covers",
@@ -174,7 +176,7 @@ static const KeyDoc BUILD[] = {
 
     GROUP("Stamps"),
     KEY("y  p",   "copy the brush's squares or the box / show the copy on the cursor to place"),
-    KEY(":stamp", "list your stamps   :stamp Table picks one   :stamp save Table keeps the copy"),
+    KEY(":stamp", "pick from your stamps   :stamp Table takes one   :stamp save Table keeps the copy"),
     KEY(":area Crypt", "name the v box Crypt, or jump to it   :areas lists them"),
 
     GROUP("Undo and elsewhere"),

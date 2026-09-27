@@ -137,7 +137,7 @@ void app_stamp_key(App *a, Key k)
     }
 }
 
-/* :stamp                  list them
+/* :stamp                  pick one from the list
  * :stamp NAME [-f]        pick one up; -f puts it down at the cursor at once
  * :stamp save NAME        keep the one in hand */
 void app_stamp_command(App *a, const char *rest)
@@ -145,17 +145,7 @@ void app_stamp_command(App *a, const char *rest)
     char msg[256], err[160];
     if (a->screen != SCREEN_EDITOR) { app_set_status(a, "stamps are build mode's - F1 first"); return; }
 
-    if (!*rest) {
-        char names[16][MAP_NAME_MAX];
-        int  n = stamp_list(names, 16), off = 0;
-        if (!n) { app_set_status(a, "no stamps yet - y copies, :stamp save NAME keeps it"); return; }
-        off = snprintf(msg, sizeof msg, "stamps:");
-        for (int i = 0; i < n && i < 16 && off < (int)sizeof msg - 40; i++)
-            off += snprintf(msg + off, sizeof msg - (size_t)off, " %s", names[i]);
-        if (n > 16 && off < (int)sizeof msg - 8) snprintf(msg + off, sizeof msg - (size_t)off, " ...");
-        app_set_status(a, msg);
-        return;
-    }
+    if (!*rest) { app_pick_open(a, PICK_STAMP, -1, ""); return; }
 
     char w1[MAP_NAME_MAX + 8] = "", w2[MAP_NAME_MAX + 8] = "", w3[16] = "";
     int  nw = sscanf(rest, "%71s %71s %15s", w1, w2, w3);

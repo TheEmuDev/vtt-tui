@@ -1115,13 +1115,22 @@ void test_stamp_keys(void)
     CHECK(strstr(a.status, "runs off the map") != NULL);
     press(&a, "\x1b");
 
-    CASE(":stamp save keeps it, :stamp lists, :stamp NAME picks it up, -f puts it down at once");
+    CASE(":stamp save keeps it, :stamp opens the picker, :stamp NAME picks it up, -f puts it down at once");
     press(&a, ":stamp save Pool\r");
     CHECK(strstr(a.status, "stamp Pool kept") != NULL);
     press(&a, ":stamp save ../x\r");
     CHECK(strstr(a.status, "letters, digits") != NULL);
+    map_free(a.stamp);
+    a.stamp = NULL;
     press(&a, ":stamp\r");
-    CHECK(strstr(a.status, "stamps: Pool") != NULL);
+    CHECK_EQ(a.modal, MODAL_PICKER);
+    CHECK_EQ(a.picker.n, 1);
+    CHECK(!strcmp(a.picker.items[0].name, "Pool") && !strcmp(a.picker.items[0].detail, "2x1"));
+    press(&a, "\r");                                /* the picker's enter takes it up */
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK_EQ(a.ed.mode, ED_STAMP);
+    CHECK(strstr(a.status, "Pool 2x1") != NULL);
+    press(&a, "\x1b");
     map_free(a.stamp);
     a.stamp = NULL;
     press(&a, ":stamp Pool\r");

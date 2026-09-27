@@ -1417,3 +1417,100 @@ void test_ctl_live(void)
     sandbox_leave(&sb);
     rmdir(sb.dir);
 }
+
+/* ------------------------------------------------ characters on the channel */
+
+void test_ctl_characters(void)
+{
+    Sandbox sb = sandbox_enter("ctlchars");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK(ctl_blank_map(&a, sb.dir, 12, 8));
+    if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    Map *m = a.map;
+    char err[160];
+
+    CASE("characters with none saved");
+    char *t = ctl_ask(&a, "characters");
+    CHECK(t && strstr(t, "ok\nno characters\n") == t);
+    free(t);
+
+    /* A template to place: a 2x2 Wight with HP and a roll. */
+    Token w;
+    memset(&w, 0, sizeof w);
+    w.kind = TOKEN_ENEMY; w.size = 2;
+    str_lcpy(w.label, "Wight", sizeof w.label);
+    w.ncounters = 1;
+    str_lcpy(w.counters[0].name, "HP", sizeof w.counters[0].name);
+    w.counters[0].value = w.counters[0].max = 9;
+    tokens_add(&m->tokens, w);
+    str_lcpy(m->rolls[0].name, "drain", sizeof m->rolls[0].name);
+    str_lcpy(m->rolls[0].expr, "1d10", sizeof m->rolls[0].expr);
+    const char *rolls[] = { "drain" };
+    CHECK(character_save(m, 0, "wight", rolls, 1, err, sizeof err) == 0);
+    w.label[0] = '\0';
+    tokens_add(&m->tokens, w);
+    CHECK(character_save(m, 1, "nameless", NULL, 0, err, sizeof err) == 0);
+    tokens_free(&m->tokens);
+    memset(m->rolls, 0, sizeof m->rolls);
+
+    CASE("characters lists name, label, side, size, counters and rolls");
+    t = ctl_ask(&a, "characters");
+    CHECK(t && strstr(t, "wight  \"Wight\" enemy 2x2  HP 9  rolls drain = 1d10\n") != NULL);
+    CHECK(t && strstr(t, "nameless  \"\" enemy 2x2") != NULL);
+    free(t);
+
+    CASE("token add ... from NAME places it, numbered, says the label, adds the roll; one undo step");
+    tokens_add(&m->tokens, (Token){ .x = 8, .y = 0, .size = 1, .kind = TOKEN_PLAYER, .label = "Wight" });
+    int depth = a.undo.depth;
+    t = ctl_ask(&a, "token add player B2 from wight hidden");
+    CHECK(t && strstr(t, "ok\n") == t);
+    CHECK(t && strstr(t, "placed \"Wight 2\" at B2\n") != NULL);
+    free(t);
+    CHECK_EQ(m->tokens.n, 2);
+    const Token *p = &m->tokens.v[1];
+    CHECK(p->kind == TOKEN_PLAYER && p->size == 2 && p->hidden && p->x == 1 && p->y == 1);
+    CHECK(!strcmp(m->rolls[0].name, "drain"));
+    CHECK_EQ(a.undo.depth, depth + 1);
+    t = ctl_ask(&a, "undo");
+    free(t);
+    CHECK_EQ(m->tokens.n, 1);
+    CHECK(!m->rolls[0].name[0]);
+
+    CASE("a request that fails later takes back the creature and its roll");
+    t = ctl_ask(&a, "token add enemy B2 from wight\ntile Z99 water");
+    CHECK(t && strncmp(t, "error: line 2", 13) == 0);
+    free(t);
+    CHECK_EQ(m->tokens.n, 1);
+    CHECK(!m->rolls[0].name[0]);
+
+    CASE("refusals: no such character, no label, no room, a bad word");
+    t = ctl_ask(&a, "token add enemy B2 from ghast");
+    CHECK(t && strstr(t, "no character called ghast") != NULL);
+    free(t);
+    t = ctl_ask(&a, "token add enemy B2 from nameless");
+    CHECK(t && strstr(t, "has no label") != NULL);
+    free(t);
+    t = ctl_ask(&a, "token add enemy L8 from wight");
+    CHECK(t && strncmp(t, "error:", 6) == 0);
+    free(t);
+    t = ctl_ask(&a, "token add enemy B2 from wight loud");
+    CHECK(t && strstr(t, "from NAME [hidden]") != NULL);
+    free(t);
+    CHECK_EQ(m->tokens.n, 1);
+
+    CASE("into a named area: the free square nearest its middle");
+    t = ctl_ask(&a, "area Hall C3:H6\ntoken add enemy Hall from wight");
+    CHECK(t && strstr(t, "ok\n") == t);
+    CHECK(t && strstr(t, "placed \"Wight 2\" at E4") != NULL);
+    free(t);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}

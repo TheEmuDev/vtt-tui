@@ -98,19 +98,23 @@ const char *token_kind_name(uint8_t kind)
     return kind == TOKEN_ENEMY ? "enemy" : "player";
 }
 
+void token_label_root(const char *label, char *out, size_t outsz)
+{
+    str_lcpy(out, label, outsz);
+    size_t n = strlen(out), end = n;
+    while (end > 0 && out[end - 1] >= '0' && out[end - 1] <= '9') end--;
+    if (end < n && end > 0 && out[end - 1] == ' ') out[end - 1] = '\0';
+}
+
 void tokens_unique_label(const TokenList *l, const char *base,
                          char *out, size_t outsz)
 {
     if (!base || !base[0]) { str_lcpy(out, "", outsz); return; }
 
-    char root[TOKEN_LABEL_MAX];
-    str_lcpy(root, base, sizeof root);
-
     /* Continue an existing run instead of stacking numbers: a copy of
      * "Goblin 2" should look for "Goblin 3", not "Goblin 2 2". */
-    size_t n = strlen(root), end = n;
-    while (end > 0 && root[end - 1] >= '0' && root[end - 1] <= '9') end--;
-    if (end < n && end > 0 && root[end - 1] == ' ') root[end - 1] = '\0';
+    char root[TOKEN_LABEL_MAX];
+    token_label_root(base, root, sizeof root);
 
     for (int i = 1; i < 1000; i++) {
         char cand[TOKEN_LABEL_MAX];

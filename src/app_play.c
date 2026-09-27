@@ -505,7 +505,19 @@ static int pending_key(App *a, Key k)
     if (pre == 'i') {
         if (k.ch == 'p') { place_token(a, TOKEN_PLAYER); return 1; }
         if (k.ch == 'e') { place_token(a, TOKEN_ENEMY);  return 1; }
-        app_set_status(a, "i wants p for a player or e for an enemy");
+        if (k.ch == 't') {
+            a->pending = PENDING_IT;
+            app_set_status(a, "i t    p as a player    e as an enemy");
+            return 1;
+        }
+        app_set_status(a, "i wants p for a player, e for an enemy, or t for a saved character");
+        return 1;
+    }
+
+    if (pre == PENDING_IT) {
+        if (k.ch == 'p') { app_pick_open(a, PICK_CHARACTER, TOKEN_PLAYER, ""); return 1; }
+        if (k.ch == 'e') { app_pick_open(a, PICK_CHARACTER, TOKEN_ENEMY,  ""); return 1; }
+        app_set_status(a, "i t wants p to place the character as a player, e as an enemy");
         return 1;
     }
 
@@ -789,7 +801,7 @@ void app_play_key(App *a, Key k)
     /* i inserts, so p is free to mean what it means everywhere else. */
     case 'i':
         a->pending = 'i';
-        app_set_status(a, "i    p player    e enemy");
+        app_set_status(a, "i    p player    e enemy    t a saved character");
         break;
 
     case 'g':

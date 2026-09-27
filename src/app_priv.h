@@ -85,6 +85,12 @@ void app_command_key(App *a, Key k);
 /* app_draw.c: the status message and its colored spans, as the bars draw it. */
 void app_draw_status_msg(App *a, int x, int y, int maxw);
 
+/* app_character.c: the picker (the character templates, the stamps) and
+ * :character. kind is the side a character goes down on, -1 for its own. */
+void app_pick_open(App *a, PickWhat what, int kind, const char *initial);
+void app_pick_key(App *a, Key k);
+void app_character_command(App *a, const char *rest);
+
 /* app_stamp.c: y, p, the stamp mode's keys, :stamp. */
 void app_stamp_yank(App *a);
 void app_stamp_lift(App *a);

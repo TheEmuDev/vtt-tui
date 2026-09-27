@@ -35,6 +35,7 @@
 #include "maptools.h"
 #include "link.h"
 #include "floor.h"
+#include "character.h"
 #include "stamp.h"
 #include "theme.h"
 #include "token.h"
@@ -233,6 +234,9 @@ void test_ctl_marked(void);
 void test_ctl_edits(void);
 void test_ctl_cap(void);
 void test_stamp_keys(void);
+void test_picker(void);
+void test_characters(void);
+void test_ctl_characters(void);
 void test_gray_marker(void);
 void test_areas(void);
 void test_links(void);
