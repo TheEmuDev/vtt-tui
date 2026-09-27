@@ -517,8 +517,10 @@ void test_mapio(void)
 
     Token p = { 2, 2, 1, TOKEN_PLAYER, "Aria" };
     Token e = { 7, 3, 2, TOKEN_ENEMY,  "Ogre Chief" };
+    Token u = { 3, 5, 1, TOKEN_ENEMY,  "" };
     tokens_add(&m->tokens, p);
     tokens_add(&m->tokens, e);
+    tokens_add(&m->tokens, u);
 
     char err[MAPIO_ERR_MAX] = { 0 };
     CASE("save succeeds");
@@ -549,7 +551,8 @@ void test_mapio(void)
         CHECK(h_same);
 
         CASE("tokens round-trip, labels with spaces included");
-        CHECK_EQ(l->tokens.n, 2);
+        CHECK_EQ(l->tokens.n, 3);
+        if (l->tokens.n == 3) CHECK_EQ(l->tokens.v[2].label[0], '\0');   /* "" is empty, not a quote */
         CHECK_EQ(strcmp(l->tokens.v[0].label, "Aria"), 0);
         CHECK_EQ(strcmp(l->tokens.v[1].label, "Ogre Chief"), 0);
         CHECK_EQ(l->tokens.v[1].size, 2);

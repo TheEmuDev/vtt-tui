@@ -407,8 +407,9 @@ static int parse_quoted(const char *from, char *out, size_t outsz)
     if (!from || *from != '"') return 0;
 
     from++;
+    /* The last quote closes it; "" is empty, not a lone quote. */
     const char *end = strrchr(from, '"');
-    size_t      len = end && end > from ? (size_t)(end - from) : strlen(from);
+    size_t      len = end ? (size_t)(end - from) : strlen(from);
     if (len >= outsz) len = outsz - 1;
     memcpy(out, from, len);
     out[len] = '\0';
