@@ -1269,7 +1269,7 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
                 l.x[0] = l.x[1]; l.y[0] = l.y[1]; l.x[1] = tx; l.y[1] = ty;
             }
             else BAD("%.20s: a link is stairs, ladder, trapdoor or portal; oneway, twoway, secret, seen%s",
-                     w[i], isnum ? ", reverse or off" : " or size N");
+                     w[i], isnum ? ", reverse or remove" : " or size N");
         }
         const char *why = link_problem(m, &l);
         if (why) BAD("%s", why);

@@ -573,6 +573,9 @@ void test_link_keys(void)
         ans = ctl_ask(&a, "links json\n");
         CHECK(ans && json_valid(strchr(ans, '\n') + 1) && strstr(ans, "\"num\":3,\"kind\":\"portal\""));
         free(ans);
+        ans = ctl_ask(&a, "link 3 off\n");                         /* the old word removes nothing */
+        CHECK(ans && strstr(ans, "link 3 remove") && link_find(m, 3) >= 0);
+        free(ans);
         ans = ctl_ask(&a, "link 3 remove\n");
         CHECK(ans && !strncmp(ans, "ok", 2) && link_find(m, 3) < 0);
         free(ans);

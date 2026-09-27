@@ -537,7 +537,7 @@ the same reason.
    rim. **Approved and designed above**, the rim settled under 9.
 5. Patches with settings that can be changed afterwards, cleared and
    disabled one at a time. **Approved and designed above.** `memory` stays,
-   on by default; `delete` and `disable` are separate acts; the rim setting
+   on by default; `remove` (first spelled `delete`) and `disable` are separate acts; the rim setting
    is `--soft-edge`.
 
 6. A silhouette loses its side's color. **Settled: neutral.**
@@ -672,7 +672,7 @@ frame. It should now be:
       the session rather than reused, because the undo log can put that
       number back on a tile, and a new patch in the slot would inherit the
       ground -- the clock bug the review found, avoided by construction; so
-      `delete` is not undoable. The first patch turns the master switch on,
+      `remove` is not undoable. The first patch turns the master switch on,
       or making one would seem to do nothing. Over fog the players' frame
       shows no status message at all, since most of them name a creature or
       a square; the ruler is the GM's and is not drawn for the players; a

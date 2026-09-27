@@ -40,7 +40,7 @@ void app_link_mark(App *a)
         if (o >= 0) {
             char name[32];
             link_name(&m->links[o], name, sizeof name);
-            snprintf(msg, sizeof msg, "%s is already there - :link %d off takes it away", name, m->links[o].num);
+            snprintf(msg, sizeof msg, "%s is already there - :link %d remove takes it away", name, m->links[o].num);
             app_set_status(a, msg);
             return;
         }
@@ -237,7 +237,7 @@ void app_link_command(App *a, const char *rest)
             l.x[1] = x;      l.y[1] = y;
         } else {
             snprintf(msg, sizeof msg, "not something a link is: %.15s - a kind, oneway, twoway, reverse, "
-                     "secret, seen or off", words[i]);
+                     "secret, seen or remove", words[i]);
             app_set_status_gm(a, msg);
             return;
         }
