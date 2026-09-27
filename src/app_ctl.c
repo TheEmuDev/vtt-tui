@@ -918,6 +918,9 @@ static int token_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *er
         else if (!strcmp(w[2], "enemy")) t.kind = TOKEN_ENEMY;
         else BAD("%.20s: a creature is a player or an enemy", w[2]);
         int x, y, size = 1;
+        /* "hidden" last is a label forgotten, not a creature named hidden. */
+        if (n >= 5 && !strcmp(w[n - 1], "hidden") && strcmp(w[n - 2], "hidden") != 0)
+            BAD("the label goes last: token add enemy C3 hidden \"Ghoul\"");
         if (n > 5 && !strcmp(w[n - 2], "size")) BAD("the size goes before the label: token add enemy C3 size 2 \"Ogre\"");
         /* The words between the square and the label, in any order. */
         for (int k = 4; k < n - 1; k++) {

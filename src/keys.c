@@ -84,9 +84,9 @@ static const KeyDoc PLAY[] = {
     KEY(":fog --soft-edge", "show the players the rim of the dark: dim walls, silhouettes"),
     GROUP("Notes"),
     KEY("s n",    "a note on this creature, or on the square; the prompt reads and writes it"),
+    KEY(":notes", "where the notes are"),
     GROUP("Hidden creatures"),
     KEY("s h",    "hide it from the players, dimmed on yours; again shows it   :hidden lists them"),
-    KEY(":notes", "where the notes are"),
 
     GROUP("Tools"),
     KEY("m",      "measure (the ruler)"),

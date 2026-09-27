@@ -73,9 +73,17 @@ int token_can_move_set(const Map *m, const Token *t, int dx, int dy,
      * Standing on an ally is allowed on the way past, which is why this is
      * about crossing rather than about where you come to rest -- refusing to
      * be put down is what stops two creatures sharing a square. */
+    /* A hidden creature blocks nothing: a visible one refusing its square,
+     * or a route bending round it, would show the players where it is. The
+     * GM rules on what happens when someone walks into it. */
     uint8_t other = (t->kind == TOKEN_PLAYER) ? TOKEN_ENEMY : TOKEN_PLAYER;
-    if (tokens_overlapping_set(&m->tokens, nx, ny, s, skip, nskip, other) >= 0)
-        return 0;
+    for (int i = 0; i < m->tokens.n; i++) {
+        const Token *o = &m->tokens.v[i];
+        if (o->kind != other || o->hidden || !token_meets(o, nx, ny, s, s)) continue;
+        int skipped = 0;
+        for (int k = 0; k < nskip && !skipped; k++) skipped = skip[k] == i;
+        if (!skipped) return 0;
+    }
 
     return walls_allow(m, t, dx, dy);
 }
@@ -314,7 +322,7 @@ static void trail_paint_blockers(const Play *p, const Map *m, uint8_t other,
 {
     for (int i = 0; i < m->tokens.n; i++) {
         const Token *b = &m->tokens.v[i];
-        if (b->kind != other || play_in_group(p, i)) continue;
+        if (b->kind != other || b->hidden || play_in_group(p, i)) continue;
 
         int x0 = imax(b->x, 0), x1 = imin(b->x + b->size, m->w);
         int y0 = imax(b->y, 0), y1 = imin(b->y + b->size, m->h);
@@ -514,7 +522,7 @@ int play_can_place_set(const Map *m, int tx, int ty, int size,
 }
 
 void play_move_label(Renderer *r, const Map *m, const GridView *g,
-                     const Play *p, const Theme *th)
+                     const Play *p, const Theme *th, int players)
 {
     PROF_ZONE("move.label");
 
@@ -543,8 +551,12 @@ void play_move_label(Renderer *r, const Map *m, const GridView *g,
      * Beside the whole group, not just the primary, or a label placed off
      * one creature's right edge lands squarely on the next one along. */
     int lo = t->x, hi = t->x + t->size - 1;
+    int fogp = players && fog_any(m);
     for (int i = 0; i < p->ngroup; i++) {
         const Token *o = &m->tokens.v[p->group[i]];
+        /* On the players' screen a member they cannot see takes no room:
+         * the label's place would outline it. */
+        if (players && fog_token_unseen(m, o, fogp)) continue;
         if (o->x < lo)                lo = o->x;
         if (o->x + o->size - 1 > hi)  hi = o->x + o->size - 1;
     }
@@ -589,8 +601,9 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
 
     /* The lit row and column say where the cursor is; in the dark that is
      * where the GM is working, which is usually on something hidden. */
+    int no_cursor = cursor_dark || held_hidden;     /* the lit labels would say where it is */
     grid_draw_labels(r, m, &e->view, th, ed_gutter(e, m),
-                     cursor_dark ? -1 : e->cx, cursor_dark ? -1 : e->cy);
+                     no_cursor ? -1 : e->cx, no_cursor ? -1 : e->cy);
 
     ClipRect saved = grid_clip_push(r, &e->view, m);
 
@@ -669,7 +682,7 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
     if (cursor) grid_draw_tile_marker(r, &e->view, m, e->cx, e->cy, csize, th->accent);
 
     /* Over everything, since it is the one thing being read right now. */
-    if (!held_hidden) play_move_label(r, m, &e->view, p, th);
+    if (!held_hidden) play_move_label(r, m, &e->view, p, th, players);
 
     rnd_clip_restore(r, saved);
 }

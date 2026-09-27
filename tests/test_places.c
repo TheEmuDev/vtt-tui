@@ -726,6 +726,9 @@ void test_floors(void)
         CHECK_EQ(floor_pick(m, TOKEN_PLAYER, -1, -1), 1);   /* else the lowest */
         CHECK_EQ(floor_pick(m, TOKEN_PLAYER, -1, 2), 1);    /* a last that is not tied: ignored */
         CHECK_EQ(floor_pick(m, TOKEN_ENEMY, 0, -1), 1);     /* the enemy's side, the same rule */
+        m->tokens.v[2].hidden = 1;                          /* C hidden upstairs: not counted */
+        CHECK_EQ(floor_pick(m, TOKEN_PLAYER, -1, 0), 1);    /* Cellar 2, Upper 0 */
+        m->tokens.v[2].hidden = 0;
         m->tokens.n = 0;
         CHECK_EQ(floor_pick(m, TOKEN_PLAYER, 0, 0), -1);
     }

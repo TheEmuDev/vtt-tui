@@ -3743,6 +3743,57 @@ void test_hidden(void)
         free(ans);
     }
 
+    CASE("review fixes: a hidden enemy blocks nothing; deleting the last hidden says nothing public");
+    {
+        char *ans = ctl_ask(&a, "token set Aria hidden off\ntoken del Lurker\ntoken move Aria B3\ntoken move Zorkmid E3\n");
+        CHECK(ans && !strncmp(ans, "ok", 2));
+        free(ans);
+        Key f2b = { KEY_F2, 0, 0 };
+        app_key(&a, f2b);
+        play_focus(&a.play, -1);
+        a.ed.cx = 1; a.ed.cy = 2;
+        press(&a, "\r");
+        press(&a, "llllll");                               /* straight through E3 */
+        CHECK(m->tokens.v[0].x == 7 && a.play.steps == 6);
+        press(&a, "\x1b");
+        play_focus(&a.play, -1);
+        a.ed.cx = 4; a.ed.cy = 2;
+        press(&a, "x");                                    /* the last hidden creature goes */
+        CHECK(!tokens_any_hidden(&m->tokens) && a.status_gm == 1);
+        press(&a, "u");
+    }
+
+    CASE("review fixes: g p carrying a hidden 2x2 rings one square; the channel wants the label last");
+    {
+        m->tokens.v[1].size = 2;
+        play_focus(&a.play, -1);
+        a.ed.cx = 4; a.ed.cy = 2;
+        press(&a, "\r");
+        a.npings = 0;
+        press(&a, "gp");
+        CHECK(a.npings == 1 && a.pings[0].x1 == a.pings[0].x0);
+        press(&a, "\x1b");
+        m->tokens.v[1].size = 1;
+        Key f1b = { KEY_F1, 0, 0 };
+        app_key(&a, f1b);
+        char *ans = ctl_ask(&a, "token add enemy K5 hidden\n");
+        CHECK(ans && strstr(ans, "the label goes last"));
+        free(ans);
+    }
+
+    CASE("review fixes: a hidden marker after a dropped creature line hides nobody");
+    {
+        char err[256], p3[1300];
+        snprintf(p3, sizeof p3, "%s/drop.vtt", sb.dir);
+        FILE *h = fopen(p3, "w");
+        fputs("VTT 10\nsize 4 1\ntiles\n....\ntoken enemy 0 0 1 \"Goblin\"\n"
+              "token enemy 9 9 1 \"Offmap\"\ntokenhidden\n", h);
+        fclose(h);
+        Map *back = mapio_load(p3, err, sizeof err);
+        CHECK(back && back->tokens.n == 1 && back->tokens.v[0].hidden == 0);
+        map_free(back);
+    }
+
     app_free(&a);
     rnd_free(&r);
     char cmd[1300];

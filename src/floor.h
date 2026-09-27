@@ -45,7 +45,7 @@ static inline int floor_holds(const Map *m, int f, int x, int y)
 }
 
 /* The floor to show a side (TOKEN_PLAYER or TOKEN_ENEMY) on, when nothing
- * names a creature: stay on `shown` if one of the side is there; else the
+ * names a creature (hidden player creatures are not counted): stay on `shown` if one of the side is there; else the
  * floor with the most of them; else `last`, the floor one of them last moved
  * on; else the lowest. -1 when none of them is on any floor. */
 int  floor_pick(const Map *m, int kind, int shown, int last);

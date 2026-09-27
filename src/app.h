@@ -91,6 +91,8 @@ typedef struct {
     /* The status message is the GM's alone -- a counter's value, say -- and
      * the players' frame leaves it out. Cleared with every new message. */
     int status_gm;
+    /* Something was hidden when the key being handled began. */
+    int key_saw_hidden;
 
     ListState menu;
 

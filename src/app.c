@@ -61,7 +61,10 @@ void app_set_status(App *a, const char *msg)
 {
     str_lcpy(a->status, msg, sizeof a->status);
     a->nstatus_span = 0;
-    a->status_gm    = 0;
+    /* A message made while anything was hidden is the GM's, even when the
+     * key that made it took the last hidden creature away: "removed
+     * Zorkmid" would name it. */
+    a->status_gm    = a->key_saw_hidden || (a->map && tokens_any_hidden(&a->map->tokens));
     a->dirty = 1;
 }
 
@@ -1925,6 +1928,7 @@ void app_fog_sync(App *a)
 
 void app_key(App *a, Key k)
 {
+    a->key_saw_hidden = a->map && tokens_any_hidden(&a->map->tokens);
     app_key_dispatch(a, k);
     app_floor_sync(a);
     app_fog_sync(a);

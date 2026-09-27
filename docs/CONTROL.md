@@ -69,9 +69,9 @@ as `--describe` names them. Lines run in order, so a read sees the edits before 
 | `tile REGION KIND` | KIND: void floor water rough brush wood hazard |
 | `wall REGION [EDGE]` | the region's outline as EDGE (default wall; `none` clears) |
 | `edge BOUNDARY EDGE` | one boundary. EDGE: none wall door open window secret opensecret |
-| `token add player\|enemy SQ [size N] "Label"` | a creature |
+| `token add player\|enemy SQ [size N] [hidden] "Label"` | a creature; `hidden` keeps it off the players' screens (added with hidden creatures) |
 | `token move WHO SQ`, `token del WHO` | WHO is a label, or a square it stands on |
-| `token set WHO label "..."\|size N\|note "..."` | |
+| `token set WHO label "..."\|size N\|note "..."\|hidden on\|off` | |
 | `note SQ "text"`, `note SQ` | a GM-only note on a square, or clears it |
 | `fog paint REGION N` | paints the region into fog patch N (0 scrubs) |
 | `room NAME ...`, `area NAME ...`, `door ROOM SIDE ...`, `corridor A B ...` | the room language (added after stamps): named areas, rooms placed beside rooms, doors by side, corridors; docs/AGENTS.md has the whole of it |

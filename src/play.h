@@ -255,7 +255,7 @@ void play_trail_draw(Renderer *r, const Map *m, const GridView *g,
  * it has to travel for is a number it reads late. Names the range band too
  * when the map has a ruleset, since that is what the distance is for. */
 void play_move_label(Renderer *r, const Map *m, const GridView *g,
-                     const Play *p, const Theme *th);
+                     const Play *p, const Theme *th, int players);
 
 /* Is there room for a size x size token anchored here -- on the map, and on
  * a square nothing already stands on? `except` is a token to ignore, for

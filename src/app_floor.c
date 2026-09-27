@@ -222,6 +222,7 @@ void app_floor_reset(App *a)
 
 void app_floor_note_move(App *a, const Token *t)
 {
+    if (t->hidden) return;          /* the tie it would break is the players' to see */
     int f = floor_of_token(a->map, t);
     if (f >= 0) name_floor(a->map, f, a->side_floor[t->kind == TOKEN_ENEMY], sizeof a->side_floor[0]);
 }
@@ -234,17 +235,20 @@ int app_players_floor(App *a)
 
     /* A player creature's turn starting takes the players there, pin or
      * not: the turn is the stronger word. */
+    /* A hidden creature's turn is the GM's business: it moves nobody's
+     * screens, or the players would be taken to where it is. */
     int acting = turn_acting(m);
+    int player_turn = acting >= 0 && m->tokens.v[acting].kind == TOKEN_PLAYER && !m->tokens.v[acting].hidden;
     if (acting != a->last_acting) {
         a->last_acting = acting;
-        if (acting >= 0 && m->tokens.v[acting].kind == TOKEN_PLAYER) a->ppin[0] = '\0';
+        if (player_turn) a->ppin[0] = '\0';
     }
 
     int f;
     int pin = floor_named(m, a->ppin);
     if (pin >= 0)
         f = pin;
-    else if (acting >= 0 && m->tokens.v[acting].kind == TOKEN_PLAYER)
+    else if (player_turn)
         f = floor_of_token(m, &m->tokens.v[acting]);
     else if (acting >= 0 || (turn_spotlight_ruleset(m) && m->spotlight == SPOTLIGHT_GM))
         f = stored;                     /* the GM's turn: the players stay where they are */
@@ -282,7 +286,7 @@ void app_players_camera(App *a)
         long sx = 0, sy = 0, n = 0;
         for (int i = 0; i < m->tokens.n; i++) {
             const Token *t = &m->tokens.v[i];
-            if (t->kind != TOKEN_PLAYER || !floor_holds(m, f, t->x, t->y)) continue;
+            if (t->kind != TOKEN_PLAYER || t->hidden || !floor_holds(m, f, t->x, t->y)) continue;
             sx += t->x; sy += t->y; n++;
         }
         int cx, cy;

@@ -90,7 +90,8 @@ int floor_pick(const Map *m, int kind, int shown, int last)
     int count[MAP_AREAS_MAX] = { 0 }, any = 0;
     for (int i = 0; i < m->tokens.n; i++) {
         const Token *t = &m->tokens.v[i];
-        if (t->kind != kind) continue;
+        /* The party's floor is chosen from what the players can see. */
+        if (t->kind != kind || (kind == TOKEN_PLAYER && t->hidden)) continue;
         int f = floor_of_token(m, t);
         if (f >= 0) { count[f]++; any = 1; }
     }

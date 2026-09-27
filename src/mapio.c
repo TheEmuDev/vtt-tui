@@ -727,6 +727,7 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
     int stray_at = -1;
     int link_line[LINK_NUM_MAX + 1] = { 0 };   /* where each link was read, for its finding */
     struct { char name[AREA_NAME_MAX]; int level, line; } floors[MAP_AREAS_MAX];
+    int last_token_read = 0;       /* the last token line made a creature */
     int nfloors = 0;
     while (read_line(ld, line, sizeof line) >= 0) {
         if (!strcmp(line, "fog")) {
@@ -767,6 +768,7 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
         } else if (!strncmp(line, "token ", 6)) {
             int before = m->tokens.n;
             RECORD(parse_token_line(m, line), "token");
+            last_token_read = m->tokens.n > before;
             if (m->tokens.n > before) {
                 int size = 0;
                 if (sscanf(line, "token %*s %*d %*d %d", &size) == 1 && size != m->tokens.v[before].size)
@@ -780,9 +782,11 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
         } else if (!strncmp(line, "tokencounter ", 13)) {
             RECORD(parse_counter_line(m, line), "counter");
         } else if (!strcmp(line, "tokenhidden")) {
-            /* On the creature read last, as its other lines are. */
-            if (m->tokens.n) m->tokens.v[m->tokens.n - 1].hidden = 1;
-            else diag(ld, ld->line, -1, "E014", "bad-record", "hidden marker dropped: no creature before it");
+            /* On the creature read last -- and only if its line was read: after a
+             * dropped one it would hide the creature before, which the table
+             * would then not see. */
+            if (m->tokens.n && last_token_read) m->tokens.v[m->tokens.n - 1].hidden = 1;
+            else diag(ld, ld->line, -1, "E014", "bad-record", "hidden marker dropped: its creature's line was not read");
         } else if (!strncmp(line, "tokennote ", 10)) {
             RECORD(parse_token_note_line(m, line), "creature note");
         } else if (!strncmp(line, "note ", 5)) {

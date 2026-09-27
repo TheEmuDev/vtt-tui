@@ -396,16 +396,18 @@ GM's screen only: in the status line for the selected creature, and in the turn 
 the creature whose turn it is. A ruleset can name standard counters (Daggerheart: HP, Stress,
 Armor).
 
-**Hidden creatures.** `s h` hides the creature under the cursor (or the selected creatures, or
-everything in a `v` box) from the players: it is not drawn on their screens, even on lit ground,
-and the turn panel shows it as `?`. On your screen it is drawn dimmed. `s h` again shows it;
-with several selected, `s h` hides them all unless all are already hidden, in which case it
-shows them all. `u` undoes it. `:hidden` lists the hidden creatures and where they are.
+**Hidden creatures.** `s h` hides creatures from the players: everything in a `v` box while one
+is open, otherwise the selected creatures, otherwise the creature under the cursor. A hidden
+creature is not drawn on their screens, even on lit ground, and the turn panel shows it as `?`.
+On your screen it is drawn dimmed. `s h` again shows it; with several, `s h` hides them all
+unless all are already hidden, in which case it shows them all. `u` undoes it. `:hidden` lists
+the hidden creatures and where they are.
 
 While any creature is hidden, the players' screens show no status messages and their status
-line leaves out the count of creatures, as over fog: most messages name a creature, and one
-naming a hidden creature would give it away. A hidden player creature still reveals fog
-around it. Copies, pastes and stamps keep a creature hidden.
+line leaves out the count of creatures, as over fog. A hidden creature does not block other
+creatures' movement or bend their routes; what happens when one walks into it is your call. A
+hidden player creature still reveals fog around it, but the players' screens do not follow it
+to another floor. Copies, pastes and stamps keep a creature hidden.
 
 **Notes.** `s n` opens a note on the selected creature, or on the cursor's square if no
 creature is selected. Notes are never shown to the players; the status line shows `(note)`

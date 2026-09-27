@@ -219,6 +219,9 @@ static void ping_here(App *a)
         pl->visual = 0;
     } else {
         int size = play_cursor_size(pl, a->map);
+        /* Carrying a hidden creature, the ring would be its size. */
+        if (pl->grabbed && pl->sel >= 0 && pl->sel < a->map->tokens.n && a->map->tokens.v[pl->sel].hidden)
+            size = 1;
         x1 = x0 + size - 1;
         y1 = y0 + size - 1;
     }
@@ -401,7 +404,7 @@ static void hide_toggle(App *a)
     int  idx[PLAY_GROUP_MAX];
     int  n = play_action_group(a, idx, PLAY_GROUP_MAX);
     if (n <= 0) { app_set_status(a, "no creature here to hide"); return; }
-    if (n > PLAY_GROUP_MAX) n = PLAY_GROUP_MAX;
+    if (n > PLAY_GROUP_MAX) { app_set_status(a, "too many creatures in the box to hide at once"); return; }
     int hide = 0;
     for (int i = 0; i < n; i++) hide |= !m->tokens.v[idx[i]].hidden;
     undo_begin(&a->undo);
@@ -791,12 +794,12 @@ void app_play_key(App *a, Key k)
 
     case 'g':
         a->pending = 'g';
-        app_set_status(a, "g    r light    h darken    R light the patch    H darken it    p ping");
+        app_set_status(a, "g    r light    h darken    R light the patch    H darken it    p ping    o take a link");
         break;
 
     case 's':
         a->pending = 's';
-        app_set_status(a, "s    a add marker    c color    d drop    i initiative    t take the turn    n note    v counters");
+        app_set_status(a, "s    a add marker    c color    d drop    i initiative    t take the turn    n note    v counters    h hide");
         break;
 
     case '<': case '>': {
