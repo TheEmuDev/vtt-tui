@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "link.h"
 #include "mapio.h"
 #include "prof.h"
 #include "util.h"
@@ -48,6 +49,16 @@ Map *stamp_copy(const Map *m, int x0, int y0, int x1, int y1)
         const Note *n = &m->notes[i];
         if (n->x >= x0 && n->x <= x1 && n->y >= y0 && n->y <= y1)
             (void)map_note_set(s, n->x - x0, n->y - y0, n->text);
+    }
+    /* A link comes only with both its ends: half a staircase leads nowhere. */
+    for (int i = 0; i < m->nlinks; i++) {
+        Link l = m->links[i];
+        int in = 1;
+        for (int e = 0; e < 2; e++)
+            in &= l.x[e] >= x0 && l.y[e] >= y0 && l.x[e] + l.size - 1 <= x1 && l.y[e] + l.size - 1 <= y1;
+        if (!in) continue;
+        for (int e = 0; e < 2; e++) { l.x[e] = (int16_t)(l.x[e] - x0); l.y[e] = (int16_t)(l.y[e] - y0); }
+        (void)link_put(s, &l);
     }
     s->modified = 0;
     return s;
@@ -98,6 +109,19 @@ static Map *transform(const Map *s, int w, int h, const Transform *tf)
     for (int i = 0; i < s->nnotes; i++) {
         tf->tile(s, s->notes[i].x, s->notes[i].y, &nx, &ny);
         (void)map_note_set(d, nx, ny, s->notes[i].text);
+    }
+    /* A link's end is a block, and goes where a creature that size would. */
+    for (int i = 0; i < s->nlinks; i++) {
+        Link l = s->links[i];
+        for (int e = 0; e < 2; e++) {
+            Token t;
+            memset(&t, 0, sizeof t);
+            t.x = l.x[e]; t.y = l.y[e]; t.size = l.size;
+            tf->token(s, &t, &nx, &ny);
+            l.x[e] = (int16_t)nx;
+            l.y[e] = (int16_t)ny;
+        }
+        (void)link_put(d, &l);
     }
     d->modified = 0;
     return d;
@@ -176,6 +200,32 @@ int stamp_place(Map *m, Undo *u, const Map *s, int x, int y, char *err, size_t e
             return 0;
         }
     }
+    /* Its links: every square of an end on ground, clear of the map's own
+     * links, and a number free for each. */
+    if (s->nlinks > MAP_LINKS_MAX - m->nlinks) {
+        snprintf(err, errsz, "no room: a map holds %d links", MAP_LINKS_MAX);
+        return 0;
+    }
+    for (int i = 0; i < s->nlinks; i++) {
+        const Link *l = &s->links[i];
+        for (int e = 0; e < 2; e++) {
+            for (int yy = l->y[e]; yy < l->y[e] + l->size; yy++)
+                for (int xx = l->x[e]; xx < l->x[e] + l->size; xx++)
+                    if (map_tile(s, xx, yy) == TILE_VOID && !map_walkable(m, x + xx, y + yy)) {
+                        char sq[MAP_COORD_MAX];
+                        map_coord_name(x + xx, y + yy, sq, sizeof sq);
+                        snprintf(err, errsz, "a link would end on void at %s", sq);
+                        return 0;
+                    }
+            int o = link_meets(m, x + l->x[e], y + l->y[e], l->size, l->size, NULL);
+            if (o >= 0) {
+                char name[32];
+                link_name(&m->links[o], name, sizeof name);
+                snprintf(err, errsz, "a link would end on %s", name);
+                return 0;
+            }
+        }
+    }
     int fresh_notes = 0;
     for (int i = 0; i < s->nnotes; i++)
         fresh_notes += map_note_at(m, x + s->notes[i].x, y + s->notes[i].y) == NULL;
@@ -209,6 +259,12 @@ int stamp_place(Map *m, Undo *u, const Map *s, int x, int y, char *err, size_t e
     }
     for (int i = 0; i < s->nnotes; i++)
         (void)undo_set_note(u, m, x + s->notes[i].x, y + s->notes[i].y, s->notes[i].text);
+    for (int i = 0; i < s->nlinks; i++) {
+        Link l = s->links[i];
+        l.num = (uint8_t)link_free_num(m);
+        for (int e = 0; e < 2; e++) { l.x[e] = (int16_t)(x + l.x[e]); l.y[e] = (int16_t)(y + l.y[e]); }
+        (void)undo_set_link(u, m, &l);
+    }
     undo_end(u);
     return 1;
 }
@@ -375,6 +431,21 @@ void stamp_show(Map *m, const Map *s, int x, int y, StampShow *sv)
         m->notes[m->nnotes].y = (int16_t)ny;
         m->nnotes++;
     }
+    /* Its links the same way, numbered as placing would number them. */
+    sv->nlinks = m->nlinks;
+    for (int i = 0; i < s->nlinks && m->nlinks < MAP_LINKS_MAX; i++) {
+        Link l = s->links[i];
+        int on = 1;
+        for (int e = 0; e < 2; e++) {
+            l.x[e] = (int16_t)(x + l.x[e]);
+            l.y[e] = (int16_t)(y + l.y[e]);
+            on &= l.x[e] >= 0 && l.y[e] >= 0 && l.x[e] + l.size <= m->w && l.y[e] + l.size <= m->h;
+        }
+        int num = link_free_num(m);
+        if (!on || !num) continue;
+        l.num = (uint8_t)num;
+        m->links[m->nlinks++] = l;
+    }
     sv->shown = 1;
 }
 
@@ -395,6 +466,7 @@ void stamp_unshow(Map *m, StampShow *sv)
                 sv->hedges[(size_t)yy * (size_t)sv->w + (size_t)xx];
     m->tokens = sv->tokens;
     m->nnotes = sv->nnotes;
+    m->nlinks = sv->nlinks;
     free(sv->tiles); free(sv->vedges); free(sv->hedges); free(sv->both);
     memset(sv, 0, sizeof *sv);
 }

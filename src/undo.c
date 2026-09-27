@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "link.h"
 #include "prof.h"
 #include "util.h"
 
@@ -369,6 +370,57 @@ int undo_remove_area(Undo *u, Map *m, const char *name)
     return 1;
 }
 
+/* A link in a token slot, carried whole in the note: size 1 says there is
+ * one, 0 that there is none. */
+_Static_assert(sizeof(Link) <= TOKEN_NOTE_MAX, "a link fits in a token's note");
+
+static Token link_slot(const Link *l)
+{
+    Token t;
+    memset(&t, 0, sizeof t);
+    if (!l) return t;
+    t.size = 1;
+    memcpy(t.note, l, sizeof *l);
+    return t;
+}
+
+static void link_from_slot(Map *m, const Token *want, const Token *other)
+{
+    Link l;
+    if (want->size) { memcpy(&l, want->note, sizeof l); (void)link_put(m, &l); return; }
+    memcpy(&l, other->note, sizeof l);
+    (void)link_remove(m, l.num);
+}
+
+static void record_link(Undo *u, const Token *before, const Token *after)
+{
+    Op *o = push(u);
+    o->kind = OP_LINK;
+    push_token(u, before);
+    push_token(u, after);
+}
+
+int undo_set_link(Undo *u, Map *m, const Link *l)
+{
+    int   i = link_find(m, l->num);
+    Token before = link_slot(i >= 0 ? &m->links[i] : NULL);
+    if (i >= 0 && !memcmp(&m->links[i], l, sizeof *l)) return 1;
+    if (link_put(m, l) < 0) return 0;
+    Token after = link_slot(l);
+    record_link(u, &before, &after);
+    return 1;
+}
+
+int undo_remove_link(Undo *u, Map *m, int num)
+{
+    int i = link_find(m, num);
+    if (i < 0) return 0;
+    Token before = link_slot(&m->links[i]), after = link_slot(NULL);
+    link_remove(m, num);
+    record_link(u, &before, &after);
+    return 1;
+}
+
 void undo_set_clock(Undo *u, Map *m, int slot, int value)
 {
     if (slot < 0 || slot >= CLOCK_MAX || !m->clocks[slot].name[0]) return;
@@ -450,6 +502,10 @@ static void apply(const Undo *u, Map *m, const Op *o, int forward)
     case OP_AREA:
         if (forward) area_from_slot(m, &tok[1], &tok[0]);
         else         area_from_slot(m, &tok[0], &tok[1]);
+        break;
+    case OP_LINK:
+        if (forward) link_from_slot(m, &tok[1], &tok[0]);
+        else         link_from_slot(m, &tok[0], &tok[1]);
         break;
     case OP_NOTE:
         /* Putting a note back takes the slot its removal freed. */

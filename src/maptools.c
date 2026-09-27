@@ -8,6 +8,7 @@
 #include "dice.h"
 #include "fog.h"
 #include "json.h"
+#include "link.h"
 #include "ruler.h"
 #include "util.h"
 
@@ -196,6 +197,19 @@ void maptools_dump(FILE *out, const Map *m, int x0, int y0, int x1, int y1)
         fprintf(out, "  %-16s %s:%s\n", ar->name, b0, b1);
     }
 
+    shown = 0;
+    for (int i = 0; i < m->nlinks; i++) {
+        const Link *l = &m->links[i];
+        int in = 0;
+        for (int e = 0; e < 2; e++)
+            in |= l->x[e] <= x1 && l->x[e] + l->size - 1 >= x0 && l->y[e] <= y1 && l->y[e] + l->size - 1 >= y0;
+        if (!in) continue;
+        if (!shown++) fputs("\nlinks\n", out);
+        char line[128];
+        link_describe(l, line, sizeof line);
+        fprintf(out, "  %s\n", line);
+    }
+
     fputs("\nkey\n"
           "  .  floor   ~  water   :  rough   \"  brush   =  wood   ^  hazard   (blank) void\n"
           "  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door\n"
@@ -352,6 +366,20 @@ void rooms_build(const Map *m, Rooms *r)
                     pairs[ne][0] = a; pairs[ne][1] = b; ne++;
                 }
             }
+    /* A two-way link joins the rooms its ends stand in as a door would; a
+     * one-way one only onward, so it waits for the walk below. */
+    for (int i = 0; i < m->nlinks; i++) {
+        const Link *l = &m->links[i];
+        if (l->oneway) continue;
+        for (int k = 0; k < l->size * l->size; k++)
+            for (int q = 0; q < l->size * l->size; q++) {
+                int a = rooms_at(r, m, l->x[0] + k % l->size, l->y[0] + k / l->size);
+                int b = rooms_at(r, m, l->x[1] + q % l->size, l->y[1] + q / l->size);
+                if (a < 0 || b < 0 || a == b) continue;
+                if (ne == ecap) { ecap = ecap ? ecap * 2 : 16; pairs = xrealloc(pairs, (size_t)ecap * sizeof *pairs); }
+                pairs[ne][0] = a; pairs[ne][1] = b; ne++;
+            }
+    }
     int *deg = xcalloc((size_t)r->n + 1, sizeof *deg);
     for (int i = 0; i < ne; i++) { deg[pairs[i][0] + 1]++; deg[pairs[i][1] + 1]++; }
     for (int i = 0; i < r->n; i++) deg[i + 1] += deg[i];
@@ -365,10 +393,29 @@ void rooms_build(const Map *m, Rooms *r)
     int  qh = 0, qt = 0;
     queue[qt++] = r->start;
     r->reach[r->start] = 1;
-    while (qh < qt) {
-        int a = queue[qh++];
-        for (int k = deg[a]; k < deg[a + 1]; k++)
-            if (!r->reach[adj[k]]) { r->reach[adj[k]] = 1; queue[qt++] = adj[k]; }
+    for (;;) {
+        while (qh < qt) {
+            int a = queue[qh++];
+            for (int k = deg[a]; k < deg[a + 1]; k++)
+                if (!r->reach[adj[k]]) { r->reach[adj[k]] = 1; queue[qt++] = adj[k]; }
+        }
+        /* One-way links out of what the walk reached lead on; the walk
+         * carries on from each room one lands in, until nothing new. */
+        int more = 0;
+        for (int i = 0; i < m->nlinks; i++) {
+            const Link *l = &m->links[i];
+            if (!l->oneway) continue;
+            int from = 0;
+            for (int k = 0; k < l->size * l->size && !from; k++) {
+                int a = rooms_at(r, m, l->x[0] + k % l->size, l->y[0] + k / l->size);
+                from = a >= 0 && r->reach[a];
+            }
+            for (int k = 0; k < l->size * l->size && from; k++) {
+                int b = rooms_at(r, m, l->x[1] + k % l->size, l->y[1] + k / l->size);
+                if (b >= 0 && !r->reach[b]) { r->reach[b] = 1; queue[qt++] = b; more = 1; }
+            }
+        }
+        if (!more) break;
     }
     free(queue); free(fill); free(adj); free(deg); free(pairs);
 }
@@ -566,6 +613,33 @@ void maptools_describe(FILE *out, const Map *m, int json)
         }
         json_close(&j, ']');
 
+        json_key(&j, "links");                     /* squares joined: stairs, portals */
+        json_open(&j, '[');
+        for (int i = 0; i < m->nlinks; i++) {
+            const Link *l = &m->links[i];
+            json_open(&j, '{');
+            json_kint(&j, "num", l->num);
+            json_kstr(&j, "kind", link_kind_name(l->kind));
+            json_kint(&j, "size", l->size);
+            json_key(&j, "oneway"); json_bool(&j, l->oneway);
+            json_key(&j, "secret"); json_bool(&j, l->secret);
+            json_key(&j, "ends");
+            json_open(&j, '[');
+            for (int e = 0; e < 2; e++) {
+                json_open(&j, '{');
+                link_end_name(l, e, buf, sizeof buf);
+                json_kstr(&j, "at", buf);
+                json_kint(&j, "x", l->x[e]); json_kint(&j, "y", l->y[e]);
+                int rr = rooms_at(&r, m, l->x[e], l->y[e]);
+                json_key(&j, "room");
+                if (rr >= 0) json_int(&j, rr + 1); else json_null(&j);
+                json_close(&j, '}');
+            }
+            json_close(&j, ']');
+            json_close(&j, '}');
+        }
+        json_close(&j, ']');
+
         json_key(&j, "outside");                   /* creatures and notes on no room */
         json_open(&j, '[');
         for (int t = 0; t < m->tokens.n; t++) {
@@ -638,6 +712,22 @@ void maptools_describe(FILE *out, const Map *m, int json)
                 if (rooms_at(&r, m, n->x, n->y) != i) continue;
                 map_coord_name(n->x, n->y, buf, sizeof buf);
                 fprintf(out, "  %-12s %-8s %s\n", "note", buf, n->text);
+            }
+            for (int li = 0; li < m->nlinks; li++) {
+                const Link *l = &m->links[li];
+                for (int e = 0; e < 2; e++) {
+                    if (rooms_at(&r, m, l->x[e], l->y[e]) != i) continue;
+                    char name[32], here[2 * MAP_COORD_MAX + 2], there[2 * MAP_COORD_MAX + 2], where[80];
+                    link_name(l, name, sizeof name);
+                    link_end_name(l, e, here, sizeof here);
+                    link_end_name(l, 1 - e, there, sizeof there);
+                    int to = rooms_at(&r, m, l->x[1 - e], l->y[1 - e]);
+                    if (to >= 0) { room_ref(m, &r, to, buf2, sizeof buf2); snprintf(where, sizeof where, "room %d %s", to + 1, buf2); }
+                    else         str_lcpy(where, "no room", sizeof where);
+                    fprintf(out, "  %-12s %-8s %s %s, %s%s\n", name, here,
+                            !l->oneway ? "to" : e == 0 ? "leads to" : "comes from", there, where,
+                            l->secret ? "  secret" : "");
+                }
             }
             for (int p = 1; p <= FOG_PATCH_MAX; p++) {
                 const FogPatch *fp = &m->fog_patches[p - 1];

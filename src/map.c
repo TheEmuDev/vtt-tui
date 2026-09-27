@@ -182,6 +182,16 @@ int map_resize(Map *m, int w, int h)
     for (int i = m->nnotes - 1; i >= 0; i--)
         if (m->notes[i].x >= w || m->notes[i].y >= h)
             m->notes[i] = m->notes[--m->nnotes];
+    /* A link with an end the shrink cut goes whole: half a staircase leads
+     * nowhere. */
+    for (int i = m->nlinks - 1; i >= 0; i--) {
+        const Link *l = &m->links[i];
+        int s = l->size;
+        if (l->x[0] + s > w || l->y[0] + s > h || l->x[1] + s > w || l->y[1] + s > h) {
+            memmove(&m->links[i], &m->links[i + 1], (size_t)(m->nlinks - i - 1) * sizeof *l);
+            m->nlinks--;
+        }
+    }
     /* Areas are cut to what is left; one left with nothing goes. */
     for (int i = m->nareas - 1; i >= 0; i--) {
         Area *ar = &m->areas[i];

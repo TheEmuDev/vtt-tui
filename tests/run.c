@@ -30,6 +30,7 @@
 #include "map.h"
 #include "mapio.h"
 #include "maptools.h"
+#include "link.h"
 #include "stamp.h"
 #include "theme.h"
 #include "token.h"
@@ -13710,6 +13711,232 @@ static void test_areas(void)
     map_free(m);
 }
 
+static Link mklink(int num, int kind, int size, int ax, int ay, int bx, int by)
+{
+    Link l;
+    memset(&l, 0, sizeof l);
+    l.num = (uint8_t)num; l.kind = (uint8_t)kind; l.size = (uint8_t)size;
+    l.x[0] = (int16_t)ax; l.y[0] = (int16_t)ay; l.x[1] = (int16_t)bx; l.y[1] = (int16_t)by;
+    return l;
+}
+
+static void test_links(void)
+{
+    char err[256];
+    Map *m = map_new(12, 8, "links");
+    map_fill_tiles(m, 0, 0, 4, 7, TILE_FLOOR);             /* two floors, void between */
+    map_fill_tiles(m, 7, 0, 11, 7, TILE_FLOOR);
+
+    CASE("where a link may go: on ground, ends apart, clear of other links");
+    Link l = mklink(1, LINK_STAIRS, 1, 1, 1, 8, 1);
+    CHECK(link_problem(m, &l) == NULL);
+    Link bad = mklink(2, LINK_STAIRS, 1, 5, 1, 8, 3);
+    CHECK(link_problem(m, &bad) != NULL);                   /* void */
+    bad = mklink(2, LINK_PORTAL, 2, 1, 1, 2, 2);
+    CHECK(link_problem(m, &bad) != NULL);                   /* ends overlap */
+    bad = mklink(2, LINK_PORTAL, 2, 3, 7, 8, 6);
+    CHECK(link_problem(m, &bad) != NULL);                   /* off the bottom */
+    CHECK_EQ(link_put(m, &l), 0);
+    bad = mklink(2, LINK_PORTAL, 2, 0, 0, 9, 5);
+    CHECK(link_problem(m, &bad) != NULL);                   /* meets link 1 at B2 */
+    Link same = l; same.kind = LINK_LADDER;
+    CHECK(link_problem(m, &same) == NULL);                  /* not in its own way */
+    CHECK_EQ(link_kind_from_name("Portal"), LINK_PORTAL);
+    CHECK_EQ(link_kind_from_name("door"), -1);
+
+    CASE("numbers: the lowest free one, kept when others go");
+    Link two = mklink(link_free_num(m), LINK_PORTAL, 2, 0, 4, 8, 4);
+    CHECK_EQ(two.num, 2);
+    CHECK(link_problem(m, &two) == NULL);
+    link_put(m, &two);
+    link_remove(m, 1);
+    CHECK_EQ(m->links[0].num, 2);
+    CHECK_EQ(link_free_num(m), 1);
+    link_put(m, &l);
+    CHECK(m->links[0].num == 1 && m->links[1].num == 2);    /* number order */
+    int end = -1;
+    CHECK_EQ(link_at(m, 1, 5, &end), 1);                    /* inside the 2x2 */
+    CHECK_EQ(end, 0);
+    CHECK_EQ(link_at(m, 9, 5, &end), 1);
+    CHECK_EQ(end, 1);
+    CHECK_EQ(link_at(m, 2, 2, NULL), -1);
+
+    CASE("through the undo log: made, changed, removed, and each undone");
+    {
+        Undo u;
+        undo_init(&u);
+        Link three = mklink(3, LINK_TRAPDOOR, 1, 3, 0, 10, 0);
+        undo_begin(&u); CHECK_EQ(undo_set_link(&u, m, &three), 1); undo_end(&u);
+        three.oneway = 1; three.secret = 1;
+        undo_begin(&u); CHECK_EQ(undo_set_link(&u, m, &three), 1); undo_end(&u);
+        undo_begin(&u); CHECK_EQ(undo_remove_link(&u, m, 1), 1); undo_end(&u);
+        CHECK_EQ(m->nlinks, 2);
+        undo_undo(&u, m);
+        CHECK_EQ(link_find(m, 1), 0);
+        undo_undo(&u, m);
+        int i = link_find(m, 3);
+        CHECK(i >= 0 && !m->links[i].oneway && !m->links[i].secret);
+        undo_undo(&u, m);
+        CHECK_EQ(link_find(m, 3), -1);
+        undo_redo(&u, m); undo_redo(&u, m);
+        i = link_find(m, 3);
+        CHECK(i >= 0 && m->links[i].oneway && m->links[i].secret);
+        undo_free(&u);
+    }
+
+    CASE("the file: version 8 with links, read back the same; a bad one dropped with a finding");
+    {
+        Sandbox sb = sandbox_enter("links");
+        char path[600];
+        snprintf(path, sizeof path, "%s/l.vtt", sb.dir);
+        CHECK_EQ(mapio_write(m, path, err, sizeof err), 0);
+        FILE *f = fopen(path, "r");
+        char first[32] = "";
+        if (f) { if (!fgets(first, sizeof first, f)) first[0] = 0; fclose(f); }
+        CHECK_EQ(strcmp(first, "VTT 8\n"), 0);
+        Map *back = mapio_load(path, err, sizeof err);
+        CHECK(back && back->nlinks == m->nlinks);
+        if (back) {
+            for (int i = 0; i < back->nlinks; i++)
+                CHECK(!memcmp(&back->links[i], &m->links[i], sizeof(Link)));
+            map_free(back);
+        }
+        f = fopen(path, "w");
+        fputs("VTT 8\nsize 4 1\n"
+              "link 1 stairs 1 0 0 3 0\n"                 /* before the tiles: still read */
+              "tiles\n.. .\n"
+              "link 2 portal 1 0 0 3 0\n"                 /* on link 1's squares */
+              "link 3 ladder 1 1 0 2 0\n"                 /* C1 is void */
+              "link 1 ladder 1 1 0 3 0\n"                 /* a number used twice */
+              "link 4 rope 1 1 0 3 0\n"                   /* not a kind */
+              "link 5 stairs 1 1 0 3 0 sideways\n", f);  /* not a word it knows */
+        fclose(f);
+        back = mapio_load(path, err, sizeof err);
+        CHECK(back && back->nlinks == 1 && back->links[0].num == 1);
+        map_free(back);
+        char *out = NULL;
+        size_t n = 0;
+        FILE *o = open_memstream(&out, &n);
+        CHECK_EQ(maptools_check(o, path, 0), 1);
+        fclose(o);
+        CHECK(out && strstr(out, "W023") && strstr(out, "link 2 dropped: another link is already there") &&
+              strstr(out, "link 3 dropped: an end is on void"));
+        free(out);
+        sandbox_leave(&sb);
+    }
+
+    CASE("resizing drops a link with an end cut off");
+    {
+        Map *c = map_new(12, 8, "c");
+        map_fill_tiles(c, 0, 0, 11, 7, TILE_FLOOR);
+        Link a1 = mklink(1, LINK_STAIRS, 1, 0, 0, 2, 0), a2 = mklink(2, LINK_STAIRS, 2, 0, 3, 9, 6);
+        link_put(c, &a1); link_put(c, &a2);
+        map_resize(c, 10, 7);
+        CHECK(c->nlinks == 1 && c->links[0].num == 1);
+        map_free(c);
+    }
+
+    CASE("a trip: everyone on the near end goes, in formation, or nobody does");
+    {
+        Map *t = map_new(12, 8, "t");
+        map_fill_tiles(t, 0, 0, 4, 7, TILE_FLOOR);
+        map_fill_tiles(t, 7, 0, 11, 7, TILE_FLOOR);
+        Link p = mklink(1, LINK_PORTAL, 3, 0, 0, 8, 2);
+        link_put(t, &p);
+        Token a = { 0, 0, 1, TOKEN_PLAYER, "Aria" }, b = { 2, 2, 1, TOKEN_PLAYER, "Bram" };
+        Token og = { 2, 1, 2, TOKEN_ENEMY, "Ogre" };    /* half on the portal: it goes too */
+        Token far = { 3, 5, 1, TOKEN_PLAYER, "Far" };
+        tokens_add(&t->tokens, a); tokens_add(&t->tokens, b);
+        tokens_add(&t->tokens, og); tokens_add(&t->tokens, far);
+        LinkTrip tr;
+        /* The Ogre runs past the portal's edge; its far side is still ground. */
+        CHECK_EQ(link_trip(t, 0, 0, 1, &tr), 3);
+        CHECK(tr.dx == 8 && tr.dy == 2);
+        CHECK(tr.idx[0] == 0 && tr.idx[1] == 1 && tr.idx[2] == 2);
+        Token sit = { 10, 4, 1, TOKEN_ENEMY, "Guard" };  /* where Bram would land */
+        tokens_add(&t->tokens, sit);
+        CHECK_EQ(link_trip(t, 0, 0, 1, &tr), 0);
+        CHECK(strstr(tr.why, "K5 is taken by Guard") != NULL);
+        CHECK_EQ(link_trip(t, 0, 0, 0, &tr), 3);             /* ctrl-w: allowed */
+        CHECK_EQ(link_trip(t, 0, 1, 1, &tr), 0);              /* nobody over there but the Guard... */
+        t->tokens.n = 4;
+        CHECK_EQ(link_trip(t, 0, 1, 1, &tr), 0);
+        CHECK(strstr(tr.why, "nobody on this end of portal 1") != NULL);
+        t->links[0].oneway = 1;
+        CHECK_EQ(link_trip(t, 0, 1, 1, &tr), 0);
+        CHECK(strstr(tr.why, "one-way") != NULL);
+        t->links[0].oneway = 0;
+        t->tokens.v[2].x = 0; t->tokens.v[2].y = 3;         /* the Ogre off the portal: stays */
+        CHECK_EQ(link_trip(t, 0, 0, 1, &tr), 2);
+        t->tokens.v[0].x = 2; t->tokens.v[0].size = 3;      /* Aria, a 3x3 over the portal's edge */
+        t->tokens.v[1].x = 0; t->tokens.v[1].y = 2;
+        CHECK_EQ(link_trip(t, 0, 0, 1, &tr), 0);             /* her far side runs off the map */
+        CHECK(strstr(tr.why, "Aria would land off the map") != NULL);
+        t->tokens.v[0].size = 2;
+        t->tokens.v[0].x = 1; t->tokens.v[0].y = 6;
+        Link low = mklink(2, LINK_LADDER, 1, 2, 7, 7, 1);   /* her left column lands on void */
+        link_put(t, &low);
+        CHECK_EQ(link_trip(t, 1, 0, 1, &tr), 0);
+        CHECK(strstr(tr.why, "Aria would land on void at G1") != NULL);
+        map_free(t);
+    }
+
+    CASE("rooms joined only by a link are reachable; a one-way link leads one way");
+    {
+        Map *r = map_new(12, 4, "r");
+        map_fill_tiles(r, 0, 0, 3, 3, TILE_FLOOR);
+        map_fill_tiles(r, 8, 0, 11, 3, TILE_FLOOR);
+        map_rect_walls(r, 0, 0, 3, 3, EDGE_WALL);
+        map_rect_walls(r, 8, 0, 11, 3, EDGE_WALL);
+        Token hero = { 1, 1, 1, TOKEN_PLAYER, "Hero" };
+        tokens_add(&r->tokens, hero);
+        char *d = describe_text(r, 0, NULL);
+        CHECK(d && strstr(d, "NOT REACHABLE"));
+        free(d);
+        Link st = mklink(1, LINK_STAIRS, 1, 2, 2, 9, 2);
+        link_put(r, &st);
+        d = describe_text(r, 0, NULL);
+        CHECK(d && !strstr(d, "NOT REACHABLE") && strstr(d, "stairs 1     C3       to J3, room 2"));
+        free(d);
+        r->links[0].oneway = 1;
+        r->links[0].x[0] = 9; r->links[0].x[1] = 2;          /* from the far room to the party's */
+        d = describe_text(r, 0, NULL);
+        CHECK(d && strstr(d, "NOT REACHABLE") && strstr(d, "comes from"));
+        free(d);
+        d = describe_text(r, 1, NULL);
+        CHECK(d && json_valid(d) && strstr(d, "\"links\":[{\"num\":1,\"kind\":\"stairs\""));
+        free(d);
+        char *dump = tool_text(r, 0, 0, r->w - 1, r->h - 1, NULL);
+        CHECK(dump && strstr(dump, "\nlinks\n  stairs 1     J3 -> C3  one-way\n"));
+        free(dump);
+        map_free(r);
+    }
+
+    CASE("stamps carry a link with both ends inside, turn it, and number it afresh");
+    {
+        Map *s = stamp_copy(m, 0, 1, 11, 1);              /* stairs 1 (B2-I2) alone */
+        CHECK(s && s->nlinks == 1);
+        Map *turned = stamp_turned(s, 1);
+        CHECK(turned && turned->nlinks == 1 && turned->links[0].x[0] == 0 && turned->links[0].y[0] == 1 &&
+              turned->links[0].x[1] == 0 && turned->links[0].y[1] == 8);
+        Map *dst = map_new(12, 12, "dst");
+        map_fill_tiles(dst, 0, 0, 11, 11, TILE_FLOOR);
+        Link mine = mklink(1, LINK_LADDER, 1, 11, 11, 11, 9);
+        link_put(dst, &mine);
+        Undo u;
+        undo_init(&u);
+        CHECK_EQ(stamp_place(dst, &u, turned, 0, 0, err, sizeof err), 1);
+        CHECK(dst->nlinks == 2 && link_find(dst, 2) >= 0);
+        CHECK_EQ(stamp_place(dst, &u, turned, 0, 0, err, sizeof err), 0);   /* on stairs 2 now */
+        CHECK(strstr(err, "a link would end on stairs 2") != NULL);
+        undo_undo(&u, dst);
+        CHECK_EQ(dst->nlinks, 1);
+        undo_free(&u);
+        map_free(dst); map_free(turned); map_free(s);
+    }
+    map_free(m);
+}
+
 static void test_room_language(void)
 {
     Sandbox sb = sandbox_enter("roomlang");
@@ -14428,6 +14655,7 @@ int main(void)
         { "stamps", test_stamps },
         { "stampkeys", test_stamp_keys },
         { "areas", test_areas },
+        { "links", test_links },
         { "graymarker", test_gray_marker },
         { "roomlang", test_room_language },
         { "corridors", test_corridors },

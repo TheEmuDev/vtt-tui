@@ -58,6 +58,7 @@ typedef struct {
     int       sx, sy;                    /* its first square in the stamp */
     TokenList tokens;                    /* the map's own list, set aside */
     int       nnotes;                    /* the map's notes; the stamp's go after */
+    int       nlinks;                    /* the map's links; the stamp's go after */
     Token    *both;                      /* the map's creatures and the stamp's */
     int       shown;
 } StampShow;

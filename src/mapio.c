@@ -14,6 +14,7 @@
 #include "clock.h"
 #include "counter.h"
 #include "fog.h"
+#include "link.h"
 #include "ruler.h"
 #include "turn.h"
 #include "util.h"
@@ -25,7 +26,7 @@
  * v3 added status markers on tokens. An older reader would ignore those lines
  * and silently drop them, which loses combat state from a saved fight, so it
  * refuses too. Each version still loads everything older. */
-#define FORMAT_VERSION 7
+#define FORMAT_VERSION 8
 
 /* Version 4 added the turn order. A map with no fight in it is still written
  * as version 3, which says everything it needs and stays loadable by the
@@ -38,8 +39,9 @@
 #define FORMAT_BEFORE_TURNS    3
 #define FORMAT_BEFORE_CLOCKS   4
 #define FORMAT_BEFORE_COUNTERS 5
-/* Version 6 added counters and fog; 7 named areas. */
+/* Version 6 added counters and fog; 7 named areas; 8 links. */
 #define FORMAT_BEFORE_AREAS    6
+#define FORMAT_BEFORE_LINKS    7
 
 /* Fog rows: a held tile of patch 1..15 is one of these, in order. */
 static const char FOG_HELD_CHARS[FOG_PATCH_MAX + 1] = "123456789!\"#$%&";
@@ -84,7 +86,8 @@ int mapio_write(const Map *m, const char *path, char *err, size_t errsz)
         patches += m->fog_patches[i].name[0] && !m->fog_patches[i].dead;
     if (patches) v6 = 1;
     int v7 = m->nareas > 0;
-    fprintf(f, "VTT %d\n", v7 ? FORMAT_VERSION : v6 ? FORMAT_BEFORE_AREAS : v5 ? FORMAT_BEFORE_COUNTERS
+    int v8 = m->nlinks > 0;
+    fprintf(f, "VTT %d\n", v8 ? FORMAT_VERSION : v7 ? FORMAT_BEFORE_LINKS : v6 ? FORMAT_BEFORE_AREAS : v5 ? FORMAT_BEFORE_COUNTERS
                           : fight ? FORMAT_BEFORE_CLOCKS : FORMAT_BEFORE_TURNS);
     fprintf(f, "name %s\n", m->name);
     fprintf(f, "size %d %d\n", m->w, m->h);
@@ -144,6 +147,12 @@ int mapio_write(const Map *m, const char *path, char *err, size_t errsz)
     for (int i = 0; i < m->nareas; i++)
         fprintf(f, "area %d %d %d %d \"%s\"\n", m->areas[i].x0, m->areas[i].y0,
                 m->areas[i].x1, m->areas[i].y1, m->areas[i].name);
+    for (int i = 0; i < m->nlinks; i++) {
+        const Link *l = &m->links[i];
+        fprintf(f, "link %d %s %d %d %d %d %d%s%s\n", l->num, link_kind_name(l->kind), l->size,
+                l->x[0], l->y[0], l->x[1], l->y[1],
+                l->oneway ? " oneway" : "", l->secret ? " secret" : "");
+    }
 
     /* Fog: the switches, the patches, then one row a map row, a character a
      * tile. Lit and rim are not written: they are where the party stands
@@ -296,7 +305,7 @@ static int looks_like_record(const char *line)
 {
     static const char *const words[] = {
         "tiles", "vedges", "hedges", "fog", "fogpatch", "token", "tokenstatus",
-        "tokenturn", "tokencounter", "tokennote", "note", "area", "spotlight", "clock",
+        "tokenturn", "tokencounter", "tokennote", "note", "area", "link", "spotlight", "clock",
         "roll", "round", "name", "size", "zoom", "scale", "ruleset", "metric", NULL,
     };
     size_t n = 0;
@@ -507,6 +516,38 @@ static int parse_area_line(Map *m, const char *line)
     return map_area_set(m, name, x0, y0, x1, y1) >= 0 ? 0 : -1;
 }
 
+/* "link N KIND SIZE X0 Y0 X1 Y1 [oneway] [secret]": refused for a word it
+ * does not know or a number already used. Where the ends are is checked
+ * once the whole file is in (link_problem wants the tiles), see the end of
+ * mapio_load_diag. */
+static int parse_link_line(Map *m, const char *line)
+{
+    int num, size, x0, y0, x1, y1, consumed = 0;
+    char kind[16];
+    if (sscanf(line, "link %d %15s %d %d %d %d %d%n", &num, kind, &size, &x0, &y0, &x1, &y1, &consumed) < 7)
+        return -1;
+    int k = link_kind_from_name(kind);
+    if (k < 0 || num < 1 || num > LINK_NUM_MAX || size < 1 || size > LINK_SIZE_MAX) return -1;
+    if (x0 < 0 || y0 < 0 || x1 < 0 || y1 < 0 || x0 > INT16_MAX || y0 > INT16_MAX ||
+        x1 > INT16_MAX || y1 > INT16_MAX)
+        return -1;
+    if (link_find(m, num) >= 0) return -1;
+    Link l;
+    memset(&l, 0, sizeof l);
+    l.num = (uint8_t)num; l.kind = (uint8_t)k; l.size = (uint8_t)size;
+    l.x[0] = (int16_t)x0; l.y[0] = (int16_t)y0; l.x[1] = (int16_t)x1; l.y[1] = (int16_t)y1;
+    for (const char *p = line + consumed; *p; ) {
+        while (*p == ' ') p++;
+        size_t n = strcspn(p, " ");
+        if (!n) break;
+        if      (n == 6 && !strncmp(p, "oneway", 6)) l.oneway = 1;
+        else if (n == 6 && !strncmp(p, "secret", 6)) l.secret = 1;
+        else return -1;
+        p += n;
+    }
+    return link_put(m, &l) >= 0 ? 0 : -1;
+}
+
 static int parse_turn_line(Map *m, const char *line)
 {
     if (m->tokens.n == 0) return -1;
@@ -673,6 +714,7 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
         diag(ld, ld->line, -1, "E014", "bad-record", "%s dropped: '%.60s'", (what), line); } while (0)
 
     int stray_at = -1;
+    int link_line[LINK_NUM_MAX + 1] = { 0 };   /* where each link was read, for its finding */
     while (read_line(ld, line, sizeof line) >= 0) {
         if (!strcmp(line, "fog")) {
             Section sec = { "fog", h, w, 2, 0, 0, w };
@@ -730,6 +772,11 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
             RECORD(parse_note_line(m, line), "note");
         } else if (!strncmp(line, "area ", 5)) {
             RECORD(parse_area_line(m, line), "area");
+        } else if (!strncmp(line, "link ", 5)) {
+            RECORD(parse_link_line(m, line), "link");
+            int num = 0;
+            if (sscanf(line, "link %d", &num) == 1 && num >= 1 && num <= LINK_NUM_MAX && !link_line[num])
+                link_line[num] = ld->line;
         } else if (!strcmp(line, "spotlight gm")) {
             m->spotlight = SPOTLIGHT_GM;
         } else if (!strncmp(line, "clock ", 6)) {
@@ -792,6 +839,17 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
             }
             else map_fog_set(m, x, y, fb);
         }
+
+    /* Links are checked against the ground now that all of it is in. One
+     * that cannot stand -- an end on void or off the map, two links on one
+     * square -- goes, the later-numbered of a clashing pair first. */
+    for (int i = m->nlinks - 1; i >= 0; i--) {
+        const char *why = link_problem(m, &m->links[i]);
+        if (!why) continue;
+        diag(ld, link_line[m->links[i].num], -1, "W023", "link-dropped", "link %d dropped: %s",
+             m->links[i].num, why);
+        link_remove(m, m->links[i].num);
+    }
 
     str_lcpy(m->path, path, sizeof m->path);
     m->modified = 0;

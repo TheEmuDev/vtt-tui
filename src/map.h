@@ -59,6 +59,29 @@ typedef struct {
     char    name[AREA_NAME_MAX];
     int16_t x0, y0, x1, y1;       /* inclusive, on the map */
 } Area;
+/* A link: two blocks of squares joined, so a creature on one can be sent
+ * to the other -- stairs, a ladder, a trapdoor, a portal. Nothing crosses
+ * by itself; see link.h. The kind only says how the ends are drawn. The
+ * number is drawn on both ends and kept for the link's life, so removing
+ * one never renumbers the rest. Kept in number order. */
+#define MAP_LINKS_MAX 64
+#define LINK_NUM_MAX  99
+#define LINK_SIZE_MAX 3
+typedef enum {
+    LINK_STAIRS = 0,
+    LINK_LADDER,
+    LINK_TRAPDOOR,
+    LINK_PORTAL,
+    LINK_KIND_COUNT,
+} LinkKind;
+typedef struct {
+    int16_t x[2], y[2];           /* each end's top-left square */
+    uint8_t num;                  /* 1..LINK_NUM_MAX */
+    uint8_t kind;                 /* LinkKind */
+    uint8_t size;                 /* each end is size x size, 1..LINK_SIZE_MAX */
+    uint8_t oneway;               /* taken from end 0 only */
+    uint8_t secret;               /* the GM's alone: never drawn for the players */
+} Link;
 #define NOTE_MAX      TOKEN_NOTE_MAX
 typedef struct {
     int16_t x, y;
@@ -199,6 +222,8 @@ typedef struct {
     int  nnotes;
     Area areas[MAP_AREAS_MAX];    /* in the order they were named */
     int  nareas;
+    Link links[MAP_LINKS_MAX];    /* in number order */
+    int  nlinks;
     uint8_t *fog;                         /* w*h, see FOG_* */
     int      fog_on;                      /* the master switch */
     int      fog_soft_edge;               /* the map's default for patches that follow it */

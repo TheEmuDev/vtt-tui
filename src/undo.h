@@ -20,6 +20,8 @@ typedef enum {
     OP_AREA,             /* a named area: two token slots carry it before and
                             after (.label the name, "" for none; the box in
                             x, y and counters[0].value/max) */
+    OP_LINK,             /* a link: two token slots carry it before and after
+                            (the Link in .note, size 0 for none) */
 } OpKind;
 
 /* One op is one cell or one token changing. Tile ops dominate -- a brush
@@ -130,6 +132,10 @@ int  undo_set_note(Undo *u, Map *m, int x, int y, const char *text);
  * nothing, when map_area_set would refuse (bad name, full, off the map). */
 int  undo_set_area(Undo *u, Map *m, const char *name, int x0, int y0, int x1, int y1);
 int  undo_remove_area(Undo *u, Map *m, const char *name);
+/* Adds a link, or changes the one with its number; checks nothing but room
+ * (link_problem is the caller's). Returns 0, recording nothing, when full. */
+int  undo_set_link(Undo *u, Map *m, const Link *l);
+int  undo_remove_link(Undo *u, Map *m, int num);
 
 int  undo_undo(Undo *u, Map *m);
 
