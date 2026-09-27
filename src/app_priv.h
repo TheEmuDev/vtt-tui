@@ -91,6 +91,14 @@ void app_stamp_lift(App *a);
 void app_stamp_key(App *a, Key k);
 void app_stamp_command(App *a, const char *rest);
 
+/* app_link.c: g l in build mode (its first end, then its second), g o's
+ * trip from end `end` of link `li` (the shift it made, 0 when refused),
+ * :link. */
+void app_link_mark(App *a);
+void app_link_cancel(App *a);
+void app_link_go(App *a, int li, int end, int enforce, int *moved_dx, int *moved_dy);
+void app_link_command(App *a, const char *rest);
+
 /* app_ctl.c: :agent on, :agent off, :agent to ask. */
 void app_agent_command(App *a, const char *rest);
 

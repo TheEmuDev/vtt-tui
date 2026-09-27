@@ -2,6 +2,7 @@
 
 #include "counter.h"
 #include "fog.h"
+#include "link.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -596,6 +597,7 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
 
     grid_draw(r, m, &e->view, th, ascii, 0,    /* play mode gives nothing away */
               players ? FOGV_PLAYERS : FOGV_GM);
+    grid_draw_links(r, m, &e->view, th, ascii, 0, players ? FOGV_PLAYERS : FOGV_GM);
 
     /* Under everything else, so tokens standing in it stay readable. */
     if (!range_hidden) range_draw(r, m, &e->view, &p->range, th);
@@ -732,9 +734,11 @@ void play_status(const Play *p, const Map *m, const Editor *e, int gm, char *buf
             nums[0] = nums[1] = ' ';
             counter_format(t, nums + 2, sizeof nums - 2);
         }
-        snprintf(buf, bufsz, "PLAY    %.20s (%s %dx%d) at %s%s%s%s  %s",
+        char link[64];
+        link_status(m, e->cx, e->cy, gm, link, sizeof link);
+        snprintf(buf, bufsz, "PLAY    %.20s (%s %dx%d) at %s%s%s%s%s  %s",
                  t->label[0] ? t->label : "unlabeled",
-                 token_kind_name(t->kind), t->size, t->size, at,
+                 token_kind_name(t->kind), t->size, t->size, at, link,
                  marks, nums, gm && t->note[0] ? "  (note)" : "", walls);
         return;
     }
@@ -744,13 +748,17 @@ void play_status(const Play *p, const Map *m, const Editor *e, int gm, char *buf
 
     if (fogp) {
         /* The square's name would say where in the dark the GM is looking. */
-        if (fog_ground_hidden(m, e->cx, e->cy)) snprintf(buf, bufsz, "PLAY    dark  %s", walls);
-        else snprintf(buf, bufsz, "PLAY    %s  %s  %s", at,
-                      map_walkable(m, e->cx, e->cy) ? "floor" : "void", walls);
+        if (fog_ground_hidden(m, e->cx, e->cy)) { snprintf(buf, bufsz, "PLAY    dark  %s", walls); return; }
+    }
+    char link[64];
+    link_status(m, e->cx, e->cy, gm, link, sizeof link);
+    if (fogp) {
+        snprintf(buf, bufsz, "PLAY    %s  %s%s  %s", at,
+                 map_walkable(m, e->cx, e->cy) ? "floor" : "void", link, walls);
         return;
     }
-    snprintf(buf, bufsz, "PLAY    %s  %s%s  %d token%s  next size %d  %s",
-             at, map_walkable(m, e->cx, e->cy) ? "floor" : "void",
+    snprintf(buf, bufsz, "PLAY    %s  %s%s%s  %d token%s  next size %d  %s",
+             at, map_walkable(m, e->cx, e->cy) ? "floor" : "void", link,
              gm && map_note_at(m, e->cx, e->cy) ? "  (note)" : "",
              m->tokens.n, m->tokens.n == 1 ? "" : "s", p->next_size, walls);
 }

@@ -1,4 +1,5 @@
 #include "app_priv.h"
+#include "link.h"
 
 #include "counter.h"
 #include "fog.h"
@@ -407,6 +408,38 @@ static void turn_hand_over(App *a)
     app_note(a, msg);
 }
 
+/* g o: whoever stands on the link end under the cursor -- or on the one
+ * the creature under it touches -- goes through. Something in hand is put
+ * down first, where it stands; the trip is its own step for u. */
+static void link_here(App *a)
+{
+    Play   *pl = &a->play;
+    Editor *e  = &a->ed;
+    Map    *m  = a->map;
+
+    if (pl->grabbed && pl->choosing) { pl->grabbed = 0; pl->choosing = 0; }
+    if (pl->grabbed && !play_put_down(a, "put down")) return;
+
+    int end, li = link_at(m, e->cx, e->cy, &end);
+    if (li < 0) {
+        int t = play_target_token(a);
+        if (t >= 0) {
+            const Token *tk = &m->tokens.v[t];
+            li = link_meets(m, tk->x, tk->y, tk->size, tk->size, &end);
+        }
+    }
+    if (li < 0) {
+        app_set_status(a, "no link here - build mode's g l makes one");
+        return;
+    }
+    int dx, dy;
+    app_link_go(a, li, end, pl->enforce_walls, &dx, &dy);
+    if (!dx && !dy) return;
+    e->cx = iclamp(e->cx + dx, 0, m->w - 1);
+    e->cy = iclamp(e->cy + dy, 0, m->h - 1);
+    grid_center_on(&e->view, m, e->cx, e->cy);
+}
+
 static int pending_key(App *a, Key k)
 {
     uint32_t pre = a->pending;
@@ -429,7 +462,9 @@ static int pending_key(App *a, Key k)
         if (k.ch == 'r' || k.ch == 'h') { fog_hand(a, k.ch == 'r'); return 1; }
         if (k.ch == 'R' || k.ch == 'H') { fog_hand_patch(a, k.ch == 'R'); return 1; }
         if (k.ch == 'p') { ping_here(a); return 1; }
-        app_set_status(a, "g wants r to light, h to darken -- R and H for the whole patch, p to ping");
+        if (k.ch == 'o') { link_here(a); return 1; }
+        if (k.ch == 'l') { app_set_status(a, "links are made in build mode - F1, then g l on each end"); return 1; }
+        app_set_status(a, "g wants r to light, h to darken -- R and H for the whole patch, p to ping, o to take a link");
         return 1;
     }
 

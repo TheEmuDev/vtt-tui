@@ -1,6 +1,7 @@
 #include "grid.h"
 
 #include "fog.h"
+#include "link.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -654,6 +655,47 @@ void grid_draw_corner_cursor(Renderer *r, const GridView *g, int cx, int cy,
     c->fg   = pen_down ? th->warn : th->accent;
     c->bg   = th->cursor_bg;
     c->attr = ATTR_BOLD;
+}
+
+void grid_draw_links(Renderer *r, const Map *m, const GridView *g, const Theme *th,
+                     int ascii, int reveal, int fogview)
+{
+    if (!m->nlinks) return;
+    PROF_ZONE("link.marks");
+    int x0, y0, x1, y1;
+    grid_visible_tiles(g, m, &x0, &y0, &x1, &y1);
+    int iw = ZOOM[g->zoom].iw, ih = ZOOM[g->zoom].ih;
+    int players = fogview == FOGV_PLAYERS && fog_any(m);
+    for (int i = 0; i < m->nlinks; i++) {
+        const Link *l = &m->links[i];
+        if (l->secret && !reveal) continue;
+        uint32_t glyph = link_glyph(l->kind, ascii);
+        uint32_t fg    = l->secret ? th->dim : th->accent;
+        char     num[4];
+        int      nlen = snprintf(num, sizeof num, "%d", l->num);
+        for (int e = 0; e < 2; e++) {
+            if (l->x[e] > x1 || l->x[e] + l->size - 1 < x0 || l->y[e] > y1 || l->y[e] + l->size - 1 < y0)
+                continue;
+            for (int k = 0; k < l->size * l->size; k++) {
+                int tx = l->x[e] + k % l->size, ty = l->y[e] + k / l->size;
+                if (players && fog_ground_hidden(m, tx, ty)) continue;
+                int sx, sy;
+                grid_tile_interior(g, tx, ty, &sx, &sy);
+                sy += (ih - 1) / 2;
+                /* The number where it fits beside the glyph, on the end's
+                 * first square; the glyph alone everywhere else. */
+                int withnum = k == 0 && iw >= 1 + nlen;
+                int w = withnum ? 1 + nlen : 1;
+                int cx = sx + (iw - w) / 2;
+                Cell *c = rnd_at(r, cx, sy);
+                if (c) { c->ch = glyph; c->fg = fg; }
+                for (int d = 0; withnum && d < nlen; d++) {
+                    c = rnd_at(r, cx + 1 + d, sy);
+                    if (c) { c->ch = (uint32_t)num[d]; c->fg = fg; }
+                }
+            }
+        }
+    }
 }
 
 uint32_t grid_terrain_glyph(uint8_t kind, int ascii)

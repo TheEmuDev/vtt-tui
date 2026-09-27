@@ -4,6 +4,7 @@
 #include <string.h>
 #include <strings.h>
 
+#include "fog.h"
 #include "util.h"
 
 static const struct {
@@ -47,6 +48,26 @@ void link_end_name(const Link *l, int end, char *out, size_t outsz)
     if (l->size == 1) { snprintf(out, outsz, "%s", a); return; }
     map_coord_name(l->x[end] + l->size - 1, l->y[end] + l->size - 1, b, sizeof b);
     snprintf(out, outsz, "%s-%s", a, b);
+}
+
+void link_status(const Map *m, int x, int y, int gm, char *out, size_t outsz)
+{
+    out[0] = '\0';
+    int end, i = link_at(m, x, y, &end);
+    if (i < 0) return;
+    const Link *l = &m->links[i];
+    if (l->secret && !gm) return;
+    char name[32], there[2 * MAP_COORD_MAX + 2];
+    link_name(l, name, sizeof name);
+    /* Where it leads is a square's name, and the players are not told the
+     * names of squares fog hides. */
+    if (!gm && fog_ground_hidden(m, l->x[1 - end], l->y[1 - end])) {
+        snprintf(out, outsz, "  %s", name);
+        return;
+    }
+    link_end_name(l, 1 - end, there, sizeof there);
+    snprintf(out, outsz, "  %s%s %s %s", l->secret ? "secret " : "", name,
+             !l->oneway ? "to" : end == 0 ? "one-way to" : "one-way from", there);
 }
 
 void link_describe(const Link *l, char *out, size_t outsz)

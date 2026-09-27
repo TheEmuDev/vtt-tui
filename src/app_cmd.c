@@ -814,6 +814,7 @@ void app_exec_command(App *a, const char *line)
     if (!strcmp(verb, "serve")) { serve_command(a, rest); return; }
     if (!strcmp(verb, "agent")) { app_agent_command(a, rest); return; }
     if (!strcmp(verb, "stamp")) { app_stamp_command(a, rest); return; }
+    if (!strcmp(verb, "link") || !strcmp(verb, "links")) { app_link_command(a, rest); return; }
     if (!strcmp(verb, "area") || !strcmp(verb, "areas")) { area_command(a, verb, rest); return; }
     if (!strcmp(verb, "mirror")) {
         /* A second window on this machine, running the watcher against our

@@ -1700,6 +1700,7 @@ static void editor_key(App *a, Key k)
 
     if (k.kind == KEY_ESC) {
         if (e->mode == ED_VISUAL) { e->mode = ED_NORMAL; app_set_status(a, ""); }
+        else if (e->link_on && !e->pending_g) app_link_cancel(a);
         e->count = 0;
         e->pending_g = 0;
         return;
@@ -1752,7 +1753,9 @@ static void editor_key(App *a, Key k)
             else             snprintf(msg, sizeof msg, "fog scrubbed from %d square%s", n, n == 1 ? "" : "s");
             app_note(a, msg);
         }
-        else app_set_status(a, "g wants g for the top, f to paint fog, c to scrub it");
+        else if (k.ch == 'l') app_link_mark(a);
+        else if (k.ch == 'o') app_set_status(a, "creatures take links in play mode - F2");
+        else app_set_status(a, "g wants g for the top, f to paint fog, c to scrub it, l to make a link");
         return;
     }
 

@@ -90,6 +90,8 @@ static const KeyDoc PLAY[] = {
     KEY("r",      "range: cycle the bands, or grow a square a press (20r)"),
     KEY("R",      "its shape: circle, cone, line, square (2R names one); the cursor aims"),
     KEY("o  O",   "open or close a door / a secret door"),
+    KEY("g o",    "take the link here: everyone on that end goes through, as one u"),
+    KEY(":link 3", "jump to link 3's end, again for the other   :links lists them"),
     KEY("ctrl-w", "let creatures through walls and each other, or stop them"),
 
     GROUP("Dice and the log"),
@@ -145,6 +147,11 @@ static const KeyDoc BUILD[] = {
     { "w",        "trace mode: walk the cursor and leave wall behind", NULL, "trace" },
     { "t",        "cycle which boundary H J K L and the pen lay", "t/T", "kind" },
     KEY("o  O",   "open or close a door / a secret door"),
+
+    GROUP("Links"),
+    KEY("g l",    "make a link: g l on one end, g l on the other; the brush is its size"),
+    KEY(":link ladder", "what g l makes: stairs, ladder, trapdoor or portal"),
+    KEY(":link 3 oneway", "change it: a kind, oneway, twoway, reverse, secret, seen, off"),
 
     GROUP("Fog"),
     KEY(":fog Crypt", "make a patch, or pick one, for g f to paint"),

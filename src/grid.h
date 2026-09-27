@@ -136,6 +136,13 @@ uint32_t grid_terrain_glyph(uint8_t kind, int ascii);
 void grid_draw_labels(Renderer *r, const Map *m, const GridView *g,
                       const Theme *th, int gutter, int cx, int cy);
 
+/* Links' ends: the kind's glyph on every square, the number beside it on
+ * each end's first square where the zoom has room. Glyph and color only,
+ * over whatever ground is there. `reveal` draws secret links (build mode);
+ * FOGV_PLAYERS leaves out the squares fog hides. */
+void grid_draw_links(Renderer *r, const Map *m, const GridView *g, const Theme *th,
+                     int ascii, int reveal, int fogview);
+
 /* Tints a tile rectangle, for visual-mode selection feedback. */
 void grid_draw_tile_region(Renderer *r, const GridView *g, int x0, int y0,
                            int x1, int y1, uint32_t bg);

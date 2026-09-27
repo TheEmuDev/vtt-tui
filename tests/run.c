@@ -13937,6 +13937,200 @@ static void test_links(void)
     map_free(m);
 }
 
+/* The glyph drawn on a square's link mark: the first non-blank cell of its
+ * interior's middle row. */
+static uint32_t link_cell(Renderer *r, const App *a, int x, int y)
+{
+    int sx, sy;
+    grid_tile_interior(&a->ed.view, x, y, &sx, &sy);
+    sy += (ZOOM[a->ed.view.zoom].ih - 1) / 2;
+    for (int i = 0; i < ZOOM[a->ed.view.zoom].iw; i++) {
+        Cell *c = rnd_at(r, sx + i, sy);
+        if (c && c->ch != ' ' && c->ch != 0) return c->ch;
+    }
+    return 0;
+}
+
+static void test_link_keys(void)
+{
+    Sandbox sb = sandbox_enter("linkkeys");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    char path[1200];
+    snprintf(path, sizeof path, "%s/two.vtt", sb.dir);
+    FILE *f = fopen(path, "w");
+    /* Two floors of 5x4 with void between. */
+    fputs("VTT 3\nname two\nsize 12 4\nzoom 1\ntiles\n"
+          ".....  .....\n.....  .....\n.....  .....\n.....  .....\n", f);
+    fclose(f);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Key f1 = { KEY_F1, 0, 0 }, f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f1);
+    Map *m = a.map;
+
+    CASE("g l on one end and g l on the other makes stairs 1; the first end is checked alone");
+    a.ed.cx = 5; a.ed.cy = 0;
+    press(&a, "gl");
+    CHECK(strstr(a.status, "void") != NULL);
+    CHECK_EQ(a.ed.link_on, 0);
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "gl");
+    CHECK_EQ(a.ed.link_on, 1);
+    CHECK(strstr(a.status, "stairs from B2") != NULL);
+    a.ed.cx = 2; a.ed.cy = 1;
+    press(&a, "gl");                                      /* the same floor is fine; on top is not */
+    CHECK_EQ(m->nlinks, 1);
+    press(&a, "u");
+    CHECK_EQ(m->nlinks, 0);
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "gl");
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "gl");
+    CHECK(strstr(a.status, "the two ends overlap") != NULL);
+    CHECK_EQ(a.ed.link_on, 1);                           /* still waiting for a good end */
+    a.ed.cx = 8; a.ed.cy = 1;
+    press(&a, "gl");
+    CHECK(m->nlinks == 1 && m->links[0].num == 1 && m->links[0].kind == LINK_STAIRS &&
+          m->links[0].x[1] == 8 && m->links[0].size == 1);
+    CHECK(strstr(a.status, "stairs 1") && strstr(a.status, "B2 <-> I2"));
+
+    CASE("esc lets go of a first end; the brush sets the size; :link picks the kind");
+    a.ed.cx = 0; a.ed.cy = 2;
+    press(&a, "gl\x1b");
+    CHECK_EQ(a.ed.link_on, 0);
+    CHECK(strstr(a.status, "link canceled") != NULL);
+    press(&a, ":link portal\r");
+    CHECK(strstr(a.status, "g l makes portal") != NULL);
+    press(&a, "2b");
+    a.ed.cx = 3; a.ed.cy = 2;
+    press(&a, "gl");
+    a.ed.cx = 10; a.ed.cy = 2;
+    press(&a, "gl");
+    CHECK(m->nlinks == 2 && m->links[1].kind == LINK_PORTAL && m->links[1].size == 2 &&
+          m->links[1].num == 2);
+    press(&a, "1b");
+
+    CASE("the ends are drawn: the glyph on every square, the number on the first");
+    rnd_begin(&r); app_draw(&a);
+    CHECK_EQ(link_cell(&r, &a, 1, 1), 0x2261u);
+    CHECK_EQ(link_cell(&r, &a, 11, 3), 0x25CEu);
+    {
+        int sx, sy;
+        grid_tile_interior(&a.ed.view, 3, 2, &sx, &sy);
+        Cell *c = rnd_at(&r, sx + 1, sy);
+        CHECK(c && c->ch == '2');
+    }
+
+    CASE(":link N changes it, off removes it, u puts each back");
+    press(&a, ":link 1 ladder oneway secret\r");
+    CHECK(m->links[0].kind == LINK_LADDER && m->links[0].oneway && m->links[0].secret);
+    press(&a, ":link 1 sideways\r");
+    CHECK(strstr(a.status, "not something a link is") != NULL);
+    press(&a, ":link 9 oneway\r");
+    CHECK(strstr(a.status, "no link 9") != NULL);
+    press(&a, ":link 1 off\r");
+    CHECK_EQ(m->nlinks, 1);
+    press(&a, "u");
+    CHECK(m->nlinks == 2 && m->links[0].secret);
+    press(&a, "u");
+    CHECK(m->nlinks == 2 && !m->links[0].secret && m->links[0].kind == LINK_STAIRS);
+    press(&a, ":links\r");
+    CHECK(strstr(a.status, "2 links: stairs 1 B2-I2, portal 2 D3-E4-K3-L4") != NULL);
+    press(&a, ":link 2\r");
+    CHECK(a.ed.cx == 3 && a.ed.cy == 2);
+    press(&a, ":link 2\r");
+    CHECK(a.ed.cx == 10 && a.ed.cy == 2);
+
+    CASE("the status line says where a link leads");
+    a.ed.cx = 1; a.ed.cy = 1;
+    char st[256];
+    ed_status(&a.ed, m, st, sizeof st);
+    CHECK(strstr(st, "stairs 1 to I2") != NULL);
+
+    CASE("play mode: g o sends the creature on an end through, the cursor with it, one u back");
+    app_key(&a, f2);
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "ipAria\r");
+    press(&a, "go");
+    CHECK(m->tokens.v[0].x == 8 && m->tokens.v[0].y == 1);
+    CHECK(a.ed.cx == 8 && a.ed.cy == 1);
+    CHECK(strstr(a.status, "Aria takes stairs 1 to I2") != NULL);
+    press(&a, "go");
+    CHECK(m->tokens.v[0].x == 1);
+    press(&a, "u");
+    CHECK(m->tokens.v[0].x == 8);
+    press(&a, "u");
+    CHECK(m->tokens.v[0].x == 1);
+
+    CASE("carried onto the stairs, g o puts it down and takes it through");
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "\rl");                                     /* pick up, step east to C2 */
+    press(&a, "h");                                       /* and back onto the stairs */
+    CHECK_EQ(a.play.grabbed, 1);
+    press(&a, "go");
+    CHECK_EQ(a.play.grabbed, 0);
+    CHECK(m->tokens.v[0].x == 8 && m->tokens.v[0].y == 1);
+
+    CASE("a party on the portal goes in formation; one landing square taken refuses it all");
+    a.ed.cx = 3; a.ed.cy = 2; press(&a, "ipBram\r");
+    a.ed.cx = 4; a.ed.cy = 3; press(&a, "ipCora\r");
+    a.ed.cx = 11; a.ed.cy = 3; press(&a, "ieGuard\r");  /* where Cora would land */
+    a.ed.cx = 3; a.ed.cy = 2;
+    press(&a, "\x1b");
+    press(&a, "go");
+    CHECK(strstr(a.status, "L4 is taken by Guard") != NULL);
+    CHECK(m->tokens.v[1].x == 3);
+    a.ed.cx = 11; a.ed.cy = 3; press(&a, "d");
+    a.ed.cx = 3; a.ed.cy = 2;
+    press(&a, "go");
+    CHECK(strstr(a.status, "2 creatures take portal 2 to K3-L4") != NULL);
+    int bram = -1, cora = -1;
+    for (int i = 0; i < m->tokens.n; i++) {
+        if (!strcmp(m->tokens.v[i].label, "Bram")) bram = i;
+        if (!strcmp(m->tokens.v[i].label, "Cora")) cora = i;
+    }
+    CHECK(bram >= 0 && m->tokens.v[bram].x == 10 && m->tokens.v[bram].y == 2);
+    CHECK(cora >= 0 && m->tokens.v[cora].x == 11 && m->tokens.v[cora].y == 3);
+
+    CASE("one-way: refused from the far end; g l in play mode points to build mode");
+    press(&a, ":link 2 oneway\r");
+    a.ed.cx = 10; a.ed.cy = 2;
+    press(&a, "go");
+    CHECK(strstr(a.status, "one-way") != NULL);
+    CHECK(m->tokens.v[bram].x == 10);
+    press(&a, "gl");
+    CHECK(strstr(a.status, "build mode") != NULL);
+    a.ed.cx = 6; a.ed.cy = 0;
+    press(&a, "go");
+    CHECK(strstr(a.status, "no link here") != NULL);
+
+    CASE("a secret link: never drawn in play mode, and the players' line does not name it");
+    press(&a, ":link 1 secret\r");
+    rnd_begin(&r); app_draw(&a);
+    CHECK(link_cell(&r, &a, 1, 1) != 0x2261u);
+    CHECK_EQ(link_cell(&r, &a, 11, 2), 0x25CEu);          /* the portal still is */
+    a.ed.cx = 5; a.ed.cy = 0;
+    char line[256];
+    a.ed.cx = 1; a.ed.cy = 1;
+    play_status(&a.play, m, &a.ed, 0, line, sizeof line);
+    CHECK(strstr(line, "stairs") == NULL);
+    play_status(&a.play, m, &a.ed, 1, line, sizeof line);
+    CHECK(strstr(line, "secret stairs 1 to I2") != NULL);
+
+    app_free(&a);
+    rnd_free(&r);
+    char cmd[1200];
+    snprintf(cmd, sizeof cmd, "rm -rf '%s'", sb.dir);
+    sandbox_leave(&sb);
+    if (system(cmd) != 0) { }
+}
+
 static void test_room_language(void)
 {
     Sandbox sb = sandbox_enter("roomlang");
@@ -14656,6 +14850,7 @@ int main(void)
         { "stampkeys", test_stamp_keys },
         { "areas", test_areas },
         { "links", test_links },
+        { "linkkeys", test_link_keys },
         { "graymarker", test_gray_marker },
         { "roomlang", test_room_language },
         { "corridors", test_corridors },

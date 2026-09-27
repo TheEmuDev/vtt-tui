@@ -58,6 +58,9 @@ int  link_trip(const Map *m, int li, int from, int enforce, LinkTrip *t);
 void link_name(const Link *l, char *out, size_t outsz);
 /* An end's squares: "C3", or "C3-D4" for a block. */
 void link_end_name(const Link *l, int end, char *out, size_t outsz);
+/* "  stairs 3 to K12" for a status line: the link at the square, or ""
+ * when there is none -- or it is secret and the line is not the GM's. */
+void link_status(const Map *m, int x, int y, int gm, char *out, size_t outsz);
 /* "stairs 3  C3 <-> K12  2x2  one-way  secret": a line of a list. */
 void link_describe(const Link *l, char *out, size_t outsz);
 

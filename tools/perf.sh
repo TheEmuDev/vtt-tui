@@ -142,6 +142,21 @@ awk 'BEGIN {
         }
 }' > "$WARREN"
 
+# Sixty-four links, the most a map holds, all on screen at 80x24 -- the
+# worst the marks can cost -- and a player on link 1's first end (A1), to be
+# sent across and back.
+LINKS="$DIR/links.vtt"
+awk 'BEGIN {
+    w = 40; h = 25;
+    printf "VTT 8\nname Links\nsize %d %d\nzoom 1\ntiles\n", w, h;
+    for (y = 0; y < h; y++) { s = ""; for (x = 0; x < w; x++) s = s "."; print s }
+    split("stairs ladder trapdoor portal", kind, " ");
+    for (i = 0; i < 64; i++)
+        printf "link %d %s 1 %d %d %d %d\n", i + 1, kind[i % 4 + 1],
+               i % 8 * 2, int(i / 8) * 2, 20 + i % 8 * 2, int(i / 8) * 2;
+    print "token player 0 0 1 \"Aria\"";
+}' > "$LINKS"
+
 LONG=$(awk 'BEGIN{ for (i = 0; i < 60; i++) printf "l" }')
 
 # The control channel's requests (docs/CONTROL.md): a 40x40 room over the void
@@ -272,6 +287,9 @@ run "play, fog sight, 4 watchers" "$MOB" 80x24 ':fog all 6\r:play\rf\rllllhhhh\r
 run "play, fog soft edge, 4 watchers" "$MOB" 80x24 ':fog all 6\r:fog --soft-edge\r:play\rf\rllllhhhh\r' "--bench-clients 4"
 run "build, stamp 20x20"   "$VOIDY"  80x24  'v19l19jy19h19k20lppu20h'
 run "build, fog paint"     "$MOB"    80x24  ':fog Crypt\r3bgfgcllgfgchh'
+run "build, 64 links"      "$LINKS"  80x24  'jjllkkhh'
+run "play, 64 links"       "$LINKS"  80x24  ':play\rjjllkkhh'
+run "play, link there+back" "$LINKS" 80x24  ':play\r:a1\rgogo'
 run "play, counters"       "$MOB"    80x24  ':play\rtsvhp 9\r><><><><'
 run "play, clocks"         "$MOB"    80x24  ':play\r:clock Dragon 6\r:clock Ritual 8\r:tick Dragon 2\r:tick -2\r'
 run "play, 1 watcher"      "$MOB"    80x24  ':play\rjjllkkhh' "--bench-clients 1"

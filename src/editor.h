@@ -64,6 +64,12 @@ typedef struct {
     int    pending_g;          /* a `g` was typed and is awaiting its pair */
     int    fog_patch;          /* the fog patch g f paints, 1..15, or 0 for none yet */
 
+    /* g l: the first end of a link being made, waiting for the second. */
+    int     link_on;
+    int     link_x, link_y;
+    uint8_t link_size;
+    uint8_t link_kind;         /* LinkKind g l makes: the last one asked for */
+
     /* What the pen lays and what the brush paints. Held here rather than
      * passed around so every tool agrees on the current choice. */
     uint8_t material;          /* EdgeKind laid by the pen and Shift-HJKL */

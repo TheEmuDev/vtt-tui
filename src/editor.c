@@ -1,6 +1,7 @@
 #include "editor.h"
 
 #include "fog.h"
+#include "link.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -405,7 +406,13 @@ void ed_draw(Renderer *r, const Map *m, const Editor *e, const Theme *th, int as
                                    e->view.view.w, e->view.view.h);
 
     grid_draw(r, m, &e->view, th, ascii, 1, FOGV_BUILD);   /* build mode sees secrets */
+    grid_draw_links(r, m, &e->view, th, ascii, 1, FOGV_BUILD);
     draw_note_marks(r, m, &e->view, th, ascii);
+
+    /* g l's first end, ringed until the second is chosen. */
+    if (e->link_on)
+        grid_draw_tile_ring(r, &e->view, m, e->link_x, e->link_y, e->link_x + e->link_size - 1,
+                            e->link_y + e->link_size - 1, th->sel_bg, NULL, NULL);
 
     if (e->mode == ED_VISUAL) {
         EdShape s = ed_shape(e->shape, e->anchor_x, e->anchor_y, e->cx, e->cy, 0);
@@ -485,9 +492,11 @@ void ed_status(const Editor *e, const Map *m, char *buf, size_t bufsz)
         snprintf(fogs + strlen(fogs), sizeof fogs - strlen(fogs), "  g f: %.15s",
                  m->fog_patches[cur - 1].name);
 
-    snprintf(buf, bufsz, "%-7s %s  %s%s%s  [%s/%s]%s%s  zoom %d  map %dx%d",
+    char link[64];
+    link_status(m, e->cx, e->cy, 1, link, sizeof link);
+    snprintf(buf, bufsz, "%-7s %s  %s%s%s%s  [%s/%s]%s%s  zoom %d  map %dx%d",
              ed_mode_name(e->mode), at,
-             tile_name(map_tile(m, e->cx, e->cy)),
+             tile_name(map_tile(m, e->cx, e->cy)), link,
              map_note_at(m, e->cx, e->cy) ? "  (note)" : "", fogs,
              edge_name(e->material), tile_name(e->terrain), brush, shape,
              e->view.zoom, m->w, m->h);
