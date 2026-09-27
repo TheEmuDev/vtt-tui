@@ -393,10 +393,10 @@ static void serve_command(App *a, const char *rest)
         return;
     }
 
-    /* Already serving, and no port named: answer, and take the flag if one
-     * came with the question. Restarting would hand every player a new join
-     * code for nothing. */
-    if (net_active(net) && !have_port) {
+    /* Already serving, and no port named or the one it is on: answer, and
+     * take the flag if one came with the question. Restarting would hand
+     * every player a new join code and drop them for nothing. */
+    if (net_active(net) && (!have_port || port == net->port)) {
         if (stay >= 0)  net_set_stay(net, stay);
         if (pings >= 0) net_set_pings(net, pings);
         net_url(net, url, sizeof url);

@@ -583,8 +583,8 @@ fogged areas). While the GM is in build mode or a menu, the players' view keeps 
 
 | command | action |
 |---------|--------|
-| `:serve` | start serving; the status line shows the address and join code |
-| `:serve 7777` | serve on a fixed port |
+| `:serve` | start serving; the status line shows the address and join code. Typed again while serving, it shows them again without restarting |
+| `:serve 7777` | serve on a fixed port; if already serving on 7777, show the address again. A different port restarts the server, with a new join code |
 | `:serve --stay-alive` | keep serving after the map closes; `--no-stay-alive` reverts |
 | `:serve --no-pings` | ignore taps from phones; `--pings` accepts them again |
 | `:serve off` | stop serving and disconnect everyone |

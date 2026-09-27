@@ -10064,6 +10064,17 @@ static void test_serve_lifetime(void)
     press(&a, ":serve\r");
     CHECK(strstr(a.status, "1 client") != NULL);
 
+    CASE(":serve with the port it is already on answers, keeping the code and the watcher");
+    {
+        char code[NET_CODE_LEN + 1], cmd[32];
+        str_lcpy(code, a.net.code, sizeof code);
+        snprintf(cmd, sizeof cmd, ":serve %u\r", (unsigned)a.net.port);
+        press(&a, cmd);
+        CHECK_EQ(strcmp(a.net.code, code), 0);
+        CHECK_EQ(net_clients(&a.net), 1);
+        CHECK(strstr(a.status, "serving at http://") != NULL && strstr(a.status, "1 client") != NULL);
+    }
+
     press(&a, ":q!\r");
     CHECK_EQ(a.map, NULL);
     CHECK_EQ(net_active(&a.net), 0);
