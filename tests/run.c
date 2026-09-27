@@ -10073,6 +10073,25 @@ static void test_serve_lifetime(void)
         CHECK_EQ(strcmp(a.net.code, code), 0);
         CHECK_EQ(net_clients(&a.net), 1);
         CHECK(strstr(a.status, "serving at http://") != NULL && strstr(a.status, "1 client") != NULL);
+
+        CASE("a move to a port that is taken leaves the server and its watcher alone");
+        int hog = socket(AF_INET, SOCK_STREAM, 0);
+        struct sockaddr_in in4;
+        memset(&in4, 0, sizeof in4);
+        in4.sin_family      = AF_INET;
+        in4.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        socklen_t len = sizeof in4;
+        CHECK(hog >= 0 && bind(hog, (struct sockaddr *)&in4, sizeof in4) == 0 && listen(hog, 1) == 0 &&
+              getsockname(hog, (struct sockaddr *)&in4, &len) == 0);
+        uint16_t was = a.net.port;
+        snprintf(cmd, sizeof cmd, ":serve %u\r", (unsigned)ntohs(in4.sin_port));
+        press(&a, cmd);
+        CHECK(strstr(a.status, "port ") != NULL);
+        CHECK_EQ(net_active(&a.net), 1);
+        CHECK_EQ(a.net.port, was);
+        CHECK_EQ(strcmp(a.net.code, code), 0);
+        CHECK_EQ(net_clients(&a.net), 1);
+        if (hog >= 0) close(hog);
     }
 
     press(&a, ":q!\r");
@@ -13579,6 +13598,28 @@ static void test_gray_marker(void)
     CHECK(status_color_from_name("grey") >= 0);
     CHECK_EQ(status_color_from_name("grey"), status_color_from_name("gray"));
     CHECK_EQ(strcmp(status_color_name((uint8_t)status_color_from_name("grey")), "gray"), 0);
+
+    char path[] = "/tmp/vtt-test-XXXXXX";
+    int  fd = mkstemp(path);
+    if (fd >= 0) close(fd);
+    write_file(path, "VTT 3\nsize 2 1\ntiles\n..\nvedges\n\nhedges\n\n\n"
+                     "token player 0 0 1 \"Aria\"\ntokenstatus grey \"Hidden\"\n");
+    char err[MAPIO_ERR_MAX] = { 0 };
+    Map *m = mapio_load(path, err, sizeof err);
+    CHECK(m != NULL);
+    if (m) {
+        CHECK_EQ(m->tokens.n, 1);
+        CHECK_EQ(m->tokens.v[0].nstatus, 1);
+        CHECK_EQ(m->tokens.v[0].status[0].color, status_color_from_name("gray"));
+        CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+        map_free(m);
+        FILE *f = fopen(path, "r");
+        char buf[512] = { 0 };
+        if (f) { if (fread(buf, 1, sizeof buf - 1, f) == 0) buf[0] = 0; fclose(f); }
+        CHECK(strstr(buf, "tokenstatus gray \"Hidden\"") != NULL);
+        CHECK(strstr(buf, "grey") == NULL);
+    }
+    unlink(path);
 }
 
 static void test_areas(void)

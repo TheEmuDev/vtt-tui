@@ -19,7 +19,7 @@ body{display:flex;align-items:center;justify-content:center}
 <script>
 'use strict';
 /* vtt remote view. The GM's terminal, drawn the way a terminal draws it:
- * glyphs rasterised once into an atlas, a pixel framebuffer, and one
+ * glyphs rasterized once into an atlas, a pixel framebuffer, and one
  * putImageData of what changed. Nothing is allocated per frame. */
 const cv=document.getElementById('c'),st=document.getElementById('s');
 const ctx=cv.getContext('2d',{alpha:false});

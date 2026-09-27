@@ -35,9 +35,9 @@ measured against them.
 - **Coalescing at both ends.** The server writes one buffer per client per
   frame with Nagle off. The page folds frames into its cell buffer and paints
   the dirty rectangle once per animation frame.
-- **A framebuffer on the client.** Glyphs are rasterised once into an atlas;
+- **A framebuffer on the client.** Glyphs are rasterized once into an atlas;
   a frame is typed-array copies into a pixel buffer and one `putImageData` of
-  the dirty rectangle. Pinch zoom is a transform; the atlas is re-rasterised
+  the dirty rectangle. Pinch zoom is a transform; the atlas is re-rasterized
   when the gesture ends. This loop is the one candidate for WebAssembly, if
   measuring ever says so.
 - **A stalled client is dropped, never waited for**, and resynced with a

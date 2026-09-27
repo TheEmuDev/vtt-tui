@@ -122,7 +122,10 @@ static void make_code(char *code)
 
 int net_start(Net *n, uint16_t port, const Renderer *r, char *err, size_t errsz)
 {
-    if (net_active(n)) net_stop(n);
+    /* A move to another port binds it before the old server goes, so a port
+     * that cannot be had leaves the players where they were. The same port
+     * cannot be bound twice, so that restart stops first. */
+    if (net_active(n) && (port == 0 || port == n->port)) net_stop(n);
 
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) { snprintf(err, errsz, "socket: %s", strerror(errno)); return -1; }
@@ -143,6 +146,7 @@ int net_start(Net *n, uint16_t port, const Renderer *r, char *err, size_t errsz)
     }
     socklen_t alen = sizeof addr;
     if (getsockname(fd, (struct sockaddr *)&addr, &alen) == 0) port = ntohs(addr.sin_port);
+    if (net_active(n)) net_stop(n);
 
     n->listen_fd = fd;
     n->port      = port;

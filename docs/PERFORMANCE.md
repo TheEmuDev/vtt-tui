@@ -214,7 +214,7 @@ owns, and a full fill of the largest map (512×512, 262,144 ops) went from 60 MB
 5 MB of history. Taking one back is `undo.step`: 181µs for the 40,000-op fill of a
 200×200 map, 4.5ns an op, all of it the tile writes. The log holds four such largest-map
 fills and then drops its oldest quarter in one memmove, `undo.trim`: about 5ms, once
-per 262,144 new ops, which is 19ns an op amortised and a thing that happens a handful
+per 262,144 new ops, which is 19ns an op amortized and a thing that happens a handful
 of times in a long session of painting. The scenario that measures it (`fill history`)
 paints and clears 200×200 without undoing so the log grows 80,000 ops a loop.
 

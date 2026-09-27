@@ -940,7 +940,7 @@ padded with spaces.
 | record | meaning |
 |--------|---------|
 | `token KIND X Y SIZE "Label"` | a creature (`player` or `enemy`), anchored at its top-left square |
-| `tokenstatus COLOR "Word"` | a status marker on the preceding token |
+| `tokenstatus COLOR "Word"` | a status marker on the preceding token; COLOR is `red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `violet` or `gray` (`grey` is read as `gray`) |
 | `tokenturn N [acting]`, `tokenturn - acting` | initiative, and whether it is this creature's turn |
 | `tokennote "text"` | a note on the preceding token |
 | `tokencounter NAME VALUE MAX` | a counter on the preceding token |

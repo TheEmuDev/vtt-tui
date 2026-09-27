@@ -26,7 +26,7 @@ int dist_metric_from_name(const char *name)
     for (int i = 0; i < DIST_COUNT; i++)
         if (strcmp(name, METRIC_NAMES[i]) == 0) return i;
 
-    /* Friendly aliases for the systems people name instead of the maths. */
+    /* Friendly aliases for the systems people name instead of the math. */
     if (!strcmp(name, "5e") || !strcmp(name, "dnd5e")) return DIST_CHEBYSHEV;
     if (!strcmp(name, "true") || !strcmp(name, "exact")) return DIST_EUCLIDEAN;
     if (!strcmp(name, "3.5") || !strcmp(name, "pf") || !strcmp(name, "5-10-5"))

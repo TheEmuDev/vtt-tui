@@ -28,7 +28,7 @@ const char WEBPAGE[] =
     "<script>\n"
     "'use strict';\n"
     "/* vtt remote view. The GM's terminal, drawn the way a terminal draws it:\n"
-    " * glyphs rasterised once into an atlas, a pixel framebuffer, and one\n"
+    " * glyphs rasterized once into an atlas, a pixel framebuffer, and one\n"
     " * putImageData of what changed. Nothing is allocated per frame. */\n"
     "const cv=document.getElementById('c'),st=document.getElementById('s');\n"
     "const ctx=cv.getContext('2d',{alpha:false});\n"
