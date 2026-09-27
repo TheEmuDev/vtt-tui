@@ -95,15 +95,14 @@ rare — and a letter shared between build and play means the same thing in both
 
 `F12` toggles the profiler overlay everywhere. `F1` and `F2` switch between build and play.
 
-**How a key is chosen.** The rules every binding so far has followed, written down so the
+**How a key is chosen.** The rules every binding follows, written down so the
 next one does too:
 
 1. **Vim's key, if vim has one.** `d` `y` `p` `c` `i` `u` `/` `n` `v` `:` mean what they mean
    there. Nothing else may take them.
 2. **One meaning in every mode.** A letter that works in build and in play does the same
    job in both — `b` is the cursor's size, `m` measures, `o` is a door. If a key cannot
-   mean the same thing in both, it is the wrong key (`1` `2` `3` were sizes until build
-   mode needed them as counts; the size moved to `b` in both rather than differ).
+   mean the same thing in both, it is the wrong key.
 3. **Digits are counts, and a count names a value outright.** `3l` moves three; on a key
    that cycles, the count picks — `2b` is 2×2, `2r` the second band, `20r` twenty squares,
    `2R` the cone. A bare press cycles; past the end a count names the last.
@@ -201,8 +200,8 @@ tinted squares:
 
 Both shapes work the same way in visual mode and in wall tracing: visual mode paints the
 tiles a shape covers, tracing walls its boundary — every face a covered tile shares with
-one outside it. That is exactly the old rectangle outline for a box, and the only sensible
-reading of a circle of wall.
+one outside it. For a box that is its four sides, and it is the only sensible reading of a
+circle of wall.
 
 The radius is measured as a straight line, so a circle is round on every map. This is
 deliberately unlike the [range highlight](#range-highlight-r), which follows the map's distance
@@ -341,10 +340,9 @@ fight (`s i`, `s t`), its note (`s n`) and its counters (`s v`) — and `g` is t
 the status line names the options; `esc` abandons it. A prefix swallows whatever comes
 next, so a half-typed command can never turn into a different whole one.
 
-Freeing `p` for paste is the point of `i`: `p` means paste everywhere else, and `P` was an
-odd place for it. The keys that moved — `V` `P` `S` — say where they went if you press
-them out of habit. (Three came back with new work: `v` selects several creatures, `R` is
-the range highlight's shape, and `a` moves the turn on.)
+Placing is `i` so that `p` can paste, as it does everywhere else. Pressed in play mode, `V`,
+`P` and `S` name the key that does that job: `v` selects several creatures, `p` pastes and
+`s c` colours a marker.
 
 `esc` backs out of one thing at a time, innermost first: drop the selection box, cancel the
 move (the creature returns to where it set out), take the overlay off, let go of the
@@ -449,7 +447,7 @@ one of three keys costs nothing.
 
 Once there is a [turn order](#turn-order-a), all three walk it: `t` visits the creatures in
 the order they will act, the ones not in the fight after them, and `f` and `e` do the same
-for their side. With no order it is the list, as it always was. Looking stays free either
+for their side. With no order it is the list. Looking stays free either
 way — these keys move the selection and nothing else; moving the *turn* is `a`.
 
 `/` searches labels: any part, any case, so `gob` finds `Goblin 3`. It walks on from the
@@ -604,7 +602,7 @@ and the status line says so.
 A square is counted as "in" when its centre is, and a creature is caught when any square
 it stands on is. That is geometry rather than any one game's wording: a system that
 draws its cone differently still gets the nearest honest picture of one, and the status
-line's list of who is caught is a suggestion to the GM, as it always was.
+line's list of who is caught is a suggestion to the GM.
 
 ```
 Cone (30 ft, 6 sq) from Aria - 2 in range: Ogre, Goblin*   * no line of sight
@@ -1291,17 +1289,19 @@ The rows are read by count, not by looking for the next header: a `vedges` secti
 row short reads the `hedges` line as its last row, and every section after it shifts. The
 map still loads. [`vtt --check`](#map-tools-dump-map-check-describe) names the line.
 
-Version 2 added terrain and the boundary kinds. A version 1 reader would take a closed door
-for an opening and water for a hole, so it refuses the file rather than misreading a sealed
-room as open. Version 3 added status markers: an older reader would ignore those lines and
-silently drop them, losing combat state from a saved fight, so it refuses too. Version 4
-added the turn order, for the same reason — but only a map with a fight in it says 4. One
-without is still written as version 3, which says everything it needs to and stays
-loadable by the builds that came before. Version 5 added clocks, named rolls and notes, and
-version 6 counters and fog, version 7 named areas, on the same terms: the writer always picks the lowest version that
-says everything in the map. Each version
-still loads everything older, and an unrecognised character reads as empty rather than
-failing the load.
+The first line is the format version, and a map is written with the lowest version that
+holds everything in it:
+
+| version | needed for |
+|---|---|
+| 3 | any map: terrain, doors, windows, creatures and their markers |
+| 4 | a fight: the turn order, the round, the spotlight |
+| 5 | clocks, named rolls, notes |
+| 6 | counters, fog |
+| 7 | named areas |
+
+vtt reads every version up to 7 and refuses a newer file rather than drop what it cannot
+read. An unrecognised character in a row reads as empty rather than failing the load.
 
 ## Map tools (`--dump-map`, `--check`, `--describe`)
 
@@ -1502,9 +1502,9 @@ path culls to the visible tiles first.
 
 | | 80×24 | 200×50 |
 |---|---|---|
-| build, 200×200 map | 29 µs | 121 µs |
-| play, 24 tokens | 30 µs | 108 µs |
-| bytes written per frame | ~209 | ~212 |
+| build, 200×200 map | 31 µs | 128 µs |
+| play, 24 tokens | 31 µs | 112 µs |
+| bytes written per frame (build) | ~209 | ~212 |
 
 **[docs/PERFORMANCE.md](docs/PERFORMANCE.md) has every path measured**, what dominates a
 frame, and the rules for keeping it that way. `make perf` regenerates it, so the numbers
@@ -1521,9 +1521,16 @@ largest map (a million single-cell changes) and drops its oldest steps past that
 long session of painting cannot grow without limit. Each step costs 20 bytes; the tokens
 a step adds, removes or edits are kept alongside it.
 
-## Design notes
+## Documentation
 
-See `docs/PLAN.md` for the architecture.
+| | |
+|---|---|
+| [docs/AGENTS.md](docs/AGENTS.md) | for an AI agent building or changing maps: the request language, plans, working live |
+| [docs/CONTROL.md](docs/CONTROL.md) | the control channel's design |
+| [docs/REMOTE.md](docs/REMOTE.md) | the remote view: the server, the phone page, the watcher |
+| [docs/FOG.md](docs/FOG.md) | fog of war and sight |
+| [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | every path measured |
+| [docs/IDEAS.md](docs/IDEAS.md) | features considered and not built, with the reasons |
 
 ## License
 
