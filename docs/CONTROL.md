@@ -57,6 +57,7 @@ as `--describe` names them. Lines run in order, so a read sees the edits before 
 | `describe [json]` | `--describe` |
 | `check [json]` | `--check` of the map in memory (so no file line numbers) |
 | `stamps` | the saved stamps and their sizes |
+| `links [json]` | every link (added with links) |
 | `marked [json]` | what the GM is pointing at: the cursor, a `v` box (rect or circle), wall mode's corner and anchor, the selected creatures and a selection box, the ruler's ends, the GM's last `g p` and each phone's last ping with their age. A ping stays on record after its ring fades. |
 
 **Edits** (build mode, nothing half-done on the GM's side):
@@ -74,6 +75,7 @@ as `--describe` names them. Lines run in order, so a read sees the edits before 
 | `fog paint REGION N` | paints the region into fog patch N (0 scrubs) |
 | `room NAME ...`, `area NAME ...`, `door ROOM SIDE ...`, `corridor A B ...` | the room language (added after stamps): named areas, rooms placed beside rooms, doors by side, corridors; docs/AGENTS.md has the whole of it |
 | `stamp NAME SQUARE [rotate 90\|180\|270] [mirror]` | a saved stamp, top-left square here, turned then mirrored; see-through and all or nothing like the GM's `p` (added with stamps) |
+| `link A B [KIND] [size N] [oneway] [secret]`, `link N ... \| off` | a link between two places, or a change to link N (added with links); docs/AGENTS.md has the details |
 | `undo` | takes back the agent's last request, only while nothing came after it; alone in its request, since it cannot roll back with other lines |
 
 Edits are refused, with `busy:` and the reason, when a prompt or dialog is open, the `:`

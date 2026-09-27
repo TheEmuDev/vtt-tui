@@ -14110,6 +14110,38 @@ static void test_link_keys(void)
     press(&a, "go");
     CHECK(strstr(a.status, "no link here") != NULL);
 
+    CASE("the channel: link from squares or rooms, links to read, link N to change or take off");
+    app_key(&a, f1);                                            /* edits are build mode's */
+    {
+        char *ans = ctl_ask(&a, "link A1 B1\n");                 /* A1 is ground, B1 too: fine */
+        CHECK(ans && !strncmp(ans, "ok", 2));
+        free(ans);
+        CHECK(link_find(m, 3) >= 0 && m->links[link_find(m, 3)].kind == LINK_STAIRS);
+        ans = ctl_ask(&a, "link 3 portal oneway\nlinks\n");
+        CHECK(ans && strstr(ans, "portal 3     A1 -> B1  one-way"));
+        free(ans);
+        ans = ctl_ask(&a, "link A1 H1\n");
+        CHECK(ans && strstr(ans, "error: line 1: another link is already there"));
+        free(ans);
+        ans = ctl_ask(&a, "link C1 F1\n");
+        CHECK(ans && strstr(ans, "error: line 1: an end is on void"));
+        free(ans);
+        ans = ctl_ask(&a, "link C1 H4 rope\n");
+        CHECK(ans && strstr(ans, "rope: a link is stairs"));
+        free(ans);
+        ans = ctl_ask(&a, "link 3 off\nlink 9 off\n");
+        CHECK(ans && strstr(ans, "there is no link 9"));
+        CHECK(link_find(m, 3) >= 0);                              /* all or nothing */
+        free(ans);
+        ans = ctl_ask(&a, "links json\n");
+        CHECK(ans && json_valid(strchr(ans, '\n') + 1) && strstr(ans, "\"num\":3,\"kind\":\"portal\""));
+        free(ans);
+        ans = ctl_ask(&a, "link 3 off\n");
+        CHECK(ans && !strncmp(ans, "ok", 2) && link_find(m, 3) < 0);
+        free(ans);
+    }
+    app_key(&a, f2);
+
     CASE("a secret link: never drawn in play mode, and the players' line does not name it");
     press(&a, ":link 1 secret\r");
     rnd_begin(&r); app_draw(&a);

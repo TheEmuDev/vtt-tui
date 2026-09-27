@@ -4,30 +4,24 @@ Things worth building that were consciously not built, with the reason, so
 the reason can be re-examined rather than the idea re-invented. Add to the
 top; move an entry to the README when it ships.
 
-## Height and pocket dimensions
+## A floor view, and height
 
-*Proposed 2026-09-26, not decided.* Floors of a building, and "pocket" places reached by a
-teleport, are the same feature seen two ways: squares that lead somewhere not beside them.
-The proposal, in three layers each useful alone:
+*Links built 2026-09-27; the rest not decided.* Floors of a building and "pocket" places
+reached by a portal are built today as areas on one map, apart and separated by void,
+joined by links (README, *Links*). Two layers of the original proposal remain:
 
-1. **Links.** Two squares entangled: stairs, a ladder, a trapdoor, a portal. A creature on
-   one end and a key press (like `o` for doors) puts it on the other, as one undo step;
-   nothing fires by itself. A kind that is only a label for the drawing (rules-agnostic),
-   one-way or two-way, secret (the GM's, like a secret door) or seen; the two ends drawn
-   with a shared number. The far end taken refuses with a message. Built by a two-phase key
-   in build mode, `link C3 K12 stairs` from an agent, a `link` line in the file. Sight does
-   not pass through one.
-2. **Floors as areas.** Each floor a named area (built: `:area`, `room NAME`) laid out on
-   the one map, separated by void, joined by links. Fog, sight, the map tools and the dump
-   all work unchanged; a pocket dimension is an area off in the void with a portal in.
-3. **A floor view.** The screen shows one area at a time, filling the window; `[` `]` flip
-   floors, and following a creature through a link switches with it; the players' frame
-   shows the party's floor. Underneath, still one flat map.
+- **A floor view.** The screen shows one area at a time, filling the window; `[` `]` flip
+  floors, and following a creature through a link switches with it; the players' frame
+  shows the party's floor. Underneath, still one flat map. Worth it when jumping between
+  floors with `g o` or `:link N` stops being enough -- a building of many floors, or a
+  window too small to hold the map.
+- **True stacked layers** (floors sharing coordinates, a level on every grid, fog, sight,
+  room finder and file), which buy seeing between floors -- a pit lined up over the room
+  below, a balcony -- at the price of a rewrite of the core. A lighter, separate idea:
+  **height on a creature** (flying, on a ledge) that the ruler and range count.
 
-Held back: **true stacked layers** (floors sharing coordinates, a level on every grid, fog,
-sight, room finder and file), which buy seeing between floors -- a pit lined up over the
-room below, a balcony -- at the price of a rewrite of the core. A lighter, separate idea:
-**height on a creature** (flying, on a ledge) that the ruler and range count.
+Links left as they are: a trip is a key press, never a step onto the square (nothing fires
+by itself); the ruler, range and route do not measure through a link.
 
 ## Undoing part of an agent's request
 

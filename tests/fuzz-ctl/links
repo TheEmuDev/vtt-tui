@@ -1,0 +1,7 @@
+room Crypt B2 6x5
+room Tower L2 6x5
+link Crypt Tower ladder
+link B2 L2 portal size 2 oneway secret
+link 1 reverse twoway seen
+links json
+link 2 off

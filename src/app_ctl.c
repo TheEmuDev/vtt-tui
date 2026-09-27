@@ -11,6 +11,7 @@
 #include "app_priv.h"
 #include "fog.h"
 #include "json.h"
+#include "link.h"
 #include "maptools.h"
 #include "prof.h"
 #include "stamp.h"
@@ -614,6 +615,28 @@ static int spot(const Map *m, const char *w, int size, int skip, int *x, int *y,
     return best >= 0;
 }
 
+/* Where a link's end goes: its top-left square, or a named area, where the
+ * block takes the ground nearest the area's middle that no link has. */
+static int link_spot(const Map *m, const char *w, int size, int *x, int *y, char *err, size_t errsz)
+{
+    int ai = map_area_find(m, w);
+    if (ai < 0) return square(m, w, x, y, err, errsz);
+    const Area *ar = &m->areas[ai];
+    long mx = ar->x0 + ar->x1 + 1 - size, my = ar->y0 + ar->y1 + 1 - size, best = -1;
+    for (int yy = ar->y0; yy + size - 1 <= ar->y1; yy++)
+        for (int xx = ar->x0; xx + size - 1 <= ar->x1; xx++) {
+            long d = (2L * xx - mx) * (2L * xx - mx) + (2L * yy - my) * (2L * yy - my);
+            if (best >= 0 && d >= best) continue;
+            int ground = 1;
+            for (int k = 0; k < size * size && ground; k++)
+                ground = map_tile(m, xx + k % size, yy + k / size) != TILE_VOID;
+            if (!ground || link_meets(m, xx, yy, size, size, NULL) >= 0) continue;
+            best = d; *x = xx; *y = yy;
+        }
+    if (best < 0) snprintf(err, errsz, "no room in %.30s for a %dx%d link end", ar->name, size, size);
+    return best >= 0;
+}
+
 /* The outline of a box of squares, as build mode walls a shape. */
 static void outline(Undo *u, Map *m, int x0, int y0, int x1, int y1, uint8_t kind)
 {
@@ -1115,6 +1138,64 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
         for (int y = y0; y <= y1; y++)
             for (int x = x0; x <= x1; x++) fog_paint(m, u, x, y, id);
     }
+    else if (!strcmp(v, "link")) {
+        /* link A B [KIND] [size 2|3] [oneway] [secret]: a new one, numbered
+         * the lowest free. link N off, or link N and what changes. */
+        if (n < 3) BAD("link A B [KIND] [size 2|3] [oneway] [secret], or link N off");
+        Link l;
+        memset(&l, 0, sizeof l);
+        int first = 1, isnum = w[1][0] != '\0';
+        for (const char *p = w[1]; *p; p++) isnum &= *p >= '0' && *p <= '9';
+        if (isnum) {
+            int num, li;
+            if (!word_int(w[1], 1, LINK_NUM_MAX, &num) || (li = link_find(m, num)) < 0)
+                BAD("there is no link %.10s", w[1]);
+            l = m->links[li];
+            if (n == 3 && !strcmp(w[2], "off")) {
+                for (int e = 0; e < 2; e++) touched(ed, l.x[e], l.y[e], l.x[e] + l.size - 1, l.y[e] + l.size - 1);
+                undo_remove_link(u, m, num);
+                return 0;
+            }
+            first = 2;
+        } else {
+            l.num = (uint8_t)link_free_num(m);
+            if (!l.num) BAD("the map holds %d links", MAP_LINKS_MAX);
+            l.size = 1;
+            /* The size first: where an end goes in a named area depends on it. */
+            for (int i = 3; i < n; i++) {
+                if (strcmp(w[i], "size") != 0) continue;
+                int sz;
+                if (i + 1 >= n || !word_int(w[i + 1], 1, LINK_SIZE_MAX, &sz))
+                    BAD("size is 1, 2 or 3 squares across, as: size 2");
+                l.size = (uint8_t)sz;
+            }
+            int ax, ay, bx, by;
+            if (!link_spot(m, w[1], l.size, &ax, &ay, err, errsz)) return -1;
+            if (!link_spot(m, w[2], l.size, &bx, &by, err, errsz)) return -1;
+            l.x[0] = (int16_t)ax; l.y[0] = (int16_t)ay; l.x[1] = (int16_t)bx; l.y[1] = (int16_t)by;
+            first = 3;
+        }
+        for (int i = first; i < n; i++) {
+            int k = link_kind_from_name(w[i]);
+            if (k >= 0)                                l.kind = (uint8_t)k;
+            else if (!strcmp(w[i], "oneway"))          l.oneway = 1;
+            else if (!strcmp(w[i], "twoway"))          l.oneway = 0;
+            else if (!strcmp(w[i], "secret"))          l.secret = 1;
+            else if (!strcmp(w[i], "seen"))            l.secret = 0;
+            else if (!strcmp(w[i], "size") && !isnum)  i++;
+            else if (!strcmp(w[i], "reverse") && isnum) {
+                int16_t tx = l.x[0], ty = l.y[0];
+                l.x[0] = l.x[1]; l.y[0] = l.y[1]; l.x[1] = tx; l.y[1] = ty;
+            }
+            else BAD("%.20s: a link is stairs, ladder, trapdoor or portal; oneway, twoway, secret, seen%s",
+                     w[i], isnum ? ", reverse or off" : " or size N");
+        }
+        const char *why = link_problem(m, &l);
+        if (why) BAD("%s", why);
+        (void)undo_set_link(u, m, &l);
+        for (int e = 0; e < 2; e++) touched(ed, l.x[e], l.y[e], l.x[e] + l.size - 1, l.y[e] + l.size - 1);
+        return 0;
+    }
     else if (!strcmp(v, "stamp")) {
         /* stamp NAME SQUARE [rotate 90|180|270] [mirror] */
         int x, y, quarters = 0, mirror = 0;
@@ -1159,7 +1240,7 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
 
 static int is_edit(const char *v)
 {
-    static const char *const EDITS[] = { "room", "area", "door", "corridor", "tile", "wall", "edge", "note", "fog", "token", "stamp" };
+    static const char *const EDITS[] = { "room", "area", "door", "corridor", "tile", "wall", "edge", "note", "fog", "token", "stamp", "link" };
     for (size_t i = 0; i < sizeof EDITS / sizeof *EDITS; i++)
         if (!strcmp(v, EDITS[i])) return 1;
     return 0;
@@ -1246,6 +1327,39 @@ static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FIL
         }
         if (!k) fputs("no stamps\n", out);
         else if (k > 64) fprintf(out, "... and %d more\n", k - 64);
+        return 0;
+    }
+    if (!strcmp(v, "links")) {
+        /* Every link, one a line, or as JSON: what `link N ...` changes. */
+        int j = want_json(w, n, 1, err, errsz);
+        if (j < 0) return -1;
+        if (j) {
+            Json js;
+            json_init(&js, out);
+            json_open(&js, '[');
+            for (int i = 0; i < m->nlinks; i++) {
+                const Link *l = &m->links[i];
+                char at[2 * MAP_COORD_MAX + 2];
+                json_open(&js, '{');
+                json_kint(&js, "num", l->num);
+                json_kstr(&js, "kind", link_kind_name(l->kind));
+                json_kint(&js, "size", l->size);
+                link_end_name(l, 0, at, sizeof at); json_kstr(&js, "from", at);
+                link_end_name(l, 1, at, sizeof at); json_kstr(&js, "to", at);
+                json_key(&js, "oneway"); json_bool(&js, l->oneway);
+                json_key(&js, "secret"); json_bool(&js, l->secret);
+                json_close(&js, '}');
+            }
+            json_close(&js, ']');
+            fputc('\n', out);
+            return 0;
+        }
+        for (int i = 0; i < m->nlinks; i++) {
+            char row[128];
+            link_describe(&m->links[i], row, sizeof row);
+            fprintf(out, "%s\n", row);
+        }
+        if (!m->nlinks) fputs("no links\n", out);
         return 0;
     }
     if (!strcmp(v, "marked")) {

@@ -65,6 +65,15 @@ sees the edits before it.
 | `note SQUARE "text"`, `note SQUARE` | a note on a square only the GM sees, or take it off |
 | `fog paint REGION N` | into fog patch N (0 scrubs); the GM makes patches |
 
+**Links.** Stairs, a ladder, a trapdoor or a portal: two places joined, so the GM can send
+creatures from one to the other with a key. Floors of a building, or a place reached by
+magic, go on the same map apart from each other, separated by void, and a link joins them.
+
+| line | does |
+|---|---|
+| `link Hall Tower [KIND] [size 2\|3] [oneway] [secret]` | a new link, numbered the lowest number free. Each end is a room's name (the free ground nearest its middle) or a square (the end's top-left). KIND `stairs` (default) `ladder` `trapdoor` `portal`; `size 3` makes each end 3x3, room for a party; `oneway` runs from the first end only; `secret` hides it from the players. Both ends on ground, apart, and on no other link's squares |
+| `link 3 portal oneway`, `link 3 reverse`, `link 3 off` | change link 3 (a kind, `oneway`, `twoway`, `reverse` swaps its ends, `secret`, `seen`), or take it off |
+
 **Creatures.**
 
 | line | does |
@@ -79,9 +88,10 @@ sees the edits before it.
 | line | answers |
 |---|---|
 | `dump [REGION]` | the map as text: squares in the file's characters, boundaries between, creatures as `1`-`9` `a`-`z` `A`-`Z`, a legend with creatures, notes and areas |
-| `describe [json]` | the rooms walls make, named by their areas, with doors and where they lead, and what is in each |
+| `describe [json]` | the rooms walls make, named by their areas, with doors and links and where they lead, and what is in each |
 | `check [json]` | mistakes: loose doors, creatures on void, rooms nothing reaches ([codes](../README.md#map-tools---dump-map---check---describe)) |
 | `stamps` | the GM's saved stamps and their sizes |
+| `links [json]` | every link: its number, kind, ends, size, one-way and secret |
 | `status` | live only: the map, whether edits are taken now |
 | `marked [json]` | live only: what the GM is pointing at -- the cursor (and the area it is in), a `v` box, selected creatures, the ruler, recent pings |
 | `undo` | live only, alone in its request: take back your last request, while nothing has happened since |
@@ -112,7 +122,8 @@ sees the edits before it.
 2. **Read it back.** `vtt crypt.vtt --dump-map` and look: is every room where the
    description puts it, every door in a wall, every creature on the floor?
    `vtt crypt.vtt --describe` says what rooms the walls make and how they join -- a room
-   `NOT REACHABLE` is a missing door. `vtt crypt.vtt --check` must say `no findings`.
+   `NOT REACHABLE` is a missing door (or link). `vtt crypt.vtt --check` must say
+   `no findings`.
 3. **Fix with another plan** against the same file (it opens what is there), not by
    rewriting the first. To move a room, clear it first, then draw it again:
    `wall Crypt none`, `tile Crypt void`, then `room Crypt ...` (the name moves with the new
@@ -128,6 +139,8 @@ sees the edits before it.
 - A room drawn over another's ground takes it: `room` floors its whole box and walls its
   outline. Plan rooms apart and join them with corridors or `gap 0` and a door.
 - Creatures need ground under every square of their footprint; `in` a room they find it.
+- A second floor is a second set of rooms on the same map, apart from the first with void
+  between, joined by `link`. Leave room: a floor needs as much map as the first.
 
 ## Working live with the GM
 
@@ -182,7 +195,7 @@ A last resort, when you must write or repair the file itself. The file is plain 
 README's *File format* section is the full reference.
 
 ```
-VTT 7
+VTT 8
 name Crypt Entrance
 size 6 4
 scale 5
@@ -209,7 +222,7 @@ note 2 3 "loose flagstone"
 area 0 0 5 3 "Entrance"
 ```
 
-`VTT 7` first (a lower number is fine if the map has no areas); then header lines (`name`,
+`VTT 8` first (a lower number is fine if the map has no links or areas); then header lines (`name`,
 `size W H`, `scale` feet per square, `metric` chebyshev / euclidean / alt / manhattan,
 optionally `ruleset daggerheart`); then the sections. **Coordinates in the file are 0-based
 x then y**; the app and the tools name squares with letters and 1-based rows (`x 4, y 2` is
@@ -240,5 +253,6 @@ blank line inside a section is a row. A door on the map's own edge is a way out 
 
 Creatures: `token player X Y SIZE "Label"` (or `enemy`), anchored at the top-left square;
 `tokennote "text"` after one. Square notes: `note X Y "text"`. Areas: `area X0 Y0 X1 Y1
-"Name"`. Fog: `fog on`, `fogpatch N Name reveal R memory on`, then a `fog` section of `H`
+"Name"`. Links: `link N KIND SIZE X0 Y0 X1 Y1 [oneway] [secret]`, each end by its top-left
+square. Fog: `fog on`, `fogpatch N Name reveal R memory on`, then a `fog` section of `H`
 rows of `W` characters (`.` none, `A`-`O` patch 1-15).

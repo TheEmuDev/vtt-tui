@@ -23,7 +23,8 @@ game-specific readouts such as range bands (see [Rulesets](#rulesets)).
 **Features**
 
 - A vim-style map editor: walls, doors, windows and secret doors on the boundaries between
-  squares; terrain; box and circle selections; reusable stamps; named areas.
+  squares; terrain; box and circle selections; reusable stamps; named areas; links (stairs,
+  ladders, portals) between floors and separate locations.
 - Play mode: creatures of 1-3 squares, movement with route and distance readouts, status
   markers, counters (HP and the like), notes, a ruler and area-of-effect templates.
 - Turn order or a spotlight, clocks, dice and named rolls, a session log.
@@ -216,6 +217,7 @@ Build mode is for drawing the map. `F1` switches to it.
 | `y` `p` | copy the brush or selection / paste it as a stamp |
 | `s n` | a note on this square |
 | `g f` `g c` | paint the current fog patch / clear fog |
+| `g l` | make a [link](#links-stairs-ladders-trapdoors-portals): press on one end, then on the other |
 | `m` | ruler |
 | `u` `Ctrl-r` | undo / redo |
 | `:` | command line |
@@ -246,7 +248,8 @@ room by walking its outline. A pen-down stroke is one undo step.
 
 **Stamps.** A stamp is a piece of map you can place again: a pillar, a table and benches, a
 stretch of cave wall. `y` copies the brush or selection: its terrain, its walls, doors and
-windows, the creatures wholly inside it and its square notes (not fog). `p` then shows the
+windows, the creatures wholly inside it, its square notes and the links with both ends inside it
+(not fog). `p` then shows the
 copy on the cursor as a preview:
 
 | key | while previewing a stamp |
@@ -316,6 +319,7 @@ Play mode is for running the encounter. `F2` switches to it.
 | `g r` `g h` | reveal / hide fog under the cursor or selection |
 | `g R` `g H` | reveal / hide the whole fog patch under the cursor |
 | `g p` | ping the cursor's squares on every screen |
+| `g o` | send the creatures on this [link](#links-stairs-ladders-trapdoors-portals)'s end to the other end |
 | `Ctrl-w` | turn movement blocking off / on |
 | `esc` | cancel: close the selection, cancel a move, clear the range, deselect |
 | `u` `Ctrl-r` | undo / redo |
@@ -392,6 +396,52 @@ Armor).
 **Notes.** `s n` opens a note on the selected creature, or on the cursor's square if no
 creature is selected. Notes are never shown to the players; the status line shows `(note)`
 when the cursor is on one. `:notes` lists where they are.
+
+## Links (stairs, ladders, trapdoors, portals)
+
+A link joins two places on the map so that creatures can be sent from one to the other: a
+staircase to the floor above, a ladder down a well, a portal to a room somewhere else. Lay out
+each floor or location on the same map, separated by void, and join them with links.
+
+**Making a link.** In build mode, put the cursor on one end and press `g l`, move to the other
+end and press `g l` again. `esc` cancels after the first press. Each end is the size of the
+brush: set `b` to 2 or 3 first for a 2×2 or 3×3 link, such as a wide portal a whole party can
+step onto. Both ends must be on map squares, must not overlap each other, and cannot share a
+square with another link. A map holds up to 64 links.
+
+Each link has a kind, which sets the symbol drawn on its ends: `≡` stairs, `‡` ladder, `□`
+trapdoor, `◎` portal. New links are stairs; `:link portal` changes the kind the next `g l`
+makes. Each link also has a number, drawn beside the symbol on each end's first square so you
+can see which ends belong together. A link keeps its number for as long as it exists.
+
+**Taking a link.** In play mode, put the cursor on a link's end, or on a creature standing on
+one, and press `g o`. Every creature with at least one square on that end moves to the other
+end, keeping its position relative to the end, so a party standing on a 3×3 portal arrives in
+the same formation. The cursor moves with them. The trip is one undo step.
+
+The trip is refused, and nobody moves, if any creature would land off the map, on void, or on
+a creature that is not moving; the status line names the square. `Ctrl-w` lifts the void and
+creature checks. If you are carrying a creature, `g o` puts it down first.
+
+**One-way and secret links.** A one-way link can only be taken from its first end (the end
+where `g l` was first pressed). A secret link is never drawn in play mode or shown to the
+players; the GM's status line still names it when the cursor is on one. Links are otherwise
+visible to the players, except for ends that fog hides.
+
+| command | action |
+|---------|--------|
+| `:links` | list the links |
+| `:link 3` | jump to link 3's first end; again for the other end |
+| `:link 3 portal` | change its kind (`stairs`, `ladder`, `trapdoor`, `portal`) |
+| `:link 3 oneway`, `:link 3 twoway` | make it one-way or two-way |
+| `:link 3 reverse` | swap its ends, so a one-way link runs the other way |
+| `:link 3 secret`, `:link 3 seen` | hide it from the players, or show it |
+| `:link 3 off` | remove it |
+| `:link ladder` | the kind `g l` makes next |
+
+Several changes can go on one line (`:link 3 portal oneway secret`). Every change can be
+undone with `u`. The status line names the link under the cursor and where it leads
+(`stairs 3 to K12`).
 
 ## Measuring
 
@@ -728,6 +778,7 @@ use. Available: `none`, `daggerheart`.
 | `:c6`, `:6` | jump to a square / a row |
 | `:area NAME` | name the selection, or jump to a named area; `:areas` lists, `:area NAME off` removes |
 | `:stamp ...` | save, load and list [stamps](#build-mode) |
+| `:link ...`, `:links` | change, remove, list and jump to [links](#links-stairs-ladders-trapdoors-portals) |
 | `:turns` | list the [turn order](#turn-order-a); `:turns off` ends the fight |
 | `:panel` | show / hide the side panel |
 | `:clock ...`, `:tick ...` | [clocks](#clocks-clock-tick) |
@@ -815,6 +866,7 @@ W120 unreachable-room  room K2   18 squares, no door leads to it from room B2
 | `W019 stray-row` | rows outside any section |
 | `W020 clamped` | a setting out of range, replaced by the nearest valid value |
 | `W022 edge-row-short` | a `vedges` row missing its east boundary |
+| `W023 link-dropped` | a link with an end off the map or on void, its ends overlapping, or on another link's squares |
 | `W102 door-to-void` | a door or window leading into void |
 | `W103 wall-in-void` | a wall with no map on either side |
 | `W104 door-loose` | a door or window with no wall at either end |
@@ -828,7 +880,9 @@ W120 unreachable-room  room K2   18 squares, no door leads to it from room B2
 | `N131 fog-patch-disabled` | a disabled fog patch |
 
 **`--json`** gives `--describe` or `--check` as JSON, with 0-based coordinates alongside the
-square names, room `area` names, the list of `areas`, and each finding's `line` and `column`.
+square names, room `area` names, the list of `areas` and `links`, and each finding's `line`
+and `column`. `--describe` lists each room's link ends and where they lead, and counts a room
+reached only by a link as reachable (a one-way link only in its direction).
 
 ## Control channel (`:agent`, `vtt --ctl`)
 
@@ -864,7 +918,7 @@ typing a command or drawing a wall. The full request language is in
 Maps are plain text, one record per line:
 
 ```
-VTT 7
+VTT 8
 name Goblin Ambush
 size 16 9
 zoom 1
@@ -888,6 +942,8 @@ clock Fuse 4 4 down
 roll attack "2d12+3"
 note 5 3 "pressure plate"
 area 1 1 6 4 "Crypt"
+link 1 stairs 1 5 2 14 2
+link 2 portal 2 1 6 12 6 oneway secret
 fog on
 fogpatch 1 Crypt reveal 2 memory on
 fog
@@ -949,6 +1005,7 @@ padded with spaces.
 | `roll NAME "EXPR"` | a named roll |
 | `note X Y "text"` | a note on a square |
 | `area X0 Y0 X1 Y1 "Name"` | a named area |
+| `link N KIND SIZE X0 Y0 X1 Y1 [oneway] [secret]` | link number N between the SIZE×SIZE blocks whose top-left squares are X0,Y0 and X1,Y1; one-way links run from the first |
 | `fog on`, `fog soft-edge` | fog settings |
 | `fogpatch N NAME reveal R\|manual memory on\|off` | a fog patch; `fog` rows use `A`-`O` for patches 1-15 (unseen), `a`-`o` (seen), `1`-`9` `!"#$%&` (revealed by hand), `.` for none |
 
@@ -962,8 +1019,9 @@ that can hold its contents:
 | 5 | clocks, named rolls, notes |
 | 6 | counters, fog |
 | 7 | named areas |
+| 8 | links |
 
-vtt reads every version up to 7 and refuses newer files.
+vtt reads every version up to 8 and refuses newer files.
 
 ## Performance
 
