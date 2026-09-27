@@ -106,6 +106,19 @@ typedef struct {
      * editor rather than inside either mode's state. */
     Ruler   ruler;
 
+    /* The players' floor (docs/FLOORS.md), by name like Editor.floor: the
+     * floor their screens show, a pin the GM set, the floor each side last
+     * moved on (the tie-breaker's third step), the creature that had the
+     * turn at the last key (a change is a turn starting), and the camera
+     * their frame is drawn through when their floor is not the GM's. */
+    char     pfloor[AREA_NAME_MAX];
+    char     ppin[AREA_NAME_MAX];
+    char     side_floor[2][AREA_NAME_MAX];    /* [0] players, [1] enemies */
+    int      last_acting;
+    GridView pview;
+    char     pview_floor[AREA_NAME_MAX];      /* the floor pview was centered for */
+    int      psplit;                          /* the players' frame is being drawn through pview */
+
     /* One log for the whole session: token moves in play mode undo through
      * the same history as wall edits in build mode. */
     Undo    undo;
@@ -196,6 +209,12 @@ void app_init(App *a, Term *t, Renderer *r);
 void app_free(App *a);
 /* The floor the GM's screen shows, as an area index; -1 for the whole map. */
 int  app_floor_shown(const App *a);
+/* The players' floor, worked out afresh (a pin, the turn, the spotlight,
+ * else the party); -1 for the whole map. */
+int  app_players_floor(App *a);
+/* The players are on a floor the GM is not showing: their frame is drawn
+ * through its own camera. */
+int  app_players_split(const App *a);
 void app_key(App *a, Key k);
 /* Works fog's sight out again if anything on the map changed since last
  * time -- a creature moved, a door opened, a patch was painted, an undo.

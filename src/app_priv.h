@@ -107,6 +107,15 @@ void app_floor_sync(App *a);
 void app_floor_show(App *a, int f);
 void app_floor_step(App *a, int dir);
 void app_floor_command(App *a, const char *verb, const char *rest);
+/* The players' side: reset with each map; a creature of a side moved on a
+ * floor (the tie-breaker's memory); their camera, set before their frame is
+ * drawn; the spotlight crossed (the GM's view goes by floor_pick); and
+ * :player floor NAME|auto. */
+void app_floor_reset(App *a);
+void app_floor_note_move(App *a, const Token *t);
+void app_players_camera(App *a);
+void app_floor_spotlight(App *a);
+void app_players_pin(App *a, const char *rest);
 
 /* app_ctl.c: :agent on, :agent off, :agent to ask. */
 void app_agent_command(App *a, const char *rest);

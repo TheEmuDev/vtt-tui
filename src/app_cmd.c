@@ -804,7 +804,11 @@ void app_exec_command(App *a, const char *line)
     if (!strcmp(verb, "tick"))  { tick_command(a, rest);  return; }
     if (!strcmp(verb, "player")) {
         /* :player preview -- the players' view on the GM's own screen. */
-        if (strcmp(rest, "preview") != 0) { app_set_status(a, ":player preview shows what the players see; q returns"); return; }
+        if (!strncmp(rest, "floor ", 6)) { app_players_pin(a, rest + 6); return; }
+        if (strcmp(rest, "preview") != 0) {
+            app_set_status(a, ":player preview shows what the players see; q returns   :player floor NAME|auto");
+            return;
+        }
         if (a->screen != SCREEN_PLAY) { app_set_status(a, "the players' view is play mode's - F2 first"); return; }
         a->preview = !a->preview;
         app_set_status(a, a->preview ? "previewing the players' view - q returns to yours"

@@ -12,6 +12,7 @@
 #include <unistd.h>
 
 #include "counter.h"
+#include "floor.h"
 #include "fog.h"
 #include "draw.h"
 #include "prof.h"
@@ -31,6 +32,7 @@ void app_init(App *a, Term *t, Renderer *r)
     a->running = 1;
     a->dirty   = 1;
     a->pending_token = -1;
+    a->last_acting   = -1;
     undo_init(&a->undo);
     slog_init(&a->slog);
     net_init(&a->net);
@@ -137,6 +139,7 @@ int app_open_map(App *a, const char *path)
     undo_clear(&a->undo);          /* history does not survive a new map */
     play_init(&a->play);
     ed_init(&a->ed, m);
+    app_floor_reset(a);
     ed_layout(&a->ed, m, a->rnd->w, a->rnd->h);
     grid_center_on(&a->ed.view, m, a->ed.cx, a->ed.cy);
 
@@ -192,6 +195,7 @@ static void recover_autosave(App *a)
     undo_clear(&a->undo);
     play_init(&a->play);
     ed_init(&a->ed, m);
+    app_floor_reset(a);
     ed_layout(&a->ed, m, a->rnd->w, a->rnd->h);
     grid_center_on(&a->ed.view, m, a->ed.cx, a->ed.cy);
     m->modified = 1;
@@ -262,10 +266,20 @@ int app_ping_cell(App *a, uint32_t who, int sx, int sy)
      * names nothing. A question box on the GM's screen is the GM's alone;
      * the table's board under it still takes a tap. */
     if (!a->map || a->screen != SCREEN_PLAY) return 0;
-    if (!rect_contains(a->ed.view.view, sx, sy)) return 0;
+    /* Through the camera their frame was drawn with: their own, when they
+     * are on a floor the GM is not showing. */
+    const GridView *g = app_players_split(a) ? &a->pview : &a->ed.view;
+    if (!rect_contains(g->view, sx, sy)) return 0;
     int tx, ty;
-    if (!grid_screen_to_tile(&a->ed.view, a->map, sx, sy, &tx, &ty)) return 0;
+    if (!grid_screen_to_tile(g, a->map, sx, sy, &tx, &ty)) return 0;
     app_ping(a, who, tx, ty, tx, ty);
+    int f = floor_at(a->map, tx, ty);
+    if (who != PING_GM && f >= 0 && f != app_floor_shown(a)) {
+        char at[MAP_COORD_MAX], msg[96];
+        map_coord_name(tx, ty, at, sizeof at);
+        snprintf(msg, sizeof msg, "ping on %s at %s", a->map->areas[f].name, at);
+        app_set_status_gm(a, msg);
+    }
     return 1;
 }
 
@@ -355,6 +369,7 @@ static void app_new_map(App *a, const char *name, int w, int h)
     undo_clear(&a->undo);
     play_init(&a->play);
     ed_init(&a->ed, m);
+    app_floor_reset(a);
     ed_layout(&a->ed, m, a->rnd->w, a->rnd->h);
     grid_center_on(&a->ed.view, m, a->ed.cx, a->ed.cy);
 

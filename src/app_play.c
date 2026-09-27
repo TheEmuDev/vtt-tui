@@ -400,6 +400,9 @@ static void turn_hand_over(App *a)
     if (idx < 0) { app_set_status(a, "no token here to hand the turn to"); return; }
 
     turn_take(a->map, &a->undo, idx);
+    /* The view goes to whoever has the turn, as it does for a. */
+    play_focus(&a->play, idx);
+    app_follow_selection(a);
 
     const Token *t = &a->map->tokens.v[idx];
     char msg[96];
@@ -556,6 +559,7 @@ void app_play_key(App *a, Key k)
                 moved++;
             }
             undo_end(&a->undo);
+            if (moved) app_floor_note_move(a, &m->tokens.v[pl->group[0]]);
             /* Being blocked is the more urgent news, so it wins; otherwise
              * the offer to walk the crowd has to go, since it stopped being
              * true the moment the choice was settled. */
@@ -947,6 +951,7 @@ void app_play_key(App *a, Key k)
         if (turn_count(m) == 0 && turn_spotlight_ruleset(m)) {
             take_count_raw(e);
             turn_flip_spotlight(m, &a->undo);
+            app_floor_spotlight(a);
             app_note(a, m->spotlight == SPOTLIGHT_GM ? "the GM has the spotlight"
                                                      : "the players have the spotlight");
             break;

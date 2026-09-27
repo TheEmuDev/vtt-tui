@@ -25,7 +25,7 @@ void app_draw_status_msg(App *a, int x, int y, int maxw)
     /* The players' frame carries no GM-only message, and over fog no message
      * at all: most of what the app says names a creature or a square, and
      * one placed in the dark would be announced to the table. */
-    if (a->view == VIEW_PLAYERS && (a->status_gm || (a->map && fog_any(a->map)))) return;
+    if (a->view == VIEW_PLAYERS && (a->status_gm || a->psplit || (a->map && fog_any(a->map)))) return;
 
     draw_text_ellipsis(r, x, y, a->status, maxw, style(th->dim, th->bg, 0));
 
@@ -142,7 +142,26 @@ static int ping_visible(const void *ctx, int tx, int ty)
     return !fog_ground_hidden((const Map *)ctx, tx, ty);
 }
 
+static void draw_editor_body(App *a);
+
+/* The players on a floor the GM is not showing: their frame is drawn
+ * through their own camera, swapped in for this one draw, and says nothing
+ * on the status line -- it would describe the GM's cursor on the GM's
+ * floor. */
 static void draw_editor(App *a)
+{
+    if (a->view != VIEW_PLAYERS || !app_players_split(a)) { draw_editor_body(a); return; }
+    GridView gm = a->ed.view;
+    app_players_camera(a);
+    a->ed.view = a->pview;
+    a->psplit  = 1;
+    draw_editor_body(a);
+    a->pview   = a->ed.view;
+    a->ed.view = gm;
+    a->psplit  = 0;
+}
+
+static void draw_editor_body(App *a)
 {
     Renderer    *r  = a->rnd;
     const Theme *th = a->th;
@@ -235,7 +254,8 @@ static void draw_editor(App *a)
 
     /* Status line sits directly above the keybinding bar. */
     char status[192];
-    if (fog_players && playing)     play_status(&a->play, m, &a->ed, 0, status, sizeof status);
+    if (a->psplit)                  status[0] = '\0';
+    else if (fog_players && playing) play_status(&a->play, m, &a->ed, 0, status, sizeof status);
     else if (a->ruler.active)       ruler_status(&a->ruler, m, status, sizeof status);
     else if (playing && a->play.range.active)
                                     range_status(&a->play.range, m, status, sizeof status);
@@ -400,6 +420,7 @@ int app_view_differs(const App *a)
         int cur = turn_acting(m);                 /* the panel shows the actor's */
         if (cur >= 0 && m->tokens.v[cur].ncounters) return 1;
         if (map_note_at(m, a->ed.cx, a->ed.cy)) return 1;
+        if (app_players_split(a)) return 1;       /* their floor is not the GM's */
         /* The GM's status line names a secret link under the cursor. */
         int li = link_at(m, a->ed.cx, a->ed.cy, NULL);
         if (li >= 0 && m->links[li].secret) return 1;

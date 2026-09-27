@@ -14548,6 +14548,117 @@ static void test_floor_view(void)
     if (system(cmd) != 0) { }
 }
 
+static void test_floor_players(void)
+{
+    Sandbox sb = sandbox_enter("floorplayers");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    char path[1200];
+    snprintf(path, sizeof path, "%s/tower.vtt", sb.dir);
+    FILE *f = fopen(path, "w");
+    /* The party: Aria and Bram on Ground, Cora in the Cellar. A Ghoul in the
+     * Cellar, a Wraith upstairs. */
+    fputs("VTT 9\nname tower\nsize 20 4\nzoom 1\nruleset daggerheart\ntiles\n"
+          "...... ...... ......\n...... ...... ......\n...... ...... ......\n...... ...... ......\n"
+          "token player 8 1 1 \"Aria\"\ntoken player 9 2 1 \"Bram\"\ntoken player 1 1 1 \"Cora\"\n"
+          "token enemy 3 2 1 \"Ghoul\"\ntoken enemy 16 1 1 \"Wraith\"\n"
+          "area 0 0 5 3 \"Cellar\"\narea 7 0 12 3 \"Ground\"\narea 14 0 19 3 \"Upper\"\n"
+          "floor \"Cellar\" -1\nfloor \"Ground\" 0\nfloor \"Upper\" 1\n", f);
+    fclose(f);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+    Map *m = a.map;
+    int cellar = map_area_find(m, "Cellar"), ground = map_area_find(m, "Ground"), upper = map_area_find(m, "Upper");
+
+    CASE("the players see the party's floor: most of them are on Ground");
+    CHECK_EQ(app_players_floor(&a), ground);
+    press(&a, ":floor Upper\r");
+    CHECK_EQ(app_players_split(&a), 1);
+    CHECK_EQ(app_view_differs(&a), 1);
+
+    CASE("their frame is drawn through their own camera: Ground's creatures, not the GM's floor");
+    rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+    {
+        int sx, sy, tx, ty;
+        grid_tile_interior(&a.pview, 8, 1, &sx, &sy);
+        Cell *c = rnd_at(&r, sx + 1, sy);
+        CHECK(c && c->ch != ' ');                          /* Aria is drawn */
+        CHECK(grid_screen_to_tile(&a.pview, m, sx, sy, &tx, &ty) && tx == 8 && ty == 1);
+        CASE("a tap maps through their camera, and the GM hears where");
+        a.npings = 0;
+        CHECK_EQ(app_ping_cell(&a, 3, sx, sy), 1);
+        CHECK(a.npings == 1 && a.pings[0].x0 == 8 && a.pings[0].y0 == 1);
+        CHECK(strstr(a.status, "ping on Ground at I2") != NULL);
+    }
+    CHECK_EQ(app_floor_shown(&a), upper);                  /* the GM's view is untouched */
+
+    CASE("a pin holds the players on a floor, and stays when the party moves");
+    press(&a, ":player floor Cellar\r");
+    CHECK_EQ(app_players_floor(&a), cellar);
+    press(&a, ":player floor auto\r");
+    CHECK_EQ(app_players_floor(&a), ground);                /* picked afresh: the most */
+    press(&a, ":player floor Nowhere\r");
+    CHECK(strstr(a.status, "no floor called Nowhere") != NULL);
+
+    CASE("initiative: an enemy's turn moves the GM, a player's moves both and lifts a pin");
+    a.ed.cx = 3; a.ed.cy = 2; press(&a, "si20\r");         /* the Ghoul, in the Cellar */
+    a.ed.cx = 1; a.ed.cy = 1; press(&a, "si10\r");         /* Cora, in the Cellar */
+    press(&a, ":floor Upper\r");
+    press(&a, ":player floor Upper\r");
+    play_focus(&a.play, -1);
+    press(&a, "a");                                        /* the Ghoul's turn */
+    CHECK_EQ(app_floor_shown(&a), cellar);
+    CHECK_EQ(app_players_floor(&a), upper);                /* the pin holds on an enemy's turn */
+    press(&a, "a");                                        /* Cora's turn */
+    CHECK_EQ(app_floor_shown(&a), cellar);
+    CHECK_EQ(app_players_floor(&a), cellar);
+    CHECK_EQ(a.ppin[0], '\0');
+    press(&a, ":turns off\r");
+
+    CASE("the spotlight: to the GM, the GM's view goes where the enemies are; the players stay");
+    press(&a, ":floor Ground\r");
+    CHECK_EQ(m->spotlight, SPOTLIGHT_PLAYERS);
+    int before = app_players_floor(&a);
+    press(&a, "a");
+    CHECK_EQ(m->spotlight, SPOTLIGHT_GM);
+    /* One enemy in the Cellar, one upstairs, none on Ground: a tie, broken
+     * by the lowest. */
+    CHECK_EQ(app_floor_shown(&a), cellar);
+    CHECK_EQ(app_players_floor(&a), before);
+
+    CASE("to the players: both go where the players are, staying put when they still can");
+    press(&a, "a");
+    CHECK_EQ(m->spotlight, SPOTLIGHT_PLAYERS);
+    CHECK_EQ(app_floor_shown(&a), app_players_floor(&a));
+
+    CASE("the last side to move breaks a tie");
+    {
+        int ai = -1;
+        for (int i = 0; i < m->tokens.n; i++) if (!strcmp(m->tokens.v[i].label, "Aria")) ai = i;
+        m->tokens.v[ai].x = 15; m->tokens.v[ai].y = 0;      /* one on each floor: a tie */
+        str_lcpy(a.pfloor, "", sizeof a.pfloor);            /* nowhere to stay */
+        a.side_floor[0][0] = '\0';
+        CHECK_EQ(app_players_floor(&a), cellar);            /* no last move: the lowest */
+        a.pfloor[0] = '\0';
+        str_lcpy(a.side_floor[0], "Upper", sizeof a.side_floor[0]);
+        CHECK_EQ(app_players_floor(&a), upper);             /* a player last moved upstairs */
+    }
+
+    app_free(&a);
+    rnd_free(&r);
+    char cmd[1200];
+    snprintf(cmd, sizeof cmd, "rm -rf '%s'", sb.dir);
+    sandbox_leave(&sb);
+    if (system(cmd) != 0) { }
+}
+
 static void test_room_language(void)
 {
     Sandbox sb = sandbox_enter("roomlang");
@@ -15270,6 +15381,7 @@ int main(void)
         { "linkkeys", test_link_keys },
         { "floors", test_floors },
         { "floorview", test_floor_view },
+        { "floorplayers", test_floor_players },
         { "graymarker", test_gray_marker },
         { "roomlang", test_room_language },
         { "corridors", test_corridors },

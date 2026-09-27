@@ -112,6 +112,7 @@ void app_link_go(App *a, int li, int end, int enforce, int *moved_dx, int *moved
         undo_move_token(&a->undo, m, tr.idx[i], t->x + tr.dx, t->y + tr.dy);
     }
     undo_end(&a->undo);
+    for (int i = 0; i < tr.n; i++) app_floor_note_move(a, &m->tokens.v[tr.idx[i]]);
     *moved_dx = tr.dx;
     *moved_dy = tr.dy;
 
