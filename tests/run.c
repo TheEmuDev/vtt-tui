@@ -14540,6 +14540,26 @@ static void test_floor_view(void)
     CHECK_EQ(app_floor_shown(&a), -1);
     CHECK_EQ(a.ed.view.bounded, 0);
 
+    CASE("the channel: floor NAME LEVEL and off, floors, and status names the floor shown");
+    {
+        press(&a, "u");                                     /* Upper a floor again */
+        press(&a, ":floor Ground\r");
+        char *ans = ctl_ask(&a, "floor Wing 2\n");
+        CHECK(ans && strstr(ans, "Wing cannot be a floor: it would overlap another floor"));
+        free(ans);
+        ans = ctl_ask(&a, "floor Cellar off\nfloor Cellar -2\nfloors\nstatus\n");
+        CHECK(ans && !strncmp(ans, "ok", 2) && strstr(ans, "Cellar           level  -2  A1:F4") &&
+              strstr(ans, "Ground           level   0  H1:M4  (the GM is looking at it)") &&
+              strstr(ans, "floor Ground\n"));
+        free(ans);
+        ans = ctl_ask(&a, "floor Cellar 500\n");
+        CHECK(ans && strstr(ans, "a level is -99 to 99"));
+        free(ans);
+        ans = ctl_ask(&a, "marked json\n");
+        CHECK(ans && strstr(ans, "\"floor\":\"Ground\""));
+        free(ans);
+    }
+
     app_free(&a);
     rnd_free(&r);
     char cmd[1200];

@@ -4,21 +4,20 @@ Things worth building that were consciously not built, with the reason, so
 the reason can be re-examined rather than the idea re-invented. Add to the
 top; move an entry to the README when it ships.
 
-## A floor view, and height
+## Stacked layers, and height
 
-*Links built 2026-09-27; the rest not decided.* Floors of a building and "pocket" places
-reached by a portal are built today as areas on one map, apart and separated by void,
-joined by links (README, *Links*). Two layers of the original proposal remain:
+*Wanted, not yet planned.* Links (2026-09-27) and the floor view (2026-09-27, FLOORS.md)
+are built: floors are areas on one flat map, apart with void between, shown one at a time.
+**True stacked layers** -- floors sharing coordinates, each its own grid of tiles, walls,
+fog and sight -- would buy seeing between floors: a pit lined up over the room below, a
+balcony over a hall. The floor view was built so they can follow (FLOORS.md, *Built so
+stacked layers can follow*): every floor question goes through floor.c, levels are
+elevations, floors never overlap, cross-floor messages name the floor. What layers still
+need: square names qualified by floor (`Upper:K12`), a level in the file's sections, sight
+and the room finder per layer, and a rule for what one floor shows of the one below.
 
-- **A floor view.** The screen shows one area at a time, filling the window; `[` `]` flip
-  floors, and following a creature through a link switches with it; the players' frame
-  shows the party's floor. Underneath, still one flat map. Worth it when jumping between
-  floors with `g o` or `:link N` stops being enough -- a building of many floors, or a
-  window too small to hold the map.
-- **True stacked layers** (floors sharing coordinates, a level on every grid, fog, sight,
-  room finder and file), which buy seeing between floors -- a pit lined up over the room
-  below, a balcony -- at the price of a rewrite of the core. A lighter, separate idea:
-  **height on a creature** (flying, on a ledge) that the ruler and range count.
+A lighter, separate idea: **height on a creature** (flying, on a ledge) that the ruler and
+range count.
 
 Links left as they are: a trip is a key press, never a step onto the square (nothing fires
 by itself); the ruler, range and route do not measure through a link.

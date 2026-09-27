@@ -65,6 +65,14 @@ sees the edits before it.
 | `note SQUARE "text"`, `note SQUARE` | a note on a square only the GM sees, or take it off |
 | `fog paint REGION N` | into fog patch N (0 scrubs); the GM makes patches |
 
+**Floors.** A floor is an area the GM's screen can show alone, with a level (-1 a
+basement, 0 the ground, 1 upstairs). The GM steps between floors with `[` `]`; the players'
+screens show the party's floor.
+
+| line | does |
+|---|---|
+| `floor Upper 1`, `floor Upper off` | the named area is a floor at level 1 (-99 to 99), or no longer one. Floors may not overlap |
+
 **Links.** Stairs, a ladder, a trapdoor or a portal: two places joined, so the GM can send
 creatures from one to the other with a key. Floors of a building, or a place reached by
 magic, go on the same map apart from each other, separated by void, and a link joins them.
@@ -92,8 +100,9 @@ magic, go on the same map apart from each other, separated by void, and a link j
 | `check [json]` | mistakes: loose doors, creatures on void, rooms nothing reaches ([codes](../README.md#map-tools---dump-map---check---describe)) |
 | `stamps` | the GM's saved stamps and their sizes |
 | `links [json]` | every link: its number, kind, ends, size, one-way and secret |
-| `status` | live only: the map, whether edits are taken now |
-| `marked [json]` | live only: what the GM is pointing at -- the cursor (and the area it is in), a `v` box, selected creatures, the ruler, recent pings |
+| `floors` | the floors, top first, with their levels and extents, and which the GM is looking at |
+| `status` | live only: the map, the floor on the GM's screen, whether edits are taken now |
+| `marked [json]` | live only: what the GM is pointing at -- the cursor (and the area it is in, and the floor on screen), a `v` box, selected creatures, the ruler, recent pings |
 | `undo` | live only, alone in its request: take back your last request, while nothing has happened since |
 
 ## From a description to a map
@@ -139,8 +148,20 @@ magic, go on the same map apart from each other, separated by void, and a link j
 - A room drawn over another's ground takes it: `room` floors its whole box and walls its
   outline. Plan rooms apart and join them with corridors or `gap 0` and a door.
 - Creatures need ground under every square of their footprint; `in` a room they find it.
-- A second floor is a second set of rooms on the same map, apart from the first with void
-  between, joined by `link`. Leave room: a floor needs as much map as the first.
+- **A building of several floors** is several blocks of the same map, apart with void
+  between: name each block as an area, mark it a `floor` with its level, draw its rooms
+  inside it, and join the floors with `link`. Make the floors the same size with their
+  stairs in the same place, and the GM's cursor stays on the stairs stepping between them:
+
+  ```
+  area Ground A1:L10
+  area Upper O1:Z10
+  floor Ground 0
+  floor Upper 1
+  room Hall B2 8x6
+  room Loft P2 8x6
+  link Hall Loft stairs
+  ```
 
 ## Working live with the GM
 
@@ -195,7 +216,7 @@ A last resort, when you must write or repair the file itself. The file is plain 
 README's *File format* section is the full reference.
 
 ```
-VTT 8
+VTT 9
 name Crypt Entrance
 size 6 4
 scale 5
@@ -222,7 +243,7 @@ note 2 3 "loose flagstone"
 area 0 0 5 3 "Entrance"
 ```
 
-`VTT 8` first (a lower number is fine if the map has no links or areas); then header lines (`name`,
+`VTT 9` first (a lower number is fine if the map has no floors, links or areas); then header lines (`name`,
 `size W H`, `scale` feet per square, `metric` chebyshev / euclidean / alt / manhattan,
 optionally `ruleset daggerheart`); then the sections. **Coordinates in the file are 0-based
 x then y**; the app and the tools name squares with letters and 1-based rows (`x 4, y 2` is
@@ -253,6 +274,6 @@ blank line inside a section is a row. A door on the map's own edge is a way out 
 
 Creatures: `token player X Y SIZE "Label"` (or `enemy`), anchored at the top-left square;
 `tokennote "text"` after one. Square notes: `note X Y "text"`. Areas: `area X0 Y0 X1 Y1
-"Name"`. Links: `link N KIND SIZE X0 Y0 X1 Y1 [oneway] [secret]`, each end by its top-left
-square. Fog: `fog on`, `fogpatch N Name reveal R memory on`, then a `fog` section of `H`
+"Name"`. Floors: `floor "Name" LEVEL` after the area lines. Links: `link N KIND SIZE X0 Y0 X1 Y1
+[oneway] [secret]`, each end by its top-left square. Fog: `fog on`, `fogpatch N Name reveal R memory on`, then a `fog` section of `H`
 rows of `W` characters (`.` none, `A`-`O` patch 1-15).

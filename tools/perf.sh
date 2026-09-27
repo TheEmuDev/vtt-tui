@@ -157,6 +157,30 @@ awk 'BEGIN {
     print "token player 0 0 1 \"Aria\"";
 }' > "$LINKS"
 
+# Three floors of 40x25 side by side, 24 creatures on each, a floor each
+# for the GM and the players: the players' frame drawn through its own
+# camera. Party on Ground; the GM looks at Upper.
+FLOORS="$DIR/floors.vtt"
+awk 'BEGIN {
+    w = 124; h = 25;
+    printf "VTT 9\nname Floors\nsize %d %d\nzoom 1\nruleset daggerheart\ntiles\n", w, h;
+    for (y = 0; y < h; y++) {
+        s = "";
+        for (x = 0; x < w; x++) s = s ((x % 42 < 40) ? "." : " ");
+        print s;
+    }
+    for (f = 0; f < 3; f++)
+        for (i = 0; i < 24; i++)
+            printf "token %s %d %d 1 \"F%d %d\"\n", (f == 1 && i % 2 == 0) ? "player" : "enemy",
+                   f * 42 + i * 3 % 38 + 1, i * 5 % 23 + 1, f, i;
+    print "area 0 0 39 24 \"Cellar\"";
+    print "area 42 0 81 24 \"Ground\"";
+    print "area 84 0 123 24 \"Upper\"";
+    print "floor \"Cellar\" -1";
+    print "floor \"Ground\" 0";
+    print "floor \"Upper\" 1";
+}' > "$FLOORS"
+
 LONG=$(awk 'BEGIN{ for (i = 0; i < 60; i++) printf "l" }')
 
 # The control channel's requests (docs/CONTROL.md): a 40x40 room over the void
@@ -290,6 +314,9 @@ run "build, fog paint"     "$MOB"    80x24  ':fog Crypt\r3bgfgcllgfgchh'
 run "build, 64 links"      "$LINKS"  80x24  'jjllkkhh'
 run "play, 64 links"       "$LINKS"  80x24  ':play\rjjllkkhh'
 run "play, link there+back" "$LINKS" 80x24  ':play\r:a1\rgogo'
+run "build, one floor"     "$FLOORS" 80x24  ':floor Ground\rjjllkkhh'
+run "play, floors split, 4 watchers" "$FLOORS" 80x24 ':play\r:floor Upper\rjjllkkhh' "--bench-clients 4"
+run "play, floor steps"    "$FLOORS" 80x24  ':play\r][][
 run "play, counters"       "$MOB"    80x24  ':play\rtsvhp 9\r><><><><'
 run "play, clocks"         "$MOB"    80x24  ':play\r:clock Dragon 6\r:clock Ritual 8\r:tick Dragon 2\r:tick -2\r'
 run "play, 1 watcher"      "$MOB"    80x24  ':play\rjjllkkhh' "--bench-clients 1"

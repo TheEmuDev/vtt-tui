@@ -10,6 +10,7 @@
 
 #include "app_priv.h"
 #include "fog.h"
+#include "floor.h"
 #include "json.h"
 #include "link.h"
 #include "maptools.h"
@@ -119,6 +120,11 @@ static void do_status(App *a, FILE *out, int own)
     else fputs("map none open\n", out);
     if (a->screen == SCREEN_EDITOR) fprintf(out, "screen build, %s mode\n", mode_name(a->ed.mode));
     else                            fprintf(out, "screen %s\n", screen_name(a->screen));
+    if (m && (a->screen == SCREEN_EDITOR || a->screen == SCREEN_PLAY)) {
+        int order[MAP_AREAS_MAX];
+        if (floor_order(m, order))
+            fprintf(out, "floor %s\n", floor_name(m, app_floor_shown(a)));
+    }
     fprintf(out, "undo %d back, %d forward%s\n", a->undo.depth, a->undo.nmarks - a->undo.depth,
             own ? ", and this request's changes one more" : "");
     const char *busy = own ? NULL : app_ctl_busy(a);
@@ -275,6 +281,9 @@ static void do_marked(App *a, FILE *out, int json)
             int ai = map_area_at(m, mk.cx0, mk.cy0);
             json_key(&j, "in");
             if (ai >= 0) json_str(&j, m->areas[ai].name); else json_null(&j);
+            int fl = app_floor_shown(a);
+            json_key(&j, "floor");                 /* the floor the GM is looking at */
+            if (fl >= 0) json_str(&j, m->areas[fl].name); else json_null(&j);
         }
         json_key(&j, "corner");
         if (mk.corner) {
@@ -355,6 +364,7 @@ static void do_marked(App *a, FILE *out, int json)
     int in_area = map_area_at(m, mk.cx0, mk.cy0);
     if (in_area >= 0) fprintf(out, "cursor %s, in %s\n", r, m->areas[in_area].name);
     else              fprintf(out, "cursor %s\n", r);
+    if (app_floor_shown(a) >= 0) fprintf(out, "floor %s\n", m->areas[app_floor_shown(a)].name);
     if (mk.corner) {
         char cn[48];
         corner_name(m, mk.wx, mk.wy, cn, sizeof cn);
@@ -1141,6 +1151,25 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
         for (int y = y0; y <= y1; y++)
             for (int x = x0; x <= x1; x++) fog_paint(m, u, x, y, id);
     }
+    else if (!strcmp(v, "floor")) {
+        /* floor NAME LEVEL, floor NAME off */
+        if (n != 3) BAD("floor NAME LEVEL, or floor NAME off");
+        int ai = map_area_find(m, w[1]);
+        if (ai < 0) BAD("no area called %.40s - area NAME REGION names one", w[1]);
+        const Area *ar = &m->areas[ai];
+        if (!strcmp(w[2], "off")) {
+            if (!ar->floor) BAD("%.40s is not a floor", w[1]);
+            undo_set_floor(u, m, ar->name, 0, 0);
+        } else {
+            int level;
+            if (!word_int(w[2], FLOOR_LEVEL_MIN, FLOOR_LEVEL_MAX, &level))
+                BAD("%.20s: a level is %d to %d, or off", w[2], FLOOR_LEVEL_MIN, FLOOR_LEVEL_MAX);
+            const char *why = floor_problem(m, ai);
+            if (why) BAD("%.40s cannot be a floor: %s", w[1], why);
+            undo_set_floor(u, m, ar->name, 1, level);
+        }
+        x0 = ar->x0; y0 = ar->y0; x1 = ar->x1; y1 = ar->y1;
+    }
     else if (!strcmp(v, "link")) {
         /* link A B [KIND] [size 2|3] [oneway] [secret]: a new one, numbered
          * the lowest free. link N off, or link N and what changes. */
@@ -1243,7 +1272,7 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
 
 static int is_edit(const char *v)
 {
-    static const char *const EDITS[] = { "room", "area", "door", "corridor", "tile", "wall", "edge", "note", "fog", "token", "stamp", "link" };
+    static const char *const EDITS[] = { "room", "area", "door", "corridor", "tile", "wall", "edge", "note", "fog", "token", "stamp", "link", "floor" };
     for (size_t i = 0; i < sizeof EDITS / sizeof *EDITS; i++)
         if (!strcmp(v, EDITS[i])) return 1;
     return 0;
@@ -1330,6 +1359,21 @@ static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FIL
         }
         if (!k) fputs("no stamps\n", out);
         else if (k > 64) fprintf(out, "... and %d more\n", k - 64);
+        return 0;
+    }
+    if (!strcmp(v, "floors")) {
+        /* The floors, highest first, as a building reads top to bottom. */
+        if (n > 1) { snprintf(err, errsz, "floors takes nothing after it"); return -1; }
+        int order[MAP_AREAS_MAX], nf = floor_order(m, order);
+        for (int k = nf - 1; k >= 0; k--) {
+            const Area *fa = &m->areas[order[k]];
+            char b0[MAP_COORD_MAX], b1[MAP_COORD_MAX];
+            map_coord_name(fa->x0, fa->y0, b0, sizeof b0);
+            map_coord_name(fa->x1, fa->y1, b1, sizeof b1);
+            fprintf(out, "%-16s level %3d  %s:%s%s\n", fa->name, fa->level, b0, b1,
+                    order[k] == app_floor_shown(a) ? "  (the GM is looking at it)" : "");
+        }
+        if (!nf) fputs("no floors\n", out);
         return 0;
     }
     if (!strcmp(v, "links")) {

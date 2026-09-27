@@ -87,3 +87,15 @@ time through its own camera).
 2. The view: clip, `[` `]`, `:floor`, following the cursor, status, labels.
 3. Turns and the players' floor: `floor_pick`, their camera, `:player floor`, taps.
 4. Channel, docs, perf. Then the Fable review.
+
+## As built: what the plan did not say
+
+- `map_area_at` no longer counts floors: a room with no area of its own would otherwise be
+  named after the floor, and `marked`'s "in" would say the floor rather than the room.
+- `:player floor auto` picks afresh (it forgets where the players were), or step 1 of the
+  tie-breaker would hold them on the floor the pin left them on.
+- When the players' floor is not the GM's, their status line is blank and no message
+  reaches them: every one describes the GM's cursor or names a square on the GM's floor.
+- A trip's message (`Aria takes stairs 1 to I2`) names no floor: it is a public message,
+  and an area's name is the GM's. The GM's status line names the floor.
+- `0` `$` `gg` `G`, wall mode's corners and a carried creature stop at the floor's edge.

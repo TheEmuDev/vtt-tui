@@ -23,8 +23,8 @@ game-specific readouts such as range bands (see [Rulesets](#rulesets)).
 **Features**
 
 - A vim-style map editor: walls, doors, windows and secret doors on the boundaries between
-  squares; terrain; box and circle selections; reusable stamps; named areas; links (stairs,
-  ladders, portals) between floors and separate locations.
+  squares; terrain; box and circle selections; reusable stamps; named areas; floors shown one
+  at a time, and links (stairs, ladders, portals) between them.
 - Play mode: creatures of 1-3 squares, movement with route and distance readouts, status
   markers, counters (HP and the like), notes, a ruler and area-of-effect templates.
 - Turn order or a spotlight, clocks, dice and named rolls, a session log.
@@ -201,6 +201,7 @@ Build mode is for drawing the map. `F1` switches to it.
 | `0` `$` `gg` `G` | start / end of the row, top / bottom of the map |
 | `Ctrl-d` `Ctrl-u` | half a page down / up |
 | `:d6` | jump to a square (`:6` jumps to row 6, keeping the column) |
+| `[` `]` | show the [floor](#floors) below / above |
 | `z` | center the view on the cursor |
 | `+` `-` | zoom in / out |
 | `#` | row and column labels on / off |
@@ -324,6 +325,7 @@ Play mode is for running the encounter. `F2` switches to it.
 | `esc` | cancel: close the selection, cancel a move, clear the range, deselect |
 | `u` `Ctrl-r` | undo / redo |
 | `:d6` | jump to a square |
+| `[` `]` | show the [floor](#floors) below / above |
 
 `V`, `P` and `S` show which key to use instead (`v`, `p`, `s c`).
 
@@ -443,6 +445,58 @@ visible to the players, except for ends that fog hides.
 Several changes can go on one line (`:link 3 portal oneway secret`). Every change can be
 undone with `u`. The status line names the link under the cursor and where it leads
 (`stairs 3 to K12`).
+
+## Floors
+
+A building with several storeys, or a set of separate locations, can be drawn on one map and
+shown one part at a time. Draw each floor as its own block of the map, separated by void, name
+it as an area, and mark it as a floor with a level:
+
+```
+:area Ground        (with the ground floor selected with v)
+:floor Ground 0
+:floor Upper 1
+:floor Cellar -1
+```
+
+The level orders the floors: `]` shows the floor above the one on screen and `[` the floor
+below. `:floor all` shows the whole map again, and `:floor Upper` shows one floor directly.
+Drawing floors the same size, with their stairs in the same place, keeps the cursor on the
+stairs when you step between them.
+
+While a floor is shown, only that floor is drawn, the view and the cursor stay inside it, and
+a carried creature stops at its edge. The status line names the floor. Whenever the cursor
+lands on another floor, the view goes with it: taking a link with `g o`, jumping with `:K12` or
+`:link 3`, finding a creature with `t` `f` `e`, or passing the turn. A square outside every
+floor shows the whole map. Which floor you are looking at is not saved with the map.
+
+**The players' floor.** When a map has floors, the players' screens show the party's floor:
+
+- In a fight, when a player creature's turn starts, both your screen and the players' go to
+  that creature's floor. When an enemy's turn starts, only your screen goes to it; the players'
+  screens stay where they are.
+- Under a spotlight ruleset, when the spotlight passes to the players, both screens go to the
+  party's floor; when it passes to you, only your screen goes, to the floor with the enemies.
+- Otherwise the players see the party's floor.
+
+The party's floor (and the enemies', for the spotlight) is chosen in this order: the floor
+already shown, if one of that side's creatures is still on it; the floor with the most of
+them; the floor where one of them last moved or took a link; the lowest floor.
+
+`:player floor Cellar` keeps the players' screens on a floor until a player creature's turn
+starts; `:player floor auto` returns them to following the party. When their floor is not the
+one on your screen, their status line is left blank, and a ping from a phone on a floor you
+are not looking at is named on your status line (`ping on Upper at K12`).
+
+| command | action |
+|---------|--------|
+| `:floor NAME LEVEL` | make the named area a floor at that level (-99 to 99) |
+| `:floor NAME off` | stop it being a floor (the area stays) |
+| `:floor NAME`, `:floor all` | show that floor / the whole map |
+| `:floors` | list the floors, top first |
+| `:player floor NAME`, `:player floor auto` | pin the players' screens to a floor / follow the party |
+
+Floors cannot overlap. A room inside a floor keeps its own area name.
 
 ## Measuring
 
@@ -780,13 +834,14 @@ use. Available: `none`, `daggerheart`.
 | `:area NAME` | name the selection, or jump to a named area; `:areas` lists, `:area NAME off` removes |
 | `:stamp ...` | save, load and list [stamps](#build-mode) |
 | `:link ...`, `:links` | change, remove, list and jump to [links](#links-stairs-ladders-trapdoors-portals) |
+| `:floor ...`, `:floors` | mark, show and list [floors](#floors) |
 | `:turns` | list the [turn order](#turn-order-a); `:turns off` ends the fight |
 | `:panel` | show / hide the side panel |
 | `:clock ...`, `:tick ...` | [clocks](#clocks-clock-tick) |
 | `:notes` | list where notes are |
 | `:fog ...` | [fog of war](#fog-of-war-fog) |
 | `:serve ...` | the [players' view](#the-players-view-serve-mirror); `:serve off` stops it |
-| `:player preview` | show the players' view on your screen |
+| `:player preview` | show the players' view on your screen; `:player floor NAME\|auto` pins their [floor](#floors) |
 | `:mirror` | open a second terminal with the players' view |
 | `:agent on` | open the [control channel](#control-channel-agent-vtt---ctl) for an AI agent; `:agent off` closes it |
 | `:roll EXPR` | roll dice; `:roll NAME = EXPR` saves a named roll, `:rolls` lists them |
@@ -868,6 +923,7 @@ W120 unreachable-room  room K2   18 squares, no door leads to it from room B2
 | `W020 clamped` | a setting out of range, replaced by the nearest valid value |
 | `W022 edge-row-short` | a `vedges` row missing its east boundary |
 | `W023 link-dropped` | a link with an end off the map, its ends overlapping, or on another link's squares |
+| `W024 floor-dropped` | a floor naming no area, marked twice, or overlapping another |
 | `W102 door-to-void` | a door or window leading into void |
 | `W103 wall-in-void` | a wall with no map on either side |
 | `W104 door-loose` | a door or window with no wall at either end |
@@ -877,13 +933,14 @@ W120 unreachable-room  room K2   18 squares, no door leads to it from room B2
 | `W130 fog-patch-empty` | a fog patch with no squares |
 | `W140 note-on-void` | a note on a square that is not map |
 | `W150 link-on-void` | a link with an end on a square that is not map (nobody can be sent there) |
+| `W160 floors-overlap` | two floors sharing squares |
 | `N021 row-short` | rows shorter than their section, read as trailing blanks |
 | `N105 door-off-map` | a door or window on the edge of the map |
 | `N131 fog-patch-disabled` | a disabled fog patch |
 
 **`--json`** gives `--describe` or `--check` as JSON, with 0-based coordinates alongside the
-square names, room `area` names, the list of `areas` and `links`, and each finding's `line`
-and `column`. `--describe` lists each room's link ends and where they lead, and counts a room
+square names, room `area` names and `floor`s, the lists of `areas`, `floors` and `links`, and
+each finding's `line` and `column`. `--describe` names each room's floor. `--describe` lists each room's link ends and where they lead, and counts a room
 reached only by a link as reachable (a one-way link only in its direction).
 
 ## Control channel (`:agent`, `vtt --ctl`)
@@ -920,7 +977,7 @@ typing a command or drawing a wall. The full request language is in
 Maps are plain text, one record per line:
 
 ```
-VTT 8
+VTT 9
 name Goblin Ambush
 size 16 9
 zoom 1
@@ -944,6 +1001,8 @@ clock Fuse 4 4 down
 roll attack "2d12+3"
 note 5 3 "pressure plate"
 area 1 1 6 4 "Crypt"
+area 0 0 15 8 "Ground"
+floor "Ground" 0
 link 1 stairs 1 5 2 14 2
 link 2 portal 2 1 6 12 6 oneway secret
 fog on
@@ -1007,6 +1066,7 @@ padded with spaces.
 | `roll NAME "EXPR"` | a named roll |
 | `note X Y "text"` | a note on a square |
 | `area X0 Y0 X1 Y1 "Name"` | a named area |
+| `floor "Name" LEVEL` | the named area is a floor at that level |
 | `link N KIND SIZE X0 Y0 X1 Y1 [oneway] [secret]` | link number N between the SIZE×SIZE blocks whose top-left squares are X0,Y0 and X1,Y1; one-way links run from the first |
 | `fog on`, `fog soft-edge` | fog settings |
 | `fogpatch N NAME reveal R\|manual memory on\|off` | a fog patch; `fog` rows use `A`-`O` for patches 1-15 (unseen), `a`-`o` (seen), `1`-`9` `!"#$%&` (revealed by hand), `.` for none |
@@ -1022,8 +1082,9 @@ that can hold its contents:
 | 6 | counters, fog |
 | 7 | named areas |
 | 8 | links |
+| 9 | floors |
 
-vtt reads every version up to 8 and refuses newer files.
+vtt reads every version up to 9 and refuses newer files.
 
 ## Performance
 
@@ -1047,6 +1108,7 @@ has measurements for every path; `make perf` regenerates them.
 | [docs/KEYS.md](docs/KEYS.md) | the rules for choosing key bindings |
 | [docs/CONTROL.md](docs/CONTROL.md) | the control channel's design |
 | [docs/REMOTE.md](docs/REMOTE.md) | the players' view: server, page and watcher |
+| [docs/FLOORS.md](docs/FLOORS.md) | floors: the view, the players' floor, and room for stacked layers |
 | [docs/FOG.md](docs/FOG.md) | fog of war and sight |
 | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | performance measurements |
 | [docs/IDEAS.md](docs/IDEAS.md) | features considered and not built |
