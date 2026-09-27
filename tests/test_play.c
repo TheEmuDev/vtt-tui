@@ -4082,6 +4082,7 @@ void test_characters(void)
     CHECK(p->counters[0].value == 12 && !p->hidden && p->nstatus == 0);
     CHECK_EQ(a.play.sel, 1);
     CHECK(strstr(a.status, "placed enemy Crypt Ghoul (2x2) at F4 from ghoul") != NULL);
+    CHECK_EQ(a.status_gm, 1);                          /* the template's name is the GM's */
     CHECK(!strcmp(m->rolls[1].name, "bite") && !strcmp(m->rolls[1].expr, "2d6"));
     CHECK_EQ(a.undo.depth, depth + 1);
 
@@ -4120,6 +4121,29 @@ void test_characters(void)
     a.ed.cx = 11; a.ed.cy = 7;                         /* a 2x2 off the edge */
     press(&a, "iteghoul\r");
     CHECK_EQ(m->tokens.n, 4);
+    CHECK(strstr(a.status, "no room for a 2x2 Crypt Ghoul at L8") != NULL);
+
+    CASE("save takes the creature under the cursor over the selected one");
+    a.play.sel = 3;                                    /* the last one placed */
+    a.ed.cx = 8; a.ed.cy = 5;                          /* on the player at I6 */
+    press(&a, ":character save pick\r");
+    Map *pc = character_load("pick", err, sizeof err);
+    CHECK(pc && character_token(pc)->kind == TOKEN_PLAYER);
+    map_free(pc);
+    a.ed.cx = 11; a.ed.cy = 0;                         /* nobody here: the selected one */
+    press(&a, ":character save pick\r");
+    pc = character_load("pick", err, sizeof err);
+    CHECK(pc && character_token(pc)->kind == TOKEN_ENEMY);
+    map_free(pc);
+
+    CASE("a name too long is refused, not cut short; a derived name never ends in a dash");
+    press(&a, ":character save aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\r");
+    CHECK(strstr(a.status, "under 64 characters") != NULL);
+    char nm2[8];
+    character_name_from_label("abcd efgh", nm2, sizeof nm2);   /* cut at "abcd-e": no trailing dash */
+    CHECK(nm2[strlen(nm2) - 1] != '-');
+    character_name_from_label("abcde fg", nm2, 7);
+    CHECK(!strcmp(nm2, "abcde"));
 
     CASE("esc cancels the picker; a wrong key after i t says what it wants");
     press(&a, "ite");
@@ -4152,7 +4176,7 @@ void test_characters(void)
     CHECK(character_load("pair", err, sizeof err) == NULL);
     CHECK(strstr(err, "holds 2 creatures") != NULL);
     press(&a, ":character\r");
-    CHECK_EQ(a.picker.n, 3);
+    CHECK_EQ(a.picker.n, 4);                         /* Crypt-Ghoul, ghoul, pair, pick */
     CHECK(!strcmp(a.picker.items[2].name, "pair") && !strcmp(a.picker.items[2].detail, "cannot be read"));
     press(&a, "pair\r");
     CHECK_EQ(m->tokens.n, 4);

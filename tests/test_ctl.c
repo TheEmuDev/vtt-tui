@@ -1497,7 +1497,7 @@ void test_ctl_characters(void)
     CHECK(t && strstr(t, "has no label") != NULL);
     free(t);
     t = ctl_ask(&a, "token add enemy L8 from wight");
-    CHECK(t && strncmp(t, "error:", 6) == 0);
+    CHECK(t && strncmp(t, "error:", 6) == 0 && strstr(t, "L8") != NULL);
     free(t);
     t = ctl_ask(&a, "token add enemy B2 from wight loud");
     CHECK(t && strstr(t, "from NAME [hidden]") != NULL);

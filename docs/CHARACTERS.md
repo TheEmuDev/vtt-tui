@@ -36,7 +36,7 @@ it is.
   too. The rolls go through the undo log (`OP_ROLL`), so `u` takes back the whole
   placement and the channel's all-or-nothing rollback takes back its rolls.
 - **The picker** is a modal: a line to type in and up to ten rows under it, each a name
-  and what it is (`ghoul  Crypt Ghoul  enemy 2x2  HP 12/12`; `pillar  3x3`). Matches are
+  and what it is (`ghoul  Crypt Ghoul  enemy 2x2  HP 12`; `pillar  3x3`). Matches are
   anywhere in the name or the label, ignoring case: the exact name first, then names
   starting with the text, then the rest, alphabetical within each. `up`/`down` (and
   `ctrl-p`/`ctrl-n`) move the highlight, `tab`/`shift-tab` fill in the next or previous
@@ -44,7 +44,8 @@ it is.
   It is the GM's: a modal, so the players' frame never has it.
 - **Keys.** `i` then `t` waits for `p` or `e` and says so. `:character` and
   `:character NAME` open the picker (NAME already typed) and place on the template's
-  saved side; `:character save [NAME] [ROLL...]` saves the creature under the cursor.
+  saved side; `:character save [NAME] [ROLL...]` saves the creature under the cursor (else the
+  selected one).
   `:stamp` with no name opens the stamp picker where it used to list; `enter` takes the
   stamp up as `:stamp NAME` does. Characters are play mode's; stamps stay build mode's.
 - **The channel.** `token add player|enemy SQ from NAME [hidden]` in place of the size and

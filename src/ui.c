@@ -501,6 +501,7 @@ void ui_picker_draw(Renderer *r, const Theme *th, const UiPicker *pk,
                     const BoxGlyphs *frame)
 {
     /* As tall as the whole list, so typing never resizes the box. */
+    PROF_ZONE("picker.draw");
     int rows = imax(1, imin(imin(UI_PICK_ROWS, pk->n), r->h - 8));
     int w = imin(imax(56, text_width(pk->p.title) + 8), r->w - 4);
     int h = rows + 6;
@@ -520,11 +521,14 @@ void ui_picker_draw(Renderer *r, const Theme *th, const UiPicker *pk,
 
     Rect field = rect(box.x + 2, box.y + 2, box.w - 4, 1);
     draw_fill(r, field, ' ', style(th->fg, th->sel_bg, 0));
-    draw_text(r, field.x, field.y, pk->p.buf, field.w - 1, style(th->fg, th->sel_bg, 0));
+    /* Scrolled so the cursor stays in view, as the prompt's field is. */
     char before[UI_PROMPT_MAX];
     memcpy(before, pk->p.buf, (size_t)pk->p.cursor);
     before[pk->p.cursor] = '\0';
-    Cell *c = rnd_at(r, field.x + imin(text_width(before), field.w - 1), field.y);
+    int cw = text_width(before), shift = imax(0, cw - (field.w - 2));
+    draw_text(r, field.x, field.y, pk->p.buf + imin(shift, pk->p.len), field.w - 1,
+              style(th->fg, th->sel_bg, 0));
+    Cell *c = rnd_at(r, field.x + cw - shift, field.y);
     if (c) { c->bg = th->accent; c->fg = th->bg; }
 
     /* The highlight on screen: the list scrolls a page at a time. */

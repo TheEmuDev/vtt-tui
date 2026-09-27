@@ -32,6 +32,7 @@ void character_name_from_label(const char *label, char *out, size_t outsz)
             dash = 1;
         }
     }
+    while (k > 0 && out[k - 1] == '-') k--;     /* the bound can cut after a dash */
     out[k] = '\0';
 }
 

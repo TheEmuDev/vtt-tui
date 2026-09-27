@@ -41,7 +41,9 @@ static UiPickItem *pick_items(PickWhat what, int *count)
     *count = 0;
     if (n <= 0) return NULL;
     char (*names)[MAP_NAME_MAX] = xmalloc((size_t)n * MAP_NAME_MAX);
-    n = what == PICK_CHARACTER ? character_list(names, n) : stamp_list(names, n);
+    /* A file saved between the two readings is left for the next open. */
+    int again = what == PICK_CHARACTER ? character_list(names, n) : stamp_list(names, n);
+    if (again < n) n = again;
     UiPickItem *items = xmalloc(sizeof *items * (size_t)n);
     for (int i = 0; i < n; i++) {
         char err[160];
@@ -97,7 +99,7 @@ static void place_character(App *a, const char *name, int kind)
     snprintf(msg, sizeof msg, "placed %s %.30s (%dx%d) at %s from %.40s%s%s",
              token_kind_name(t->kind), t->label[0] ? t->label : "unlabeled",
              t->size, t->size, at, name, said[0] ? " - " : "", said);
-    app_note(a, msg);
+    app_note_gm(a, msg);        /* the template's name is the GM's bookkeeping */
 }
 
 void app_pick_key(App *a, Key k)
@@ -118,11 +120,14 @@ void app_pick_key(App *a, Key k)
 
 /* ------------------------------------------------------------ :character */
 
+/* The creature under the cursor, else the selected one: placing selects
+ * what it placed, and the GM saving means the one they are pointing at. */
 static int target(App *a)
 {
+    int i = app_token_under_cursor(a);
+    if (i >= 0) return i;
     Play *pl = &a->play;
-    if (pl->sel >= 0 && pl->sel < a->map->tokens.n) return pl->sel;
-    return app_token_under_cursor(a);
+    return pl->sel >= 0 && pl->sel < a->map->tokens.n ? pl->sel : -1;
 }
 
 /* :character save [NAME [ROLL...]]  keep the creature under the cursor
@@ -149,6 +154,11 @@ void app_character_command(App *a, const char *rest)
         int idx = target(a);
         if (idx < 0) { app_set_status(a, "no creature here to save - put the cursor on one"); return; }
         char name[MAP_NAME_MAX];
+        if (nw >= 2 && strlen(w[1]) >= sizeof name) {
+            snprintf(msg, sizeof msg, "a character's name is under %d characters", MAP_NAME_MAX);
+            app_set_status(a, msg);
+            return;
+        }
         if (nw >= 2) str_lcpy(name, w[1], sizeof name);
         else character_name_from_label(a->map->tokens.v[idx].label, name, sizeof name);
         if (!name[0]) { app_set_status(a, "it has no label to name it by - :character save NAME"); return; }

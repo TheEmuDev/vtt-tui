@@ -418,7 +418,8 @@ when the cursor is on one. `:notes` lists where they are.
 ## Characters (`:character`, `i t`)
 
 A character is a creature saved to place again, on any map: a Ghoul with its
-counters, note and attacks, typed once. Put the cursor on a creature and save it:
+counters, note and attacks, typed once. Put the cursor on a creature (or select it) and
+save it:
 
 | command | action |
 |---------|--------|
