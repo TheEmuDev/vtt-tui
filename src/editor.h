@@ -98,6 +98,10 @@ typedef struct {
      * areas cannot leave it pointing at the wrong one; "" for the whole map.
      * app_floor_sync puts it into view.bounded. */
     char   floor[AREA_NAME_MAX];
+    /* Set while the players' frame is drawn through their own camera: the
+     * layout keeps it where it is instead of scrolling to the GM's cursor,
+     * which is on another floor. */
+    int    hold_camera;
 
     TextPrompt cmd;            /* the `:` line */
     int    cmd_from_stamp;     /* it was opened over a stamp, and goes back to it */

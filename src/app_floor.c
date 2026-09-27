@@ -53,6 +53,11 @@ void app_floor_sync(App *a)
     int x, y;
     cursor_square(a, &x, &y);
     if (floor_holds(m, f, x, y)) return;
+    /* Wall mode's cursor is a corner, and the corners round a floor's far
+     * edge -- where its outer wall is drawn -- belong to it. */
+    if (e->mode == ED_WALL && e->wx >= m->areas[f].x0 && e->wx <= m->areas[f].x1 + 1 &&
+        e->wy >= m->areas[f].y0 && e->wy <= m->areas[f].y1 + 1)
+        return;
 
     /* Something put the cursor off the floor: the view goes with it. */
     PROF_ZONE("floor.switch");
@@ -131,6 +136,8 @@ void app_floor_command(App *a, const char *verb, const char *rest)
 
     char name[AREA_NAME_MAX + 16];
     str_lcpy(name, rest, sizeof name);
+    size_t len = strlen(name);
+    while (len && name[len - 1] == ' ') name[--len] = '\0';
     if (!strcmp(name, "all")) {
         if (a->play.grabbed) { app_set_status(a, "put the creature down before changing floors"); return; }
         app_floor_show(a, -1);
@@ -146,6 +153,8 @@ void app_floor_command(App *a, const char *verb, const char *rest)
         long  v = strtol(last + 1, &end, 10);
         if (!strcmp(last + 1, "off"))           { off = 1; *last = '\0'; }
         else if (last[1] && !*end)              { level = (int)v; has_level = 1; *last = '\0'; }
+        len = strlen(name);                     /* "Ground  0": the name ends at its last letter */
+        while (len && name[len - 1] == ' ') name[--len] = '\0';
     }
     int ai = map_area_find(m, name);
     if (ai < 0) {

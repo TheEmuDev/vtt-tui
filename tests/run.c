@@ -14534,6 +14534,37 @@ static void test_floor_view(void)
     press(&a, ":floors\r");
     CHECK(strstr(a.status, "floors: Upper 1, Ground 0, Cellar -1") != NULL);
 
+    CASE("review fixes: wall mode's far edge, the brush, [ ] with a box, re-boxing a floor");
+    press(&a, ":floor Ground\r");
+    press(&a, "w");
+    press(&a, "20l");
+    CHECK(app_floor_shown(&a) == map_area_find(m, "Ground") && a.ed.wx == 13);
+    press(&a, "\x1b");
+    press(&a, "\x1b");
+    CHECK(a.ed.mode == ED_NORMAL);
+    a.ed.cx = 12; a.ed.cy = 0;
+    press(&a, "3b");
+    press(&a, "x");                                          /* over the gap and into Upper */
+    CHECK(map_tile(m, 12, 0) == TILE_VOID && map_tile(m, 14, 0) == TILE_FLOOR);
+    press(&a, "u1b");
+    a.ed.cx = 8; a.ed.cy = 1;
+    press(&a, "v");
+    press(&a, "]");
+    CHECK(strstr(a.status, "esc first") != NULL && app_floor_shown(&a) == map_area_find(m, "Ground"));
+    press(&a, "l");
+    press(&a, ":area Ground\r");                            /* the v box: I2:J2, fine */
+    CHECK(m->areas[map_area_find(m, "Ground")].x1 == 9);
+    press(&a, "u");
+    press(&a, ":floor all\r");
+    a.ed.cx = 5; a.ed.cy = 0;
+    press(&a, "v");
+    a.ed.cx = 14; a.ed.cy = 3;
+    press(&a, ":area Ground\r");                            /* over Cellar and Upper */
+    CHECK(strstr(a.status, "Ground is a floor, and it would overlap another floor") != NULL);
+    CHECK(m->areas[map_area_find(m, "Ground")].x0 == 7);
+    press(&a, ":floor Ground  0 \r");                       /* stray spaces */
+    CHECK(strstr(a.status, "no area called") == NULL);
+
     CASE("a shown floor that stops being one: back to the whole map");
     press(&a, ":floor Upper\r");
     press(&a, ":floor Upper off\r");
@@ -14619,6 +14650,15 @@ static void test_floor_players(void)
     }
     CHECK_EQ(app_floor_shown(&a), upper);                  /* the GM's view is untouched */
 
+    CASE("s t waits while a creature is carried");
+    a.ed.cx = 8; a.ed.cy = 1;
+    press(&a, "\r");
+    CHECK_EQ(a.play.grabbed, 1);
+    press(&a, "st");
+    CHECK(a.play.grabbed == 1 && strstr(a.status, "put it down first"));
+    press(&a, "\x1b");
+    play_focus(&a.play, -1);
+
     CASE("a pin holds the players on a floor, and stays when the party moves");
     press(&a, ":player floor Cellar\r");
     CHECK_EQ(app_players_floor(&a), cellar);
@@ -14671,6 +14711,55 @@ static void test_floor_players(void)
         CHECK_EQ(app_players_floor(&a), upper);             /* a player last moved upstairs */
     }
 
+    app_free(&a);
+    rnd_free(&r);
+    char cmd[1200];
+    snprintf(cmd, sizeof cmd, "rm -rf '%s'", sb.dir);
+    sandbox_leave(&sb);
+    if (system(cmd) != 0) { }
+}
+
+static void test_floor_big_camera(void)
+{
+    Sandbox sb = sandbox_enter("floorcam");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    char path[1200];
+    snprintf(path, sizeof path, "%s/big.vtt", sb.dir);
+    FILE *f = fopen(path, "w");
+    fputs("VTT 9\nname big\nsize 40 30\nzoom 1\ntiles\n", f);
+    for (int y = 0; y < 30; y++) fputs(y < 12 || (y >= 15 && y < 27) ? "........................................\n"
+                                                                        : "                                        \n", f);
+    fputs("token player 2 3 1 \"Aria\"\ntoken player 3 4 1 \"Bram\"\n"
+          "area 0 0 39 11 \"Ground\"\narea 0 15 39 26 \"Upper\"\n"
+          "floor \"Ground\" 0\nfloor \"Upper\" 1\n", f);
+    fclose(f);
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 60, 16);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+
+    CASE("the players' camera stays on the party, not on the GM's cursor on another floor");
+    press(&a, ":floor Upper\r");
+    a.ed.cx = 38; a.ed.cy = 25;
+    rnd_begin(&r); app_draw(&a);
+    for (int i = 0; i < 2; i++) {
+        rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+        int x0, y0, x1, y1;
+        grid_visible_tiles(&a.pview, a.map, &x0, &y0, &x1, &y1);
+        CHECK(x0 <= 2 && x1 >= 3 && y0 <= 3 && y1 >= 4);
+    }
+    press(&a, "+");
+    rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+    {
+        int x0, y0, x1, y1;
+        grid_visible_tiles(&a.pview, a.map, &x0, &y0, &x1, &y1);
+        CHECK(x0 <= 2 && x1 >= 3);
+    }
     app_free(&a);
     rnd_free(&r);
     char cmd[1200];
@@ -15402,6 +15491,7 @@ int main(void)
         { "floors", test_floors },
         { "floorview", test_floor_view },
         { "floorplayers", test_floor_players },
+        { "floorcam", test_floor_big_camera },
         { "graymarker", test_gray_marker },
         { "roomlang", test_room_language },
         { "corridors", test_corridors },

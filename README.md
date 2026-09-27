@@ -198,7 +198,7 @@ Build mode is for drawing the map. `F1` switches to it.
 |-----|--------|
 | `h` `j` `k` `l`, arrows | move the cursor |
 | `10j` | a count repeats a motion |
-| `0` `$` `gg` `G` | start / end of the row, top / bottom of the map |
+| `0` `$` `gg` `G` | start / end of the row, top / bottom of the map (or of the floor shown) |
 | `Ctrl-d` `Ctrl-u` | half a page down / up |
 | `:d6` | jump to a square (`:6` jumps to row 6, keeping the column) |
 | `[` `]` | show the [floor](#floors) below / above |
@@ -448,7 +448,7 @@ undone with `u`. The status line names the link under the cursor and where it le
 
 ## Floors
 
-A building with several storeys, or a set of separate locations, can be drawn on one map and
+A building with several floors, or a set of separate locations, can be drawn on one map and
 shown one part at a time. Draw each floor as its own block of the map, separated by void, name
 it as an area, and mark it as a floor with a level:
 
@@ -464,8 +464,9 @@ below. `:floor all` shows the whole map again, and `:floor Upper` shows one floo
 Drawing floors the same size, with their stairs in the same place, keeps the cursor on the
 stairs when you step between them.
 
-While a floor is shown, only that floor is drawn, the view and the cursor stay inside it, and
-a carried creature stops at its edge. The status line names the floor. Whenever the cursor
+While a floor is shown, only that floor is drawn and changed: the view, the cursor, the brush,
+stamps and a carried creature all stop at its edge. `[` and `]` wait while a `v` box, a wall
+mode anchor or the ruler is out (`esc` first). The status line names the floor. Whenever the cursor
 lands on another floor, the view goes with it: taking a link with `g o`, jumping with `:K12` or
 `:link 3`, finding a creature with `t` `f` `e`, or passing the turn. A square outside every
 floor shows the whole map. Which floor you are looking at is not saved with the map.
@@ -476,7 +477,8 @@ floor shows the whole map. Which floor you are looking at is not saved with the 
   that creature's floor. When an enemy's turn starts, only your screen goes to it; the players'
   screens stay where they are.
 - Under a spotlight ruleset, when the spotlight passes to the players, both screens go to the
-  party's floor; when it passes to you, only your screen goes, to the floor with the enemies.
+  party's floor (or to the floor the players are pinned to); when it passes to you, only your
+  screen goes, to the floor with the enemies.
 - Otherwise the players see the party's floor.
 
 The party's floor (and the enemies', for the spotlight) is chosen in this order: the floor
@@ -940,7 +942,7 @@ W120 unreachable-room  room K2   18 squares, no door leads to it from room B2
 
 **`--json`** gives `--describe` or `--check` as JSON, with 0-based coordinates alongside the
 square names, room `area` names and `floor`s, the lists of `areas`, `floors` and `links`, and
-each finding's `line` and `column`. `--describe` names each room's floor. `--describe` lists each room's link ends and where they lead, and counts a room
+each finding's `line` and `column`. `--describe` names each room's floor, lists its link ends and where they lead, and counts a room
 reached only by a link as reachable (a one-way link only in its direction).
 
 ## Control channel (`:agent`, `vtt --ctl`)

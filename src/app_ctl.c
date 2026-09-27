@@ -996,6 +996,8 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
         if (!room_box(m, w, n, &name, &x0, &y0, &x1, &y1, err, errsz)) return -1;
         for (int y = y0; y <= y1; y++)
             for (int x = x0; x <= x1; x++) undo_set_tile(u, m, x, y, TILE_FLOOR);
+        const char *fwhy = name ? floor_problem_box(m, map_area_find(m, name), x0, y0, x1, y1) : NULL;
+        if (fwhy) BAD("%.40s is a floor, and %s", name, fwhy);
         outline(u, m, x0, y0, x1, y1, EDGE_WALL);
         if (name && !undo_set_area(u, m, name, x0, y0, x1, y1))
             BAD("the map holds %d named areas", MAP_AREAS_MAX);
@@ -1014,6 +1016,8 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
             undo_remove_area(u, m, w[1]);
         } else {
             if (!region(m, w[2], &x0, &y0, &x1, &y1, err, errsz)) return -1;
+            const char *fwhy = floor_problem_box(m, map_area_find(m, w[1]), x0, y0, x1, y1);
+            if (fwhy) BAD("%.40s is a floor, and %s", w[1], fwhy);
             if (!undo_set_area(u, m, w[1], x0, y0, x1, y1)) BAD("the map holds %d named areas", MAP_AREAS_MAX);
         }
     }

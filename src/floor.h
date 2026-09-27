@@ -29,6 +29,9 @@ int  floor_step(const Map *m, int cur, int dir);
 
 /* Why area `ai` cannot be a floor, or NULL: it would overlap another. */
 const char *floor_problem(const Map *m, int ai);
+/* The same for area `ai` given a new box: what :area and the channel's area
+ * and room ask before moving a floor's box. NULL when `ai` is no floor. */
+const char *floor_problem_box(const Map *m, int ai, int x0, int y0, int x1, int y1);
 
 /* The shown floor's box, or the whole map for -1. */
 void floor_box(const Map *m, int f, int *x0, int *y0, int *x1, int *y1);

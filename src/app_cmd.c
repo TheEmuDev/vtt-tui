@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "dice.h"
+#include "floor.h"
 #include "fog.h"
 
 /* ---------------------------------------------------------------- clocks */
@@ -617,6 +618,13 @@ static void area_command(App *a, const char *verb, const char *rest)
     }
     if (a->screen == SCREEN_EDITOR && a->ed.cmd_from_visual) {
         EdShape sh = ed_shape(a->ed.shape, a->ed.anchor_x, a->ed.anchor_y, a->ed.cx, a->ed.cy, 0);
+        const char *fwhy = floor_problem_box(m, ai, sh.x0, sh.y0, sh.x1, sh.y1);
+        if (fwhy) {
+            snprintf(msg, sizeof msg, "%.40s is a floor, and %s", m->areas[ai].name, fwhy);
+            a->ed.mode = ED_NORMAL;
+            app_set_status_gm(a, msg);
+            return;
+        }
         undo_begin(&a->undo);
         int ok = undo_set_area(&a->undo, m, name, sh.x0, sh.y0, sh.x1, sh.y1);
         undo_end(&a->undo);

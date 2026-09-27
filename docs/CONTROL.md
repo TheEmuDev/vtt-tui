@@ -52,14 +52,14 @@ as `--describe` names them. Lines run in order, so a read sees the edits before 
 
 | line | answer |
 |---|---|
-| `status` | the map, its file, unsaved or not; the screen and mode; undo depth; whether edits are taken now and why not |
+| `status` | the map, its file, unsaved or not; the screen and mode; the floor on the GM's screen (a `floor NAME` line, when the map has floors); undo depth; whether edits are taken now and why not |
 | `dump [REGION]` | `--dump-map` of the live map |
 | `describe [json]` | `--describe` |
 | `check [json]` | `--check` of the map in memory (so no file line numbers) |
 | `stamps` | the saved stamps and their sizes |
 | `links [json]` | every link (added with links) |
 | `floors` | the floors and which the GM is looking at (added with floors) |
-| `marked [json]` | what the GM is pointing at: the cursor, a `v` box (rect or circle), wall mode's corner and anchor, the selected creatures and a selection box, the ruler's ends, the GM's last `g p` and each phone's last ping with their age. A ping stays on record after its ring fades. |
+| `marked [json]` | what the GM is pointing at: the cursor, a `v` box (rect or circle), wall mode's corner and anchor, the selected creatures and a selection box, the ruler's ends, the GM's last `g p` and each phone's last ping with their age, and the floor on the GM's screen (`floor`). A ping stays on record after its ring fades. |
 
 **Edits** (build mode, nothing half-done on the GM's side):
 

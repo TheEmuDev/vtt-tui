@@ -98,4 +98,14 @@ time through its own camera).
   reaches them: every one describes the GM's cursor or names a square on the GM's floor.
 - A trip's message (`Aria takes stairs 1 to I2`) names no floor: it is a public message,
   and an area's name is the GM's. The GM's status line names the floor.
-- `0` `$` `gg` `G`, wall mode's corners and a carried creature stop at the floor's edge.
+- `0` `$` `gg` `G`, wall mode's corners and a carried creature stop at the floor's edge; a
+  corner on the floor's far edge belongs to it (the outer wall is drawn there).
+- Edits stop there too: the brush, a `v` box's fill, `y` and a stamp are cut to (or refused
+  past) the floor shown -- only what is on screen can be changed from it.
+- `[` `]` wait while a `v` box, a wall-mode anchor or the ruler is out: each is anchored on
+  this floor and would stretch onto the next.
+- A floor's box can be moved (`:area`, the channel's `area` and `room`) only where it
+  overlaps no other floor.
+- The players' frame drawn through their camera does not scroll to the GM's cursor
+  (`Editor.hold_camera` while it is swapped in).
+- `s t` waits while a creature is carried, as `a` does.

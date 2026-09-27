@@ -1492,8 +1492,12 @@ static void wall_key(App *a, Key k)
         undo_stroke_end(&a->undo);     /* close any stroke still in progress */
         e->mode = ED_NORMAL;
         e->pen = e->erase = 0;
-        e->cx = iclamp(e->wx, 0, m->w - 1);
-        e->cy = iclamp(e->wy, 0, m->h - 1);
+        /* The corner's square, kept on the floor shown: the far edge's
+         * corners have their square past it. */
+        int x0, y0, x1, y1;
+        grid_bounds(&e->view, m, &x0, &y0, &x1, &y1);
+        e->cx = iclamp(e->wx, x0, x1);
+        e->cy = iclamp(e->wy, y0, y1);
         app_set_status(a, "");
         return;
     }
@@ -1973,6 +1977,12 @@ static void app_key_dispatch(App *a, Key k)
         (a->screen == SCREEN_EDITOR || a->screen == SCREEN_PLAY) &&
         a->ed.mode != ED_COMMAND && !a->pending && !a->ed.pending_g) {
         a->ed.count = 0;
+        /* Something anchored on this floor would stretch onto the next. */
+        if (a->ed.mode == ED_VISUAL || a->play.visual || (a->ed.mode == ED_WALL && a->ed.has_anchor) ||
+            a->ruler.active) {
+            app_set_status(a, "esc first - the box or the ruler would stretch onto the other floor");
+            return;
+        }
         app_floor_step(a, k.ch == ']' ? 1 : -1);
         return;
     }

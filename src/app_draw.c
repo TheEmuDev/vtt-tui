@@ -155,7 +155,9 @@ static void draw_editor(App *a)
     app_players_camera(a);
     a->ed.view = a->pview;
     a->psplit  = 1;
+    a->ed.hold_camera = 1;
     draw_editor_body(a);
+    a->ed.hold_camera = 0;
     a->pview   = a->ed.view;
     a->ed.view = gm;
     a->psplit  = 0;

@@ -1,4 +1,4 @@
-# A two-storey tower: the ground floor and the one above, the same size.
+# A two-floor tower: the ground floor and the one above, the same size.
 area Ground A1:H6
 area Upper K1:R6
 floor Ground 0

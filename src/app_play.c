@@ -396,10 +396,12 @@ static void turn_prompt(App *a)
  * game that passes a spotlight instead of rolling initiative needs. */
 static void turn_hand_over(App *a)
 {
+    if (a->play.grabbed) { app_set_status(a, "put it down first - enter drops, esc cancels"); return; }
     int idx = play_target_token(a);
     if (idx < 0) { app_set_status(a, "no token here to hand the turn to"); return; }
 
     turn_take(a->map, &a->undo, idx);
+    a->play.visual = 0;
     /* The view goes to whoever has the turn, as it does for a. */
     play_focus(&a->play, idx);
     app_follow_selection(a);

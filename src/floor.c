@@ -52,16 +52,29 @@ int floor_step(const Map *m, int cur, int dir)
     return -1;
 }
 
-const char *floor_problem(const Map *m, int ai)
+static const char *overlap(const Map *m, int ai, int x0, int y0, int x1, int y1)
 {
-    const Area *a = &m->areas[ai];
     for (int i = 0; i < m->nareas; i++) {
         const Area *o = &m->areas[i];
         if (i == ai || !o->floor) continue;
-        if (a->x0 <= o->x1 && o->x0 <= a->x1 && a->y0 <= o->y1 && o->y0 <= a->y1)
+        if (x0 <= o->x1 && o->x0 <= x1 && y0 <= o->y1 && o->y0 <= y1)
             return "it would overlap another floor";
     }
     return NULL;
+}
+
+const char *floor_problem(const Map *m, int ai)
+{
+    const Area *a = &m->areas[ai];
+    return overlap(m, ai, a->x0, a->y0, a->x1, a->y1);
+}
+
+const char *floor_problem_box(const Map *m, int ai, int x0, int y0, int x1, int y1)
+{
+    if (ai < 0 || !m->areas[ai].floor) return NULL;
+    if (x0 > x1) { int t = x0; x0 = x1; x1 = t; }
+    if (y0 > y1) { int t = y0; y0 = y1; y1 = t; }
+    return overlap(m, ai, x0, y0, x1, y1);
 }
 
 void floor_box(const Map *m, int f, int *x0, int *y0, int *x1, int *y1)

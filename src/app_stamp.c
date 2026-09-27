@@ -31,6 +31,9 @@ void app_stamp_yank(App *a)
 {
     Editor *e = &a->ed;
     int x0 = e->cx, y0 = e->cy, x1 = e->cx + e->brush - 1, y1 = e->cy + e->brush - 1;
+    int bx0, by0, bx1, by1;                            /* not past the floor's edge */
+    grid_bounds(&e->view, a->map, &bx0, &by0, &bx1, &by1);
+    x1 = imin(x1, bx1); y1 = imin(y1, by1);
     int circle = 0;
     if (e->mode == ED_VISUAL) {
         /* A circle's box: see-through placing makes the corners harmless
@@ -64,6 +67,12 @@ void app_stamp_lift(App *a)
 static void place(App *a)
 {
     char err[160], what[96], at[MAP_COORD_MAX], msg[200];
+    int bx0, by0, bx1, by1;
+    grid_bounds(&a->ed.view, a->map, &bx0, &by0, &bx1, &by1);
+    if (a->ed.view.bounded && (a->ed.cx + a->stamp->w - 1 > bx1 || a->ed.cy + a->stamp->h - 1 > by1)) {
+        app_set_status(a, "the stamp runs off the floor - move it, or :floor all");
+        return;
+    }
     if (!stamp_place(a->map, &a->undo, a->stamp, a->ed.cx, a->ed.cy, err, sizeof err)) {
         app_set_status(a, err);
         return;

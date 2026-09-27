@@ -42,7 +42,7 @@ void ed_layout(Editor *e, const Map *m, int screen_w, int screen_h)
     e->view.view = rect(gut, top, imax(1, screen_w - gut),
                         imax(1, screen_h - top - 2));
     grid_clamp_camera(&e->view, m);
-    grid_ensure_visible(&e->view, m, e->cx, e->cy, ED_SCROLLOFF);
+    if (!e->hold_camera) grid_ensure_visible(&e->view, m, e->cx, e->cy, ED_SCROLLOFF);
 }
 
 void ed_cursor_tile(const Editor *e, int *tx, int *ty)
@@ -114,8 +114,10 @@ void ed_toggle_edge(Editor *e, Map *m, Undo *u, int dx, int dy)
      * the same way the cursor draws it, so a 3x3 brush walls three edges in
      * one press and a brush hanging over the map edge walls the part that
      * exists. */
-    int bw = imin((int)e->brush, m->w - x);
-    int bh = imin((int)e->brush, m->h - y);
+    int bx0, by0, bx1, by1;
+    grid_bounds(&e->view, m, &bx0, &by0, &bx1, &by1);
+    int bw = imin((int)e->brush, bx1 - x + 1);      /* the map's edge, or the floor's */
+    int bh = imin((int)e->brush, by1 - y + 1);
     if (bw < 1 || bh < 1) return;
 
     /* One edge of the face for each row (or column) of the brush. */
@@ -302,14 +304,26 @@ void ed_wall_shape(Map *m, Undo *u, const EdShape *s, uint8_t kind)
     undo_end(u);
 }
 
-void ed_apply_tiles(Editor *e, Map *m, Undo *u, uint8_t kind)
+/* What a brush or box acts on: the shape, cut to the floor shown. Only what
+ * is on screen can be changed from it. */
+static EdShape footprint(const Editor *e, const Map *m)
 {
-    /* The brush's whole footprint; undo_set_tile drops the part hanging off
-     * the map, which is also the part the cursor does not draw. */
     EdShape s = ed_shape(ED_SHAPE_RECT, e->cx, e->cy,
                          e->cx + e->brush - 1, e->cy + e->brush - 1, 0);
     if (e->mode == ED_VISUAL)
         s = ed_shape(e->shape, e->anchor_x, e->anchor_y, e->cx, e->cy, 0);
+    int x0, y0, x1, y1;
+    grid_bounds(&e->view, m, &x0, &y0, &x1, &y1);
+    s.x0 = imax(s.x0, x0); s.y0 = imax(s.y0, y0);
+    s.x1 = imin(s.x1, x1); s.y1 = imin(s.y1, y1);
+    return s;
+}
+
+void ed_apply_tiles(Editor *e, Map *m, Undo *u, uint8_t kind)
+{
+    /* The brush's whole footprint; undo_set_tile drops the part hanging off
+     * the map, which is also the part the cursor does not draw. */
+    EdShape s = footprint(e, m);
 
     undo_begin(u);
     for (int y = s.y0; y <= s.y1; y++)
@@ -321,10 +335,7 @@ void ed_apply_tiles(Editor *e, Map *m, Undo *u, uint8_t kind)
 int ed_apply_fog(Editor *e, Map *m, Undo *u, int id)
 {
     PROF_ZONE("fog.paint");
-    EdShape s = ed_shape(ED_SHAPE_RECT, e->cx, e->cy,
-                         e->cx + e->brush - 1, e->cy + e->brush - 1, 0);
-    if (e->mode == ED_VISUAL)
-        s = ed_shape(e->shape, e->anchor_x, e->anchor_y, e->cx, e->cy, 0);
+    EdShape s = footprint(e, m);
 
     int changed = 0;
     undo_begin(u);
