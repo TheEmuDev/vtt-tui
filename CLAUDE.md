@@ -23,7 +23,7 @@ maintainer; this file is what survives a context reset, so keep it true.
 - **Rules-agnostic core.** Game-specific behaviour lives behind the `Ruleset`
   table in `ruler.c` (bands, `action_roll`, `spotlight`, `countdown`), documented under the README's
   *Rulesets* section with a subsection per game. Nothing else may know a game.
-- **Keys follow the eight rules** in README *Keys → How a key is chosen*. Read
+- **Keys follow the eight rules** in docs/KEYS.md. Read
   them before binding anything. The `?` page and the bar both come from
   `src/keys.c`; the bar holds six hints; no duplicate key strings per map.
 
@@ -153,6 +153,8 @@ code it names is touched, and move an item out of here once it is fixed.
 
 ## Docs to keep in step
 
-`README.md` (keys tables, feature sections, *Rulesets*, *File format*),
+`README.md` (keys tables, feature sections, *Rulesets*, *File format*; written for a user,
+in a plain instructional tone: what a feature does and how to use it, no history and no
+design argument -- that belongs in docs/),
 `docs/PERFORMANCE.md` (tables + a paragraph per finding), `src/keys.c` (the `?`
 page). A feature is not done until all three agree with the code.
