@@ -285,14 +285,17 @@ void test_clocks(void)
     press(&a, ":tick Nothing\r");
     CHECK(strstr(a.status, "no clock called") != NULL);
 
-    CASE(":clock lists them; :clock NAME SIZE resizes; :clock NAME off drops");
+    CASE(":clock lists them; :clock NAME SIZE resizes; :clock NAME remove drops");
     press(&a, ":clock\r");
     CHECK(strstr(a.status, "Dragon 1/6, Ritual 0/4, Rite 2/8") != NULL);
     press(&a, ":clock Rite 2\r");
     CHECK_EQ(m->clocks[2].size, 2);
     CHECK_EQ(m->clocks[2].value, 2);                        /* kept, clamped */
     CHECK(strstr(a.status, "resized") != NULL);
-    press(&a, ":clock Ritual off\r");
+    press(&a, ":clock Ritual off\r");                    /* the old word drops nothing */
+    CHECK_EQ(clock_count(m), 3);
+    CHECK(strstr(a.status, ":clock Ritual remove drops a clock") != NULL);
+    press(&a, ":clock Ritual remove\r");
     CHECK_EQ(clock_count(m), 2);
     CHECK_EQ(m->clocks[1].name[0], '\0');                   /* the slot stays empty */
     press(&a, ":clock Sun 3\r");                            /* and is taken by the next */
@@ -304,7 +307,7 @@ void test_clocks(void)
 
     CASE("an undo recorded against a dropped slot touches nothing, not even its successor");
     press(&a, ":tick Sun\r");                               /* Sun 1/3, in slot 1 */
-    press(&a, ":clock Sun off\r");
+    press(&a, ":clock Sun remove\r");
     press(&a, "u");                                         /* the tick's op names slot 1, now empty */
     CHECK_EQ(m->clocks[1].name[0], '\0');
     press(&a, ":clock Moon 3\r");                           /* slot 1 again, a new generation */
@@ -322,7 +325,7 @@ void test_clocks(void)
     press(&a, ":tick Dragon =1\r");                        /* back to where the cases below expect it */
 
     CASE("the panel shows the clocks under the turn order, dots for segments, a full one lit");
-    press(&a, ":clock Moon off\r");
+    press(&a, ":clock Moon remove\r");
     press(&a, ":tick Rite =2\r");
     rnd_begin(&r);
     app_draw(&a);
@@ -472,15 +475,15 @@ void test_clocks(void)
         if (c->ch == 'F' && c->fg == a.th->turn) lit++;
     }
     CHECK_EQ(lit, 1);
-    press(&a, ":clock Ambush off\r");
-    press(&a, ":clock Heist off\r");
-    press(&a, ":clock Fuse off\r");
-    press(&a, ":clock Storm off\r");
+    press(&a, ":clock Ambush remove\r");
+    press(&a, ":clock Heist remove\r");
+    press(&a, ":clock Fuse remove\r");
+    press(&a, ":clock Storm remove\r");
 
     CASE("with the clocks gone the file is version 3 again");
-    press(&a, ":clock Dragon off\r");
-    press(&a, ":clock Rite off\r");
-    press(&a, ":clock Siege off\r");
+    press(&a, ":clock Dragon remove\r");
+    press(&a, ":clock Rite remove\r");
+    press(&a, ":clock Siege remove\r");
     CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
     text = slurp(path);
     if (text) { CHECK_EQ(strncmp(text, "VTT 3\n", 6), 0); free(text); }
@@ -1095,14 +1098,17 @@ void test_turn_keys(void)
     CHECK_EQ(a.map->tokens.v[3].turn, 0);
     CHECK(strstr(a.status, "leaves the turn order") != NULL);
 
-    CASE(":turns reads the order out, :turns off ends the fight, u undoes that too");
+    CASE(":turns reads the order out, :turns end ends the fight, u undoes that too");
     press(&a, ":turns\r");
     CHECK(strstr(a.status, "Aria 18, Ogre 12*, Bram 9") != NULL);
-    press(&a, ":turns off\r");
+    press(&a, ":turns off\r");                           /* the old word ends nothing */
+    CHECK(turn_count(a.map) > 0);
+    CHECK(strstr(a.status, ":turns end ends the fight") != NULL);
+    press(&a, ":turns end\r");
     CHECK_EQ(turn_count(a.map), 0);
     CHECK_EQ(a.map->round, 0);
     CHECK(strstr(a.status, "the fight is over") != NULL);
-    press(&a, ":turns off\r");
+    press(&a, ":turns end\r");
     CHECK(strstr(a.status, "no fight to end") != NULL);
     press(&a, ":turns\r");
     CHECK(strstr(a.status, "no turn order") != NULL);
@@ -1111,7 +1117,7 @@ void test_turn_keys(void)
     CHECK_EQ(turn_acting(a.map), 1);
 
     CASE("the panel appears with the fight, takes its width from the map, and can be turned off");
-    press(&a, ":turns off\r");                           /* a known fight: Aria 18, Ogre 12 */
+    press(&a, ":turns end\r");                           /* a known fight: Aria 18, Ogre 12 */
     play_focus(&a.play, 0); press(&a, "si18\r");
     play_focus(&a.play, 1); press(&a, "si12\r");
     CHECK_EQ(a.map->tokens.n, 4);
@@ -1136,7 +1142,7 @@ void test_turn_keys(void)
     rnd_begin(&r);
     app_draw(&a);
     CHECK_EQ(a.ed.view.view.x + a.ed.view.view.w, r.w - TURN_PANEL_W);
-    press(&a, ":turns off\r");
+    press(&a, ":turns end\r");
     rnd_begin(&r);
     app_draw(&a);
     CHECK_EQ(a.ed.view.view.x + a.ed.view.view.w, r.w);   /* no fight, no panel */
@@ -1145,7 +1151,7 @@ void test_turn_keys(void)
     /* Daggerheart: no numbers, a passes the spotlight across, s t hands it
      * to a creature and the side follows, and the panel shows the sides. */
     CASE("under daggerheart a passes the spotlight and the panel shows the sides");
-    press(&a, ":turns off\r");
+    press(&a, ":turns end\r");
     press(&a, ":ruleset daggerheart\r");
     rnd_begin(&r);
     app_draw(&a);

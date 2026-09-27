@@ -830,15 +830,19 @@ void test_room_language(void)
     free(t);
     CHECK(map_note_at(m, 4, 3) && !strcmp(map_note_at(m, 4, 3), "the lid is loose"));   /* B2:I7: E4 */
 
-    CASE("area NAME REGION names without drawing; area NAME off takes it off");
+    CASE("area NAME REGION names without drawing; area NAME remove takes it off");
     t = ctl_ask(&a, "area Nook J18:K19\n");
     CHECK(strncmp(t, "ok\n", 3) == 0);
     free(t);
     CHECK_EQ(map_tile(m, 9, 17), TILE_VOID);
     t = ctl_ask(&a, "area Nook off\n");
+    CHECK(t && strstr(t, "area Nook remove") != NULL);
+    CHECK(map_area_find(m, "Nook") >= 0);
+    free(t);
+    t = ctl_ask(&a, "area Nook remove\n");
     free(t);
     CHECK_EQ(map_area_find(m, "Nook"), -1);
-    t = ctl_ask(&a, "area Nook off\n");
+    t = ctl_ask(&a, "area Nook remove\n");
     CHECK(strstr(t, "no area called Nook") != NULL);
     free(t);
 
@@ -869,7 +873,10 @@ void test_room_language(void)
     CHECK(strstr(a.status, "areas: Crypt B2:I7") != NULL);
     press(&a, ":area Nowhere\r");
     CHECK(strstr(a.status, "no area called Nowhere") != NULL);
-    press(&a, ":area Hall off\r");
+    press(&a, ":area Hall off\r");                       /* not an area called "Hall off" */
+    CHECK(map_area_find(m, "Hall") >= 0 && map_area_find(m, "Hall off") < 0);
+    CHECK(strstr(a.status, ":area Hall remove") != NULL);
+    press(&a, ":area Hall remove\r");
     CHECK_EQ(map_area_find(m, "Hall"), -1);
 
     app_free(&a);

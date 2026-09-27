@@ -1046,12 +1046,13 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
             BAD("the map holds %d named areas", MAP_AREAS_MAX);
     }
     else if (!strcmp(v, "area")) {
-        /* area NAME REGION, area NAME off: a name, nothing drawn. */
-        if (n != 3) BAD("area NAME REGION, or area NAME off");
+        /* area NAME REGION, area NAME remove: a name, nothing drawn. */
+        if (n != 3) BAD("area NAME REGION, or area NAME remove");
+        if (!strcmp(w[2], "off")) BAD("area %.40s remove takes the name off", w[1]);
         if (!map_area_name_ok(w[1]))
             BAD("%.40s: an area's name is 1-%d characters, no quote or colon, and not a square",
                 w[1], AREA_NAME_MAX - 1);
-        if (!strcmp(w[2], "off")) {
+        if (!strcmp(w[2], "remove")) {
             int ai = map_area_find(m, w[1]);
             if (ai < 0) BAD("no area called %.40s", w[1]);
             const Area *ar = &m->areas[ai];
@@ -1219,8 +1220,8 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
     }
     else if (!strcmp(v, "link")) {
         /* link A B [KIND] [size 2|3] [oneway] [secret]: a new one, numbered
-         * the lowest free. link N off, or link N and what changes. */
-        if (n < 3) BAD("link A B [KIND] [size 2|3] [oneway] [secret], or link N off");
+         * the lowest free. link N remove, or link N and what changes. */
+        if (n < 3) BAD("link A B [KIND] [size 2|3] [oneway] [secret], or link N remove");
         Link l;
         memset(&l, 0, sizeof l);
         int first = 1, isnum = w[1][0] != '\0';
@@ -1230,7 +1231,8 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
             if (!word_int(w[1], 1, LINK_NUM_MAX, &num) || (li = link_find(m, num)) < 0)
                 BAD("there is no link %.10s", w[1]);
             l = m->links[li];
-            if (n == 3 && !strcmp(w[2], "off")) {
+            if (n == 3 && !strcmp(w[2], "off")) BAD("link %d remove takes a link away", num);
+            if (n == 3 && !strcmp(w[2], "remove")) {
                 for (int e = 0; e < 2; e++) touched(ed, l.x[e], l.y[e], l.x[e] + l.size - 1, l.y[e] + l.size - 1);
                 undo_remove_link(u, m, num);
                 return 0;

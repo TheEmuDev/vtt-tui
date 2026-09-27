@@ -50,7 +50,7 @@ sees the edits before it.
 | `room Crypt B2:I7` | the same, by region |
 | `room Vault 6x4 east of Crypt gap 3 [top\|middle\|bottom]` | placed beside another room: `gap` squares between (0: they share a wall), lined up on the other room's `middle` unless told; `north`/`south` line up `left`/`middle`/`right` |
 | `room B2:I7` | an unnamed room |
-| `area Upper B1:Z20`, `area Upper off` | name a box without drawing anything (a floor, a region you drew by hand), or take the name off |
+| `area Upper B1:Z20`, `area Upper remove` | name a box without drawing anything (a floor, a region you drew by hand), or take the name off |
 | `door Crypt east [N\|middle] [KIND]` | a door on a room's side: the Nth square along it from the top or left (`middle` by default); KIND below, a door by default |
 | `corridor Crypt Vault [width 1-3] [KIND]` | dug between two named rooms through void: **straight** when one is beside or above the other and they share at least `width` rows (or columns) -- refused when they share fewer; **one bend** when they are apart both ways, leaving the first room's side and entering the second's, each side at least `width` long. Walled along (a door or window already on a boundary it runs past stays); a door at each end when one wide, open ends when wider. Rooms sharing a wall just get the doorway. Ground, or a named room that does not hold both, in the way refuses it |
 
@@ -80,7 +80,7 @@ magic, go on the same map apart from each other, separated by void, and a link j
 | line | does |
 |---|---|
 | `link Hall Tower [KIND] [size 2\|3] [oneway] [secret]` | a new link, numbered the lowest number free. Each end is a room's name (the free ground nearest its middle) or a square (the end's top-left). KIND `stairs` (default) `ladder` `trapdoor` `portal`; `size 3` makes each end 3x3, room for a party; `oneway` runs from the first end only; `secret` hides it from the players. Both ends on ground, apart, and on no other link's squares |
-| `link 3 portal oneway`, `link 3 reverse`, `link 3 off` | change link 3 (a kind, `oneway`, `twoway`, `reverse` swaps its ends, `secret`, `seen`), or take it off |
+| `link 3 portal oneway`, `link 3 reverse`, `link 3 remove` | change link 3 (a kind, `oneway`, `twoway`, `reverse` swaps its ends, `secret`, `seen`), or remove it |
 
 **Creatures.**
 

@@ -285,7 +285,7 @@ and is unused in play mode:
 | `:fog NAME clear` | light the whole patch at once, for when the door opens |
 | `:fog NAME hide` | put it all back into the dark |
 | `:fog NAME disable` | stop it hiding anything, keeping it and its painting; `enable` puts it back to work |
-| `:fog NAME delete` | scrub the patch off the map for good |
+| `:fog NAME remove` | scrub the patch off the map for good (was `delete`) |
 | `:fog all [N]` | a patch covering every tile, for plain fog of war |
 | `:fog on` `:fog off` | the master switch, changing no painting |
 | `:fog --soft-edge` | the half-lit rim, for every patch; `:fog NAME --soft-edge` for one |

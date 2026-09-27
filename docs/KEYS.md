@@ -26,3 +26,8 @@ The bar and the `?` page are both generated from the tables in `src/keys.c`.
 8. **Six hints on the bar, everything on `?`.** Both read the same table in `src/keys.c`,
    no key string appears twice in one table, and anything rarely used is a `:` command
    rather than a key.
+9. **`off` switches off; `remove` destroys.** In `:` commands and the control channel, `off`
+   only turns something off that `on` brings back as it was (`:fog off`, `:serve off`,
+   `hidden off`). Anything that throws something away says `remove`, after the name it
+   removes (`:clock Dragon remove`, `:link 3 remove`), and ending a fight is `:turns end`.
+   An old spelling says what replaced it rather than doing something else.

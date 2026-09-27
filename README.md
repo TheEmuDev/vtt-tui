@@ -281,7 +281,7 @@ Names may use letters, digits, `-` and `_`. The current stamp is kept when you c
 so you can copy from one map to another.
 
 **Named areas.** Select a box with `v`, then `:area Crypt` to name it. `:area Crypt` jumps to
-it later (in build or play mode), `:areas` lists them, and `:area Crypt off` removes the name.
+it later (in build or play mode), `:areas` lists them, and `:area Crypt remove` removes the name.
 A name draws nothing on the map; it is used by `--describe` and by agents to refer to places
 (`token add enemy Crypt "Ghoul"`). Area names are shown only on the GM's screen.
 
@@ -491,7 +491,7 @@ visible to the players, except for ends that fog hides.
 | `:link 3 oneway`, `:link 3 twoway` | make it one-way or two-way |
 | `:link 3 reverse` | swap its ends, so a one-way link runs the other way |
 | `:link 3 secret`, `:link 3 seen` | hide it from the players, or show it |
-| `:link 3 off` | remove it |
+| `:link 3 remove` | remove it |
 | `:link ladder` | the kind `g l` makes next |
 
 Several changes can go on one line (`:link 3 portal oneway secret`). Every change can be
@@ -620,7 +620,7 @@ and selects it.
 | `s i` | set the selected creature's initiative; a blank answer removes it from the order |
 | `a` `A` | next / previous turn |
 | `s t` | give the turn to the selected creature, in or out of order |
-| `:turns` | list the order; `:turns off` ends the fight |
+| `:turns` | list the order; `:turns end` ends the fight |
 | `:panel` | show / hide the side panel |
 
 Advancing the turn is recorded in the undo history and the session log, so `u` reverts it.
@@ -661,7 +661,7 @@ track, "three more rounds until the roof comes in". A clock counts up (empty to 
 :tick Dragon 2        advance by two;  -1 goes back one;  =3 sets it to 3
 :tick Dragon reset    return to the start
 :clock                list clocks
-:clock Dragon off     remove it
+:clock Dragon remove  remove it
 ```
 
 Names are one word; any unique prefix works (`:tick dr`). A map holds eight clocks. They are
@@ -703,7 +703,7 @@ always visible.
 :fog Crypt memory off   hide squares again once no one can see them
 :fog Crypt clear        reveal the whole patch;  hide  covers it again
 :fog Crypt disable      keep the patch but hide nothing;  enable  restores it
-:fog Crypt delete       remove the patch
+:fog Crypt remove       remove the patch
 :fog all                one patch over the whole map
 :fog on | off           turn fog on or off without losing the patches
 :fog --soft-edge        show the edge of the dark (below);  --no-soft-edge  hides it
@@ -885,12 +885,12 @@ use. Available: `none`, `daggerheart`.
 | `:metric NAME` | `alt`, `chebyshev`, `euclidean` or `manhattan` |
 | `:ruleset NAME` | set the map's [ruleset](#rulesets) |
 | `:c6`, `:6` | jump to a square / a row |
-| `:area NAME` | name the selection, or jump to a named area; `:areas` lists, `:area NAME off` removes |
+| `:area NAME` | name the selection, or jump to a named area; `:areas` lists, `:area NAME remove` removes |
 | `:stamp ...` | save, load and choose [stamps](#build-mode) |
 | `:character ...` | save and place [characters](#characters-character-i-t) |
 | `:link ...`, `:links` | change, remove, list and jump to [links](#links-stairs-ladders-trapdoors-portals) |
 | `:floor ...`, `:floors` | mark, show and list [floors](#floors) |
-| `:turns` | list the [turn order](#turn-order-a); `:turns off` ends the fight |
+| `:turns` | list the [turn order](#turn-order-a); `:turns end` ends the fight |
 | `:panel` | show / hide the side panel |
 | `:clock ...`, `:tick ...` | [clocks](#clocks-clock-tick) |
 | `:notes` | list where notes are |

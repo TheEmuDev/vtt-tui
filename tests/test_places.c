@@ -468,7 +468,10 @@ void test_link_keys(void)
     CHECK(strstr(a.status, "not something a link is") != NULL);
     press(&a, ":link 9 oneway\r");
     CHECK(strstr(a.status, "no link 9") != NULL);
-    press(&a, ":link 1 off\r");
+    press(&a, ":link 1 off\r");                          /* the old word removes nothing */
+    CHECK_EQ(m->nlinks, 2);
+    CHECK(strstr(a.status, ":link 1 remove") != NULL);
+    press(&a, ":link 1 remove\r");
     CHECK_EQ(m->nlinks, 1);
     press(&a, "u");
     CHECK(m->nlinks == 2 && m->links[0].secret);
@@ -563,14 +566,14 @@ void test_link_keys(void)
         ans = ctl_ask(&a, "link C1 H4 rope\n");
         CHECK(ans && strstr(ans, "rope: a link is stairs"));
         free(ans);
-        ans = ctl_ask(&a, "link 3 off\nlink 9 off\n");
+        ans = ctl_ask(&a, "link 3 remove\nlink 9 remove\n");
         CHECK(ans && strstr(ans, "there is no link 9"));
         CHECK(link_find(m, 3) >= 0);                              /* all or nothing */
         free(ans);
         ans = ctl_ask(&a, "links json\n");
         CHECK(ans && json_valid(strchr(ans, '\n') + 1) && strstr(ans, "\"num\":3,\"kind\":\"portal\""));
         free(ans);
-        ans = ctl_ask(&a, "link 3 off\n");
+        ans = ctl_ask(&a, "link 3 remove\n");
         CHECK(ans && !strncmp(ans, "ok", 2) && link_find(m, 3) < 0);
         free(ans);
         ans = ctl_ask(&a, "area Low H1:L4\nlink Low Low trapdoor\n");  /* both ends in one room */
@@ -579,7 +582,7 @@ void test_link_keys(void)
         int li = link_find(m, 3);
         CHECK(li >= 0 && m->links[li].kind == LINK_TRAPDOOR &&
               (m->links[li].x[0] != m->links[li].x[1] || m->links[li].y[0] != m->links[li].y[1]));
-        ans = ctl_ask(&a, "link 3 off\n");
+        ans = ctl_ask(&a, "link 3 remove\n");
         free(ans);
     }
     app_key(&a, f2);
@@ -1061,7 +1064,7 @@ void test_floor_players(void)
     CHECK_EQ(app_floor_shown(&a), cellar);
     CHECK_EQ(app_players_floor(&a), cellar);
     CHECK_EQ(a.ppin[0], '\0');
-    press(&a, ":turns off\r");
+    press(&a, ":turns end\r");
 
     CASE("the spotlight: to the GM, the GM's view goes where the enemies are; the players stay");
     press(&a, ":floor Ground\r");

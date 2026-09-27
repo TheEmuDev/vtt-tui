@@ -210,6 +210,11 @@ void app_link_command(App *a, const char *rest)
 
     Link l = m->links[li];
     if (nw == 2 && !strcmp(words[1], "off")) {
+        snprintf(msg, sizeof msg, ":link %d remove takes a link away", l.num);
+        app_set_status_gm(a, msg);
+        return;
+    }
+    if (nw == 2 && !strcmp(words[1], "remove")) {
         char name[32];
         link_name(&l, name, sizeof name);
         undo_begin(&a->undo);

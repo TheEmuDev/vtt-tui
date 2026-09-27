@@ -34,7 +34,7 @@ static int clock_named(App *a, const char *name)
  *                        does, filling up otherwise; "up" or "down" after
  *                        the size says which regardless. Or resize it.
  * :clock NAME d6         a die for the size, and it starts at the roll
- * :clock NAME off        drop it */
+ * :clock NAME remove     drop it */
 static void clock_command(App *a, const char *rest)
 {
     Map *m = a->map;
@@ -53,10 +53,15 @@ static void clock_command(App *a, const char *rest)
 
     char name[CLOCK_NAME_MAX + 8] = { 0 }, arg[16] = { 0 }, dir[8] = { 0 };
     if (sscanf(rest, "%27s %15s %7s", name, arg, dir) < 2) {
-        app_set_status(a, ":clock NAME SIZE starts a clock; :clock NAME off drops it");
+        app_set_status(a, ":clock NAME SIZE starts a clock; :clock NAME remove drops it");
         return;
     }
     if (!strcmp(arg, "off")) {
+        snprintf(msg, sizeof msg, ":clock %.27s remove drops a clock", name);
+        app_set_status(a, msg);
+        return;
+    }
+    if (!strcmp(arg, "remove")) {
         int idx = clock_named(a, name);
         if (idx < 0) return;
         snprintf(msg, sizeof msg, "clock %s dropped", m->clocks[idx].name);
@@ -456,7 +461,7 @@ static void fog_list(App *a)
  * :fog NAME --soft-edge      that patch's own rim setting; --no-soft-edge
  * :fog NAME clear | hide     light the whole patch, or put it back in the dark
  * :fog NAME disable | enable keep the painting, stop it hiding / start again
- * :fog NAME delete           scrub it off the map for good */
+ * :fog NAME remove           scrub it off the map for good */
 static void fog_command(App *a, const char *rest)
 {
     Map *m = a->map;
@@ -498,9 +503,14 @@ static void fog_command(App *a, const char *rest)
     const char *verb = w2;
     const char *arg  = w3;
 
+    if (!strcmp(verb, "delete")) {
+        snprintf(msg, sizeof msg, ":fog %.20s remove scrubs a patch off the map", name);
+        app_set_status(a, msg);
+        return;
+    }
     /* Verbs on an existing patch. */
     if (!strcmp(verb, "clear") || !strcmp(verb, "hide") || !strcmp(verb, "disable") ||
-        !strcmp(verb, "enable") || !strcmp(verb, "delete")) {
+        !strcmp(verb, "enable") || !strcmp(verb, "remove")) {
         if (!id) { snprintf(msg, sizeof msg, "no fog patch called %.20s", name); app_set_status(a, msg); return; }
         FogPatch *p = &m->fog_patches[id - 1];
         char pname[FOG_NAME_MAX];
@@ -509,10 +519,10 @@ static void fog_command(App *a, const char *rest)
             int n = fog_light_patch(m, &a->undo, id, !strcmp(verb, "clear"));
             snprintf(msg, sizeof msg, "%s %s - %d square%s", !strcmp(verb, "clear") ? "lit" : "darkened",
                      pname, n, n == 1 ? "" : "s");
-        } else if (!strcmp(verb, "delete")) {
+        } else if (!strcmp(verb, "remove")) {
             fog_delete(m, id);
             if (a->ed.fog_patch == id) a->ed.fog_patch = 0;
-            snprintf(msg, sizeof msg, "fog patch %s deleted, painting and all", pname);
+            snprintf(msg, sizeof msg, "fog patch %s removed, painting and all", pname);
         } else {
             p->disabled = !strcmp(verb, "disable");
             map_touch(m);
@@ -534,7 +544,7 @@ static void fog_command(App *a, const char *rest)
         char *end;
         reveal = strtol(verb, &end, 10);
         if (*end || reveal < 0 || reveal > 99) {
-            app_set_status(a, ":fog NAME [reveal 0-99 | manual | memory on/off | --soft-edge | clear | hide | disable | enable | delete]");
+            app_set_status(a, ":fog NAME [reveal 0-99 | manual | memory on/off | --soft-edge | clear | hide | disable | enable | remove]");
             return;
         }
     }
@@ -580,7 +590,7 @@ static void fog_command(App *a, const char *rest)
 /* --------------------------------------------------------- command line */
 
 /* :areas lists the named areas; :area NAME names the v box (build mode),
- * or jumps to the area of that name; :area NAME off takes the name off. */
+ * or jumps to the area of that name; :area NAME remove takes the name off. */
 static void area_command(App *a, const char *verb, const char *rest)
 {
     Map *m = a->map;
@@ -599,8 +609,14 @@ static void area_command(App *a, const char *verb, const char *rest)
     char name[AREA_NAME_MAX + 8];
     str_lcpy(name, rest, sizeof name);
     size_t n = strlen(name);
-    int off = n > 4 && !strcmp(name + n - 4, " off");
-    if (off) name[n - 4] = '\0';
+    if (n > 4 && !strcmp(name + n - 4, " off")) {
+        name[n - 4] = '\0';
+        snprintf(msg, sizeof msg, ":area %.40s remove takes the name off", name);
+        app_set_status_gm(a, msg);
+        return;
+    }
+    int off = n > 7 && !strcmp(name + n - 7, " remove");
+    if (off) name[n - 7] = '\0';
     if (!map_area_name_ok(name)) {
         snprintf(msg, sizeof msg, "an area's name is 1-%d characters, no quote or colon, and not a square", AREA_NAME_MAX - 1);
         app_set_status_gm(a, msg);
@@ -799,14 +815,14 @@ static void cmd_rolls(App *a, const char *verb, const char *rest)
 static void cmd_turns(App *a, const char *verb, const char *rest)
 {
     Map *m = a->map;
-    /* Bare, it reads the order out; "off" ends the fight. */
+    /* Bare, it reads the order out; "end" ends the fight. */
     char msg[160];
     if (!*rest) {
         turn_list(m, msg, sizeof msg);
         app_set_status(a, msg);
         return;
     }
-    if (strcmp(rest, "off") != 0) { app_set_status(a, ":turns lists the order, :turns off ends the fight"); return; }
+    if (strcmp(rest, "end") != 0) { app_set_status(a, ":turns lists the order, :turns end ends the fight"); return; }
     if (turn_count(m) == 0 && turn_acting(m) < 0) { app_set_status(a, "there is no fight to end"); return; }
     int had = turn_clear(m, &a->undo);
     snprintf(msg, sizeof msg, "the fight is over - %d left the turn order", had);

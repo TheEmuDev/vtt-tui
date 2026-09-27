@@ -23,7 +23,7 @@ maintainer; this file is what survives a context reset, so keep it true.
 - **Rules-agnostic core.** Game-specific behavior lives behind the `Ruleset`
   table in `ruler.c` (bands, `action_roll`, `spotlight`, `countdown`), documented under the README's
   *Rulesets* section with a subsection per game. Nothing else may know a game.
-- **Keys follow the eight rules** in docs/KEYS.md. Read
+- **Keys follow the nine rules** in docs/KEYS.md (the ninth: `off` switches off, `remove` destroys). Read
   them before binding anything. The `?` page and the bar both come from
   `src/keys.c`; the bar holds six hints; no duplicate key strings per map.
 

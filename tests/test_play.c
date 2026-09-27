@@ -3574,7 +3574,7 @@ void test_counters(void)
     if (text) { CHECK_EQ(strncmp(text, "VTT 4\n", 6), 0); free(text); }   /* still a fight */
 
     CASE("with no creature, s v and < say so");
-    press(&a, ":turns off\r");
+    press(&a, ":turns end\r");
     press(&a, "\x1b");
     a.ed.cx = 1; a.ed.cy = 1;
     press(&a, "sv");

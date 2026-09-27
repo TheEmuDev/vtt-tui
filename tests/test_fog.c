@@ -200,7 +200,7 @@ void test_fog(void)
     bb_init(&fr, 65536); rnd_dump(&r, &fr); bb_putc(&fr, '\0');
     CHECK(strstr(fr.data, "12  Ogre") != NULL);
     bb_free(&fr);
-    press(&a, ":turns off\r");
+    press(&a, ":turns end\r");
 
     CASE("a range anchored on a creature in the dark is not drawn for the players");
     play_focus(&a.play, 0);
@@ -377,11 +377,14 @@ void test_fog(void)
         }
     }
 
-    CASE("delete scrubs a patch for good, and its number is never handed out again this session");
-    press(&a, ":fog Crate delete\r");
+    CASE("remove scrubs a patch for good, and its number is never handed out again this session");
+    press(&a, ":fog Crate delete\r");                   /* the old word says the new one */
+    CHECK(fog_find(m, "Crate") != 0);
+    CHECK(strstr(a.status, ":fog Crate remove") != NULL);
+    press(&a, ":fog Crate remove\r");
     CHECK_EQ(fog_at(m, 9, 0), 0);
     CHECK_EQ(fog_find(m, "Crate"), 0);
-    CHECK(strstr(a.status, "deleted") != NULL);
+    CHECK(strstr(a.status, "removed") != NULL);
     press(&a, "u");                                        /* back comes a tile of a dead patch... */
     press(&a, ":fog Newt\r");
     CHECK_EQ(fog_find(m, "Newt"), 3);                      /* ...and slot 2 is not reused */
