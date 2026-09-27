@@ -113,19 +113,47 @@ void grid_tile_interior(const GridView *g, int tx, int ty, int *sx, int *sy)
     *sy += 1;
 }
 
+void grid_bounds(const GridView *g, const Map *m, int *x0, int *y0, int *x1, int *y1)
+{
+    *x0 = 0; *y0 = 0; *x1 = m->w - 1; *y1 = m->h - 1;
+    if (!g->bounded) return;
+    /* Cut to the map: a floor's box can outlive a :resize that shrank it. */
+    int bx0 = imax(g->bx0, 0), by0 = imax(g->by0, 0);
+    int bx1 = imin(g->bx1, m->w - 1), by1 = imin(g->by1, m->h - 1);
+    if (bx1 < bx0 || by1 < by0) return;
+    *x0 = bx0; *y0 = by0; *x1 = bx1; *y1 = by1;
+}
+
+ClipRect grid_clip_push(Renderer *r, const GridView *g, const Map *m)
+{
+    ClipRect saved = rnd_clip_push(r, g->view.x, g->view.y, g->view.w, g->view.h);
+    if (!g->bounded) return saved;
+    int x0, y0, x1, y1, sx, sy;
+    grid_bounds(g, m, &x0, &y0, &x1, &y1);
+    grid_tile_screen(g, x0, y0, &sx, &sy);
+    /* Squares and the boundary line round them: one pitch a square, plus
+     * the far line. */
+    (void)rnd_clip_push(r, sx, sy, (x1 - x0 + 1) * zoom_pw(g->zoom) + 1,
+                        (y1 - y0 + 1) * zoom_ph(g->zoom) + 1);
+    return saved;                 /* one restore undoes both narrowings */
+}
+
 void grid_clamp_camera(GridView *g, const Map *m)
 {
-    int cw = grid_cells_w(m, g->zoom);
-    int ch = grid_cells_h(m, g->zoom);
+    int x0, y0, x1, y1;
+    grid_bounds(g, m, &x0, &y0, &x1, &y1);
+    int ox = x0 * zoom_pw(g->zoom), oy = y0 * zoom_ph(g->zoom);
+    int cw = (x1 - x0 + 1) * zoom_pw(g->zoom) + 1;
+    int ch = (y1 - y0 + 1) * zoom_ph(g->zoom) + 1;
 
     /* A map smaller than its viewport is centered rather than pinned to a
      * corner, which is what "the editor is centered in the application" means
-     * once the map no longer fills the space. */
-    if (cw <= g->view.w) g->cam_x = -(g->view.w - cw) / 2;
-    else                 g->cam_x = iclamp(g->cam_x, 0, cw - g->view.w);
+     * once the map no longer fills the space. A floor is its own map here. */
+    if (cw <= g->view.w) g->cam_x = ox - (g->view.w - cw) / 2;
+    else                 g->cam_x = iclamp(g->cam_x, ox, ox + cw - g->view.w);
 
-    if (ch <= g->view.h) g->cam_y = -(g->view.h - ch) / 2;
-    else                 g->cam_y = iclamp(g->cam_y, 0, ch - g->view.h);
+    if (ch <= g->view.h) g->cam_y = oy - (g->view.h - ch) / 2;
+    else                 g->cam_y = iclamp(g->cam_y, oy, oy + ch - g->view.h);
 }
 
 void grid_center_on(GridView *g, const Map *m, int tx, int ty)
@@ -181,6 +209,9 @@ int grid_screen_to_tile(const GridView *g, const Map *m, int sx, int sy, int *tx
 
     int x = mx / pw, y = my / ph;
     if (!map_in_bounds(m, x, y)) return 0;
+    int bx0, by0, bx1, by1;
+    grid_bounds(g, m, &bx0, &by0, &bx1, &by1);
+    if (x < bx0 || x > bx1 || y < by0 || y > by1) return 0;
     *tx = x;
     *ty = y;
     return 1;
@@ -318,10 +349,12 @@ void grid_visible_tiles(const GridView *g, const Map *m,
 {
     int pw = zoom_pw(g->zoom), ph = zoom_ph(g->zoom);
 
-    *x0 = iclamp(fdiv(g->cam_x, pw), 0, m->w - 1);
-    *y0 = iclamp(fdiv(g->cam_y, ph), 0, m->h - 1);
-    *x1 = iclamp(fdiv(g->cam_x + g->view.w, pw), 0, m->w - 1);
-    *y1 = iclamp(fdiv(g->cam_y + g->view.h, ph), 0, m->h - 1);
+    int bx0, by0, bx1, by1;
+    grid_bounds(g, m, &bx0, &by0, &bx1, &by1);
+    *x0 = iclamp(fdiv(g->cam_x, pw), bx0, bx1);
+    *y0 = iclamp(fdiv(g->cam_y, ph), by0, by1);
+    *x1 = iclamp(fdiv(g->cam_x + g->view.w, pw), bx0, bx1);
+    *y1 = iclamp(fdiv(g->cam_y + g->view.h, ph), by0, by1);
 }
 
 void grid_draw(Renderer *r, const Map *m, const GridView *g, const Theme *th,

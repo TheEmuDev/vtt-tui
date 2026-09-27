@@ -24,7 +24,21 @@ typedef struct {
     int  zoom;
     int  cam_x, cam_y;   /* top-left visible cell, in map-cell space */
     Rect view;           /* where the map is drawn on screen */
+
+    /* The part of the map shown, when it is not all of it: a floor
+     * (floor.h). The camera stays inside it, only it is drawn, and a screen
+     * cell outside it names no square. */
+    int  bounded;
+    int  bx0, by0, bx1, by1;
 } GridView;
+
+/* The squares the view may show: its bounds cut to the map, or the map. */
+void grid_bounds(const GridView *g, const Map *m, int *x0, int *y0, int *x1, int *y1);
+
+/* Narrows the renderer's clip to the viewport and, within it, to the shown
+ * part of the map with its outer boundary line. Everything drawn on the map
+ * goes inside one of these. */
+ClipRect grid_clip_push(Renderer *r, const GridView *g, const Map *m);
 
 int  grid_cells_w(const Map *m, int zoom);
 int  grid_cells_h(const Map *m, int zoom);

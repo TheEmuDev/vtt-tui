@@ -99,6 +99,15 @@ void app_link_cancel(App *a);
 void app_link_go(App *a, int li, int end, int enforce, int *moved_dx, int *moved_dy);
 void app_link_command(App *a, const char *rest);
 
+/* app_floor.c: the floor the GM's screen shows (area index, -1 for the whole
+ * map); after every key and before every draw, _sync puts it into the view
+ * and follows the cursor onto another floor; _show changes it, keeping the
+ * cursor's place in the box; [ ] and :floor. */
+void app_floor_sync(App *a);
+void app_floor_show(App *a, int f);
+void app_floor_step(App *a, int dir);
+void app_floor_command(App *a, const char *verb, const char *rest);
+
 /* app_ctl.c: :agent on, :agent off, :agent to ask. */
 void app_agent_command(App *a, const char *rest);
 

@@ -6313,7 +6313,7 @@ static void test_help_page(void)
     CHECK(strstr(f.data, "cycle the bands") == NULL);   /* below the fold at 24 rows */
     bb_free(&f);
 
-    rnd_resize(&r, 90, 80);                    /* the play page has grown past sixty rows */
+    rnd_resize(&r, 90, 100);                   /* the play page has grown past eighty rows */
     rnd_begin(&r);
     app_draw(&a);
     bb_init(&f, 65536);
@@ -14417,6 +14417,137 @@ static void test_floors(void)
     map_free(m);
 }
 
+static void test_floor_view(void)
+{
+    Sandbox sb = sandbox_enter("floorview");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    char path[1200];
+    snprintf(path, sizeof path, "%s/tower.vtt", sb.dir);
+    FILE *f = fopen(path, "w");
+    /* Cellar A1:F4 (-1), Ground H1:M4 (0), Upper O1:T4 (1); stairs 1 from
+     * Ground's I2 to Upper's P2, the same place in each box. */
+    fputs("VTT 9\nname tower\nsize 20 4\nzoom 1\ntiles\n"
+          "...... ...... ......\n...... ...... ......\n...... ...... ......\n...... ...... ......\n"
+          "area 0 0 5 3 \"Cellar\"\narea 7 0 12 3 \"Ground\"\narea 14 0 19 3 \"Upper\"\n"
+          "floor \"Cellar\" -1\nfloor \"Ground\" 0\nfloor \"Upper\" 1\n"
+          "link 1 stairs 1 8 1 15 1\n", f);
+    fclose(f);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Key f1 = { KEY_F1, 0, 0 }, f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f1);
+    Map *m = a.map;
+
+    CASE("a map opens on the whole of it; ] shows the lowest floor, the cursor on it");
+    CHECK_EQ(app_floor_shown(&a), -1);
+    press(&a, "]");
+    CHECK_EQ(app_floor_shown(&a), map_area_find(m, "Cellar"));
+    CHECK(a.ed.cx >= 0 && a.ed.cx <= 5);
+    CHECK(strstr(a.status, "Cellar, level -1") != NULL);
+    press(&a, "[");
+    CHECK(strstr(a.status, "Cellar is the bottom floor") != NULL);
+
+    CASE("the cursor stays on the floor: hjkl, counts, $ and G stop at its edge");
+    press(&a, "20l");
+    CHECK_EQ(a.ed.cx, 5);
+    press(&a, "0");
+    CHECK_EQ(a.ed.cx, 0);
+    press(&a, "$G");
+    CHECK(a.ed.cx == 5 && a.ed.cy == 3);
+    press(&a, "gg");
+    CHECK_EQ(a.ed.cy, 0);
+
+    CASE("] keeps the cursor's place in the box, so stairs line up floor to floor");
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "]");
+    CHECK(app_floor_shown(&a) == map_area_find(m, "Ground") && a.ed.cx == 8 && a.ed.cy == 1);
+    char st[256];
+    ed_status(&a.ed, m, st, sizeof st);
+    CHECK(strstr(st, "I2  on Ground") && strstr(st, "stairs 1 to Upper P2"));
+
+    CASE("only the floor is drawn, and a screen cell off it names no square");
+    rnd_begin(&r); app_draw(&a);
+    {
+        int sx, sy, tx, ty;
+        grid_tile_interior(&a.ed.view, 8, 1, &sx, &sy);
+        CHECK(grid_screen_to_tile(&a.ed.view, m, sx, sy, &tx, &ty) && tx == 8);
+        CHECK_EQ(link_cell(&r, &a, 8, 1), 0x2261u);
+        CHECK_EQ(link_cell(&r, &a, 15, 1), 0);               /* Upper's end is not on screen */
+        grid_tile_interior(&a.ed.view, 15, 1, &sx, &sy);
+        CHECK_EQ(grid_screen_to_tile(&a.ed.view, m, sx, sy, &tx, &ty), 0);
+    }
+
+    CASE("a jump off the floor takes the view to the floor it lands on, or the whole map");
+    press(&a, ":p3\r");
+    CHECK(app_floor_shown(&a) == map_area_find(m, "Upper") && a.ed.cx == 15);
+    press(&a, ":g2\r");                                        /* G2 is between floors */
+    CHECK_EQ(app_floor_shown(&a), -1);
+    press(&a, ":floor Ground\r");
+    CHECK_EQ(app_floor_shown(&a), map_area_find(m, "Ground"));
+    press(&a, ":floor all\r");
+    CHECK_EQ(app_floor_shown(&a), -1);
+    press(&a, ":floor Nowhere\r");
+    CHECK(strstr(a.status, "no area called Nowhere") != NULL);
+
+    CASE("g o through the stairs takes the view upstairs with the creature");
+    press(&a, ":floor Ground\r");
+    app_key(&a, f2);
+    a.ed.cx = 8; a.ed.cy = 1;
+    press(&a, "ipAria\r");
+    press(&a, "go");
+    CHECK(m->tokens.v[0].x == 15 && app_floor_shown(&a) == map_area_find(m, "Upper"));
+    play_focus(&a.play, -1);                                 /* the bare square's line */
+    a.ed.cx = 16;
+    play_status(&a.play, m, &a.ed, 1, st, sizeof st);
+    CHECK(strstr(st, "Q2 on Upper") != NULL);
+    play_status(&a.play, m, &a.ed, 0, st, sizeof st);
+    CHECK(strstr(st, "Upper") == NULL);                      /* the players' line: no area names */
+
+    CASE("a carried creature stops at the floor's edge");
+    a.ed.cx = 15; a.ed.cy = 1;
+    press(&a, "\r");
+    press(&a, "hhhh");
+    CHECK_EQ(m->tokens.v[0].x, 14);
+    CHECK(strstr(a.status, "edge of the floor") != NULL);
+    press(&a, "\r");
+
+    CASE(":floor marks and unmarks, refusing an overlap; u puts it back");
+    press(&a, ":area Wing\r");                                 /* play mode: jumps, so it must exist */
+    app_key(&a, f1);
+    press(&a, ":floor all\r");
+    a.ed.cx = 12; a.ed.cy = 0;
+    press(&a, "v");
+    a.ed.cx = 14; a.ed.cy = 3;
+    press(&a, ":area Wing\r");
+    press(&a, ":floor Wing 2\r");
+    CHECK(strstr(a.status, "cannot be a floor: it would overlap another floor") != NULL);
+    press(&a, ":floor Upper off\r");
+    CHECK_EQ(m->areas[map_area_find(m, "Upper")].floor, 0);
+    press(&a, "u");
+    CHECK_EQ(m->areas[map_area_find(m, "Upper")].floor, 1);
+    press(&a, ":floors\r");
+    CHECK(strstr(a.status, "floors: Upper 1, Ground 0, Cellar -1") != NULL);
+
+    CASE("a shown floor that stops being one: back to the whole map");
+    press(&a, ":floor Upper\r");
+    press(&a, ":floor Upper off\r");
+    CHECK_EQ(app_floor_shown(&a), -1);
+    CHECK_EQ(a.ed.view.bounded, 0);
+
+    app_free(&a);
+    rnd_free(&r);
+    char cmd[1200];
+    snprintf(cmd, sizeof cmd, "rm -rf '%s'", sb.dir);
+    sandbox_leave(&sb);
+    if (system(cmd) != 0) { }
+}
+
 static void test_room_language(void)
 {
     Sandbox sb = sandbox_enter("roomlang");
@@ -15138,6 +15269,7 @@ int main(void)
         { "links", test_links },
         { "linkkeys", test_link_keys },
         { "floors", test_floors },
+        { "floorview", test_floor_view },
         { "graymarker", test_gray_marker },
         { "roomlang", test_room_language },
         { "corridors", test_corridors },

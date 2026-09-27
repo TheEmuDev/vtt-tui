@@ -194,6 +194,8 @@ typedef struct {
 
 void app_init(App *a, Term *t, Renderer *r);
 void app_free(App *a);
+/* The floor the GM's screen shows, as an area index; -1 for the whole map. */
+int  app_floor_shown(const App *a);
 void app_key(App *a, Key k);
 /* Works fog's sight out again if anything on the map changed since last
  * time -- a creature moved, a door opened, a patch was painted, an undo.

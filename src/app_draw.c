@@ -179,8 +179,7 @@ static void draw_editor(App *a)
 
     if (stamping) {
         stamp_unshow(m, &sv);
-        ClipRect saved = rnd_clip_push(r, a->ed.view.view.x, a->ed.view.view.y,
-                                       a->ed.view.view.w, a->ed.view.view.h);
+        ClipRect saved = grid_clip_push(r, &a->ed.view, m);
         grid_draw_tile_ring(r, &a->ed.view, m, a->ed.cx, a->ed.cy,
                             imin(a->ed.cx + a->stamp->w - 1, m->w - 1),
                             imin(a->ed.cy + a->stamp->h - 1, m->h - 1), th->ping_bg, NULL, NULL);
@@ -191,8 +190,7 @@ static void draw_editor(App *a)
      * its numbers measure, ground the players cannot see. */
     int fog_players = a->view == VIEW_PLAYERS && fog_any(m);
     if (a->ruler.active && !fog_players) {
-        ClipRect saved = rnd_clip_push(r, a->ed.view.view.x, a->ed.view.view.y,
-                                       a->ed.view.view.w, a->ed.view.view.h);
+        ClipRect saved = grid_clip_push(r, &a->ed.view, m);
         ruler_draw(r, m, &a->ed.view, &a->ruler, th, 1);
         rnd_clip_restore(r, saved);
     }
@@ -202,8 +200,7 @@ static void draw_editor(App *a)
      * players can see. */
     if (playing && a->npings) {
         PROF_ZONE("ping.draw");
-        ClipRect saved = rnd_clip_push(r, a->ed.view.view.x, a->ed.view.view.y,
-                                       a->ed.view.view.w, a->ed.view.view.h);
+        ClipRect saved = grid_clip_push(r, &a->ed.view, m);
         for (int i = 0; i < a->npings; i++) {
             const Ping *p = &a->pings[i];
             grid_draw_tile_ring(r, &a->ed.view, m, p->x0, p->y0, p->x1, p->y1, th->ping_bg,
@@ -214,8 +211,7 @@ static void draw_editor(App *a)
     /* And the agent's last change, for the GM alone. */
     if (a->agent_ring.until_ms && a->view == VIEW_GM) {
         const Ping *p = &a->agent_ring;
-        ClipRect saved = rnd_clip_push(r, a->ed.view.view.x, a->ed.view.view.y,
-                                       a->ed.view.view.w, a->ed.view.view.h);
+        ClipRect saved = grid_clip_push(r, &a->ed.view, m);
         grid_draw_tile_ring(r, &a->ed.view, m, p->x0, p->y0, p->x1, p->y1, th->ping_bg, NULL, NULL);
         rnd_clip_restore(r, saved);
     }
@@ -315,6 +311,7 @@ void app_draw_view(App *a, View view)
 {
     PROF_ZONE("app.draw");
     a->view = view;
+    if (view == VIEW_GM) app_floor_sync(a);   /* an agent's request may have moved a floor */
 
     switch (a->screen) {
     case SCREEN_HELP:    draw_help(a); prof_overlay_draw(a->rnd); return;

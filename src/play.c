@@ -592,8 +592,7 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
     grid_draw_labels(r, m, &e->view, th, ed_gutter(e, m),
                      cursor_dark ? -1 : e->cx, cursor_dark ? -1 : e->cy);
 
-    ClipRect saved = rnd_clip_push(r, e->view.view.x, e->view.view.y,
-                                   e->view.view.w, e->view.view.h);
+    ClipRect saved = grid_clip_push(r, &e->view, m);
 
     grid_draw(r, m, &e->view, th, ascii, 0,    /* play mode gives nothing away */
               players ? FOGV_PLAYERS : FOGV_GM);
@@ -734,7 +733,7 @@ void play_status(const Play *p, const Map *m, const Editor *e, int gm, char *buf
             nums[0] = nums[1] = ' ';
             counter_format(t, nums + 2, sizeof nums - 2);
         }
-        char link[64];
+        char link[128];
         link_status(m, e->cx, e->cy, gm, link, sizeof link);
         snprintf(buf, bufsz, "PLAY    %.20s (%s %dx%d) at %s%s%s%s%s  %s",
                  t->label[0] ? t->label : "unlabeled",
@@ -743,14 +742,17 @@ void play_status(const Play *p, const Map *m, const Editor *e, int gm, char *buf
         return;
     }
 
-    char at[MAP_COORD_MAX];
+    char at[MAP_COORD_MAX + AREA_NAME_MAX + 8];
     map_coord_name(e->cx, e->cy, at, sizeof at);
+    /* The floor shown, on the GM's line: an area's name is the GM's. */
+    if (gm && e->view.bounded && e->floor[0])
+        snprintf(at + strlen(at), sizeof at - strlen(at), " on %s", e->floor);
 
     if (fogp) {
         /* The square's name would say where in the dark the GM is looking. */
         if (fog_ground_hidden(m, e->cx, e->cy)) { snprintf(buf, bufsz, "PLAY    dark  %s", walls); return; }
     }
-    char link[64];
+    char link[128];
     link_status(m, e->cx, e->cy, gm, link, sizeof link);
     if (fogp) {
         snprintf(buf, bufsz, "PLAY    %s  %s%s  %s", at,

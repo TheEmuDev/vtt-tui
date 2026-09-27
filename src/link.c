@@ -4,6 +4,7 @@
 #include <string.h>
 #include <strings.h>
 
+#include "floor.h"
 #include "fog.h"
 #include "util.h"
 
@@ -66,8 +67,13 @@ void link_status(const Map *m, int x, int y, int gm, char *out, size_t outsz)
         return;
     }
     link_end_name(l, 1 - end, there, sizeof there);
-    snprintf(out, outsz, "  %s%s %s %s", l->secret ? "secret " : "", name,
-             !l->oneway ? "to" : end == 0 ? "one-way to" : "one-way from", there);
+    /* Another floor is named, on the GM's line (an area's name is the GM's):
+     * under stacked layers a square's name alone would not say where. */
+    int ff = floor_at(m, l->x[1 - end], l->y[1 - end]);
+    char fl[AREA_NAME_MAX + 2] = "";
+    if (gm && ff >= 0 && ff != floor_at(m, l->x[end], l->y[end])) snprintf(fl, sizeof fl, "%s ", m->areas[ff].name);
+    snprintf(out, outsz, "  %s%s %s %s%s", l->secret ? "secret " : "", name,
+             !l->oneway ? "to" : end == 0 ? "one-way to" : "one-way from", fl, there);
 }
 
 void link_describe(const Link *l, char *out, size_t outsz)

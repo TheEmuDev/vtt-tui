@@ -19,6 +19,7 @@ static const KeyDoc PLAY[] = {
     KEY("3j",     "any motion takes a count"),
     KEY(":d6",    "jump to a square by its label"),
     KEY(":area Crypt", "jump to a named area   :areas lists them"),
+    KEY("[  ]",   "the floor below / above   :floor all shows the whole map"),
     KEY("#",      "column letters and row numbers, on or off"),
     KEY("z",      "center the view on the cursor"),
     KEY("+ -",    "zoom in and out"),
@@ -147,6 +148,10 @@ static const KeyDoc BUILD[] = {
     { "w",        "trace mode: walk the cursor and leave wall behind", NULL, "trace" },
     { "t",        "cycle which boundary H J K L and the pen lay", "t/T", "kind" },
     KEY("o  O",   "open or close a door / a secret door"),
+
+    GROUP("Floors"),
+    KEY(":floor Upper 1", "make the named area Upper a floor, level 1   :floors lists them"),
+    KEY("[  ]",   "show the floor below / above; :floor Upper shows one, :floor all the map"),
 
     GROUP("Links"),
     KEY("g l",    "make a link: g l on one end, g l on the other; the brush is its size"),

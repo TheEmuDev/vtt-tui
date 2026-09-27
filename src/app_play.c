@@ -408,6 +408,21 @@ static void turn_hand_over(App *a)
     app_note(a, msg);
 }
 
+/* Would every creature in hand still be on the shown floor after a step?
+ * A floor's edge is the edge of the map while it is shown. */
+static int group_stays_on_floor(const App *a, int dx, int dy)
+{
+    if (!a->ed.view.bounded) return 1;
+    int x0, y0, x1, y1;
+    grid_bounds(&a->ed.view, a->map, &x0, &y0, &x1, &y1);
+    for (int i = 0; i < a->play.ngroup; i++) {
+        const Token *t = &a->map->tokens.v[a->play.group[i]];
+        int nx = t->x + dx, ny = t->y + dy;
+        if (nx < x0 || ny < y0 || nx + t->size - 1 > x1 || ny + t->size - 1 > y1) return 0;
+    }
+    return 1;
+}
+
 /* g o: whoever stands on the link end under the cursor -- or on the one
  * the creature under the cursor touches -- goes through. The cursor, not
  * the selection: a creature selected across the map is not "here". Something
@@ -534,8 +549,9 @@ void app_play_key(App *a, Key k)
              * not merely un-undoable: the next u reached straight past them
              * to the batch underneath and took the whole token off the map. */
             undo_begin(&a->undo);
-            int moved = 0;
+            int moved = 0, edge = 0;
             for (int i = 0; i < times; i++) {
+                if (!group_stays_on_floor(a, dx, dy)) { edge = 1; break; }
                 if (!play_step(m, &a->undo, pl, dx, dy)) break;
                 moved++;
             }
@@ -544,7 +560,8 @@ void app_play_key(App *a, Key k)
              * the offer to walk the crowd has to go, since it stopped being
              * true the moment the choice was settled. */
             if (moved < times)
-                app_set_status(a, pl->enforce_walls ? "blocked" : "edge of the map");
+                app_set_status(a, edge ? "edge of the floor - [ ] or a link to go elsewhere"
+                                       : pl->enforce_walls ? "blocked" : "edge of the map");
             else if (settling)
                 app_set_status(a, "picked up - enter drops, esc cancels");
             app_follow_selection(a);

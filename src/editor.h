@@ -94,6 +94,11 @@ typedef struct {
      * to. A view preference, so it is not saved with the map. */
     int    labels;
 
+    /* The floor shown (docs/FLOORS.md), by name so renaming or removing
+     * areas cannot leave it pointing at the wrong one; "" for the whole map.
+     * app_floor_sync puts it into view.bounded. */
+    char   floor[AREA_NAME_MAX];
+
     TextPrompt cmd;            /* the `:` line */
     int    cmd_from_stamp;     /* it was opened over a stamp, and goes back to it */
     int    cmd_from_visual;    /* it was opened over a v box, which :area names */

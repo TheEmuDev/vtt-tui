@@ -55,13 +55,18 @@ void ed_move(Editor *e, const Map *m, int dx, int dy, int times)
 {
     if (times < 1) times = 1;
 
+    /* Inside the shown floor, when there is one: the view never scrolls to
+     * ground it does not draw. */
+    int x0, y0, x1, y1;
+    grid_bounds(&e->view, m, &x0, &y0, &x1, &y1);
+
     if (e->mode == ED_WALL) {
         /* Corner-to-corner movement. Each step crosses exactly one edge, and
          * with the pen down that edge becomes (or stops being) a wall - so a
          * room is drawn by walking its outline. */
         for (int i = 0; i < times; i++) {
-            int nx = iclamp(e->wx + dx, 0, m->w);
-            int ny = iclamp(e->wy + dy, 0, m->h);
+            int nx = iclamp(e->wx + dx, x0, x1 + 1);
+            int ny = iclamp(e->wy + dy, y0, y1 + 1);
             if (nx == e->wx && ny == e->wy) break;
             e->wx = nx;
             e->wy = ny;
@@ -71,8 +76,8 @@ void ed_move(Editor *e, const Map *m, int dx, int dy, int times)
         return;
     }
 
-    e->cx = iclamp(e->cx + dx * times, 0, m->w - 1);
-    e->cy = iclamp(e->cy + dy * times, 0, m->h - 1);
+    e->cx = iclamp(e->cx + dx * times, x0, x1);
+    e->cy = iclamp(e->cy + dy * times, y0, y1);
     grid_ensure_visible(&e->view, m, e->cx, e->cy, ED_SCROLLOFF);
 }
 
@@ -176,10 +181,12 @@ void ed_wall_step(Editor *e, Map *m, Undo *u, int dx, int dy, int times)
     if (e->pen) undo_stroke(u);
 
     uint8_t kind = e->erase ? (uint8_t)EDGE_NONE : e->material;
+    int x0, y0, x1, y1;
+    grid_bounds(&e->view, m, &x0, &y0, &x1, &y1);
 
     for (int i = 0; i < times; i++) {
-        int nx = iclamp(e->wx + dx, 0, m->w);
-        int ny = iclamp(e->wy + dy, 0, m->h);
+        int nx = iclamp(e->wx + dx, x0, x1 + 1);
+        int ny = iclamp(e->wy + dy, y0, y1 + 1);
         if (nx == e->wx && ny == e->wy) break;
 
         if (e->pen) {
@@ -402,8 +409,7 @@ void ed_draw(Renderer *r, const Map *m, const Editor *e, const Theme *th, int as
 
     /* The map scrolls; the chrome around it must not. Everything the grid
      * paints is confined to the viewport rectangle. */
-    ClipRect saved = rnd_clip_push(r, e->view.view.x, e->view.view.y,
-                                   e->view.view.w, e->view.view.h);
+    ClipRect saved = grid_clip_push(r, &e->view, m);
 
     grid_draw(r, m, &e->view, th, ascii, 1, FOGV_BUILD);   /* build mode sees secrets */
     grid_draw_links(r, m, &e->view, th, ascii, 1, FOGV_BUILD);
@@ -492,10 +498,11 @@ void ed_status(const Editor *e, const Map *m, char *buf, size_t bufsz)
         snprintf(fogs + strlen(fogs), sizeof fogs - strlen(fogs), "  g f: %.15s",
                  m->fog_patches[cur - 1].name);
 
-    char link[64];
+    char link[128], on[AREA_NAME_MAX + 8] = "";
     link_status(m, e->cx, e->cy, 1, link, sizeof link);
-    snprintf(buf, bufsz, "%-7s %s  %s%s%s%s  [%s/%s]%s%s  zoom %d  map %dx%d",
-             ed_mode_name(e->mode), at,
+    if (e->view.bounded && e->floor[0]) snprintf(on, sizeof on, "  on %s", e->floor);
+    snprintf(buf, bufsz, "%-7s %s%s  %s%s%s%s  [%s/%s]%s%s  zoom %d  map %dx%d",
+             ed_mode_name(e->mode), at, on,
              tile_name(map_tile(m, e->cx, e->cy)), link,
              map_note_at(m, e->cx, e->cy) ? "  (note)" : "", fogs,
              edge_name(e->material), tile_name(e->terrain), brush, shape,

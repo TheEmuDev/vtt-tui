@@ -1736,7 +1736,8 @@ static void editor_key(App *a, Key k)
 
     if (e->pending_g) {
         e->pending_g = 0;
-        if (k.ch == 'g') { e->cy = 0; grid_ensure_visible(&e->view, m, e->cx, e->cy, ED_SCROLLOFF); }
+        if (k.ch == 'g') { int x0, y0, x1, y1; grid_bounds(&e->view, m, &x0, &y0, &x1, &y1);
+                           e->cy = y0; grid_ensure_visible(&e->view, m, e->cx, e->cy, ED_SCROLLOFF); }
         else if (k.ch == 'f' || k.ch == 'c') {
             /* Painting fog is authoring, so it lives here with the terrain
              * brush and takes the same footprint: the brush, or the box. */
@@ -1783,10 +1784,10 @@ static void editor_key(App *a, Key k)
         break;
     }
 
-    case '0': e->cx = 0;        grid_ensure_visible(&e->view, m, e->cx, e->cy, ED_SCROLLOFF); break;
-    case '$': e->cx = m->w - 1; grid_ensure_visible(&e->view, m, e->cx, e->cy, ED_SCROLLOFF); break;
+    case '0': ed_move(e, m, -1, 0, MAP_MAX_DIM); break;       /* as far as the floor goes */
+    case '$': ed_move(e, m,  1, 0, MAP_MAX_DIM); break;
     case 'g': e->pending_g = 1; break;
-    case 'G': e->cy = m->h - 1; grid_ensure_visible(&e->view, m, e->cx, e->cy, ED_SCROLLOFF); break;
+    case 'G': ed_move(e, m, 0, 1, MAP_MAX_DIM); break;
 
     case 'v': case 'V': {
         uint8_t want = (k.ch == 'V') ? ED_SHAPE_CIRCLE : ED_SHAPE_RECT;
@@ -1906,6 +1907,7 @@ void app_fog_sync(App *a)
 void app_key(App *a, Key k)
 {
     app_key_dispatch(a, k);
+    app_floor_sync(a);
     app_fog_sync(a);
 }
 
@@ -1948,6 +1950,15 @@ static void app_key_dispatch(App *a, Key k)
         a->ed.labels = !a->ed.labels;
         ed_layout(&a->ed, a->map, a->rnd->w, a->rnd->h);
         app_set_status(a, a->ed.labels ? "labels on" : "labels off");
+        return;
+    }
+
+    /* [ and ] step between floors, in every mode on the map, the same way. */
+    if (k.kind == KEY_CHAR && k.mods == 0 && (k.ch == '[' || k.ch == ']') && a->map &&
+        (a->screen == SCREEN_EDITOR || a->screen == SCREEN_PLAY) &&
+        a->ed.mode != ED_COMMAND && !a->pending && !a->ed.pending_g) {
+        a->ed.count = 0;
+        app_floor_step(a, k.ch == ']' ? 1 : -1);
         return;
     }
 
