@@ -236,6 +236,7 @@ int map_area_at(const Map *m, int x, int y)
     long best_n = 0;
     for (int i = 0; i < m->nareas; i++) {
         const Area *ar = &m->areas[i];
+        if (ar->floor) continue;              /* a floor is not a room; floor_at asks for it */
         if (x < ar->x0 || x > ar->x1 || y < ar->y0 || y > ar->y1) continue;
         long n = (long)(ar->x1 - ar->x0 + 1) * (ar->y1 - ar->y0 + 1);
         if (best < 0 || n < best_n) { best = i; best_n = n; }
@@ -255,6 +256,7 @@ int map_area_set(Map *m, const char *name, int x0, int y0, int x1, int y1)
     if (i < 0) {
         if (m->nareas >= MAP_AREAS_MAX) return -1;
         i = m->nareas++;
+        memset(&m->areas[i], 0, sizeof m->areas[i]);   /* not a floor until marked */
     }
     Area *ar = &m->areas[i];
     str_lcpy(ar->name, name, sizeof ar->name);

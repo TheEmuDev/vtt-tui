@@ -6,6 +6,7 @@
 #include "clock.h"
 #include "mapio.h"
 #include "dice.h"
+#include "floor.h"
 #include "fog.h"
 #include "json.h"
 #include "link.h"
@@ -527,6 +528,9 @@ void maptools_describe(FILE *out, const Map *m, int json)
                 int ai = map_area_at(m, rm->fx, rm->fy);
                 json_key(&j, "area");
                 if (ai >= 0) json_str(&j, m->areas[ai].name); else json_null(&j);
+                int fl = floor_at(m, rm->fx, rm->fy);
+                json_key(&j, "floor");
+                if (fl >= 0) json_str(&j, m->areas[fl].name); else json_null(&j);
             }
             json_kint(&j, "x", rm->fx); json_kint(&j, "y", rm->fy);
             bounds_name(rm->x0, rm->y0, rm->x1, rm->y1, buf, sizeof buf); json_kstr(&j, "bounds", buf);
@@ -613,6 +617,22 @@ void maptools_describe(FILE *out, const Map *m, int json)
         }
         json_close(&j, ']');
 
+        json_key(&j, "floors");                    /* areas marked as floors, low level first */
+        json_open(&j, '[');
+        {
+            int order[MAP_AREAS_MAX], nf = floor_order(m, order);
+            for (int k = 0; k < nf; k++) {
+                const Area *fa = &m->areas[order[k]];
+                json_open(&j, '{');
+                json_kstr(&j, "name", fa->name);
+                json_kint(&j, "level", fa->level);
+                bounds_name(fa->x0, fa->y0, fa->x1, fa->y1, buf, sizeof buf);
+                json_kstr(&j, "bounds", buf);
+                json_close(&j, '}');
+            }
+        }
+        json_close(&j, ']');
+
         json_key(&j, "links");                     /* squares joined: stairs, portals */
         json_open(&j, '[');
         for (int i = 0; i < m->nlinks; i++) {
@@ -676,13 +696,22 @@ void maptools_describe(FILE *out, const Map *m, int json)
         if (r.start >= 0) { room_ref(m, &r, r.start, buf, sizeof buf); fprintf(out, ", starting in room %d %s", r.start + 1, buf); }
         if (unreachable) fprintf(out, ", %d not reachable from it", unreachable);
         fputc('\n', out);
+        int order[MAP_AREAS_MAX], nf = floor_order(m, order);
+        for (int k = 0; k < nf; k++) {
+            const Area *fa = &m->areas[order[k]];
+            bounds_name(fa->x0, fa->y0, fa->x1, fa->y1, buf2, sizeof buf2);
+            fprintf(out, "%s %s (level %d) %s", k ? "," : "  floors", fa->name, fa->level, buf2);
+        }
+        if (nf) fputc('\n', out);
 
         for (int i = 0; i < r.n; i++) {
             const Room *rm = &r.v[i];
             room_ref(m, &r, i, buf, sizeof buf);
             bounds_name(rm->x0, rm->y0, rm->x1, rm->y1, buf2, sizeof buf2);
-            fprintf(out, "\nroom %d %s  %s  %d square%s%s\n", i + 1, buf, buf2, rm->squares,
-                    rm->squares == 1 ? "" : "s", r.reach[i] ? "" : "  NOT REACHABLE");
+            int fl = floor_at(m, rm->fx, rm->fy);
+            fprintf(out, "\nroom %d %s  %s  %d square%s%s%s%s\n", i + 1, buf, buf2, rm->squares,
+                    rm->squares == 1 ? "" : "s", fl >= 0 ? "  on " : "", fl >= 0 ? m->areas[fl].name : "",
+                    r.reach[i] ? "" : "  NOT REACHABLE");
             int terrain[TILE_COUNT] = { 0 };
             for (int y = rm->y0; y <= rm->y1; y++)
                 for (int x = rm->x0; x <= rm->x1; x++)
@@ -959,6 +988,19 @@ static void check_map(const Map *m, Findings *fs)
         map_coord_name(n->x, n->y, where, sizeof where);
         snprintf(msg, sizeof msg, "a note on void: %.60s", n->text);
         map_finding(fs, "W140", "note-on-void", n->x, n->y, 0, where, msg);
+    }
+    for (int i = 0; i < m->nareas; i++) {
+        if (!m->areas[i].floor || !floor_problem(m, i)) continue;
+        /* Each overlapping pair once: from its later-named floor. */
+        int first = 1;
+        for (int k = 0; k < i && first; k++) {
+            const Area *a = &m->areas[i], *o = &m->areas[k];
+            first = !(o->floor && a->x0 <= o->x1 && o->x0 <= a->x1 && a->y0 <= o->y1 && o->y0 <= a->y1);
+        }
+        if (first) continue;
+        map_coord_name(m->areas[i].x0, m->areas[i].y0, where, sizeof where);
+        snprintf(msg, sizeof msg, "floor %s overlaps another floor: a square can be on only one", m->areas[i].name);
+        map_finding(fs, "W160", "floors-overlap", m->areas[i].x0, m->areas[i].y0, 0, where, msg);
     }
     for (int i = 0; i < m->nlinks; i++) {
         int vx, vy;

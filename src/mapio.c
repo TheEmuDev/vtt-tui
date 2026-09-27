@@ -13,6 +13,7 @@
 
 #include "clock.h"
 #include "counter.h"
+#include "floor.h"
 #include "fog.h"
 #include "link.h"
 #include "ruler.h"
@@ -26,7 +27,7 @@
  * v3 added status markers on tokens. An older reader would ignore those lines
  * and silently drop them, which loses combat state from a saved fight, so it
  * refuses too. Each version still loads everything older. */
-#define FORMAT_VERSION 8
+#define FORMAT_VERSION 9
 
 /* Version 4 added the turn order. A map with no fight in it is still written
  * as version 3, which says everything it needs and stays loadable by the
@@ -39,9 +40,10 @@
 #define FORMAT_BEFORE_TURNS    3
 #define FORMAT_BEFORE_CLOCKS   4
 #define FORMAT_BEFORE_COUNTERS 5
-/* Version 6 added counters and fog; 7 named areas; 8 links. */
+/* Version 6 added counters and fog; 7 named areas; 8 links; 9 floors. */
 #define FORMAT_BEFORE_AREAS    6
 #define FORMAT_BEFORE_LINKS    7
+#define FORMAT_BEFORE_FLOORS   8
 
 /* Fog rows: a held tile of patch 1..15 is one of these, in order. */
 static const char FOG_HELD_CHARS[FOG_PATCH_MAX + 1] = "123456789!\"#$%&";
@@ -87,7 +89,9 @@ int mapio_write(const Map *m, const char *path, char *err, size_t errsz)
     if (patches) v6 = 1;
     int v7 = m->nareas > 0;
     int v8 = m->nlinks > 0;
-    fprintf(f, "VTT %d\n", v8 ? FORMAT_VERSION : v7 ? FORMAT_BEFORE_LINKS : v6 ? FORMAT_BEFORE_AREAS : v5 ? FORMAT_BEFORE_COUNTERS
+    int v9 = 0;
+    for (int i = 0; i < m->nareas; i++) v9 |= m->areas[i].floor;
+    fprintf(f, "VTT %d\n", v9 ? FORMAT_VERSION : v8 ? FORMAT_BEFORE_FLOORS : v7 ? FORMAT_BEFORE_LINKS : v6 ? FORMAT_BEFORE_AREAS : v5 ? FORMAT_BEFORE_COUNTERS
                           : fight ? FORMAT_BEFORE_CLOCKS : FORMAT_BEFORE_TURNS);
     fprintf(f, "name %s\n", m->name);
     fprintf(f, "size %d %d\n", m->w, m->h);
@@ -147,6 +151,8 @@ int mapio_write(const Map *m, const char *path, char *err, size_t errsz)
     for (int i = 0; i < m->nareas; i++)
         fprintf(f, "area %d %d %d %d \"%s\"\n", m->areas[i].x0, m->areas[i].y0,
                 m->areas[i].x1, m->areas[i].y1, m->areas[i].name);
+    for (int i = 0; i < m->nareas; i++)
+        if (m->areas[i].floor) fprintf(f, "floor \"%s\" %d\n", m->areas[i].name, m->areas[i].level);
     for (int i = 0; i < m->nlinks; i++) {
         const Link *l = &m->links[i];
         fprintf(f, "link %d %s %d %d %d %d %d%s%s\n", l->num, link_kind_name(l->kind), l->size,
@@ -305,7 +311,7 @@ static int looks_like_record(const char *line)
 {
     static const char *const words[] = {
         "tiles", "vedges", "hedges", "fog", "fogpatch", "token", "tokenstatus",
-        "tokenturn", "tokencounter", "tokennote", "note", "area", "link", "spotlight", "clock",
+        "tokenturn", "tokencounter", "tokennote", "note", "area", "floor", "link", "spotlight", "clock",
         "roll", "round", "name", "size", "zoom", "scale", "ruleset", "metric", NULL,
     };
     size_t n = 0;
@@ -715,6 +721,8 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
 
     int stray_at = -1;
     int link_line[LINK_NUM_MAX + 1] = { 0 };   /* where each link was read, for its finding */
+    struct { char name[AREA_NAME_MAX]; int level, line; } floors[MAP_AREAS_MAX];
+    int nfloors = 0;
     while (read_line(ld, line, sizeof line) >= 0) {
         if (!strcmp(line, "fog")) {
             Section sec = { "fog", h, w, 2, 0, 0, w };
@@ -772,6 +780,20 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
             RECORD(parse_note_line(m, line), "note");
         } else if (!strncmp(line, "area ", 5)) {
             RECORD(parse_area_line(m, line), "area");
+        } else if (!strncmp(line, "floor ", 6)) {
+            /* Held until every area is in: a floor names one. */
+            char fname[AREA_NAME_MAX];
+            const char *q = parse_quoted(line + 6, fname, sizeof fname) ? strrchr(line + 7, '"') : NULL;
+            int level = 0;
+            if (!q || q <= line + 6 || nfloors >= MAP_AREAS_MAX || sscanf(q + 1, "%d", &level) != 1 ||
+                level < FLOOR_LEVEL_MIN || level > FLOOR_LEVEL_MAX) {
+                diag(ld, ld->line, -1, "E014", "bad-record", "floor dropped: '%.60s'", line);
+            } else {
+                str_lcpy(floors[nfloors].name, fname, sizeof floors[nfloors].name);
+                floors[nfloors].level = level;
+                floors[nfloors].line  = ld->line;
+                nfloors++;
+            }
         } else if (!strncmp(line, "link ", 5)) {
             RECORD(parse_link_line(m, line), "link");
             int num = 0;
@@ -839,6 +861,20 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
             }
             else map_fog_set(m, x, y, fb);
         }
+
+    /* Floors, now that every area is in. One naming no area, or overlapping
+     * a floor already marked, goes with a finding. */
+    for (int i = 0; i < nfloors; i++) {
+        int ai = map_area_find(m, floors[i].name);
+        const char *why = ai < 0 ? "no area has that name" : m->areas[ai].floor ? "it is already a floor" : NULL;
+        if (!why) {
+            m->areas[ai].floor = 1;
+            m->areas[ai].level = (int8_t)floors[i].level;
+            why = floor_problem(m, ai);
+            if (why) m->areas[ai].floor = 0, m->areas[ai].level = 0;
+        }
+        if (why) diag(ld, floors[i].line, -1, "W024", "floor-dropped", "floor %.31s dropped: %s", floors[i].name, why);
+    }
 
     /* Links are checked now that the size is certain. One that cannot stand
      * -- an end off the map, its ends overlapping, two links on one square --

@@ -132,6 +132,9 @@ int  undo_set_note(Undo *u, Map *m, int x, int y, const char *text);
  * nothing, when map_area_set would refuse (bad name, full, off the map). */
 int  undo_set_area(Undo *u, Map *m, const char *name, int x0, int y0, int x1, int y1);
 int  undo_remove_area(Undo *u, Map *m, const char *name);
+/* Marks the named area a floor at `level`, or with on 0 unmarks it; floor.c's
+ * floor_problem is the caller's. Returns 0 when there is no such area. */
+int  undo_set_floor(Undo *u, Map *m, const char *name, int on, int level);
 /* Adds a link, or changes the one with its number; checks nothing but room
  * (link_problem is the caller's). Returns 0, recording nothing, when full. */
 int  undo_set_link(Undo *u, Map *m, const Link *l);

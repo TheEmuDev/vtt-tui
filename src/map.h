@@ -58,6 +58,8 @@ typedef struct {
 typedef struct {
     char    name[AREA_NAME_MAX];
     int16_t x0, y0, x1, y1;       /* inclusive, on the map */
+    uint8_t floor;                /* a floor of the building: see floor.h */
+    int8_t  level;                /* its elevation, when it is one */
 } Area;
 /* A link: two blocks of squares joined, so a creature on one can be sent
  * to the other -- stairs, a ladder, a trapdoor, a portal. Nothing crosses
@@ -312,7 +314,8 @@ int         map_note_set(Map *m, int x, int y, const char *text);
 int  map_area_name_ok(const char *name);
 int  map_area_find(const Map *m, const char *name);           /* index, or -1 */
 /* The smallest area holding the square (the first named, among equals);
- * -1 for none. */
+ * -1 for none. Floors are not counted: they hold rooms rather than being
+ * one, and floor_at (floor.h) is how a floor is found. */
 int  map_area_at(const Map *m, int x, int y);
 /* Names a box (clipped to the map): replaces the area of that name, or adds
  * one. Returns its index, or -1 when the box is off the map, the name is

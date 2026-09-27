@@ -31,6 +31,7 @@
 #include "mapio.h"
 #include "maptools.h"
 #include "link.h"
+#include "floor.h"
 #include "stamp.h"
 #include "theme.h"
 #include "token.h"
@@ -14261,6 +14262,161 @@ static void test_link_keys(void)
     if (system(cmd) != 0) { }
 }
 
+/* Three floors of 6x4 side by side with void between: Cellar -1 at A1,
+ * Ground 0 at H1, Upper 1 at O1. */
+static Map *floors_fixture(void)
+{
+    Map *m = map_new(20, 4, "floors");
+    map_fill_tiles(m, 0, 0, 5, 3, TILE_FLOOR);
+    map_fill_tiles(m, 7, 0, 12, 3, TILE_FLOOR);
+    map_fill_tiles(m, 14, 0, 19, 3, TILE_FLOOR);
+    map_area_set(m, "Upper", 14, 0, 19, 3);
+    map_area_set(m, "Cellar", 0, 0, 5, 3);
+    map_area_set(m, "Ground", 7, 0, 12, 3);
+    map_area_set(m, "Hall", 8, 1, 10, 2);                  /* a room on the ground floor */
+    m->areas[0].floor = 1; m->areas[0].level = 1;
+    m->areas[1].floor = 1; m->areas[1].level = -1;
+    m->areas[2].floor = 1; m->areas[2].level = 0;
+    return m;
+}
+
+static void test_floors(void)
+{
+    char err[256];
+    Map *m = floors_fixture();
+
+    CASE("floors in level order; stepping up and down; the whole map steps to the ends");
+    int order[MAP_AREAS_MAX];
+    CHECK_EQ(floor_order(m, order), 3);
+    CHECK(order[0] == 1 && order[1] == 2 && order[2] == 0);
+    CHECK_EQ(floor_step(m, 2, 1), 0);
+    CHECK_EQ(floor_step(m, 2, -1), 1);
+    CHECK_EQ(floor_step(m, 0, 1), -1);
+    CHECK_EQ(floor_step(m, -1, 1), 1);
+    CHECK_EQ(floor_step(m, -1, -1), 0);
+
+    CASE("which floor holds a square; rooms are named by their own area, not the floor");
+    CHECK_EQ(floor_at(m, 9, 1), 2);
+    CHECK_EQ(floor_at(m, 6, 0), -1);
+    CHECK_EQ(map_area_at(m, 9, 1), 3);
+    CHECK_EQ(map_area_at(m, 7, 0), -1);                    /* the floor is not a room */
+    CHECK(strcmp(floor_name(m, -1), "the whole map") == 0);
+
+    CASE("a floor may not overlap another");
+    map_area_set(m, "Wing", 12, 0, 15, 3);
+    int wing = map_area_find(m, "Wing");
+    CHECK(floor_problem(m, wing) != NULL);
+    map_area_set(m, "Wing", 13, 0, 13, 3);
+    CHECK(floor_problem(m, wing) == NULL);
+
+    CASE("marked and unmarked through the undo log");
+    {
+        Undo u;
+        undo_init(&u);
+        undo_begin(&u); CHECK_EQ(undo_set_floor(&u, m, "Wing", 1, 5), 1); undo_end(&u);
+        CHECK(m->areas[wing].floor && m->areas[wing].level == 5);
+        undo_begin(&u); CHECK_EQ(undo_set_floor(&u, m, "Upper", 0, 0), 1); undo_end(&u);
+        CHECK_EQ(m->areas[0].floor, 0);
+        undo_undo(&u, m);
+        CHECK(m->areas[0].floor && m->areas[0].level == 1);
+        undo_undo(&u, m);
+        CHECK_EQ(m->areas[wing].floor, 0);
+        undo_redo(&u, m);
+        CHECK(m->areas[wing].floor && m->areas[wing].level == 5);
+        undo_begin(&u); undo_remove_area(&u, m, "Wing"); undo_end(&u);
+        undo_undo(&u, m);                                  /* comes back a floor */
+        wing = map_area_find(m, "Wing");
+        CHECK(wing >= 0 && m->areas[wing].floor && m->areas[wing].level == 5);
+        undo_free(&u);
+        map_area_remove(m, "Wing");
+    }
+
+    CASE("the party's floor: stay, the most, the last, the lowest");
+    {
+        Token a = { 1, 1, 1, TOKEN_PLAYER, "A" }, b = { 8, 1, 1, TOKEN_PLAYER, "B" };
+        Token c = { 15, 1, 1, TOKEN_PLAYER, "C" }, d = { 16, 1, 1, TOKEN_PLAYER, "D" };
+        Token e = { 2, 2, 1, TOKEN_ENEMY, "E" };
+        tokens_add(&m->tokens, a); tokens_add(&m->tokens, b);
+        tokens_add(&m->tokens, c); tokens_add(&m->tokens, d); tokens_add(&m->tokens, e);
+        CHECK_EQ(floor_pick(m, TOKEN_PLAYER, 1, -1), 1);    /* A is still on the Cellar: stay */
+        CHECK_EQ(floor_pick(m, TOKEN_PLAYER, -1, -1), 0);   /* Upper has two */
+        m->tokens.v[3].x = 9;                               /* D to the ground: 1 / 2 / 1 */
+        CHECK_EQ(floor_pick(m, TOKEN_PLAYER, -1, -1), 2);
+        m->tokens.v[1].x = 17;                              /* B up: 1 / 1 / 2... */
+        m->tokens.v[3].x = 3;                               /* D down: 2 / 0 / 2, a tie */
+        CHECK_EQ(floor_pick(m, TOKEN_PLAYER, -1, 0), 0);    /* the last moved on wins */
+        CHECK_EQ(floor_pick(m, TOKEN_PLAYER, -1, -1), 1);   /* else the lowest */
+        CHECK_EQ(floor_pick(m, TOKEN_PLAYER, -1, 2), 1);    /* a last that is not tied: ignored */
+        CHECK_EQ(floor_pick(m, TOKEN_ENEMY, 0, -1), 1);     /* the enemy's side, the same rule */
+        m->tokens.n = 0;
+        CHECK_EQ(floor_pick(m, TOKEN_PLAYER, 0, 0), -1);
+    }
+
+    CASE("the file: version 9 with floors, read back; a bad floor line dropped with a finding");
+    {
+        Sandbox sb = sandbox_enter("floors");
+        char path[600];
+        snprintf(path, sizeof path, "%s/f.vtt", sb.dir);
+        CHECK_EQ(mapio_write(m, path, err, sizeof err), 0);
+        FILE *f = fopen(path, "r");
+        char first[32] = "";
+        if (f) { if (!fgets(first, sizeof first, f)) first[0] = 0; fclose(f); }
+        CHECK_EQ(strcmp(first, "VTT 9\n"), 0);
+        Map *back = mapio_load(path, err, sizeof err);
+        CHECK(back != NULL);
+        if (back) {
+            int o2[MAP_AREAS_MAX];
+            CHECK_EQ(floor_order(back, o2), 3);
+            CHECK(!strcmp(back->areas[o2[0]].name, "Cellar") && back->areas[o2[0]].level == -1);
+            map_free(back);
+        }
+        f = fopen(path, "w");
+        fputs("VTT 9\nsize 6 1\ntiles\n......\n"
+              "floor \"Low\" 0\n"                                /* before its area: still read */
+              "area 0 0 2 0 \"Low\"\narea 2 0 5 0 \"High\"\narea 4 0 5 0 \"Top\"\n"
+              "floor \"High\" 1\n"                               /* overlaps Low */
+              "floor \"Nowhere\" 2\n"
+              "floor \"Top\" 200\n"                              /* out of range */
+              "floor \"Low\" 3\n", f);                          /* twice */
+        fclose(f);
+        back = mapio_load(path, err, sizeof err);
+        CHECK(back && back->areas[0].floor && !back->areas[1].floor && !back->areas[2].floor &&
+              back->areas[0].level == 0);
+        map_free(back);
+        char *out = NULL;
+        size_t n = 0;
+        FILE *o = open_memstream(&out, &n);
+        CHECK_EQ(maptools_check(o, path, 0), 1);
+        fclose(o);
+        CHECK(out && strstr(out, "floor High dropped: it would overlap another floor") &&
+              strstr(out, "floor Nowhere dropped: no area has that name") &&
+              strstr(out, "floor Low dropped: it is already a floor") && strstr(out, "E014"));
+        free(out);
+        sandbox_leave(&sb);
+    }
+
+    CASE("--check finds overlapping floors made after the fact; --describe names each room's floor");
+    {
+        map_area_set(m, "Cellar", 0, 0, 8, 3);              /* grown into Ground */
+        char *out = NULL;
+        size_t n = 0;
+        FILE *o = open_memstream(&out, &n);
+        maptools_check_map(o, m, 0);
+        fclose(o);
+        CHECK(out && strstr(out, "W160"));
+        free(out);
+        map_area_set(m, "Cellar", 0, 0, 5, 3);
+        char *d = describe_text(m, 0, NULL);
+        CHECK(d && strstr(d, "floors Cellar (level -1) A1:F4, Ground (level 0) H1:M4, Upper (level 1) O1:T4"));
+        CHECK(d && strstr(d, "on Ground"));
+        free(d);
+        d = describe_text(m, 1, NULL);
+        CHECK(d && json_valid(d) && strstr(d, "\"floors\":[{\"name\":\"Cellar\",\"level\":-1"));
+        free(d);
+    }
+    map_free(m);
+}
+
 static void test_room_language(void)
 {
     Sandbox sb = sandbox_enter("roomlang");
@@ -14981,6 +15137,7 @@ int main(void)
         { "areas", test_areas },
         { "links", test_links },
         { "linkkeys", test_link_keys },
+        { "floors", test_floors },
         { "graymarker", test_gray_marker },
         { "roomlang", test_room_language },
         { "corridors", test_corridors },
