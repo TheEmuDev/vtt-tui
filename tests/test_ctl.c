@@ -1,303 +1,6 @@
-/* Tests: stamps, undo nesting, the control channel. */
+/* Tests: the control channel, the room language, corridors, --apply. */
 
 #include "harness.h"
-
-void test_stamps(void)
-{
-    char err[160];
-    Map *s = stamp_fixture();
-    char *orig = stamp_text(s);
-
-    CASE("turning: each quarter as the goldens have it, four quarters the start again");
-    static const char *const names[] = { "stamp-turn0", "stamp-turn1", "stamp-turn2", "stamp-turn3" };
-    for (int q = 0; q < 4; q++) {
-        Map *t = stamp_turned(s, q);
-        CHECK_EQ(t->w, q % 2 ? 3 : 4);
-        char *txt = stamp_text(t);
-        golden_bytes(names[q], txt, strlen(txt));
-        free(txt);
-        map_free(t);
-    }
-    {
-        Map *t = s;
-        Map *owned[4];
-        for (int q = 0; q < 4; q++) { owned[q] = stamp_turned(t, 1); t = owned[q]; }
-        char *txt = stamp_text(t);
-        CHECK_EQ(strcmp(txt, orig), 0);
-        free(txt);
-        for (int q = 0; q < 4; q++) map_free(owned[q]);
-        Map *back = stamp_turned(s, -1), *fwd = stamp_turned(s, 3);
-        char *a = stamp_text(back), *b = stamp_text(fwd);
-        CHECK_EQ(strcmp(a, b), 0);                          /* -1 is 3 */
-        free(a); free(b); map_free(back); map_free(fwd);
-    }
-
-    CASE("mirroring: as the golden has it, twice the start again");
-    {
-        Map *m1 = stamp_mirrored(s), *m2 = stamp_mirrored(m1);
-        char *a = stamp_text(m1), *b = stamp_text(m2);
-        golden_bytes("stamp-mirror", a, strlen(a));
-        CHECK_EQ(strcmp(b, orig), 0);
-        free(a); free(b); map_free(m1); map_free(m2);
-    }
-
-    CASE("mirroring moves a creature by its size: a 2x2 at the west edge of 4 wide lands at x 2");
-    {
-        Map *one = map_new(4, 2, "one");
-        Token t;
-        memset(&t, 0, sizeof t);
-        t.size = 2;
-        tokens_add(&one->tokens, t);
-        Map *mm = stamp_mirrored(one);
-        CHECK(mm->tokens.v[0].x == 2 && mm->tokens.v[0].y == 0);
-        map_free(mm);
-        map_free(one);
-    }
-
-    CASE("an empty box has no outline: a box of corners in one line lays nothing");
-    {
-        Map *m = map_new(6, 4, "m");
-        Undo u;
-        undo_init(&u);
-        EdShape line = ed_shape(ED_SHAPE_RECT, 2, 1, 2, 3, 1);   /* two corners, one column */
-        ed_wall_shape(m, &u, &line, EDGE_WALL);
-        CHECK_EQ(u.nmarks, 0);
-        for (int y = 0; y < 4; y++) CHECK_EQ(map_vedge(m, 2, y), EDGE_NONE);
-        EdShape box = ed_shape(ED_SHAPE_RECT, 1, 1, 3, 3, 1);    /* a 2x2 between corners */
-        ed_wall_shape(m, &u, &box, EDGE_WALL);
-        CHECK(map_vedge(m, 1, 1) == EDGE_WALL && map_vedge(m, 3, 2) == EDGE_WALL &&
-              map_hedge(m, 2, 1) == EDGE_WALL && map_hedge(m, 1, 3) == EDGE_WALL);
-        CHECK(map_vedge(m, 2, 1) == EDGE_NONE);
-        undo_free(&u);
-        map_free(m);
-    }
-
-    CASE("copying: squares, every boundary round them, creatures wholly inside, notes; fresh creatures");
-    {
-        Map *m = map_new(8, 6, "m");
-        Map *p = NULL;
-        Undo u;
-        undo_init(&u);
-        for (int y = 0; y < 6; y++)
-            for (int x = 0; x < 8; x++) map_set_tile(m, x, y, TILE_FLOOR);
-        CHECK_EQ(stamp_place(m, &u, s, 2, 2, err, sizeof err), 1);
-        m->tokens.v[0].turn = TURN_IN | TURN_ACTING;
-        token_add_status(&m->tokens.v[0], 1, "Poisoned");
-        p = stamp_copy(m, 2, 2, 5, 4);
-        CHECK(p != NULL);
-        if (p) {
-            CHECK_EQ(p->tokens.n, 1);
-            CHECK(p->tokens.v[0].turn == 0 && p->tokens.v[0].nstatus == 0);
-            CHECK_EQ(map_vedge(p, 0, 1), EDGE_DOOR_CLOSED);
-            CHECK_EQ(map_hedge(p, 2, 3), EDGE_WINDOW);
-            CHECK(map_note_at(p, 3, 0) != NULL);
-            map_free(p);
-        }
-        p = stamp_copy(m, 2, 2, 3, 4);                 /* cuts the Ogre in half: left out */
-        CHECK(p && p->tokens.n == 0);
-        map_free(p);
-        undo_free(&u);
-        map_free(m);
-    }
-
-    CASE("placing: see-through void and blank boundaries, one undo step, labels kept apart");
-    {
-        Map *m = map_new(10, 8, "m");
-        Undo u;
-        undo_init(&u);
-        for (int y = 0; y < 8; y++)
-            for (int x = 0; x < 10; x++) map_set_tile(m, x, y, TILE_BRUSH);
-        map_set_hedge(m, 5, 5, EDGE_WALL);             /* under the stamp, where it has no boundary */
-        Token og;
-        memset(&og, 0, sizeof og);
-        og.x = 9; og.y = 7; og.size = 1;
-        str_lcpy(og.label, "Ogre", sizeof og.label);
-        tokens_add(&m->tokens, og);
-        char *before = stamp_text(m);
-        CHECK_EQ(stamp_place(m, &u, s, 3, 3, err, sizeof err), 1);
-        CHECK_EQ(map_tile(m, 3, 5), TILE_BRUSH);        /* the stamp's void square: the map's */
-        CHECK_EQ(map_tile(m, 6, 3), TILE_WATER);
-        CHECK_EQ(map_hedge(m, 5, 5), EDGE_WALL);        /* see-through boundary */
-        CHECK_EQ(map_vedge(m, 3, 4), EDGE_DOOR_CLOSED);
-        CHECK_EQ(m->tokens.n, 2);
-        CHECK_EQ(strcmp(m->tokens.v[1].label, "Ogre 2"), 0);
-        CHECK_EQ(u.nmarks, 1);
-        undo_undo(&u, m);
-        char *after = stamp_text(m);
-        CHECK_EQ(strcmp(before, after), 0);
-        free(before); free(after);
-
-        CASE("placing is refused whole: off the map, a creature on void or on another, notes full");
-        before = stamp_text(m);
-        CHECK_EQ(stamp_place(m, &u, s, 7, 3, err, sizeof err), 0);
-        CHECK(strstr(err, "runs off the map") != NULL);
-        Map *hole = stamp_copy(s, 0, 0, 3, 2);
-        map_set_tile(hole, 1, 2, TILE_VOID);            /* the Ogre's square in the stamp goes see-through */
-        map_set_tile(m, 4, 5, TILE_VOID);               /* and the map has no ground there */
-        CHECK_EQ(stamp_place(m, &u, hole, 3, 3, err, sizeof err), 0);
-        CHECK(strstr(err, "Ogre would stand on void at E6") != NULL);
-        map_set_tile(m, 4, 5, TILE_BRUSH);
-        CHECK_EQ(stamp_place(m, &u, s, 8, 5, err, sizeof err), 0);
-        CHECK(strstr(err, "runs off the map") != NULL);
-        m->tokens.v[0].x = 4; m->tokens.v[0].y = 4;     /* where the stamp's Ogre would go */
-        CHECK_EQ(stamp_place(m, &u, s, 3, 3, err, sizeof err), 0);
-        CHECK(strstr(err, "would land on Ogre") != NULL);
-        m->tokens.v[0].x = 9; m->tokens.v[0].y = 7;
-        for (int i = 0; m->nnotes < MAP_NOTES_MAX; i++) map_note_set(m, i % 10, i / 10, "x");
-        map_note_set(m, 6, 3, "");                       /* the stamp's note square is free */
-        map_note_set(m, 9, 7, "y");
-        CHECK_EQ(stamp_place(m, &u, s, 3, 3, err, sizeof err), 0);
-        CHECK(strstr(err, "no room") != NULL);
-        map_free(hole);
-        free(before);
-        undo_free(&u);
-        map_free(m);
-    }
-
-    CASE("the preview: shown for a draw and put back exactly, touching nothing");
-    {
-        Map *m = map_new(10, 8, "m");
-        for (int y = 0; y < 8; y++)
-            for (int x = 0; x < 10; x++) map_set_tile(m, x, y, TILE_BRUSH);
-        Token og;
-        memset(&og, 0, sizeof og);
-        og.x = 0; og.y = 0; og.size = 1;
-        tokens_add(&m->tokens, og);
-        char *before = stamp_text(m);
-        unsigned gen = m->gen, shape = m->tokens.shape;
-        StampShow sv;
-        stamp_show(m, s, 8, 6, &sv);                    /* hangs off the corner */
-        CHECK_EQ(map_tile(m, 8, 6), TILE_FLOOR);          /* the stamp's corner, clipped */
-        CHECK_EQ(map_vedge(m, 8, 7), EDGE_DOOR_CLOSED);
-        CHECK_EQ(m->tokens.n, 1);                        /* its Ogre would hang off the map: not shown */
-        stamp_unshow(m, &sv);
-        char *after = stamp_text(m);
-        CHECK_EQ(strcmp(before, after), 0);
-        CHECK(m->gen == gen && m->tokens.shape == shape);
-        stamp_show(m, s, 2, 2, &sv);                    /* its note shows with it, and goes */
-        CHECK(map_note_at(m, 5, 2) && !strcmp(map_note_at(m, 5, 2), "well"));
-        stamp_unshow(m, &sv);
-        CHECK(map_note_at(m, 5, 2) == NULL);
-        CHECK_EQ(m->nnotes, 0);
-        free(before); free(after);
-        map_free(m);
-    }
-
-    CASE("files: saved by name, listed, loaded back the same; names are never paths");
-    {
-        Sandbox sb = sandbox_enter("stamps");
-        CHECK_EQ(stamp_name_ok("pillar-row_2"), 1);
-        CHECK_EQ(stamp_name_ok("../x"), 0);
-        CHECK_EQ(stamp_name_ok(""), 0);
-        CHECK_EQ(stamp_name_ok("a b"), 0);
-        CHECK_EQ(stamp_save(s, "../evil", err, sizeof err), -1);
-        CHECK_EQ(stamp_save(s, "Piece", err, sizeof err), 0);
-        CHECK_EQ(stamp_save(s, "Altar", err, sizeof err), 0);
-        char listed[4][MAP_NAME_MAX];
-        CHECK_EQ(stamp_list(listed, 4), 2);
-        CHECK(!strcmp(listed[0], "Altar") && !strcmp(listed[1], "Piece"));
-        Map *l = stamp_load("Piece", err, sizeof err);
-        CHECK(l != NULL);
-        if (l) {
-            CHECK_EQ(strcmp(l->name, "Piece"), 0);    /* the file says its name */
-            str_lcpy(l->name, s->name, sizeof l->name);
-            char *a = stamp_text(l);
-            CHECK_EQ(strcmp(a, orig), 0);
-            if (strcmp(a, orig)) fprintf(stderr, "%s\n---\n%s", a, orig);
-            free(a);
-            map_free(l);
-        }
-        CHECK(stamp_load("Nothing", err, sizeof err) == NULL);
-        CASE("a listing cut short is the start of the alphabet, not the directory's order");
-        char nm[16];
-        for (int i = 20; i >= 1; i--) {
-            snprintf(nm, sizeof nm, "b%02d", i);
-            stamp_save(s, nm, err, sizeof err);
-        }
-        char few[3][MAP_NAME_MAX];
-        CHECK_EQ(stamp_list(few, 3), 22);
-        CHECK(!strcmp(few[0], "Altar") && !strcmp(few[1], "Piece") && !strcmp(few[2], "b01"));
-        CHECK(strstr(err, "no stamp called Nothing") != NULL);
-        char dir[600], cmd[700];
-        stamp_dir(dir, sizeof dir);
-        snprintf(cmd, sizeof cmd, "rm -rf '%s'", sb.dir);
-        sandbox_leave(&sb);
-        if (system(cmd) != 0) { }
-    }
-
-    free(orig);
-    map_free(s);
-}
-
-void test_undo_nesting(void)
-{
-    Map *m = map_new(6, 4, "n");
-    Undo u;
-    undo_init(&u);
-
-    CASE("a helper's batch inside an operation's is part of it: one step, closed by the outermost end");
-    undo_begin(&u);
-    undo_set_tile(&u, m, 0, 0, TILE_WATER);
-    undo_begin(&u);                                   /* a helper */
-    undo_set_tile(&u, m, 1, 0, TILE_WATER);
-    undo_end(&u);
-    CHECK_EQ(u.open, 1);                              /* still the operation's */
-    CHECK_EQ(undo_balanced(&u), 0);
-    undo_begin(&u);                                   /* a second helper */
-    undo_set_tile(&u, m, 2, 0, TILE_WATER);
-    undo_end(&u);
-    undo_end(&u);
-    CHECK_EQ(u.open, 0);
-    CHECK_EQ(undo_balanced(&u), 1);
-    CHECK_EQ(u.nmarks, 1);
-    undo_undo(&u, m);
-    CHECK(map_tile(m, 0, 0) == TILE_VOID && map_tile(m, 2, 0) == TILE_VOID);
-
-    CASE("a stroke stays open across calls, is balanced between keys, and ends when told");
-    undo_clear(&u);
-    undo_stroke(&u);
-    undo_set_hedge(&u, m, 0, 1, EDGE_WALL);
-    undo_stroke(&u);                                  /* the next step */
-    undo_set_hedge(&u, m, 1, 1, EDGE_WALL);
-    CHECK_EQ(undo_balanced(&u), 1);
-    undo_stroke_end(&u);
-    CHECK_EQ(u.open, 0);
-    CHECK_EQ(u.nmarks, 1);
-
-    CASE("another tool mid-stroke ends the stroke: two steps, as before nesting");
-    undo_clear(&u);
-    undo_stroke(&u);
-    undo_set_hedge(&u, m, 2, 1, EDGE_WALL);
-    undo_begin(&u);                                   /* a fill */
-    undo_set_tile(&u, m, 3, 3, TILE_WATER);
-    undo_end(&u);
-    CHECK_EQ(u.open, 0);
-    CHECK_EQ(u.nmarks, 2);
-
-    CASE("undo and redo close whatever is open, however deep");
-    undo_clear(&u);
-    undo_begin(&u);
-    undo_begin(&u);
-    undo_set_tile(&u, m, 4, 3, TILE_WATER);
-    undo_undo(&u, m);
-    CHECK_EQ(u.open, 0);
-    CHECK_EQ(u.nest, 0);
-    CHECK_EQ(map_tile(m, 4, 3), TILE_VOID);
-
-    CASE("abort forgets a nested batch whole");
-    undo_clear(&u);
-    undo_begin(&u);
-    undo_set_tile(&u, m, 5, 3, TILE_WATER);
-    undo_begin(&u);
-    undo_set_tile(&u, m, 5, 2, TILE_WATER);
-    undo_end(&u);
-    undo_abort(&u, m);
-    CHECK(u.open == 0 && u.nest == 0 && u.nmarks == 0 && u.nops == 0);
-    CHECK(map_tile(m, 5, 3) == TILE_VOID && map_tile(m, 5, 2) == TILE_VOID);
-
-    undo_free(&u);
-    map_free(m);
-}
 
 void test_ctl(void)
 {
@@ -465,7 +168,7 @@ void test_ctl(void)
 }
 
 /* Services the app's channel until `until` says stop or two seconds pass. */
-void ctl_pump(App *a, int (*until)(void *), void *ctx)
+static void ctl_pump(App *a, int (*until)(void *), void *ctx)
 {
     for (int spin = 0; spin < 400 && !(until && until(ctx)); spin++) {
         struct pollfd fds[1 + CTL_MAX_CONN];
@@ -477,7 +180,7 @@ void ctl_pump(App *a, int (*until)(void *), void *ctx)
     }
 }
 
-int ctl_raw_connect(const char *path)
+static int ctl_raw_connect(const char *path)
 {
     int fd = socket(AF_UNIX, SOCK_STREAM, 0);
     struct sockaddr_un sa;
@@ -488,7 +191,7 @@ int ctl_raw_connect(const char *path)
     return fd;
 }
 
-int ctl_read_some(void *ctx)
+static int ctl_read_some(void *ctx)
 {
     CtlReader *rd = ctx;
     for (;;) {
@@ -501,7 +204,7 @@ int ctl_read_some(void *ctx)
     }
 }
 
-int ctl_child_done(void *ctx)
+static int ctl_child_done(void *ctx)
 {
     int *st = ctx;
     return st[1] || (st[1] = waitpid((pid_t)st[0], &st[2], WNOHANG) > 0);
@@ -639,25 +342,9 @@ void test_ctl_marked(void)
     rnd_free(&r);
 }
 
-/* A w x h map of floor, no walls, in dir; opened in build mode. */
-static int ctl_blank_map(App *a, const char *dir, int w, int h)
-{
-    char path[700];
-    snprintf(path, sizeof path, "%s/blank.vtt", dir);
-    FILE *f = fopen(path, "w");
-    if (!f) return 0;
-    fprintf(f, "VTT 6\nname Blank\nsize %d %d\ntiles\n", w, h);
-    for (int y = 0; y < h; y++) {
-        for (int x = 0; x < w; x++) fputc('.', f);
-        fputc('\n', f);
-    }
-    fclose(f);
-    return app_open_map(a, path) == 0 && a->map != NULL;
-}
-
 /* The map's squares, boundaries, creatures and notes, to compare before and
  * after a request that must have changed nothing. */
-char *ctl_snapshot(const Map *m)
+static char *ctl_snapshot(const Map *m)
 {
     char  *buf = NULL;
     size_t n   = 0;
@@ -1034,9 +721,9 @@ void test_ctl_cap(void)
     sandbox_leave(&sb);
 }
 
-void test_stamp_keys(void)
+void test_room_language(void)
 {
-    Sandbox sb = sandbox_enter("stampkeys");
+    Sandbox sb = sandbox_enter("roomlang");
     CHECK_EQ(sb.ok, 1);
     if (!sb.ok) return;
     Renderer r;
@@ -1044,181 +731,689 @@ void test_stamp_keys(void)
     rnd_init(&r);
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
-    CHECK(ctl_blank_map(&a, sb.dir, 12, 8));
-    if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
-    Map *m = a.map;
-
-    CASE("p with nothing in hand says how to get something");
-    press(&a, "p");
-    CHECK_EQ(a.ed.mode, ED_NORMAL);
-    CHECK(strstr(a.status, "nothing to paste") != NULL);
-
-    CASE("y copies the box; p shows it on the cursor without changing the map; p again puts it down");
-    map_set_tile(m, 1, 1, TILE_WATER);
-    map_set_vedge(m, 1, 1, EDGE_WALL);
-    a.ed.cx = 1; a.ed.cy = 1;
-    press(&a, "vly");
-    CHECK_EQ(a.ed.mode, ED_NORMAL);
-    CHECK(a.stamp && a.stamp->w == 2 && a.stamp->h == 1);
-    CHECK(strstr(a.status, "copied 2x1") != NULL);
-    int depth = a.undo.depth;
-    unsigned gen = m->gen;
-    press(&a, "p5l3j");
-    CHECK_EQ(a.ed.mode, ED_STAMP);
-    CHECK(a.ed.cx == 7 && a.ed.cy == 4);          /* vl left the cursor on C2 */
-    rnd_begin(&r);
-    app_draw(&a);                                   /* the preview draws, and goes */
-    CHECK_EQ(map_tile(m, 7, 4), TILE_FLOOR);
-    CHECK_EQ(m->gen, gen);
-    CHECK_EQ(a.undo.depth, depth);
-    press(&a, "p");
-    CHECK_EQ(a.ed.mode, ED_NORMAL);
-    CHECK_EQ(map_tile(m, 7, 4), TILE_WATER);
-    CHECK_EQ(map_vedge(m, 7, 4), EDGE_WALL);
-    CHECK_EQ(a.undo.depth, depth + 1);
-    CHECK(strstr(a.status, "stamped the copy 2x1 at H5") != NULL);
-    press(&a, "u");
-    CHECK_EQ(map_tile(m, 7, 4), TILE_FLOOR);
-
-    CASE("r and | turn and mirror the stamp in hand; enter places; esc puts it away placing nothing");
-    press(&a, "pr");
-    CHECK(a.stamp->w == 1 && a.stamp->h == 2);
-    CHECK(strstr(a.status, "turned 90") != NULL);
-    press(&a, "|");
-    CHECK(strstr(a.status, "mirrored") != NULL);
-    press(&a, "R");
-    CHECK(a.stamp->w == 2 && a.stamp->h == 1);
-    press(&a, "\r");
-    CHECK_EQ(a.ed.mode, ED_NORMAL);
-    CHECK_EQ(a.undo.depth, depth + 1);
-    depth = a.undo.depth;
-    press(&a, "p\x1b");
-    CHECK_EQ(a.ed.mode, ED_NORMAL);
-    CHECK_EQ(a.undo.depth, depth);
-
-    CASE("the readout is turned-then-mirrored whatever order the keys came in, as the channel applies it");
+    char path[700];
+    snprintf(path, sizeof path, "%s/void.vtt", sb.dir);
     {
-        Map *base = stamp_copy(a.stamp, 0, 0, a.stamp->w - 1, a.stamp->h - 1);
-        static const char *const seqs[] = { "pr|", "p|r", "p|rr|r", "prr|R" };
-        for (size_t i = 0; i < sizeof seqs / sizeof *seqs; i++) {
-            map_free(a.stamp);
-            a.stamp = stamp_copy(base, 0, 0, base->w - 1, base->h - 1);
-            a.stamp_turns = a.stamp_mirrored = 0;
-            press(&a, seqs[i]);
-            Map *t = stamp_turned(base, a.stamp_turns);
-            Map *want = a.stamp_mirrored ? stamp_mirrored(t) : stamp_copy(t, 0, 0, t->w - 1, t->h - 1);
-            char *x = stamp_text(a.stamp), *y = stamp_text(want);
-            CHECK_EQ(strcmp(x, y), 0);
-            free(x); free(y);
-            map_free(t); map_free(want);
-            press(&a, "\x1b");
-        }
-        map_free(a.stamp);
-        a.stamp = base;
-        a.stamp_turns = a.stamp_mirrored = 0;
+        Map *v = map_new(30, 20, "void");
+        char err[200];
+        mapio_write(v, path, err, sizeof err);
+        map_free(v);
     }
+    app_open_map(&a, path);
+    Map *m = a.map;
+    CHECK(m != NULL);
+    if (!m) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    char *t;
 
-    CASE(": over a stamp comes back to it: :J6 jumps it there");
-    press(&a, "p:J6\r");
-    CHECK_EQ(a.ed.mode, ED_STAMP);
-    CHECK(a.ed.cx == 9 && a.ed.cy == 5);
-    press(&a, ":\x1b");
-    CHECK_EQ(a.ed.mode, ED_STAMP);
-    press(&a, "\x1b");
+    CASE("room NAME REGION and room NAME SQUARE WxH draw and name");
+    t = ctl_ask(&a, "room Crypt B2 8x6\nroom Hall B12:E14\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    int ci = map_area_find(m, "Crypt");
+    CHECK(ci >= 0 && m->areas[ci].x0 == 1 && m->areas[ci].x1 == 8 && m->areas[ci].y1 == 6);
+    CHECK_EQ(map_vedge(m, 9, 3), EDGE_WALL);
+    CHECK(map_area_find(m, "Hall") >= 0);
 
-    CASE("a stamp that would run off the map is refused where it is, and the preview stays up");
-    a.ed.cx = 11; a.ed.cy = 7;
-    press(&a, "pp");
-    CHECK_EQ(a.ed.mode, ED_STAMP);
-    CHECK(strstr(a.status, "runs off the map") != NULL);
-    press(&a, "\x1b");
-
-    CASE(":stamp save keeps it, :stamp lists, :stamp NAME picks it up, -f puts it down at once");
-    press(&a, ":stamp save Pool\r");
-    CHECK(strstr(a.status, "stamp Pool kept") != NULL);
-    press(&a, ":stamp save ../x\r");
-    CHECK(strstr(a.status, "letters, digits") != NULL);
-    press(&a, ":stamp\r");
-    CHECK(strstr(a.status, "stamps: Pool") != NULL);
-    map_free(a.stamp);
-    a.stamp = NULL;
-    press(&a, ":stamp Pool\r");
-    CHECK_EQ(a.ed.mode, ED_STAMP);
-    CHECK(strstr(a.status, "Pool 2x1") != NULL);
-    press(&a, "\x1b");
-    a.ed.cx = 3; a.ed.cy = 6;
-    press(&a, ":stamp Pool -f\r");
-    CHECK_EQ(a.ed.mode, ED_NORMAL);
-    CHECK_EQ(map_tile(m, 3, 6), TILE_WATER);
-    CHECK(strstr(a.status, "stamped Pool 2x1 at D7") != NULL);
-    press(&a, ":stamp Nothing\r");
-    CHECK(strstr(a.status, "no stamp called Nothing") != NULL);
-    press(&a, ":stamp Pool now\r");
-    CHECK(strstr(a.status, ":stamp NAME, :stamp NAME -f") != NULL);
-
-    CASE("the agent: stamps lists them, stamp puts one down turned or mirrored, inside the request's one step");
-    char *t = ctl_ask(&a, "stamps\n");
-    CHECK_EQ(strcmp(t, "ok\nPool  2x1\n"), 0);
+    CASE("relative rooms: each side, gap, and the three alignments");
+    {
+        static const struct { const char *req; int x0, y0; } rel[] = {
+            { "room A 4x2 east of Crypt\n",               9, 3 },   /* middle of rows 1-6 */
+            { "room B 4x2 east of Crypt gap 2 top\n",    11, 1 },
+            { "room C 4x2 east of Crypt gap 7 bottom\n", 16, 5 },
+            { "room D 2x2 south of Crypt gap 1 right\n",  7, 8 },
+            { "room E 2x2 south of Crypt gap 1 left\n",   1, 8 },
+            { "room F 3x1 south of Crypt gap 1\n",        3, 8 },
+        };
+        for (size_t i = 0; i < sizeof rel / sizeof *rel; i++) {
+            t = ctl_ask(&a, rel[i].req);
+            CHECK(strncmp(t, "ok\n", 3) == 0);
+            if (strncmp(t, "ok\n", 3)) fprintf(stderr, "    %s -> %s", rel[i].req, t);
+            free(t);
+            char nm[2] = { (char)('A' + i), 0 };
+            int k = map_area_find(m, nm);
+            CHECK(k >= 0 && m->areas[k].x0 == rel[i].x0 && m->areas[k].y0 == rel[i].y0);
+            if (k >= 0 && (m->areas[k].x0 != rel[i].x0 || m->areas[k].y0 != rel[i].y0))
+                fprintf(stderr, "    %s at %d,%d\n", nm, m->areas[k].x0, m->areas[k].y0);
+        }
+        press(&a, "u");                                /* one at a time, back */
+    }
+    t = ctl_ask(&a, "room G 4x2 north of Crypt\n");
+    CHECK(strstr(t, "would run off the north side of the map") != NULL);
     free(t);
-    depth = a.undo.depth;
-    t = ctl_ask(&a, "stamp Pool J2 rotate 90\nstamp Pool A8 mirror\n");
-    CHECK(strncmp(t, "ok\nchanged", 10) == 0);
+    t = ctl_ask(&a, "room G 4x2 east of Crypt top\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
     free(t);
-    CHECK_EQ(a.undo.depth, depth + 1);
-    CHECK_EQ(map_tile(m, 9, 1), TILE_WATER);          /* turned: the water on top */
-    CHECK_EQ(map_hedge(m, 9, 1), EDGE_WALL);           /* its west wall is now its top */
-    CHECK_EQ(map_tile(m, 1, 7), TILE_WATER);           /* mirrored: the water on the right */
-    CHECK_EQ(map_vedge(m, 2, 7), EDGE_WALL);
-    t = ctl_ask(&a, "stamp Pool L8\n");
-    CHECK(strstr(t, "runs off the map") != NULL);
+    t = ctl_ask(&a, "room H 4x2 north of Crypt gap 0 top\n");
+    CHECK(strstr(t, "lines up left, middle or right") != NULL);
     free(t);
-    t = ctl_ask(&a, "stamp Pool B2 rotate 45\n");
-    CHECK(strstr(t, "stamp NAME SQUARE [rotate") != NULL);
+    t = ctl_ask(&a, "room I 4x2 east of Nowhere\n");
+    CHECK(strstr(t, "no room called Nowhere") != NULL);
     free(t);
-    t = ctl_ask(&a, "stamp Nope B2\n");
-    CHECK(strstr(t, "no stamp called Nope") != NULL);
+    t = ctl_ask(&a, "room C3 4x2 east of Crypt\n");
+    CHECK(strstr(t, "not a square") != NULL);
     free(t);
 
-    CASE("stamps are build mode's");
-    Key f2 = { KEY_F2, 0, 0 };
-    app_key(&a, f2);
-    press(&a, ":stamp Pool\r");
-    CHECK(strstr(a.status, "stamps are build mode's") != NULL);
+    CASE("door by side: the middle by default, a numbered square, a kind");
+    t = ctl_ask(&a, "door Crypt west\ndoor Crypt north 1 window\ndoor Crypt south 8 secret\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    CHECK_EQ(map_vedge(m, 1, 3), EDGE_DOOR_CLOSED);        /* 6 rows: the third */
+    CHECK_EQ(map_hedge(m, 1, 1), EDGE_WINDOW);
+    CHECK_EQ(map_hedge(m, 8, 7), EDGE_SECRET_CLOSED);
+    t = ctl_ask(&a, "door Crypt south 9\n");
+    CHECK(strstr(t, "1-8, from the left") != NULL);
+    free(t);
+
+    CASE("a name where a region goes is the area's box; where a creature goes, the free square nearest its middle");
+    t = ctl_ask(&a, "tile Hall water\ntoken add enemy Crypt \"Ghoul\"\ntoken add player Crypt size 2 \"Ogre\"\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    CHECK(map_tile(m, 1, 11) == TILE_WATER && map_tile(m, 4, 13) == TILE_WATER);
+    CHECK(m->tokens.v[0].x == 4 && m->tokens.v[0].y == 3);  /* 8x6 at B2: E4 */
+    CHECK(m->tokens.v[1].x >= 1 && m->tokens.v[1].x <= 7 && m->tokens.v[1].y >= 1 && m->tokens.v[1].y <= 5);
+    t = ctl_ask(&a, "tile J18 floor\narea Closet J18:J18\ntoken add enemy Closet \"A\"\ntoken add enemy Closet \"B\"\n");
+    CHECK(strstr(t, "error: line 4: no room in Closet for a 1x1 creature") != NULL);
+    free(t);
+    CHECK_EQ(map_area_find(m, "Closet"), -1);               /* rolled back with it */
+
+    CASE("a bare row is not a square; a mistyped room says it is neither");
+    t = ctl_ask(&a, "note 5 \"x\"\n");
+    CHECK(strstr(t, "5 is not a square on this map") != NULL);
+    free(t);
+    t = ctl_ask(&a, "token add enemy Cryptt \"X\"\n");
+    CHECK(strstr(t, "nor a room's name") != NULL);
+    free(t);
+
+    CASE("a note on a room goes on its middle square");
+    t = ctl_ask(&a, "note Crypt \"the lid is loose\"\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    CHECK(map_note_at(m, 4, 3) && !strcmp(map_note_at(m, 4, 3), "the lid is loose"));   /* B2:I7: E4 */
+
+    CASE("area NAME REGION names without drawing; area NAME off takes it off");
+    t = ctl_ask(&a, "area Nook J18:K19\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    CHECK_EQ(map_tile(m, 9, 17), TILE_VOID);
+    t = ctl_ask(&a, "area Nook off\n");
+    free(t);
+    CHECK_EQ(map_area_find(m, "Nook"), -1);
+    t = ctl_ask(&a, "area Nook off\n");
+    CHECK(strstr(t, "no area called Nook") != NULL);
+    free(t);
+
+    CASE("describe names rooms by their areas; marked says which area the cursor is in");
+    t = ctl_ask(&a, "describe\n");
+    CHECK(strstr(t, "room 1 Crypt (B2)") != NULL);
+    free(t);
+    a.ed.cx = 3; a.ed.cy = 3;
+    t = ctl_ask(&a, "marked\n");
+    CHECK(strstr(t, "cursor D4, in Crypt\n") != NULL);
+    free(t);
+    t = ctl_ask(&a, "dump\n");
+    CHECK(strstr(t, "\nareas\n  Crypt            B2:I7\n") != NULL);
+    free(t);
+
+    CASE(":area names the v box, jumps to one, lists them, takes one off; undoable");
+    a.ed.cx = 20; a.ed.cy = 15;
+    press(&a, "vll:area Ledge\r");
+    int li = map_area_find(m, "Ledge");
+    CHECK(li >= 0 && m->areas[li].x0 == 20 && m->areas[li].x1 == 22);
+    CHECK_EQ(a.status_gm, 1);
+    press(&a, "u");
+    CHECK_EQ(map_area_find(m, "Ledge"), -1);
+    press(&a, ":area Crypt\r");
+    CHECK(a.ed.cx == 1 && a.ed.cy == 1);
+    CHECK(strstr(a.status, "jumped to Crypt") != NULL);
+    press(&a, ":areas\r");
+    CHECK(strstr(a.status, "areas: Crypt B2:I7") != NULL);
+    press(&a, ":area Nowhere\r");
+    CHECK(strstr(a.status, "no area called Nowhere") != NULL);
+    press(&a, ":area Hall off\r");
+    CHECK_EQ(map_area_find(m, "Hall"), -1);
 
     app_free(&a);
     rnd_free(&r);
-    char cmd[1200];
+    sandbox_leave(&sb);
+}
+
+void test_corridors(void)
+{
+    Sandbox sb = sandbox_enter("corridor");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    char path[700];
+    snprintf(path, sizeof path, "%s/void.vtt", sb.dir);
+    {
+        Map *v = map_new(30, 20, "void");
+        char err[200];
+        mapio_write(v, path, err, sizeof err);
+        map_free(v);
+    }
+    app_open_map(&a, path);
+    Map *m = a.map;
+    if (!m) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    char *t;
+    t = ctl_ask(&a, "room A B2 4x4\nroom B 4x4 east of A gap 3\nroom C 4x4 south of A gap 4 left\n"
+                    "room D 4x4 east of C gap 5\nroom E 2x2 east of B gap 0\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+
+    CASE("straight across: floor between, walls along, a door at each end");
+    t = ctl_ask(&a, "corridor A B\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    /* A is B2:E5 (x 1-4, y 1-4), B x 8-11: the corridor x 5-7 on the middle row y 2. */
+    for (int x = 5; x <= 7; x++) {
+        CHECK_EQ(map_tile(m, x, 2), TILE_FLOOR);
+        CHECK_EQ(map_hedge(m, x, 2), EDGE_WALL);
+        CHECK_EQ(map_hedge(m, x, 3), EDGE_WALL);
+    }
+    CHECK_EQ(map_vedge(m, 5, 2), EDGE_DOOR_CLOSED);
+    CHECK_EQ(map_vedge(m, 8, 2), EDGE_DOOR_CLOSED);
+
+    CASE("straight down, two wide: open ends");
+    t = ctl_ask(&a, "corridor A C width 2\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    for (int y = 5; y <= 8; y++) {
+        CHECK(map_tile(m, 2, y) == TILE_FLOOR && map_tile(m, 3, y) == TILE_FLOOR);
+        CHECK(map_vedge(m, 2, y) == EDGE_WALL && map_vedge(m, 4, y) == EDGE_WALL);
+    }
+    CHECK(map_hedge(m, 2, 5) == EDGE_NONE && map_hedge(m, 3, 5) == EDGE_NONE);
+    CHECK(map_hedge(m, 2, 9) == EDGE_NONE && map_hedge(m, 3, 9) == EDGE_NONE);
+
+    CASE("rooms already sharing a wall: only the doorway");
+    int depth = a.undo.depth;
+    t = ctl_ask(&a, "corridor B E\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    CHECK_EQ(a.undo.depth, depth + 1);
+    int bi = map_area_find(m, "B");
+    CHECK_EQ(map_vedge(m, m->areas[bi].x1 + 1, m->areas[map_area_find(m, "E")].y0), EDGE_DOOR_CLOSED);
+
+    CASE("one bend for rooms apart both ways: out of the side, along, and in");
+    t = ctl_ask(&a, "room P Q8 2x2\nroom Q X14 2x2\ncorridor P Q\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    if (strncmp(t, "ok\n", 3)) fprintf(stderr, "    %s", t);
+    free(t);
+    /* P x 16-17 y 7-8, Q x 23-24 y 13-14: along row 7 from x 18 to 23,
+     * then down column 23 to row 12. */
+    CHECK(map_tile(m, 18, 7) == TILE_FLOOR && map_tile(m, 23, 7) == TILE_FLOOR && map_tile(m, 23, 12) == TILE_FLOOR);
+    CHECK_EQ(map_tile(m, 22, 8), TILE_VOID);
+    CHECK_EQ(map_vedge(m, 18, 7), EDGE_DOOR_CLOSED);
+    CHECK_EQ(map_hedge(m, 23, 13), EDGE_DOOR_CLOSED);
+    CHECK(map_hedge(m, 20, 7) == EDGE_WALL && map_hedge(m, 20, 8) == EDGE_WALL);
+    CHECK(map_vedge(m, 24, 7) == EDGE_WALL && map_hedge(m, 23, 7) == EDGE_WALL);
+    CHECK(map_vedge(m, 23, 10) == EDGE_WALL && map_vedge(m, 24, 10) == EDGE_WALL);
+    CHECK_EQ(map_hedge(m, 23, 8), EDGE_NONE);                /* the bend is open inside */
+
+    CASE("when the first way round is blocked, the bend goes the other way");
+    t = ctl_ask(&a, "room R B18 2x2\nroom S H14 2x2\ntile C14:G15 floor\ncorridor R S\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    if (strncmp(t, "ok\n", 3)) fprintf(stderr, "    %s", t);
+    free(t);
+
+    CASE("refused whole: through ground, through a named room, too little shared, overlapping");
+    char *before = ctl_snapshot(m);
+    t = ctl_ask(&a, "room G S2 2x2\nroom K 2x2 south of G gap 6\ntile S5:T6 floor\ncorridor G K\n");
+    CHECK(strstr(t, "error: line 4: it would cross ground already at") != NULL);
+    free(t);
+    t = ctl_ask(&a, "room G S2 2x2\nroom K 2x2 south of G gap 6\narea Pit S5:T6\ncorridor G K\n");
+    CHECK(strstr(t, "it would cut through Pit at") != NULL);
+    free(t);
+    t = ctl_ask(&a, "room G S2 2x2\nroom K S9 2x2\ncorridor G K width 3\n");
+    CHECK(strstr(t, "share fewer than 3 columns") != NULL);
+    free(t);
+    t = ctl_ask(&a, "area Big A1:Z5\ncorridor A Big\n");
+    CHECK(strstr(t, "overlap") != NULL);
+    free(t);
+    t = ctl_ask(&a, "corridor A A\n");
+    CHECK(strstr(t, "a corridor joins two rooms") != NULL);
+    free(t);
+    char *after = ctl_snapshot(m);
+    free(before);
+    free(after);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
+void test_corridor_edges(void)
+{
+    Sandbox sb = sandbox_enter("corridor2");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    char path[700];
+    snprintf(path, sizeof path, "%s/void.vtt", sb.dir);
+    {
+        Map *v = map_new(30, 30, "void");
+        char err[200];
+        mapio_write(v, path, err, sizeof err);
+        map_free(v);
+    }
+    app_open_map(&a, path);
+    Map *m = a.map;
+    if (!m) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    char *t;
+
+    CASE("a corridor running past a room keeps that room's doors and windows");
+    t = ctl_ask(&a, "room Ka B2 3x3\nroom Kb 3x3 east of Ka gap 3\nroom Kc E4 3x1\ndoor Kc north 2\ndoor Kc north 3 window\n"
+                    "corridor Ka Kb\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    if (strncmp(t, "ok\n", 3)) fprintf(stderr, "    %s", t);
+    free(t);
+    {
+        int kc = map_area_find(m, "Kc");
+        if (kc >= 0) {
+            CHECK_EQ(map_hedge(m, m->areas[kc].x0 + 1, m->areas[kc].y0), EDGE_DOOR_CLOSED);
+            CHECK_EQ(map_hedge(m, m->areas[kc].x0 + 2, m->areas[kc].y0), EDGE_WINDOW);
+        }
+    }
+
+    CASE("a bend is never wider than the sides it leaves and enters; the changed area is the corridor's");
+    t = ctl_ask(&a, "room Na B10 4x4\nroom Nb L17 1x2\n");     /* Nb is one wide and two tall */
+    free(t);
+    char *snap = ctl_snapshot(m);
+    t = ctl_ask(&a, "corridor Na Nb width 3\n");
+    CHECK(strstr(t, "too narrow for a bend 3 wide") != NULL);
+    free(t);
+    t = ctl_ask(&a, "corridor Na Nb width 2\n");            /* down first: Na's four, Nb's two */
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    press(&a, "u");
+    char *snap2 = ctl_snapshot(m);
+    CHECK_EQ(strcmp(snap, snap2), 0);
+    free(snap); free(snap2);
+    t = ctl_ask(&a, "corridor Na Nb\n");
+    CHECK(strstr(t, "ok\nchanged ") != NULL);
+    free(t);
+
+    CASE("an area holding both rooms whole is no obstacle, and the rooms keep their own names");
+    t = ctl_ask(&a, "room Ha B24 2x2\nroom Hb 2x2 east of Ha gap 3\narea Floor A23:Z27\ncorridor Ha Hb\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    if (strncmp(t, "ok\n", 3)) fprintf(stderr, "    %s", t);
+    free(t);
+    {
+        int ha = map_area_find(m, "Ha");
+        CHECK(ha >= 0 && map_area_at(m, m->areas[ha].x0, m->areas[ha].y0) == ha);
+    }
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
+void test_apply(void)
+{
+    Sandbox sb = sandbox_enter("apply");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    char vtt[] = "./vtt";
+    CHECK(access(vtt, X_OK) == 0);
+    char plan[700], map[700], cmd[2400];
+    snprintf(plan, sizeof plan, "%s/plan.txt", sb.dir);
+    snprintf(map, sizeof map, "%s/crypt.vtt", sb.dir);
+    FILE *f = fopen(plan, "w");
+    fputs("# a crypt\nroom Crypt B2 8x6\nroom Vault 6x4 east of Crypt gap 3\n"
+          "room Well 4x3 south of Crypt gap 2 left\ncorridor Crypt Vault\ncorridor Crypt Well width 2\n"
+          "door Crypt north middle window\ntoken add enemy Vault \"Ghoul\"\n"
+          "token add player Crypt size 2 \"Aria\"\ntile Well water\n", f);
+    fclose(f);
+
+    CASE("--apply: a new map from a plan, saved; the result as the golden has it");
+    snprintf(cmd, sizeof cmd, "%s '%s' --apply '%s' > /dev/null 2>&1", vtt, map, plan);
+    CHECK_EQ(WEXITSTATUS(system(cmd)), 2);                 /* not there, and no --new */
+    snprintf(cmd, sizeof cmd, "%s '%s' --apply '%s' --new 30x18 > /dev/null", vtt, map, plan);
+    CHECK_EQ(WEXITSTATUS(system(cmd)), 0);
+    char err[256];
+    Map *m = mapio_load(map, err, sizeof err);
+    CHECK(m != NULL);
+    if (m) {
+        size_t n;
+        char *txt = tool_text(m, 0, 0, m->w - 1, m->h - 1, &n);
+        golden_bytes("apply-crypt", txt, n);
+        free(txt);
+        CHECK_EQ(m->nareas, 3);
+        map_free(m);
+    }
+
+    CASE("docs/AGENTS.md's example plan applies, and checks clean");
+    {
+        FILE *doc = fopen("docs/AGENTS.md", "r");
+        CHECK(doc != NULL);
+        char line[512], ex[700];
+        snprintf(ex, sizeof ex, "%s/guide.txt", sb.dir);
+        FILE *out = fopen(ex, "w");
+        int in = 0, lines = 0;
+        while (doc && out && fgets(line, sizeof line, doc)) {
+            if (!in && !strncmp(line, "   # The drowned crypt", 22)) in = 1;
+            else if (in && !strncmp(line, "   ```", 6)) break;
+            if (in) { fputs(line + 3, out); lines++; }
+        }
+        if (doc) fclose(doc);
+        if (out) fclose(out);
+        CHECK(lines > 5);
+        char gm[700];
+        snprintf(gm, sizeof gm, "%s/guide.vtt", sb.dir);
+        snprintf(cmd, sizeof cmd, "%s '%s' --apply '%s' --new 40x24 > /dev/null", vtt, gm, ex);
+        CHECK_EQ(WEXITSTATUS(system(cmd)), 0);
+        snprintf(cmd, sizeof cmd, "%s '%s' --check > /dev/null", vtt, gm);
+        CHECK_EQ(WEXITSTATUS(system(cmd)), 0);
+    }
+
+    CASE("--apply over a newer autosave works on the file as saved, and says so");
+    {
+        char as[800], ep[700];
+        snprintf(as, sizeof as, "%s.autosave", map);
+        snprintf(cmd, sizeof cmd, "cp '%s' '%s' && touch -d '+1 minute' '%s'", map, as, as);
+        CHECK_EQ(system(cmd), 0);
+        snprintf(ep, sizeof ep, "%s/one.txt", sb.dir);
+        f = fopen(ep, "w");
+        fputs("note A1 \"x\"\n", f);
+        fclose(f);
+        snprintf(cmd, sizeof cmd, "%s '%s' --apply '%s' > /dev/null 2>&1", vtt, map, ep);
+        CHECK_EQ(WEXITSTATUS(system(cmd)), 0);
+        unlink(as);
+    }
+
+    CASE("--new with a failing plan leaves no file behind");
+    {
+        char nm[700], bp[700];
+        snprintf(nm, sizeof nm, "%s/never.vtt", sb.dir);
+        snprintf(bp, sizeof bp, "%s/bad.txt", sb.dir);
+        f = fopen(bp, "w");
+        fputs("room A Z99 2x2\n", f);
+        fclose(f);
+        snprintf(cmd, sizeof cmd, "%s '%s' --apply '%s' --new 10x10 > /dev/null 2>&1", vtt, nm, bp);
+        CHECK_EQ(WEXITSTATUS(system(cmd)), 1);
+        CHECK(access(nm, F_OK) != 0);
+    }
+
+    CASE("--apply: a failing plan changes nothing and saves nothing (exit 1)");
+    struct stat st0, st1;
+    stat(map, &st0);
+    f = fopen(plan, "w");
+    fputs("tile Crypt hazard\ntoken add enemy Z99 \"X\"\n", f);
+    fclose(f);
+    snprintf(cmd, sizeof cmd, "%s '%s' --apply '%s' > /dev/null 2>&1", vtt, map, plan);
+    CHECK_EQ(WEXITSTATUS(system(cmd)), 1);
+    stat(map, &st1);
+    CHECK(st0.st_mtime == st1.st_mtime && st0.st_size == st1.st_size);
+    m = mapio_load(map, err, sizeof err);
+    CHECK(m && map_tile(m, 1, 1) == TILE_FLOOR);
+    map_free(m);
+
     snprintf(cmd, sizeof cmd, "rm -rf '%s'", sb.dir);
     sandbox_leave(&sb);
     if (system(cmd) != 0) { }
 }
 
-void test_gray_marker(void)
+void test_ctl_live(void)
 {
-    CASE("a marker saved as grey loads as gray and is written as gray");
-    CHECK(status_color_from_name("grey") >= 0);
-    CHECK_EQ(status_color_from_name("grey"), status_color_from_name("gray"));
-    CHECK_EQ(strcmp(status_color_name((uint8_t)status_color_from_name("grey")), "gray"), 0);
+    Sandbox sb = sandbox_enter("ctl");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    char saved_rt[1024] = "";
+    const char *rt = getenv("XDG_RUNTIME_DIR");
+    if (rt) str_lcpy(saved_rt, rt, sizeof saved_rt);
+    setenv("XDG_RUNTIME_DIR", sb.dir, 1);
 
-    char path[] = "/tmp/vtt-test-XXXXXX";
-    int  fd = mkstemp(path);
-    if (fd >= 0) close(fd);
-    write_file(path, "VTT 3\nsize 2 1\ntiles\n..\nvedges\n\nhedges\n\n\n"
-                     "token player 0 0 1 \"Aria\"\ntokenstatus grey \"Hidden\"\n");
-    char err[MAPIO_ERR_MAX] = { 0 };
-    Map *m = mapio_load(path, err, sizeof err);
-    CHECK(m != NULL);
-    if (m) {
-        CHECK_EQ(m->tokens.n, 1);
-        CHECK_EQ(m->tokens.v[0].nstatus, 1);
-        CHECK_EQ(m->tokens.v[0].status[0].color, status_color_from_name("gray"));
-        CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
-        map_free(m);
-        FILE *f = fopen(path, "r");
-        char buf[512] = { 0 };
-        if (f) { if (fread(buf, 1, sizeof buf - 1, f) == 0) buf[0] = 0; fclose(f); }
-        CHECK(strstr(buf, "tokenstatus gray \"Hidden\"") != NULL);
-        CHECK(strstr(buf, "grey") == NULL);
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+    app_open_map(&a, "tests/fixtures/two-rooms.vtt");
+
+    CASE("a directory open to others is refused, and nothing listens");
+    char dir[600];
+    snprintf(dir, sizeof dir, "%s/vtt", sb.dir);
+    mkdir(dir, 0755);
+    chmod(dir, 0755);
+    press(&a, ":agent on\r");
+    CHECK(strstr(a.status, "not this user's alone") != NULL);
+    CHECK_EQ(ctl_active(&a.ctl), 0);
+    chmod(dir, 0700);
+
+    CASE(":agent on listens at <dir>/<pid>.sock, only for this user");
+    press(&a, ":agent on\r");
+    CHECK_EQ(ctl_active(&a.ctl), 1);
+    char want[700];
+    snprintf(want, sizeof want, "%s/%ld.sock", dir, (long)getpid());
+    CHECK_EQ(strcmp(a.ctl.path, want), 0);
+    struct stat st;
+    CHECK(stat(want, &st) == 0 && S_ISSOCK(st.st_mode) && (st.st_mode & 077) == 0);
+    CHECK(strstr(a.status, "agent channel on") != NULL);
+
+    CASE("a request over the socket: written, shut, answered, closed");
+    {
+        CtlReader rd = { ctl_raw_connect(a.ctl.path), "", 0, 0 };
+        CHECK(rd.fd >= 0);
+        CHECK(write(rd.fd, "status\n", 7) == 7);
+        shutdown(rd.fd, SHUT_WR);
+        ctl_pump(&a, ctl_read_some, &rd);
+        CHECK_EQ(rd.done, 1);
+        CHECK(strncmp(rd.buf, "ok\nmap Two Rooms", 16) == 0);
+        close(rd.fd);
+        CHECK_EQ(a.ctl.requests, 1u);
+        CHECK_EQ(a.ctl.nc, 0);
     }
-    unlink(path);
+
+    CASE("an answer too big for the socket's buffer goes out in pieces");
+    {
+        CtlReader rd = { ctl_raw_connect(a.ctl.path), "", 0, 0 };
+        /* Forty dumps of the whole map: far past what one send takes. */
+        char req[400] = "";
+        for (int i = 0; i < 40; i++) strcat(req, "dump\n");
+        CHECK(write(rd.fd, req, strlen(req)) == (ssize_t)strlen(req));
+        shutdown(rd.fd, SHUT_WR);
+        size_t total = 0;
+        int    got_ok = 0, spins = 0;
+        while (spins++ < 400) {
+            struct pollfd fds[1 + CTL_MAX_CONN];
+            int n = ctl_pollfds(&a.ctl, fds, 1 + CTL_MAX_CONN);
+            poll(fds, (nfds_t)n, 5);
+            uint64_t now = prof_now_ns() / 1000000u;
+            ctl_service(&a.ctl, fds, n, now);
+            app_tick(&a, now);
+            char chunk[65536];
+            ssize_t k;
+            while ((k = recv(rd.fd, chunk, sizeof chunk, MSG_DONTWAIT)) > 0) {
+                if (!total) got_ok = !strncmp(chunk, "ok\n", 3);
+                total += (size_t)k;
+            }
+            if (k == 0) break;
+        }
+        CHECK_EQ(got_ok, 1);
+        CHECK(total > 40000);
+        close(rd.fd);
+        CHECK_EQ(a.ctl.nc, 0);
+    }
+
+    CASE("a request over 64 KB is answered with why, not run");
+    {
+        CtlReader rd = { ctl_raw_connect(a.ctl.path), "", 0, 0 };
+        fcntl(rd.fd, F_SETFL, fcntl(rd.fd, F_GETFL) | O_NONBLOCK);
+        char *big = malloc(CTL_REQ_CAP + 100);
+        memset(big, '#', CTL_REQ_CAP + 100);
+        /* Written as the server takes it: the socket buffer is smaller
+         * than the request. */
+        size_t off = 0;
+        for (int spin = 0; spin < 400 && off < CTL_REQ_CAP + 100; spin++) {
+            ssize_t k = write(rd.fd, big + off, CTL_REQ_CAP + 100 - off);
+            if (k > 0) off += (size_t)k;
+            struct pollfd fds[1 + CTL_MAX_CONN];
+            int n = ctl_pollfds(&a.ctl, fds, 1 + CTL_MAX_CONN);
+            poll(fds, (nfds_t)n, 5);
+            ctl_service(&a.ctl, fds, n, prof_now_ns() / 1000000u);
+        }
+        free(big);
+        CHECK_EQ(off, (size_t)CTL_REQ_CAP + 100);    /* the server kept reading */
+        shutdown(rd.fd, SHUT_WR);
+        fcntl(rd.fd, F_SETFL, fcntl(rd.fd, F_GETFL) & ~O_NONBLOCK);
+        ctl_pump(&a, ctl_read_some, &rd);
+        CHECK_EQ(strcmp(rd.buf, "error: the request is over 64 KB\n"), 0);
+        CHECK_EQ(rd.reset, 0);
+        close(rd.fd);
+    }
+
+    CASE("past four connections, the next is closed at once; a silent one is dropped at the deadline");
+    {
+        int fd[CTL_MAX_CONN + 1];
+        for (int i = 0; i <= CTL_MAX_CONN; i++) fd[i] = ctl_raw_connect(a.ctl.path);
+        uint32_t dropped = a.ctl.dropped;
+        struct pollfd fds[1 + CTL_MAX_CONN];
+        int n = ctl_pollfds(&a.ctl, fds, 1 + CTL_MAX_CONN);
+        poll(fds, (nfds_t)n, 5);
+        uint64_t now = prof_now_ns() / 1000000u;
+        ctl_service(&a.ctl, fds, n, now);
+        CHECK_EQ(a.ctl.nc, CTL_MAX_CONN);
+        CHECK_EQ(a.ctl.dropped, dropped + 1);
+        CHECK(ctl_due(&a.ctl, now) > CTL_TIMEOUT_MS - 1000);
+        /* Nothing ready; only the clock has moved. */
+        memset(fds, 0, sizeof fds);
+        fds[0].fd = a.ctl.listen_fd;
+        ctl_service(&a.ctl, fds, 1, now + CTL_TIMEOUT_MS);
+        CHECK_EQ(a.ctl.nc, 0);
+        CHECK_EQ(ctl_due(&a.ctl, now), -1);
+        for (int i = 0; i <= CTL_MAX_CONN; i++) close(fd[i]);
+    }
+
+    CASE("vtt --ctl: finds the one vtt, prints the report, exits 0; 1 on an error");
+    {
+        char out[700];
+        snprintf(out, sizeof out, "%s/ctl-out.txt", sb.dir);
+        for (int round = 0; round < 2; round++) {
+            fflush(stdout);
+            pid_t pid = fork();
+            if (pid == 0) {
+                int o = open(out, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+                dup2(o, 1);
+                dup2(o, 2);
+                int rc = ctl_client_main(round ? "bogus" : "status", 0);
+                fflush(stdout);
+                _exit(rc);
+            }
+            int stc[3] = { (int)pid, 0, 0 };
+            ctl_pump(&a, ctl_child_done, stc);
+            CHECK_EQ(stc[1], 1);
+            CHECK(WIFEXITED(stc[2]) && WEXITSTATUS(stc[2]) == round);
+            FILE *f = fopen(out, "r");
+            char  text[512] = "";
+            size_t k = f ? fread(text, 1, sizeof text - 1, f) : 0;
+            text[k] = '\0';
+            if (f) fclose(f);
+            if (!round) CHECK(strncmp(text, "map Two Rooms", 13) == 0);
+            else        CHECK(strstr(text, "vtt: error: line 1: unknown request bogus") != NULL);
+        }
+        unlink(out);
+    }
+
+    CASE("vtt --ctl with a request over 64 KB, or far past the socket's buffer: the answer says why, exit 1");
+    for (int round = 0; round < 2; round++) {
+        size_t big = round ? 300 * 1024 : CTL_REQ_CAP + 5000;
+        char  *req = malloc(big + 1);
+        memset(req, '#', big);
+        req[big] = '\0';
+        char out[700];
+        snprintf(out, sizeof out, "%s/ctl-big.txt", sb.dir);
+        fflush(stdout);
+        pid_t pid = fork();
+        if (pid == 0) {
+            int o = open(out, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+            dup2(o, 2);
+            int rc = ctl_client_main(req, 0);
+            _exit(rc);
+        }
+        int stc[3] = { (int)pid, 0, 0 };
+        ctl_pump(&a, ctl_child_done, stc);
+        CHECK(WIFEXITED(stc[2]) && WEXITSTATUS(stc[2]) == 1);
+        FILE *f = fopen(out, "r");
+        char  text[256] = "";
+        size_t k = f ? fread(text, 1, sizeof text - 1, f) : 0;
+        text[k] = '\0';
+        if (f) fclose(f);
+        CHECK(strstr(text, "the request is over 64 KB") != NULL);
+        unlink(out);
+        free(req);
+    }
+
+    CASE("--ctl will not talk through a directory that is not this user's alone");
+    {
+        chmod(dir, 0755);
+        fflush(stdout);
+        pid_t pid = fork();
+        if (pid == 0) {
+            int o = open("/dev/null", O_WRONLY);
+            dup2(o, 2);
+            _exit(ctl_client_main("status", 0));
+        }
+        int stc = 0;
+        waitpid(pid, &stc, 0);
+        CHECK(WIFEXITED(stc) && WEXITSTATUS(stc) == 2);
+        CHECK(access(want, F_OK) == 0);            /* and removed nothing */
+        chmod(dir, 0700);
+    }
+
+    CASE(":agent off closes it and removes the socket; --ctl then finds nobody (exit 2)");
+    press(&a, ":agent off\r");
+    CHECK_EQ(ctl_active(&a.ctl), 0);
+    CHECK(access(want, F_OK) != 0);
+    {
+        fflush(stdout);
+        pid_t pid = fork();
+        if (pid == 0) {
+            int o = open("/dev/null", O_WRONLY);
+            dup2(o, 2);
+            _exit(ctl_client_main("status", 0));
+        }
+        int stc = 0;
+        waitpid(pid, &stc, 0);
+        CHECK(WIFEXITED(stc) && WEXITSTATUS(stc) == 2);
+    }
+
+    CASE("a socket file nobody answers on is a crashed vtt's, and --ctl removes it");
+    {
+        char stale[700];
+        snprintf(stale, sizeof stale, "%s/99999999.sock", dir);
+        int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+        struct sockaddr_un sa;
+        memset(&sa, 0, sizeof sa);
+        sa.sun_family = AF_UNIX;
+        str_lcpy(sa.sun_path, stale, sizeof sa.sun_path);
+        CHECK(bind(fd, (struct sockaddr *)&sa, sizeof sa) == 0);
+        close(fd);                             /* bound, never listened: refused */
+        CHECK(access(stale, F_OK) == 0);
+        fflush(stdout);
+        pid_t pid = fork();
+        if (pid == 0) {
+            int o = open("/dev/null", O_WRONLY);
+            dup2(o, 2);
+            _exit(ctl_client_main("status", 0));
+        }
+        int stc = 0;
+        waitpid(pid, &stc, 0);
+        CHECK(WIFEXITED(stc) && WEXITSTATUS(stc) == 2);
+        CHECK(access(stale, F_OK) != 0);
+    }
+
+    app_free(&a);
+    rnd_free(&r);
+    rmdir(dir);
+    if (saved_rt[0]) setenv("XDG_RUNTIME_DIR", saved_rt, 1);
+    else             unsetenv("XDG_RUNTIME_DIR");
+    sandbox_leave(&sb);
+    rmdir(sb.dir);
 }

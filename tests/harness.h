@@ -96,22 +96,22 @@ typedef struct {
 
 typedef struct { int fd; char buf[8192]; size_t n; int done, reset; } CtlReader;
 
-/* ------------------------------------------------------ shared data */
+/* ------------------------------------------------------------ map tools */
 
-extern const WireSink WC_SINK;
+/* What a map tool printed, as a string the caller frees. */
+typedef void (*DumpFn)(FILE *out, const Map *m, int x0, int y0, int x1, int y1);
 
 /* --------------------------------------------------- shared helpers */
 
 void feed(InputParser *p, const char *s);
-void write_file(const char *path, const char *text);
 void golden_bytes(const char *name, const char *data, size_t len);
 void golden(const char *name, int w, int h, const char *map_path,
             const char *const *segments, int nsegments, int ascii);
 void write_map_file(const char *dir, const char *name);
-int file_exists(const char *dir, const char *name);
 void press(App *a, const char *keys);
 Sandbox sandbox_enter(const char *tag);
 void sandbox_leave(Sandbox *s);
+double luminance(uint32_t c);
 double contrast(uint32_t a, uint32_t b);
 char *slurp(const char *path);
 char *tool_text(const Map *m, int x0, int y0, int x1, int y1, size_t *len);
@@ -119,16 +119,10 @@ int json_valid(const char *s);
 char *describe_text(const Map *m, int json, size_t *len);
 int net_connect(uint16_t port);
 void net_pump(Net *n, uint64_t now_ms);
-int net_recv_until(Net *n, int fd, WireDec *d, WireCatch *c, int ends, uint64_t now_ms);
 void front_text(const Renderer *r, ByteBuf *out);
+void write_sight_map(const char *dir, const char *name, int reveal, int memory);
 char *ctl_ask(App *a, const char *req);
-char *stamp_text(const Map *m);
-Map *stamp_fixture(void);
-void ctl_pump(App *a, int (*until)(void *), void *ctx);
-int ctl_raw_connect(const char *path);
-int ctl_read_some(void *ctx);
-int ctl_child_done(void *ctx);
-char *ctl_snapshot(const Map *m);
+int ctl_blank_map(App *a, const char *dir, int w, int h);
 
 /* ------------------------------------------------------------ suites */
 

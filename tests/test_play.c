@@ -1,6 +1,752 @@
-/* Tests: play mode: covering, sizes, selection, groups, the brush, the cursor, occupancy, terrain, coordinates, shapes, the key tables, cycling and searching. */
+/* Tests: play mode: creatures, the cursor, groups, occupancy, keys and the ? page, cycling, markers, counters, notes, the trail. */
 
 #include "harness.h"
+
+/* ------------------------------------------------------------------ play */
+
+void test_play(void)
+{
+    Map *m = map_new(12, 10, "play");
+    map_fill_tiles(m, 0, 0, 11, 9, TILE_FLOOR);
+
+    Undo u;
+    undo_init(&u);
+    Play p;
+    play_init(&p);
+
+    CASE("play starts with nothing selected and walls enforced");
+    CHECK_EQ(p.sel, -1);
+    CHECK_EQ(p.enforce_walls, 1);
+    CHECK_EQ(p.next_size, 1);
+
+    Token a = { 2, 2, 1, TOKEN_PLAYER, "Aria" };
+    int ai = undo_add_token(&u, m, a);
+
+    CASE("a 1x1 token moves freely on open floor");
+    play_focus(&p, ai);
+    CHECK_EQ(play_step(m, &u, &p, 1, 0), 1);
+    CHECK_EQ(m->tokens.v[ai].x, 3);
+    CHECK_EQ(p.steps, 1);
+    CHECK_EQ(play_step(m, &u, &p, 0, 1), 1);
+    CHECK_EQ(p.steps, 2);
+
+    CASE("a wall stops it, and the step is not counted");
+    map_set_vedge(m, 4, 3, EDGE_WALL);
+    int before = p.steps;
+    CHECK_EQ(play_step(m, &u, &p, 1, 0), 0);
+    CHECK_EQ(m->tokens.v[ai].x, 3);
+    CHECK_EQ(p.steps, before);
+
+    /* Rules-agnostic means the GM can always overrule the map. */
+    CASE("blocking can be switched off");
+    p.enforce_walls = 0;
+    CHECK_EQ(play_step(m, &u, &p, 1, 0), 1);
+    CHECK_EQ(m->tokens.v[ai].x, 4);
+    p.enforce_walls = 1;
+    map_set_vedge(m, 4, 3, EDGE_NONE);
+
+    CASE("the map edge stops a token even with walls off");
+    p.enforce_walls = 0;
+    m->tokens.v[ai].x = 0;
+    m->tokens.v[ai].y = 0;
+    CHECK_EQ(play_step(m, &u, &p, -1, 0), 0);
+    CHECK_EQ(play_step(m, &u, &p, 0, -1), 0);
+    p.enforce_walls = 1;
+
+    /* A big token has to be stopped by a wall anywhere along its leading
+     * face, not only the one tile the anchor happens to sit on. */
+    CASE("a 2x2 token is blocked by a wall on any part of its face");
+    Token big = { 4, 4, 2, TOKEN_ENEMY, "Ogre" };
+    int bi = undo_add_token(&u, m, big);
+    play_focus(&p, bi);
+    CHECK_EQ(token_can_move(m, &m->tokens.v[bi], 1, 0, 1, bi), 1);
+    map_set_vedge(m, 6, 5, EDGE_WALL);        /* the token's lower-right face */
+    CHECK_EQ(token_can_move(m, &m->tokens.v[bi], 1, 0, 1, bi), 0);
+    CHECK_EQ(play_step(m, &u, &p, 1, 0), 0);
+    map_set_vedge(m, 6, 5, EDGE_WALL * 0);
+
+    CHECK_EQ(token_can_move(m, &m->tokens.v[bi], 0, 1, 1, bi), 1);
+    map_set_hedge(m, 5, 6, EDGE_WALL);        /* below its right-hand column */
+    CHECK_EQ(token_can_move(m, &m->tokens.v[bi], 0, 1, 1, bi), 0);
+    map_set_hedge(m, 5, 6, EDGE_NONE);
+
+    CASE("a big token needs its whole footprint on the map");
+    m->tokens.v[bi].x = 10;
+    CHECK_EQ(token_can_move(m, &m->tokens.v[bi], 1, 0, 1, bi), 0);
+    m->tokens.v[bi].x = 4;
+
+    CASE("void tiles stop a token like a wall does");
+    map_set_tile(m, 6, 4, TILE_VOID);
+    CHECK_EQ(token_can_move(m, &m->tokens.v[bi], 1, 0, 1, bi), 0);
+    map_set_tile(m, 6, 4, TILE_FLOOR);
+
+    CASE("placement checks the footprint fits");
+    CHECK_EQ(play_can_place(m, 11, 9, 1, -1), 1);
+    CHECK_EQ(play_can_place(m, 11, 9, 2, -1), 0);
+    CHECK_EQ(play_can_place(m, 10, 8, 2, -1), 1);
+    CHECK_EQ(play_can_place(m, -1, 0, 1, -1), 0);
+
+    /* Aria is parked on 0,0 from the edge test above, and the ogre's 2x2 sits
+     * at 4,4. A stack of tokens is a stack nobody can see into. */
+    CASE("placement also checks the square is free");
+    CHECK_EQ(play_can_place(m, 0, 0, 1, -1), 0);
+    CHECK_EQ(play_can_place(m, 4, 4, 1, -1), 0);
+    CHECK_EQ(play_can_place(m, 5, 5, 1, -1), 0);    /* the far corner of the 2x2 */
+    CHECK_EQ(play_can_place(m, 3, 3, 2, -1), 0);    /* only its corner overlaps */
+    CHECK_EQ(play_can_place(m, 6, 6, 1, -1), 1);
+
+    CASE("a token may grow where it already stands");
+    CHECK_EQ(play_can_place(m, 4, 4, 3, -1), 0);
+    CHECK_EQ(play_can_place(m, 4, 4, 3, bi), 1);
+
+    CASE("cycling wraps in both directions");
+    play_focus(&p, -1);
+    play_cycle(&p, m, 1, PLAY_ANY_KIND);
+    CHECK_EQ(p.sel, 0);
+    play_cycle(&p, m, 1, PLAY_ANY_KIND);
+    CHECK_EQ(p.sel, 1);
+    play_cycle(&p, m, 1, PLAY_ANY_KIND);
+    CHECK_EQ(p.sel, 0);          /* wrapped */
+    play_cycle(&p, m, -1, PLAY_ANY_KIND);
+    CHECK_EQ(p.sel, 1);
+
+    CASE("selecting by tile finds the token under the cursor");
+    m->tokens.v[bi].x = 4;
+    m->tokens.v[bi].y = 4;
+    play_select_at(&p, m, 5, 5, 1);      /* inside the 2x2 footprint */
+    CHECK_EQ(p.sel, bi);
+    play_select_at(&p, m, 9, 9, 1);
+    CHECK_EQ(p.sel, -1);
+
+    CASE("moves undo one step at a time");
+    play_focus(&p, ai);
+    m->tokens.v[ai].x = 5;
+    m->tokens.v[ai].y = 5;
+    undo_clear(&u);
+    undo_begin(&u); play_step(m, &u, &p, 1, 0); undo_end(&u);
+    undo_begin(&u); play_step(m, &u, &p, 1, 0); undo_end(&u);
+    CHECK_EQ(m->tokens.v[ai].x, 7);
+    undo_undo(&u, m);
+    CHECK_EQ(m->tokens.v[ai].x, 6);
+    undo_undo(&u, m);
+    CHECK_EQ(m->tokens.v[ai].x, 5);
+
+    CASE("stepping with nothing selected does nothing");
+    play_focus(&p, -1);
+    CHECK_EQ(play_step(m, &u, &p, 1, 0), 0);
+
+    undo_free(&u);
+    map_free(m);
+}
+
+/* ------------------------------------------------------- status markers */
+
+void test_status(void)
+{
+    Token t;
+    memset(&t, 0, sizeof t);
+    t.size = 1;
+    str_lcpy(t.label, "Goblin", sizeof t.label);
+
+    CASE("a token starts unmarked");
+    CHECK_EQ(t.nstatus, 0);
+
+    CASE("markers accumulate up to the cap, then refuse");
+    for (int i = 0; i < TOKEN_STATUS_MAX; i++)
+        CHECK_EQ(token_add_status(&t, (uint8_t)i, "Poisoned"), 1);
+    CHECK_EQ(t.nstatus, TOKEN_STATUS_MAX);
+    CHECK_EQ(token_add_status(&t, 0, "Marked"), 0);
+    CHECK_EQ(t.nstatus, TOKEN_STATUS_MAX);
+
+    CASE("clearing removes all of them");
+    token_clear_status(&t);
+    CHECK_EQ(t.nstatus, 0);
+    CHECK_EQ(token_add_status(&t, 0, "Poisoned"), 1);
+
+    /* The map shows an initial rather than a dot, so a glance says which
+     * condition it is and not merely that there is one. */
+    CASE("a marker draws as the first letter of its word");
+    CHECK_EQ(status_glyph(&t.status[0]), 'P');
+    token_clear_status(&t);
+    token_add_status(&t, 0, "burning");
+    CHECK_EQ(status_glyph(&t.status[0]), 'B');       /* upper-cased */
+    token_clear_status(&t);
+    token_add_status(&t, 0, "");
+    CHECK_EQ(status_glyph(&t.status[0]), 0x25CFu);   /* a dot, with no word */
+
+    CASE("a color out of range wraps rather than reading past the palette");
+    token_clear_status(&t);
+    token_add_status(&t, 200, "X");
+    CHECK(t.status[0].color < STATUS_COLOR_COUNT);
+
+    CASE("color names round-trip");
+    for (int i = 0; i < STATUS_COLOR_COUNT; i++)
+        CHECK_EQ(status_color_from_name(status_color_name((uint8_t)i)), i);
+    CHECK_EQ(status_color_from_name("chartreuse"), -1);
+
+    CASE("a long word is truncated, not overrun");
+    token_clear_status(&t);
+    token_add_status(&t, 0, "an extremely long condition name indeed");
+    CHECK(strlen(t.status[0].label) < STATUS_LABEL_MAX);
+
+    /* A condition ends on its own schedule, so the one that ended has to be
+     * the one that goes -- and the rest have to keep the order they are drawn
+     * and numbered in, or the next question would answer about the wrong one. */
+    CASE("one marker can be taken off, leaving the rest in order");
+    token_clear_status(&t);
+    token_add_status(&t, 0, "Poisoned");
+    token_add_status(&t, 1, "Marked");
+    token_add_status(&t, 2, "Burning");
+    token_remove_status(&t, 1);
+    CHECK_EQ(t.nstatus, 2);
+    CHECK_EQ(strcmp(t.status[0].label, "Poisoned"), 0);
+    CHECK_EQ(strcmp(t.status[1].label, "Burning"), 0);
+    CHECK_EQ(t.status[1].color, 2);
+
+    CASE("the vacated slot is wiped, not left holding the old word");
+    CHECK_EQ(t.status[2].label[0], '\0');
+
+    CASE("removing the first and the last both work");
+    token_remove_status(&t, 1);
+    CHECK_EQ(t.nstatus, 1);
+    CHECK_EQ(strcmp(t.status[0].label, "Poisoned"), 0);
+    token_remove_status(&t, 0);
+    CHECK_EQ(t.nstatus, 0);
+
+    CASE("an index nobody holds is a no-op, not a corruption");
+    token_add_status(&t, 0, "Poisoned");
+    token_remove_status(&t, -1);
+    token_remove_status(&t, 1);
+    token_remove_status(&t, TOKEN_STATUS_MAX + 5);
+    CHECK_EQ(t.nstatus, 1);
+    CHECK_EQ(strcmp(t.status[0].label, "Poisoned"), 0);
+}
+
+void test_status_io(void)
+{
+    char path[] = "/tmp/vtt-status-XXXXXX";
+    int  fd = mkstemp(path);
+    if (fd >= 0) close(fd);
+
+    Map *m = map_new(8, 8, "marked");
+    map_fill_tiles(m, 0, 0, 7, 7, TILE_FLOOR);
+
+    Token a = { 1, 1, 1, TOKEN_PLAYER, "Aria", { { 0, "" } }, 0 };
+    Token b = { 4, 4, 2, TOKEN_ENEMY, "Ogre Chief", { { 0, "" } }, 0 };
+    token_add_status(&a, 0, "Poisoned");
+    token_add_status(&a, 3, "Blessed by Fate");
+    token_add_status(&b, 6, "Marked");
+    tokens_add(&m->tokens, a);
+    tokens_add(&m->tokens, b);
+
+    char err[MAPIO_ERR_MAX] = { 0 };
+    CASE("markers travel with the map");
+    CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+
+    Map *l = mapio_load(path, err, sizeof err);
+    CHECK(l != NULL);
+    if (l) {
+        CHECK_EQ(l->tokens.n, 2);
+        CHECK_EQ(l->tokens.v[0].nstatus, 2);
+        CHECK_EQ(l->tokens.v[1].nstatus, 1);
+        CHECK_EQ(strcmp(l->tokens.v[0].status[0].label, "Poisoned"), 0);
+        CHECK_EQ(l->tokens.v[0].status[0].color, 0);
+        CHECK_EQ(strcmp(l->tokens.v[0].status[1].label, "Blessed by Fate"), 0);
+        CHECK_EQ(l->tokens.v[0].status[1].color, 3);
+        CHECK_EQ(strcmp(l->tokens.v[1].status[0].label, "Marked"), 0);
+        CHECK_EQ(l->tokens.v[1].status[0].color, 6);
+        map_free(l);
+    }
+
+    /* A marker line must attach to the token above it and nothing else. */
+    CASE("a stray marker line with no token before it is ignored");
+    FILE *f = fopen(path, "w");
+    if (f) {
+        fputs("VTT 3\nname Stray\nsize 3 3\ntiles\n...\n...\n...\n"
+              "tokenstatus red \"Orphan\"\n"
+              "token enemy 1 1 1 \"Real\"\n"
+              "tokenstatus blue \"Mine\"\n", f);
+        fclose(f);
+    }
+    Map *stray = mapio_load(path, err, sizeof err);
+    CHECK(stray != NULL);
+    if (stray) {
+        CHECK_EQ(stray->tokens.n, 1);
+        CHECK_EQ(stray->tokens.v[0].nstatus, 1);
+        CHECK_EQ(strcmp(stray->tokens.v[0].status[0].label, "Mine"), 0);
+        map_free(stray);
+    }
+
+    CASE("an unknown color name drops the marker rather than the map");
+    f = fopen(path, "w");
+    if (f) {
+        fputs("VTT 3\nname Odd\nsize 3 3\ntiles\n...\n...\n...\n"
+              "token enemy 1 1 1 \"Real\"\ntokenstatus chartreuse \"Nope\"\n", f);
+        fclose(f);
+    }
+    Map *odd = mapio_load(path, err, sizeof err);
+    CHECK(odd != NULL);
+    if (odd) {
+        CHECK_EQ(odd->tokens.n, 1);
+        CHECK_EQ(odd->tokens.v[0].nstatus, 0);
+        map_free(odd);
+    }
+
+    map_free(m);
+    unlink(path);
+}
+
+void test_token_edit_undo(void)
+{
+    Map *m = map_new(8, 8, "edit");
+    map_fill_tiles(m, 0, 0, 7, 7, TILE_FLOOR);
+
+    Undo u;
+    undo_init(&u);
+
+    Token g = { 2, 2, 1, TOKEN_ENEMY, "Goblin", { { 0, "" } }, 0 };
+    undo_begin(&u);
+    int idx = undo_add_token(&u, m, g);
+    undo_end(&u);
+
+    /* Marking, relabeling and resizing all edit a token in place, and all
+     * three should be one u away. */
+    CASE("adding a marker undoes");
+    Token t = m->tokens.v[idx];
+    token_add_status(&t, 0, "Poisoned");
+    undo_begin(&u);
+    undo_edit_token(&u, m, idx, t);
+    undo_end(&u);
+    CHECK_EQ(m->tokens.v[idx].nstatus, 1);
+    CHECK_EQ(undo_undo(&u, m), 1);
+    CHECK_EQ(m->tokens.v[idx].nstatus, 0);
+    CHECK_EQ(undo_redo(&u, m), 1);
+    CHECK_EQ(m->tokens.v[idx].nstatus, 1);
+
+    CASE("clearing markers undoes, restoring every one");
+    t = m->tokens.v[idx];
+    token_add_status(&t, 2, "Marked");
+    undo_begin(&u); undo_edit_token(&u, m, idx, t); undo_end(&u);
+    CHECK_EQ(m->tokens.v[idx].nstatus, 2);
+
+    t = m->tokens.v[idx];
+    token_clear_status(&t);
+    undo_begin(&u); undo_edit_token(&u, m, idx, t); undo_end(&u);
+    CHECK_EQ(m->tokens.v[idx].nstatus, 0);
+    CHECK_EQ(undo_undo(&u, m), 1);
+    CHECK_EQ(m->tokens.v[idx].nstatus, 2);
+    CHECK_EQ(strcmp(m->tokens.v[idx].status[1].label, "Marked"), 0);
+
+    CASE("relabeling undoes");
+    t = m->tokens.v[idx];
+    str_lcpy(t.label, "Hobgoblin", sizeof t.label);
+    undo_begin(&u); undo_edit_token(&u, m, idx, t); undo_end(&u);
+    CHECK_EQ(strcmp(m->tokens.v[idx].label, "Hobgoblin"), 0);
+    CHECK_EQ(undo_undo(&u, m), 1);
+    CHECK_EQ(strcmp(m->tokens.v[idx].label, "Goblin"), 0);
+
+    CASE("resizing undoes");
+    t = m->tokens.v[idx];
+    t.size = 3;
+    undo_begin(&u); undo_edit_token(&u, m, idx, t); undo_end(&u);
+    CHECK_EQ(m->tokens.v[idx].size, 3);
+    CHECK_EQ(undo_undo(&u, m), 1);
+    CHECK_EQ(m->tokens.v[idx].size, 1);
+
+    /* A keystroke that turns out to change nothing should cost neither an
+     * undo step nor the redo tail waiting behind it. */
+    CASE("an edit that changes nothing costs no undo step, and keeps redo");
+    CHECK_EQ(undo_can_redo(&u), 1);
+    int before = u.nmarks;
+    undo_begin(&u);
+    undo_edit_token(&u, m, idx, m->tokens.v[idx]);
+    undo_end(&u);
+    CHECK_EQ(u.nmarks, before);
+    CHECK_EQ(undo_can_redo(&u), 1);
+    CHECK_EQ(undo_redo(&u, m), 1);
+    CHECK_EQ(m->tokens.v[idx].size, 3);
+
+    undo_free(&u);
+    map_free(m);
+}
+
+/* Driving the whole app rather than the model: the point of the chooser is
+ * the keystrokes, and a test that called clear_token_status directly would
+ * not notice if `c` never reached it. */
+void test_clear_status_keys(void)
+{
+    Sandbox sb = sandbox_enter("clr");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+
+    write_map_file(sb.dir, "fight.vtt");
+    char path[600];
+    snprintf(path, sizeof path, "%s/fight.vtt", sb.dir);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+    CHECK_EQ(a.screen, SCREEN_PLAY);
+
+    Token g = { 0, 0, 1, TOKEN_ENEMY, "Goblin", { { 0, "" } }, 0 };
+    token_add_status(&g, 0, "Poisoned");
+    token_add_status(&g, 3, "Marked");
+    token_add_status(&g, 5, "Burning");
+    int idx = tokens_add(&a.map->tokens, g);
+    a.ed.cx = 0; a.ed.cy = 0;
+
+    CASE("s d on a token wearing several markers asks which one");
+    press(&a, "sd");
+    CHECK_EQ(a.modal, MODAL_CLEAR_STATUS);
+    CHECK_EQ(a.map->tokens.v[idx].nstatus, 3);
+
+    /* The map only ever shows initials, and two conditions can share one, so
+     * the question has to spell the words out. */
+    CASE("the chooser names every marker in full");
+    rnd_begin(&r);
+    app_draw(&a);
+    ByteBuf frame;
+    bb_init(&frame, 16384);
+    rnd_dump(&r, &frame);
+    bb_putc(&frame, '\0');
+    CHECK(strstr(frame.data, "Poisoned") != NULL);
+    CHECK(strstr(frame.data, "Marked") != NULL);
+    CHECK(strstr(frame.data, "Burning") != NULL);
+    CHECK(strstr(frame.data, "Goblin") != NULL);
+    CHECK(strstr(frame.data, "1-3") != NULL);
+    bb_free(&frame);
+
+    CASE("esc leaves every marker where it was");
+    press(&a, "\x1b");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK_EQ(a.map->tokens.v[idx].nstatus, 3);
+
+    CASE("a number takes off that marker and only that one");
+    press(&a, "sd2");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK_EQ(a.map->tokens.v[idx].nstatus, 2);
+    CHECK_EQ(strcmp(a.map->tokens.v[idx].status[0].label, "Poisoned"), 0);
+    CHECK_EQ(strcmp(a.map->tokens.v[idx].status[1].label, "Burning"), 0);
+    CHECK(strstr(a.status, "Marked") != NULL);
+
+    CASE("clearing one marker undoes");
+    press(&a, "u");
+    CHECK_EQ(a.map->tokens.v[idx].nstatus, 3);
+    CHECK_EQ(strcmp(a.map->tokens.v[idx].status[1].label, "Marked"), 0);
+
+    CASE("a number past the last row is ignored, and the question stays up");
+    press(&a, "sd4");
+    CHECK_EQ(a.modal, MODAL_CLEAR_STATUS);
+    CHECK_EQ(a.map->tokens.v[idx].nstatus, 3);
+
+    CASE("a clears them all at once");
+    press(&a, "a");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK_EQ(a.map->tokens.v[idx].nstatus, 0);
+    CHECK(strstr(a.status, "3 markers") != NULL);
+    press(&a, "u");
+    CHECK_EQ(a.map->tokens.v[idx].nstatus, 3);
+
+    /* A chooser with one row is a keystroke that asks nothing. */
+    CASE("a single marker clears without a question");
+    press(&a, "sda");
+    press(&a, "sa");
+    CHECK_EQ(a.modal, MODAL_PROMPT);
+    press(&a, "Stunned\r");
+    CHECK_EQ(a.map->tokens.v[idx].nstatus, 1);
+    press(&a, "sd");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK_EQ(a.map->tokens.v[idx].nstatus, 0);
+    CHECK(strstr(a.status, "Stunned") != NULL);
+
+    CASE("s d on a bare token says so rather than opening an empty question");
+    press(&a, "sd");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK(strstr(a.status, "no markers") != NULL);
+
+    CASE("s d away from any token says so");
+    play_focus(&a.play, -1);
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "sd");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK(strstr(a.status, "no token here") != NULL);
+
+    app_free(&a);
+    rnd_free(&r);
+    unlink(path);
+    sandbox_leave(&sb);
+}
+
+/* --------------------------------------------------------- movement trail */
+
+void test_trail(void)
+{
+    Map *m = map_new(12, 10, "trail");
+    map_fill_tiles(m, 0, 0, 11, 9, TILE_FLOOR);
+
+    Undo u;
+    undo_init(&u);
+    Play p;
+    play_init(&p);
+
+    Token g = { 2, 2, 1, TOKEN_ENEMY, "Goblin", { { 0, "" } }, 0 };
+    int idx = undo_add_token(&u, m, g);
+    play_focus(&p, idx);
+    CASE("picking a token up marks the tile it stood on");
+    play_grab(&p, m, 0);
+    CHECK_EQ(p.grabbed, 1);
+    CHECK_EQ(p.ntrail, 1);
+    CHECK_EQ(p.trail[0].x, 2);
+    CHECK_EQ(p.trail[0].y, 2);
+    CHECK_EQ(p.origin_x, 2);
+    CHECK_EQ(p.origin_y, 2);
+    CHECK_EQ(p.steps, 0);
+
+    /* Walk east then back west: the route from where it set out is one square,
+     * however much the cursor wandered getting there. */
+    CASE("the ribbon is the route from the origin, not the squares walked");
+    undo_begin(&u); play_step(m, &u, &p, 1, 0); undo_end(&u);
+    undo_begin(&u); play_step(m, &u, &p, 1, 0); undo_end(&u);
+    undo_begin(&u); play_step(m, &u, &p, -1, 0); undo_end(&u);
+    CHECK_EQ(m->tokens.v[idx].x, 3);
+    CHECK_EQ(p.ntrail, 2);
+    CHECK_EQ(p.trail[0].x, 2);
+    CHECK_EQ(p.trail[1].x, 3);
+
+    CASE("the step count is what the route costs, not the keys pressed");
+    CHECK_EQ(p.steps, 1);
+
+    /* Across open floor a great many routes are equally short. The one drawn
+     * should hug the straight line rather than turning a single corner. */
+    CASE("an open diagonal comes out as a staircase, not an L");
+    play_focus(&p, idx);
+    m->tokens.v[idx].x = 2;
+    m->tokens.v[idx].y = 2;
+    play_grab(&p, m, 0);
+    for (int i = 0; i < 3; i++) {
+        undo_begin(&u); play_step(m, &u, &p, 1, 0); undo_end(&u);
+        undo_begin(&u); play_step(m, &u, &p, 0, 1); undo_end(&u);
+    }
+    CHECK_EQ(p.ntrail, 7);
+    CHECK_EQ(p.steps, 6);
+    int corners = 0;
+    for (int i = 1; i + 1 < p.ntrail; i++) {
+        int ax = p.trail[i].x - p.trail[i - 1].x, ay = p.trail[i].y - p.trail[i - 1].y;
+        int bx = p.trail[i + 1].x - p.trail[i].x, by = p.trail[i + 1].y - p.trail[i].y;
+        if (ax != bx || ay != by) corners++;
+    }
+    CHECK(corners > 1);                     /* an L would turn exactly once */
+
+    CASE("every tile on the route is a step from the one before it");
+    for (int i = 1; i < p.ntrail; i++) {
+        int d = abs(p.trail[i].x - p.trail[i - 1].x) +
+                abs(p.trail[i].y - p.trail[i - 1].y);
+        CHECK_EQ(d, 1);
+    }
+
+    /* A route has to be one the creature could actually walk, so a wall in
+     * the way lengthens it rather than being cut through. */
+    CASE("a wall in the way makes the route go round it");
+    Map *w = map_new(9, 9, "wall");
+    map_fill_tiles(w, 0, 0, 8, 8, TILE_FLOOR);
+    for (int y = 0; y <= 3; y++) map_set_vedge(w, 4, y, EDGE_WALL);
+
+    Undo wu;
+    undo_init(&wu);
+    Play wp;
+    play_init(&wp);
+    Token t2 = { 3, 0, 1, TOKEN_ENEMY, "W", { { 0, "" } }, 0 };
+    int wi = undo_add_token(&wu, w, t2);
+    play_focus(&wp, wi);
+    play_grab(&wp, w, 0);
+
+    /* Down the near side, round the end of the wall, back up the far side. */
+    for (int i = 0; i < 4; i++) { undo_begin(&wu); play_step(w, &wu, &wp, 0, 1); undo_end(&wu); }
+    undo_begin(&wu); play_step(w, &wu, &wp, 1, 0); undo_end(&wu);
+    CHECK_EQ(w->tokens.v[wi].x, 4);
+    CHECK_EQ(w->tokens.v[wi].y, 4);
+
+    CHECK_EQ(wp.ntrail, 6);                 /* five steps: straight is only two */
+    CHECK_EQ(wp.steps, 5);
+    for (int i = 0; i < wp.ntrail; i++)
+        CHECK(!(wp.trail[i].x == 4 && wp.trail[i].y <= 3));   /* never through it */
+
+    CASE("no route at all leaves no ribbon and the keystrokes standing");
+    map_fill_tiles(w, 0, 0, 8, 8, TILE_VOID);
+    map_set_tile(w, 0, 0, TILE_FLOOR);
+    map_set_tile(w, 8, 8, TILE_FLOOR);
+    wp.origin_x = 0; wp.origin_y = 0;
+    w->tokens.v[wi].x = 8; w->tokens.v[wi].y = 8;
+    wp.steps = 7;
+    play_trail_sync(&wp, w);
+    CHECK_EQ(wp.ntrail, 0);
+    CHECK_EQ(wp.steps, 7);
+
+    undo_free(&wu);
+    map_free(w);
+
+    /* Undo walks the token back the way it came, so the route shortens with
+     * it and the cost comes down: a step that has been undone was not spent. */
+    CASE("undo shortens the route and gives the cost back");
+    CHECK_EQ(undo_undo(&u, m), 1);
+    play_trail_sync(&p, m);
+    CHECK_EQ(p.ntrail, 6);
+    CHECK_EQ(p.steps, 5);
+
+    CASE("redo lengthens it again");
+    CHECK_EQ(undo_redo(&u, m), 1);
+    play_trail_sync(&p, m);
+    CHECK_EQ(p.ntrail, 7);
+    CHECK_EQ(p.steps, 6);
+
+    CASE("undoing back to the start leaves just the origin");
+    for (int i = 0; i < 6; i++) { CHECK_EQ(undo_undo(&u, m), 1); play_trail_sync(&p, m); }
+    CHECK_EQ(p.ntrail, 1);
+    CHECK_EQ(p.steps, 0);
+    CHECK_EQ(p.trail[0].x, 2);
+    CHECK_EQ(p.trail[0].y, 2);
+
+    CASE("sync does nothing at all when no token is held");
+    p.grabbed = 0;
+    play_trail_sync(&p, m);
+    CHECK_EQ(p.ntrail, 0);
+
+    undo_free(&u);
+    map_free(m);
+
+    /* The biggest map the format allows has more tiles than 16 bits can
+     * count, so a route across it has to be measured in something wider. */
+    CASE("a route across the largest allowed map is measured, not wrapped");
+    Map *big = map_new(MAP_MAX_DIM, 4, "big");
+    map_fill_tiles(big, 0, 0, MAP_MAX_DIM - 1, 3, TILE_FLOOR);
+
+    Undo bu;
+    undo_init(&bu);
+    Play bp;
+    play_init(&bp);
+    Token bt = { 0, 0, 1, TOKEN_ENEMY, "B", { { 0, "" } }, 0 };
+    play_focus(&bp, undo_add_token(&bu, big, bt));
+    play_grab(&bp, big, 0);
+    big->tokens.v[bp.sel].x = (int16_t)(MAP_MAX_DIM - 1);
+    play_trail_sync(&bp, big);
+    CHECK_EQ(bp.steps, MAP_MAX_DIM - 1);
+    CHECK_EQ(bp.ntrail, PLAY_TRAIL_MAX);       /* the ribbon stops at its cap */
+
+    undo_free(&bu);
+    map_free(big);
+}
+
+void test_trail_draw(void)
+{
+    Map *m = map_new(12, 10, "trail");
+    map_fill_tiles(m, 0, 0, 11, 9, TILE_FLOOR);
+
+    Undo u;
+    undo_init(&u);
+    Play p;
+    play_init(&p);
+
+    Renderer r;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+
+    GridView g;
+    memset(&g, 0, sizeof g);
+    g.zoom = 1;
+    g.view = rect(0, 0, 80, 24);
+
+    Token t = { 2, 2, 1, TOKEN_ENEMY, "G", { { 0, "" } }, 0 };
+    int idx = undo_add_token(&u, m, t);
+    play_focus(&p, idx);
+    CASE("nothing is drawn while no token is held");
+    rnd_begin(&r);
+    play_trail_draw(&r, m, &g, &p, &THEME_DARK, 0);
+    int sx, sy;
+    grid_tile_interior(&g, 2, 2, &sx, &sy);
+    CHECK(rnd_at(&r, sx, sy)->bg != THEME_DARK.trail_bg);
+
+    play_grab(&p, m, 0);
+    undo_begin(&u); play_step(m, &u, &p, 1, 0); undo_end(&u);
+    undo_begin(&u); play_step(m, &u, &p, 0, 1); undo_end(&u);
+
+    CASE("every tile walked over is tinted");
+    rnd_begin(&r);
+    play_trail_draw(&r, m, &g, &p, &THEME_DARK, 0);
+    const int walked[3][2] = { { 2, 2 }, { 3, 2 }, { 3, 3 } };
+    for (int i = 0; i < 3; i++) {
+        grid_tile_interior(&g, walked[i][0], walked[i][1], &sx, &sy);
+        CHECK_EQ(rnd_at(&r, sx, sy)->bg, THEME_DARK.trail_bg);
+    }
+
+    /* The corner it did not cut: the ribbon follows the route, so the tile
+     * on the diagonal stays untouched. */
+    CASE("a tile beside the route is left alone");
+    grid_tile_interior(&g, 2, 3, &sx, &sy);
+    CHECK(rnd_at(&r, sx, sy)->bg != THEME_DARK.trail_bg);
+
+    /* The whole point of drawing the route rather than the walk: fumbling the
+     * cursor out and back should leave nothing behind. */
+    CASE("squares only wandered over are not tinted");
+    undo_begin(&u); play_step(m, &u, &p, 1, 0); undo_end(&u);   /* out to x=4 */
+    undo_begin(&u); play_step(m, &u, &p, 1, 0); undo_end(&u);   /* and x=5 */
+    undo_begin(&u); play_step(m, &u, &p, -1, 0); undo_end(&u);  /* back to x=4 */
+    undo_begin(&u); play_step(m, &u, &p, -1, 0); undo_end(&u);  /* back to x=3 */
+    CHECK_EQ(m->tokens.v[idx].x, 3);
+    rnd_begin(&r);
+    play_trail_draw(&r, m, &g, &p, &THEME_DARK, 0);
+    grid_tile_interior(&g, 5, 3, &sx, &sy);
+    CHECK(rnd_at(&r, sx, sy)->bg != THEME_DARK.trail_bg);
+    grid_tile_interior(&g, 4, 3, &sx, &sy);
+    CHECK(rnd_at(&r, sx, sy)->bg != THEME_DARK.trail_bg);
+    grid_tile_interior(&g, 3, 3, &sx, &sy);
+    CHECK_EQ(rnd_at(&r, sx, sy)->bg, THEME_DARK.trail_bg);
+
+    CASE("the tile it set out from carries a mark of its own");
+    Rect a;
+    grid_token_area(&g, 2, 2, 1, &a);
+    CHECK_EQ(rnd_at(&r, a.x, a.y)->ch, 0x25C6u);
+    CHECK_EQ(rnd_at(&r, a.x, a.y)->fg, THEME_DARK.trail);
+
+    CASE("ascii mode marks it with a letter instead");
+    rnd_begin(&r);
+    play_trail_draw(&r, m, &g, &p, &THEME_DARK, 1);
+    CHECK_EQ(rnd_at(&r, a.x, a.y)->ch, (uint32_t)'X');
+
+    /* A big creature covers ground, not a thread along its top-left corner. */
+    CASE("a 2x2 token tints its whole footprint at every step");
+    m->tokens.v[idx].size = 2;
+    m->tokens.v[idx].x = 5;
+    m->tokens.v[idx].y = 5;
+    play_grab(&p, m, 0);
+    undo_begin(&u); play_step(m, &u, &p, 1, 0); undo_end(&u);
+    rnd_begin(&r);
+    play_trail_draw(&r, m, &g, &p, &THEME_DARK, 0);
+    const int covered[6][2] = {
+        { 5, 5 }, { 6, 5 }, { 5, 6 }, { 6, 6 }, { 7, 5 }, { 7, 6 },
+    };
+    for (int i = 0; i < 6; i++) {
+        grid_tile_interior(&g, covered[i][0], covered[i][1], &sx, &sy);
+        CHECK_EQ(rnd_at(&r, sx, sy)->bg, THEME_DARK.trail_bg);
+    }
+
+    /* A long walk should cost the size of the window, not the size of the
+     * walk: tiles off screen are never drawn. */
+    CASE("tiles scrolled out of view are skipped");
+    g.view = rect(0, 0, 20, 10);
+    rnd_begin(&r);
+    play_trail_draw(&r, m, &g, &p, &THEME_DARK, 0);
+    CHECK(1);
+
+    rnd_free(&r);
+    undo_free(&u);
+    map_free(m);
+}
 
 /* -------------------------------------------------------------- covering */
 
@@ -272,31 +1018,6 @@ void test_size_keys(void)
     #undef ESC
     app_free(&a);
     rnd_free(&r);
-}
-
-/* ------------------------------------------------------------- selection */
-
-/* Relative luminance, the WCAG definition, so "higher contrast" can be a
- * number in a test rather than an opinion about a screen. */
-static double luminance(uint32_t c)
-{
-    double ch[3];
-    ch[0] = ((c >> 16) & 0xFFu) / 255.0;
-    ch[1] = ((c >> 8)  & 0xFFu) / 255.0;
-    ch[2] = ( c        & 0xFFu) / 255.0;
-
-    for (int i = 0; i < 3; i++)
-        ch[i] = ch[i] <= 0.04045 ? ch[i] / 12.92
-                                 : pow((ch[i] + 0.055) / 1.055, 2.4);
-
-    return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
-}
-
-double contrast(uint32_t a, uint32_t b)
-{
-    double la = luminance(a), lb = luminance(b);
-    if (la < lb) { double t = la; la = lb; lb = t; }
-    return (la + 0.05) / (lb + 0.05);
 }
 
 void test_selection_contrast(void)
@@ -595,145 +1316,6 @@ void test_group_yank(void)
 
     #undef K
     #undef ESC
-    app_free(&a);
-    rnd_free(&r);
-}
-
-/* ---------------------------------------------------------------- brush */
-
-/* The sized cursor in build mode, and the size key both modes now share. */
-void test_brush(void)
-{
-    Renderer r;
-    App      a;
-
-    rnd_init(&r);
-    rnd_resize(&r, 80, 24);
-    app_init(&a, NULL, &r);
-
-    if (app_open_map(&a, "tests/fixtures/crowd.vtt") != 0) {
-        g_fails++;
-        fprintf(stderr, "  FAIL [brush] could not open tests/fixtures/crowd.vtt\n");
-        rnd_free(&r);
-        return;
-    }
-
-    Map    *m = a.map;
-    Editor *e = &a.ed;
-
-    #define K(c) do { Key k = { KEY_CHAR, 0, (uint32_t)(c) }; app_key(&a, k); } while (0)
-
-    a.screen = SCREEN_EDITOR;
-    e->mode  = ED_NORMAL;
-
-    CASE("b cycles the brush and wraps; B cycles back; a count names it");
-    CHECK_EQ(e->brush, 1);
-    K('b'); CHECK_EQ(e->brush, 2);
-    K('b'); CHECK_EQ(e->brush, 3);
-    K('b'); CHECK_EQ(e->brush, 1);
-    K('B'); CHECK_EQ(e->brush, 3);
-    K('2'); K('b'); CHECK_EQ(e->brush, 2);
-    K('9'); K('b'); CHECK_EQ(e->brush, 3);   /* clamped to the largest */
-
-    CASE("counts on motions survive the size key taking b");
-    e->cx = 2; e->cy = 2;
-    K('3'); K('j');
-    CHECK_EQ(e->cy, 5);
-    K('1'); K('0'); K('l');                  /* 10l: multi-digit still works */
-    CHECK_EQ(e->cx, 12);
-
-    CASE("f paints the brush's whole footprint, as one undo step");
-    K('2'); K('b');
-    e->cx = 6; e->cy = 6;
-    map_fill_tiles(m, 0, 0, m->w - 1, m->h - 1, TILE_VOID);
-    e->terrain = TILE_FLOOR;
-    K('f');
-    CHECK_EQ(map_tile(m, 6, 6), TILE_FLOOR);
-    CHECK_EQ(map_tile(m, 7, 7), TILE_FLOOR);
-    CHECK_EQ(map_tile(m, 8, 8), TILE_VOID);  /* outside the 2x2 */
-    K('u');
-    CHECK_EQ(map_tile(m, 6, 6), TILE_VOID);  /* one step took all four */
-
-    CASE("a brush hanging over the edge paints the part that exists");
-    e->cx = m->w - 1; e->cy = 6;
-    K('3'); K('b');
-    K('f');
-    CHECK_EQ(map_tile(m, m->w - 1, 6), TILE_FLOOR);
-    CHECK_EQ(map_tile(m, m->w - 1, 8), TILE_FLOOR);
-
-    CASE("L walls the brush's whole east face");
-    e->cx = 3; e->cy = 3;
-    CHECK_EQ(e->brush, 3);
-    K('L');
-    CHECK_EQ(map_vedge(m, 6, 3), EDGE_WALL);
-    CHECK_EQ(map_vedge(m, 6, 4), EDGE_WALL);
-    CHECK_EQ(map_vedge(m, 6, 5), EDGE_WALL);
-    CHECK_EQ(map_vedge(m, 6, 2), EDGE_NONE);  /* the face, not the column */
-    CHECK_EQ(map_vedge(m, 6, 6), EDGE_NONE);
-
-    CASE("the same key again takes the whole face away");
-    K('L');
-    CHECK_EQ(map_vedge(m, 6, 3), EDGE_NONE);
-    CHECK_EQ(map_vedge(m, 6, 5), EDGE_NONE);
-
-    CASE("a partly built face is completed rather than dismantled");
-    map_set_vedge(m, 6, 4, EDGE_WALL);
-    K('L');
-    CHECK_EQ(map_vedge(m, 6, 3), EDGE_WALL);
-    CHECK_EQ(map_vedge(m, 6, 4), EDGE_WALL);
-    CHECK_EQ(map_vedge(m, 6, 5), EDGE_WALL);
-
-    CASE("one press of a face is one undo step, whatever the brush");
-    K('u');
-    CHECK_EQ(map_vedge(m, 6, 3), EDGE_NONE);
-    CHECK_EQ(map_vedge(m, 6, 4), EDGE_WALL);  /* the hand-laid edge survives:
-                                               * undo takes back the press,
-                                               * not the wall it built on */
-
-    CASE("K walls the north face, J the south, H the west");
-    map_rect_walls(m, 0, 0, m->w - 1, m->h - 1, EDGE_NONE);
-    e->cx = 3; e->cy = 3;
-    K('K');
-    CHECK_EQ(map_hedge(m, 3, 3), EDGE_WALL);
-    CHECK_EQ(map_hedge(m, 5, 3), EDGE_WALL);
-    K('J');
-    CHECK_EQ(map_hedge(m, 3, 6), EDGE_WALL);
-    K('H');
-    CHECK_EQ(map_vedge(m, 3, 3), EDGE_WALL);
-    CHECK_EQ(map_vedge(m, 3, 5), EDGE_WALL);
-
-    CASE("space clears the brush's footprint back to void together");
-    map_fill_tiles(m, 0, 0, m->w - 1, m->h - 1, TILE_FLOOR);
-    e->cx = 6; e->cy = 6;
-    K(' ');
-    CHECK_EQ(map_tile(m, 6, 6), TILE_VOID);
-    CHECK_EQ(map_tile(m, 8, 8), TILE_VOID);
-    CHECK_EQ(map_tile(m, 9, 9), TILE_FLOOR);
-
-    CASE("the visual box ignores the brush -- its own two corners rule");
-    K('v');
-    CHECK_EQ(e->mode, ED_VISUAL);
-    Key esc = { KEY_ESC, 0, 0 };
-    app_key(&a, esc);
-    CHECK_EQ(e->mode, ED_NORMAL);
-
-    CASE("play mode: the same digits are counts and the same b is the size");
-    a.screen = SCREEN_PLAY;
-    play_focus(&a.play, -1);
-    a.ed.cx = 2; a.ed.cy = 2;
-    K('3'); K('l');
-    CHECK_EQ(a.ed.cx, 5);
-    K('2'); K('b');
-    CHECK_EQ(a.play.next_size, 2);
-
-    CASE("b on a selected creature cycles up from the size it already is");
-    play_focus(&a.play, 3);                    /* the 2x2 Ogre */
-    K('b');
-    CHECK_EQ(m->tokens.v[3].size, 3);
-    K('b');                                    /* wraps past the top */
-    CHECK_EQ(m->tokens.v[3].size, 1);
-
-    #undef K
     app_free(&a);
     rnd_free(&r);
 }
@@ -1476,42 +2058,6 @@ void test_void_reads_as_void(void)
     map_free(m);
 }
 
-void test_terrain_palette(void)
-{
-    /* Floor is the page and every other terrain is tuned to sit above it, so
-     * lifting the floor would put rough and wood underneath it. That is why
-     * void is told apart by a mark instead. */
-    CASE("floor is the page, so the palette above it is undisturbed");
-    CHECK_EQ(THEME_DARK.terrain_bg[TILE_FLOOR], THEME_DARK.bg);
-    CHECK_EQ(THEME_DARK.terrain_bg[TILE_VOID], THEME_DARK.bg);
-
-    CASE("every terrain that means something stands off the page");
-    for (int i = 0; i < TILE_COUNT; i++) {
-        if (i == TILE_VOID || i == TILE_FLOOR) continue;
-        CHECK(THEME_DARK.terrain_bg[i] != THEME_DARK.bg);
-    }
-
-    CASE("and off each other");
-    for (int a = 0; a < TILE_COUNT; a++) {
-        if (a == TILE_VOID || a == TILE_FLOOR) continue;
-        for (int b = a + 1; b < TILE_COUNT; b++) {
-            if (b == TILE_VOID || b == TILE_FLOOR) continue;
-            CHECK(THEME_DARK.terrain_bg[a] != THEME_DARK.terrain_bg[b]);
-        }
-    }
-
-    /* Every kind carries a glyph of its own, so none of them rests on color
-     * alone -- which is what makes the palette survive a terminal that
-     * renders these tints badly. Floor is the one blank kind, and blank is
-     * what floor means. */
-    CASE("floor is the only kind drawn blank");
-    for (int i = 0; i < TILE_COUNT; i++) {
-        uint32_t glyph = grid_terrain_glyph((uint8_t)i, 0);
-        if (i == TILE_FLOOR || i == TILE_VOID) CHECK_EQ(glyph, ' ');
-        else                                   CHECK(glyph != ' ');
-    }
-}
-
 /* ------------------------------------------------------------- coordinates */
 
 void test_coords(void)
@@ -1798,316 +2344,6 @@ void test_labels(void)
         }
     }
     CHECK(1);
-
-    app_free(&a);
-    rnd_free(&r);
-    unlink(path);
-    sandbox_leave(&sb);
-}
-
-/* ------------------------------------------------------------------ shapes */
-
-void test_shapes(void)
-{
-    CASE("a rectangle between two tiles includes both ends");
-    EdShape b = ed_shape(ED_SHAPE_RECT, 2, 3, 5, 4, 0);
-    CHECK_EQ(b.x0, 2); CHECK_EQ(b.x1, 5);
-    CHECK_EQ(b.y0, 3); CHECK_EQ(b.y1, 4);
-    CHECK_EQ(ed_shape_has(&b, 2, 3), 1);
-    CHECK_EQ(ed_shape_has(&b, 5, 4), 1);
-    CHECK_EQ(ed_shape_has(&b, 6, 4), 0);
-
-    CASE("a reversed rectangle is the same rectangle");
-    EdShape rev = ed_shape(ED_SHAPE_RECT, 5, 4, 2, 3, 0);
-    CHECK_EQ(rev.x0, b.x0); CHECK_EQ(rev.x1, b.x1);
-    CHECK_EQ(rev.y0, b.y0); CHECK_EQ(rev.y1, b.y1);
-
-    /* Between two corners it spans what they enclose, which is one fewer
-     * tile than a box drawn between two squares. */
-    CASE("a rectangle between two corners spans the tiles they enclose");
-    EdShape c = ed_shape(ED_SHAPE_RECT, 2, 2, 5, 5, 1);
-    CHECK_EQ(c.x0, 2); CHECK_EQ(c.x1, 4);
-    CHECK_EQ(c.y0, 2); CHECK_EQ(c.y1, 4);
-
-    CASE("a circle holds its center and reaches its cursor");
-    EdShape d = ed_shape(ED_SHAPE_CIRCLE, 10, 10, 14, 10, 0);
-    CHECK_EQ(ed_shape_has(&d, 10, 10), 1);
-    CHECK_EQ(ed_shape_has(&d, 14, 10), 1);      /* the tile that set the radius */
-    CHECK_EQ(ed_shape_has(&d, 15, 10), 0);
-    CHECK_EQ(ed_shape_radius(&d), 4);
-
-    CASE("a circle is round, not the box around it");
-    CHECK_EQ(ed_shape_has(&d, 13, 13), 0);      /* the corner of the box */
-    CHECK_EQ(ed_shape_has(&d, 12, 12), 1);      /* inside the arc */
-
-    CASE("a circle is symmetric about its center");
-    for (int dy = -5; dy <= 5; dy++)
-        for (int dx = -5; dx <= 5; dx++) {
-            int in = ed_shape_has(&d, 10 + dx, 10 + dy);
-            CHECK_EQ(ed_shape_has(&d, 10 - dx, 10 + dy), in);
-            CHECK_EQ(ed_shape_has(&d, 10 + dx, 10 - dy), in);
-        }
-
-    CASE("a circle of no radius is the one tile");
-    EdShape dot = ed_shape(ED_SHAPE_CIRCLE, 4, 4, 4, 4, 0);
-    CHECK_EQ(ed_shape_has(&dot, 4, 4), 1);
-    CHECK_EQ(ed_shape_has(&dot, 5, 4), 0);
-    CHECK_EQ(ed_shape_radius(&dot), 0);
-
-    /* Wall mode anchors on a lattice corner, so its circles sit between
-     * squares and come out even across rather than odd. */
-    CASE("a circle anchored on a corner is centered on the corner");
-    EdShape w = ed_shape(ED_SHAPE_CIRCLE, 5, 5, 8, 5, 1);
-    CHECK_EQ(ed_shape_has(&w, 4, 4), 1);        /* the four tiles round it */
-    CHECK_EQ(ed_shape_has(&w, 5, 4), 1);
-    CHECK_EQ(ed_shape_has(&w, 4, 5), 1);
-    CHECK_EQ(ed_shape_has(&w, 5, 5), 1);
-    CHECK_EQ(ed_shape_has(&w, 4, 4), ed_shape_has(&w, 5, 5));
-
-    CASE("a circle reaching off the map is clipped, not clamped");
-    EdShape edge = ed_shape(ED_SHAPE_CIRCLE, 1, 1, 6, 1, 0);
-    CHECK_EQ(ed_shape_has(&edge, -3, 1), 1);    /* the shape itself is unbounded */
-    CHECK(edge.x0 < 0);                          /* the map bounds it on use */
-}
-
-void test_circle_fill(void)
-{
-    Map *m = map_new(20, 20, "circle");
-    Undo u;
-    undo_init(&u);
-
-    Editor e;
-    ed_init(&e, m);
-    ed_layout(&e, m, 80, 24);
-
-    CASE("a visual circle fills a disc, not its bounding box");
-    e.mode = ED_VISUAL;
-    e.shape = ED_SHAPE_CIRCLE;
-    e.anchor_x = 10; e.anchor_y = 10;
-    e.cx = 14; e.cy = 10;
-    ed_apply_tiles(&e, m, &u, TILE_FLOOR);
-    CHECK_EQ(map_tile(m, 10, 10), TILE_FLOOR);
-    CHECK_EQ(map_tile(m, 14, 10), TILE_FLOOR);
-    CHECK_EQ(map_tile(m, 13, 13), TILE_VOID);       /* the box corner */
-    CHECK_EQ(map_tile(m, 15, 10), TILE_VOID);
-
-    CASE("it undoes as one step");
-    CHECK_EQ(undo_undo(&u, m), 1);
-    CHECK_EQ(map_tile(m, 10, 10), TILE_VOID);
-    CHECK_EQ(undo_redo(&u, m), 1);
-
-    /* A circle reaching past the edge should paint what fits rather than
-     * refusing or wrapping. */
-    CASE("a circle overhanging the map paints only what is on it");
-    e.anchor_x = 1; e.anchor_y = 1;
-    e.cx = 5; e.cy = 1;
-    ed_apply_tiles(&e, m, &u, TILE_WATER);
-    CHECK_EQ(map_tile(m, 1, 1), TILE_WATER);
-    CHECK_EQ(map_tile(m, 0, 0), TILE_WATER);
-    CHECK_EQ(map_tile(m, 5, 1), TILE_WATER);
-
-    CASE("a box selection still fills its box");
-    e.shape = ED_SHAPE_RECT;
-    e.anchor_x = 15; e.anchor_y = 15;
-    e.cx = 17; e.cy = 17;
-    ed_apply_tiles(&e, m, &u, TILE_ROUGH);
-    for (int y = 15; y <= 17; y++)
-        for (int x = 15; x <= 17; x++)
-            CHECK_EQ(map_tile(m, x, y), TILE_ROUGH);
-
-    undo_free(&u);
-    map_free(m);
-}
-
-/* The point of a ring of wall is that it encloses. Flooding out from the
- * middle and finding no way past it is the only test that says so. */
-static int flood_escapes(const Map *m, int sx, int sy, const EdShape *s)
-{
-    int  n    = m->w * m->h;
-    char *seen = xcalloc((size_t)n, 1);
-    int  *q    = xmalloc((size_t)n * sizeof *q);
-    int   head = 0, tail = 0, escaped = 0;
-
-    seen[sy * m->w + sx] = 1;
-    q[tail++] = sy * m->w + sx;
-
-    static const int DX[4] = { 1, -1, 0, 0 };
-    static const int DY[4] = { 0, 0, 1, -1 };
-
-    while (head < tail) {
-        int cur = q[head++];
-        int cx = cur % m->w, cy = cur / m->w;
-        if (!ed_shape_has(s, cx, cy)) { escaped = 1; break; }
-
-        for (int d = 0; d < 4; d++) {
-            int nx = cx + DX[d], ny = cy + DY[d];
-            if (!map_in_bounds(m, nx, ny)) continue;
-            if (seen[ny * m->w + nx]) continue;
-            if (map_blocked(m, cx, cy, DX[d], DY[d])) continue;
-            seen[ny * m->w + nx] = 1;
-            q[tail++] = ny * m->w + nx;
-        }
-    }
-
-    free(seen);
-    free(q);
-    return escaped;
-}
-
-void test_circle_walls(void)
-{
-    Map *m = map_new(24, 24, "ring");
-    map_fill_tiles(m, 0, 0, 23, 23, TILE_FLOOR);
-
-    Undo u;
-    undo_init(&u);
-
-    CASE("a circle of wall closes all the way round");
-    EdShape s = ed_shape(ED_SHAPE_CIRCLE, 12, 12, 18, 12, 1);
-    ed_wall_shape(m, &u, &s, EDGE_WALL);
-    CHECK_EQ(flood_escapes(m, 11, 11, &s), 0);
-
-    CASE("it walls the boundary and nothing inside it");
-    CHECK_EQ(map_blocked(m, 11, 11, 1, 0), 0);      /* the middle is open */
-    CHECK_EQ(map_blocked(m, 11, 11, 0, 1), 0);
-
-    CASE("a radius of one is still a closed ring");
-    Map *tiny = map_new(9, 9, "tiny");
-    map_fill_tiles(tiny, 0, 0, 8, 8, TILE_FLOOR);
-    Undo tu;
-    undo_init(&tu);
-    EdShape one = ed_shape(ED_SHAPE_CIRCLE, 4, 4, 5, 4, 1);
-    ed_wall_shape(tiny, &tu, &one, EDGE_WALL);
-    CHECK_EQ(flood_escapes(tiny, 3, 3, &one), 0);
-    undo_free(&tu);
-    map_free(tiny);
-
-    CASE("the whole ring undoes as one step");
-    CHECK_EQ(undo_undo(&u, m), 1);
-    CHECK_EQ(flood_escapes(m, 11, 11, &s), 1);      /* open again */
-
-    /* Half a circle drawn off the corner of the map: the arc that fits gets
-     * laid and the rest is dropped, rather than writing past the edge. */
-    CASE("a circle overhanging the map lays the arc that fits");
-    Map *corner = map_new(10, 10, "corner");
-    map_fill_tiles(corner, 0, 0, 9, 9, TILE_FLOOR);
-    Undo cu;
-    undo_init(&cu);
-    EdShape off = ed_shape(ED_SHAPE_CIRCLE, 1, 1, 6, 1, 1);
-    ed_wall_shape(corner, &cu, &off, EDGE_WALL);
-    CHECK_EQ(undo_can_undo(&cu), 1);
-    CHECK_EQ(map_vedge(corner, 6, 1), EDGE_WALL);   /* the east arc is there */
-    undo_free(&cu);
-    map_free(corner);
-
-    CASE("a rectangle of wall closes too, through the same path");
-    undo_clear(&u);
-    EdShape box = ed_shape(ED_SHAPE_RECT, 3, 3, 8, 8, 1);
-    ed_wall_shape(m, &u, &box, EDGE_WALL);
-    CHECK_EQ(flood_escapes(m, 4, 4, &box), 0);
-
-    undo_free(&u);
-    map_free(m);
-}
-
-void test_shape_keys(void)
-{
-    Sandbox sb = sandbox_enter("shape");
-    CHECK_EQ(sb.ok, 1);
-    if (!sb.ok) return;
-
-    write_map_file(sb.dir, "m.vtt");
-    char path[600];
-    snprintf(path, sizeof path, "%s/m.vtt", sb.dir);
-
-    Renderer r;
-    App      a;
-    rnd_init(&r);
-    rnd_resize(&r, 80, 24);
-    app_init(&a, NULL, &r);
-    CHECK_EQ(app_open_map(&a, path), 0);
-
-    CASE("v selects a box, V a circle");
-    press(&a, "v");
-    CHECK_EQ(a.ed.mode, ED_VISUAL);
-    CHECK_EQ(a.ed.shape, ED_SHAPE_RECT);
-    press(&a, "\x1b");
-
-    press(&a, "V");
-    CHECK_EQ(a.ed.mode, ED_VISUAL);
-    CHECK_EQ(a.ed.shape, ED_SHAPE_CIRCLE);
-    CHECK(strstr(a.status, "circle") != NULL);
-
-    /* The way v and V swap between vim's two visual modes: the other key
-     * changes the shape, the same key leaves. */
-    CASE("the other key swaps the shape and keeps the anchor");
-    a.ed.anchor_x = 0; a.ed.anchor_y = 0;
-    press(&a, "v");
-    CHECK_EQ(a.ed.mode, ED_VISUAL);
-    CHECK_EQ(a.ed.shape, ED_SHAPE_RECT);
-    CHECK_EQ(a.ed.anchor_x, 0);
-    CHECK_EQ(a.ed.anchor_y, 0);
-
-    CASE("the same key twice leaves visual mode");
-    press(&a, "v");
-    CHECK_EQ(a.ed.mode, ED_NORMAL);
-    press(&a, "VV");
-    CHECK_EQ(a.ed.mode, ED_NORMAL);
-
-    CASE("the readout names the shape, and a circle's radius");
-    press(&a, "V");
-    a.ed.anchor_x = 0; a.ed.anchor_y = 0;
-    a.ed.cx = 1; a.ed.cy = 0;
-    char st[256];
-    ed_status(&a.ed, a.map, st, sizeof st);
-    CHECK(strstr(st, "circle r1") != NULL);
-    press(&a, "\x1b");
-
-    CASE("wall mode anchors both shapes too");
-    press(&a, "w");
-    CHECK_EQ(a.ed.mode, ED_WALL);
-    press(&a, "V");
-    CHECK_EQ(a.ed.has_anchor, 1);
-    CHECK_EQ(a.ed.shape, ED_SHAPE_CIRCLE);
-    press(&a, "v");
-    CHECK_EQ(a.ed.has_anchor, 1);
-    CHECK_EQ(a.ed.shape, ED_SHAPE_RECT);
-    press(&a, "v");
-    CHECK_EQ(a.ed.has_anchor, 0);
-
-    CASE("enter lays the shape the anchor was dropped with");
-    press(&a, "V");
-    press(&a, "\r");
-    CHECK_EQ(a.ed.has_anchor, 0);
-    CHECK(strstr(a.status, "circle") != NULL);
-
-    CASE("enter with no anchor says which keys set one");
-    press(&a, "\r");
-    CHECK(strstr(a.status, "v or V") != NULL);
-
-    /* The bar has to name the shape too: v and V chose it a while ago, and
-     * the anchor on screen does not spell out which one it is. */
-    CASE("the trace bar names the shape enter would lay");
-    press(&a, "V");
-    rnd_begin(&r);
-    app_draw(&a);
-    ByteBuf f;
-    bb_init(&f, 16384);
-    rnd_dump(&r, &f);
-    bb_putc(&f, '\0');
-    CHECK(strstr(f.data, "enter circle") != NULL);
-    CHECK(strstr(f.data, "enter rect") == NULL);
-    bb_free(&f);
-
-    press(&a, "v");
-    rnd_begin(&r);
-    app_draw(&a);
-    bb_init(&f, 16384);
-    rnd_dump(&r, &f);
-    bb_putc(&f, '\0');
-    CHECK(strstr(f.data, "enter rect") != NULL);
-    CHECK(strstr(f.data, "enter circle") == NULL);
-    bb_free(&f);
 
     app_free(&a);
     rnd_free(&r);
@@ -2950,4 +3186,403 @@ void test_status_draw(void)
 
     rnd_free(&r);
     map_free(m);
+}
+
+/* Notes: the GM's own text on a creature or a square, read and written
+ * through one prompt, hinted at but never shown on the mirrored status
+ * line, marked on the map in build mode only. */
+void test_notes(void)
+{
+    Sandbox sb = sandbox_enter("notes");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+
+    write_map_file(sb.dir, "fight.vtt");
+    char path[600];
+    snprintf(path, sizeof path, "%s/fight.vtt", sb.dir);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+    Map *m = a.map;
+    a.ed.cx = 0; a.ed.cy = 0;
+    press(&a, "ipAria\r");
+    CHECK_EQ(m->tokens.n, 1);
+
+    CASE("s n on a creature opens its note; the players' frame would differ while it is open");
+    CHECK_EQ(app_remote_live(&a), 1);
+    CHECK_EQ(app_view_differs(&a), 0);
+    press(&a, "sn");
+    CHECK_EQ(a.modal, MODAL_PROMPT);
+    CHECK_EQ(a.prompt_what, PROMPT_NOTE);
+    CHECK(strstr(a.prompt.title, "note on Aria") != NULL);
+    CHECK_EQ(app_remote_live(&a), 1);              /* no freeze: the prompt is simply not in their frame */
+    CHECK_EQ(app_view_differs(&a), 1);
+    press(&a, "wants the amulet\r");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK_EQ(app_view_differs(&a), 1);             /* the selected creature has a note: (note) is GM-only */
+    CHECK_EQ(strcmp(m->tokens.v[0].note, "wants the amulet"), 0);
+    CHECK(strstr(a.status, "noted on Aria") != NULL);
+    CHECK(strstr(a.status, "amulet") == NULL);            /* the text stays off the line */
+    CHECK_EQ(m->modified, 1);
+
+    CASE("the readout says there is a note, not what it says -- and only to the GM");
+    char line[192];
+    play_status(&a.play, m, &a.ed, 1, line, sizeof line);
+    CHECK(strstr(line, "(note)") != NULL);
+    CHECK(strstr(line, "amulet") == NULL);
+    play_status(&a.play, m, &a.ed, 0, line, sizeof line);
+    CHECK(strstr(line, "(note)") == NULL);
+
+    CASE("the prompt stops where the note does, so nothing typed is lost on the way in");
+    press(&a, "sn\025");
+    for (int i = 0; i < 80; i++) press(&a, "x");
+    CHECK_EQ(a.prompt.len, TOKEN_NOTE_MAX - 1);
+    press(&a, "\r");
+    CHECK_EQ((int)strlen(m->tokens.v[0].note), TOKEN_NOTE_MAX - 1);
+    press(&a, "sn\025wants the amulet\r");
+
+    CASE("the prompt opens holding the note, so it is the reader too");
+    press(&a, "sn");
+    CHECK_EQ(strcmp(a.prompt.buf, "wants the amulet"), 0);
+    press(&a, " and the ring\r");
+    CHECK_EQ(strcmp(m->tokens.v[0].note, "wants the amulet and the ring"), 0);
+
+    CASE("a creature's note undoes, and ctrl-u then enter takes it off");
+    press(&a, "u");
+    CHECK_EQ(strcmp(m->tokens.v[0].note, "wants the amulet"), 0);
+    press(&a, "\x12");
+    CHECK_EQ(strcmp(m->tokens.v[0].note, "wants the amulet and the ring"), 0);
+    press(&a, "sn\025\r");
+    CHECK_EQ(m->tokens.v[0].note[0], '\0');
+    CHECK(strstr(a.status, "note taken off Aria") != NULL);
+    press(&a, "sn\r");
+    CHECK(strstr(a.status, "nothing noted") != NULL);
+
+    CASE("with no creature under the cursor the note goes on the square");
+    press(&a, "\x1b");                                     /* deselect */
+    a.ed.cx = 1; a.ed.cy = 1;
+    CHECK_EQ(a.play.sel, -1);
+    press(&a, "sn");
+    CHECK(strstr(a.prompt.title, "note on B2") != NULL);
+    press(&a, "pressure plate\r");
+    CHECK(map_note_at(m, 1, 1) != NULL);
+    CHECK_EQ(strcmp(map_note_at(m, 1, 1), "pressure plate"), 0);
+    CHECK(strstr(a.status, "noted on B2") != NULL);
+    CHECK_EQ(m->nnotes, 1);
+    play_status(&a.play, m, &a.ed, 1, line, sizeof line);
+    CHECK(strstr(line, "(note)") != NULL);
+    a.ed.cx = 0; a.ed.cy = 1;
+    play_status(&a.play, m, &a.ed, 1, line, sizeof line);
+    CHECK(strstr(line, "(note)") == NULL);
+
+    CASE(":notes says where they are");
+    press(&a, "sn");
+    press(&a, "loose flagstone\r");                        /* A2 */
+    a.ed.cx = 0; a.ed.cy = 0;
+    press(&a, "t");                                        /* select Aria */
+    press(&a, "sn");
+    press(&a, "afraid of fire\r");
+    press(&a, ":notes\r");
+    CHECK(strstr(a.status, "notes on Aria, B2, A2") != NULL);
+    CHECK(strstr(a.status, "flagstone") == NULL);
+
+    CASE("in play mode nothing marks a noted square; in build mode a quote does");
+    rnd_begin(&r);
+    app_draw(&a);
+    int marks = 0;
+    for (size_t i = 0; i < (size_t)r.w * (size_t)r.h; i++) marks += r.back[i].ch == 0x201Du;
+    CHECK_EQ(marks, 0);
+    Key f1 = { KEY_F1, 0, 0 };
+    app_key(&a, f1);
+    rnd_begin(&r);
+    app_draw(&a);
+    marks = 0;
+    for (size_t i = 0; i < (size_t)r.w * (size_t)r.h; i++) marks += r.back[i].ch == 0x201Du;
+    CHECK_EQ(marks, 2);
+    int sx, sy;
+    grid_tile_interior(&a.ed.view, 1, 1, &sx, &sy);
+    CHECK_EQ(r.back[(size_t)sy * (size_t)r.w + (size_t)(sx + ZOOM[a.ed.view.zoom].iw - 1)].ch, 0x201Du);
+
+    CASE("build mode has s n too, on the square, and says so");
+    a.ed.cx = 1; a.ed.cy = 0;
+    press(&a, "s");
+    CHECK(strstr(a.status, "s n") != NULL);
+    press(&a, "n");
+    CHECK(strstr(a.prompt.title, "note on B1") != NULL);
+    press(&a, "the altar\r");
+    CHECK_EQ(m->nnotes, 3);
+    ed_status(&a.ed, m, line, sizeof line);
+    CHECK(strstr(line, "(note)") != NULL);
+    press(&a, "sx");
+    CHECK(strstr(a.status, "s wants n") != NULL);
+    app_key(&a, f2);
+
+    CASE("notes are saved as version 5, on the creature and on the squares, and read back");
+    char err[128];
+    CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+    char *text = slurp(path);
+    CHECK(text != NULL);
+    if (text) {
+        CHECK_EQ(strncmp(text, "VTT 5\n", 6), 0);
+        CHECK(strstr(text, "token player 0 0 1 \"Aria\"\ntokennote \"afraid of fire\"\n") != NULL);
+        CHECK(strstr(text, "note 1 1 \"pressure plate\"\n") != NULL);
+        free(text);
+    }
+    Map *back = mapio_load(path, err, sizeof err);
+    CHECK(back != NULL);
+    if (back) {
+        CHECK_EQ(strcmp(back->tokens.v[0].note, "afraid of fire"), 0);
+        CHECK_EQ(back->nnotes, 3);
+        CHECK_EQ(strcmp(map_note_at(back, 1, 0), "the altar"), 0);
+        CHECK_EQ(back->modified, 0);
+
+        CASE("a shrink drops the notes it leaves outside");
+        CHECK_EQ(map_resize(back, 1, 1), 0);
+        CHECK_EQ(back->nnotes, 0);
+        map_free(back);
+    }
+
+    CASE("a copied creature carries its note, and equality sees it");
+    Token t1 = m->tokens.v[0], t2 = t1;
+    CHECK_EQ(token_equal(&t1, &t2), 1);
+    str_lcpy(t2.note, "other", sizeof t2.note);
+    CHECK_EQ(token_equal(&t1, &t2), 0);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
+void test_counters(void)
+{
+    CASE("the parser: set, step, name, remove, and refuse nonsense");
+    Token t;
+    memset(&t, 0, sizeof t);
+    char cur[COUNTER_NAME_MAX] = "HP", msg[160];
+    const char *dh = "HP Stress Armor";
+    CHECK_EQ(counter_apply(&t, "hp 6", dh, cur, sizeof cur, msg, sizeof msg), 0);
+    CHECK_EQ(t.ncounters, 1);
+    CHECK_EQ(strcmp(t.counters[0].name, "HP"), 0);          /* the ruleset's spelling */
+    CHECK_EQ(t.counters[0].value, 6);
+    CHECK_EQ(t.counters[0].max, 6);
+    CHECK_EQ(counter_apply(&t, "hp -2, stress 0/6", dh, cur, sizeof cur, msg, sizeof msg), 0);
+    CHECK_EQ(t.counters[0].value, 4);
+    CHECK_EQ(strcmp(t.counters[1].name, "Stress"), 0);
+    CHECK_EQ(strcmp(cur, "Stress"), 0);                      /* the last one named */
+    CHECK_EQ(strcmp(msg, "HP 4/6  Stress 0/6"), 0);
+    CHECK_EQ(counter_apply(&t, "hp +9", dh, cur, sizeof cur, msg, sizeof msg), 0);
+    CHECK_EQ(t.counters[0].value, 6);                        /* clamped at the maximum */
+    CHECK_EQ(counter_apply(&t, "hp 3/8", dh, cur, sizeof cur, msg, sizeof msg), 0);
+    CHECK_EQ(t.counters[0].max, 8);
+    CHECK_EQ(counter_apply(&t, "hp", dh, cur, sizeof cur, msg, sizeof msg), 0);
+    CHECK_EQ(strcmp(cur, "HP"), 0);
+    CHECK(strstr(msg, "the counter < and > step") != NULL);
+    CHECK_EQ(counter_apply(&t, "Wounds 2", NULL, cur, sizeof cur, msg, sizeof msg), 0);
+    CHECK_EQ(strcmp(t.counters[2].name, "Wounds"), 0);       /* any name, as typed */
+    CHECK_EQ(counter_apply(&t, "-stress", dh, cur, sizeof cur, msg, sizeof msg), 0);
+    CHECK_EQ(t.ncounters, 2);
+    CHECK_EQ(strcmp(t.counters[1].name, "Wounds"), 0);       /* the rest close up */
+    CHECK_EQ(counter_apply(&t, "armor -1", dh, cur, sizeof cur, msg, sizeof msg), -1);
+    CHECK(strstr(msg, "no Armor yet") != NULL);
+    CHECK_EQ(counter_apply(&t, "armor 0", dh, cur, sizeof cur, msg, sizeof msg), -1);
+    CHECK(strstr(msg, "needs its maximum") != NULL);
+    CHECK_EQ(counter_apply(&t, "hp 3/0", dh, cur, sizeof cur, msg, sizeof msg), -1);
+    CHECK_EQ(counter_apply(&t, "hp x", dh, cur, sizeof cur, msg, sizeof msg), -1);
+    CHECK_EQ(counter_apply(&t, "3 hp", dh, cur, sizeof cur, msg, sizeof msg), -1);
+    CHECK_EQ(counter_apply(&t, "toolongname 3", dh, cur, sizeof cur, msg, sizeof msg), -1);
+    CHECK_EQ(counter_apply(&t, "-nothing", dh, cur, sizeof cur, msg, sizeof msg), -1);
+    CHECK_EQ(counter_apply(&t, "hp +2147483647", dh, cur, sizeof cur, msg, sizeof msg), 0);
+    CHECK_EQ(t.counters[0].value, t.counters[0].max);        /* bounded, not overflowed */
+    CHECK_EQ(counter_apply(&t, "hp -9999999999", dh, cur, sizeof cur, msg, sizeof msg), 0);
+    CHECK_EQ(t.counters[0].value, 0);
+    CHECK_EQ(counter_apply(&t, "a 1, b 1, c 1", NULL, cur, sizeof cur, msg, sizeof msg), -1);
+    CHECK(strstr(msg, "at most 4") != NULL);
+    char def[COUNTER_NAME_MAX];
+    counter_default(dh, def, sizeof def);   CHECK_EQ(strcmp(def, "HP"), 0);
+    counter_default(NULL, def, sizeof def); CHECK_EQ(strcmp(def, "HP"), 0);
+    counter_default("Wounds Grit", def, sizeof def); CHECK_EQ(strcmp(def, "Wounds"), 0);
+
+    Sandbox sb = sandbox_enter("counters");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    write_map_file(sb.dir, "fight.vtt");
+    char path[600];
+    snprintf(path, sizeof path, "%s/fight.vtt", sb.dir);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+    press(&a, ":ruleset daggerheart\r");
+    a.ed.cx = a.ed.cy = 0;
+    press(&a, "ieOgre\r");
+    Map *m = a.map;
+
+    CASE("s v opens the prompt with the ruleset's counters offered");
+    press(&a, "sv");
+    CHECK_EQ(a.modal, MODAL_PROMPT);
+    CHECK_EQ(a.prompt_what, PROMPT_COUNTERS);
+    CHECK(strstr(a.prompt.title, "counters on Ogre") != NULL);
+    CHECK(strstr(a.prompt.hint, "HP Stress Armor") != NULL);
+    press(&a, "hp 6, stress 0/3\r");
+    CHECK_EQ(m->tokens.v[0].ncounters, 2);
+    CHECK(strstr(a.status, "Ogre: HP 6/6  Stress 0/3") != NULL);
+    CHECK_EQ(a.status_gm, 1);
+    CHECK_EQ(m->modified, 1);
+
+    CASE("< and > step the current counter -- the last named, here Stress -- and a count names how far");
+    press(&a, ">");
+    CHECK_EQ(m->tokens.v[0].counters[1].value, 1);
+    press(&a, "svhp\r");                                   /* HP is current now */
+    press(&a, "2<");
+    CHECK_EQ(m->tokens.v[0].counters[0].value, 4);
+    CHECK(strstr(a.status, "Ogre HP 4/6") != NULL);
+    press(&a, "9<");
+    CHECK_EQ(m->tokens.v[0].counters[0].value, 0);
+    press(&a, "<");
+    CHECK(strstr(a.status, "already 0/6") != NULL);
+
+    CASE("a hit is one undo step");
+    press(&a, "u");
+    CHECK_EQ(m->tokens.v[0].counters[0].value, 4);
+    press(&a, "\x12");
+    CHECK_EQ(m->tokens.v[0].counters[0].value, 0);
+    press(&a, "sv\025hp 5\r");
+
+    CASE("the GM's status line shows the counters; the players' never does");
+    char line[192];
+    play_status(&a.play, m, &a.ed, 1, line, sizeof line);
+    CHECK(strstr(line, "HP 5/6") != NULL);
+    play_status(&a.play, m, &a.ed, 0, line, sizeof line);
+    CHECK(strstr(line, "HP") == NULL);
+
+    CASE("a creature with counters selected makes the two frames differ, and the phone sees no number");
+    CHECK_EQ(app_view_differs(&a), 1);
+    press(&a, ":serve\r");
+    int w = net_connect(a.net.port);
+    CHECK(w >= 0);
+    CHECK_EQ((int)write(w, "VTT1\n", 5), 5);
+    net_pump(&a.net, 0);
+    press(&a, ">");                                        /* a GM-only message on the line */
+    app_frame(&a, NULL, 0);
+    ByteBuf gm, pl;
+    bb_init(&gm, 65536); front_text(&r, &gm); bb_putc(&gm, '\0');
+    bb_init(&pl, 65536); front_text(&a.net.players, &pl); bb_putc(&pl, '\0');
+    CHECK(strstr(gm.data, "6/6") != NULL);
+    CHECK(strstr(pl.data, "6/6") == NULL);
+    CHECK(strstr(pl.data, "HP") == NULL);
+    CHECK(strstr(pl.data, "PLAY") != NULL);
+    bb_free(&gm); bb_free(&pl);
+
+    CASE("a prompt that changes nothing, or is refused, still keeps its numbers off the phone");
+    play_focus(&a.play, 0);
+    press(&a, "sv\025hp 6\r");                             /* already 6/6 */
+    CHECK(strstr(a.status, "HP 6/6") != NULL);
+    CHECK_EQ(a.status_gm, 1);
+    press(&a, "\x1b");                                     /* deselect; the cursor still names Ogre */
+    a.ed.cx = 0; a.ed.cy = 0;
+    press(&a, "sv\025hp 4/\r");                            /* refused, echoing what was typed */
+    CHECK(strstr(a.status, "maximum") != NULL);
+    CHECK_EQ(a.status_gm, 1);
+    a.ed.cx = 3; a.ed.cy = 3;                                /* nothing else GM-only in view */
+    CHECK_EQ(app_view_differs(&a), 1);
+    app_frame(&a, NULL, 0);
+    bb_init(&pl, 65536); front_text(&a.net.players, &pl); bb_putc(&pl, '\0');
+    CHECK(strstr(pl.data, "maximum") == NULL);
+    CHECK(strstr(pl.data, "4/") == NULL);
+    bb_free(&pl);
+
+    CASE("the panel shows the actor's counter to the GM only");
+    play_focus(&a.play, 0);
+    press(&a, "si12\r");
+    press(&a, "a");
+    press(&a, "\x1b");
+    a.ed.cx = 3; a.ed.cy = 3;
+    app_frame(&a, NULL, 0);
+    bb_init(&gm, 65536); front_text(&r, &gm); bb_putc(&gm, '\0');
+    bb_init(&pl, 65536); front_text(&a.net.players, &pl); bb_putc(&pl, '\0');
+    CHECK(strstr(gm.data, "Ogre") != NULL);
+    CHECK(strstr(gm.data, "6/6") != NULL);
+    CHECK(strstr(pl.data, "Ogre") != NULL);                /* the order is the table's */
+    CHECK(strstr(pl.data, "6/6") == NULL);                 /* the number is not */
+    bb_free(&gm); bb_free(&pl);
+    close(w);
+    press(&a, ":serve off\r");
+
+    CASE("copy and paste carry the counters along");
+    play_focus(&a.play, 0);
+    a.ed.cx = 0; a.ed.cy = 0;
+    press(&a, "y");
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "p");
+    CHECK_EQ(m->tokens.n, 2);
+    CHECK_EQ(m->tokens.v[1].ncounters, 2);
+    CHECK_EQ(m->tokens.v[1].counters[0].value, 6);
+
+    CASE("counters are saved as version 6 and read back; without them the file says what it did before");
+    char err[128];
+    CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+    char *text = slurp(path);
+    CHECK(text != NULL);
+    if (text) {
+        CHECK_EQ(strncmp(text, "VTT 6\n", 6), 0);
+        CHECK(strstr(text, "tokencounter HP 6 6\ntokencounter Stress 1 3\n") != NULL);
+        free(text);
+    }
+    Map *back = mapio_load(path, err, sizeof err);
+    CHECK(back != NULL);
+    if (back) {
+        CHECK_EQ(back->tokens.v[0].ncounters, 2);
+        CHECK_EQ(token_equal(&back->tokens.v[0], &m->tokens.v[0]), 1);
+        map_free(back);
+    }
+
+    CASE("an overlong counter name in a file is refused, not cut short with its tail read as a number");
+    {
+        char bad[700];
+        snprintf(bad, sizeof bad, "%s/bad.vtt", sb.dir);
+        FILE *bf = fopen(bad, "w");
+        if (bf) {
+            fputs("VTT 6\nname x\nsize 2 2\ntiles\n..\n..\ntoken enemy 0 0 1 \"Ogre\"\n"
+                  "tokencounter Stamina2 4 6\ntokencounter Grit 2 5\n", bf);
+            fclose(bf);
+        }
+        Map *bm = mapio_load(bad, err, sizeof err);
+        CHECK(bm != NULL);
+        if (bm) {
+            CHECK_EQ(bm->tokens.v[0].ncounters, 1);
+            CHECK_EQ(strcmp(bm->tokens.v[0].counters[0].name, "Grit"), 0);
+            map_free(bm);
+        }
+    }
+    press(&a, "u");                                        /* the paste */
+    play_focus(&a.play, 0);
+    press(&a, "sv\025-hp, -stress\r");
+    CHECK_EQ(m->tokens.v[0].ncounters, 0);
+    CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+    text = slurp(path);
+    if (text) { CHECK_EQ(strncmp(text, "VTT 4\n", 6), 0); free(text); }   /* still a fight */
+
+    CASE("with no creature, s v and < say so");
+    press(&a, ":turns off\r");
+    press(&a, "\x1b");
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "sv");
+    CHECK(strstr(a.status, "no creature") != NULL);
+    press(&a, "<");
+    CHECK(strstr(a.status, "no creature") != NULL);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
 }

@@ -1,4 +1,4 @@
-/* Tests: text, input, the renderer, the map, tokens, the file, the grid, the editor, undo, build editing, play basics, how tokens look. */
+/* Tests: text and input, the renderer, the map and its file, undo, golden frames, the map browser, the autosave. */
 
 #include "harness.h"
 
@@ -64,12 +64,6 @@ static Key next_key(InputParser *p)
     memset(&k, 0, sizeof k);
     if (!input_next(p, &k)) k.kind = KEY_NONE;
     return k;
-}
-
-void feed(InputParser *p, const char *s)
-{
-    input_init(p);
-    input_feed(p, s, strlen(s));
 }
 
 void test_input(void)
@@ -503,7 +497,7 @@ void test_tokens(void)
 
 /* ----------------------------------------------------------------- mapio */
 
-void write_file(const char *path, const char *text)
+static void write_file(const char *path, const char *text)
 {
     FILE *f = fopen(path, "w");
     if (f) { fputs(text, f); fclose(f); }
@@ -1158,143 +1152,6 @@ void test_editing(void)
     undo_free(&u);
 }
 
-/* ------------------------------------------------------------------ play */
-
-void test_play(void)
-{
-    Map *m = map_new(12, 10, "play");
-    map_fill_tiles(m, 0, 0, 11, 9, TILE_FLOOR);
-
-    Undo u;
-    undo_init(&u);
-    Play p;
-    play_init(&p);
-
-    CASE("play starts with nothing selected and walls enforced");
-    CHECK_EQ(p.sel, -1);
-    CHECK_EQ(p.enforce_walls, 1);
-    CHECK_EQ(p.next_size, 1);
-
-    Token a = { 2, 2, 1, TOKEN_PLAYER, "Aria" };
-    int ai = undo_add_token(&u, m, a);
-
-    CASE("a 1x1 token moves freely on open floor");
-    play_focus(&p, ai);
-    CHECK_EQ(play_step(m, &u, &p, 1, 0), 1);
-    CHECK_EQ(m->tokens.v[ai].x, 3);
-    CHECK_EQ(p.steps, 1);
-    CHECK_EQ(play_step(m, &u, &p, 0, 1), 1);
-    CHECK_EQ(p.steps, 2);
-
-    CASE("a wall stops it, and the step is not counted");
-    map_set_vedge(m, 4, 3, EDGE_WALL);
-    int before = p.steps;
-    CHECK_EQ(play_step(m, &u, &p, 1, 0), 0);
-    CHECK_EQ(m->tokens.v[ai].x, 3);
-    CHECK_EQ(p.steps, before);
-
-    /* Rules-agnostic means the GM can always overrule the map. */
-    CASE("blocking can be switched off");
-    p.enforce_walls = 0;
-    CHECK_EQ(play_step(m, &u, &p, 1, 0), 1);
-    CHECK_EQ(m->tokens.v[ai].x, 4);
-    p.enforce_walls = 1;
-    map_set_vedge(m, 4, 3, EDGE_NONE);
-
-    CASE("the map edge stops a token even with walls off");
-    p.enforce_walls = 0;
-    m->tokens.v[ai].x = 0;
-    m->tokens.v[ai].y = 0;
-    CHECK_EQ(play_step(m, &u, &p, -1, 0), 0);
-    CHECK_EQ(play_step(m, &u, &p, 0, -1), 0);
-    p.enforce_walls = 1;
-
-    /* A big token has to be stopped by a wall anywhere along its leading
-     * face, not only the one tile the anchor happens to sit on. */
-    CASE("a 2x2 token is blocked by a wall on any part of its face");
-    Token big = { 4, 4, 2, TOKEN_ENEMY, "Ogre" };
-    int bi = undo_add_token(&u, m, big);
-    play_focus(&p, bi);
-    CHECK_EQ(token_can_move(m, &m->tokens.v[bi], 1, 0, 1, bi), 1);
-    map_set_vedge(m, 6, 5, EDGE_WALL);        /* the token's lower-right face */
-    CHECK_EQ(token_can_move(m, &m->tokens.v[bi], 1, 0, 1, bi), 0);
-    CHECK_EQ(play_step(m, &u, &p, 1, 0), 0);
-    map_set_vedge(m, 6, 5, EDGE_WALL * 0);
-
-    CHECK_EQ(token_can_move(m, &m->tokens.v[bi], 0, 1, 1, bi), 1);
-    map_set_hedge(m, 5, 6, EDGE_WALL);        /* below its right-hand column */
-    CHECK_EQ(token_can_move(m, &m->tokens.v[bi], 0, 1, 1, bi), 0);
-    map_set_hedge(m, 5, 6, EDGE_NONE);
-
-    CASE("a big token needs its whole footprint on the map");
-    m->tokens.v[bi].x = 10;
-    CHECK_EQ(token_can_move(m, &m->tokens.v[bi], 1, 0, 1, bi), 0);
-    m->tokens.v[bi].x = 4;
-
-    CASE("void tiles stop a token like a wall does");
-    map_set_tile(m, 6, 4, TILE_VOID);
-    CHECK_EQ(token_can_move(m, &m->tokens.v[bi], 1, 0, 1, bi), 0);
-    map_set_tile(m, 6, 4, TILE_FLOOR);
-
-    CASE("placement checks the footprint fits");
-    CHECK_EQ(play_can_place(m, 11, 9, 1, -1), 1);
-    CHECK_EQ(play_can_place(m, 11, 9, 2, -1), 0);
-    CHECK_EQ(play_can_place(m, 10, 8, 2, -1), 1);
-    CHECK_EQ(play_can_place(m, -1, 0, 1, -1), 0);
-
-    /* Aria is parked on 0,0 from the edge test above, and the ogre's 2x2 sits
-     * at 4,4. A stack of tokens is a stack nobody can see into. */
-    CASE("placement also checks the square is free");
-    CHECK_EQ(play_can_place(m, 0, 0, 1, -1), 0);
-    CHECK_EQ(play_can_place(m, 4, 4, 1, -1), 0);
-    CHECK_EQ(play_can_place(m, 5, 5, 1, -1), 0);    /* the far corner of the 2x2 */
-    CHECK_EQ(play_can_place(m, 3, 3, 2, -1), 0);    /* only its corner overlaps */
-    CHECK_EQ(play_can_place(m, 6, 6, 1, -1), 1);
-
-    CASE("a token may grow where it already stands");
-    CHECK_EQ(play_can_place(m, 4, 4, 3, -1), 0);
-    CHECK_EQ(play_can_place(m, 4, 4, 3, bi), 1);
-
-    CASE("cycling wraps in both directions");
-    play_focus(&p, -1);
-    play_cycle(&p, m, 1, PLAY_ANY_KIND);
-    CHECK_EQ(p.sel, 0);
-    play_cycle(&p, m, 1, PLAY_ANY_KIND);
-    CHECK_EQ(p.sel, 1);
-    play_cycle(&p, m, 1, PLAY_ANY_KIND);
-    CHECK_EQ(p.sel, 0);          /* wrapped */
-    play_cycle(&p, m, -1, PLAY_ANY_KIND);
-    CHECK_EQ(p.sel, 1);
-
-    CASE("selecting by tile finds the token under the cursor");
-    m->tokens.v[bi].x = 4;
-    m->tokens.v[bi].y = 4;
-    play_select_at(&p, m, 5, 5, 1);      /* inside the 2x2 footprint */
-    CHECK_EQ(p.sel, bi);
-    play_select_at(&p, m, 9, 9, 1);
-    CHECK_EQ(p.sel, -1);
-
-    CASE("moves undo one step at a time");
-    play_focus(&p, ai);
-    m->tokens.v[ai].x = 5;
-    m->tokens.v[ai].y = 5;
-    undo_clear(&u);
-    undo_begin(&u); play_step(m, &u, &p, 1, 0); undo_end(&u);
-    undo_begin(&u); play_step(m, &u, &p, 1, 0); undo_end(&u);
-    CHECK_EQ(m->tokens.v[ai].x, 7);
-    undo_undo(&u, m);
-    CHECK_EQ(m->tokens.v[ai].x, 6);
-    undo_undo(&u, m);
-    CHECK_EQ(m->tokens.v[ai].x, 5);
-
-    CASE("stepping with nothing selected does nothing");
-    play_focus(&p, -1);
-    CHECK_EQ(play_step(m, &u, &p, 1, 0), 0);
-
-    undo_free(&u);
-    map_free(m);
-}
-
 /* ------------------------------------------------------- token appearance */
 
 /* Renders one token and reports whether a cell carries its fill color. */
@@ -1493,4 +1350,1024 @@ void test_token_draw(void)
 
     rnd_free(&r);
     map_free(m);
+}
+
+#define FIXTURE "tests/fixtures/two-rooms.vtt"
+
+void test_golden(void)
+{
+    CASE("menu");
+    {
+        static const char *const seg[] = { "" };
+        golden("menu", 72, 20, NULL, seg, 1, 0);
+    }
+
+    CASE("build mode on a loaded map");
+    {
+        static const char *const seg[] = { "" };
+        golden("build", 72, 20, FIXTURE, seg, 1, 0);
+    }
+
+    /* The whole point of the wall tool: walking an outline with the pen down
+     * should leave a sealed room. */
+    CASE("a room traced with the wall tool");
+    {
+        static const char *const seg[] = { "gg0jjjjjjllllllllllllw lljjhhkk" };
+        golden("traced-room", 72, 20, FIXTURE, seg, 1, 0);
+    }
+
+    CASE("visual selection cleared to void");
+    {
+        static const char *const seg[] = { "gg0vlljj", "x" };
+        golden("cleared", 72, 20, FIXTURE, seg, 2, 0);
+    }
+
+    CASE("play mode with a token picked up and moved");
+    {
+        /* F2 into play, tab to the first token, grab it, walk east. */
+        static const char *const seg[] = { "\x1b[12~\t\r", "lll" };
+        golden("play-moving", 72, 20, FIXTURE, seg, 2, 0);
+    }
+
+    CASE("play mode in ascii");
+    {
+        static const char *const seg[] = { "\x1b[12~" };
+        golden("play-ascii", 72, 20, FIXTURE, seg, 1, 1);
+    }
+
+    CASE("the new-map prompt");
+    {
+        static const char *const seg[] = { "j\r", "Ambush" };
+        golden("prompt", 72, 20, NULL, seg, 2, 0);
+    }
+
+    CASE("the ruler measuring across a room");
+    {
+        /* Anchor inside the west room, then measure out through its wall so
+         * the readout has to report sight as broken. */
+        static const char *const seg[] = { "gg0jjll", "m", "llllll" };
+        golden("ruler", 72, 20, FIXTURE, seg, 3, 0);
+    }
+
+    CASE("the ruler with several legs");
+    {
+        static const char *const seg[] = { "gg0jjll", "m", "lll", "\r", "jjj", "\r", "ll" };
+        golden("ruler-legs", 72, 20, FIXTURE, seg, 7, 0);
+    }
+
+    /* The fill itself is a background color, which a text dump cannot show;
+     * this pins the readout, which is the part that names names. */
+    CASE("the range overlay's readout");
+    {
+        static const char *const seg[] = { ":ruleset daggerheart\r", "\x1b[12~", "\t", "rrrr" };
+        golden("range", 84, 20, FIXTURE, seg, 4, 0);
+    }
+
+    /* Doors, windows and terrain all carry their own glyph, so a
+     * text dump pins them. */
+    CASE("every boundary kind and terrain, in build mode");
+    {
+        static const char *const seg[] = { "" };
+        golden("kinds-build", 72, 16, "tests/fixtures/kinds.vtt", seg, 1, 0);
+    }
+
+    /* The same map in play mode: the secret door must be a wall. */
+    CASE("the same map in play mode, with the secret door hidden");
+    {
+        static const char *const seg[] = { "\x1b[12~" };
+        golden("kinds-play", 72, 16, "tests/fixtures/kinds.vtt", seg, 1, 0);
+    }
+
+    CASE("a narrow terminal still lays out");
+    {
+        static const char *const seg[] = { "" };
+        golden("narrow", 34, 12, FIXTURE, seg, 1, 0);
+    }
+}
+
+/* ---------------------------------------------------------------- term io */
+
+/* These cover the failure that produced visible artifacts: the terminal falls
+ * behind, part of a frame never arrives, and the renderer goes on believing
+ * the screen shows what it drew. */
+void test_term_io(void)
+{
+    signal(SIGPIPE, SIG_IGN);
+
+    /* A frame that does not fully arrive must not advance `front`. Otherwise
+     * the cells that were dropped are diffed away on every later frame and
+     * stay wrong on screen forever. */
+    CASE("a failed write forces a full repaint instead of trusting front");
+    {
+        Renderer r;
+        rnd_init(&r);
+        rnd_resize(&r, 20, 5);
+
+        Term t;
+        memset(&t, 0, sizeof t);
+
+        int devnull = open("/dev/null", O_WRONLY);
+        CHECK(devnull >= 0);
+        t.out_fd = devnull;
+
+        Style st = style(COL_DEFAULT, COL_DEFAULT, 0);
+
+        /* A clean frame first, so front is in sync and force_full is clear. */
+        rnd_begin(&r);
+        draw_text(&r, 0, 0, "hello", -1, st);
+        rnd_flush(&r, &t);
+        CHECK_EQ(r.force_full, 0);
+        CHECK_EQ(t.dead, 0);
+
+        /* Now break the destination and change one cell. */
+        int fds[2];
+        CHECK_EQ(pipe(fds), 0);
+        close(fds[0]);                       /* reader gone: writes get EPIPE */
+        t.out_fd = fds[1];
+
+        rnd_begin(&r);
+        draw_text(&r, 0, 0, "hellp", -1, st);
+        rnd_flush(&r, &t);
+
+        CHECK_EQ(t.dead, 1);                 /* a real failure, not backpressure */
+        CHECK_EQ(r.bytes_written, 0);        /* reports what arrived, not what we hoped */
+        CHECK_EQ(r.force_full, 1);           /* the next frame must repaint everything */
+
+        /* Redrawing the same content must now emit the whole screen, which is
+         * only true if front was left alone. */
+        close(fds[1]);
+        t.out_fd = devnull;
+        t.dead   = 0;
+        rnd_begin(&r);
+        draw_text(&r, 0, 0, "hellp", -1, st);
+        rnd_flush(&r, &t);
+        CHECK_EQ(r.cells_changed, 100);      /* 20 x 5, every cell */
+        CHECK_EQ(r.force_full, 0);
+
+        close(devnull);
+        rnd_free(&r);
+    }
+
+    /* The original bug: stdout was non-blocking, so a terminal that fell
+     * behind made write() return EAGAIN and the rest of the frame was thrown
+     * away. Backpressure must be waited out instead. */
+    CASE("term_write delivers everything even when the reader is slow");
+    {
+        int fds[2];
+        CHECK_EQ(pipe(fds), 0);
+
+        int fl = fcntl(fds[1], F_GETFL, 0);
+        fcntl(fds[1], F_SETFL, fl | O_NONBLOCK);   /* force the EAGAIN path */
+
+        const size_t N = 512 * 1024;              /* far beyond any pipe buffer */
+        char *buf = xmalloc(N);
+        memset(buf, 'x', N);
+
+        pid_t pid = fork();
+        CHECK(pid >= 0);
+        if (pid == 0) {
+            /* Child: drain slowly, so the writer really does hit EAGAIN. */
+            close(fds[1]);
+            char   sink[8192];
+            size_t total = 0;
+            for (;;) {
+                ssize_t n = read(fds[0], sink, sizeof sink);
+                if (n <= 0) break;
+                total += (size_t)n;
+                if ((total / sizeof sink) % 4 == 0) {
+                    struct timespec ts = { 0, 1000000 };   /* 1ms */
+                    nanosleep(&ts, NULL);
+                }
+            }
+            close(fds[0]);
+            _exit(total == N ? 0 : 1);
+        }
+
+        close(fds[0]);
+        Term t;
+        memset(&t, 0, sizeof t);
+        t.out_fd = fds[1];
+
+        size_t wrote = term_write(&t, buf, N);
+        CHECK_EQ(wrote, N);                       /* nothing dropped */
+        CHECK_EQ(t.dead, 0);                      /* slow is not dead */
+
+        close(fds[1]);
+        int status = 0;
+        waitpid(pid, &status, 0);
+        CHECK(WIFEXITED(status));
+        CHECK_EQ(WEXITSTATUS(status), 0);         /* the child saw every byte */
+
+        free(buf);
+    }
+
+    /* The drain loop reads only what the parser can hold, because input_feed
+     * discards the rest; without that a long burst loses keystrokes. */
+    CASE("input_room bounds what input_feed can accept");
+    {
+        InputParser p;
+        input_init(&p);
+        size_t cap = input_room(&p);
+        CHECK(cap > 0);
+
+        char *big = xmalloc(cap + 64);
+        memset(big, 'j', cap + 64);
+
+        input_feed(&p, big, cap);
+        CHECK_EQ(input_room(&p), 0);
+
+        int n = 0;
+        Key k;
+        while (input_next(&p, &k)) n++;
+        CHECK_EQ((size_t)n, cap);                 /* every byte became a key */
+        CHECK_EQ(input_room(&p), cap);
+
+        /* Offering more than the room silently drops the excess, which is
+         * exactly why the caller must ask first. */
+        input_feed(&p, big, cap + 64);
+        CHECK_EQ(input_room(&p), 0);
+
+        free(big);
+    }
+}
+
+void test_map_format_v2(void)
+{
+    char path[] = "/tmp/vtt-v2-XXXXXX";
+    int  fd = mkstemp(path);
+    if (fd >= 0) close(fd);
+
+    Map *m = map_new(10, 6, "kinds");
+    for (int k = TILE_FLOOR, x = 0; x < 10; x++, k++) {
+        if (k >= TILE_COUNT) k = TILE_FLOOR;
+        for (int y = 0; y < 6; y++) map_set_tile(m, x, y, (uint8_t)k);
+    }
+    for (int k = EDGE_WALL, y = 0; y < 6; y++, k++) {
+        if (k >= EDGE_COUNT) k = EDGE_WALL;
+        map_set_vedge(m, 3, y, (uint8_t)k);
+        map_set_hedge(m, y, 2, (uint8_t)k);
+    }
+
+    char err[MAPIO_ERR_MAX] = { 0 };
+    CASE("every terrain and boundary kind survives a save and load");
+    CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+
+    Map *l = mapio_load(path, err, sizeof err);
+    CHECK(l != NULL);
+    if (l) {
+        int tiles_ok = 1, v_ok = 1, h_ok = 1;
+        for (int y = 0; y < 6; y++)
+            for (int x = 0; x < 10; x++)
+                if (map_tile(l, x, y) != map_tile(m, x, y)) tiles_ok = 0;
+        for (int y = 0; y < 6; y++)
+            for (int x = 0; x <= 10; x++)
+                if (map_vedge(l, x, y) != map_vedge(m, x, y)) v_ok = 0;
+        for (int y = 0; y <= 6; y++)
+            for (int x = 0; x < 10; x++)
+                if (map_hedge(l, x, y) != map_hedge(m, x, y)) h_ok = 0;
+        CHECK(tiles_ok);
+        CHECK(v_ok);
+        CHECK(h_ok);
+        map_free(l);
+    }
+
+    /* A v1 map predates doors and terrain, and must still open. */
+    CASE("a version 1 map still loads, as walls and plain floor");
+    FILE *f = fopen(path, "w");
+    if (f) {
+        fputs("VTT 1\nname Old\nsize 4 3\nzoom 1\n"
+              "tiles\n....\n....\n....\n"
+              "vedges\n|   |\n|   |\n|   |\n"
+              "hedges\n----\n    \n    \n----\n", f);
+        fclose(f);
+    }
+    Map *old = mapio_load(path, err, sizeof err);
+    CHECK(old != NULL);
+    if (old) {
+        CHECK_EQ(map_tile(old, 0, 0), TILE_FLOOR);
+        CHECK_EQ(map_vedge(old, 0, 0), EDGE_WALL);
+        CHECK_EQ(map_vedge(old, 4, 0), EDGE_WALL);
+        CHECK_EQ(map_hedge(old, 0, 0), EDGE_WALL);      /* written as '-' */
+        CHECK_EQ(map_hedge(old, 0, 1), EDGE_NONE);
+        map_free(old);
+    }
+
+    CASE("an unreadable character reads as empty rather than failing the load");
+    f = fopen(path, "w");
+    if (f) {
+        fputs("VTT 2\nname Odd\nsize 3 2\ntiles\n.@.\n...\n"
+              "vedges\n|@ |\n    \nhedges\n-@-\n   \n   \n", f);
+        fclose(f);
+    }
+    Map *odd = mapio_load(path, err, sizeof err);
+    CHECK(odd != NULL);
+    if (odd) {
+        CHECK_EQ(map_tile(odd, 1, 0), TILE_VOID);
+        CHECK_EQ(map_vedge(odd, 0, 0), EDGE_WALL);
+        CHECK_EQ(map_vedge(odd, 1, 0), EDGE_NONE);
+        map_free(odd);
+    }
+
+    map_free(m);
+    unlink(path);
+}
+
+static int file_exists(const char *dir, const char *name)
+{
+    char path[512];
+    snprintf(path, sizeof path, "%s/%s", dir, name);
+    return access(path, F_OK) == 0;
+}
+
+void test_delete_map(void)
+{
+    Sandbox sb = sandbox_enter("del");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    const char *dir = sb.dir;
+
+    write_map_file(dir, "alpha.vtt");
+    write_map_file(dir, "bravo.vtt");
+    write_map_file(dir, "charlie.vtt");
+    if (chdir(dir) != 0) { CHECK(0); return; }
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+
+    press(&a, "\r");                       /* menu -> Open Map */
+    CASE("the browser finds the maps");
+    CHECK_EQ(a.screen, SCREEN_BROWSER);
+    CHECK_EQ(a.nentries, 3);
+
+    CASE("d asks before it deletes anything");
+    press(&a, "jd");                       /* select bravo, then delete */
+    CHECK_EQ(a.modal, MODAL_CONFIRM_DELETE);
+    CHECK(strstr(a.modal_body, "bravo.vtt") != NULL);
+    CHECK_EQ(file_exists(dir, "bravo.vtt"), 1);   /* nothing gone yet */
+
+    /* While the question is up, nothing else may act -- least of all the
+     * keys that would move the selection out from under it. */
+    CASE("the confirmation swallows every other key");
+    int sel_before = a.browser.sel;
+    press(&a, "jkgGr");
+    CHECK_EQ(a.modal, MODAL_CONFIRM_DELETE);
+    CHECK_EQ(a.browser.sel, sel_before);
+    CHECK_EQ(a.nentries, 3);
+
+    CASE("n keeps the file");
+    press(&a, "n");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK_EQ(file_exists(dir, "bravo.vtt"), 1);
+    CHECK_EQ(a.nentries, 3);
+
+    CASE("esc keeps it too");
+    press(&a, "d\x1b");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK_EQ(file_exists(dir, "bravo.vtt"), 1);
+
+    CASE("y deletes it, and only it, and its recovery copy with it");
+    write_map_file(dir, "bravo.vtt.autosave");
+    press(&a, "dy");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK_EQ(file_exists(dir, "bravo.vtt"), 0);
+    CHECK_EQ(file_exists(dir, "bravo.vtt.autosave"), 0);
+    CHECK_EQ(file_exists(dir, "alpha.vtt"), 1);
+    CHECK_EQ(file_exists(dir, "charlie.vtt"), 1);
+
+    CASE("the list refreshes without being asked");
+    CHECK_EQ(a.nentries, 2);
+
+    /* Deleting several in a row should not send you back to the top. */
+    CASE("the caret keeps its place");
+    CHECK_EQ(a.browser.sel, 1);
+    CHECK(strstr(a.entries[a.browser.sel].name, "charlie") != NULL);
+
+    CASE("deleting the last entry clamps the caret rather than running off");
+    press(&a, "dy");
+    CHECK_EQ(a.nentries, 1);
+    CHECK_EQ(a.browser.sel, 0);
+    CHECK(strstr(a.entries[0].name, "alpha") != NULL);
+
+    CASE("an empty list has nothing to delete and says so");
+    press(&a, "dy");
+    CHECK_EQ(a.nentries, 0);
+    press(&a, "d");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK(strstr(a.status, "nothing") != NULL);
+
+    /* A file that will not unlink must report, not pretend. */
+    CASE("a delete that fails reports instead of lying");
+    write_map_file(dir, "guard.vtt");
+    char sub[1200];
+    snprintf(sub, sizeof sub, "%.1000s/locked", dir);
+    if (mkdir(sub, 0755) == 0) {
+        write_map_file(sub, "inner.vtt");
+        chmod(sub, 0500);                  /* readable, not writable */
+    }
+    press(&a, "r");
+    CHECK(a.nentries >= 1);
+
+    app_free(&a);
+    rnd_free(&r);
+
+    sandbox_leave(&sb);
+
+    /* Tidy up whatever survived. */
+    chmod(sub, 0700);
+    char p2[1400];
+    snprintf(p2, sizeof p2, "%.1200s/inner.vtt", sub); unlink(p2);
+    rmdir(sub);
+    snprintf(p2, sizeof p2, "%.1200s/alpha.vtt", dir); unlink(p2);
+    snprintf(p2, sizeof p2, "%.1200s/guard.vtt", dir); unlink(p2);
+    rmdir(dir);
+}
+
+/* Reads the map's title straight out of the file, to check the rename reached
+ * inside and not only the directory entry. */
+static void read_title(const char *dir, const char *name, char *out, size_t n)
+{
+    out[0] = '\0';
+    char path[512];
+    snprintf(path, sizeof path, "%s/%s", dir, name);
+    FILE *f = fopen(path, "r");
+    if (!f) return;
+    char line[256];
+    while (fgets(line, sizeof line, f))
+        if (!strncmp(line, "name ", 5)) {
+            size_t l = strlen(line);
+            while (l && (line[l - 1] == '\n' || line[l - 1] == '\r')) line[--l] = '\0';
+            str_lcpy(out, line + 5, n);
+            break;
+        }
+    fclose(f);
+}
+
+void test_rename_map(void)
+{
+    Sandbox sb = sandbox_enter("ren");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    const char *dir = sb.dir;
+
+    write_map_file(dir, "alpha.vtt");
+    write_map_file(dir, "bravo.vtt");
+    if (chdir(dir) != 0) { CHECK(0); sandbox_leave(&sb); return; }
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+
+    press(&a, "\r");
+    CHECK_EQ(a.nentries, 2);
+
+    CASE("R offers the current name, without its extension");
+    press(&a, "jR");
+    CHECK_EQ(a.modal, MODAL_PROMPT);
+    CHECK_EQ(strcmp(a.prompt.buf, "bravo"), 0);
+
+    CASE("esc leaves the file alone");
+    press(&a, "\x1b");
+    CHECK_EQ(file_exists(dir, "bravo.vtt"), 1);
+
+    /* The name in the browser and the title in the editor should not drift
+     * apart, so a rename reaches inside the file too. */
+    CASE("renaming moves the file and retitles the map, and its recovery copy follows");
+    write_map_file(dir, "bravo.vtt.autosave");
+    press(&a, "R\025goblin\r");
+    CHECK_EQ(file_exists(dir, "bravo.vtt"), 0);
+    CHECK_EQ(file_exists(dir, "goblin.vtt"), 1);
+    CHECK_EQ(file_exists(dir, "bravo.vtt.autosave"), 0);
+    CHECK_EQ(file_exists(dir, "goblin.vtt.autosave"), 1);
+    unlink("goblin.vtt.autosave");
+    char title[128];
+    read_title(dir, "goblin.vtt", title, sizeof title);
+    CHECK_EQ(strcmp(title, "goblin"), 0);
+
+    CASE("the caret follows the file to wherever it now sorts");
+    CHECK_EQ(a.nentries, 2);
+    CHECK(strstr(a.entries[a.browser.sel].name, "goblin") != NULL);
+
+    /* rename(2) would silently destroy the other map; it must refuse. */
+    CASE("renaming onto an existing map refuses instead of clobbering it");
+    press(&a, "R\025alpha\r");
+    CHECK_EQ(a.modal, MODAL_MESSAGE);
+    CHECK(strstr(a.modal_body, "already exists") != NULL);
+    CHECK_EQ(file_exists(dir, "goblin.vtt"), 1);
+    CHECK_EQ(file_exists(dir, "alpha.vtt"), 1);
+    read_title(dir, "alpha.vtt", title, sizeof title);
+    CHECK_EQ(strcmp(title, "x"), 0);        /* the other map is untouched */
+    press(&a, " ");                         /* dismiss */
+
+    CASE("a name with a slash is refused: this renames, it does not move");
+    press(&a, "R\025../escaped\r");
+    CHECK_EQ(file_exists(dir, "goblin.vtt"), 1);
+    CHECK(strstr(a.status, "cannot contain") != NULL);
+
+    CASE("an empty name is refused");
+    press(&a, "R\025\r");
+    CHECK_EQ(file_exists(dir, "goblin.vtt"), 1);
+    CHECK_EQ(a.nentries, 2);
+
+    CASE("a typed extension is not doubled up");
+    press(&a, "R\025ogre.vtt\r");
+    CHECK_EQ(file_exists(dir, "ogre.vtt"), 1);
+    CHECK_EQ(file_exists(dir, "ogre.vtt.vtt"), 0);
+
+    CASE("renaming to the same name is a no-op, not a self-destruct");
+    press(&a, "R\r");
+    CHECK_EQ(file_exists(dir, "ogre.vtt"), 1);
+
+    /* A map too damaged to parse is exactly when you want to move it out of
+     * the way, so the file rename must not depend on the load. */
+    CASE("a map that will not load still renames, keeping its old title");
+    char broken[1200];
+    snprintf(broken, sizeof broken, "%.1000s/broken.vtt", dir);
+    FILE *bf = fopen(broken, "w");
+    if (bf) { fputs("VTT 2\nname keep\nsize 0 0\ngarbage\n", bf); fclose(bf); }
+    press(&a, "r");
+    int found = -1;
+    for (int i = 0; i < a.nentries; i++)
+        if (strstr(a.entries[i].name, "broken")) found = i;
+    CHECK(found >= 0);
+    if (found >= 0) {
+        a.browser.sel = found;
+        press(&a, "R\025salvaged\r");
+        CHECK_EQ(file_exists(dir, "salvaged.vtt"), 1);
+        CHECK_EQ(file_exists(dir, "broken.vtt"), 0);
+        read_title(dir, "salvaged.vtt", title, sizeof title);
+        CHECK_EQ(strcmp(title, "keep"), 0);          /* contents preserved */
+        CHECK(strstr(a.status, "title unchanged") != NULL);
+    }
+
+    /* The browser used to swallow its own confirmations: the message was set
+     * but never drawn, so a delete reported nothing at all. */
+    CASE("the browser actually draws its status message");
+    app_set_status(&a, "a distinctive message");
+    rnd_begin(&r);
+    app_draw(&a);
+    ByteBuf frame;
+    bb_init(&frame, 8192);
+    rnd_dump(&r, &frame);
+    bb_putc(&frame, '\0');
+    CHECK(strstr(frame.data, "a distinctive message") != NULL);
+    bb_free(&frame);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+
+    char p2[1400];
+    const char *leftovers[] = { "alpha.vtt", "ogre.vtt", "salvaged.vtt", "goblin.vtt" };
+    for (size_t i = 0; i < sizeof leftovers / sizeof *leftovers; i++) {
+        snprintf(p2, sizeof p2, "%.1200s/%.40s", dir, leftovers[i]);
+        unlink(p2);
+    }
+    rmdir(dir);
+}
+
+/* ----------------------------------------------------- duplicating maps */
+
+static int files_identical(const char *dir, const char *a, const char *b)
+{
+    char pa[1200], pb[1200];
+    snprintf(pa, sizeof pa, "%.1000s/%.60s", dir, a);
+    snprintf(pb, sizeof pb, "%.1000s/%.60s", dir, b);
+
+    FILE *fa = fopen(pa, "rb"), *fb = fopen(pb, "rb");
+    if (!fa || !fb) { if (fa) fclose(fa); if (fb) fclose(fb); return 0; }
+
+    int same = 1, ca, cb;
+    do { ca = fgetc(fa); cb = fgetc(fb); if (ca != cb) same = 0; }
+    while (same && ca != EOF && cb != EOF);
+
+    fclose(fa);
+    fclose(fb);
+    return same;
+}
+
+void test_duplicate_map(void)
+{
+    Sandbox sb = sandbox_enter("dup");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    const char *dir = sb.dir;
+
+    write_map_file(dir, "goblin.vtt");
+    if (chdir(dir) != 0) { CHECK(0); sandbox_leave(&sb); return; }
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+
+    press(&a, "\r");
+    CHECK_EQ(a.nentries, 1);
+
+    CASE("c offers a name that is already free");
+    press(&a, "c");
+    CHECK_EQ(a.modal, MODAL_PROMPT);
+    CHECK_EQ(strcmp(a.prompt.buf, "goblin copy"), 0);
+
+    CASE("esc leaves nothing behind");
+    press(&a, "\x1b");
+    CHECK_EQ(a.nentries, 1);
+    CHECK_EQ(file_exists(dir, "goblin copy.vtt"), 0);
+
+    CASE("accepting it copies the file and titles the copy");
+    press(&a, "c\r");
+    CHECK_EQ(file_exists(dir, "goblin.vtt"), 1);       /* original untouched */
+    CHECK_EQ(file_exists(dir, "goblin copy.vtt"), 1);
+    char title[128];
+    read_title(dir, "goblin.vtt", title, sizeof title);
+    CHECK_EQ(strcmp(title, "x"), 0);
+    read_title(dir, "goblin copy.vtt", title, sizeof title);
+    CHECK_EQ(strcmp(title, "goblin copy"), 0);
+
+    CASE("the caret moves to the copy");
+    CHECK_EQ(a.nentries, 2);
+    CHECK(strstr(a.entries[a.browser.sel].name, "goblin copy") != NULL);
+
+    /* Duplicating a duplicate should count up from the original rather than
+     * stacking the word. */
+    CASE("a copy of a copy is offered the next number");
+    press(&a, "c");
+    CHECK_EQ(strcmp(a.prompt.buf, "goblin copy 2"), 0);
+    press(&a, "\r");
+    CHECK_EQ(file_exists(dir, "goblin copy 2.vtt"), 1);
+    CHECK_EQ(file_exists(dir, "goblin copy copy.vtt"), 0);
+
+    press(&a, "c");
+    CHECK_EQ(strcmp(a.prompt.buf, "goblin copy 3"), 0);
+    press(&a, "\x1b");
+
+    CASE("duplicating onto an existing map refuses, leaving it alone");
+    press(&a, "c\025goblin\r");
+    CHECK_EQ(a.modal, MODAL_MESSAGE);
+    CHECK(strstr(a.modal_body, "already exists") != NULL);
+    read_title(dir, "goblin.vtt", title, sizeof title);
+    CHECK_EQ(strcmp(title, "x"), 0);                   /* not overwritten */
+    press(&a, " ");
+
+    CASE("a copy needs a name of its own");
+    press(&a, "g");                                    /* first entry */
+    press(&a, "c\025goblin\r");
+    CHECK(a.modal == MODAL_MESSAGE || strstr(a.status, "name of its own") != NULL);
+    if (a.modal == MODAL_MESSAGE) press(&a, " ");
+
+    CASE("a name with a slash is refused");
+    press(&a, "c\025../escaped\r");
+    CHECK_EQ(file_exists(dir, "escaped.vtt"), 0);
+    CHECK(strstr(a.status, "cannot contain") != NULL);
+
+    CASE("an empty name is refused");
+    int before = a.nentries;
+    press(&a, "c\025\r");
+    CHECK_EQ(a.nentries, before);
+
+    /* The copy is the bytes, not a re-serialization, so a map the loader
+     * would choke on still duplicates exactly. */
+    CASE("a map that will not load copies byte for byte, title untouched");
+    char broken[1200];
+    snprintf(broken, sizeof broken, "%.1000s/broken.vtt", dir);
+    FILE *bf = fopen(broken, "w");
+    if (bf) { fputs("VTT 2\nname keep\nsize 0 0\ngarbage here\n", bf); fclose(bf); }
+    press(&a, "r");
+
+    int found = -1;
+    for (int i = 0; i < a.nentries; i++)
+        if (strstr(a.entries[i].name, "broken")) found = i;
+    CHECK(found >= 0);
+    if (found >= 0) {
+        a.browser.sel = found;
+        press(&a, "c\025salvage\r");
+        CHECK_EQ(file_exists(dir, "salvage.vtt"), 1);
+        CHECK_EQ(files_identical(dir, "broken.vtt", "salvage.vtt"), 1);
+        read_title(dir, "salvage.vtt", title, sizeof title);
+        CHECK_EQ(strcmp(title, "keep"), 0);
+        CHECK(strstr(a.status, "title unchanged") != NULL);
+    }
+
+    CASE("an empty list has nothing to duplicate");
+    while (a.nentries > 0) press(&a, "dy");
+    press(&a, "c");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK(strstr(a.status, "nothing") != NULL);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+    rmdir(dir);
+}
+
+void test_unique_label(void)
+{
+    TokenList l;
+    memset(&l, 0, sizeof l);
+    char out[TOKEN_LABEL_MAX];
+
+    CASE("an unused label is left alone");
+    tokens_unique_label(&l, "Goblin", out, sizeof out);
+    CHECK_EQ(strcmp(out, "Goblin"), 0);
+
+    Token g;
+    memset(&g, 0, sizeof g);
+    g.size = 1;
+    str_lcpy(g.label, "Goblin", sizeof g.label);
+    tokens_add(&l, g);
+
+    CASE("a taken one gets the next number");
+    tokens_unique_label(&l, "Goblin", out, sizeof out);
+    CHECK_EQ(strcmp(out, "Goblin 2"), 0);
+
+    str_lcpy(g.label, "Goblin 2", sizeof g.label);
+    tokens_add(&l, g);
+    tokens_unique_label(&l, "Goblin", out, sizeof out);
+    CHECK_EQ(strcmp(out, "Goblin 3"), 0);
+
+    /* Copying a copy should continue the run rather than stack numbers. */
+    CASE("a numbered label continues the run");
+    tokens_unique_label(&l, "Goblin 2", out, sizeof out);
+    CHECK_EQ(strcmp(out, "Goblin 3"), 0);
+    CHECK(strstr(out, "2 2") == NULL);
+
+    CASE("an unlabeled token stays unlabeled");
+    tokens_unique_label(&l, "", out, sizeof out);
+    CHECK_EQ(out[0], '\0');
+
+    tokens_free(&l);
+}
+
+/* The recovery autosave: a copy beside the file once changes go quiet,
+ * gone with a save or a discard, offered back after a crash. */
+void test_autosave(void)
+{
+    Sandbox sb = sandbox_enter("autosave");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+
+    write_map_file(sb.dir, "fight.vtt");
+    char path[600], autosave[620];
+    snprintf(path, sizeof path, "%s/fight.vtt", sb.dir);
+    snprintf(autosave, sizeof autosave, "%s.autosave", path);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+    a.autosave_on = 1;
+    CHECK_EQ(app_open_map(&a, path), 0);
+    a.ed.cx = a.ed.cy = 0;
+    CHECK_EQ(a.modal, MODAL_NONE);                          /* nothing to recover */
+
+    CASE("a clean map owes no autosave, and an idle loop can sleep for ever");
+    CHECK_EQ(app_autosave_due(&a, 1000), -1);
+    app_tick(&a, 1000);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+
+    CASE("a change starts the clock; the copy is written once the changes go quiet");
+    press(&a, "x");                                         /* a tile to void */
+    CHECK_EQ(a.map->modified, 1);
+    app_tick(&a, 2000);
+    CHECK_EQ(app_autosave_due(&a, 2000), AUTOSAVE_QUIET_MS);
+    app_tick(&a, 2000 + AUTOSAVE_QUIET_MS - 1);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+    press(&a, "lx");                                        /* still typing: the clock restarts */
+    app_tick(&a, 2000 + AUTOSAVE_QUIET_MS);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+    app_tick(&a, 2000 + 2 * AUTOSAVE_QUIET_MS);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1);
+    CHECK_EQ(app_autosave_due(&a, 9000), -1);              /* nothing more owed */
+    CHECK_EQ(a.map->modified, 1);                           /* it is not a save */
+    CHECK_EQ(strcmp(a.map->path, path), 0);
+
+    CASE("the copy holds the changes");
+    {
+        char err[128];
+        Map *copy = mapio_load(autosave, err, sizeof err);
+        CHECK(copy != NULL);
+        if (copy) { CHECK_EQ(map_tile(copy, 0, 0), TILE_VOID); CHECK_EQ(map_tile(copy, 1, 0), TILE_VOID); map_free(copy); }
+    }
+
+    CASE("a save takes the copy away");
+    press(&a, ":w\r");
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+    CHECK_EQ(app_autosave_due(&a, 20000), -1);
+
+    CASE("so does a deliberate discard");
+    press(&a, "jx");
+    app_tick(&a, 30000);
+    app_tick(&a, 30000 + AUTOSAVE_QUIET_MS);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1);
+    press(&a, ":q!\r");
+    CHECK_EQ(a.map, NULL);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+
+    CASE("after a crash the next open offers the copy, and y takes it");
+    CHECK_EQ(app_open_map(&a, path), 0);
+    a.ed.cx = a.ed.cy = 0;
+    press(&a, "jx");                                        /* (0,1) */
+    app_tick(&a, 40000);
+    app_tick(&a, 40000 + AUTOSAVE_QUIET_MS);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1);
+    map_free(a.map);                                        /* the crash: no close, no save */
+    a.map = NULL;
+    undo_clear(&a.undo);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    a.ed.cx = a.ed.cy = 0;
+    CHECK_EQ(a.modal, MODAL_CONFIRM_RECOVER);
+    CHECK(strstr(a.modal_body, "never saved") != NULL);
+    CHECK_EQ(map_tile(a.map, 0, 1), TILE_FLOOR);            /* the file as saved, until answered */
+    press(&a, "y");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK_EQ(map_tile(a.map, 0, 1), TILE_VOID);
+    CHECK_EQ(a.map->modified, 1);
+    CHECK_EQ(strcmp(a.map->path, path), 0);
+    CHECK(strstr(a.status, "recovered") != NULL);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1); /* kept until the save */
+    press(&a, ":w\r");
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+    {
+        char err[128];
+        Map *disk = mapio_load(path, err, sizeof err);
+        CHECK(disk != NULL);
+        if (disk) { CHECK_EQ(map_tile(disk, 0, 1), TILE_VOID); map_free(disk); }
+    }
+
+    CASE("n lets the copy go, once");
+    press(&a, "lx");
+    app_tick(&a, 50000);
+    app_tick(&a, 50000 + AUTOSAVE_QUIET_MS);
+    map_free(a.map);
+    a.map = NULL;
+    undo_clear(&a.undo);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    a.ed.cx = a.ed.cy = 0;
+    CHECK_EQ(a.modal, MODAL_CONFIRM_RECOVER);
+    press(&a, "n");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+    CHECK_EQ(map_tile(a.map, 1, 1), TILE_FLOOR);
+    map_free(a.map); a.map = NULL; undo_clear(&a.undo);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    a.ed.cx = a.ed.cy = 0;
+    CHECK_EQ(a.modal, MODAL_NONE);
+
+    CASE("an autosave older than the file is not offered");
+    press(&a, " ");                                         /* toggle: always a change */
+    app_tick(&a, 60000);
+    app_tick(&a, 60000 + AUTOSAVE_QUIET_MS);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1);
+    a.map->modified = 0;                                    /* pretend it was saved elsewhere... */
+    write_map_file(sb.dir, "fight.vtt");                    /* ...and the file rewritten since */
+    map_free(a.map); a.map = NULL; undo_clear(&a.undo);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    a.ed.cx = a.ed.cy = 0;
+    CHECK_EQ(a.modal, MODAL_NONE);
+    unlink(autosave);
+
+    CASE("a write that fails is not owed again until the next change");
+    char real_path[MAP_PATH_MAX];
+    str_lcpy(real_path, a.map->path, sizeof real_path);
+    str_lcpy(a.map->path, "/nonexistent/dir/t.vtt", sizeof a.map->path);
+    press(&a, " ");
+    app_tick(&a, 65000);
+    app_tick(&a, 65000 + AUTOSAVE_QUIET_MS);              /* the attempt, which fails */
+    CHECK_EQ(app_autosave_due(&a, 65000 + AUTOSAVE_QUIET_MS), -1);
+    CHECK_EQ(app_autosave_due(&a, 99000), -1);            /* and stays that way */
+    press(&a, " ");                                        /* a change owes one again */
+    app_tick(&a, 99000);
+    CHECK(app_autosave_due(&a, 99000) >= 0);
+    str_lcpy(a.map->path, real_path, sizeof a.map->path);
+    app_tick(&a, 99000 + AUTOSAVE_QUIET_MS);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1);
+
+    CASE("quitting with y to the question lets the copy go");
+    a.screen = SCREEN_MENU;                                /* the quit key lives on the menu */
+    press(&a, "q");
+    CHECK_EQ(a.modal, MODAL_CONFIRM_QUIT);
+    press(&a, "y");
+    CHECK_EQ(a.running, 0);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+    a.running = 1;
+    a.screen = SCREEN_EDITOR;
+    a.map->modified = 0;
+
+    CASE("headless runs never write one");
+    a.autosave_on = 0;
+    press(&a, " ");
+    app_tick(&a, 70000);
+    app_tick(&a, 70000 + AUTOSAVE_QUIET_MS);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+    CHECK_EQ(app_autosave_due(&a, 80000), -1);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
+void test_undo_nesting(void)
+{
+    Map *m = map_new(6, 4, "n");
+    Undo u;
+    undo_init(&u);
+
+    CASE("a helper's batch inside an operation's is part of it: one step, closed by the outermost end");
+    undo_begin(&u);
+    undo_set_tile(&u, m, 0, 0, TILE_WATER);
+    undo_begin(&u);                                   /* a helper */
+    undo_set_tile(&u, m, 1, 0, TILE_WATER);
+    undo_end(&u);
+    CHECK_EQ(u.open, 1);                              /* still the operation's */
+    CHECK_EQ(undo_balanced(&u), 0);
+    undo_begin(&u);                                   /* a second helper */
+    undo_set_tile(&u, m, 2, 0, TILE_WATER);
+    undo_end(&u);
+    undo_end(&u);
+    CHECK_EQ(u.open, 0);
+    CHECK_EQ(undo_balanced(&u), 1);
+    CHECK_EQ(u.nmarks, 1);
+    undo_undo(&u, m);
+    CHECK(map_tile(m, 0, 0) == TILE_VOID && map_tile(m, 2, 0) == TILE_VOID);
+
+    CASE("a stroke stays open across calls, is balanced between keys, and ends when told");
+    undo_clear(&u);
+    undo_stroke(&u);
+    undo_set_hedge(&u, m, 0, 1, EDGE_WALL);
+    undo_stroke(&u);                                  /* the next step */
+    undo_set_hedge(&u, m, 1, 1, EDGE_WALL);
+    CHECK_EQ(undo_balanced(&u), 1);
+    undo_stroke_end(&u);
+    CHECK_EQ(u.open, 0);
+    CHECK_EQ(u.nmarks, 1);
+
+    CASE("another tool mid-stroke ends the stroke: two steps, as before nesting");
+    undo_clear(&u);
+    undo_stroke(&u);
+    undo_set_hedge(&u, m, 2, 1, EDGE_WALL);
+    undo_begin(&u);                                   /* a fill */
+    undo_set_tile(&u, m, 3, 3, TILE_WATER);
+    undo_end(&u);
+    CHECK_EQ(u.open, 0);
+    CHECK_EQ(u.nmarks, 2);
+
+    CASE("undo and redo close whatever is open, however deep");
+    undo_clear(&u);
+    undo_begin(&u);
+    undo_begin(&u);
+    undo_set_tile(&u, m, 4, 3, TILE_WATER);
+    undo_undo(&u, m);
+    CHECK_EQ(u.open, 0);
+    CHECK_EQ(u.nest, 0);
+    CHECK_EQ(map_tile(m, 4, 3), TILE_VOID);
+
+    CASE("abort forgets a nested batch whole");
+    undo_clear(&u);
+    undo_begin(&u);
+    undo_set_tile(&u, m, 5, 3, TILE_WATER);
+    undo_begin(&u);
+    undo_set_tile(&u, m, 5, 2, TILE_WATER);
+    undo_end(&u);
+    undo_abort(&u, m);
+    CHECK(u.open == 0 && u.nest == 0 && u.nmarks == 0 && u.nops == 0);
+    CHECK(map_tile(m, 5, 3) == TILE_VOID && map_tile(m, 5, 2) == TILE_VOID);
+
+    undo_free(&u);
+    map_free(m);
+}
+
+void test_gray_marker(void)
+{
+    CASE("a marker saved as grey loads as gray and is written as gray");
+    CHECK(status_color_from_name("grey") >= 0);
+    CHECK_EQ(status_color_from_name("grey"), status_color_from_name("gray"));
+    CHECK_EQ(strcmp(status_color_name((uint8_t)status_color_from_name("grey")), "gray"), 0);
+
+    char path[] = "/tmp/vtt-test-XXXXXX";
+    int  fd = mkstemp(path);
+    if (fd >= 0) close(fd);
+    write_file(path, "VTT 3\nsize 2 1\ntiles\n..\nvedges\n\nhedges\n\n\n"
+                     "token player 0 0 1 \"Aria\"\ntokenstatus grey \"Hidden\"\n");
+    char err[MAPIO_ERR_MAX] = { 0 };
+    Map *m = mapio_load(path, err, sizeof err);
+    CHECK(m != NULL);
+    if (m) {
+        CHECK_EQ(m->tokens.n, 1);
+        CHECK_EQ(m->tokens.v[0].nstatus, 1);
+        CHECK_EQ(m->tokens.v[0].status[0].color, status_color_from_name("gray"));
+        CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+        map_free(m);
+        FILE *f = fopen(path, "r");
+        char buf[512] = { 0 };
+        if (f) { if (fread(buf, 1, sizeof buf - 1, f) == 0) buf[0] = 0; fclose(f); }
+        CHECK(strstr(buf, "tokenstatus gray \"Hidden\"") != NULL);
+        CHECK(strstr(buf, "grey") == NULL);
+    }
+    unlink(path);
 }

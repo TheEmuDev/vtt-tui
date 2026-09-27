@@ -1,13 +1,17 @@
-/* Tests: the wire format, the server, the map tools and their diagnostics, the players' frame. */
+/* Tests: the wire format, the server and its clients, the players' frame, pings, :serve, the phone page. */
 
 #include "harness.h"
 
 /* ---------------------------------------------------------------- wire */
 
 static void wc_full(void *ctx, int w, int h) { WireCatch *c = ctx; c->w = w; c->h = h; c->fulls++; }
+
 static void wc_pal(void *ctx, int i, uint32_t rgb) { ((WireCatch *)ctx)->pal[i] = rgb; }
+
 static void wc_end(void *ctx) { ((WireCatch *)ctx)->ends++; }
+
 static void wc_keepalive(void *ctx) { ((WireCatch *)ctx)->keepalives++; }
+
 static void wc_run(void *ctx, int x, int y, int n, uint8_t fg, uint8_t bg, uint8_t attr,
                    const uint16_t *g)
 {
@@ -20,7 +24,8 @@ static void wc_run(void *ctx, int x, int y, int n, uint8_t fg, uint8_t bg, uint8
         c->glyphs++;
     }
 }
-const WireSink WC_SINK = { wc_full, wc_pal, wc_run, wc_end, wc_keepalive };
+
+static const WireSink WC_SINK = { wc_full, wc_pal, wc_run, wc_end, wc_keepalive };
 
 void test_wire(void)
 {
@@ -180,651 +185,9 @@ void test_net_primitives(void)
     CHECK_EQ(strcmp(acc, "s3pPLMBiTxaQ9kYGzzhZRbK+xOo="), 0);
 }
 
-/* ------------------------------------------------------------ map tools */
-
-/* What a map tool printed, as a string the caller frees. */
-typedef void (*DumpFn)(FILE *out, const Map *m, int x0, int y0, int x1, int y1);
-
-char *tool_text(const Map *m, int x0, int y0, int x1, int y1, size_t *len)
-{
-    char  *buf = NULL;
-    size_t n   = 0;
-    FILE  *f   = open_memstream(&buf, &n);
-    maptools_dump(f, m, x0, y0, x1, y1);
-    fclose(f);
-    if (len) *len = n;
-    return buf;
-}
-
-/* A small JSON validator: enough to prove what the tools write parses --
- * objects, arrays, strings with escapes, numbers, literals. */
-static const char *jv_value(const char *p, int depth);
-
-static const char *jv_ws(const char *p) { while (*p == ' ' || *p == '\n' || *p == '\t' || *p == '\r') p++; return p; }
-
-static const char *jv_string(const char *p)
-{
-    if (*p++ != '"') return NULL;
-    while (*p && *p != '"') {
-        if ((unsigned char)*p < 0x20) return NULL;
-        if (*p == '\\') {
-            p++;
-            if (*p == 'u') { for (int i = 1; i <= 4; i++) if (!isxdigit((unsigned char)p[i])) return NULL; p += 5; continue; }
-            if (!strchr("\"\\/bfnrt", *p)) return NULL;
-        }
-        p++;
-    }
-    return *p == '"' ? p + 1 : NULL;
-}
-
-static const char *jv_value(const char *p, int depth)
-{
-    if (depth > 64) return NULL;
-    p = jv_ws(p);
-    if (*p == '{' || *p == '[') {
-        char close = *p == '{' ? '}' : ']';
-        int  obj = *p == '{';
-        p = jv_ws(p + 1);
-        if (*p == close) return p + 1;
-        for (;;) {
-            if (obj) {
-                p = jv_string(jv_ws(p));
-                if (!p) return NULL;
-                p = jv_ws(p);
-                if (*p++ != ':') return NULL;
-            }
-            p = jv_value(p, depth + 1);
-            if (!p) return NULL;
-            p = jv_ws(p);
-            if (*p == ',') { p++; continue; }
-            return *p == close ? p + 1 : NULL;
-        }
-    }
-    if (*p == '"') return jv_string(p);
-    if (!strncmp(p, "true", 4)) return p + 4;
-    if (!strncmp(p, "false", 5)) return p + 5;
-    if (!strncmp(p, "null", 4)) return p + 4;
-    const char *q = p;
-    if (*q == '-') q++;
-    if (!isdigit((unsigned char)*q)) return NULL;
-    while (isdigit((unsigned char)*q) || *q == '.' || *q == 'e' || *q == 'E' || *q == '+' || *q == '-') q++;
-    return q;
-}
-
-int json_valid(const char *s)
-{
-    const char *end = jv_value(s, 0);
-    return end && *jv_ws(end) == '\0';
-}
-
-char *describe_text(const Map *m, int json, size_t *len)
-{
-    char  *buf = NULL;
-    size_t n   = 0;
-    FILE  *f   = open_memstream(&buf, &n);
-    maptools_describe(f, m, json);
-    fclose(f);
-    if (len) *len = n;
-    return buf;
-}
-
-/* A map built by hand: rooms and what joins them. */
-static Map *rooms_fixture(void)
-{
-    /* Three rooms in a row, 3 wide each, walls between: A|B through a door,
-     * B|C through a window only. And a sealed D below A, and a void gap. */
-    Map *m = map_new(11, 5, "rooms");
-    for (int y = 0; y < 5; y++)
-        for (int x = 0; x < 11; x++) map_set_tile(m, x, y, x == 3 || x == 7 ? TILE_VOID : TILE_FLOOR);
-    map_set_tile(m, 3, 1, TILE_FLOOR);                      /* the door squares across the gaps */
-    map_set_tile(m, 7, 1, TILE_FLOOR);
-    for (int y = 0; y < 5; y++) { map_set_vedge(m, 3, y, EDGE_WALL); map_set_vedge(m, 4, y, EDGE_WALL); }
-    map_set_vedge(m, 3, 1, EDGE_DOOR_CLOSED);               /* A <-> corridor square */
-    map_set_vedge(m, 4, 1, EDGE_DOOR_OPEN);                 /* corridor square <-> B */
-    for (int y = 0; y < 5; y++) { map_set_vedge(m, 7, y, EDGE_WALL); map_set_vedge(m, 8, y, EDGE_WALL); }
-    map_set_vedge(m, 7, 1, EDGE_WINDOW);
-    map_set_vedge(m, 8, 1, EDGE_WINDOW);
-    for (int x = 0; x < 3; x++) map_set_hedge(m, x, 3, EDGE_WALL);   /* D: rows 3-4 of A's column */
-    Token t = { 0 };
-    t.x = 1; t.y = 1; t.size = 1; t.kind = TOKEN_PLAYER;
-    str_lcpy(t.label, "Aria \"the Bold\"", sizeof t.label);         /* a quote to escape */
-    tokens_add(&m->tokens, t);
-    return m;
-}
-
-void test_map_tools_describe(void)
-{
-    char err[256];
-
-    CASE("rooms: doors of any kind join them for reaching, windows and walls do not, every door splits");
-    Map *m = rooms_fixture();
-    Rooms r;
-    rooms_build(m, &r);
-    /* A (rows 0-2 of x 0-2), the corridor square D2... names in reading order. */
-    CHECK_EQ(r.n, 6);
-    int a = rooms_at(&r, m, 0, 0), cor1 = rooms_at(&r, m, 3, 1), b = rooms_at(&r, m, 5, 0);
-    int cor2 = rooms_at(&r, m, 7, 1), c = rooms_at(&r, m, 9, 0), d = rooms_at(&r, m, 0, 4);
-    CHECK(a != cor1 && cor1 != b && b != cor2 && cor2 != c && d != a);
-    CHECK_EQ(r.start, a);                                   /* Aria's room */
-    CHECK(r.reach[a] && r.reach[cor1] && r.reach[b]);       /* a closed door and an open one */
-    CHECK(!r.reach[cor2] && !r.reach[c]);                   /* windows only */
-    CHECK(!r.reach[d]);                                     /* sealed by a wall */
-    CHECK_EQ(r.v[a].fx, 0);
-    CHECK_EQ(r.v[a].squares, 9);
-    rooms_free(&r);
-
-    CASE("describe names rooms by their first square and says where each door leads; JSON parses");
-    size_t n;
-    char *t = describe_text(m, 0, &n);
-    CHECK(strstr(t, "room 1 (A1)") != NULL);
-    CHECK(strstr(t, "not reachable") != NULL);
-    CHECK(strstr(t, "NOT REACHABLE") != NULL);
-    CHECK(strstr(t, "door         C2|D2    to room") != NULL);
-    free(t);
-    t = describe_text(m, 1, &n);
-    CHECK(json_valid(t));
-    CHECK(strstr(t, "\"label\":\"Aria \\\"the Bold\\\"\"") != NULL);   /* escaped */
-    CHECK(strstr(t, "\"reachable\":false") != NULL);
-    free(t);
-    map_free(m);
-
-    CASE("the goldens: the fixture with every boundary kind, as text and as JSON");
-    m = mapio_load("tests/fixtures/kinds.vtt", err, sizeof err);
-    CHECK(m != NULL);
-    if (m) {
-        t = describe_text(m, 0, &n);
-        golden_bytes("describe-kinds", t, n);
-        free(t);
-        t = describe_text(m, 1, &n);
-        CHECK(json_valid(t));
-        golden_bytes("describe-kinds-json", t, n);
-        free(t);
-        map_free(m);
-    }
-
-    CASE("the worst case: 512x512 with a wall on every boundary is 262,144 rooms, linearly");
-    m = map_new(512, 512, "cells");
-    for (int y = 0; y < 512; y++)
-        for (int x = 0; x < 512; x++) {
-            map_set_tile(m, x, y, TILE_FLOOR);
-            map_set_vedge(m, x, y, EDGE_WALL);
-            map_set_hedge(m, x, y, EDGE_WALL);
-        }
-    uint64_t t0 = prof_now_ns();
-    rooms_build(m, &r);
-    uint64_t took = prof_now_ns() - t0;
-    CHECK_EQ(r.n, 512 * 512);
-    CHECK(took < 2000000000ull);                            /* generous: ASan, a busy machine */
-    rooms_free(&r);
-    map_free(m);
-
-    CASE("the account of the worst case is written in full");
-    m = map_new(512, 512, "cells");
-    for (int y = 0; y < 512; y++)
-        for (int x = 0; x < 512; x++) {
-            map_set_tile(m, x, y, TILE_FLOOR);
-            map_set_vedge(m, x, y, EDGE_WALL);
-            map_set_hedge(m, x, y, EDGE_WALL);
-        }
-    t = describe_text(m, 0, &n);
-    CHECK(strstr(t, "room 262144 (SR512)") != NULL);
-    free(t);
-    map_free(m);
-
-    CASE("a door in a stub of wall inside one room is listed once");
-    m = map_new(3, 3, "stub");
-    for (int y = 0; y < 3; y++) for (int x = 0; x < 3; x++) map_set_tile(m, x, y, TILE_FLOOR);
-    map_set_vedge(m, 1, 1, EDGE_DOOR_CLOSED);             /* a door standing alone in the room */
-    t = describe_text(m, 0, &n);
-    const char *first = strstr(t, "B2|");
-    CHECK(first == NULL || strstr(first + 1, "B2|") == NULL);
-    const char *door = strstr(t, "A2|B2");
-    CHECK(door != NULL && strstr(door + 1, "A2|B2") == NULL);
-    free(t);
-    map_free(m);
-
-    CASE("one open 512x512 room is one room, filled without recursion");
-    m = map_new(512, 512, "open");
-    for (int y = 0; y < 512; y++)
-        for (int x = 0; x < 512; x++) map_set_tile(m, x, y, TILE_FLOOR);
-    rooms_build(m, &r);
-    CHECK_EQ(r.n, 1);
-    CHECK_EQ(r.v[0].squares, 512 * 512);
-    rooms_free(&r);
-    map_free(m);
-}
-
-static char *check_text(const char *path, int json, int *rc, size_t *len)
-{
-    char  *buf = NULL;
-    size_t n   = 0;
-    FILE  *f   = open_memstream(&buf, &n);
-    *rc = maptools_check(f, path, json);
-    fclose(f);
-    if (len) *len = n;
-    return buf;
-}
-
-void test_map_tools_check(void)
-{
-    int    rc;
-    size_t n;
-
-    CASE("the shipped fixtures are clean: exit 0");
-    static const char *const clean[] = { "tests/fixtures/two-rooms.vtt", "tests/fixtures/kinds.vtt",
-                                         "tests/fixtures/crowd.vtt" };
-    for (int i = 0; i < 3; i++) {
-        char *t = check_text(clean[i], 0, &rc, NULL);
-        CHECK_EQ(rc, 0);
-        CHECK(strstr(t, "no findings") != NULL);
-        free(t);
-    }
-
-    CASE("the broken fixture: one of every mistake, each found, in a stable order; exit 1");
-    char *t = check_text("tests/fixtures/broken.vtt", 0, &rc, &n);
-    CHECK_EQ(rc, 1);
-    golden_bytes("check-broken", t, n);
-    static const char *const codes[] = {
-        "E010", "E011", "E013", "E014", "E101", "E110", "E111", "E112", "W015", "W016", "W018", "W019",
-        "W020", "W102", "W103", "W104", "W113", "W120", "W121", "W130", "W140", "N021", "N131",
-    };
-    for (size_t i = 0; i < sizeof codes / sizeof *codes; i++) {
-        char want[16];
-        snprintf(want, sizeof want, "\n%s ", codes[i]);
-        if (!strstr(t, want) && strncmp(t, want + 1, 5) != 0) {
-            CHECK(!"a code the broken fixture should raise");
-            fprintf(stderr, "    missing %s\n", codes[i]);
-        }
-    }
-    CHECK(strstr(t, "8 errors, 15 warnings, 2 notes") != NULL);
-    free(t);
-
-    CASE("--json: the same findings, valid, with coordinates beside the names");
-    t = check_text("tests/fixtures/broken.vtt", 1, &rc, &n);
-    CHECK_EQ(rc, 1);
-    CHECK(json_valid(t));
-    CHECK(strstr(t, "\"code\":\"E101\"") != NULL);
-    CHECK(strstr(t, "\"edge\":\"v\"") != NULL);
-    golden_bytes("check-broken-json", t, n);
-    free(t);
-
-    CASE("the dump and the account read the broken map without fault (ASan is the check)");
-    {
-        char err[256];
-        Map *m = mapio_load("tests/fixtures/broken.vtt", err, sizeof err);
-        CHECK(m != NULL);
-        if (m) {
-            FILE *sink = fopen("/dev/null", "w");
-            maptools_dump(sink, m, 0, 0, m->w - 1, m->h - 1);
-            maptools_describe(sink, m, 0);
-            maptools_describe(sink, m, 1);
-            fclose(sink);
-            map_free(m);
-        }
-    }
-
-    CASE("rules that must not fire: an outer wall on the map's edge, a door with a wall at one end");
-    {
-        Sandbox sb = sandbox_enter("checkok");
-        char path[600];
-        snprintf(path, sizeof path, "%s/ok.vtt", sb.dir);
-        FILE *f = fopen(path, "w");
-        /* A room walled on the map's edge, an inner wall with a door at its
-         * open end (one wall end), a door off the map (a way out), and a
-         * disabled fog patch: only notes. */
-        fputs("VTT 6\nsize 5 3\ntiles\n.....\n.....\n.....\n"
-              "vedges\n|  | |\n|  + +\n|    |\nhedges\n-----\n     \n     \n-----\n"
-              "fog on\nfogpatch 1 Mist disabled\nfog\nA....\n.....\n.....\n", f);
-        fclose(f);
-        t = check_text(path, 0, &rc, NULL);
-        CHECK_EQ(rc, 0);                                   /* notes only: clean */
-        CHECK(strstr(t, "W103") == NULL && strstr(t, "W102") == NULL && strstr(t, "W104") == NULL);
-        CHECK(strstr(t, "N105 door-off-map") != NULL);
-        CHECK(strstr(t, "N131") != NULL);
-        free(t);
-        sandbox_leave(&sb);
-    }
-
-    CASE("--region: either order, one square, a row alone, and what is not a square");
-    {
-        Map *m = map_new(10, 8, "r");
-        int x0, y0, x1, y1;
-        CHECK_EQ(maptools_region(m, "C4:B2", &x0, &y0, &x1, &y1), 1);
-        CHECK(x0 == 1 && y0 == 1 && x1 == 2 && y1 == 3);
-        CHECK_EQ(maptools_region(m, "d5", &x0, &y0, &x1, &y1), 1);
-        CHECK(x0 == 3 && x1 == 3 && y0 == 4 && y1 == 4);
-        CHECK_EQ(maptools_region(m, "5:6", &x0, &y0, &x1, &y1), 1);
-        CHECK(x0 == 0 && x1 == 9 && y0 == 4 && y1 == 5);
-        CHECK_EQ(maptools_region(m, "B2:", &x0, &y0, &x1, &y1), 0);
-        CHECK_EQ(maptools_region(m, "hello", &x0, &y0, &x1, &y1), 0);
-        CHECK_EQ(maptools_region(m, ":B2", &x0, &y0, &x1, &y1), 0);
-        map_free(m);
-    }
-
-    CASE("a file that is not a map: E001 and exit 2");
-    t = check_text("/nonexistent/map.vtt", 0, &rc, NULL);
-    CHECK_EQ(rc, 2);
-    CHECK(strncmp(t, "E001 unreadable", 15) == 0);
-    free(t);
-    t = check_text("/nonexistent/map.vtt", 1, &rc, NULL);
-    CHECK_EQ(rc, 2);
-    CHECK(json_valid(t));
-    free(t);
-}
-
-void test_map_tools_dump(void)
-{
-    char err[256];
-
-    CASE("the dump: whole fixtures and a region, as the goldens have them");
-    static const struct { const char *file, *golden; int x0, y0, x1, y1; } cases[] = {
-        { "tests/fixtures/two-rooms.vtt", "dump-two-rooms", 0, 0, 99, 99 },
-        { "tests/fixtures/kinds.vtt",     "dump-kinds",     0, 0, 99, 99 },
-        { "tests/fixtures/two-rooms.vtt", "dump-region",    1, 1, 6, 5 },
-    };
-    for (size_t i = 0; i < sizeof cases / sizeof *cases; i++) {
-        Map *m = mapio_load(cases[i].file, err, sizeof err);
-        CHECK(m != NULL);
-        if (!m) continue;
-        size_t n;
-        char *t = tool_text(m, cases[i].x0, cases[i].y0, cases[i].x1, cases[i].y1, &n);
-        golden_bytes(cases[i].golden, t, n);
-        CHECK(strstr(t, " \n") == NULL);                    /* no trailing blanks */
-        free(t);
-        map_free(m);
-    }
-
-    CASE("fog, notes and a creature's note get their own sections");
-    {
-        Sandbox sb = sandbox_enter("dumpfog");
-        CHECK_EQ(sb.ok, 1);
-        char path[600];
-        snprintf(path, sizeof path, "%s/f.vtt", sb.dir);
-        FILE *f = fopen(path, "w");
-        fputs("VTT 6\nname Cellar\nsize 5 3\nscale 5\nmetric chebyshev\ntiles\n.....\n.~~..\n.....\n"
-              "vedges\n|  S |\n|  | |\n|  + |\nhedges\n-----\n     \n     \n-----\n"
-              "token player 0 0 1 \"Aria\"\ntokennote \"wants the amulet\"\n"
-              "token enemy 3 1 2 \"Ogre\"\nnote 1 2 \"pressure plate\"\n"
-              "fog on\nfogpatch 1 Cellar reveal 2 memory on\nfogpatch 2 Pit reveal manual memory off\n"
-              "fog\n..AAA\n.aAAB\n..1BB\n", f);
-        fclose(f);
-        Map *m = mapio_load(path, err, sizeof err);
-        CHECK(m != NULL);
-        if (m) {
-            size_t n;
-            char *t = tool_text(m, 0, 0, 99, 99, &n);
-            golden_bytes("dump-fog", t, n);
-            CHECK(strstr(t, "wants the amulet") != NULL);
-            CHECK(strstr(t, "pressure plate") != NULL);
-            CHECK(strstr(t, "reveal manual") != NULL);
-            free(t);
-            map_free(m);
-        }
-        sandbox_leave(&sb);
-    }
-
-    CASE("past Z the columns take two header rows, and every one is labeled");
-    {
-        Map *m = map_new(30, 2, "wide");
-        char *t = tool_text(m, 0, 0, 99, 99, NULL);
-        const char *nl = strchr(t, '\n');
-        CHECK(nl != NULL);
-        if (nl) {
-            char first[256];
-            size_t fl = (size_t)(nl - t) < sizeof first - 1 ? (size_t)(nl - t) : sizeof first - 1;
-            memcpy(first, t, fl);
-            first[fl] = '\0';
-            CHECK(strstr(first, "A A A A") != NULL);                      /* AA..AD's first letters */
-            CHECK(strstr(nl, "Y Z A B C D") != NULL);                     /* ...and their last */
-        }
-        free(t);
-        map_free(m);
-    }
-}
-
-/* ------------------------------------------------------------ map diagnostics */
-
-typedef struct { char codes[64][8]; int lines[64]; int n; } DiagLog;
-
-static void diag_collect(void *ctx, int line, int col, const char *code, const char *slug, const char *msg)
-{
-    (void)col; (void)slug; (void)msg;
-    DiagLog *d = ctx;
-    if (d->n < 64) { str_lcpy(d->codes[d->n], code, sizeof d->codes[0]); d->lines[d->n] = line; d->n++; }
-}
-
-static int diag_has(const DiagLog *d, const char *code)
-{
-    for (int i = 0; i < d->n; i++) if (!strcmp(d->codes[i], code)) return 1;
-    return 0;
-}
-
-static int diag_line(const DiagLog *d, const char *code)
-{
-    for (int i = 0; i < d->n; i++) if (!strcmp(d->codes[i], code)) return d->lines[i];
-    return -1;
-}
-
-/* Loads `text` through the diagnostic loader; returns the map (freed by
- * the caller) and what it said. */
-static Map *diag_load(const char *dir, const char *text, DiagLog *d)
-{
-    char path[600], err[256];
-    snprintf(path, sizeof path, "%s/d.vtt", dir);
-    FILE *f = fopen(path, "w");
-    if (!f) return NULL;
-    fputs(text, f);
-    fclose(f);
-    memset(d, 0, sizeof *d);
-    return mapio_load_diag(path, err, sizeof err, diag_collect, d);
-}
-
-/* The loader forgives a damaged map and, asked, says what it forgave: with
- * the line, and without changing what loads. */
-void test_map_diag(void)
-{
-    Sandbox sb = sandbox_enter("mapdiag");
-    CHECK_EQ(sb.ok, 1);
-    if (!sb.ok) return;
-    DiagLog d;
-    char err[256];
-
-    CASE("the shipped fixtures load without a word");
-    static const char *const clean[] = { "tests/fixtures/two-rooms.vtt", "tests/fixtures/kinds.vtt",
-                                         "tests/fixtures/crowd.vtt" };
-    char here[1024];
-    for (size_t i = 0; i < 3; i++) {
-        snprintf(here, sizeof here, "%s/%s", sb.cwd, clean[i]);
-        memset(&d, 0, sizeof d);
-        Map *m = mapio_load_diag(here, err, sizeof err, diag_collect, &d);
-        CHECK(m != NULL);
-        int loud = 0;
-        for (int k = 0; k < d.n; k++) loud += d.codes[k][0] != 'N';
-        CHECK_EQ(loud, 0);
-        map_free(m);
-    }
-
-    CASE("a vedges section one row short swallows the hedges header, and says so at that line");
-    Map *m = diag_load(sb.dir,
-        "VTT 2\nsize 3 2\ntiles\n...\n...\n"
-        "vedges\n|  |\n"                                   /* one row, not two */
-        "hedges\n---\n   \n---\n", &d);
-    CHECK(m != NULL);
-    CHECK(diag_has(&d, "E011"));
-    CHECK_EQ(diag_line(&d, "E011"), 8);                    /* 'hedges' is line 8 */
-    CHECK(diag_has(&d, "W019"));                           /* the stranded hedges rows */
-    int strays = 0;
-    for (int k = 0; k < d.n; k++) strays += !strcmp(d.codes[k], "W019");
-    CHECK_EQ(strays, 1);                                   /* one finding for the run */
-    map_free(m);
-
-    CASE("a section one row long leaves a stray row; a row too long is cut, and says where");
-    m = diag_load(sb.dir,
-        "VTT 2\nsize 3 2\ntiles\n...\n....\n...\n"         /* second row long, then one too many */
-        "vedges\n|  |\n|  |\nhedges\n---\n   \n---\n", &d);
-    CHECK(diag_has(&d, "E010"));
-    CHECK_EQ(diag_line(&d, "E010"), 5);
-    CHECK(diag_has(&d, "W019"));
-    CHECK_EQ(diag_line(&d, "W019"), 6);
-    map_free(m);
-
-    CASE("a character no row knows reads as empty and is named with its column");
-    m = diag_load(sb.dir, "VTT 2\nsize 3 1\ntiles\n.X.\nvedges\n| Q|\nhedges\n---\n---\n", &d);
-    CHECK(diag_has(&d, "E013"));
-    CHECK_EQ(map_tile(m, 1, 0), TILE_VOID);                /* loaded exactly as before */
-    int bad = 0;
-    for (int k = 0; k < d.n; k++) bad += !strcmp(d.codes[k], "E013");
-    CHECK_EQ(bad, 2);
-    map_free(m);
-
-    CASE("records that do not parse are named, dropped as ever");
-    m = diag_load(sb.dir,
-        "VTT 6\nsize 3 2\ntiles\n...\n...\n"
-        "tokenstatus red \"Early\"\n"                      /* no token yet */
-        "token player 9 9 1 \"Off\"\n"                     /* off the map */
-        "token enemy 0 0 7 \"Big\"\n"                      /* size clamped */
-        "note 5 5 \"nowhere\"\n"
-        "clock 3 4\n"
-        "fogpatch 99 Bad reveal 1\n"
-        "mystery line\n", &d);
-    CHECK(m != NULL);
-    int records = 0;
-    for (int k = 0; k < d.n; k++) records += !strcmp(d.codes[k], "E014");
-    CHECK_EQ(records, 5);
-    CHECK_EQ(diag_line(&d, "E014"), 6);
-    CHECK(diag_has(&d, "W020"));
-    CHECK(diag_has(&d, "W015"));
-    CHECK_EQ(m->tokens.n, 1);
-    map_free(m);
-
-    CASE("header settings it does not know or cannot use");
-    m = diag_load(sb.dir, "VTT 5\nsize 2 1\nzoom 9\nscale -3\nruleset nosuch\nmetric bent\ntiles\n..\n", &d);
-    CHECK(diag_has(&d, "W016"));
-    CHECK(diag_has(&d, "W017"));
-    CHECK_EQ(diag_line(&d, "W017"), 6);
-    int clamps = 0;
-    for (int k = 0; k < d.n; k++) clamps += !strcmp(d.codes[k], "W020");
-    CHECK_EQ(clamps, 2);
-    CHECK_EQ(m->zoom, 3);
-    map_free(m);
-
-    CASE("short rows are the format's leniency: one note a section, not a failure");
-    m = diag_load(sb.dir, "VTT 2\nsize 4 3\ntiles\n..\n.\n....\n", &d);
-    CHECK(diag_has(&d, "N021"));
-    int notes = 0;
-    for (int k = 0; k < d.n; k++) notes += !strcmp(d.codes[k], "N021");
-    CHECK_EQ(notes, 1);
-    CHECK_EQ(diag_line(&d, "N021"), 4);
-    map_free(m);
-
-    CASE("a fog row naming a patch no line creates, told once for that patch");
-    m = diag_load(sb.dir, "VTT 6\nsize 3 2\ntiles\n...\n...\nfog on\nfogpatch 1 Crypt\nfog\nAC.\n.CC\n", &d);
-    int unknown = 0;
-    for (int k = 0; k < d.n; k++) unknown += !strcmp(d.codes[k], "W018");
-    CHECK_EQ(unknown, 1);
-    CHECK_EQ(diag_line(&d, "W018"), 9);
-    CHECK_EQ(fog_at(m, 1, 0) & FOG_ID, 0);
-    map_free(m);
-
-    CASE("a file that ends inside a section says so");
-    m = diag_load(sb.dir, "VTT 2\nsize 2 3\ntiles\n..\n", &d);
-    CHECK(diag_has(&d, "E011"));
-    map_free(m);
-
-    CASE("a fog row spelling a word is a fog row, not a swallowed record");
-    m = diag_load(sb.dir, "VTT 6\nsize 4 2\ntiles\n....\n....\nfog on\n"
-                          "fogpatch 6 Six\nfogpatch 7 Seven\nfogpatch 15 Last\nfogpatch 14 Four\n"
-                          "fog\nfog.\nname\n", &d);
-    CHECK(!diag_has(&d, "E011"));
-    map_free(m);
-
-    CASE("short wall and fog rows are noted too, and a vedges row as wide as the map is a warning");
-    m = diag_load(sb.dir, "VTT 2\nsize 4 2\ntiles\n....\n....\nvedges\n|  |\n|   |\nhedges\n---\n    \n----\n", &d);
-    CHECK(diag_has(&d, "W022"));
-    CHECK_EQ(diag_line(&d, "W022"), 7);
-    int shorts = 0;
-    for (int k = 0; k < d.n; k++) shorts += !strcmp(d.codes[k], "N021");
-    CHECK_EQ(shorts, 2);                                   /* vedges row 1, hedges row 1 */
-    map_free(m);
-
-    CASE("a line of spaces between sections is blank, not a stray row");
-    m = diag_load(sb.dir, "VTT 2\nsize 2 1\ntiles\n..\n   \nvedges\n| |\n", &d);
-    CHECK(!diag_has(&d, "W019"));
-    map_free(m);
-
-    CASE("a header line after the sections says why it is ignored; no size at all says so");
-    m = diag_load(sb.dir, "VTT 2\nsize 2 1\ntiles\n..\nname Late\n", &d);
-    CHECK(diag_has(&d, "W015"));
-    map_free(m);
-    m = diag_load(sb.dir, "VTT 2\ntiles\n..\nsize 2 1\n", &d);
-    CHECK(m == NULL);
-
-    CASE("the broken fixture loads byte-for-byte the same through either loader");
-    {
-        char here2[1024], o1[700], o2[700];
-        snprintf(here2, sizeof here2, "%s/tests/fixtures/broken.vtt", sb.cwd);
-        Map *b1 = mapio_load(here2, err, sizeof err);
-        Map *b2 = mapio_load_diag(here2, err, sizeof err, diag_collect, &d);
-        CHECK(b1 && b2);
-        snprintf(o1, sizeof o1, "%s/o1.vtt", sb.dir);
-        snprintf(o2, sizeof o2, "%s/o2.vtt", sb.dir);
-        if (b1 && b2) {
-            CHECK_EQ(mapio_write(b1, o1, err, sizeof err), 0);
-            CHECK_EQ(mapio_write(b2, o2, err, sizeof err), 0);
-            FILE *f1 = fopen(o1, "rb"), *f2 = fopen(o2, "rb");
-            char  x1[8192], x2[8192];
-            size_t n1 = f1 ? fread(x1, 1, sizeof x1, f1) : 0, n2 = f2 ? fread(x2, 1, sizeof x2, f2) : 1;
-            if (f1) fclose(f1);
-            if (f2) fclose(f2);
-            CHECK(n1 > 0);
-            CHECK(n1 == n2 && !memcmp(x1, x2, n1));
-        }
-        map_free(b1);
-        map_free(b2);
-    }
-
-    CASE("without a sink the loader is silent and loads the same map");
-    map_free(diag_load(sb.dir, "VTT 2\nsize 3 2\ntiles\n.X.\n...\nvedges\n|  |\n", &d));
-    char path[600];
-    snprintf(path, sizeof path, "%s/d.vtt", sb.dir);
-    Map *a1 = mapio_load(path, err, sizeof err);
-    Map *a2 = mapio_load_diag(path, err, sizeof err, diag_collect, &d);
-    CHECK(a1 && a2);
-    if (a1 && a2) CHECK_EQ(memcmp(a1->tiles, a2->tiles, (size_t)a1->w * (size_t)a1->h), 0);
-    map_free(a1);
-    map_free(a2);
-
-    sandbox_leave(&sb);
-}
-
-/* A loopback client of the server under test. */
-int net_connect(uint16_t port)
-{
-    int fd = socket(AF_INET, SOCK_STREAM, 0);
-    struct sockaddr_in a;
-    memset(&a, 0, sizeof a);
-    a.sin_family = AF_INET;
-    a.sin_port   = htons(port);
-    a.sin_addr.s_addr = htonl(0x7F000001);
-    if (connect(fd, (struct sockaddr *)&a, sizeof a) < 0) { close(fd); return -1; }
-    struct timeval tv = { 2, 0 };
-    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
-    return fd;
-}
-
-/* One turn of the server's event loop, as main would run it. */
-void net_pump(Net *n, uint64_t now_ms)
-{
-    struct pollfd fds[1 + NET_MAX_CLIENTS];
-    int k = net_pollfds(n, fds, 1 + NET_MAX_CLIENTS);
-    if (k == 0) return;
-    poll(fds, (nfds_t)k, 20);
-    net_service(n, fds, k, now_ms);
-}
-
 /* Reads from a raw client into the decoder until `ends` frames have
  * arrived or the wait runs out. */
-int net_recv_until(Net *n, int fd, WireDec *d, WireCatch *c, int ends, uint64_t now_ms)
+static int net_recv_until(Net *n, int fd, WireDec *d, WireCatch *c, int ends, uint64_t now_ms)
 {
     uint8_t buf[8192];
     for (int tries = 0; tries < 50 && c->ends < ends; tries++) {
@@ -1684,22 +1047,6 @@ void test_serve_lifetime(void)
     sandbox_leave(&sb);
 }
 
-/* rnd_dump reads the back buffer, which after a flush is the previous frame;
- * this reads what was actually shown or sent. */
-void front_text(const Renderer *r, ByteBuf *out)
-{
-    for (int y = 0; y < r->h; y++) {
-        for (int x = 0; x < r->w; x++) {
-            const Cell *c = &r->front[(size_t)y * (size_t)r->w + (size_t)x];
-            if (c->ch == 0) continue;
-            char enc[4];
-            int  n = utf8_encode(c->ch, enc);
-            if (n > 0) bb_put(out, enc, (size_t)n); else bb_putc(out, ' ');
-        }
-        bb_putc(out, '\n');
-    }
-}
-
 /* The players' frame: what the clients receive is a second renderer's diff,
  * drawn the players' way when it could differ from the GM's and copied from
  * the GM's when it cannot. */
@@ -1835,6 +1182,361 @@ void test_players_frame(void)
     sandbox_leave(&sb);
 }
 
-/* Counters on creatures: s v reads and writes them, < and > step the
- * current one, undo takes a hit back, the file keeps them, and the
- * players' frame never shows a number. */
+/* The ring round tile (tx,ty): true when the cell just north-west of its
+ * interior -- a corner of the ring -- has the ping's color. */
+static int ring_at(const Renderer *r, const App *a, int tx, int ty)
+{
+    int sx, sy;
+    grid_tile_interior(&a->ed.view, tx, ty, &sx, &sy);
+    const Cell *c = rnd_at((Renderer *)r, sx - 1, sy - 1);
+    return c && c->bg == a->th->ping_bg;
+}
+
+/* Pings: a phone's tap or the GM's g p rings a square on every screen. */
+void test_pings(void)
+{
+    Sandbox sb = sandbox_enter("pings");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    write_sight_map(sb.dir, "p.vtt", 2, 1);
+    char path[600];
+    snprintf(path, sizeof path, "%s/p.vtt", sb.dir);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 16);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Map *m = a.map;
+    Key f1 = { KEY_F1, 0, 0 }, f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+    press(&a, ":fog off\r");
+    uint64_t now = 10000;
+    app_tick(&a, now);
+    rnd_begin(&r); app_draw(&a);                            /* lay the view out */
+
+    CASE("a phone's tap on a square rings it, says where, and is taken down two seconds later");
+    int sx, sy;
+    grid_tile_interior(&a.ed.view, 4, 2, &sx, &sy);
+    CHECK_EQ(app_ping_cell(&a, 7, sx, sy), 1);
+    CHECK_EQ(a.npings, 1);
+    CHECK_EQ(a.pings[0].x0, 4);
+    CHECK_EQ(a.pings[0].y0, 2);
+    CHECK_EQ(a.pings[0].who, 7u);
+    CHECK(strstr(a.status, "ping at E3") != NULL);
+    CHECK_EQ(app_ping_due(&a, now), PING_SHOW_MS);
+    rnd_begin(&r); app_draw(&a);
+    CHECK(ring_at(&r, &a, 4, 2));
+    CHECK(!ring_at(&r, &a, 6, 2));
+
+    CASE("without fog the players' frame can be the GM's copied: a ring changes nothing there");
+    CHECK_EQ(app_view_differs(&a), 0);
+    rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+    CHECK(ring_at(&r, &a, 4, 2));
+
+    CASE("expiry: due counts down, and at two seconds the ring is gone");
+    CHECK_EQ(app_ping_due(&a, now + 1999), 1);
+    app_tick(&a, now + 1999);
+    CHECK_EQ(a.npings, 1);
+    a.dirty = 0;
+    app_tick(&a, now + 2000);
+    CHECK_EQ(a.npings, 0);
+    CHECK_EQ(a.dirty, 1);
+    CHECK_EQ(app_ping_due(&a, now + 2000), -1);
+    rnd_begin(&r); app_draw(&a);
+    CHECK(!ring_at(&r, &a, 4, 2));
+    now += 3000;
+    app_tick(&a, now);
+
+    CASE("a tap off the map -- the gutter, the title, the status line, the bar -- names nothing");
+    CHECK_EQ(app_ping_cell(&a, 7, 0, sy), 0);               /* the row labels */
+    CHECK_EQ(app_ping_cell(&a, 7, sx, 0), 0);               /* the title bar */
+    CHECK_EQ(app_ping_cell(&a, 7, sx, r.h - 2), 0);         /* the status line */
+    CHECK_EQ(app_ping_cell(&a, 7, sx, r.h - 1), 0);         /* the key bar */
+    CHECK_EQ(app_ping_cell(&a, 7, r.w - 1, sy), 0);         /* past the map's east edge */
+    CHECK_EQ(a.npings, 0);
+
+    CASE("the same phone moves its ring; another phone adds one; the GM's is its own");
+    app_ping_cell(&a, 7, sx, sy);
+    grid_tile_interior(&a.ed.view, 1, 1, &sx, &sy);
+    app_ping_cell(&a, 7, sx, sy);
+    CHECK_EQ(a.npings, 1);
+    CHECK_EQ(a.pings[0].x0, 1);
+    app_ping_cell(&a, 8, sx, sy);
+    CHECK_EQ(a.npings, 2);
+    a.ed.cx = 9; a.ed.cy = 3;
+    press(&a, "gp");
+    CHECK_EQ(a.npings, 3);
+    CHECK(strstr(a.status, "ping at J4") != NULL);
+    press(&a, "lgp");
+    CHECK_EQ(a.npings, 3);
+    int gm = -1;
+    for (int i = 0; i < a.npings; i++) if (a.pings[i].who == PING_GM) gm = i;
+    CHECK(gm >= 0);
+    CHECK_EQ(a.pings[gm].x0, 10);
+
+    CASE("the GM's ping rings the cursor's footprint, or the box");
+    press(&a, "2b");
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "gp");
+    CHECK_EQ(a.pings[gm].x1 - a.pings[gm].x0, 1);
+    CHECK_EQ(a.pings[gm].y1 - a.pings[gm].y0, 1);
+    CHECK(strstr(a.status, "ping at B2-C3") != NULL);
+    press(&a, "1b");
+    a.ed.cx = 2; a.ed.cy = 0;
+    press(&a, "vlljgp");
+    CHECK_EQ(a.pings[gm].x0, 2);
+    CHECK_EQ(a.pings[gm].x1, 4);
+    CHECK_EQ(a.pings[gm].y1, 1);
+    CHECK_EQ(a.play.visual, 0);
+
+    CASE("in build mode g p is not a ping, and the rings wait for play");
+    int before = a.npings;
+    app_key(&a, f1);
+    press(&a, "gp");
+    CHECK_EQ(a.npings, before);
+    rnd_begin(&r); app_draw(&a);
+    CHECK(!ring_at(&r, &a, 2, 0));
+    CHECK_EQ(app_ping_cell(&a, 7, sx, sy), 0);              /* the phones' frame is play mode's */
+    app_key(&a, f2);
+
+    CASE("fog: a ping into the dark rings for the GM, not for the players, and says nothing to them");
+    now += 5000;
+    app_tick(&a, now);
+    CHECK_EQ(a.npings, 0);
+    press(&a, ":fog on\r");
+    a.ed.cx = 9; a.ed.cy = 3;                                /* nobody lights it */
+    CHECK_EQ(fog_ground_hidden(m, 9, 3), 1);
+    press(&a, "gp");
+    CHECK_EQ(app_view_differs(&a), 1);
+    rnd_begin(&r); app_draw_view(&a, VIEW_GM);
+    CHECK(ring_at(&r, &a, 9, 3));
+    rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+    CHECK(!ring_at(&r, &a, 9, 3));
+    ByteBuf fr;
+    bb_init(&fr, 65536); rnd_dump(&r, &fr); bb_putc(&fr, '\0');
+    CHECK(strstr(fr.data, "ping") == NULL);
+    bb_free(&fr);
+    int amber = 0;
+    for (size_t i = 0; i < (size_t)r.w * (size_t)r.h; i++) amber += r.back[i].bg == a.th->ping_bg;
+    CHECK_EQ(amber, 0);
+
+    CASE("a box half in the light is ringed only round the part the players can see");
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "ipAria\r\x1b");                              /* she lights x 0..3 */
+    a.ed.cx = 2; a.ed.cy = 1;
+    press(&a, "vllllgp");                                   /* 2..6: 5 and 6 are dark */
+    CHECK_EQ(fog_ground_hidden(m, 2, 1), 0);
+    CHECK_EQ(fog_ground_hidden(m, 6, 1), 1);
+    rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
+    CHECK(ring_at(&r, &a, 2, 1));
+    int tx6, ty6;
+    grid_tile_interior(&a.ed.view, 6, 1, &tx6, &ty6);
+    CHECK(rnd_at(&r, tx6, ty6 - 1)->bg != a.th->ping_bg);   /* the ring's top over a dark square */
+    rnd_begin(&r); app_draw_view(&a, VIEW_GM);
+    CHECK(rnd_at(&r, tx6, ty6 - 1)->bg == a.th->ping_bg);
+
+    CASE("the server's taps come through app_tick; :serve --no-pings stops them and says so");
+    press(&a, ":fog off\r");
+    now += 5000;
+    app_tick(&a, now);
+    press(&a, ":serve 0\r");
+    CHECK(net_active(&a.net));
+    int w = net_connect(a.net.port);
+    CHECK(w >= 0);
+    CHECK(write(w, "VTT1\n", 5) == 5);
+    for (int i = 0; i < 10; i++) net_pump(&a.net, now);
+    grid_tile_interior(&a.ed.view, 3, 3, &sx, &sy);
+    char line[32];
+    snprintf(line, sizeof line, "P %d %d\n", sx, sy);
+    CHECK(write(w, line, strlen(line)) == (ssize_t)strlen(line));
+    for (int i = 0; i < 20 && a.npings == 0; i++) { net_pump(&a.net, now); app_tick(&a, now); }
+    CHECK_EQ(a.npings, 1);
+    CHECK(a.pings[0].who != PING_GM);
+    CHECK_EQ(a.pings[0].x0, 3);
+    press(&a, ":serve --no-pings\r");
+    CHECK(strstr(a.status, "pings off") != NULL);
+    CHECK_EQ(net_pings_on(&a.net), 0);
+    press(&a, "gp");                                        /* the GM's own is not a phone's */
+    CHECK_EQ(a.npings, 2);
+    press(&a, ":serve --pings\r");
+    CHECK_EQ(net_pings_on(&a.net), 1);
+    close(w);
+
+    CASE("a phone's tap into the dark sends the phones nothing at all");
+    press(&a, ":fog on\r");
+    app_frame(&a, NULL, now);
+    app_frame(&a, NULL, now);
+    CHECK_EQ(fog_ground_hidden(m, 9, 3), 1);
+    grid_tile_interior(&a.ed.view, 9, 3, &sx, &sy);
+    now += 2000;
+    snprintf(line, sizeof line, "P %d %d\n", sx, sy);
+    int w2 = net_connect(a.net.port);
+    CHECK(w2 >= 0);
+    CHECK(write(w2, "VTT1\n", 5) == 5);
+    for (int i = 0; i < 10; i++) net_pump(&a.net, now);
+    app_tick(&a, now);                                      /* earlier rings come down first */
+    app_frame(&a, NULL, now);
+    app_frame(&a, NULL, now);
+    CHECK(write(w2, line, strlen(line)) == (ssize_t)strlen(line));
+    int dark = 0;
+    for (int i = 0; i < 20 && !dark; i++) {
+        net_pump(&a.net, now);
+        app_tick(&a, now);
+        for (int j = 0; j < a.npings; j++)
+            dark |= a.pings[j].who != PING_GM && a.pings[j].x0 == 9 && a.pings[j].y0 == 3;
+    }
+    CHECK(dark);
+    app_frame(&a, NULL, now);
+    CHECK_EQ(a.net.frame_bytes, 0u);                        /* the GM's frame changed; theirs did not */
+    close(w2);
+    press(&a, ":fog off\r");
+
+    CASE("with every slot taken, a new source takes the ring closest to going");
+    now += 10000;
+    app_tick(&a, now);
+    for (uint32_t i = 1; i <= PING_MAX; i++) { a.now_ms = now + i; app_ping(&a, 100 + i, 1, 1, 1, 1); }
+    CHECK_EQ(a.npings, PING_MAX);
+    a.now_ms = now + 50;
+    app_ping(&a, 999, 2, 2, 2, 2);
+    CHECK_EQ(a.npings, PING_MAX);
+    int evicted = 1;
+    for (int i = 0; i < a.npings; i++) if (a.pings[i].who == 101) evicted = 0;
+    CHECK(evicted);
+
+    CASE("closing the map, or opening another, takes every ring down");
+    press(&a, ":q!\r");                                    /* app_close_map */
+    CHECK(a.map == NULL);
+    CHECK_EQ(a.npings, 0);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    app_key(&a, f2);
+    press(&a, "gp");
+    CHECK_EQ(a.npings, 1);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    CHECK_EQ(a.npings, 0);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
+void test_serve_commands(void)
+{
+    Sandbox sb = sandbox_enter("serve");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+
+    write_map_file(sb.dir, "fight.vtt");
+    char path[600];
+    snprintf(path, sizeof path, "%s/fight.vtt", sb.dir);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+
+    CASE(":serve opens the remote view and says where");
+    CHECK_EQ(net_active(&a.net), 0);
+    press(&a, ":serve\r");
+    CHECK_EQ(net_active(&a.net), 1);
+    CHECK(strstr(a.status, "serving at http://") != NULL);
+    CHECK(strstr(a.status, "/?k=") != NULL);
+    press(&a, ":serve\r");
+    CHECK(strstr(a.status, "0 clients") != NULL);
+
+    CASE("a watcher that connects is counted, and sees the play frame");
+    int w = net_connect(a.net.port);
+    CHECK(w >= 0);
+    CHECK_EQ((int)write(w, "VTT1\n", 5), 5);
+    WireCatch c;
+    memset(&c, 0, sizeof c);
+    WireDec d;
+    wire_dec_init(&d, &WC_SINK, &c);
+    /* the app draws its frame through the same hooks main uses */
+    app_frame(&a, NULL, 0);
+    CHECK_EQ(net_recv_until(&a.net, w, &d, &c, 1, 0), 0);
+    CHECK_EQ(c.w, 80);
+    press(&a, ":serve\r");
+    CHECK(strstr(a.status, "1 client") != NULL);
+
+    CASE("leaving play mode freezes the mirror; coming back sends it whole");
+    Key f1 = { KEY_F1, 0, 0 };
+    app_key(&a, f1);
+    app_frame(&a, NULL, 0);
+    uint64_t before = a.net.total_bytes;
+    CHECK_EQ((int)(a.net.total_bytes - before), 0);
+    app_key(&a, f2);
+    app_frame(&a, NULL, 0);
+    CHECK_EQ(net_recv_until(&a.net, w, &d, &c, 2, 0), 0);
+    CHECK_EQ(c.fulls, 2);
+
+    CASE(":mirror with no terminal to open says so, and how to do it by hand");
+    const char *had_term = getenv("TERMINAL");
+    char saved_term[512] = "";
+    if (had_term) str_lcpy(saved_term, had_term, sizeof saved_term);
+    const char *had_path = getenv("PATH");
+    char saved_path[2048] = "";
+    if (had_path) str_lcpy(saved_path, had_path, sizeof saved_path);
+    setenv("TERMINAL", "/nonexistent/terminal", 1);
+    setenv("PATH", "/nonexistent", 1);
+    press(&a, ":mirror\r");
+    CHECK(strstr(a.status, "no terminal found") != NULL);
+    CHECK(strstr(a.status, "--watch 127.0.0.1:") != NULL);
+    if (had_term) setenv("TERMINAL", saved_term, 1); else unsetenv("TERMINAL");
+    if (had_path) setenv("PATH", saved_path, 1);
+
+    CASE(":serve off drops everyone");
+    press(&a, ":serve off\r");
+    CHECK_EQ(net_active(&a.net), 0);
+    CHECK(strstr(a.status, "1 client dropped") != NULL);
+    uint8_t z;
+    struct timeval tv = { 1, 0 };
+    setsockopt(w, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+    ssize_t got;
+    do got = read(w, &z, 1); while (got > 0);
+    CHECK_EQ((int)got, 0);                              /* the server closed it */
+    close(w);
+    press(&a, ":serve off\r");
+    CHECK(strstr(a.status, "not on") != NULL);
+
+    CASE(":mirror starts the server itself when it has to");
+    setenv("TERMINAL", "/nonexistent/terminal", 1);
+    setenv("PATH", "/nonexistent", 1);
+    press(&a, ":mirror\r");
+    CHECK_EQ(net_active(&a.net), 1);
+    if (had_term) setenv("TERMINAL", saved_term, 1); else unsetenv("TERMINAL");
+    if (had_path) setenv("PATH", saved_path, 1);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
+void test_webpage(void)
+{
+    extern const char   WEBPAGE[];
+    extern const size_t WEBPAGE_LEN;
+
+    CASE("the page is one request under 12 KB, with nothing fetched from anywhere");
+    CHECK((int)WEBPAGE_LEN < 12288);
+    CHECK(strstr(WEBPAGE, "<!doctype html") != NULL);
+    CHECK(strstr(WEBPAGE, "new WebSocket(") != NULL);
+    CHECK(strstr(WEBPAGE, "WebAssembly.Module") != NULL);
+    CHECK(strstr(WEBPAGE, "src=\"http") == NULL);
+    CHECK(strstr(WEBPAGE, "href=\"http") == NULL);
+    CHECK(strstr(WEBPAGE, "@import") == NULL);
+
+    CASE("a tap sends the cell under it, a line the server reads as a ping");
+    CHECK(strstr(WEBPAGE, "addEventListener('click'") != NULL);
+    CHECK(strstr(WEBPAGE, "ws.send('P '+x+' '+y)") != NULL);
+
+    CASE("the embedded wasm module is the one tools/blit_wasm.py assembles");
+    const char *w = strstr(WEBPAGE, "const WASM='");
+    CHECK(w != NULL);
+    if (w) CHECK(strncmp(w + 12, "AGFzbQEAAAAB", 12) == 0);   /* \0asm, version 1, a type section */
+}
