@@ -36,7 +36,7 @@ void draw_cell(Renderer *r, int x, int y, uint32_t ch, Style s)
 
     /* A double-width glyph owns the next cell too; mark it as a continuation
      * so the flush loop knows not to emit anything there. The range check
-     * first is not just an optimisation of the common case: nothing below
+     * first is not just an optimization of the common case: nothing below
      * the first wide range can be double-width, so it is exact. */
     if (ch >= 0x1100u && utf8_width(ch) == 2) {
         Cell *n = rnd_at(r, x + 1, y);

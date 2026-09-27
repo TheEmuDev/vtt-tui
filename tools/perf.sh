@@ -13,7 +13,7 @@
 #            is a per-frame average, so a path that fires in a minority of
 #            frames reads as 0ns there however expensive it actually is.
 #
-# Two rules for a scenario script, both learnt the hard way:
+# Two rules for a scenario script, both learned the hard way:
 #   - no toggles. The bench runs the script again every loop, so a lone # would
 #     turn the labels on and off in alternate frames and measure neither.
 #   - no bare ESC. Every loop feeds the whole script at once, and ESC followed
@@ -203,7 +203,7 @@ run() {
 
 : > "$DIR/ev"
 
-cat > "$DIR/sum.py" <<'SUMMARISER'
+cat > "$DIR/sum.py" <<'SUMMARIZER'
 import json, sys
 
 path, label = sys.argv[1], sys.argv[2]
@@ -222,7 +222,7 @@ for name, durs in by.items():
     n = len(durs)
     print("%s\t%.2f\t%.2f\t%.2f\t%d\t%s"
           % (name, durs[n // 2], durs[min(n - 1, int(n * 0.99))], durs[-1], n, label))
-SUMMARISER
+SUMMARIZER
 
 echo '| scenario             | size   | frame p50 | frame p99 | cells | bytes |'
 echo '|----------------------|--------|-----------|-----------|-------|-------|'

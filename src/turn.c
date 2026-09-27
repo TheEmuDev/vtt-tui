@@ -34,8 +34,8 @@ static const char *name_of(const Token *t)
     return t->label[0] ? t->label : token_kind_name(t->kind);
 }
 
-/* A row in its creature's side colour -- but a creature the players' frame
- * names "?" is not coloured by side either, or the colour would say what
+/* A row in its creature's side color -- but a creature the players' frame
+ * names "?" is not colored by side either, or the color would say what
  * the name does not. */
 static Style side_style(const Token *t, const Theme *th)
 {
@@ -43,10 +43,10 @@ static Style side_style(const Token *t, const Theme *th)
     return style(t->kind == TOKEN_ENEMY ? th->enemy : th->player, th->bg, 0);
 }
 
-/* The neighbour of `from` in key order among tokens that pass the filter,
+/* The neighbor of `from` in key order among tokens that pass the filter,
  * without wrapping: -1 when `from` is already the last (or first). A `from`
  * of -1 gives the first (dir > 0) or the last. */
-static int neighbour(const Map *m, int from, int dir, int kind, int only_in)
+static int neighbor(const Map *m, int from, int dir, int kind, int only_in)
 {
     int     have = from >= 0 && from < m->tokens.n;
     int64_t at   = have ? walk_key(&m->tokens.v[from], from) : 0;
@@ -83,8 +83,8 @@ int turn_acting(const Map *m)
 int turn_walk(const Map *m, int from, int dir, int kind)
 {
     if (dir == 0) dir = 1;
-    int next = neighbour(m, from, dir, kind, 0);
-    if (next < 0) next = neighbour(m, -1, dir, kind, 0);    /* wrap */
+    int next = neighbor(m, from, dir, kind, 0);
+    if (next < 0) next = neighbor(m, -1, dir, kind, 0);    /* wrap */
     return next;
 }
 
@@ -121,20 +121,20 @@ int turn_advance(Map *m, Undo *u, int delta)
     for (int s = 0; s < steps; s++) {
         int in = cur >= 0 && (m->tokens.v[cur].turn & TURN_IN);
         if (dir > 0) {
-            int next = in ? neighbour(m, cur, 1, TOKEN_ANY_KIND, 1) : -1;
+            int next = in ? neighbor(m, cur, 1, TOKEN_ANY_KIND, 1) : -1;
             if (next < 0) {
                 /* Off the end, or nobody in the order had the turn: the top
                  * of the order, and a new round if this was a lap. */
-                next  = neighbour(m, -1, 1, TOKEN_ANY_KIND, 1);
+                next  = neighbor(m, -1, 1, TOKEN_ANY_KIND, 1);
                 round = in ? round + 1 : imax(round, 1);
             }
             cur = next;
         } else {
             if (!in) return TURN_AT_START;
-            int prev = neighbour(m, cur, -1, TOKEN_ANY_KIND, 1);
+            int prev = neighbor(m, cur, -1, TOKEN_ANY_KIND, 1);
             if (prev < 0) {
                 if (round <= 1) return TURN_AT_START;
-                prev = neighbour(m, -1, -1, TOKEN_ANY_KIND, 1);
+                prev = neighbor(m, -1, -1, TOKEN_ANY_KIND, 1);
                 round--;
             }
             cur = prev;
@@ -293,8 +293,8 @@ static void turn_status_body(const Map *m, char *buf, size_t bufsz)
     if (!(m->tokens.v[cur].turn & TURN_IN) || n < 2) return;
     int next = cur;
     for (int i = 0; i < 2 && i < n - 1 && (size_t)off + 24 < bufsz; i++) {
-        int after = neighbour(m, next, 1, TOKEN_ANY_KIND, 1);
-        if (after < 0) after = neighbour(m, -1, 1, TOKEN_ANY_KIND, 1);
+        int after = neighbor(m, next, 1, TOKEN_ANY_KIND, 1);
+        if (after < 0) after = neighbor(m, -1, 1, TOKEN_ANY_KIND, 1);
         if (after < 0 || after == cur) break;
         next = after;
         off += snprintf(buf + off, bufsz - (size_t)off, "%s%.16s",
@@ -316,14 +316,14 @@ void turn_list(const Map *m, char *buf, size_t bufsz)
                            : snprintf(buf, bufsz, "Order: ");
     int at = -1;
     for (int i = 0; i < n && (size_t)off + 28 < bufsz; i++) {
-        at = neighbour(m, at, 1, TOKEN_ANY_KIND, 1);
+        at = neighbor(m, at, 1, TOKEN_ANY_KIND, 1);
         if (at < 0) break;
         const Token *t = &m->tokens.v[at];
         off += snprintf(buf + off, bufsz - (size_t)off, "%s%.16s %d%s",
                         i ? ", " : "", name_of(t), t->init,
                         (t->turn & TURN_ACTING) ? "*" : "");
     }
-    if (at >= 0 && neighbour(m, at, 1, TOKEN_ANY_KIND, 1) >= 0 && (size_t)off + 5 < bufsz)
+    if (at >= 0 && neighbor(m, at, 1, TOKEN_ANY_KIND, 1) >= 0 && (size_t)off + 5 < bufsz)
         snprintf(buf + off, bufsz - (size_t)off, ", ...");
 }
 
@@ -415,7 +415,7 @@ static void turn_draw_panel_body(Renderer *r, const Map *m, const Theme *th, Rec
     int at    = -1;
     int shown = 0;
     while (shown < n && y < rc.y + rc.h - 2) {
-        at = neighbour(m, at, 1, TOKEN_ANY_KIND, 1);
+        at = neighbor(m, at, 1, TOKEN_ANY_KIND, 1);
         if (at < 0) break;
         const Token *t = &m->tokens.v[at];
         int on = at == cur;

@@ -142,7 +142,7 @@ metrics are available, set per map with `:metric`:
 | `manhattan` | 35 ft | no diagonal movement |
 
 **Zoom.** `+` and `-` change the zoom level (0-3, default 1). Each square takes a block of
-screen cells plus the one-cell boundary it shares with its neighbour:
+screen cells plus the one-cell boundary it shares with its neighbor:
 
 | level | square | squares visible in 80×24 |
 |-------|--------|--------------------------|
@@ -200,7 +200,7 @@ Build mode is for drawing the map. `F1` switches to it.
 | `0` `$` `gg` `G` | start / end of the row, top / bottom of the map |
 | `Ctrl-d` `Ctrl-u` | half a page down / up |
 | `:d6` | jump to a square (`:6` jumps to row 6, keeping the column) |
-| `z` | centre the view on the cursor |
+| `z` | center the view on the cursor |
 | `+` `-` | zoom in / out |
 | `#` | row and column labels on / off |
 | `b` `B` | brush size 1×1, 2×2, 3×3; `2b` sets it directly |
@@ -227,7 +227,7 @@ already the chosen kind, the key clears them instead.
 
 **Selections.** `v` starts a box and `V` a circle at the cursor; move the cursor to size it.
 Pressing the other key switches shape and keeps the anchor; pressing the same key again
-cancels. A circle is centred on its starting square, and the status line shows its radius
+cancels. A circle is centered on its starting square, and the status line shows its radius
 (`circle r4`). With a selection open, `f`, `x`, `y`, `g f` and `g c` act on it.
 
 **Wall mode (`w`).** The cursor moves along the corners between squares, and each step
@@ -303,7 +303,7 @@ Play mode is for running the encounter. `F2` switches to it.
 | `e` `E` | next / previous enemy |
 | `tab` `shift-tab` | same as `t` / `T` |
 | `/` `n` `N` | search labels / next / previous match |
-| `s a` `s c` `s d` | add a status marker / choose its colour / remove one |
+| `s a` `s c` `s d` | add a status marker / choose its color / remove one |
 | `s n` | note on the selected creature, or on the square if none is selected |
 | `s v` | edit the selected creature's counters |
 | `<` `>` | decrease / increase the current counter by one (`3<` by three) |
@@ -353,7 +353,7 @@ Then:
   or refuses if any of them would not fit.
 - `v` or `esc` closes the box.
 
-Selected creatures are outlined in their own colour.
+Selected creatures are outlined in their own color.
 
 **Finding creatures.** `t` cycles through all creatures, `f` through players, `e` through
 enemies; the capitals go backwards. During a fight they follow the turn order. The view
@@ -367,7 +367,7 @@ numbered (`Goblin`, `Goblin 2`, `Goblin 3`). `d` removes a creature and keeps it
 status markers.
 
 **Status markers.** `s a` adds a marker to the selected creature: a word of your choice in a
-colour chosen with `s c`. Markers are drawn as the first letter of the word above the
+color chosen with `s c`. Markers are drawn as the first letter of the word above the
 creature; the status line spells them out. A creature shows four, with more continuing below.
 `s d` removes one, asking which when there are several.
 
@@ -436,7 +436,7 @@ Cones, lines and squares point towards the cursor.
 | line | within reach, one square wide |
 | square | a square with sides as long as the reach, its near edge at the origin |
 
-A square is included when its centre is; a creature is included when any of its squares is.
+A square is included when its center is; a creature is included when any of its squares is.
 Squares in range but out of line of sight are shaded more faintly. The status line lists the
 creatures caught, marking those out of sight:
 
@@ -553,7 +553,7 @@ always visible.
 ```
 
 **Painting.** In build mode, `g f` paints the current patch over the brush or selection and
-`g c` clears fog from it. Build mode shows each patch in its own colour.
+`g c` clears fog from it. Build mode shows each patch in its own color.
 
 **Revealing.** Player creatures reveal fog around them as they move, up to each patch's
 reveal distance, along lines not blocked by walls, closed doors or secret doors. Enemies
@@ -573,7 +573,7 @@ squares. The GM sees fogged areas shaded dark blue, with everything in them.
 
 **Soft edge.** With `:fog --soft-edge`, the squares bordering what the party can see are
 partly shown: their walls, dimmed (doors appear as walls until the square beyond has been
-seen), and any creature on them as a grey `?` silhouette of its size.
+seen), and any creature on them as a gray `?` silhouette of its size.
 
 ## The players' view (`:serve`, `:mirror`)
 
@@ -637,7 +637,7 @@ map as `name.log` by default.
 --- 19:20:03  log off ---
 ```
 
-It records creatures placed, moved, removed, pasted and relabelled, markers, doors, rolls,
+It records creatures placed, moved, removed, pasted and relabeled, markers, doors, rolls,
 ruleset changes, and undo and redo. Each line is written immediately. Closing the map closes
 the log.
 
@@ -809,7 +809,7 @@ W120 unreachable-room  room K2   18 squares, no door leads to it from room B2
 | `E110 token-on-void` | a creature on a square that is not map |
 | `E111 token-overhang` | a creature extending off the edge of the map |
 | `E112 token-overlap` | two creatures on one square |
-| `W015 unknown-line` | an unrecognised line |
+| `W015 unknown-line` | an unrecognized line |
 | `W016 unknown-ruleset`, `W017 unknown-metric` | an unknown setting |
 | `W018 fog-unknown-patch` | a fog row naming a patch that is not defined |
 | `W019 stray-row` | rows outside any section |
@@ -940,7 +940,7 @@ padded with spaces.
 | record | meaning |
 |--------|---------|
 | `token KIND X Y SIZE "Label"` | a creature (`player` or `enemy`), anchored at its top-left square |
-| `tokenstatus COLOUR "Word"` | a status marker on the preceding token |
+| `tokenstatus COLOR "Word"` | a status marker on the preceding token |
 | `tokenturn N [acting]`, `tokenturn - acting` | initiative, and whether it is this creature's turn |
 | `tokennote "text"` | a note on the preceding token |
 | `tokencounter NAME VALUE MAX` | a counter on the preceding token |

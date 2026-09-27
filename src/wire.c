@@ -25,7 +25,7 @@ static uint32_t get16(const uint8_t *p) { return (uint32_t)p[0] | ((uint32_t)p[1
 
 /* -------------------------------------------------------------- palette */
 
-/* Colours are 24-bit but a session meets a few dozen. The hash is a small
+/* Colors are 24-bit but a session meets a few dozen. The hash is a small
  * open-addressed table of index+1 so the lookup per cell is a couple of
  * probes and never a scan. */
 static uint32_t pal_slot(uint32_t rgb)
@@ -60,8 +60,8 @@ static uint8_t pal_index(WireEnc *e, uint32_t rgb)
     int i = pal_find(e, rgb);
     if (i >= 0) return (uint8_t)i;
 
-    /* Past 256 colours the table would need evicting and clients told; a
-     * frame of that many colours is not one this program draws. Reuse the
+    /* Past 256 colors the table would need evicting and clients told; a
+     * frame of that many colors is not one this program draws. Reuse the
      * last index and let that cell be a shade off rather than grow. */
     if (e->npal >= WIRE_PAL_MAX) return (uint8_t)(WIRE_PAL_MAX - 1);
 

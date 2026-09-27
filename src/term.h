@@ -28,7 +28,7 @@ void term_shutdown(Term *t);
 /* Re-reads the window size into t->w/t->h. Returns 1 if it changed. */
 int  term_update_size(Term *t);
 
-/* Drains the self-pipe. Returns 1 if a resize was signalled. */
+/* Drains the self-pipe. Returns 1 if a resize was signaled. */
 int  term_drain_signals(Term *t);
 
 /* Writes n bytes, returning how many were actually delivered.

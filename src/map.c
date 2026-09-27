@@ -7,7 +7,7 @@
 
 #include "util.h"
 
-/* One row per kind, so the name, the saved character and the behaviour cannot
+/* One row per kind, so the name, the saved character and the behavior cannot
  * drift apart. grid.c holds a parallel table of appearances, checked against
  * these counts at compile time. */
 static const struct {

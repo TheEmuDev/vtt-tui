@@ -14,7 +14,7 @@
  * its own settings. A tile belongs to one patch or to none, and a tile in
  * none is always visible. What a patch still hides is drawn as nothing at
  * all in the players' frame, dimmed in the GM's, and tinted in the patch's
- * own colour in build mode.
+ * own color in build mode.
  *
  * Every drawing path answers its question with one load of the tile's fog
  * byte and a mask; the patch table is read only to know whether a patch is
@@ -26,7 +26,7 @@
  * and is never written to a file. */
 
 typedef enum {
-    FOGV_BUILD,      /* painted ground tinted in its patch's colour */
+    FOGV_BUILD,      /* painted ground tinted in its patch's color */
     FOGV_GM,         /* what fog hides from the table, dimmed */
     FOGV_PLAYERS,    /* what fog hides, not drawn at all */
 } FogView;
@@ -143,7 +143,7 @@ void fog_recompute(Map *m);
  * moved) and the full one. */
 void fog_sight_counts(unsigned *steps, unsigned *fulls);
 
-/* The patch colour index for the build-mode tint, 0..14. */
+/* The patch color index for the build-mode tint, 0..14. */
 static inline int fog_tint(int id) { return (id - 1) % FOG_PATCH_MAX; }
 
 #endif /* VTT_FOG_H */

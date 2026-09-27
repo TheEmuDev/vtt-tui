@@ -164,7 +164,7 @@ typedef struct {
     int      corner, wx, wy;         /* wall mode: the lattice corner */
     int      box;                    /* 0 none, else ED_SHAPE_RECT + 1 or ED_SHAPE_CIRCLE + 1 */
     int      bx0, by0, bx1, by1;     /* the box's squares, or the disc's bounding box */
-    int      ox, oy, radius;         /* a circle's centre square and radius */
+    int      ox, oy, radius;         /* a circle's center square and radius */
     int      box_corners;            /* the box is wall mode's, between corners */
     int      box_empty;              /* it holds no squares: a straight line of corners */
     const Ruler *ruler;              /* NULL when not measuring */
@@ -297,7 +297,7 @@ static void do_marked(App *a, FILE *out, int json)
                 json_kint(&j, "radius", mk.radius);
                 if (!mk.box_corners) {
                     map_coord_name(mk.ox, mk.oy, at, sizeof at);
-                    json_kstr(&j, "centre", at);
+                    json_kstr(&j, "center", at);
                 }
             }
             json_close(&j, '}');
@@ -691,7 +691,7 @@ static void add_ends(Corridor *c, int vert, int x, int y, int w)
 }
 
 /* A straight run between rooms side by side (horizontal) or one above the
- * other, centred on the stretch they share; 0 when that is narrower than
+ * other, centered on the stretch they share; 0 when that is narrower than
  * the corridor. */
 static int straight(const Area *a, const Area *b, int w, int horiz, Corridor *c)
 {

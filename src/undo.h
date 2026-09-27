@@ -112,7 +112,7 @@ int  undo_add_token(Undo *u, Map *m, Token t);
 void undo_del_token(Undo *u, Map *m, int idx);
 void undo_move_token(Undo *u, Map *m, int idx, int nx, int ny);
 
-/* Replaces a token wholesale, which is how relabelling, resizing and status
+/* Replaces a token wholesale, which is how relabeling, resizing and status
  * markers become undoable without an op per field. */
 void undo_edit_token(Undo *u, Map *m, int idx, Token after);
 
@@ -134,7 +134,7 @@ int  undo_remove_area(Undo *u, Map *m, const char *name);
 int  undo_undo(Undo *u, Map *m);
 
 /* Unwinds back to `depth`, but only through batches that are nothing but
- * moves of the tokens in `idx`. Stops at anything else, so cancelling a move cannot
+ * moves of the tokens in `idx`. Stops at anything else, so canceling a move cannot
  * quietly swallow an edit made part way through it. Returns how many batches
  * were undone. This is what makes a cancel leave no trace: the steps are
  * taken back out of the history rather than answered with a step back. */

@@ -216,7 +216,7 @@ EdShape ed_shape(uint8_t kind, int ax, int ay, int bx, int by, int corners)
     }
 
     /* Half-tiles throughout: a square's middle is odd, a lattice corner even,
-     * so both anchors and the tile centres they are measured against live in
+     * so both anchors and the tile centers they are measured against live in
      * the same integers. */
     s.ccx = corners ? 2L * ax : 2L * ax + 1;
     s.ccy = corners ? 2L * ay : 2L * ay + 1;
@@ -265,7 +265,7 @@ void ed_wall_shape(Map *m, Undo *u, const EdShape *s, uint8_t kind)
          * line -- has no outline, as the tile walk found none. */
         if (s->x1 < s->x0 || s->y1 < s->y0) { undo_end(u); return; }
         /* A box's outline is its four sides: walk those, not every tile
-         * inside asking whether its neighbours are in. The same faces. */
+         * inside asking whether its neighbors are in. The same faces. */
         for (int y = s->y0; y <= s->y1; y++) {
             undo_set_vedge(u, m, s->x0,     y, kind);
             undo_set_vedge(u, m, s->x1 + 1, y, kind);

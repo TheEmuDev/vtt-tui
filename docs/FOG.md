@@ -19,13 +19,13 @@ less than it sounds.
 
 - **The tile stays one byte, so patches are free per tile.** Four bits say
   which patch; the rest say seen, lit, rim and held. Everything that varies
-  between patches -- reveal distance, memory, the soft edge, colour, name --
+  between patches -- reveal distance, memory, the soft edge, color, name --
   lives in a fifteen-entry table that no drawing path ever reads. A tile
   costs one load and a mask either way, and the array is the 256 KB it
   always was.
 - **Nothing gains a drawing pass.** The GM's dim, the players' blank and
   the build-mode tint all fold into the single per-tile loop `grid_draw`
-  already runs, writing the cells it was going to write in another colour.
+  already runs, writing the cells it was going to write in another color.
   Where fog hides a tile the players' frame writes *less* than the GM's, so
   a fogged map is cheaper to draw for the players than for the GM.
 - **Many patches are cheaper than one big one.** Each carries a bounding
@@ -47,7 +47,7 @@ less than it sounds.
   terminal the players' way. Authoring a fogged map is guesswork without it,
   and once `app_draw` takes a view argument it is a flag, not a feature.
 
-## Fog of war: the agreed behaviour
+## Fog of war: the agreed behavior
 
 Your summary of 2026-09-22, which is the spec the rest of this document now
 serves. Two of these changed what was written above, and *What it costs*
@@ -71,7 +71,7 @@ Answers of 2026-09-23 settle the rest:
 9. **Sight stops at walls**, and at everything else the map says is opaque.
 10. **The soft edge is the fog tiles adjacent to a lit tile**, so it moves
     with the party rather than sitting on the painted border. Anchored on
-    *lit*, all eight neighbours, a diagonal only when all four crossings
+    *lit*, all eight neighbors, a diagonal only when all four crossings
     round its corner are clear -- the rule `map_blocked` uses for movement.
 11. **On a soft-edge tile**: walls are drawn, but a door in one is drawn as
     a wall and only becomes a door when the tile is fully lit; terrain is
@@ -301,10 +301,10 @@ and darken during play and live there. Rule 2 is kept because no key means
 two things -- each one simply has one home.
 
 **The build-mode indicator.** Painted tiles take a tint under their terrain,
-and the tint is *the patch's own colour*, indexed off its number out of a
+and the tint is *the patch's own color*, indexed off its number out of a
 row of fifteen in the theme, so two patches that touch can be told apart at
 a glance and the GM can see which one the brush is about to extend. It is a
-different colour again from the dim the GM sees in play: in build mode the
+different color again from the dim the GM sees in play: in build mode the
 tint says "this patch covers this", in play "the players cannot see this
 now". It costs one indexed load per visible tile in build mode and nothing
 in play -- see *Drawing* -- and being a background it cannot collide with
@@ -407,16 +407,16 @@ the dungeon.
 **Drawing, and why it is close to free.** `grid_draw` already runs one loop
 over the visible tiles, reading each tile and writing its interior cells.
 Fog adds a byte load and a branch inside that loop, and then writes the same
-cells it was going to write anyway, in a different colour:
+cells it was going to write anyway, in a different color:
 
 | view | a tile its patch is still hiding |
 |---|---|
-| build | its terrain, tinted in the patch's own colour |
+| build | its terrain, tinted in the patch's own color |
 | play, GM | its terrain, dimmed |
 | play, players | nothing: `continue`, zero cell writes |
 
 Build mode's tint is the only one that reads the patch, and it reads a
-fifteen-entry colour row by index, which is one L1 load. Play mode needs
+fifteen-entry color row by index, which is one L1 load. Play mode needs
 only "hidden or not", which is the tile byte it already has. **The patch
 record is never touched on a drawing path.**
 
@@ -455,14 +455,14 @@ while drawing. A wall between the two tiles stops it, for the same reason
 sight stops at walls: a silhouette through stone would read as a bug.
 
 **A rim tile is one that fog still hides, next to a tile that is lit right
-now, across a boundary that does not stop sight.** Neighbours are all
+now, across a boundary that does not stop sight.** Neighbors are all
 eight, and a diagonal counts only when both of the orthogonal crossings it
 is made of are clear, which is the rule `map_blocked` already applies to
 movement and is what stops a silhouette appearing around the outside of a
 corner. Settled 2026-09-23 from two drafts, taking the anchor from one and
-the neighbours from the other:
+the neighbors from the other:
 
-| | anchored on | neighbours |
+| | anchored on | neighbors |
 |---|---|---|
 | first draft | a *visible* tile | eight |
 | 2026-09-23 | a **lit** tile | four |
@@ -477,12 +477,12 @@ Eight rather than four because of a rule that arrived later: a rim tile
 draws its walls, which makes corners matter.
 
 - **A creature in melee would vanish.** At `reveal 0` the lit set is the
-  one square a creature stands on, so with four neighbours a creature
+  one square a creature stands on, so with four neighbors a creature
   diagonally beside it is not on the rim and is not drawn at all, while one
   orthogonally beside it is a silhouette. Both are in melee.
 - **A dim wall would get a hole at the corner.** A lit region with a convex
   corner has an unlit tile touching it only diagonally; with four
-  neighbours its walls go undrawn, and a room corner reads as a gap in a
+  neighbors its walls go undrawn, and a room corner reads as a gap in a
   wall that is drawn either side of it.
 
 The four-way rim is tighter and gives away a little less, but not much: at
@@ -496,7 +496,7 @@ against four, inside a box the walk already steps through.
 
 | | |
 |---|---|
-| terrain | not drawn, glyph or ground colour, until the tile is fully lit -- unless memory already shows it, when the rim changes nothing about its ground or walls |
+| terrain | not drawn, glyph or ground color, until the tile is fully lit -- unless memory already shows it, when the rim changes nothing about its ground or walls |
 | walls | drawn, dimmed; a window stays a window, dimmed |
 | a door | drawn as a **wall**, and only becomes a door when the tile is lit. `seg_look` already makes this substitution for secret doors; this is the same line one case further down |
 | a creature | drawn, dimmed, one neutral square whatever it is, `?` where its name would be |
@@ -515,12 +515,12 @@ square in the half-light is covered:
 At most nine tiles scanned for a creature the frame was walking anyway.
 
 A silhouette keeps the creature's footprint, since that is what a
-silhouette is, but takes a **neutral colour**: the `?` would be undone by a
+silhouette is, but takes a **neutral color**: the `?` would be undone by a
 red square still saying "enemy". Settled 2026-09-23. Built, the same
 reasoning reached its shape: circles are players and squares enemies
 everywhere else, so a silhouette takes **one form**, the square, whatever
 it is -- found in review 2026-09-24, and the one line to turn round if the
-shape should stay. The turn panel's `?` rows lose their side colour for
+shape should stay. The turn panel's `?` rows lose their side color for
 the same reason.
 
 **Decisions, and where they stand.**
@@ -540,13 +540,13 @@ the same reason.
    on by default; `delete` and `disable` are separate acts; the rim setting
    is `--soft-edge`.
 
-6. A silhouette loses its side's colour. **Settled: neutral.**
+6. A silhouette loses its side's color. **Settled: neutral.**
 7. Painting fog is **build mode only**, where the rest of authoring lives.
    `g r` and `g h`, which light and darken rather than author, stay in
    play mode. **Settled.**
 8. Fifteen patches a map, named and prefix-matched like clocks, with a
    current one the brush paints. **Settled: enough for now.**
-9. The rim is anchored on *lit* and counts all eight neighbours.
+9. The rim is anchored on *lit* and counts all eight neighbors.
    **Settled.**
 
 Nothing blocking remains. What is left is three standing assumptions,

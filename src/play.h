@@ -110,7 +110,7 @@ typedef struct {
 
     /* How deep the undo log was when the creature was picked up, so esc can
      * take the walk back out of the history rather than answering it with a
-     * step back. A cancelled move should leave no trace. */
+     * step back. A canceled move should leave no trace. */
     int grab_depth;
 
     /* Set when a creature has been picked up but the cursor has not committed
@@ -154,7 +154,7 @@ typedef struct {
     Token   yank[PLAY_GROUP_MAX];
     int     nyank;
 
-    uint8_t status_color;   /* colour the next marker will use */
+    uint8_t status_color;   /* color the next marker will use */
 
     /* The last thing searched for, so n and N can walk the matches without
      * making you type it again. */

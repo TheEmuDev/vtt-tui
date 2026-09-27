@@ -123,7 +123,7 @@ void tokens_unique_label(const TokenList *l, const char *base,
 }
 
 static const char *STATUS_COLOR_NAMES[STATUS_COLOR_COUNT] = {
-    "red", "orange", "yellow", "green", "cyan", "blue", "violet", "grey",
+    "red", "orange", "yellow", "green", "cyan", "blue", "violet", "gray",
 };
 
 const char *status_color_name(uint8_t c)
@@ -133,18 +133,20 @@ const char *status_color_name(uint8_t c)
 
 int status_color_from_name(const char *name)
 {
+    /* Maps saved before the spelling changed say "grey". */
+    if (strcmp(name, "grey") == 0) name = "gray";
     for (int i = 0; i < STATUS_COLOR_COUNT; i++)
         if (strcmp(STATUS_COLOR_NAMES[i], name) == 0) return i;
     return -1;
 }
 
-int token_add_status(Token *t, uint8_t colour, const char *label)
+int token_add_status(Token *t, uint8_t color, const char *label)
 {
     if (t->nstatus >= TOKEN_STATUS_MAX) return 0;
 
     Status *st = &t->status[t->nstatus];
     memset(st, 0, sizeof *st);
-    st->color = (uint8_t)(colour % STATUS_COLOR_COUNT);
+    st->color = (uint8_t)(color % STATUS_COLOR_COUNT);
     str_lcpy(st->label, label ? label : "", sizeof st->label);
     t->nstatus++;
     return 1;
@@ -170,7 +172,7 @@ void token_remove_status(Token *t, int idx)
 
 uint32_t status_glyph(const Status *st)
 {
-    /* A letter says more than a dot, and the colour still separates two that
+    /* A letter says more than a dot, and the color still separates two that
      * happen to share one. */
     if (!st->label[0]) return 0x25CFu;   /* filled circle */
 
@@ -196,20 +198,20 @@ void grid_token_area(const GridView *g, int tx, int ty, int size, Rect *out)
     out->h = size * zoom_ph(g->zoom) - 1;
 }
 
-/* Brightens a colour towards white by roughly a third, for the selected
- * token, so selection is legible without a second colour to learn. */
-/* Ring on the lattice around a selected creature, in its own selected colour.
+/* Brightens a color towards white by roughly a third, for the selected
+ * token, so selection is legible without a second color to learn. */
+/* Ring on the lattice around a selected creature, in its own selected color.
  *
- * The fill alone cannot carry selection. A token is a solid patch of colour,
+ * The fill alone cannot carry selection. A token is a solid patch of color,
  * and telling two solid patches apart is a matter of luminance -- but the
  * player green already sits near the top of that range, so the brightest
  * green still only reads 1.6:1 against the plain one, well under the 3:1 a
  * UI element needs. Contrast has to come from somewhere other than the fill,
  * and the grid lines around the creature are free: they are already drawn, so
- * this recolours them rather than painting anything new, and against the page
+ * this recolors them rather than painting anything new, and against the page
  * the ring reads at better than 16:1.
  *
- * The creature's own colour rather than the cursor's blue, so "what is
+ * The creature's own color rather than the cursor's blue, so "what is
  * selected" and "where the cursor is" stay two different questions. */
 static void draw_select_ring(Renderer *r, const Rect *a, uint32_t fg)
 {
@@ -234,13 +236,13 @@ static void draw_select_ring(Renderer *r, const Rect *a, uint32_t fg)
     }
 }
 
-/* Whose turn it is: the lattice above and below the creature, recoloured the
- * way the selection ring recolours all four sides. Two bars rather than a
+/* Whose turn it is: the lattice above and below the creature, recolored the
+ * way the selection ring recolors all four sides. Two bars rather than a
  * second ring so the two marks can share a creature -- which they usually
  * do, since advancing the turn selects whoever it went to -- with the sides
  * saying "selected" and the bars saying "acting". Drawn after the ring, so
  * the bars win the corners. Nothing is painted over: a wall there stays a
- * wall, in another colour. */
+ * wall, in another color. */
 static void draw_turn_bars(Renderer *r, const Rect *a, uint32_t fg)
 {
     int x0 = a->x - 1, x1 = a->x + a->w;
@@ -278,7 +280,7 @@ static void token_draw(Renderer *r, const GridView *g, const Token *t,
 
     /* A silhouette takes one form whatever it is: circles are players and
      * squares enemies everywhere else, so keeping its own would say its side
-     * as plainly as its colour. The square, since nearly every creature the
+     * as plainly as its color. The square, since nearly every creature the
      * party cannot see is one. */
     int player = !silhouette && t->kind != TOKEN_ENEMY;
 
@@ -286,9 +288,9 @@ static void token_draw(Renderer *r, const GridView *g, const Token *t,
     if (!silhouette && (t->turn & TURN_ACTING)) draw_turn_bars(r, &a, th->turn);
     const char *label = silhouette ? "?" : t->label;
 
-    /* A single-row token has no room for a shape, and colour alone is a poor
+    /* A single-row token has no room for a shape, and color alone is a poor
      * way to tell a player from an enemy — it fails in --ascii and for a
-     * colourblind reader. So the smallest tokens carry their shape as a
+     * colorblind reader. So the smallest tokens carry their shape as a
      * glyph: round brackets for circles, square ones for squares. */
     if (a.h == 1) {
         Style s = style(base, th->bg, ATTR_BOLD);
@@ -329,7 +331,7 @@ static void token_draw(Renderer *r, const GridView *g, const Token *t,
         }
     }
 
-    /* Without colour the fill alone is ambiguous, so ASCII mode marks the
+    /* Without color the fill alone is ambiguous, so ASCII mode marks the
      * shape on the middle row the same way the single-row form does. */
     if (ascii && body.w >= 3) {
         Style edge = style(th->bg, base, ATTR_BOLD);
@@ -340,7 +342,7 @@ static void token_draw(Renderer *r, const GridView *g, const Token *t,
 
     if (!label[0]) return;
 
-    /* The label sits on the middle row, centred, trimmed to what fits.
+    /* The label sits on the middle row, centered, trimmed to what fits.
      * It has to stay clear of the ASCII brackets when those are drawn, and
      * off the curve of a circle when they are not. */
     int row   = body.y + body.h / 2;

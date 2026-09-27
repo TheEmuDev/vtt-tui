@@ -66,7 +66,7 @@ static inline void rnd_set_observer(Renderer *r, RndObserver fn, void *ctx)
     r->observer_ctx = ctx;
 }
 
-/* Sets the colour rnd_begin() clears to. */
+/* Sets the color rnd_begin() clears to. */
 void rnd_set_clear(Renderer *r, uint32_t fg, uint32_t bg);
 
 /* Clears the back buffer. Call once at the top of each frame. */

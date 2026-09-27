@@ -14,7 +14,7 @@
 #include "prof.h"
 #include "stamp.h"
 
-/* The status message, then its coloured spans over the top. A span is drawn
+/* The status message, then its colored spans over the top. A span is drawn
  * only when all of it survived the ellipsis; half a number in gold would be
  * a different number. */
 void app_draw_status_msg(App *a, int x, int y, int maxw)

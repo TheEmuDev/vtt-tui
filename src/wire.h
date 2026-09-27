@@ -10,9 +10,9 @@
  * and a fixed header, no text anywhere:
  *
  *   'F' u16 w, u16 h            a full frame follows; the grid is this size
- *   'P' u8 index, u8 r,g,b      a palette entry, sent the first time a colour is met
+ *   'P' u8 index, u8 r,g,b      a palette entry, sent the first time a color is met
  *   'R' u16 x,y, u16 n,          n consecutive cells in row y from column x,
- *       u8 fg,bg,attr,           sharing colours, then n x u16 glyph; a 0 glyph is
+ *       u8 fg,bg,attr,           sharing colors, then n x u16 glyph; a 0 glyph is
  *       u16 glyph[n]             the second half of the wide one before it
  *   'E'                          end of frame: present it
  *   'Z'                          keep-alive to a watcher; nothing to draw (a browser gets
@@ -26,7 +26,7 @@
  * the bytes are copied to each. The palette belongs to the encoder and is
  * never written inline: each client remembers how many entries it has been
  * told, and the server sends it the ones it lacks ahead of its next frame,
- * so a client that joined late is told the same colours as one that did
+ * so a client that joined late is told the same colors as one that did
  * not. */
 
 #define WIRE_PAL_MAX  256
@@ -37,7 +37,7 @@ typedef struct {
     size_t    len, cap;
     int       overflow;          /* the frame did not fit: drop it, send FULL */
 
-    uint32_t  pal[WIRE_PAL_MAX]; /* colour by index */
+    uint32_t  pal[WIRE_PAL_MAX]; /* color by index */
     int       npal;
     uint8_t  *pal_hash;          /* 4096 buckets of index+1, 0 for empty */
 
@@ -67,7 +67,7 @@ void wire_enc_full(WireEnc *e, const Renderer *r);
  * bytes). Returns the bytes written; a client then knows e->npal entries. */
 size_t wire_enc_palette(const WireEnc *e, int from, uint8_t *out, size_t cap);
 
-/* Forgets the palette; every colour is re-announced as it is next met. Used
+/* Forgets the palette; every color is re-announced as it is next met. Used
  * when the last client leaves, so the table cannot grow across a session. */
 void wire_enc_reset_palette(WireEnc *e);
 

@@ -133,11 +133,11 @@ typedef enum {
 /* Names and the single character each takes in a saved map. */
 const char *tile_name(uint8_t kind);
 char        tile_file_char(uint8_t kind);
-int         tile_from_file_char(char c);      /* -1 when unrecognised */
+int         tile_from_file_char(char c);      /* -1 when unrecognized */
 
 const char *edge_name(uint8_t kind);
 char        edge_file_char(uint8_t kind);
-int         edge_from_file_char(char c);      /* -1 when unrecognised */
+int         edge_from_file_char(char c);      /* -1 when unrecognized */
 
 /* Doors and secret doors toggle; everything else does not. */
 int     edge_is_door(uint8_t kind);

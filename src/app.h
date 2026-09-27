@@ -83,7 +83,7 @@ typedef struct {
 
     char status[160];
 
-    /* Stretches of the status message drawn in a colour of their own -- the
+    /* Stretches of the status message drawn in a color of their own -- the
      * two duality dice. Byte offsets into status; cleared with every new
      * message, so a span can never outlive the text it was measured on. */
     struct { int at, len; uint32_t fg; } status_span[2];
@@ -225,7 +225,7 @@ void app_set_status(App *a, const char *msg);
 void app_note(App *a, const char *msg);     /* status line + session log */
 void app_note_gm(App *a, const char *msg);  /* the same, kept off the players' frame */
 void app_set_status_gm(App *a, const char *msg);  /* a hint or error the table must not see */
-void app_status_span(App *a, int at, int len, uint32_t fg);   /* colour part of it */
+void app_status_span(App *a, int at, int len, uint32_t fg);   /* color part of it */
 
 /* Whether the remote view should be streaming this frame: play mode is what
  * the players may see. GM-only things are not in the players' frame at all,

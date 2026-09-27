@@ -900,7 +900,7 @@ void app_exec_command(App *a, const char *line)
 
         a->ed.cx = jx;
         a->ed.cy = jy;
-        /* Centred rather than merely scrolled into view: a jump is for going
+        /* Centered rather than merely scrolled into view: a jump is for going
          * somewhere else, and arriving pinned against an edge shows half of
          * where you went. */
         grid_center_on(&a->ed.view, a->map, jx, jy);

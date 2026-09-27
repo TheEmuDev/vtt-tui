@@ -29,8 +29,8 @@ measured against them.
   changed cell to the encoder, so its front buffer is always exactly what
   the clients show. A new client gets a `FULL` from that front, then `DIFF`s.
 - **Runs, not cells.** A record is a run of consecutive cells in one row
-  sharing colours: an 8-byte header and two bytes a glyph. Colours are
-  one-byte indices into a palette sent as colours are first met. Glyphs are
+  sharing colors: an 8-byte header and two bytes a glyph. Colors are
+  one-byte indices into a palette sent as colors are first met. Glyphs are
   sixteen-bit; the second half of a wide glyph is a zero.
 - **Coalescing at both ends.** The server writes one buffer per client per
   frame with Nagle off. The page folds frames into its cell buffer and paints
@@ -43,7 +43,7 @@ measured against them.
 - **A stalled client is dropped, never waited for**, and resynced with a
   `FULL` on reconnect.
 - **The watcher is `vtt --watch host:port`**: the same decoder painting into
-  the same renderer, at the GM's size, centred or clipped. `q` closes it.
+  the same renderer, at the GM's size, centered or clipped. `q` closes it.
 - **Access.** LAN only, a join code in the URL, at most eight clients,
   a request-size limit. No TLS, deliberately.
 - **Liveness.** A browser silent for 15 s is sent a WebSocket ping, which

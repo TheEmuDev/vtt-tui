@@ -204,7 +204,7 @@ static ParseResult parse_csi(const char *s, size_t len, Key *out, size_t *used)
         return R_OK;
     }
 
-    *out = mk(KEY_NONE, 0, 0);      /* recognised shape, unmapped key */
+    *out = mk(KEY_NONE, 0, 0);      /* recognized shape, unmapped key */
     return R_OK;
 }
 
@@ -263,7 +263,7 @@ int input_next(InputParser *p, Key *out)
 
         consume(p, used);
         if (out->kind != KEY_NONE) return 1;
-        /* Recognised but unmapped: keep going rather than returning a no-op. */
+        /* Recognized but unmapped: keep going rather than returning a no-op. */
     }
 }
 

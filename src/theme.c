@@ -12,7 +12,7 @@ const Theme THEME_DARK = {
     .player    = RGB(0x7C, 0xD9, 0x92),
     .enemy     = RGB(0xE0, 0x72, 0x72),
 
-    /* Picked for contrast against the unselected colour, not for prettiness.
+    /* Picked for contrast against the unselected color, not for prettiness.
      * Lightening the green by a third moved it 1.19:1, which is nearly no
      * change at all; these are 1.48:1 and 1.80:1, which is as far as either
      * hue goes before it stops being green or red. The ring around a selected
@@ -53,7 +53,7 @@ const Theme THEME_DARK = {
         RGB(0x5C, 0xC8, 0xC8),   /* cyan   */
         RGB(0x62, 0x92, 0xE0),   /* blue   */
         RGB(0xB0, 0x7A, 0xE0),   /* violet */
-        RGB(0xB0, 0xB0, 0xB8),   /* grey   */
+        RGB(0xB0, 0xB0, 0xB8),   /* gray   */
     },
 
     .terrain_fg = {
@@ -64,7 +64,7 @@ const Theme THEME_DARK = {
         [TILE_BRUSH]  = RGB(0x62, 0x9C, 0x5E),
         [TILE_WOOD]   = RGB(0x9A, 0x74, 0x4C),
         /* An ember, not a flame: every interior cell of a hazard tile is a
-         * triangle, so the colour is seen as a field, and a bright one was
+         * triangle, so the color is seen as a field, and a bright one was
          * the loudest thing on the map. */
         [TILE_HAZARD] = RGB(0x9C, 0x50, 0x2E),
     },

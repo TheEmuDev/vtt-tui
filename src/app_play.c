@@ -33,7 +33,7 @@ static void play_cancel_move(App *a)
     map_coord_name(pl->origin_x, pl->origin_y, at, sizeof at);
 
     char msg[96];
-    if (back) snprintf(msg, sizeof msg, "cancelled - back to %s", at);
+    if (back) snprintf(msg, sizeof msg, "canceled - back to %s", at);
     else      snprintf(msg, sizeof msg, "put down at %s", at);
     app_note(a, msg);
 }
@@ -336,10 +336,10 @@ static void status_add(App *a)
     snprintf(title, sizeof title, "%s marker on %.20s",
              status_color_name(pl->status_color),
              token_name(t));
-    app_open_prompt(a, PROMPT_STATUS_LABEL, title, "s c changes the colour", "");
+    app_open_prompt(a, PROMPT_STATUS_LABEL, title, "s c changes the color", "");
 }
 
-static void status_colour(App *a)
+static void status_color(App *a)
 {
     Play *pl = &a->play;
     pl->status_color = (uint8_t)((pl->status_color + 1) % STATUS_COLOR_COUNT);
@@ -414,7 +414,7 @@ static int pending_key(App *a, Key k)
     a->pending = 0;
 
     if (k.kind != KEY_CHAR || k.mods != 0) {
-        app_set_status(a, k.kind == KEY_ESC ? "cancelled" : "");
+        app_set_status(a, k.kind == KEY_ESC ? "canceled" : "");
         return 1;
     }
 
@@ -435,13 +435,13 @@ static int pending_key(App *a, Key k)
 
     if (pre == 's') {
         if (k.ch == 'a') { status_add(a);    return 1; }
-        if (k.ch == 'c') { status_colour(a); return 1; }
+        if (k.ch == 'c') { status_color(a); return 1; }
         if (k.ch == 'd') { status_drop(a);   return 1; }
         if (k.ch == 'i') { turn_prompt(a);   return 1; }
         if (k.ch == 't') { turn_hand_over(a); return 1; }
         if (k.ch == 'n') { app_note_prompt(a, play_target_token(a), a->ed.cx, a->ed.cy); return 1; }
         if (k.ch == 'v') { counters_prompt(a); return 1; }
-        app_set_status(a, "s wants a add, c colour, d drop, i initiative, t take the turn, n note, v counters");
+        app_set_status(a, "s wants a add, c color, d drop, i initiative, t take the turn, n note, v counters");
         return 1;
     }
     return 1;
@@ -454,7 +454,7 @@ static const char *retired_key(uint32_t ch)
     switch (ch) {
     case 'V':           return "V is now v - select several creatures";
     case 'P':           return "P is now p - paste";
-    case 'S':           return "S is now s c - marker colour";
+    case 'S':           return "S is now s c - marker color";
     default:            return NULL;
     }
 }
@@ -648,7 +648,7 @@ void app_play_key(App *a, Key k)
     if (k.ch == 'b' || k.ch == 'B') {
         /* One number behind all of it: the size key sets it, the cursor shows
          * it, and a selected creature is resized to it. Being held is not a
-         * reason to refuse -- realising a creature is Large is something that
+         * reason to refuse -- realizing a creature is Large is something that
          * happens mid-move as often as not. Cycling starts from the creature
          * being looked at when there is one, so b on a selected creature
          * always means "the next size up from what it is". */
@@ -709,7 +709,7 @@ void app_play_key(App *a, Key k)
 
     case 's':
         a->pending = 's';
-        app_set_status(a, "s    a add marker    c colour    d drop    i initiative    t take the turn    n note    v counters");
+        app_set_status(a, "s    a add marker    c color    d drop    i initiative    t take the turn    n note    v counters");
         break;
 
     case '<': case '>': {

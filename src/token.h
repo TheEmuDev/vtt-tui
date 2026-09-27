@@ -13,7 +13,7 @@
 
 /* Markers a GM hangs on a creature: poisoned, marked, restrained, whatever
  * the table calls it. The tool attaches no meaning to them -- they are a
- * colour and a word, and what they do is between the GM and the players. */
+ * color and a word, and what they do is between the GM and the players. */
 #define TOKEN_STATUS_MAX   4
 #define STATUS_LABEL_MAX   16
 #define STATUS_COLOR_COUNT 8
@@ -147,23 +147,23 @@ static inline const char *token_name(const Token *t)
 
 /* A label no other token carries, so pasting a copy of "Goblin" gives you
  * "Goblin 2" rather than two creatures you cannot tell apart in the readout.
- * A trailing number is continued rather than stacked. An unlabelled token
- * stays unlabelled. */
+ * A trailing number is continued rather than stacked. An unlabeled token
+ * stays unlabeled. */
 void tokens_unique_label(const TokenList *l, const char *base,
                          char *out, size_t outsz);
 
-const char *status_color_name(uint8_t colour);
+const char *status_color_name(uint8_t color);
 int         status_color_from_name(const char *name);   /* -1 if unknown */
 
 /* Returns 0 when the token already carries as many as it can hold. */
-int  token_add_status(Token *t, uint8_t colour, const char *label);
+int  token_add_status(Token *t, uint8_t color, const char *label);
 void token_clear_status(Token *t);
 
 /* Drops one marker, keeping the rest in order. Out-of-range is a no-op. */
 void token_remove_status(Token *t, int idx);
 
 /* The character drawn on the map for a marker: the first letter of its label,
- * so the map says what it is, falling back to a dot for an unlabelled one. */
+ * so the map says what it is, falling back to a dot for an unlabeled one. */
 uint32_t status_glyph(const Status *st);
 
 #endif /* VTT_TOKEN_H */

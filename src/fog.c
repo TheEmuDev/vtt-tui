@@ -19,7 +19,7 @@ int fog_any(const Map *m)
     return 0;
 }
 
-/* Can sight cross from (x,y) to its neighbour (x+dx,y+dy)? A diagonal needs
+/* Can sight cross from (x,y) to its neighbor (x+dx,y+dy)? A diagonal needs
  * all four of the crossings round both sides of its corner clear, the rule
  * map_blocked uses for movement, so the rim never wraps round a corner. */
 static int sight_step_clear(const Map *m, int x, int y, int dx, int dy)

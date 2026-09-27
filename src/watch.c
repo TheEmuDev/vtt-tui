@@ -60,7 +60,7 @@ static void on_run(void *ctx, int x, int y, int n, uint8_t fg, uint8_t bg, uint8
     }
 }
 
-/* The GM's frame onto this terminal: centred with room to spare, clipped
+/* The GM's frame onto this terminal: centered with room to spare, clipped
  * at the top left without. Every frame is a full repaint of the back
  * buffer, and the renderer's diff makes that cost only what changed. */
 static void paint(Watch *wt)

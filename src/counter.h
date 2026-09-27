@@ -9,7 +9,7 @@
  * to one reaching zero or its maximum; it keeps the number for the GM, who
  * decides what it means. A ruleset may name the counters its game uses
  * ("HP Stress Armor" for Daggerheart); those spellings are offered by the
- * prompt and win over the GM's capitalisation, and nothing else follows from
+ * prompt and win over the GM's capitalization, and nothing else follows from
  * them -- a creature has only the counters it has been given numbers for. */
 
 /* Index of the counter called `name`, case aside, or -1. */

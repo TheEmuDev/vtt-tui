@@ -527,7 +527,7 @@ static int build_dest_path(App *a, const char *from, const char *typed,
     size_t n = strlen(base);
     if (n > 4 && strcmp(base + n - 4, ".vtt") == 0) base[n - 4] = '\0';
 
-    if (!base[0]) { app_set_status(a, "cancelled: a map needs a name"); return -1; }
+    if (!base[0]) { app_set_status(a, "canceled: a map needs a name"); return -1; }
     if (strchr(base, '/')) {
         app_set_status(a, "a name cannot contain '/': this names a map, not a path");
         return -1;
@@ -743,7 +743,7 @@ void app_report_selection(App *a)
     char at[MAP_COORD_MAX];
     map_coord_name(t->x, t->y, at, sizeof at);
     snprintf(msg, sizeof msg, "%.30s (%s) at %s",
-             t->label[0] ? t->label : "unlabelled",
+             t->label[0] ? t->label : "unlabeled",
              token_kind_name(t->kind), at);
     app_set_status(a, msg);
 }
@@ -758,7 +758,7 @@ static void prompt_accept(App *a)
 
     switch (what) {
     case PROMPT_NEW_NAME: {
-        if (!text[0]) { app_set_status(a, "cancelled: a map needs a name"); return; }
+        if (!text[0]) { app_set_status(a, "canceled: a map needs a name"); return; }
         str_lcpy(a->pending_name, text, sizeof a->pending_name);
         app_open_prompt(a, PROMPT_NEW_SIZE, "Map size", "width x height, in tiles", "40x25");
         return;
@@ -797,7 +797,7 @@ static void prompt_accept(App *a)
         char at[MAP_COORD_MAX];
         map_coord_name(t.x, t.y, at, sizeof at);
         snprintf(msg, sizeof msg, "placed %s %.30s (%dx%d) at %s",
-                 token_kind_name(t.kind), t.label[0] ? t.label : "unlabelled",
+                 token_kind_name(t.kind), t.label[0] ? t.label : "unlabeled",
                  t.size, t.size, at);
         app_note(a, msg);
         return;
@@ -815,7 +815,7 @@ static void prompt_accept(App *a)
         undo_edit_token(&a->undo, a->map, pl->sel, t);
         undo_end(&a->undo);
         char msg[96];
-        snprintf(msg, sizeof msg, "relabelled %.30s to %.30s",
+        snprintf(msg, sizeof msg, "relabeled %.30s to %.30s",
                  was[0] ? was : token_kind_name(t.kind), t.label);
         app_note(a, msg);
         return;
@@ -833,7 +833,7 @@ static void prompt_accept(App *a)
         const char *p = text;
         while (*p == ' ') p++;
         if (!*p) {
-            if (!(t->turn & TURN_IN)) { app_set_status(a, "cancelled: it was not in the turn order"); return; }
+            if (!(t->turn & TURN_IN)) { app_set_status(a, "canceled: it was not in the turn order"); return; }
             snprintf(msg, sizeof msg, "%.30s leaves the turn order", who);
             turn_leave(a->map, &a->undo, idx);
             app_note(a, msg);
@@ -856,7 +856,7 @@ static void prompt_accept(App *a)
         int idx = a->pending_token;
         a->pending_token = -1;
         if (idx < 0 || idx >= a->map->tokens.n) return;
-        if (!text[0]) { app_set_status(a, "cancelled: a marker needs a word"); return; }
+        if (!text[0]) { app_set_status(a, "canceled: a marker needs a word"); return; }
 
         Token t = a->map->tokens.v[idx];
         if (!token_add_status(&t, a->play.status_color, text)) {
@@ -1200,7 +1200,7 @@ static int modal_key(App *a, Key k)
         else if (r == -1) {
             a->modal       = MODAL_NONE;
             a->prompt_what = PROMPT_NONE;
-            app_set_status(a, "cancelled");
+            app_set_status(a, "canceled");
         }
         return 1;
     }
@@ -1227,7 +1227,7 @@ static int modal_key(App *a, Key k)
                    (k.kind == KEY_CHAR && (k.ch == 'q' || k.ch == 'n'))) {
             a->modal = MODAL_NONE;
             a->pending_token = -1;
-            app_set_status(a, "cancelled");
+            app_set_status(a, "canceled");
         }
         return 1;
     }
@@ -1540,7 +1540,7 @@ static void wall_key(App *a, Key k)
 
         /* The same key twice clears the anchor; the other one changes the
          * shape and keeps it, the way v and V swap between vim's two visual
-         * modes rather than cancelling each other. */
+         * modes rather than canceling each other. */
         if (e->has_anchor && e->shape == want) {
             e->has_anchor = 0;
             app_set_status(a, "anchor cleared");
@@ -1705,7 +1705,7 @@ static void editor_key(App *a, Key k)
         return;
     }
 
-    /* Arrows mirror hjkl so the editor is usable before the keys are learnt. */
+    /* Arrows mirror hjkl so the editor is usable before the keys are learned. */
     if (k.kind == KEY_LEFT)  { ed_move(e, m, -1, 0, take_count(e)); return; }
     if (k.kind == KEY_RIGHT) { ed_move(e, m,  1, 0, take_count(e)); return; }
     if (k.kind == KEY_UP)    { ed_move(e, m,  0, -1, take_count(e)); return; }
@@ -1790,7 +1790,7 @@ static void editor_key(App *a, Key k)
 
         /* The same key twice leaves visual mode; the other one changes the
          * shape and keeps the anchor, the way v and V swap between vim's two
-         * visual modes rather than cancelling each other. */
+         * visual modes rather than canceling each other. */
         if (e->mode == ED_VISUAL && e->shape == want) {
             e->mode = ED_NORMAL;
             app_set_status(a, "");

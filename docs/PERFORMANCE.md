@@ -95,7 +95,7 @@ binary is what showed it was the machine and not the code.
 | profiler overlay     | 80x24  |    37.5us |   159.3us |   155 |   933 |
 
 > The machine's own baseline drifts: one recording of this table sat ~10% above its
-> neighbours on every row, and none of it was the code -- the previous binary run
+> neighbors on every row, and none of it was the code -- the previous binary run
 > through the same harness on the same day read identically (40.0us against 40.0us on
 > `build, open`; 31.0us against 31.0us in a direct A/B). This is the reason the page
 > says to read the ratios between rows rather than the absolute numbers, and the
@@ -293,7 +293,7 @@ paints in 0.2-0.5ms; a scroll of 1220 cells in 0.7-2ms, of which the pixel push 
 1ms. Three implementations of the copy loop were tried: JavaScript typed-array row copies
 at 4-5µs a cell, `memory.copy` in WebAssembly at 40ns a row, and a WebAssembly loop of
 64-bit words at 0.21µs a cell, which is the one shipped. A canvas `drawImage` sprite path
-measured no better than the JavaScript copies. The tile cache -- a glyph in its colours
+measured no better than the JavaScript copies. The tile cache -- a glyph in its colors
 rendered once -- is what makes the copies the only per-cell work; the first frame after a
 palette change or a resize pays for every tile again, about 15ms for a full screen.
 
@@ -315,7 +315,7 @@ same as `play, rolling`.
 **Fog costs the GM 1.5µs a frame and a map without it nothing.** `grid_draw` decides once a
 frame whether any patch is live; a map with none takes the path it always took, and
 `play, 24 tokens` sits where it did (31.0µs). With fog over the whole map, `play, fog` is
-32.2µs: one byte load and a mask a visible tile, writing the dim colour into cells that were
+32.2µs: one byte load and a mask a visible tile, writing the dim color into cells that were
 being written anyway. The players' frame over fog is cheaper to draw than the GM's -- a hidden
 tile is a `continue` with no writes, and walls between hidden tiles are never resolved -- so
 `play, fog, 4 watchers` at 67.3µs is the second draw the plan priced in, less than the
@@ -480,7 +480,7 @@ it was measuring -- the same objection this page makes to `prof.overlay`.
 **The ring around a selected creature costs one cell and nine bytes a frame**, and
 only in the frames where the selection is moving -- 33 cells against 32 on the carrying
 scenario. A ring that sits still is a ring the diff never writes, which is why the cue
-that fixed the contrast problem is also nearly the cheapest one available: it recolours
+that fixed the contrast problem is also nearly the cheapest one available: it recolors
 grid lines that were already on screen rather than painting anything new. A creature
 standing still while selected costs nothing at all.
 
@@ -571,7 +571,7 @@ frame (`agent, room + 12`'s frame row is the redraw of the changed squares).
    calls `grid_visible_tiles` first. This is the single rule that keeps a 512×512 map as
    cheap as a small one.
 4. **Prefer not drawing to drawing quickly.** The diff means an unchanged cell costs
-   nothing to leave alone, so a guard that skips work beats an optimisation that does it
+   nothing to leave alone, so a guard that skips work beats an optimization that does it
    faster.
 5. **When a measurement suggests a win, plan it rather than taking it silently.** Say
    what it costs now, what it would cost, and what the change buys — some of these paths

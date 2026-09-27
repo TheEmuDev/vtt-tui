@@ -3,7 +3,7 @@
 
 /* `vtt --watch host:port[?k=CODE]`: a read-only mirror of a serving vtt in
  * this terminal. The same decoder the tests use paints the GM's frame into
- * this process's renderer, at the GM's size, centred when the terminal is
+ * this process's renderer, at the GM's size, centered when the terminal is
  * larger and clipped at the top left when it is smaller. q, esc or ctrl-c
  * closes it; so does the GM stopping the server.
  *

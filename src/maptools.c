@@ -32,7 +32,7 @@ static int digits(int v)
     return d;
 }
 
-/* A report names an unlabelled creature as such: a reader checking a map
+/* A report names an unlabeled creature as such: a reader checking a map
  * wants to know the label is missing, not which side it is on. */
 static const char *label_or_unnamed(const Token *t) { return t->label[0] ? t->label : "(unnamed)"; }
 
@@ -86,7 +86,7 @@ static char corner_char(const Map *m, int cx, int cy)
 static void header_rows(FILE *out, int gutter, int x0, int x1, int prefix_pitch)
 {
     /* Two rows when any column in view has two letters: the first letter
-     * above, the last below, so every column is labelled at its own pitch. */
+     * above, the last below, so every column is labeled at its own pitch. */
     char name[8];
     col_name(x1, name, sizeof name);
     int two = strlen(name) > 1;

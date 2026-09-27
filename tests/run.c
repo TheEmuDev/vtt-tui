@@ -115,7 +115,7 @@ static void test_utf8(void)
              utf8_width_slow(UTIL_WIDTH_FASTPATH_LO - 1));
     CHECK_EQ(utf8_width(UTIL_WIDTH_FASTPATH_HI),
              utf8_width_slow(UTIL_WIDTH_FASTPATH_HI));
-    CHECK_EQ(utf8_width(0x2E80u), 2);          /* the window's upper neighbour */
+    CHECK_EQ(utf8_width(0x2E80u), 2);          /* the window's upper neighbor */
     CHECK_EQ(utf8_width(0x20D0u), 0);          /* a combining mark just below */
 
     CASE("utf8 width");
@@ -685,12 +685,12 @@ static void test_mapio(void)
 
 static void test_grid(void)
 {
-    CASE("interior widths are odd so tokens have a centre cell");
+    CASE("interior widths are odd so tokens have a center cell");
     for (int z = 0; z < ZOOM_COUNT; z++) CHECK_EQ(ZOOM[z].iw % 2, 1);
 
     Map *m = map_new(3, 3, "grid");
     map_fill_tiles(m, 0, 0, 2, 2, TILE_FLOOR);
-    map_rect_walls(m, 1, 1, 1, 1, EDGE_WALL);   /* wall the centre tile */
+    map_rect_walls(m, 1, 1, 1, 1, EDGE_WALL);   /* wall the center tile */
 
     Renderer r;
     rnd_init(&r);
@@ -714,7 +714,7 @@ static void test_grid(void)
     CHECK_EQ(rnd_at(&r, 4, 4)->ch, 0x251Bu);        /* ┛ */
     CHECK_EQ(rnd_at(&r, 2, 2)->fg, THEME_DARK.wall);
 
-    CASE("wall runs are heavy, open boundaries are thin grey");
+    CASE("wall runs are heavy, open boundaries are thin gray");
     CHECK_EQ(rnd_at(&r, 3, 2)->ch, 0x2501u);        /* ━ along the north wall */
     CHECK_EQ(rnd_at(&r, 2, 3)->ch, 0x2503u);        /* ┃ down the west wall */
     CHECK_EQ(rnd_at(&r, 1, 2)->ch, 0x2500u);        /* ─ grid line outside it */
@@ -742,7 +742,7 @@ static void test_grid(void)
     CHECK_EQ(drawn, marks);
     map_free(v);
 
-    CASE("a map smaller than the viewport is centred");
+    CASE("a map smaller than the viewport is centered");
     grid_clamp_camera(&g, m);
     CHECK_EQ(g.cam_x, -(40 - grid_cells_w(m, 0)) / 2);
     CHECK_EQ(g.cam_y, -(20 - grid_cells_h(m, 0)) / 2);
@@ -1370,7 +1370,7 @@ static void test_play(void)
 
 /* ------------------------------------------------------- token appearance */
 
-/* Renders one token and reports whether a cell carries its fill colour. */
+/* Renders one token and reports whether a cell carries its fill color. */
 static int tok_filled(Renderer *r, uint32_t col, int x, int y)
 {
     Cell *c = rnd_at(r, x, y);
@@ -1394,8 +1394,8 @@ static void test_token_draw(void)
     memset(&t, 0, sizeof t);
     t.x = 1; t.y = 1; t.size = 1;
 
-    /* Colour alone cannot carry the player/enemy distinction: it is lost in
-     * --ascii and to a colourblind reader. The smallest tokens say it with a
+    /* Color alone cannot carry the player/enemy distinction: it is lost in
+     * --ascii and to a colorblind reader. The smallest tokens say it with a
      * glyph instead. */
     CASE("a one-cell token is a filled circle or square glyph");
     g.zoom = 0;
@@ -1451,7 +1451,7 @@ static void test_token_draw(void)
     CHECK_EQ(tok_filled(&r, pc, a.x + a.w - 1, a.y), 0);
     CHECK_EQ(tok_filled(&r, pc, a.x, a.y + a.h - 1), 0);
     CHECK_EQ(tok_filled(&r, pc, a.x + a.w - 1, a.y + a.h - 1), 0);
-    CHECK_EQ(tok_filled(&r, pc, a.x + a.w / 2, a.y + a.h / 2), 1); /* centre */
+    CHECK_EQ(tok_filled(&r, pc, a.x + a.w / 2, a.y + a.h / 2), 1); /* center */
     CHECK_EQ(tok_filled(&r, pc, a.x, a.y + a.h / 2), 1);           /* widest row */
 
     CASE("an enemy token is a square: every cell of its body is filled");
@@ -1513,7 +1513,7 @@ static void test_token_draw(void)
     CHECK(rnd_at(&r, a.x + a.w / 2, a.y)->bg != THEME_DARK.bg);
 
     /* In --ascii the brackets are the only thing distinguishing the shapes,
-     * so a centred label must not be allowed to overwrite them. */
+     * so a centered label must not be allowed to overwrite them. */
     CASE("an ascii label never eats its own brackets");
     g.zoom = 1;
     t.size = 2;
@@ -1725,7 +1725,7 @@ static void test_golden(void)
         golden("ruler-legs", 72, 20, FIXTURE, seg, 7, 0);
     }
 
-    /* The fill itself is a background colour, which a text dump cannot show;
+    /* The fill itself is a background color, which a text dump cannot show;
      * this pins the readout, which is the part that names names. */
     CASE("the range overlay's readout");
     {
@@ -2371,7 +2371,7 @@ static void test_range(void)
     CHECK_EQ(range_contains(&tp, plain, 9, 7), 1);
     CHECK_EQ(range_contains(&tp, plain, 11, 9), 1);
     CHECK_EQ(range_contains(&tp, plain, 11, 10), 0);
-    /* An even side cannot centre on one square: it leans with the cursor. */
+    /* An even side cannot center on one square: it leans with the cursor. */
     range_cycle(&tp, plain, -1, 10, 10, 2);
     range_set_aim(&tp, 20, 12);                         /* east, leaning south */
     CHECK_EQ(range_contains(&tp, plain, 11, 10), 1);
@@ -2394,7 +2394,7 @@ static void test_range(void)
     CHECK(strstr(tbuf, "1 in range: Ogre") != NULL);
     plain->tokens.n = 0;
 
-    CASE("with bands the shape rides on the band, and a 2x2 origin centres a square");
+    CASE("with bands the shape rides on the band, and a 2x2 origin centers a square");
     RangeOverlay bs;
     range_clear(&bs);
     Token giant = { 4, 4, 2, TOKEN_PLAYER, "Giant" };
@@ -2436,8 +2436,8 @@ static void test_range(void)
     range_clear(&bare);
     map_free(plain);
 
-    /* Melee is one square, so exactly the eight neighbours and the anchor. */
-    CASE("Melee covers the anchor and its neighbours, and nothing else");
+    /* Melee is one square, so exactly the eight neighbors and the anchor. */
+    CASE("Melee covers the anchor and its neighbors, and nothing else");
     range_clear(&ro);
     range_cycle(&ro, m, -1, 10, 7, 0);          /* band 0: Melee */
     int inside = 0;
@@ -2714,7 +2714,7 @@ static void test_secret_doors(void)
     g.view = rect(0, 0, 40, 20);
 
     /* The point of a secret door is that nobody reading the screen in play
-     * can tell it from a wall. Not by glyph, and not by colour. */
+     * can tell it from a wall. Not by glyph, and not by color. */
     CASE("in play mode a secret door is pixel for pixel a wall");
     rnd_begin(&r);
     grid_draw(&r, m, &g, &THEME_DARK, 0, 0, FOGV_GM);
@@ -3360,7 +3360,7 @@ static void test_duplicate_map(void)
     press(&a, "c\025\r");
     CHECK_EQ(a.nentries, before);
 
-    /* The copy is the bytes, not a re-serialisation, so a map the loader
+    /* The copy is the bytes, not a re-serialization, so a map the loader
      * would choke on still duplicates exactly. */
     CASE("a map that will not load copies byte for byte, title untouched");
     char broken[1200];
@@ -3431,12 +3431,12 @@ static void test_status(void)
     token_add_status(&t, 0, "");
     CHECK_EQ(status_glyph(&t.status[0]), 0x25CFu);   /* a dot, with no word */
 
-    CASE("a colour out of range wraps rather than reading past the palette");
+    CASE("a color out of range wraps rather than reading past the palette");
     token_clear_status(&t);
     token_add_status(&t, 200, "X");
     CHECK(t.status[0].color < STATUS_COLOR_COUNT);
 
-    CASE("colour names round-trip");
+    CASE("color names round-trip");
     for (int i = 0; i < STATUS_COLOR_COUNT; i++)
         CHECK_EQ(status_color_from_name(status_color_name((uint8_t)i)), i);
     CHECK_EQ(status_color_from_name("chartreuse"), -1);
@@ -3510,7 +3510,7 @@ static void test_unique_label(void)
     CHECK_EQ(strcmp(out, "Goblin 3"), 0);
     CHECK(strstr(out, "2 2") == NULL);
 
-    CASE("an unlabelled token stays unlabelled");
+    CASE("an unlabeled token stays unlabeled");
     tokens_unique_label(&l, "", out, sizeof out);
     CHECK_EQ(out[0], '\0');
 
@@ -3572,7 +3572,7 @@ static void test_status_io(void)
         map_free(stray);
     }
 
-    CASE("an unknown colour name drops the marker rather than the map");
+    CASE("an unknown color name drops the marker rather than the map");
     f = fopen(path, "w");
     if (f) {
         fputs("VTT 3\nname Odd\nsize 3 3\ntiles\n...\n...\n...\n"
@@ -3604,7 +3604,7 @@ static void test_token_edit_undo(void)
     int idx = undo_add_token(&u, m, g);
     undo_end(&u);
 
-    /* Marking, relabelling and resizing all edit a token in place, and all
+    /* Marking, relabeling and resizing all edit a token in place, and all
      * three should be one u away. */
     CASE("adding a marker undoes");
     Token t = m->tokens.v[idx];
@@ -3632,7 +3632,7 @@ static void test_token_edit_undo(void)
     CHECK_EQ(m->tokens.v[idx].nstatus, 2);
     CHECK_EQ(strcmp(m->tokens.v[idx].status[1].label, "Marked"), 0);
 
-    CASE("relabelling undoes");
+    CASE("relabeling undoes");
     t = m->tokens.v[idx];
     str_lcpy(t.label, "Hobgoblin", sizeof t.label);
     undo_begin(&u); undo_edit_token(&u, m, idx, t); undo_end(&u);
@@ -4191,7 +4191,7 @@ static void test_choosing(void)
     CHECK_EQ(p->sel, -1);
     CHECK_EQ(p->grabbed, 0);
 
-    /* Cancelling has to reach back past the choice as well as the walk, or a
+    /* Canceling has to reach back past the choice as well as the walk, or a
      * creature picked out of a crowd could not be put back. */
     CASE("esc after settling still returns the creature to where it set out");
     a.ed.cx = 2; a.ed.cy = 2;
@@ -4352,7 +4352,7 @@ static void test_selection_contrast(void)
     /* Lightening the base by a third -- what this used to do -- put the
      * selected player at 1.19:1 against the plain one, which is very nearly
      * no difference at all. */
-    CASE("the selected colours are far enough from the plain ones to see");
+    CASE("the selected colors are far enough from the plain ones to see");
     CHECK(contrast(th->player, th->player_sel) > 1.4);
     CHECK(contrast(th->enemy,  th->enemy_sel)  > 1.7);
 
@@ -4425,10 +4425,10 @@ static void test_selection_contrast(void)
         CHECK(ring[i]->attr & ATTR_BOLD);
     }
 
-    CASE("the ring recolours the lattice rather than painting over it");
+    CASE("the ring recolors the lattice rather than painting over it");
     CHECK(ring[2]->ch != ' ');         /* still a box-drawing glyph */
 
-    CASE("an enemy is ringed in its own colour, not the player's");
+    CASE("an enemy is ringed in its own color, not the player's");
     Token b = { 8, 3, 1, TOKEN_ENEMY, "Bram", { { 0, "" } }, 0 };
     int bi = undo_add_token(&u, m, b);
     play_focus(&p, bi);
@@ -5121,7 +5121,7 @@ static void test_occupancy_keys(void)
     press(&a, "\x1b");
     CHECK_EQ(a.play.grabbed, 0);
     CHECK_EQ(a.map->tokens.v[sel].x, 2);        /* back on C3 */
-    CHECK(strstr(a.status, "cancelled") != NULL);
+    CHECK(strstr(a.status, "canceled") != NULL);
 
     /* G3 holds the copy pasted above, so the first clear square is the one
      * past it. */
@@ -5331,7 +5331,7 @@ static void test_cancel_move(void)
     CHECK_EQ(a.ed.cx, 2);
     CHECK_EQ(a.ed.cy, 2);
 
-    /* The whole point of unwinding rather than stepping back: a cancelled
+    /* The whole point of unwinding rather than stepping back: a canceled
      * move is not in the history at all. */
     CASE("and the walk leaves no trace behind it");
     CHECK_EQ(undo_can_undo(&a.undo), 0);
@@ -5367,7 +5367,7 @@ static void test_cancel_move(void)
     CASE("it stops unwinding at the edit rather than crossing it");
     CHECK(a.map->tokens.v[sel].x > 3);
 
-    CASE("cancelling without having moved just lets go");
+    CASE("canceling without having moved just lets go");
     press(&a, "\r");
     CHECK_EQ(a.play.grabbed, 1);
     int x = a.map->tokens.v[sel].x;
@@ -5452,7 +5452,7 @@ static void test_delete_yanks(void)
 
 static void test_void_reads_as_void(void)
 {
-    /* A lone void square keeps the grid lines its floor neighbours draw, so
+    /* A lone void square keeps the grid lines its floor neighbors draw, so
      * without a mark of its own it is the same picture as the floor. */
     Map *m = map_new(9, 5, "hole");
     map_fill_tiles(m, 0, 0, 8, 4, TILE_FLOOR);
@@ -5548,7 +5548,7 @@ static void test_terrain_palette(void)
         }
     }
 
-    /* Every kind carries a glyph of its own, so none of them rests on colour
+    /* Every kind carries a glyph of its own, so none of them rests on color
      * alone -- which is what makes the palette survive a terminal that
      * renders these tints badly. Floor is the one blank kind, and blank is
      * what floor means. */
@@ -5680,7 +5680,7 @@ static void test_jump(void)
     CHECK_EQ(a.ed.cx, 26);
     CHECK_EQ(a.ed.cy, 11);
 
-    CASE("the jump centres rather than scrolling the least it can");
+    CASE("the jump centers rather than scrolling the least it can");
     press(&a, ":a1\r");
     press(&a, ":z20\r");
     CHECK_EQ(a.ed.cx, 25);
@@ -5877,7 +5877,7 @@ static void test_shapes(void)
     CHECK_EQ(c.x0, 2); CHECK_EQ(c.x1, 4);
     CHECK_EQ(c.y0, 2); CHECK_EQ(c.y1, 4);
 
-    CASE("a circle holds its centre and reaches its cursor");
+    CASE("a circle holds its center and reaches its cursor");
     EdShape d = ed_shape(ED_SHAPE_CIRCLE, 10, 10, 14, 10, 0);
     CHECK_EQ(ed_shape_has(&d, 10, 10), 1);
     CHECK_EQ(ed_shape_has(&d, 14, 10), 1);      /* the tile that set the radius */
@@ -5888,7 +5888,7 @@ static void test_shapes(void)
     CHECK_EQ(ed_shape_has(&d, 13, 13), 0);      /* the corner of the box */
     CHECK_EQ(ed_shape_has(&d, 12, 12), 1);      /* inside the arc */
 
-    CASE("a circle is symmetric about its centre");
+    CASE("a circle is symmetric about its center");
     for (int dy = -5; dy <= 5; dy++)
         for (int dx = -5; dx <= 5; dx++) {
             int in = ed_shape_has(&d, 10 + dx, 10 + dy);
@@ -5904,7 +5904,7 @@ static void test_shapes(void)
 
     /* Wall mode anchors on a lattice corner, so its circles sit between
      * squares and come out even across rather than odd. */
-    CASE("a circle anchored on a corner is centred on the corner");
+    CASE("a circle anchored on a corner is centered on the corner");
     EdShape w = ed_shape(ED_SHAPE_CIRCLE, 5, 5, 8, 5, 1);
     CHECK_EQ(ed_shape_has(&w, 4, 4), 1);        /* the four tiles round it */
     CHECK_EQ(ed_shape_has(&w, 5, 4), 1);
@@ -6468,7 +6468,7 @@ static void test_play_remap(void)
     CASE("esc abandons a half-typed prefix");
     press(&a, "\x1b");
     CHECK_EQ(a.map->tokens.n, 2);
-    CHECK(strstr(a.status, "cancelled") != NULL);
+    CHECK(strstr(a.status, "canceled") != NULL);
 
     /* The prefix must swallow the next key rather than let it act: a
      * half-typed command turning into a different whole one is the worst
@@ -6539,7 +6539,7 @@ static void test_play_remap(void)
     press(&a, ":ruleset daggerheart\r");
     CHECK_EQ(a.play.range.active, 0);
 
-    CASE("s a adds a marker, s c colours, s d drops");
+    CASE("s a adds a marker, s c colors, s d drops");
     press(&a, "t");
     int sel = a.play.sel;
     press(&a, "saPoisoned\r");
@@ -6696,9 +6696,9 @@ static void test_cycle_tracks(void)
     CHECK_EQ(p.sel, 3);
     CHECK_EQ(strcmp(p.search, "goblin"), 0);
 
-    /* An unlabelled token has nothing to match, and must not be swept up by
+    /* An unlabeled token has nothing to match, and must not be swept up by
      * an empty-looking search. */
-    CASE("an unlabelled token matches nothing");
+    CASE("an unlabeled token matches nothing");
     Token bare = { 10, 0, 1, TOKEN_ENEMY, "", { { 0, "" } }, 0 };
     tokens_add(&m->tokens, bare);
     play_focus(&p, -1);
@@ -6963,7 +6963,7 @@ static void test_status_draw(void)
     CHECK_EQ(rnd_at(&r, a.x + 1, a.y - 1)->ch, 'M');
     CHECK_EQ(rnd_at(&r, a.x, a.y)->ch, ' ');        /* the token row is untouched */
 
-    CASE("each marker takes its own colour from the palette");
+    CASE("each marker takes its own color from the palette");
     CHECK_EQ(rnd_at(&r, a.x, a.y - 1)->fg, THEME_DARK.status[0]);
     CHECK_EQ(rnd_at(&r, a.x + 1, a.y - 1)->fg, THEME_DARK.status[3]);
 
@@ -7898,7 +7898,7 @@ static void test_roll_command(void)
     CHECK(strstr(a.status, "Duality") == NULL);
 
     /* Gold for Hope and purple for Fear, on the digits themselves. The log
-     * and the status text stay plain; only the drawing knows about colour. */
+     * and the status text stay plain; only the drawing knows about color. */
     CASE("the hope die is drawn gold and the fear die purple");
     {
         DualityRoll dr = { 12, 3, 2, 17 };
@@ -7923,7 +7923,7 @@ static void test_roll_command(void)
         CHECK(gold >= 1 && gold <= 2);
         CHECK(purple >= 1 && purple <= 2);
 
-        press(&a, ":roll 2d6\r");                /* plain dice: no colour left behind */
+        press(&a, ":roll 2d6\r");                /* plain dice: no color left behind */
         CHECK_EQ(a.nstatus_span, 0);
 
         CHECK(contrast(a.th->hope, a.th->bg) > 7.0);
@@ -7956,7 +7956,7 @@ static void test_roll_command(void)
     press(&a, ":rolls\r");
     CHECK(strstr(a.status, "attack = 2d12+3, bite = d8 + 1") != NULL);
 
-    CASE("a saved roll may be the action roll, and keeps its colours");
+    CASE("a saved roll may be the action roll, and keeps its colors");
     press(&a, ":roll swing = duality +2\r");
     press(&a, ":roll swing\r");
     CHECK(strstr(a.status, "swing: Duality +2 = ") != NULL);
@@ -8385,7 +8385,7 @@ static void test_turn_keys(void)
     CHECK(strstr(frame.data, "Round 2 - Aria's turn, then Ogre, Bram") != NULL);
     bb_free(&frame);
 
-    CASE("the actor wears the turn colour above and below");
+    CASE("the actor wears the turn color above and below");
     int bars = 0;
     for (size_t i = 0; i < r.ncells; i++) if (r.back[i].fg == a.th->turn) bars++;
     CHECK(bars >= 6);
@@ -8575,7 +8575,7 @@ static void test_wire(void)
     rnd_init(&r);
     rnd_resize(&r, 40, 12);
 
-    /* A frame with a few runs of text in two colours and a wide glyph. */
+    /* A frame with a few runs of text in two colors and a wide glyph. */
     rnd_begin(&r);
     draw_text(&r, 2, 3, "hello world", -1, style(0x112233, 0x000000, 0));
     draw_text(&r, 20, 3, "red", -1, style(0xFF0000, 0x000000, ATTR_BOLD));
@@ -9111,7 +9111,7 @@ static void test_map_tools_dump(void)
         sandbox_leave(&sb);
     }
 
-    CASE("past Z the columns take two header rows, and every one is labelled");
+    CASE("past Z the columns take two header rows, and every one is labeled");
     {
         Map *m = map_new(30, 2, "wide");
         char *t = tool_text(m, 0, 0, 99, 99, NULL);
@@ -10621,7 +10621,7 @@ static const Cell *tile_cell(const Renderer *r, const App *a, int tx, int ty)
 static void write_sight_map(const char *dir, const char *name, int reveal, int memory);
 
 /* The ring round tile (tx,ty): true when the cell just north-west of its
- * interior -- a corner of the ring -- has the ping's colour. */
+ * interior -- a corner of the ring -- has the ping's color. */
 static int ring_at(const Renderer *r, const App *a, int tx, int ty)
 {
     int sx, sy;
@@ -10923,7 +10923,7 @@ static void test_fog(void)
     ed_status(&a.ed, m, line, sizeof line);
     CHECK(strstr(line, "fog Crypt") != NULL);
 
-    CASE("build mode tints painted ground in the patch's colour");
+    CASE("build mode tints painted ground in the patch's color");
     rnd_begin(&r); app_draw(&a);
     CHECK_EQ(tile_cell(&r, &a, 7, 2)->bg, a.th->fog_tint[fog_tint(1)]);
     CHECK(tile_cell(&r, &a, 2, 2)->bg != a.th->fog_tint[fog_tint(1)]);
@@ -11792,7 +11792,7 @@ static void test_fog_diff(void)
                 app_fog_sync(&a);
             }
             break;
-        default:                                             /* stray keys, cancelled */
+        default:                                             /* stray keys, canceled */
             a.ed.cx = (int)fd_rand((unsigned)m->w); a.ed.cy = (int)fd_rand((unsigned)m->h);
             press(&a, (const char *[]){ "\r", "\rl", "v", "f", "F", "t", "\x1b" }[fd_rand(7)]);
             press(&a, "\x1b");
@@ -11923,7 +11923,7 @@ static void test_fog_edge(void)
     imp->x = 0; imp->y = 0; imp->size = 1;                  /* back out of the way, in the dark */
     CHECK_EQ(fog_token_silhouette(m, imp), 0);
 
-    CASE("drawn, the big one is grey across the dark squares it covers too");
+    CASE("drawn, the big one is gray across the dark squares it covers too");
     imp->x = 0; imp->y = 3; imp->size = 2;
     rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
     CHECK_EQ(tile_cell(&r, &a, 1, 4)->bg, a.th->dim);      /* (0,3)'s cell is the square's inset */
@@ -11935,7 +11935,7 @@ static void test_fog_edge(void)
     CHECK_EQ(tile_cell(&r, &a, 5, 3)[0].ch, (uint32_t)'[');
     m->tokens.v[1].kind = TOKEN_ENEMY;
 
-    CASE("selected, acting and in the fight, a silhouette has no ring, no bars and no side colour in the panel");
+    CASE("selected, acting and in the fight, a silhouette has no ring, no bars and no side color in the panel");
     m->tokens.v[0].turn = TURN_IN; m->tokens.v[0].init = 12;
     m->tokens.v[1].turn = TURN_IN | TURN_ACTING; m->tokens.v[1].init = 10;
     play_focus(&a.play, 1);
@@ -11960,7 +11960,7 @@ static void test_fog_edge(void)
     red = 0;
     for (size_t i = 0; i < (size_t)r.w * (size_t)r.h; i++) red += r.back[i].fg == a.th->enemy;
     CHECK_EQ(red, 0);
-    rnd_begin(&r); app_draw_view(&a, VIEW_GM);              /* the GM's panel still colours it */
+    rnd_begin(&r); app_draw_view(&a, VIEW_GM);              /* the GM's panel still colors it */
     red = 0;
     for (size_t i = 0; i < (size_t)r.w * (size_t)r.h; i++) red += r.back[i].fg == a.th->enemy;
     CHECK(red > 0);
@@ -11988,7 +11988,7 @@ static void test_fog_edge(void)
     CASE("no grid lines on the rim: it shows walls, not floor");
     CHECK_EQ(edge_cell(&r, &a, 1, 0, 1)->ch, ' ');          /* between rim (1,0) and dark (0,0) */
 
-    CASE("lit, the door is a door again, in its own colour");
+    CASE("lit, the door is a door again, in its own color");
     play_focus(&a.play, 0);
     press(&a, "\rl\r");                                   /* Aria to (4,2): (5,2) is lit */
     CHECK(fog_at(m, 5, 2) & FOG_LIT);
@@ -12927,7 +12927,7 @@ static void test_ctl_marked(void)
     t = ctl_ask(&a, "marked json");
     CHECK(json_valid(t + 3));
     CHECK(strstr(t, "\"box\":{\"shape\":\"circle\",\"between\":\"squares\"") != NULL);
-    CHECK(strstr(t, "\"centre\":\"C3\"") != NULL);
+    CHECK(strstr(t, "\"center\":\"C3\"") != NULL);
     free(t);
     press(&a, "\x1b");
 
@@ -13164,7 +13164,7 @@ static void test_ctl_edits(void)
             { "token move Nobody C3\n",     "no creature called Nobody" },
             { "token move A1 C3\n",         "no creature stands on A1" },
             { "token move Ghoul G5\n",      "G5 is taken by Aria" },
-            { "token set Ghoul colour red\n", "token set changes a label, a size or a note" },
+            { "token set Ghoul color red\n", "token set changes a label, a size or a note" },
             { "token fly Ghoul\n",          "token fly: add, move, del or set" },
             { "note Z1 \"x\"\n",            "is not a square" },
             { "fog paint B2:C3 1\n",        "there is no fog patch 1" },
@@ -13571,6 +13571,14 @@ static void test_stamp_keys(void)
     snprintf(cmd, sizeof cmd, "rm -rf '%s'", sb.dir);
     sandbox_leave(&sb);
     if (system(cmd) != 0) { }
+}
+
+static void test_gray_marker(void)
+{
+    CASE("a marker saved as grey loads as gray and is written as gray");
+    CHECK(status_color_from_name("grey") >= 0);
+    CHECK_EQ(status_color_from_name("grey"), status_color_from_name("gray"));
+    CHECK_EQ(strcmp(status_color_name((uint8_t)status_color_from_name("grey")), "gray"), 0);
 }
 
 static void test_areas(void)
@@ -14379,6 +14387,7 @@ int main(void)
         { "stamps", test_stamps },
         { "stampkeys", test_stamp_keys },
         { "areas", test_areas },
+        { "graymarker", test_gray_marker },
         { "roomlang", test_room_language },
         { "corridors", test_corridors },
         { "corridor2", test_corridor_edges },

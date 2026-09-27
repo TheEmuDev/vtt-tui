@@ -11,14 +11,14 @@ typedef struct {
     uint32_t dim;
     uint32_t accent;
     uint32_t wall;        /* white lines */
-    uint32_t grid;        /* thin grey lines, walkable tiles only */
+    uint32_t grid;        /* thin gray lines, walkable tiles only */
     uint32_t void_mark;   /* the dot that says a square is not map */
     uint32_t cursor_bg;
     uint32_t sel_bg;
     uint32_t player;
     uint32_t enemy;
 
-    /* Selection is a colour of its own rather than the base lightened. Green
+    /* Selection is a color of its own rather than the base lightened. Green
      * sits near the top of the luminance range already, so lightening it can
      * only move it a few percent -- which is exactly how the selected player
      * came to be almost indistinguishable from an unselected one. */
@@ -34,8 +34,8 @@ typedef struct {
     uint32_t range_bg;    /* ground within the chosen range band */
     uint32_t range_dim;   /* in range, but with no line to it */
     /* Daggerheart's duality dice: the Hope die reads gold and the Fear die
-     * purple, the colours the game's own dice come in. They differ in
-     * luminance as well as hue, so they stay apart without colour vision. */
+     * purple, the colors the game's own dice come in. They differ in
+     * luminance as well as hue, so they stay apart without color vision. */
     uint32_t hope;
     uint32_t fear;
     uint32_t turn;        /* the bars above and below whoever's turn it is */
@@ -55,8 +55,8 @@ typedef struct {
 
     uint32_t terrain_fg[TILE_COUNT];
     uint32_t terrain_bg[TILE_COUNT];
-    /* Fog. Build mode tints each patch in a colour of its own, fifteen hues
-     * at one low value so neighbours part by hue and none shouts; play mode
+    /* Fog. Build mode tints each patch in a color of its own, fifteen hues
+     * at one low value so neighbors part by hue and none shouts; play mode
      * shows the GM what the table cannot see on a background of its own. */
     uint32_t fog_tint[FOG_PATCH_MAX];
     uint32_t fog_gm_bg;

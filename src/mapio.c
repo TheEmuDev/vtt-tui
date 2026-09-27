@@ -253,7 +253,7 @@ static void diag(Loader *ld, int line, int col, const char *code, const char *sl
 /* Reads one line without its newline. Returns -1 at EOF.
  * One line per call, however long it is: what does not fit the buffer is
  * discarded rather than handed back as a line of its own, so an oversized
- * record cannot desynchronise the ones after it. */
+ * record cannot desynchronize the ones after it. */
 static int read_line(Loader *ld, char *buf, size_t bufsz)
 {
     FILE *f = ld->f;
@@ -270,7 +270,7 @@ static int read_line(Loader *ld, char *buf, size_t bufsz)
 
 /* Rows are read by index and short lines are treated as trailing blanks, so
  * an editor that strips trailing whitespace cannot corrupt a map. An
- * unrecognised character reads as empty rather than aborting the load: a map
+ * unrecognized character reads as empty rather than aborting the load: a map
  * with one odd byte in it is still worth opening. */
 static void parse_tile_row(const char *line, uint8_t *row, int n)
 {
@@ -345,7 +345,7 @@ static int section_row(Loader *ld, Section *sec, int y, char *line, size_t cap)
     }
     int len = (int)strlen(line);
     /* The easy mistake: a vedges row written w long, as if it were a row
-     * of squares -- its last boundary is the east edge's neighbour, and
+     * of squares -- its last boundary is the east edge's neighbor, and
      * the east edge itself is missing. */
     if (sec->kind == 1 && sec->width == sec->rows_w + 1 && len == sec->rows_w && line[len - 1] != ' ')
         diag(ld, ld->line, len, "W022", "edge-row-short",
@@ -400,11 +400,11 @@ static int parse_status_line(Map *m, const char *line)
 {
     if (m->tokens.n == 0) return -1;
 
-    char colour[16] = { 0 };
+    char color[16] = { 0 };
     int  consumed = 0;
-    if (sscanf(line, "tokenstatus %15s %n", colour, &consumed) < 1) return -1;
+    if (sscanf(line, "tokenstatus %15s %n", color, &consumed) < 1) return -1;
 
-    int c = status_color_from_name(colour);
+    int c = status_color_from_name(color);
     if (c < 0) return -1;
 
     char label[STATUS_LABEL_MAX];

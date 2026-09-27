@@ -82,7 +82,7 @@ int  app_spawn_mirror(App *a, char *msg, size_t msgsz);
 void app_exec_command(App *a, const char *line);
 void app_command_key(App *a, Key k);
 
-/* app_draw.c: the status message and its coloured spans, as the bars draw it. */
+/* app_draw.c: the status message and its colored spans, as the bars draw it. */
 void app_draw_status_msg(App *a, int x, int y, int maxw);
 
 /* app_stamp.c: y, p, the stamp mode's keys, :stamp. */

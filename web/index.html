@@ -56,11 +56,11 @@ function mask(g,bold,wide){
   return m;
 }
 
-/* ---- tiles: a glyph in its colours, rendered once, then copied by the row.
- * The blend runs once per distinct (glyph, colours, attributes), which a
+/* ---- tiles: a glyph in its colors, rendered once, then copied by the row.
+ * The blend runs once per distinct (glyph, colors, attributes), which a
  * frame has a few hundred of; every cell after that is native row copies. */
 /* Two levels, so every key is a small integer: the glyph indexes an array,
- * the colours and attributes key a map beneath it. */
+ * the colors and attributes key a map beneath it. */
 const tiles=new Array(65536);let ntiles=0;
 function tile(g,f,b,a,wide){
   let byc=tiles[g];
@@ -190,7 +190,7 @@ function feed(u8){
       const f=u8[p+7],b=u8[p+8],a=u8[p+9];p+=10;
       if(y<rows){let i=y*cols+x;
         for(let j=0;j<k&&x+j<cols;j++,i++){gl[i]=dv.getUint16(p+2*j,true);fg[i]=f;bg[i]=b;at[i]=a}
-        touch(Math.max(0,x-1),y,Math.min(cols-1,x+k))}     // a neighbour, for a wide glyph's half
+        touch(Math.max(0,x-1),y,Math.min(cols-1,x+k))}     // a neighbor, for a wide glyph's half
       p+=2*k;
     }else if(t===0x45){p++;schedule()}                     // 'E': present
     else if(t===0x5a){p++}                                 // 'Z': keep-alive

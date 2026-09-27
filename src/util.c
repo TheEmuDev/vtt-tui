@@ -152,7 +152,7 @@ int utf8_decode(const char *s, size_t len, uint32_t *cp)
 }
 
 /* Compact wcwidth. Only the ranges a map/UI can realistically contain are
- * modelled: combining marks are zero-width, CJK and emoji are double-width,
+ * modeled: combining marks are zero-width, CJK and emoji are double-width,
  * everything else (Latin, box drawing, block elements, geometric shapes) is
  * single-width. */
 struct Range { uint32_t lo, hi; };

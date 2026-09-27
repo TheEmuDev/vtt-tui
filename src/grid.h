@@ -7,8 +7,8 @@
 
 /* Because walls live between tiles, the screen grid uses a pitch: every tile
  * gets an `iw x ih` interior plus the 1-cell boundary row/column it shares
- * with its neighbour, which is where walls and grid lines are drawn.
- * Interior widths are odd so there is a true centre cell to anchor a circle
+ * with its neighbor, which is where walls and grid lines are drawn.
+ * Interior widths are odd so there is a true center cell to anchor a circle
  * or a label on. */
 typedef struct {
     int iw, ih;
@@ -35,7 +35,7 @@ void grid_tile_screen(const GridView *g, int tx, int ty, int *sx, int *sy);
 /* Screen position of a tile's interior origin (one cell in from the corner). */
 void grid_tile_interior(const GridView *g, int tx, int ty, int *sx, int *sy);
 
-/* Keeps the camera inside the map, or centres the map when it is smaller
+/* Keeps the camera inside the map, or centers the map when it is smaller
  * than the viewport. */
 void grid_clamp_camera(GridView *g, const Map *m);
 void grid_center_on(GridView *g, const Map *m, int tx, int ty);
@@ -79,7 +79,7 @@ void grid_draw_tile_cursor(Renderer *r, const GridView *g, int tx, int ty, uint3
 void grid_draw_cursor_area(Renderer *r, const GridView *g, const Map *m,
                            int tx, int ty, int size, uint32_t bg);
 
-/* Recolours the four corner cells of a size x size block, keeping their
+/* Recolors the four corner cells of a size x size block, keeping their
  * glyphs. Marks the cursor on top of a token without painting over the grid
  * underneath. */
 void grid_draw_tile_marker(Renderer *r, const GridView *g, const Map *m,
@@ -103,9 +103,9 @@ void grid_draw_token(Renderer *r, const GridView *g, const Token *t,
                      const Theme *th, int selected, int ascii);
 
 /* A creature at the soft edge of the dark: its footprint, in one neutral
- * form -- the square, whatever its side -- and a dim colour, `?` for a name,
+ * form -- the square, whatever its side -- and a dim color, `?` for a name,
  * no ring, no turn bars. The size stays because that is what a silhouette
- * is; the colour and the circle-or-square go because either would say its
+ * is; the color and the circle-or-square go because either would say its
  * side as plainly as a name. */
 void grid_draw_token_silhouette(Renderer *r, const GridView *g, const Token *t,
                                 const Theme *th, int ascii);

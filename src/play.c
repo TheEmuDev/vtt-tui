@@ -345,7 +345,7 @@ static int probe_can_move(const Map *m, const Token *t, int dx, int dy,
 /* Breadth-first out from where the creature stands, over every tile its whole
  * footprint could occupy, until the tile it set out from is reached. Searching
  * from the destination rather than the origin is what lets the route then be
- * traced forward: at each tile the next step is any neighbour one closer, and
+ * traced forward: at each tile the next step is any neighbor one closer, and
  * having a choice is the point -- across open floor there are many equally
  * short routes, and the one that hugs the straight line is the one a player
  * would actually walk. Picking arbitrarily gives an L. */
@@ -391,7 +391,7 @@ void play_trail_sync(Play *p, const Map *m)
             if (dist[ni] != TRAIL_UNREACHED) continue;
 
             /* The search runs backwards, so the question is whether a token
-             * standing on the neighbour could step to here. A boundary stops
+             * standing on the neighbor could step to here. A boundary stops
              * both ways, so either phrasing gives the same answer. */
             probe.x = (int16_t)nx;
             probe.y = (int16_t)ny;
@@ -660,7 +660,7 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
         grid_draw_token_status(r, &e->view, &m->tokens.v[i], th, ascii);
     }
 
-    /* Recolouring the tile's four boundary corners keeps the cursor visible
+    /* Recoloring the tile's four boundary corners keeps the cursor visible
      * on top of a token without painting over the box-drawing underneath. */
     if (cursor) grid_draw_tile_marker(r, &e->view, m, e->cx, e->cy, csize, th->accent);
 
@@ -733,7 +733,7 @@ void play_status(const Play *p, const Map *m, const Editor *e, int gm, char *buf
             counter_format(t, nums + 2, sizeof nums - 2);
         }
         snprintf(buf, bufsz, "PLAY    %.20s (%s %dx%d) at %s%s%s%s  %s",
-                 t->label[0] ? t->label : "unlabelled",
+                 t->label[0] ? t->label : "unlabeled",
                  token_kind_name(t->kind), t->size, t->size, at,
                  marks, nums, gm && t->note[0] ? "  (note)" : "", walls);
         return;
@@ -920,7 +920,7 @@ typedef struct {
     double     reach;            /* in the map's units; 1e30 for a band with no end */
     double     scale;
     DistMetric metric;
-    double     ox, oy;           /* the origin: centre of the anchor's footprint */
+    double     ox, oy;           /* the origin: center of the anchor's footprint */
     double     ux, uy;           /* unit vector from the origin to the cursor */
     int        x0, y0, x1, y1;   /* RANGE_SQUARE: the box, inclusive */
 } RangeGeom;
@@ -950,7 +950,7 @@ static int range_geom(const RangeOverlay *ro, const Map *m, const Ruleset **rs, 
 
     if (g->shape == RANGE_SQUARE) {
         /* A side of as many squares as the reach, its near face against the
-         * footprint, centred on it. An even side cannot centre on an odd
+         * footprint, centered on it. An even side cannot center on an odd
          * footprint, so the spare half-square goes the way the cursor leans. */
         double tiles = g->scale > 0 ? g->reach / g->scale : 1.0;
         int    side  = tiles >= RANGE_RADIUS_MAX ? RANGE_RADIUS_MAX : (int)lround(tiles);
@@ -987,7 +987,7 @@ static int geom_covers(const RangeGeom *g, int tx, int ty, int *nx, int *ny)
     if (g->shape == RANGE_CIRCLE) return 1;
     if (!g->aimed) return 0;
 
-    /* Tile centres against the aim: how far along it, how far off it. */
+    /* Tile centers against the aim: how far along it, how far off it. */
     double vx = tx + 0.5 - g->ox, vy = ty + 0.5 - g->oy;
     double along = vx * g->ux + vy * g->uy;
     double off   = fabs(vx * g->uy - vy * g->ux);

@@ -20,7 +20,7 @@ static const KeyDoc PLAY[] = {
     KEY(":d6",    "jump to a square by its label"),
     KEY(":area Crypt", "jump to a named area   :areas lists them"),
     KEY("#",      "column letters and row numbers, on or off"),
-    KEY("z",      "centre the view on the cursor"),
+    KEY("z",      "center the view on the cursor"),
     KEY("+ -",    "zoom in and out"),
 
     GROUP("Creatures"),
@@ -69,8 +69,8 @@ static const KeyDoc PLAY[] = {
     KEY(":player preview", "see the players' frame on your own screen; q returns"),
 
     GROUP("Status markers"),
-    KEY("s a",    "add a marker: a colour and a word"),
-    KEY("s c",    "colour the next marker will use"),
+    KEY("s a",    "add a marker: a color and a word"),
+    KEY("s c",    "color the next marker will use"),
     KEY("s d",    "drop a marker, asking which when there are several"),
     GROUP("Counters"),
     KEY("s v",    "the creature's counters: hp 6, hp -2, stress 0/6, -hp"),
@@ -137,7 +137,7 @@ static const KeyDoc BUILD[] = {
     KEY(":d6",    "jump to a square by its label  (:6 for a row)"),
     KEY("#",      "column letters and row numbers, on or off"),
     KEY("ctrl-d", "half a page down    ctrl-u up"),
-    KEY("z",      "centre the view    + - zoom"),
+    KEY("z",      "center the view    + - zoom"),
 
     GROUP("Walls and doors"),
     { "H J K L",  "wall on the west / south / north / east face", "HJKL", "wall" },
@@ -176,7 +176,7 @@ static const KeyDoc BUILD[] = {
 static const KeyDoc VISUAL[] = {
     GROUP("Visual select"),
     { "h j k l",  "stretch the selection",             "hjkl", "extend" },
-    { "v  V",     "box or circle; a circle is centred where you started", "v/V", "shape" },
+    { "v  V",     "box or circle; a circle is centered where you started", "v/V", "shape" },
     { "f",        "paint the selected terrain over it", NULL, "floor" },
     { "x",        "clear it to void",                  NULL, "clear" },
     { "y",        "copy it: ground, walls, creatures, notes", NULL, NULL },
@@ -204,7 +204,7 @@ static const KeyDoc WALL[] = {
     KEY("v  V",   "anchor a rectangle / a circle, then enter"),
     { "enter",    "wall around the anchored shape",     NULL, "rect" },
     KEY("u",      "undo    ctrl-r redo"),
-    KEY("z",      "centre the view    + - zoom"),
+    KEY("z",      "center the view    + - zoom"),
     { "esc",      "drop the anchor, or leave trace mode", NULL, "back" },
     { "?",        "this page",                         NULL, "keys" },
 };
@@ -218,7 +218,7 @@ static const KeyDoc RULER[] = {
     KEY("bksp",   "drop the last corner  (u does too)"),
     KEY("m",      "start again from here"),
     { "M",        "cycle the distance metric",         NULL, "metric" },
-    KEY("z",      "centre the view    + - zoom"),
+    KEY("z",      "center the view    + - zoom"),
     { "esc",      "done measuring",                    NULL, "done" },
     { "?",        "this page",                         NULL, "keys" },
 };

@@ -67,7 +67,7 @@ typedef struct {
 void ui_prompt_open(TextPrompt *p, const char *title, const char *hint,
                     const char *initial);
 
-/* Returns 1 when the user accepted (Enter), -1 when cancelled (Esc),
+/* Returns 1 when the user accepted (Enter), -1 when canceled (Esc),
  * 0 while still editing. */
 int  ui_prompt_key(TextPrompt *p, Key k);
 
@@ -77,7 +77,7 @@ void ui_prompt_draw(Renderer *r, const Theme *th, const TextPrompt *p,
                     const BoxGlyphs *frame);
 
 /* The same editing state rendered inline on one row, vim's `:` line, rather
- * than as a centred modal. */
+ * than as a centered modal. */
 void ui_cmdline_draw(Renderer *r, const Theme *th, const TextPrompt *p, int row,
                      char lead);
 
@@ -86,7 +86,7 @@ void ui_cmdline_draw(Renderer *r, const Theme *th, const TextPrompt *p, int row,
 void ui_modal(Renderer *r, const Theme *th, const char *title, const char *body,
               const char *footer, const BoxGlyphs *frame);
 
-/* Centres a message box with a yes/no footer. The caller interprets keys. */
+/* Centers a message box with a yes/no footer. The caller interprets keys. */
 void ui_confirm(Renderer *r, const Theme *th, const char *title, const char *body,
                 const BoxGlyphs *frame);
 
@@ -96,7 +96,7 @@ void ui_confirm(Renderer *r, const Theme *th, const char *title, const char *bod
 
 typedef struct {
     char     text[64];
-    uint32_t color;     /* the row's foreground, so a coloured thing looks it */
+    uint32_t color;     /* the row's foreground, so a colored thing looks it */
 } UiChoice;
 
 /* A modal listing a handful of numbered rows. Short by construction -- it

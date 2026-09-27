@@ -21,7 +21,7 @@ The working directory is empty, so this is greenfield. Constraints you set, whic
 - **As responsive as possible.** The architecture is built around this: a diffing cell renderer, one
   `write()` per frame, input coalescing, and a blocking event loop that burns 0% CPU when idle.
 - **Profiling from day one**, not bolted on later, so hot paths are always visible.
-- **Minimal graphics.** White lines for walls, thin grey lines for grid (walkable tiles only), circles for
+- **Minimal graphics.** White lines for walls, thin gray lines for grid (walkable tiles only), circles for
   players, inset squares for enemies.
 
 Decisions already settled: walls are **edge-based** (a wall lives on the boundary between two tiles, so it
@@ -107,7 +107,7 @@ representable without special-casing. Edge values are an enum so doors/windows/s
 without a format change. `map_blocked(m, x, y, dx, dy)` is a single array lookup — the one query play mode
 needs.
 
-`tiles` carries walkability, which is what gates grid-line rendering: grey grid lines are drawn only on
+`tiles` carries walkability, which is what gates grid-line rendering: gray grid lines are drawn only on
 `TILE_FLOOR`, `TILE_VOID` renders as blank.
 
 ### Zoom and the tile↔screen transform
@@ -130,9 +130,9 @@ vim-style `scrolloff` margin. If the map is smaller than the viewport it is cent
 
 ### Line rendering
 
-Boundary cells between two floor tiles draw a **thin grey** light line (`│ ─`); boundary cells carrying a
+Boundary cells between two floor tiles draw a **thin gray** light line (`│ ─`); boundary cells carrying a
 wall draw **white** heavy (`┃ ━`). Corner cells resolve from a 4-bit mask of which incident segments exist,
-via one 16-entry glyph table instantiated twice — once light/grey, once heavy/white. A junction is heavy if
+via one 16-entry glyph table instantiated twice — once light/gray, once heavy/white. A junction is heavy if
 *any* incident segment is a wall, which sidesteps the combinatorial explosion of mixed-weight box-drawing
 glyphs and still looks right.
 

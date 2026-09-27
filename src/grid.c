@@ -7,7 +7,7 @@
 
 #include "prof.h"
 
-/* Interior sizes. Odd widths keep a true centre cell for tokens and labels.
+/* Interior sizes. Odd widths keep a true center cell for tokens and labels.
  * Pitch is interior + 1, the extra cell being the shared boundary. */
 const ZoomLevel ZOOM[ZOOM_COUNT] = {
     { 1, 1 },   /* Z0  pitch 2x2  — whole-encounter overview */
@@ -65,7 +65,7 @@ static const uint32_t JUNC_ASCII[16] = {
     '-', '+', '-', '+', '+', '+', '+', '+',
 };
 
-/* Terrain fill glyphs. Colours live in the theme; these are the shapes, and
+/* Terrain fill glyphs. Colors live in the theme; these are the shapes, and
  * the ASCII column keeps the palette distinguishable without them. */
 static const struct {
     uint32_t glyph;
@@ -80,7 +80,7 @@ static const struct {
     [TILE_HAZARD] = { 0x25B2u, '^' },   /* triangle, reads as spikes */
 };
 
-/* A boundary's weight decides the junction it forms; its glyph and colour say
+/* A boundary's weight decides the junction it forms; its glyph and color say
  * which kind it is. Weight 2 is solid, 1 is something you can step over or
  * through, which joins the grid lines rather than the walls. */
 static int edge_weight(uint8_t kind)
@@ -117,8 +117,8 @@ void grid_clamp_camera(GridView *g, const Map *m)
     int cw = grid_cells_w(m, g->zoom);
     int ch = grid_cells_h(m, g->zoom);
 
-    /* A map smaller than its viewport is centred rather than pinned to a
-     * corner, which is what "the editor is centred in the application" means
+    /* A map smaller than its viewport is centered rather than pinned to a
+     * corner, which is what "the editor is centered in the application" means
      * once the map no longer fills the space. */
     if (cw <= g->view.w) g->cam_x = -(g->view.w - cw) / 2;
     else                 g->cam_x = iclamp(g->cam_x, 0, cw - g->view.w);
@@ -270,7 +270,7 @@ static Seg hseg(const Map *m, int x, int y)
     return s;
 }
 
-/* Glyph and colour for a run of one boundary kind. A secret door is a wall in
+/* Glyph and color for a run of one boundary kind. A secret door is a wall in
  * every respect until `reveal` says otherwise. */
 static void seg_look(uint8_t kind, int vertical, int ascii, int reveal,
                      const Theme *th, uint32_t *glyph, uint32_t *fg)
@@ -394,7 +394,7 @@ void grid_draw(Renderer *r, const Map *m, const GridView *g, const Theme *th,
             grid_tile_interior(g, tx, ty, &sx, &sy);
 
             if (glyph == ' ') {
-                /* A blank terrain is only its colour. Taking the background
+                /* A blank terrain is only its color. Taking the background
                  * alone leaves the cells holding what they already had, which
                  * is the difference between tinting the floor and redrawing
                  * it -- and the floor is most of most maps. */
@@ -429,7 +429,7 @@ void grid_draw(Renderer *r, const Map *m, const GridView *g, const Theme *th,
     for (int cx = cx0; cx <= cx1; cx++) vrow[cx - cx0] = vseg(m, cx, cy0 - 1);
 
     for (int cy = cy0; cy <= cy1; cy++) {
-        /* The segment west of a corner is the one east of its neighbour, so
+        /* The segment west of a corner is the one east of its neighbor, so
          * carrying it across the row halves the horizontal lookups. */
         Seg w = hseg(m, cx0 - 1, cy);
 
@@ -449,7 +449,7 @@ void grid_draw(Renderer *r, const Map *m, const GridView *g, const Theme *th,
             if (w.level)  { any |= JW; if (w.level == 2) solid |= JW; }
 
             /* A junction between two panels of the same kind takes their
-             * colour, so a run of doors reads as one door rather than as
+             * color, so a run of doors reads as one door rather than as
              * panels stitched together by wall. Mixed junctions stay wall,
              * which is what a doorway in a wall should look like. */
             Style s_junc = s_wall;
@@ -596,7 +596,7 @@ void grid_draw_tile_marker(Renderer *r, const GridView *g, const Map *m,
     if (!block_area(g, m, tx, ty, size, &a)) return;
 
     /* The four corners of the block, which for a single tile are the same
-     * four boundary cells this drew before it learnt about size. */
+     * four boundary cells this drew before it learned about size. */
     const int cx[4] = { a.x - 1, a.x + a.w, a.x - 1,     a.x + a.w };
     const int cy[4] = { a.y - 1, a.y - 1,   a.y + a.h,   a.y + a.h };
 
@@ -714,7 +714,7 @@ void grid_draw_labels(Renderer *r, const Map *m, const GridView *g,
     rnd_clip_restore(r, saved);
 
     /* Row numbers hug the grid rather than the edge of the screen: a map
-     * narrower than the window is centred, and a column of numbers stranded
+     * narrower than the window is centered, and a column of numbers stranded
      * out on the left belongs to nothing the eye can see. */
     int gx, gy;
     grid_tile_interior(g, x0, y0, &gx, &gy);
