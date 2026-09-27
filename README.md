@@ -252,7 +252,7 @@ copy on the cursor as a preview:
 | key | while previewing a stamp |
 |-----|--------------------------|
 | `h` `j` `k` `l` | move it; the cursor is its top-left square |
-| `r` `R` | rotate a quarter turn clockwise / anticlockwise |
+| `r` `R` | rotate a quarter turn clockwise / counterclockwise |
 | `\|` | mirror left to right |
 | `p` `enter` | place it (one undo step) |
 | `:` | run a command and return to the preview (`:J6` moves it to J6) |
