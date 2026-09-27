@@ -1,0 +1,1541 @@
+/* Tests: dice, the session log, clocks, notes, the autosave, rolls, the turn order. */
+
+#include "harness.h"
+
+/* --------------------------------------------------------------- dice */
+
+void test_dice(void)
+{
+    CASE("a seed makes the dice repeatable");
+    dice_seed(42);
+    int first[8];
+    for (int i = 0; i < 8; i++) first[i] = dice_one(20);
+    dice_seed(42);
+    int same = 1;
+    for (int i = 0; i < 8; i++) if (dice_one(20) != first[i]) same = 0;
+    CHECK_EQ(same, 1);
+
+    CASE("every face comes up, and nothing off the die does");
+    dice_seed(7);
+    int seen[7] = { 0 };
+    int off = 0;
+    for (int i = 0; i < 6000; i++) {
+        int v = dice_one(6);
+        if (v < 1 || v > 6) off++; else seen[v]++;
+    }
+    CHECK_EQ(off, 0);
+    for (int f = 1; f <= 6; f++) CHECK(seen[f] > 800);   /* ~1000 each */
+    CHECK_EQ(dice_one(1), 1);
+    CHECK_EQ(dice_one(0), 1);
+
+    CASE("an expression is the sum of its dice and constants");
+    DiceResult r;
+    char err[64];
+    dice_seed(3);
+    CHECK_EQ(dice_roll_expr("2d6+3", &r, err, sizeof err), 0);
+    CHECK_EQ(r.nrolls, 2);
+    CHECK_EQ(r.total, r.rolls[0] + r.rolls[1] + 3);
+    CHECK_EQ(dice_roll_expr(" 4d6 + 1d4 - 1 ", &r, err, sizeof err), 0);
+    CHECK_EQ(r.nrolls, 5);
+    int sum = -1;
+    for (int i = 0; i < 5; i++) sum += r.rolls[i];
+    CHECK_EQ(r.total, sum);
+    CHECK_EQ(dice_roll_expr("d20", &r, err, sizeof err), 0);   /* a bare d is one die */
+    CHECK_EQ(r.nrolls, 1);
+    CHECK_EQ(dice_roll_expr("-d4+10", &r, err, sizeof err), 0);
+    CHECK(r.total >= 6 && r.total <= 9);
+    CHECK_EQ(dice_roll_expr("5", &r, err, sizeof err), 0);
+    CHECK_EQ(r.total, 5);
+    CHECK_EQ(r.nrolls, 0);
+
+    CASE("what is not an expression says why");
+    CHECK_EQ(dice_roll_expr("", &r, err, sizeof err), -1);
+    CHECK_EQ(dice_roll_expr("d", &r, err, sizeof err), -1);
+    CHECK(strstr(err, "sides") != NULL);
+    CHECK_EQ(dice_roll_expr("0d6", &r, err, sizeof err), -1);
+    CHECK_EQ(dice_roll_expr("101d6", &r, err, sizeof err), -1);
+    CHECK_EQ(dice_roll_expr("2d1", &r, err, sizeof err), -1);
+    CHECK_EQ(dice_roll_expr("2d1001", &r, err, sizeof err), -1);
+    CHECK_EQ(dice_roll_expr("2d6+", &r, err, sizeof err), -1);
+    CHECK_EQ(dice_roll_expr("2d6 3", &r, err, sizeof err), -1);
+    CHECK_EQ(dice_roll_expr("abc", &r, err, sizeof err), -1);
+    CHECK_EQ(dice_roll_expr("1d6+1d6+1d6+1d6+1d6+1d6+1d6+1d6+1d6", &r, err, sizeof err), -1);
+
+    CASE("the readout shows the expression, the total and each die");
+    r.total = 9; r.nrolls = 2; r.rolls[0] = 4; r.rolls[1] = 2;
+    char buf[160];
+    dice_format("2d6 + 3", &r, buf, sizeof buf);
+    CHECK_EQ(strcmp(buf, "2d6+3 = 9  [4 2]"), 0);
+    r.nrolls = 0; r.total = 5;
+    dice_format("5", &r, buf, sizeof buf);
+    CHECK_EQ(strcmp(buf, "5 = 5"), 0);
+    CHECK_EQ(dice_roll_expr("100d6", &r, err, sizeof err), 0);
+    CHECK_EQ(r.nrolls, 100);
+    dice_format("100d6", &r, buf, sizeof buf);
+    CHECK(strstr(buf, "...]") != NULL);                     /* past the 64 kept */
+
+    /* Daggerheart: two d12s, Hope and Fear, read against each other. */
+    CASE("duality reads Hope, Fear, or a critical when the dice match");
+    CHECK_EQ(strcmp(dice_duality_verdict(9, 6), "with Hope"), 0);
+    CHECK_EQ(strcmp(dice_duality_verdict(3, 11), "with Fear"), 0);
+    CHECK_EQ(strcmp(dice_duality_verdict(7, 7), "critical success"), 0);
+    DualityRoll d;
+    dice_seed(11);
+    dice_duality(2, &d);
+    CHECK(d.hope >= 1 && d.hope <= 12);
+    CHECK(d.fear >= 1 && d.fear <= 12);
+    CHECK_EQ(d.total, d.hope + d.fear + 2);
+    d.hope = 9; d.fear = 6; d.mod = 2; d.total = 17;
+    dice_duality_format(&d, buf, sizeof buf, NULL);
+    CHECK_EQ(strcmp(buf, "Duality +2 = 17 with Hope  [hope 9, fear 6]"), 0);
+    d.hope = 7; d.fear = 7; d.mod = 0; d.total = 14;
+    dice_duality_format(&d, buf, sizeof buf, NULL);
+    CHECK_EQ(strcmp(buf, "Duality = 14 critical success  [hope 7, fear 7]"), 0);
+}
+
+/* Reads a whole file; NULL when it cannot. */
+char *slurp(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) return NULL;
+    char  *buf = xmalloc(65536);
+    size_t n   = fread(buf, 1, 65535, f);
+    fclose(f);
+    buf[n] = '\0';
+    return buf;
+}
+
+static int count_lines(const char *s)
+{
+    int n = 0;
+    for (; *s; s++) if (*s == '\n') n++;
+    return n;
+}
+
+void test_session_log(void)
+{
+    Sandbox sb = sandbox_enter("slog");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+
+    write_map_file(sb.dir, "fight.vtt");
+    char path[600], logpath[600];
+    snprintf(path, sizeof path, "%s/fight.vtt", sb.dir);
+    snprintf(logpath, sizeof logpath, "%s/fight.log", sb.dir);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+
+    CASE("off by default, and nothing is written while it is");
+    CHECK_EQ(slog_on(&a.slog), 0);
+    a.ed.cx = 0; a.ed.cy = 0;
+    press(&a, "ipAria\r");                    /* place a player at a1 */
+    CHECK_EQ(a.map->tokens.n, 1);
+    press(&a, "\rl\r");                       /* pick up, a step, drop */
+    CHECK(strstr(a.status, "dropped after 1 step") != NULL);
+    CHECK(slurp(logpath) == NULL);
+
+    CASE(":log turns it on beside the map, with a header naming it");
+    press(&a, ":log\r");
+    CHECK_EQ(slog_on(&a.slog), 1);
+    CHECK(strstr(a.status, "logging to") != NULL);
+    CHECK(strstr(a.status, "fight.log") != NULL);
+    char *text = slurp(logpath);
+    CHECK(text != NULL);
+    if (text) {
+        CHECK(strstr(text, "log on:") != NULL);
+        CHECK(strstr(text, a.map->name) != NULL);
+        free(text);
+    }
+
+    CASE("what happens is written, timestamped, one line each");
+    press(&a, "\rh\r");                        /* pick up, a step back, drop */
+    press(&a, ":roll 2d6+3\r");
+    text = slurp(logpath);
+    CHECK(text != NULL);
+    if (text) {
+        CHECK(strstr(text, "] dropped after 1 step") != NULL);
+        CHECK(strstr(text, "] 2d6+3 = ") != NULL);
+        CHECK_EQ(count_lines(text), 3);         /* header + 2 events */
+        CHECK(text[0] == '-');
+        CHECK(strchr(text, '[') != NULL && strchr(text, '[')[3] == ':');   /* [HH:MM:SS] */
+        free(text);
+    }
+
+    CASE("hints and errors stay off the log");
+    press(&a, ":roll nonsense\r");
+    CHECK(strstr(a.status, "no roll called nonsense") != NULL);
+    press(&a, ":roll 2x6\r");
+    CHECK(strstr(a.status, ":roll -") != NULL);
+    press(&a, "i");                             /* a prefix waiting: a hint */
+    press(&a, "\x1b");
+    text = slurp(logpath);
+    if (text) { CHECK_EQ(count_lines(text), 3); free(text); }
+
+    CASE("a second :log turns it off and says where the file is");
+    press(&a, ":log\r");
+    CHECK_EQ(slog_on(&a.slog), 0);
+    CHECK(strstr(a.status, "log off") != NULL);
+    text = slurp(logpath);
+    if (text) { CHECK(strstr(text, "log off ---") != NULL); free(text); }
+    press(&a, ":roll d6\r");
+    text = slurp(logpath);
+    if (text) { CHECK_EQ(count_lines(text), 4); free(text); }   /* nothing after the footer */
+
+    CASE(":log on/off and :log path are explicit");
+    press(&a, ":log off\r");
+    CHECK(strstr(a.status, "already off") != NULL);
+    char other[600];
+    snprintf(other, sizeof other, "%s/elsewhere.log", sb.dir);
+    press(&a, ":log ");
+    press(&a, other);
+    press(&a, "\r");
+    CHECK_EQ(slog_on(&a.slog), 1);
+    CHECK_EQ(strcmp(a.slog.path, other), 0);
+    press(&a, ":log on\r");                     /* moves to the default path */
+    CHECK_EQ(strcmp(a.slog.path, logpath), 0);
+    press(&a, ":log on\r");
+    CHECK(strstr(a.status, "already logging") != NULL);
+
+    CASE("closing the map closes the log");
+    press(&a, ":q!\r");
+    CHECK_EQ(slog_on(&a.slog), 0);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
+/* Clocks: named, sized, ticked through the undo log, drawn under the turn
+ * order, and saved as version 5. */
+void test_clocks(void)
+{
+    Sandbox sb = sandbox_enter("clocks");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+
+    write_map_file(sb.dir, "fight.vtt");
+    char path[600];
+    snprintf(path, sizeof path, "%s/fight.vtt", sb.dir);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+    Map *m = a.map;
+
+    CASE("no clocks to begin with, and the panel stays away");
+    CHECK_EQ(clock_count(m), 0);
+    CHECK_EQ(clock_panel_rows(m), 0);
+    press(&a, ":clock\r");
+    CHECK(strstr(a.status, "no clocks") != NULL);
+    press(&a, ":tick\r");
+    CHECK(strstr(a.status, "no clocks") != NULL);
+
+    CASE(":clock NAME SIZE starts one");
+    press(&a, ":clock Dragon 6\r");
+    CHECK_EQ(clock_count(m), 1);
+    CHECK_EQ(m->clocks[0].size, 6);
+    CHECK_EQ(m->clocks[0].value, 0);
+    CHECK(strstr(a.status, "clock Dragon 0/6 started") != NULL);
+    CHECK_EQ(m->modified, 1);
+
+    CASE("a bare :tick fills the clock in hand; the last started or ticked");
+    press(&a, ":tick\r");
+    CHECK_EQ(m->clocks[0].value, 1);
+    CHECK(strstr(a.status, "Dragon 1/6") != NULL);
+    press(&a, ":tick 2\r");
+    CHECK_EQ(m->clocks[0].value, 3);
+    press(&a, ":tick -1\r");
+    CHECK_EQ(m->clocks[0].value, 2);
+    press(&a, ":tick =5\r");
+    CHECK_EQ(m->clocks[0].value, 5);
+
+    CASE("a tick is one undo step");
+    press(&a, "u");
+    CHECK_EQ(m->clocks[0].value, 2);
+    press(&a, "u");
+    CHECK_EQ(m->clocks[0].value, 3);
+    press(&a, "\x12");                                    /* ctrl-r */
+    CHECK_EQ(m->clocks[0].value, 2);
+
+    CASE("filling it says so, and it will not go past full or below empty");
+    press(&a, ":tick =6\r");
+    CHECK(strstr(a.status, "Dragon 6/6 - full") != NULL);
+    press(&a, ":tick\r");
+    CHECK(strstr(a.status, "Dragon is full") != NULL);
+    CHECK_EQ(m->clocks[0].value, 6);
+    press(&a, ":tick =0\r");
+    press(&a, ":tick -1\r");
+    CHECK(strstr(a.status, "Dragon is at its start") != NULL);
+    press(&a, ":tick 3\r");
+    press(&a, ":tick reset\r");
+    CHECK_EQ(m->clocks[0].value, 0);
+
+    CASE("names match by prefix, case aside, and an exact name beats a longer one");
+    press(&a, ":clock Ritual 4\r");
+    press(&a, ":clock Rite 8\r");
+    CHECK_EQ(clock_count(m), 3);
+    press(&a, ":tick dr\r");
+    CHECK_EQ(m->clocks[0].value, 1);
+    press(&a, ":tick R\r");
+    CHECK(strstr(a.status, "more than one clock") != NULL);
+    press(&a, ":tick rite\r");
+    CHECK_EQ(m->clocks[2].value, 1);
+    press(&a, ":tick\r");                                   /* Rite is now in hand */
+    CHECK_EQ(m->clocks[2].value, 2);
+    press(&a, ":tick Nothing\r");
+    CHECK(strstr(a.status, "no clock called") != NULL);
+
+    CASE(":clock lists them; :clock NAME SIZE resizes; :clock NAME off drops");
+    press(&a, ":clock\r");
+    CHECK(strstr(a.status, "Dragon 1/6, Ritual 0/4, Rite 2/8") != NULL);
+    press(&a, ":clock Rite 2\r");
+    CHECK_EQ(m->clocks[2].size, 2);
+    CHECK_EQ(m->clocks[2].value, 2);                        /* kept, clamped */
+    CHECK(strstr(a.status, "resized") != NULL);
+    press(&a, ":clock Ritual off\r");
+    CHECK_EQ(clock_count(m), 2);
+    CHECK_EQ(m->clocks[1].name[0], '\0');                   /* the slot stays empty */
+    press(&a, ":clock Sun 3\r");                            /* and is taken by the next */
+    CHECK_EQ(strcmp(m->clocks[1].name, "Sun"), 0);
+    press(&a, ":clock 7up 3\r");
+    CHECK(strstr(a.status, "starts with a letter") != NULL);
+    press(&a, ":clock Big 99\r");
+    CHECK(strstr(a.status, "1 to 24 segments") != NULL);
+
+    CASE("an undo recorded against a dropped slot touches nothing, not even its successor");
+    press(&a, ":tick Sun\r");                               /* Sun 1/3, in slot 1 */
+    press(&a, ":clock Sun off\r");
+    press(&a, "u");                                         /* the tick's op names slot 1, now empty */
+    CHECK_EQ(m->clocks[1].name[0], '\0');
+    press(&a, ":clock Moon 3\r");                           /* slot 1 again, a new generation */
+    press(&a, "\x12");                                      /* redo: Sun's tick must not land on Moon */
+    CHECK_EQ(m->clocks[1].value, 0);
+    press(&a, "u");
+    CHECK_EQ(m->clocks[1].value, 0);
+
+    CASE(":tick NAME = takes a count, not a direction");
+    press(&a, ":tick Dragon =2\r");
+    CHECK_EQ(m->clocks[0].value, 2);
+    press(&a, ":tick Dragon =-1\r");
+    CHECK(strstr(a.status, ":tick NAME") != NULL);
+    CHECK_EQ(m->clocks[0].value, 2);
+    press(&a, ":tick Dragon =1\r");                        /* back to where the cases below expect it */
+
+    CASE("the panel shows the clocks under the turn order, dots for segments, a full one lit");
+    press(&a, ":clock Moon off\r");
+    press(&a, ":tick Rite =2\r");
+    rnd_begin(&r);
+    app_draw(&a);
+    ByteBuf frame;
+    bb_init(&frame, 65536);
+    rnd_dump(&r, &frame);
+    bb_putc(&frame, '\0');
+    CHECK(strstr(frame.data, "Clocks") != NULL);
+    CHECK(strstr(frame.data, "Dragon ●○○○○○") != NULL);
+    CHECK(strstr(frame.data, "Rite   ●●") != NULL);
+    CHECK(strstr(frame.data, "Turn order") == NULL);       /* no fight: no order block */
+    CHECK_EQ(a.ed.view.view.x + a.ed.view.view.w, r.w - TURN_PANEL_W);
+    int lit = 0;
+    for (int y = 0; y < r.h; y++) {
+        const Cell *c = &r.back[(size_t)y * (size_t)r.w + (size_t)(r.w - TURN_PANEL_W + 2)];
+        if (c->ch == 'R' && c->fg == a.th->turn) lit++;
+    }
+    CHECK_EQ(lit, 1);
+    bb_free(&frame);
+
+    CASE("in build mode the panel is not drawn");
+    Key f1 = { KEY_F1, 0, 0 };
+    app_key(&a, f1);
+    rnd_begin(&r);
+    app_draw(&a);
+    CHECK_EQ(a.ed.view.view.x + a.ed.view.view.w, r.w);
+    app_key(&a, f2);
+
+    CASE("a wide clock is a fraction, not dots");
+    press(&a, ":clock Siege 24\r");
+    press(&a, ":tick 5\r");
+    rnd_begin(&r);
+    app_draw(&a);
+    bb_init(&frame, 65536);
+    rnd_dump(&r, &frame);
+    bb_putc(&frame, '\0');
+    CHECK(strstr(frame.data, "Siege  5/24") != NULL);
+    bb_free(&frame);
+
+    CASE("clocks are saved as version 5 and read back, in order");
+    char err[128];
+    CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+    char *text = slurp(path);
+    CHECK(text != NULL);
+    if (text) {
+        CHECK_EQ(strncmp(text, "VTT 5\n", 6), 0);
+        CHECK(strstr(text, "clock Dragon 1 6\n") != NULL);
+        CHECK(strstr(text, "clock Siege 5 24\n") != NULL);
+        free(text);
+    }
+    Map *back = mapio_load(path, err, sizeof err);
+    CHECK(back != NULL);
+    if (back) {
+        CHECK_EQ(clock_count(back), 3);
+        CHECK_EQ(strcmp(back->clocks[0].name, "Dragon"), 0);
+        CHECK_EQ(back->clocks[0].value, 1);
+        CHECK_EQ(strcmp(back->clocks[1].name, "Siege"), 0);   /* the first empty slot */
+        CHECK_EQ(back->clocks[1].size, 24);
+        map_free(back);
+    }
+
+    /* Daggerheart's countdowns run the other way: they start full and a
+     * tick brings them down. The ruleset decides the default, a word after
+     * the size decides outright, and a die names the size and rolls the
+     * start. Nothing ticks by itself: this is for a table that rolls its
+     * own dice. */
+    CASE("under daggerheart a new clock counts down: full at the start, done at nothing");
+    press(&a, ":ruleset daggerheart\r");
+    press(&a, ":clock Ambush 4\r");
+    int amb = clock_find(m, "Ambush");
+    CHECK(amb >= 0);
+    CHECK_EQ(m->clocks[amb].down, 1);
+    CHECK_EQ(m->clocks[amb].value, 4);
+    CHECK(strstr(a.status, "Ambush 4/4 started - :tick counts it down") != NULL);
+    press(&a, ":tick\r");
+    CHECK_EQ(m->clocks[amb].value, 3);
+    press(&a, ":tick 2\r");
+    CHECK_EQ(m->clocks[amb].value, 1);
+    press(&a, ":tick -1\r");                               /* back towards the start */
+    CHECK_EQ(m->clocks[amb].value, 2);
+    press(&a, ":tick =0\r");
+    CHECK(strstr(a.status, "Ambush 0/4 - done") != NULL);
+    CHECK_EQ(clock_done(&m->clocks[amb]), 1);
+    press(&a, ":tick\r");
+    CHECK(strstr(a.status, "Ambush is done") != NULL);
+    press(&a, "u");
+    CHECK_EQ(m->clocks[amb].value, 2);
+
+    CASE("a loop is a reset by hand, and a resize keeps counting the same way");
+    press(&a, ":tick =0\r");
+    press(&a, ":tick reset\r");
+    CHECK_EQ(m->clocks[amb].value, 4);
+    press(&a, ":clock Ambush 5\r");                        /* the loop that grows */
+    CHECK_EQ(m->clocks[amb].size, 5);
+    CHECK_EQ(m->clocks[amb].value, 4);
+    CHECK_EQ(m->clocks[amb].down, 1);
+    press(&a, ":tick reset\r");
+    CHECK_EQ(m->clocks[amb].value, 5);
+
+    CASE("\"up\" and \"down\" after the size say which way, whatever the game");
+    press(&a, ":clock Heist 6 up\r");
+    int h = clock_find(m, "Heist");
+    CHECK_EQ(m->clocks[h].down, 0);
+    CHECK_EQ(m->clocks[h].value, 0);
+    press(&a, ":clock Ambush 5 up\r");                     /* a change of direction starts over */
+    CHECK_EQ(m->clocks[amb].down, 0);
+    CHECK_EQ(m->clocks[amb].value, 0);
+    press(&a, ":clock Ambush 5 sideways\r");
+    CHECK(strstr(a.status, "\"up\" or \"down\"") != NULL);
+    press(&a, ":ruleset none\r");
+    press(&a, ":clock Fuse 3 down\r");
+    CHECK_EQ(m->clocks[clock_find(m, "Fuse")].down, 1);
+    CHECK_EQ(m->clocks[clock_find(m, "Fuse")].value, 3);
+
+    CASE("a die for the size starts the clock at the roll");
+    dice_seed(3);
+    int expect = dice_one(8);
+    dice_seed(3);
+    press(&a, ":clock Storm d8 down\r");
+    int st = clock_find(m, "Storm");
+    CHECK_EQ(m->clocks[st].size, 8);
+    CHECK_EQ(m->clocks[st].value, expect);
+    CHECK(strstr(a.status, "started at the d8's") != NULL);
+    CHECK(strstr(a.status, "counting down") != NULL);
+
+    CASE("the direction is saved, and a countdown at nothing is lit");
+    CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+    text = slurp(path);
+    if (text) {
+        CHECK(strstr(text, "clock Fuse 3 3 down\n") != NULL);
+        CHECK(strstr(text, "clock Heist 0 6\n") != NULL);
+        free(text);
+    }
+    back = mapio_load(path, err, sizeof err);
+    CHECK(back != NULL);
+    if (back) {
+        int f = clock_find(back, "Fuse");
+        CHECK(f >= 0 && back->clocks[f].down == 1 && back->clocks[f].value == 3);
+        map_free(back);
+    }
+    press(&a, ":tick Fuse =0\r");
+    rnd_begin(&r);
+    app_draw(&a);
+    lit = 0;
+    for (int y = 0; y < r.h; y++) {
+        const Cell *c = &r.back[(size_t)y * (size_t)r.w + (size_t)(r.w - TURN_PANEL_W + 2)];
+        if (c->ch == 'F' && c->fg == a.th->turn) lit++;
+    }
+    CHECK_EQ(lit, 1);
+    press(&a, ":clock Ambush off\r");
+    press(&a, ":clock Heist off\r");
+    press(&a, ":clock Fuse off\r");
+    press(&a, ":clock Storm off\r");
+
+    CASE("with the clocks gone the file is version 3 again");
+    press(&a, ":clock Dragon off\r");
+    press(&a, ":clock Rite off\r");
+    press(&a, ":clock Siege off\r");
+    CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+    text = slurp(path);
+    if (text) { CHECK_EQ(strncmp(text, "VTT 3\n", 6), 0); free(text); }
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
+/* Notes: the GM's own text on a creature or a square, read and written
+ * through one prompt, hinted at but never shown on the mirrored status
+ * line, marked on the map in build mode only. */
+void test_notes(void)
+{
+    Sandbox sb = sandbox_enter("notes");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+
+    write_map_file(sb.dir, "fight.vtt");
+    char path[600];
+    snprintf(path, sizeof path, "%s/fight.vtt", sb.dir);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+    Map *m = a.map;
+    a.ed.cx = 0; a.ed.cy = 0;
+    press(&a, "ipAria\r");
+    CHECK_EQ(m->tokens.n, 1);
+
+    CASE("s n on a creature opens its note; the players' frame would differ while it is open");
+    CHECK_EQ(app_remote_live(&a), 1);
+    CHECK_EQ(app_view_differs(&a), 0);
+    press(&a, "sn");
+    CHECK_EQ(a.modal, MODAL_PROMPT);
+    CHECK_EQ(a.prompt_what, PROMPT_NOTE);
+    CHECK(strstr(a.prompt.title, "note on Aria") != NULL);
+    CHECK_EQ(app_remote_live(&a), 1);              /* no freeze: the prompt is simply not in their frame */
+    CHECK_EQ(app_view_differs(&a), 1);
+    press(&a, "wants the amulet\r");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK_EQ(app_view_differs(&a), 1);             /* the selected creature has a note: (note) is GM-only */
+    CHECK_EQ(strcmp(m->tokens.v[0].note, "wants the amulet"), 0);
+    CHECK(strstr(a.status, "noted on Aria") != NULL);
+    CHECK(strstr(a.status, "amulet") == NULL);            /* the text stays off the line */
+    CHECK_EQ(m->modified, 1);
+
+    CASE("the readout says there is a note, not what it says -- and only to the GM");
+    char line[192];
+    play_status(&a.play, m, &a.ed, 1, line, sizeof line);
+    CHECK(strstr(line, "(note)") != NULL);
+    CHECK(strstr(line, "amulet") == NULL);
+    play_status(&a.play, m, &a.ed, 0, line, sizeof line);
+    CHECK(strstr(line, "(note)") == NULL);
+
+    CASE("the prompt stops where the note does, so nothing typed is lost on the way in");
+    press(&a, "sn\025");
+    for (int i = 0; i < 80; i++) press(&a, "x");
+    CHECK_EQ(a.prompt.len, TOKEN_NOTE_MAX - 1);
+    press(&a, "\r");
+    CHECK_EQ((int)strlen(m->tokens.v[0].note), TOKEN_NOTE_MAX - 1);
+    press(&a, "sn\025wants the amulet\r");
+
+    CASE("the prompt opens holding the note, so it is the reader too");
+    press(&a, "sn");
+    CHECK_EQ(strcmp(a.prompt.buf, "wants the amulet"), 0);
+    press(&a, " and the ring\r");
+    CHECK_EQ(strcmp(m->tokens.v[0].note, "wants the amulet and the ring"), 0);
+
+    CASE("a creature's note undoes, and ctrl-u then enter takes it off");
+    press(&a, "u");
+    CHECK_EQ(strcmp(m->tokens.v[0].note, "wants the amulet"), 0);
+    press(&a, "\x12");
+    CHECK_EQ(strcmp(m->tokens.v[0].note, "wants the amulet and the ring"), 0);
+    press(&a, "sn\025\r");
+    CHECK_EQ(m->tokens.v[0].note[0], '\0');
+    CHECK(strstr(a.status, "note taken off Aria") != NULL);
+    press(&a, "sn\r");
+    CHECK(strstr(a.status, "nothing noted") != NULL);
+
+    CASE("with no creature under the cursor the note goes on the square");
+    press(&a, "\x1b");                                     /* deselect */
+    a.ed.cx = 1; a.ed.cy = 1;
+    CHECK_EQ(a.play.sel, -1);
+    press(&a, "sn");
+    CHECK(strstr(a.prompt.title, "note on B2") != NULL);
+    press(&a, "pressure plate\r");
+    CHECK(map_note_at(m, 1, 1) != NULL);
+    CHECK_EQ(strcmp(map_note_at(m, 1, 1), "pressure plate"), 0);
+    CHECK(strstr(a.status, "noted on B2") != NULL);
+    CHECK_EQ(m->nnotes, 1);
+    play_status(&a.play, m, &a.ed, 1, line, sizeof line);
+    CHECK(strstr(line, "(note)") != NULL);
+    a.ed.cx = 0; a.ed.cy = 1;
+    play_status(&a.play, m, &a.ed, 1, line, sizeof line);
+    CHECK(strstr(line, "(note)") == NULL);
+
+    CASE(":notes says where they are");
+    press(&a, "sn");
+    press(&a, "loose flagstone\r");                        /* A2 */
+    a.ed.cx = 0; a.ed.cy = 0;
+    press(&a, "t");                                        /* select Aria */
+    press(&a, "sn");
+    press(&a, "afraid of fire\r");
+    press(&a, ":notes\r");
+    CHECK(strstr(a.status, "notes on Aria, B2, A2") != NULL);
+    CHECK(strstr(a.status, "flagstone") == NULL);
+
+    CASE("in play mode nothing marks a noted square; in build mode a quote does");
+    rnd_begin(&r);
+    app_draw(&a);
+    int marks = 0;
+    for (size_t i = 0; i < (size_t)r.w * (size_t)r.h; i++) marks += r.back[i].ch == 0x201Du;
+    CHECK_EQ(marks, 0);
+    Key f1 = { KEY_F1, 0, 0 };
+    app_key(&a, f1);
+    rnd_begin(&r);
+    app_draw(&a);
+    marks = 0;
+    for (size_t i = 0; i < (size_t)r.w * (size_t)r.h; i++) marks += r.back[i].ch == 0x201Du;
+    CHECK_EQ(marks, 2);
+    int sx, sy;
+    grid_tile_interior(&a.ed.view, 1, 1, &sx, &sy);
+    CHECK_EQ(r.back[(size_t)sy * (size_t)r.w + (size_t)(sx + ZOOM[a.ed.view.zoom].iw - 1)].ch, 0x201Du);
+
+    CASE("build mode has s n too, on the square, and says so");
+    a.ed.cx = 1; a.ed.cy = 0;
+    press(&a, "s");
+    CHECK(strstr(a.status, "s n") != NULL);
+    press(&a, "n");
+    CHECK(strstr(a.prompt.title, "note on B1") != NULL);
+    press(&a, "the altar\r");
+    CHECK_EQ(m->nnotes, 3);
+    ed_status(&a.ed, m, line, sizeof line);
+    CHECK(strstr(line, "(note)") != NULL);
+    press(&a, "sx");
+    CHECK(strstr(a.status, "s wants n") != NULL);
+    app_key(&a, f2);
+
+    CASE("notes are saved as version 5, on the creature and on the squares, and read back");
+    char err[128];
+    CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+    char *text = slurp(path);
+    CHECK(text != NULL);
+    if (text) {
+        CHECK_EQ(strncmp(text, "VTT 5\n", 6), 0);
+        CHECK(strstr(text, "token player 0 0 1 \"Aria\"\ntokennote \"afraid of fire\"\n") != NULL);
+        CHECK(strstr(text, "note 1 1 \"pressure plate\"\n") != NULL);
+        free(text);
+    }
+    Map *back = mapio_load(path, err, sizeof err);
+    CHECK(back != NULL);
+    if (back) {
+        CHECK_EQ(strcmp(back->tokens.v[0].note, "afraid of fire"), 0);
+        CHECK_EQ(back->nnotes, 3);
+        CHECK_EQ(strcmp(map_note_at(back, 1, 0), "the altar"), 0);
+        CHECK_EQ(back->modified, 0);
+
+        CASE("a shrink drops the notes it leaves outside");
+        CHECK_EQ(map_resize(back, 1, 1), 0);
+        CHECK_EQ(back->nnotes, 0);
+        map_free(back);
+    }
+
+    CASE("a copied creature carries its note, and equality sees it");
+    Token t1 = m->tokens.v[0], t2 = t1;
+    CHECK_EQ(token_equal(&t1, &t2), 1);
+    str_lcpy(t2.note, "other", sizeof t2.note);
+    CHECK_EQ(token_equal(&t1, &t2), 0);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
+/* The recovery autosave: a copy beside the file once changes go quiet,
+ * gone with a save or a discard, offered back after a crash. */
+void test_autosave(void)
+{
+    Sandbox sb = sandbox_enter("autosave");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+
+    write_map_file(sb.dir, "fight.vtt");
+    char path[600], autosave[620];
+    snprintf(path, sizeof path, "%s/fight.vtt", sb.dir);
+    snprintf(autosave, sizeof autosave, "%s.autosave", path);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+    a.autosave_on = 1;
+    CHECK_EQ(app_open_map(&a, path), 0);
+    a.ed.cx = a.ed.cy = 0;
+    CHECK_EQ(a.modal, MODAL_NONE);                          /* nothing to recover */
+
+    CASE("a clean map owes no autosave, and an idle loop can sleep for ever");
+    CHECK_EQ(app_autosave_due(&a, 1000), -1);
+    app_tick(&a, 1000);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+
+    CASE("a change starts the clock; the copy is written once the changes go quiet");
+    press(&a, "x");                                         /* a tile to void */
+    CHECK_EQ(a.map->modified, 1);
+    app_tick(&a, 2000);
+    CHECK_EQ(app_autosave_due(&a, 2000), AUTOSAVE_QUIET_MS);
+    app_tick(&a, 2000 + AUTOSAVE_QUIET_MS - 1);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+    press(&a, "lx");                                        /* still typing: the clock restarts */
+    app_tick(&a, 2000 + AUTOSAVE_QUIET_MS);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+    app_tick(&a, 2000 + 2 * AUTOSAVE_QUIET_MS);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1);
+    CHECK_EQ(app_autosave_due(&a, 9000), -1);              /* nothing more owed */
+    CHECK_EQ(a.map->modified, 1);                           /* it is not a save */
+    CHECK_EQ(strcmp(a.map->path, path), 0);
+
+    CASE("the copy holds the changes");
+    {
+        char err[128];
+        Map *copy = mapio_load(autosave, err, sizeof err);
+        CHECK(copy != NULL);
+        if (copy) { CHECK_EQ(map_tile(copy, 0, 0), TILE_VOID); CHECK_EQ(map_tile(copy, 1, 0), TILE_VOID); map_free(copy); }
+    }
+
+    CASE("a save takes the copy away");
+    press(&a, ":w\r");
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+    CHECK_EQ(app_autosave_due(&a, 20000), -1);
+
+    CASE("so does a deliberate discard");
+    press(&a, "jx");
+    app_tick(&a, 30000);
+    app_tick(&a, 30000 + AUTOSAVE_QUIET_MS);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1);
+    press(&a, ":q!\r");
+    CHECK_EQ(a.map, NULL);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+
+    CASE("after a crash the next open offers the copy, and y takes it");
+    CHECK_EQ(app_open_map(&a, path), 0);
+    a.ed.cx = a.ed.cy = 0;
+    press(&a, "jx");                                        /* (0,1) */
+    app_tick(&a, 40000);
+    app_tick(&a, 40000 + AUTOSAVE_QUIET_MS);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1);
+    map_free(a.map);                                        /* the crash: no close, no save */
+    a.map = NULL;
+    undo_clear(&a.undo);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    a.ed.cx = a.ed.cy = 0;
+    CHECK_EQ(a.modal, MODAL_CONFIRM_RECOVER);
+    CHECK(strstr(a.modal_body, "never saved") != NULL);
+    CHECK_EQ(map_tile(a.map, 0, 1), TILE_FLOOR);            /* the file as saved, until answered */
+    press(&a, "y");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK_EQ(map_tile(a.map, 0, 1), TILE_VOID);
+    CHECK_EQ(a.map->modified, 1);
+    CHECK_EQ(strcmp(a.map->path, path), 0);
+    CHECK(strstr(a.status, "recovered") != NULL);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1); /* kept until the save */
+    press(&a, ":w\r");
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+    {
+        char err[128];
+        Map *disk = mapio_load(path, err, sizeof err);
+        CHECK(disk != NULL);
+        if (disk) { CHECK_EQ(map_tile(disk, 0, 1), TILE_VOID); map_free(disk); }
+    }
+
+    CASE("n lets the copy go, once");
+    press(&a, "lx");
+    app_tick(&a, 50000);
+    app_tick(&a, 50000 + AUTOSAVE_QUIET_MS);
+    map_free(a.map);
+    a.map = NULL;
+    undo_clear(&a.undo);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    a.ed.cx = a.ed.cy = 0;
+    CHECK_EQ(a.modal, MODAL_CONFIRM_RECOVER);
+    press(&a, "n");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+    CHECK_EQ(map_tile(a.map, 1, 1), TILE_FLOOR);
+    map_free(a.map); a.map = NULL; undo_clear(&a.undo);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    a.ed.cx = a.ed.cy = 0;
+    CHECK_EQ(a.modal, MODAL_NONE);
+
+    CASE("an autosave older than the file is not offered");
+    press(&a, " ");                                         /* toggle: always a change */
+    app_tick(&a, 60000);
+    app_tick(&a, 60000 + AUTOSAVE_QUIET_MS);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1);
+    a.map->modified = 0;                                    /* pretend it was saved elsewhere... */
+    write_map_file(sb.dir, "fight.vtt");                    /* ...and the file rewritten since */
+    map_free(a.map); a.map = NULL; undo_clear(&a.undo);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    a.ed.cx = a.ed.cy = 0;
+    CHECK_EQ(a.modal, MODAL_NONE);
+    unlink(autosave);
+
+    CASE("a write that fails is not owed again until the next change");
+    char real_path[MAP_PATH_MAX];
+    str_lcpy(real_path, a.map->path, sizeof real_path);
+    str_lcpy(a.map->path, "/nonexistent/dir/t.vtt", sizeof a.map->path);
+    press(&a, " ");
+    app_tick(&a, 65000);
+    app_tick(&a, 65000 + AUTOSAVE_QUIET_MS);              /* the attempt, which fails */
+    CHECK_EQ(app_autosave_due(&a, 65000 + AUTOSAVE_QUIET_MS), -1);
+    CHECK_EQ(app_autosave_due(&a, 99000), -1);            /* and stays that way */
+    press(&a, " ");                                        /* a change owes one again */
+    app_tick(&a, 99000);
+    CHECK(app_autosave_due(&a, 99000) >= 0);
+    str_lcpy(a.map->path, real_path, sizeof a.map->path);
+    app_tick(&a, 99000 + AUTOSAVE_QUIET_MS);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1);
+
+    CASE("quitting with y to the question lets the copy go");
+    a.screen = SCREEN_MENU;                                /* the quit key lives on the menu */
+    press(&a, "q");
+    CHECK_EQ(a.modal, MODAL_CONFIRM_QUIT);
+    press(&a, "y");
+    CHECK_EQ(a.running, 0);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+    a.running = 1;
+    a.screen = SCREEN_EDITOR;
+    a.map->modified = 0;
+
+    CASE("headless runs never write one");
+    a.autosave_on = 0;
+    press(&a, " ");
+    app_tick(&a, 70000);
+    app_tick(&a, 70000 + AUTOSAVE_QUIET_MS);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+    CHECK_EQ(app_autosave_due(&a, 80000), -1);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
+void test_roll_command(void)
+{
+    Sandbox sb = sandbox_enter("roll");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+
+    write_map_file(sb.dir, "fight.vtt");
+    char path[600];
+    snprintf(path, sizeof path, "%s/fight.vtt", sb.dir);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    dice_seed(5);
+
+    CASE(":roll takes an expression on any map");
+    press(&a, ":roll 2d6+3\r");
+    CHECK(strstr(a.status, "2d6+3 = ") != NULL);
+    press(&a, ":roll 2d12\r");
+    CHECK(strstr(a.status, "2d12 = ") != NULL);
+    CHECK(strstr(a.status, "Hope") == NULL);    /* plain dice carry no verdict */
+
+    CASE("without a ruleset there is no action roll to be bare about");
+    a.map->ruleset[0] = '\0';
+    press(&a, ":roll\r");
+    CHECK(strstr(a.status, "roll what") != NULL);
+    press(&a, ":roll +2\r");
+    CHECK(strstr(a.status, "needs a ruleset") != NULL);
+
+    CASE("duality can be asked for by name anywhere");
+    press(&a, ":roll duality +1\r");
+    CHECK(strstr(a.status, "Duality +1 = ") != NULL);
+    CHECK(strstr(a.status, "[hope ") != NULL);
+
+    /* The rules-aware part: under Daggerheart a bare roll is the duality
+     * roll -- two d12s, Hope and Fear -- and a modifier rides on it. */
+    CASE("under daggerheart a bare :roll is the duality roll");
+    press(&a, ":ruleset daggerheart\r");
+    press(&a, ":roll\r");
+    CHECK(strstr(a.status, "Duality = ") != NULL);
+    int verdict = strstr(a.status, "with Hope") != NULL || strstr(a.status, "with Fear") != NULL
+               || strstr(a.status, "critical success") != NULL;
+    CHECK_EQ(verdict, 1);
+    press(&a, ":roll +3\r");
+    CHECK(strstr(a.status, "Duality +3 = ") != NULL);
+    press(&a, ":roll -1\r");
+    CHECK(strstr(a.status, "Duality -1 = ") != NULL);
+    press(&a, ":roll +x\r");
+    CHECK(strstr(a.status, "modifier is a number") != NULL);
+    press(&a, ":roll 2d12\r");                  /* an expression is still plain dice */
+    CHECK(strstr(a.status, "2d12 = ") != NULL);
+    CHECK(strstr(a.status, "Duality") == NULL);
+
+    /* Gold for Hope and purple for Fear, on the digits themselves. The log
+     * and the status text stay plain; only the drawing knows about color. */
+    CASE("the hope die is drawn gold and the fear die purple");
+    {
+        DualityRoll dr = { 12, 3, 2, 17 };
+        DualitySpans sp;
+        char text[96];
+        dice_duality_format(&dr, text, sizeof text, &sp);
+        CHECK_EQ(strncmp(text + sp.hope_at, "12", 2), 0);
+        CHECK_EQ(sp.hope_len, 2);
+        CHECK_EQ(strncmp(text + sp.fear_at, "3]", 2), 0);
+        CHECK_EQ(sp.fear_len, 1);
+
+        press(&a, ":roll +2\r");
+        CHECK_EQ(a.nstatus_span, 2);
+        rnd_begin(&r);
+        app_draw(&a);
+        int gold = 0, purple = 0;
+        for (int x = 0; x < r.w; x++) {
+            const Cell *c = &r.back[(size_t)(r.h - 2) * (size_t)r.w + (size_t)x];
+            if (c->fg == a.th->hope && c->ch >= '0' && c->ch <= '9') gold++;
+            if (c->fg == a.th->fear && c->ch >= '0' && c->ch <= '9') purple++;
+        }
+        CHECK(gold >= 1 && gold <= 2);
+        CHECK(purple >= 1 && purple <= 2);
+
+        press(&a, ":roll 2d6\r");                /* plain dice: no color left behind */
+        CHECK_EQ(a.nstatus_span, 0);
+
+        CHECK(contrast(a.th->hope, a.th->bg) > 7.0);
+        CHECK(contrast(a.th->fear, a.th->bg) > 5.0);
+        CHECK(contrast(a.th->hope, a.th->fear) > 1.8);   /* apart without hue */
+    }
+
+    CASE("the total is the dice plus the modifier");
+    dice_seed(9);
+    DualityRoll d;
+    dice_duality(3, &d);
+    dice_seed(9);
+    press(&a, ":roll +3\r");
+    char want[32];
+    snprintf(want, sizeof want, "= %d ", d.total);
+    CHECK(strstr(a.status, want) != NULL);
+
+    CASE("a roll can be saved under a name, and rolled by it or a prefix of it");
+    press(&a, ":rolls\r");
+    CHECK(strstr(a.status, "no named rolls") != NULL);
+    press(&a, ":roll attack = 2d12+3\r");
+    CHECK(strstr(a.status, "attack = 2d12+3") != NULL);
+    CHECK_EQ(a.map->modified, 1);
+    press(&a, ":roll attack\r");
+    CHECK(strstr(a.status, "attack: 2d12+3 = ") != NULL);
+    press(&a, ":roll att\r");
+    CHECK(strstr(a.status, "attack: 2d12+3 = ") != NULL);
+    press(&a, ":roll bite=d8 + 1\r");                 /* spaces around = are optional */
+    press(&a, ":rolls\r");
+    CHECK(strstr(a.status, "attack = 2d12+3, bite = d8 + 1") != NULL);
+
+    CASE("a saved roll may be the action roll, and keeps its colors");
+    press(&a, ":roll swing = duality +2\r");
+    press(&a, ":roll swing\r");
+    CHECK(strstr(a.status, "swing: Duality +2 = ") != NULL);
+    CHECK_EQ(a.nstatus_span, 2);
+    CHECK(a.status_span[0].at > 7);                    /* shifted past the name */
+    CHECK_EQ(a.status[a.status_span[0].at - 1] != '\0', 1);
+    press(&a, ":roll raise = +1\r");
+    press(&a, ":roll raise\r");
+    CHECK(strstr(a.status, "raise: Duality +1 = ") != NULL);
+
+    CASE("plain dice always win over a name, and a name may not be dice");
+    press(&a, ":roll d20 = 3d6\r");
+    CHECK(strstr(a.status, "already a roll of its own") != NULL);
+    press(&a, ":roll duality = 3d6\r");
+    CHECK(strstr(a.status, "already a roll of its own") != NULL);
+    press(&a, ":roll 2d12+3\r");
+    CHECK(strstr(a.status, "attack:") == NULL);
+    press(&a, ":roll bad = 2x6\r");
+    CHECK(strstr(a.status, ":roll -") != NULL);
+    press(&a, ":roll 7up = d6\r");
+    CHECK(strstr(a.status, "starting with a letter") != NULL);
+    press(&a, ":roll arrow = d6\r");
+    press(&a, ":roll a\r");
+    CHECK(strstr(a.status, "more than one roll") != NULL);
+    press(&a, ":roll arrow =\r");
+    press(&a, ":roll nothing\r");
+    CHECK(strstr(a.status, "no roll called nothing") != NULL);
+
+    CASE("named rolls are saved as version 5 and read back");
+    {
+        char err[128];
+        CHECK_EQ(mapio_save(a.map, path, err, sizeof err), 0);
+        char *text = slurp(path);
+        if (text) {
+            CHECK_EQ(strncmp(text, "VTT 5\n", 6), 0);
+            CHECK(strstr(text, "roll attack \"2d12+3\"\n") != NULL);
+            CHECK(strstr(text, "roll swing \"duality +2\"\n") != NULL);
+            free(text);
+        }
+        Map *back = mapio_load(path, err, sizeof err);
+        CHECK(back != NULL);
+        if (back) {
+            CHECK_EQ(strcmp(back->rolls[0].name, "attack"), 0);
+            CHECK_EQ(strcmp(back->rolls[1].expr, "d8 + 1"), 0);
+            map_free(back);
+        }
+    }
+
+    CASE(":roll NAME = with nothing after it forgets the roll");
+    press(&a, ":roll bite =\r");
+    CHECK(strstr(a.status, "forgot bite") != NULL);
+    press(&a, ":roll bite\r");
+    CHECK(strstr(a.status, "no roll called bite") != NULL);
+    press(&a, ":roll att =\r");                       /* a prefix will not do for forgetting */
+    CHECK(strstr(a.status, "no roll called att") != NULL);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
+/* ---------------------------------------------------------- turn order */
+
+void test_turns(void)
+{
+    Map *m = map_new(12, 8, "turns");
+    map_fill_tiles(m, 0, 0, 11, 7, TILE_FLOOR);
+    Undo u;
+    undo_init(&u);
+
+    Token aria = { 1, 1, 1, TOKEN_PLAYER, "Aria" };
+    Token ogre = { 5, 1, 2, TOKEN_ENEMY,  "Ogre" };
+    Token bram = { 1, 3, 1, TOKEN_PLAYER, "Bram" };
+    Token dax  = { 1, 5, 1, TOKEN_PLAYER, "Dax" };
+    Token eel  = { 8, 5, 1, TOKEN_ENEMY,  "Eel" };
+    tokens_add(&m->tokens, aria);   /* 0 */
+    tokens_add(&m->tokens, ogre);   /* 1 */
+    tokens_add(&m->tokens, bram);   /* 2 */
+    tokens_add(&m->tokens, dax);    /* 3 */
+    tokens_add(&m->tokens, eel);    /* 4 */
+
+    /* Nobody has rolled initiative: the walk is the list, exactly as the
+     * cycle keys always went. */
+    CASE("with no fight the walk is list order, either way, per kind");
+    CHECK_EQ(turn_count(m), 0);
+    CHECK_EQ(turn_acting(m), -1);
+    CHECK_EQ(turn_walk(m, -1, 1, TOKEN_ANY_KIND), 0);
+    CHECK_EQ(turn_walk(m, 0, 1, TOKEN_ANY_KIND), 1);
+    CHECK_EQ(turn_walk(m, 4, 1, TOKEN_ANY_KIND), 0);           /* wraps */
+    CHECK_EQ(turn_walk(m, 0, -1, TOKEN_ANY_KIND), 4);
+    CHECK_EQ(turn_walk(m, 1, 1, TOKEN_ENEMY), 4);
+    CHECK_EQ(turn_walk(m, 3, 1, TOKEN_PLAYER), 0);
+    CHECK_EQ(turn_advance(m, &u, 1), TURN_NO_ORDER);
+    char buf[200];
+    turn_status(m, buf, sizeof buf);
+    CHECK_EQ(buf[0], '\0');
+
+    CASE("joining gives a creature a number; highest first, ties by who was placed first");
+    turn_join(m, &u, 2, 15);
+    turn_join(m, &u, 1, 15);
+    turn_join(m, &u, 0, 18);
+    CHECK_EQ(turn_count(m), 3);
+    CHECK_EQ(turn_walk(m, -1, 1, TOKEN_ANY_KIND), 0);           /* Aria 18 */
+    CHECK_EQ(turn_walk(m, 0, 1, TOKEN_ANY_KIND), 1);            /* Ogre 15, placed before... */
+    CHECK_EQ(turn_walk(m, 1, 1, TOKEN_ANY_KIND), 2);            /* ...Bram 15 */
+    CHECK_EQ(turn_walk(m, 2, 1, TOKEN_ANY_KIND), 3);            /* then those not in it */
+    CHECK_EQ(turn_walk(m, 4, 1, TOKEN_ANY_KIND), 0);
+    CHECK_EQ(turn_walk(m, 0, 1, TOKEN_PLAYER), 2);              /* the friendly track skips the ogre */
+    CHECK_EQ(turn_walk(m, 0, -1, TOKEN_ANY_KIND), 4);
+    turn_status(m, buf, sizeof buf);
+    CHECK(strstr(buf, "3 in the order") != NULL);
+
+    CASE("the number can change, and the order with it");
+    turn_join(m, &u, 2, 20);                                    /* Bram jumps the queue */
+    CHECK_EQ(turn_walk(m, -1, 1, TOKEN_ANY_KIND), 2);
+    turn_join(m, &u, 2, 15);
+    CHECK_EQ(turn_walk(m, -1, 1, TOKEN_ANY_KIND), 0);
+
+    CASE("the first advance starts round 1 at the top; a lap is a new round");
+    CHECK_EQ(turn_advance(m, &u, 1), 0);
+    CHECK_EQ(m->round, 1);
+    CHECK_EQ(turn_acting(m), 0);
+    CHECK_EQ(turn_advance(m, &u, 1), 1);
+    CHECK_EQ(turn_advance(m, &u, 1), 2);
+    CHECK_EQ(m->round, 1);
+    CHECK_EQ(turn_advance(m, &u, 1), 0);
+    CHECK_EQ(m->round, 2);
+    int acting = 0;
+    for (int i = 0; i < m->tokens.n; i++) if (m->tokens.v[i].turn & TURN_ACTING) acting++;
+    CHECK_EQ(acting, 1);
+
+    CASE("the readouts name the round, the actor and who is next");
+    turn_status(m, buf, sizeof buf);
+    CHECK_EQ(strcmp(buf, "Round 2 - Aria's turn, then Ogre, Bram"), 0);
+    turn_list(m, buf, sizeof buf);
+    CHECK_EQ(strcmp(buf, "Round 2: Aria 18*, Ogre 15, Bram 15"), 0);
+
+    CASE("stepping back unwinds the lap, and stops at the start of the fight");
+    CHECK_EQ(turn_advance(m, &u, -1), 2);
+    CHECK_EQ(m->round, 1);
+    CHECK_EQ(turn_advance(m, &u, -2), 0);
+    CHECK_EQ(turn_advance(m, &u, -1), TURN_AT_START);
+    CHECK_EQ(turn_acting(m), 0);
+    CHECK_EQ(m->round, 1);
+    CHECK_EQ(turn_advance(m, &u, 2), 2);
+    CHECK_EQ(turn_advance(m, &u, -5), TURN_AT_START);           /* all or nothing */
+    CHECK_EQ(turn_acting(m), 2);
+
+    CASE("a count moves several places, laps and all");
+    CHECK_EQ(turn_advance(m, &u, 4), 0);                        /* Bram -> Aria, Ogre, Bram, Aria */
+    CHECK_EQ(m->round, 3);
+
+    CASE("an advance is one undo step, round included");
+    CHECK_EQ(turn_advance(m, &u, 1), 1);
+    CHECK_EQ(undo_undo(&u, m), 1);
+    CHECK_EQ(turn_acting(m), 0);
+    CHECK_EQ(m->round, 3);
+    CHECK_EQ(undo_undo(&u, m), 1);                              /* the count-of-four advance */
+    CHECK_EQ(turn_acting(m), 2);
+    CHECK_EQ(m->round, 1);
+    CHECK_EQ(undo_redo(&u, m), 1);
+    CHECK_EQ(turn_acting(m), 0);
+    CHECK_EQ(m->round, 3);
+
+    /* A game that passes a spotlight needs only this half. */
+    CASE("the turn can be handed to anyone, in the order or not");
+    turn_take(m, &u, 3);                                        /* Dax: not in the order */
+    CHECK_EQ(turn_acting(m), 3);
+    CHECK_EQ(m->tokens.v[0].turn & TURN_ACTING, 0);
+    turn_status(m, buf, sizeof buf);
+    CHECK_EQ(strcmp(buf, "Round 3 - Dax's turn"), 0);
+    CHECK_EQ(turn_advance(m, &u, -1), TURN_AT_START);           /* no place to step back from */
+    CHECK_EQ(turn_advance(m, &u, 1), 0);                        /* on from an outsider: the top */
+    CHECK_EQ(m->round, 3);                                      /* and not a lap */
+    turn_take(m, &u, 2);
+    CHECK_EQ(turn_advance(m, &u, 1), 0);                        /* from Bram, the last: a lap */
+    CHECK_EQ(m->round, 4);
+
+    CASE("leaving the order on your own turn passes it on first");
+    turn_take(m, &u, 1);
+    turn_leave(m, &u, 1);
+    CHECK_EQ(m->tokens.v[1].turn, 0);
+    CHECK_EQ(turn_acting(m), 2);
+    CHECK_EQ(turn_count(m), 2);
+    CHECK_EQ(undo_undo(&u, m), 1);                              /* one step back: all of it */
+    CHECK_EQ(turn_acting(m), 1);
+    CHECK_EQ(turn_count(m), 3);
+
+    CASE("removing the actor passes the turn, in the same undo step");
+    turn_take(m, &u, 2);                                        /* Bram, last in the order */
+    int round_before = m->round;
+    undo_begin(&u);
+    turn_before_remove(m, &u, 2);
+    undo_del_token(&u, m, 2);
+    turn_settle(m, &u);
+    undo_end(&u);
+    CHECK_EQ(m->tokens.n, 4);
+    CHECK_EQ(turn_acting(m), 0);                                /* round the corner to Aria */
+    CHECK_EQ(m->round, round_before + 1);
+    CHECK_EQ(undo_undo(&u, m), 1);
+    CHECK_EQ(m->tokens.n, 5);
+    CHECK_EQ(turn_acting(m), 2);
+    CHECK_EQ(m->round, round_before);
+    CHECK_EQ(strcmp(m->tokens.v[2].label, "Bram"), 0);
+    CHECK_EQ(m->tokens.v[2].init, 15);
+
+    char  err[128];
+    char *text = NULL;
+    Map  *back = NULL;
+
+    CASE("the last one out ends the fight");
+    Map *solo = map_new(4, 4, "solo");
+    tokens_add(&solo->tokens, aria);
+    Undo su;
+    undo_init(&su);
+    turn_join(solo, &su, 0, 10);
+    CHECK_EQ(turn_advance(solo, &su, 1), 0);
+    CHECK_EQ(turn_advance(solo, &su, 1), 0);                    /* alone: every turn is a lap */
+    CHECK_EQ(solo->round, 2);
+    turn_status(solo, buf, sizeof buf);
+    CHECK_EQ(strcmp(buf, "Round 2 - Aria's turn"), 0);
+    turn_leave(solo, &su, 0);
+    CHECK_EQ(turn_acting(solo), -1);
+    CHECK_EQ(solo->round, 0);
+    undo_free(&su);
+    map_free(solo);
+
+    CASE("ending the fight clears everyone, and is one step to take back");
+    CHECK_EQ(turn_clear(m, &u), 3);
+    CHECK_EQ(turn_count(m), 0);
+    CHECK_EQ(turn_acting(m), -1);
+    CHECK_EQ(m->round, 0);
+    CHECK_EQ(undo_undo(&u, m), 1);
+    CHECK_EQ(turn_count(m), 3);
+    CHECK_EQ(turn_acting(m), 2);
+    CHECK_EQ(m->round, round_before);
+
+    /* A fight is combat state, like the markers version 3 was for: a file
+     * that holds one says 4 so an older build refuses it instead of quietly
+     * dropping whose turn it is. A map with no fight still says 3. */
+    /* A game with no initiative: the turn is a side. */
+    CASE("under a spotlight ruleset the turn passes between the players and the GM");
+    str_lcpy(m->ruleset, "daggerheart", sizeof m->ruleset);
+    turn_clear(m, &u);
+    CHECK_EQ(turn_spotlight_ruleset(m), 1);
+    CHECK_EQ(m->spotlight, SPOTLIGHT_PLAYERS);
+    turn_status(m, buf, sizeof buf);
+    CHECK_EQ(strcmp(buf, "Players' spotlight"), 0);
+    turn_flip_spotlight(m, &u);
+    CHECK_EQ(m->spotlight, SPOTLIGHT_GM);
+    turn_status(m, buf, sizeof buf);
+    CHECK_EQ(strcmp(buf, "GM spotlight"), 0);
+    turn_take(m, &u, 0);                                        /* Aria, a player */
+    CHECK_EQ(m->spotlight, SPOTLIGHT_PLAYERS);                  /* the side follows the creature */
+    turn_status(m, buf, sizeof buf);
+    CHECK_EQ(strcmp(buf, "Players' spotlight - Aria"), 0);
+    turn_take(m, &u, 1);                                        /* the ogre */
+    CHECK_EQ(m->spotlight, SPOTLIGHT_GM);
+    turn_flip_spotlight(m, &u);                                 /* across, and nobody holds it */
+    CHECK_EQ(m->spotlight, SPOTLIGHT_PLAYERS);
+    CHECK_EQ(turn_acting(m), -1);
+    CHECK_EQ(undo_undo(&u, m), 1);                              /* one step: side and holder */
+    CHECK_EQ(m->spotlight, SPOTLIGHT_GM);
+    CHECK_EQ(turn_acting(m), 1);
+    CHECK_EQ(turn_panel_wanted(m), 1);
+
+    CASE("a spotlight fight is version 4 too, and ends with the fight");
+    CHECK_EQ(mapio_save(m, "/tmp/vtt-spot.vtt", err, sizeof err), 0);
+    text = slurp("/tmp/vtt-spot.vtt");
+    if (text) {
+        CHECK_EQ(strncmp(text, "VTT 4\n", 6), 0);
+        CHECK(strstr(text, "spotlight gm\n") != NULL);
+        free(text);
+    }
+    back = mapio_load("/tmp/vtt-spot.vtt", err, sizeof err);
+    CHECK(back != NULL);
+    if (back) { CHECK_EQ(back->spotlight, SPOTLIGHT_GM); CHECK_EQ(turn_acting(back), 1); map_free(back); }
+    unlink("/tmp/vtt-spot.vtt");
+    turn_clear(m, &u);
+    CHECK_EQ(m->spotlight, SPOTLIGHT_PLAYERS);
+    m->ruleset[0] = '\0';
+    CHECK_EQ(turn_panel_wanted(m), 0);
+
+    /* Back on numbers for the file tests below. */
+    turn_join(m, &u, 0, 18); turn_join(m, &u, 1, 15); turn_join(m, &u, 2, 15);
+    turn_advance(m, &u, 3);
+
+    CASE("a fight round-trips through the file, as version 4");
+    turn_take(m, &u, 3);                                        /* an outsider holds the turn */
+    char path[128];
+    snprintf(path, sizeof path, "/tmp/vtt-turns-%ld.vtt", (long)getpid());
+    CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+    text = slurp(path);
+    CHECK(text != NULL);
+    if (text) {
+        CHECK_EQ(strncmp(text, "VTT 4\n", 6), 0);
+        CHECK(strstr(text, "tokenturn 18\n") != NULL);
+        CHECK(strstr(text, "tokenturn - acting\n") != NULL);
+        char want[32];
+        snprintf(want, sizeof want, "round %d\n", m->round);
+        CHECK(strstr(text, want) != NULL);
+        free(text);
+    }
+    back = mapio_load(path, err, sizeof err);
+    CHECK(back != NULL);
+    if (back) {
+        CHECK_EQ(back->round, m->round);
+        CHECK_EQ(back->tokens.n, m->tokens.n);
+        for (int i = 0; i < m->tokens.n && i < back->tokens.n; i++)
+            CHECK_EQ(token_equal(&back->tokens.v[i], &m->tokens.v[i]), 1);
+        map_free(back);
+    }
+
+    CASE("a map with no fight is still written as version 3");
+    turn_clear(m, &u);
+    CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+    text = slurp(path);
+    if (text) {
+        CHECK_EQ(strncmp(text, "VTT 3\n", 6), 0);
+        CHECK(strstr(text, "tokenturn") == NULL);
+        CHECK(strstr(text, "round") == NULL);
+        free(text);
+    }
+
+    CASE("a file claiming two actors loads with one");
+    FILE *f = fopen(path, "w");
+    CHECK(f != NULL);
+    if (f) {
+        fputs("VTT 4\nname x\nsize 2 2\nzoom 1\ntiles\n..\n..\nvedges\n   \n   \nhedges\n  \n  \n  \n"
+              "token player 0 0 1 \"A\"\ntokenturn 12 acting\n"
+              "token enemy 1 0 1 \"B\"\ntokenturn 9 acting\n"
+              "token enemy 1 1 1 \"C\"\ntokenturn nonsense\nround 5\n", f);
+        fclose(f);
+        back = mapio_load(path, err, sizeof err);
+        CHECK(back != NULL);
+        if (back) {
+            CHECK_EQ(turn_acting(back), 0);
+            CHECK_EQ(back->tokens.v[1].turn, TURN_IN);
+            CHECK_EQ(back->tokens.v[2].turn, 0);                /* a bad number joins nothing */
+            CHECK_EQ(back->round, 5);
+            map_free(back);
+        }
+    }
+    unlink(path);
+
+    undo_free(&u);
+    map_free(m);
+}
+
+void test_turn_keys(void)
+{
+    Sandbox sb = sandbox_enter("turnkeys");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+
+    write_map_file(sb.dir, "fight.vtt");
+    char path[600];
+    snprintf(path, sizeof path, "%s/fight.vtt", sb.dir);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 24);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+
+    a.ed.cx = 0; a.ed.cy = 0; press(&a, "ipAria\r");    /* 0 */
+    a.ed.cx = 1; a.ed.cy = 0; press(&a, "ieOgre\r");    /* 1 */
+    a.ed.cx = 0; a.ed.cy = 1; press(&a, "ipBram\r");    /* 2 */
+    CHECK_EQ(a.map->tokens.n, 3);
+
+    CASE("a with no order says how to make one; a and A are no longer retired");
+    press(&a, "a");
+    CHECK(strstr(a.status, "no turn order") != NULL);
+    CHECK(strstr(a.status, "s i") != NULL);
+    press(&a, "A");
+    CHECK(strstr(a.status, "gone") == NULL);
+
+    CASE("s i prompts for a number and puts the creature in the order");
+    press(&a, "si");                                     /* Bram is still selected */
+    CHECK_EQ(a.modal, MODAL_PROMPT);
+    CHECK_EQ(a.prompt_what, PROMPT_INITIATIVE);
+    press(&a, "9\r");
+    CHECK_EQ(a.map->tokens.v[2].turn, TURN_IN);
+    CHECK_EQ(a.map->tokens.v[2].init, 9);
+    CHECK(strstr(a.status, "Bram joins the turn order at 9") != NULL);
+    play_focus(&a.play, 0); press(&a, "si18\r");
+    play_focus(&a.play, 1); press(&a, "si12\r");
+    press(&a, "sinope\r");
+    CHECK(strstr(a.status, "initiative is a number") != NULL);
+    CHECK_EQ(a.map->tokens.v[1].init, 12);
+    press(&a, "si");                                     /* the prompt opens on the old number */
+    CHECK_EQ(strcmp(a.prompt.buf, "12"), 0);
+    press(&a, "\x1b");
+
+    CASE("t, f and e walk in turn order once there is one");
+    play_focus(&a.play, -1);
+    press(&a, "t"); CHECK_EQ(a.play.sel, 0);             /* Aria 18 */
+    press(&a, "t"); CHECK_EQ(a.play.sel, 1);             /* Ogre 12 */
+    press(&a, "t"); CHECK_EQ(a.play.sel, 2);             /* Bram 9 */
+    press(&a, "T"); CHECK_EQ(a.play.sel, 1);
+    press(&a, "f"); CHECK_EQ(a.play.sel, 2);
+    press(&a, "f"); CHECK_EQ(a.play.sel, 0);
+    CHECK_EQ(turn_acting(a.map), -1);                    /* looking is free: nobody's turn yet */
+
+    CASE("a moves the fight on, selects whoever is up, and says so up top");
+    press(&a, "a");
+    CHECK_EQ(turn_acting(a.map), 0);
+    CHECK_EQ(a.play.sel, 0);
+    CHECK_EQ(a.map->round, 1);
+    CHECK(strstr(a.status, "round 1 - Aria's turn") != NULL);
+    press(&a, "2a");
+    CHECK_EQ(turn_acting(a.map), 2);
+    CHECK_EQ(a.play.sel, 2);
+    press(&a, "a");
+    CHECK_EQ(a.map->round, 2);
+    rnd_begin(&r);
+    app_draw(&a);
+    ByteBuf frame;
+    bb_init(&frame, 32768);
+    rnd_dump(&r, &frame);
+    bb_putc(&frame, '\0');
+    CHECK(strstr(frame.data, "Round 2 - Aria's turn, then Ogre, Bram") != NULL);
+    bb_free(&frame);
+
+    CASE("the actor wears the turn color above and below");
+    int bars = 0;
+    for (size_t i = 0; i < r.ncells; i++) if (r.back[i].fg == a.th->turn) bars++;
+    CHECK(bars >= 6);
+    CHECK(contrast(a.th->turn, a.th->bg) > 10.0);
+
+    CASE("A steps back, u takes an advance back, and the start is the start");
+    press(&a, "A");
+    CHECK_EQ(turn_acting(a.map), 2);
+    CHECK_EQ(a.map->round, 1);
+    press(&a, "a");
+    press(&a, "u");
+    CHECK_EQ(turn_acting(a.map), 2);
+    CHECK_EQ(a.map->round, 1);
+    press(&a, "9A");
+    CHECK(strstr(a.status, "start of the fight") != NULL);
+    CHECK_EQ(turn_acting(a.map), 2);
+
+    CASE("s t hands the turn over out of order");
+    play_focus(&a.play, 1);
+    press(&a, "st");
+    CHECK_EQ(turn_acting(a.map), 1);
+    CHECK(strstr(a.status, "Ogre takes the turn") != NULL);
+
+    CASE("the turn cannot move while a creature is in hand");
+    a.ed.cx = 1; a.ed.cy = 0;                            /* the cursor, not just the focus */
+    press(&a, "\r");                                     /* pick the ogre up */
+    CHECK_EQ(a.play.sel, 1);
+    CHECK_EQ(a.play.grabbed, 1);
+    press(&a, "a");
+    CHECK(strstr(a.status, "put it down first") != NULL);
+    CHECK_EQ(turn_acting(a.map), 1);
+    press(&a, "\x1b");
+
+    CASE("removing the actor passes the turn; u brings both back");
+    press(&a, "d");
+    CHECK_EQ(a.map->tokens.n, 2);
+    CHECK_EQ(turn_acting(a.map), 1);                     /* Bram, who was next, now index 1 */
+    CHECK_EQ(strcmp(a.map->tokens.v[1].label, "Bram"), 0);
+    press(&a, "u");
+    CHECK_EQ(a.map->tokens.n, 3);
+    CHECK_EQ(turn_acting(a.map), 1);
+    CHECK_EQ(strcmp(a.map->tokens.v[1].label, "Ogre"), 0);
+
+    CASE("a copy keeps its number and never the turn");
+    a.ed.cx = 1; a.ed.cy = 0;
+    play_focus(&a.play, 1);
+    press(&a, "y");
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "p");
+    CHECK_EQ(a.map->tokens.n, 4);
+    CHECK_EQ(a.map->tokens.v[3].turn, TURN_IN);
+    CHECK_EQ(a.map->tokens.v[3].init, 12);
+    int actors = 0;
+    for (int i = 0; i < a.map->tokens.n; i++) if (a.map->tokens.v[i].turn & TURN_ACTING) actors++;
+    CHECK_EQ(actors, 1);
+
+    CASE("a blank answer to s i leaves the order");
+    play_focus(&a.play, 3);
+    press(&a, "si\025\r");                               /* ctrl-u clears the old number */
+    CHECK_EQ(a.map->tokens.v[3].turn, 0);
+    CHECK(strstr(a.status, "leaves the turn order") != NULL);
+
+    CASE(":turns reads the order out, :turns off ends the fight, u undoes that too");
+    press(&a, ":turns\r");
+    CHECK(strstr(a.status, "Aria 18, Ogre 12*, Bram 9") != NULL);
+    press(&a, ":turns off\r");
+    CHECK_EQ(turn_count(a.map), 0);
+    CHECK_EQ(a.map->round, 0);
+    CHECK(strstr(a.status, "the fight is over") != NULL);
+    press(&a, ":turns off\r");
+    CHECK(strstr(a.status, "no fight to end") != NULL);
+    press(&a, ":turns\r");
+    CHECK(strstr(a.status, "no turn order") != NULL);
+    press(&a, "u");
+    CHECK_EQ(turn_count(a.map), 3);
+    CHECK_EQ(turn_acting(a.map), 1);
+
+    CASE("the panel appears with the fight, takes its width from the map, and can be turned off");
+    press(&a, ":turns off\r");                           /* a known fight: Aria 18, Ogre 12 */
+    play_focus(&a.play, 0); press(&a, "si18\r");
+    play_focus(&a.play, 1); press(&a, "si12\r");
+    CHECK_EQ(a.map->tokens.n, 4);
+    press(&a, "a");
+    rnd_begin(&r);
+    app_draw(&a);
+    CHECK_EQ(a.ed.view.view.x + a.ed.view.view.w, r.w - TURN_PANEL_W);
+    bb_init(&frame, 32768);
+    rnd_dump(&r, &frame);
+    bb_putc(&frame, '\0');
+    CHECK(strstr(frame.data, "Turn order") != NULL);
+    CHECK(strstr(frame.data, "Round 1") != NULL);
+    CHECK(strstr(frame.data, "\u25b6  18  Aria") != NULL);
+    CHECK(strstr(frame.data, "   12  Ogre") != NULL);
+    CHECK(strstr(frame.data, "2 not in the fight") != NULL);
+    bb_free(&frame);
+    press(&a, ":panel off\r");
+    rnd_begin(&r);
+    app_draw(&a);
+    CHECK_EQ(a.ed.view.view.x + a.ed.view.view.w, r.w);
+    press(&a, ":panel\r");
+    rnd_begin(&r);
+    app_draw(&a);
+    CHECK_EQ(a.ed.view.view.x + a.ed.view.view.w, r.w - TURN_PANEL_W);
+    press(&a, ":turns off\r");
+    rnd_begin(&r);
+    app_draw(&a);
+    CHECK_EQ(a.ed.view.view.x + a.ed.view.view.w, r.w);   /* no fight, no panel */
+    press(&a, "u");
+
+    /* Daggerheart: no numbers, a passes the spotlight across, s t hands it
+     * to a creature and the side follows, and the panel shows the sides. */
+    CASE("under daggerheart a passes the spotlight and the panel shows the sides");
+    press(&a, ":turns off\r");
+    press(&a, ":ruleset daggerheart\r");
+    rnd_begin(&r);
+    app_draw(&a);
+    bb_init(&frame, 32768);
+    rnd_dump(&r, &frame);
+    bb_putc(&frame, '\0');
+    CHECK(strstr(frame.data, "Spotlight") != NULL);
+    CHECK(strstr(frame.data, "\u25b6 Players") != NULL);
+    CHECK(strstr(frame.data, "Players' spotlight") != NULL);   /* the title bar too */
+    bb_free(&frame);
+    press(&a, "a");
+    CHECK_EQ(a.map->spotlight, SPOTLIGHT_GM);
+    CHECK(strstr(a.status, "GM has the spotlight") != NULL);
+    press(&a, "3A");                                     /* a count means nothing here */
+    CHECK_EQ(a.map->spotlight, SPOTLIGHT_PLAYERS);
+    play_focus(&a.play, 1);                              /* the ogre */
+    press(&a, "st");
+    CHECK_EQ(a.map->spotlight, SPOTLIGHT_GM);
+    rnd_begin(&r);
+    app_draw(&a);
+    bb_init(&frame, 32768);
+    rnd_dump(&r, &frame);
+    bb_putc(&frame, '\0');
+    CHECK(strstr(frame.data, "\u25b6 GM") != NULL);
+    CHECK(strstr(frame.data, "    Ogre") != NULL);
+    CHECK(strstr(frame.data, "GM spotlight - Ogre") != NULL);
+    bb_free(&frame);
+    press(&a, "u");
+    CHECK_EQ(a.map->spotlight, SPOTLIGHT_PLAYERS);
+    press(&a, ":ruleset none\r");
+
+    CASE("the s prefix lists its new members");
+    press(&a, "s");
+    CHECK(strstr(a.status, "initiative") != NULL);
+    press(&a, "z");
+    CHECK(strstr(a.status, "i initiative") != NULL);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}

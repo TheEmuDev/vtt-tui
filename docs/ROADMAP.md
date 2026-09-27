@@ -27,5 +27,5 @@ any code, and moves to the README when it ships. Ideas not yet decided live in I
    over (the town to the dungeon): links and floors across a campaign. The largest: it
    touches opening maps, the autosave and the players' connection.
 
-**Housekeeping due alongside** (CLAUDE.md's watch list): `tests/run.c` is at 15.6k lines --
-split it by area. (The `:` command chain became a table, 2026-09-27.)
+**Housekeeping** (2026-09-27): the `:` command chain became a table, and `tests/run.c` was
+split by area. CLAUDE.md's watch list keeps what is left.

@@ -89,12 +89,15 @@ Bench scripts replay whole; no toggles — use loop-neutral pairs (`llllhhhh`,
 | `watch.c` | `vtt --watch host:port`, the read-only terminal mirror; `:mirror` spawns it in `$TERMINAL` |
 | `web/index.html` → `src/webpage.c` | the phone page; edit the HTML, run `tools/embed.sh`. Its copy loop is `tools/blit_wasm.py`, a hand-assembled wasm module pasted in as base64 |
 | `grid.c`, `token.c`, `draw.c`, `render.c`, `term.c` | drawing down to the diffing renderer and the terminal |
-| `tests/run.c` | one file, suites in a table at the bottom; `tests/fuzz_mapio.c` and `tests/fuzz_ctl.c` are libFuzzer only |
+| `tests/` | `run.c` is the suite table and `main` only; the suites live by area in `test_core.c`, `test_screens.c`, `test_play.c`, `test_session.c`, `test_net.c`, `test_fog.c`, `test_ctl.c`, `test_places.c`; `harness.h` holds the `CHECK` macros, the shared types (`Sandbox`, `WireCatch`, `CtlReader`) and every helper or suite used across files (a helper used in one file stays `static` there); `harness.c` the counters. `tests/fuzz_mapio.c` and `tests/fuzz_ctl.c` are libFuzzer only |
 
 ## Writing tests
 
 - `press(&a, "keys")` feeds bytes through the real parser; `\r` is enter, `\x1b`
   esc, `\025` ctrl-u (clears a prompt). `Key k = { KEY_ENTER, 0, 0 }` for raw keys.
+- A new suite: a `void test_x(void)` in the file for its area (make it non-static and
+  declare it in `harness.h`), then a row in `run.c`'s table. A helper another file needs
+  moves its prototype to `harness.h` and loses `static`.
 - App tests: `Sandbox sb = sandbox_enter("name")`, `write_map_file(sb.dir, "fight.vtt")`
   (a **2×2 empty map** — place tokens with `ipAria\r` after setting `a.ed.cx/cy`),
   `app_open_map`, `Key f2 = {KEY_F2,0,0}` for play mode, `sandbox_leave(&sb)`.
@@ -144,10 +147,6 @@ Tech debt looked at in the 2026-09-26 health check and left on purpose. Each
 has the point at which it stops being cheap to ignore; check it whenever the
 code it names is touched, and move an item out of here once it is fixed.
 
-- **`tests/run.c` is one file** (13k+ lines, 100+ suites). Fine while it builds
-  in seconds and the suite table stays the index. Split by area (net, fog, map
-  tools, control, play) when a change regularly means scrolling through
-  unrelated suites, or the ASan build of it passes about 30 s.
 - **Squares and regions are parsed in two places:** `maptools_region` (clips,
   takes a bare row `5:6`) and app_ctl.c's `region` (strict, refuses off-map).
   Two is within the rule of three; a third caller makes them one function
