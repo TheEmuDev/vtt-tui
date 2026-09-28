@@ -237,11 +237,12 @@ static void recover_autosave(App *a)
         /* Set aside rather than deleted, and so never offered again. */
         char aside[sizeof a->pending_file + 16];
         snprintf(aside, sizeof aside, "%s.damaged", a->pending_file);
-        rename(a->pending_file, aside);
-        const char *base = strrchr(aside, '/');
+        int kept = rename(a->pending_file, aside) == 0;
+        const char *shown = kept ? aside : a->pending_file;
+        const char *base = strrchr(shown, '/');
         char body[192];
-        snprintf(body, sizeof body, "It stops short: the computer went off before it was written out. "
-                 "The map is open as last saved; the copy is kept as %.60s.", base ? base + 1 : aside);
+        snprintf(body, sizeof body, "Kept as %.80s. The map is open as last saved.%s",
+                 base ? base + 1 : shown, kept ? "" : " n at the next open discards it.");
         show_message(a, "The autosave is incomplete", body);
         return;
     }
@@ -690,10 +691,13 @@ static void app_rename_map(App *a, const char *from, const char *typed)
     }
 
     /* A recovery copy left by a crash follows the map it belongs to. */
-    char from_copy[MAP_PATH_MAX + 16], to_copy[MAP_PATH_MAX + 16];
-    snprintf(from_copy, sizeof from_copy, "%s.autosave", from);
-    snprintf(to_copy, sizeof to_copy, "%s.autosave", to);
-    if (rename(from_copy, to_copy) != 0 && errno != ENOENT) unlink(from_copy);
+    static const char *const copies[] = { ".autosave", ".autosave.damaged" };  /* the second, one recovery refused */
+    for (int i = 0; i < 2; i++) {
+        char from_copy[MAP_PATH_MAX + 24], to_copy[MAP_PATH_MAX + 24];
+        snprintf(from_copy, sizeof from_copy, "%s%s", from, copies[i]);
+        snprintf(to_copy, sizeof to_copy, "%s%s", to, copies[i]);
+        if (rename(from_copy, to_copy) != 0 && errno != ENOENT) unlink(from_copy);
+    }
 
     int titled = retitle_map(to, base);
     select_path(a, to);
@@ -741,8 +745,10 @@ static void app_delete_map(App *a, const char *path)
 
     /* Its recovery copy goes with it, or a new map under this name would be
      * offered the deleted one's contents. */
-    char copy[MAP_PATH_MAX + 16];
+    char copy[MAP_PATH_MAX + 24];
     snprintf(copy, sizeof copy, "%s.autosave", path);
+    unlink(copy);
+    snprintf(copy, sizeof copy, "%s.autosave.damaged", path);
     unlink(copy);
 
     if (unlink(path) != 0) {

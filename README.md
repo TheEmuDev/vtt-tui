@@ -304,11 +304,12 @@ mode. A map holds up to 64 square notes. Notes are never shown to the players.
 
 Play mode is for running the encounter. `F2` switches to it.
 
-**The selected creature.** Keys that act on a creature (`c`, `b`, `r`, `s a`, `s v`, `s i`,
-`s t` and others) act on the *selected* one: the creature you last placed or picked up,
+**The selected creature.** Keys that act on a creature (`c`, `r`, `s a`, `s v`, `s i`, `s t`
+and others) act on the *selected* one: the creature you last placed or picked up,
 jumped to with `t` `f` `e` or `/`, or gave the turn. It is ringed on the map and named on the
 status line, and it stays selected when the cursor moves away. `esc` clears the selection;
-with nothing selected, those keys act on the creature under the cursor.
+with nothing selected, those keys act on the creature under the cursor. `b` resizes only a
+selected creature; with none it sets the size of the next one placed.
 
 | key | action |
 |-----|--------|
@@ -1072,6 +1073,7 @@ W120 unreachable-room  room K2   18 squares, no door leads to it from room B2
 | `W023 link-dropped` | a link with an end off the map, its ends overlapping, or on another link's squares |
 | `W024 floor-dropped` | a floor naming no area, marked twice, or overlapping another |
 | `W025 scene-dropped` | a scene with a bad name or box, a name used twice, a seventeenth, or no `endscene` |
+| `W026 after-end` | lines after an `end` line, which ends the file |
 | `W102 door-to-void` | a door or window leading into void |
 | `W103 wall-in-void` | a wall with no map on either side |
 | `W104 door-loose` | a door or window with no wall at either end |

@@ -661,7 +661,7 @@ void test_roll_command(void)
     CHECK(strstr(a.status, ":roll bite remove removes it") != NULL);
     press(&a, ":roll bite\r");
     CHECK(strstr(a.status, "no roll called bite") == NULL);   /* still there */
-    press(&a, ":roll bite remove\r");
+    press(&a, ":roll bite  remove \r");               /* spaces are forgiven */
     CHECK(strstr(a.status, "removed roll bite") != NULL);
     press(&a, ":roll bite\r");
     CHECK(strstr(a.status, "no roll called bite") != NULL);

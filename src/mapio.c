@@ -826,7 +826,15 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
     memset(&map_tokens, 0, sizeof map_tokens);
     int nfloors = 0;
     while (read_line(ld, line, sizeof line) >= 0) {
-        if (!strcmp(line, "end")) break;              /* an autosave's last line */
+        if (!strcmp(line, "end")) {                    /* an autosave's last line */
+            while (ld->sink && read_line(ld, line, sizeof line) >= 0)
+                if (line[strspn(line, " ")]) {
+                    diag(ld, ld->line, -1, "W026", "after-end",
+                         "ignored: everything from here on, after the 'end' line");
+                    break;
+                }
+            break;
+        }
         if (!strncmp(line, "scene ", 6) || !strcmp(line, "endscene")) {
             if (in_scene) {
                 /* The block closes: kept, or thrown away. */
@@ -1097,6 +1105,10 @@ void mapio_resolve_path(const char *name, char *buf, size_t bufsz)
     int has_ext = n > 4 && strcmp(name + n - 4, ".vtt") == 0;
     snprintf(with_ext, sizeof with_ext, "%s%s", name, has_ext ? "" : ".vtt");
 
+    if (!strncmp(with_ext, "~/", 2) && getenv("HOME")) {     /* as a shell would */
+        snprintf(buf, bufsz, "%s%s", getenv("HOME"), with_ext + 1);
+        return;
+    }
     if (strchr(with_ext, '/')) {
         str_lcpy(buf, with_ext, bufsz);
         return;

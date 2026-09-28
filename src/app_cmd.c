@@ -266,7 +266,10 @@ static void roll_command(App *a, const char *rest)
 
     /* NAME remove: the whole name, as a prefix would remove the wrong one. */
     const char *gap = strchr(rest, ' ');
-    if (!eq && gap && !strcmp(gap + 1, "remove") && gap - rest < ROLL_NAME_MAX) {
+    const char *verb = gap ? gap + strspn(gap, " ") : NULL;
+    size_t vl = verb ? strcspn(verb, " ") : 0;
+    if (!eq && gap && vl == 6 && !strncmp(verb, "remove", 6) && !verb[vl + strspn(verb + vl, " ")] &&
+        gap - rest < ROLL_NAME_MAX) {
         char name[ROLL_NAME_MAX];
         snprintf(name, sizeof name, "%.*s", (int)(gap - rest), rest);
         int idx = roll_find(m, name);

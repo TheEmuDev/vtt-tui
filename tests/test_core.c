@@ -611,6 +611,18 @@ void test_mapio(void)
     mapio_resolve_path("./local.vtt", resolved, sizeof resolved);
     CHECK_EQ(strcmp(resolved, "./local.vtt"), 0);
 
+    CASE("~/ is the home folder, as the shell would have it");
+    {
+        char home[MAP_PATH_MAX] = "", want[MAP_PATH_MAX + 32];
+        const char *h = getenv("HOME");
+        if (h) str_lcpy(home, h, sizeof home);
+        setenv("HOME", "/home/someone", 1);
+        mapio_resolve_path("~/games/town", resolved, sizeof resolved);
+        snprintf(want, sizeof want, "/home/someone/games/town.vtt");
+        CHECK_EQ(strcmp(resolved, want), 0);
+        if (h) setenv("HOME", home, 1); else unsetenv("HOME");
+    }
+
     unlink(path);
 }
 
@@ -2116,11 +2128,14 @@ void test_unique_label(void)
 
 /* The recovery autosave: a copy beside the file once changes go quiet,
  * gone with a save or a discard, offered back after a crash. */
-static void count_w015(void *ctx, int line, int col, const char *code,
+typedef struct { const char *code; int n; } CodeCount;
+
+static void count_code(void *ctx, int line, int col, const char *code,
                        const char *slug, const char *msg)
 {
+    CodeCount *c = ctx;
     (void)line; (void)col; (void)slug; (void)msg;
-    if (!strcmp(code, "W015")) ++*(int *)ctx;
+    if (!strcmp(code, c->code)) c->n++;
 }
 
 void test_autosave(void)
@@ -2248,11 +2263,23 @@ void test_autosave(void)
         size_t wl = whole ? strlen(whole) : 0;
         CHECK(wl > 5 && !strcmp(whole + wl - 5, "\nend\n"));
         char err[128];
-        int w015 = 0;
-        Map *back = mapio_load_diag(autosave, err, sizeof err, count_w015, &w015);
+        CodeCount w015 = { "W015", 0 };
+        Map *back = mapio_load_diag(autosave, err, sizeof err, count_code, &w015);
         CHECK(back != NULL);
-        CHECK_EQ(w015, 0);
+        CHECK_EQ(w015.n, 0);
         if (back) map_free(back);
+
+        CASE("a line after end is reported, and ignored");
+        char after[640];
+        snprintf(after, sizeof after, "%s/after.vtt", sb.dir);
+        FILE *af = fopen(after, "w");
+        if (af) { fputs("VTT 2\nname x\nsize 2 2\nzoom 1\ntiles\n..\n..\nend\nnote 0 0 \"x\"\n", af); fclose(af); }
+        CodeCount w026 = { "W026", 0 };
+        back = mapio_load_diag(after, err, sizeof err, count_code, &w026);
+        CHECK(back != NULL);
+        CHECK_EQ(w026.n, 1);
+        if (back) { CHECK_EQ(back->tokens.n, 0); map_free(back); }
+        unlink(after);
 
         CASE("a copy cut short on a line's end is refused, set aside, and not offered again");
         FILE *cut = fopen(autosave, "w");                  /* everything but the end line */
@@ -2265,7 +2292,7 @@ void test_autosave(void)
     CHECK_EQ(a.modal, MODAL_CONFIRM_RECOVER);
     press(&a, "y");
     CHECK(strstr(a.modal_title, "incomplete") != NULL);
-    CHECK(strstr(a.modal_body, "fight.vtt.autosave.damaged") != NULL);
+    CHECK(strncmp(a.modal_body, "Kept as fight.vtt.autosave.damaged.", 35) == 0);  /* the name first */
     CHECK_EQ(a.map->modified, 0);                           /* the file as saved */
     CHECK_EQ(a.pending_file[0], '\0');
     CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);

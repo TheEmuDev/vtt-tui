@@ -104,7 +104,8 @@ static const KeyDoc PLAY[] = {
     GROUP("Dice and the log"),
     KEY(":roll 2d6+3", "roll dice, shown die by die"),
     KEY(":roll +2",    "the ruleset's action roll -- Daggerheart's Hope and Fear d12s"),
-    KEY(":roll attack = 2d12+3", "save a roll under a name; :roll attack rolls it, :rolls lists them, :roll attack remove"),
+    KEY(":roll attack = 2d12+3", "save a roll under a name; :roll attack rolls it, :rolls lists them"),
+    KEY(":roll attack remove", "remove a saved roll"),
     KEY(":log",        "the session log, on or off  (:log on, :log off, :log file)"),
 
     GROUP("Undo and elsewhere"),
