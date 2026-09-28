@@ -2116,6 +2116,13 @@ void test_unique_label(void)
 
 /* The recovery autosave: a copy beside the file once changes go quiet,
  * gone with a save or a discard, offered back after a crash. */
+static void count_w015(void *ctx, int line, int col, const char *code,
+                       const char *slug, const char *msg)
+{
+    (void)line; (void)col; (void)slug; (void)msg;
+    if (!strcmp(code, "W015")) ++*(int *)ctx;
+}
+
 void test_autosave(void)
 {
     Sandbox sb = sandbox_enter("autosave");
@@ -2231,41 +2238,48 @@ void test_autosave(void)
     a.ed.cx = a.ed.cy = 0;
     CHECK_EQ(a.modal, MODAL_NONE);
 
-    CASE("a copy cut short (a power cut before it reached the disk) is refused, and kept");
+    CASE("the copy ends with an end line, which the loader stops at");
     press(&a, " ");                                         /* toggle: always a change */
     app_tick(&a, 55000);
     app_tick(&a, 55000 + AUTOSAVE_QUIET_MS);
     {
         char *whole = slurp(autosave);
         CHECK(whole != NULL);
-        if (whole) {
-            FILE *cut = fopen(autosave, "w");
-            if (cut) { fwrite(whole, 1, strlen(whole) / 2, cut); fclose(cut); }
-            free(whole);
-        }
+        size_t wl = whole ? strlen(whole) : 0;
+        CHECK(wl > 5 && !strcmp(whole + wl - 5, "\nend\n"));
+        char err[128];
+        int w015 = 0;
+        Map *back = mapio_load_diag(autosave, err, sizeof err, count_w015, &w015);
+        CHECK(back != NULL);
+        CHECK_EQ(w015, 0);
+        if (back) map_free(back);
+
+        CASE("a copy cut short on a line's end is refused, set aside, and not offered again");
+        FILE *cut = fopen(autosave, "w");                  /* everything but the end line */
+        if (cut && whole) { fwrite(whole, 1, wl - 4, cut); }
+        if (cut) fclose(cut);
+        free(whole);
     }
     map_free(a.map); a.map = NULL; undo_clear(&a.undo);
     CHECK_EQ(app_open_map(&a, path), 0);
     CHECK_EQ(a.modal, MODAL_CONFIRM_RECOVER);
     press(&a, "y");
-    CHECK(strstr(a.modal_title, "damaged") != NULL);
-    CHECK(strstr(a.modal_body, "stops short") != NULL);
+    CHECK(strstr(a.modal_title, "incomplete") != NULL);
+    CHECK(strstr(a.modal_body, "fight.vtt.autosave.damaged") != NULL);
     CHECK_EQ(a.map->modified, 0);                           /* the file as saved */
-    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1);
+    CHECK_EQ(a.pending_file[0], '\0');
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave.damaged"), 1);
     press(&a, "\r");
     CHECK_EQ(a.modal, MODAL_NONE);
-    {                                                       /* cut on a line's end, in the tiles */
-        FILE *cut = fopen(autosave, "w");
-        if (cut) { fputs("VTT 3\nname x\nsize 2 2\nzoom 1\ntiles\n. \n", cut); fclose(cut); }
-    }
     map_free(a.map); a.map = NULL; undo_clear(&a.undo);
     CHECK_EQ(app_open_map(&a, path), 0);
-    CHECK_EQ(a.modal, MODAL_CONFIRM_RECOVER);
-    press(&a, "y");
-    CHECK(strstr(a.modal_body, "stops short at line 6") != NULL);
-    CHECK_EQ(a.map->modified, 0);
-    press(&a, "\r");
-    unlink(autosave);
+    CHECK_EQ(a.modal, MODAL_NONE);                          /* asked once */
+    {
+        char aside[640];
+        snprintf(aside, sizeof aside, "%s.damaged", autosave);
+        unlink(aside);
+    }
 
     CASE("an autosave older than the file is not offered");
     press(&a, " ");                                         /* toggle: always a change */

@@ -4,7 +4,8 @@
 # in the repo (.perf.*) unless PERF_DIR says otherwise, since on a tmpfs /tmp a
 # flush is free and the table would say nothing.
 set -eu
-[ -f build/mapio.o ] || { echo "no build/ -- run make first" >&2; exit 1; }
+[ -f build/mapio.o ] && [ "$(cat build/.mode 2>/dev/null)" = release ] \
+    || { echo "no release build in build/ -- run make first" >&2; exit 1; }
 DIR=$(mktemp -d "${PERF_DIR:-.}/.perf.XXXXXX")
 trap 'rm -rf "$DIR"' EXIT
 OBJS=$(ls build/*.o | grep -v '/main\.o$')

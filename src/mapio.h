@@ -12,9 +12,9 @@
  * save"; mapio_save is the save. Both flush the file to the disk before the
  * rename; mapio_write_unflushed does not, for the recovery autosave: a vtt
  * crash still finds it (the system holds it), only a system crash or power
- * cut within half a minute can lose it (or, on ext4 or xfs, leave only its
- * start: recover_autosave refuses that), and the map's own file is
- * untouched either way. */
+ * cut within half a minute can lose it, or leave only its start -- so it ends
+ * with an `end` line, which recover_autosave requires -- and the map's own
+ * file is untouched either way. */
 int  mapio_write(const Map *m, const char *path, char *err, size_t errsz);
 int  mapio_write_unflushed(const Map *m, const char *path, char *err, size_t errsz);
 int  mapio_save(Map *m, const char *path, char *err, size_t errsz);

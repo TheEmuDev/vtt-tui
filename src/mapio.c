@@ -108,7 +108,7 @@ static void put_tokens(FILE *f, const TokenList *l)
     }
 }
 
-static int write_map(const Map *m, const char *path, int flush, char *err, size_t errsz)
+static int write_map(const Map *m, const char *path, int autosave, char *err, size_t errsz)
 {
     PROF_ZONE("mapio.write");
     char tmp[MAP_PATH_MAX + 8];
@@ -236,8 +236,12 @@ static int write_map(const Map *m, const char *path, int flush, char *err, size_
         }
     }
 
+    /* The autosave is not flushed, so a power cut can leave only its start,
+     * cut anywhere; its last line says it is whole. */
+    if (autosave) fputs("end\n", f);
+
     int ok = (fflush(f) == 0);
-    if (ok && flush) {
+    if (ok && !autosave) {
         PROF_ZONE("mapio.fsync");
         ok = (fsync(fileno(f)) == 0) || errno == EINVAL;   /* pipes are fine */
     }
@@ -258,12 +262,12 @@ static int write_map(const Map *m, const char *path, int flush, char *err, size_
 
 int mapio_write(const Map *m, const char *path, char *err, size_t errsz)
 {
-    return write_map(m, path, 1, err, errsz);
+    return write_map(m, path, 0, err, errsz);
 }
 
 int mapio_write_unflushed(const Map *m, const char *path, char *err, size_t errsz)
 {
-    return write_map(m, path, 0, err, errsz);
+    return write_map(m, path, 1, err, errsz);
 }
 
 int mapio_save(Map *m, const char *path, char *err, size_t errsz)
@@ -822,6 +826,7 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
     memset(&map_tokens, 0, sizeof map_tokens);
     int nfloors = 0;
     while (read_line(ld, line, sizeof line) >= 0) {
+        if (!strcmp(line, "end")) break;              /* an autosave's last line */
         if (!strncmp(line, "scene ", 6) || !strcmp(line, "endscene")) {
             if (in_scene) {
                 /* The block closes: kept, or thrown away. */
