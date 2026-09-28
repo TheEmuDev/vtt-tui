@@ -2231,6 +2231,42 @@ void test_autosave(void)
     a.ed.cx = a.ed.cy = 0;
     CHECK_EQ(a.modal, MODAL_NONE);
 
+    CASE("a copy cut short (a power cut before it reached the disk) is refused, and kept");
+    press(&a, " ");                                         /* toggle: always a change */
+    app_tick(&a, 55000);
+    app_tick(&a, 55000 + AUTOSAVE_QUIET_MS);
+    {
+        char *whole = slurp(autosave);
+        CHECK(whole != NULL);
+        if (whole) {
+            FILE *cut = fopen(autosave, "w");
+            if (cut) { fwrite(whole, 1, strlen(whole) / 2, cut); fclose(cut); }
+            free(whole);
+        }
+    }
+    map_free(a.map); a.map = NULL; undo_clear(&a.undo);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    CHECK_EQ(a.modal, MODAL_CONFIRM_RECOVER);
+    press(&a, "y");
+    CHECK(strstr(a.modal_title, "damaged") != NULL);
+    CHECK(strstr(a.modal_body, "stops short") != NULL);
+    CHECK_EQ(a.map->modified, 0);                           /* the file as saved */
+    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1);
+    press(&a, "\r");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    {                                                       /* cut on a line's end, in the tiles */
+        FILE *cut = fopen(autosave, "w");
+        if (cut) { fputs("VTT 3\nname x\nsize 2 2\nzoom 1\ntiles\n. \n", cut); fclose(cut); }
+    }
+    map_free(a.map); a.map = NULL; undo_clear(&a.undo);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    CHECK_EQ(a.modal, MODAL_CONFIRM_RECOVER);
+    press(&a, "y");
+    CHECK(strstr(a.modal_body, "stops short at line 6") != NULL);
+    CHECK_EQ(a.map->modified, 0);
+    press(&a, "\r");
+    unlink(autosave);
+
     CASE("an autosave older than the file is not offered");
     press(&a, " ");                                         /* toggle: always a change */
     app_tick(&a, 60000);

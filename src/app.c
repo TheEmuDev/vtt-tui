@@ -217,11 +217,47 @@ static void offer_recovery(App *a)
              a->map->name, stamp);
 }
 
+/* The errors the loader forgave, and the first one's line. vtt writes none
+ * and ends every file with a newline, so an error, or a last line without
+ * one, means the copy was cut short: the autosave is not flushed, and a power
+ * cut on some filesystems leaves only its start. A cut inside a line loses
+ * the newline and one inside a section is an error; one that falls exactly
+ * at a line's end before the tiles still reads as a whole (empty) map --
+ * nothing in the file says it was longer. */
+typedef struct { int findings, line; } Damage;
+
+static void note_damage(void *ctx, int line, int col, const char *code,
+                        const char *slug, const char *msg)
+{
+    Damage *d = ctx;
+    (void)col; (void)slug; (void)msg;
+    if (code[0] != 'E') return;
+    if (!d->findings++) d->line = line;
+}
+
+static int ends_in_newline(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0;
+    int ok = fseek(f, -1, SEEK_END) == 0 && fgetc(f) == '\n';
+    fclose(f);
+    return ok;
+}
+
 static void recover_autosave(App *a)
 {
     char err[MAPIO_ERR_MAX] = { 0 };
-    Map *m = mapio_load(a->pending_file, err, sizeof err);
+    Damage dmg = { 0 };
+    Map *m = mapio_load_diag(a->pending_file, err, sizeof err, note_damage, &dmg);
     if (!m) { show_message(a, "Cannot read the autosave", err); return; }
+    if (dmg.findings || !ends_in_newline(a->pending_file)) {
+        map_free(m);
+        char body[160];
+        if (dmg.findings) snprintf(body, sizeof body, "The copy stops short at line %d. The map is open as it was last saved; the copy is kept beside it.", dmg.line);
+        else              snprintf(body, sizeof body, "The copy stops short. The map is open as it was last saved; the copy is kept beside it.");
+        show_message(a, "The autosave is damaged", body);
+        return;
+    }
 
     /* It stands in for the map, under the map's own path, and counts as
      * unsaved: the file on disk is still the older one until :w. */

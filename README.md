@@ -872,8 +872,8 @@ the log.
 Unsaved changes are copied to `name.vtt.autosave` next to the map shortly after you stop
 editing. Saving, or discarding changes on purpose, removes the copy. If vtt exits
 unexpectedly, the next time the map is opened it offers to recover the changes. The copy
-covers vtt or its terminal closing; a power cut can lose the last half minute of it, so
-save with `:w` before switching the computer off.
+covers vtt or its terminal closing. A power cut or a computer that stops without shutting
+down can lose the last half minute of unsaved work, so save with `:w` when you pause.
 
 ```
 ╭─ Unsaved work found ───────────────────────────────────────╮

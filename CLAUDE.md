@@ -39,6 +39,7 @@ make perf       one perf run; publish the per-row MEDIAN of three quiet runs (to
 ./vtt map.vtt --agent; ./vtt --ctl 'status'   the control channel (docs/CONTROL.md); requests on stdin with no argument
 ./vtt new.vtt --apply plan.txt --new 40x30     the same requests headless, saved (docs/AGENTS.md is the agent's guide)
 tools/sight.sh  fog.sight per fog scenario (the zone table keeps only each zone's worst)
+tools/saves.sh  a save flushed and unflushed, three map sizes, on the real disk (PERFORMANCE.md's save table)
 VTT_FOGDIFF_OPS=36000 ./build/run-tests   the long run of the fog differential test
 make fuzz       libFuzzer on the map loader (clang), FUZZ_SECONDS=600 for longer
 make fuzz-ctl   libFuzzer on control-channel requests (tests/fuzz_ctl.c, corpus tests/fuzz-ctl)

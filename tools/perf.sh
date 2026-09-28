@@ -29,7 +29,7 @@ LOOPS=${LOOPS:-400}
 
 [ -x "$BIN" ] || { echo "no $BIN -- run make first" >&2; exit 1; }
 
-# The maps live beside the repo, on the filesystem a GM's maps would be on:
+# The maps live in the repo (in .perf.*, ignored by git), on the filesystem a GM's maps would be on:
 # /tmp is often memory, where flushing a save to the disk costs nothing and
 # the save and trip rows would quote a figure no table sees.
 DIR=$(mktemp -d "${PERF_DIR:-.}/.perf.XXXXXX")

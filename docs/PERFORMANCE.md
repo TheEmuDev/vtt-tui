@@ -8,8 +8,8 @@ Recorded on an **Intel i7-4510U @ 2.00GHz**, gcc 16.2.1, `-O2`. Treat the absolu
 numbers as a baseline for *this* machine and the ratios between rows as the part that
 travels.
 
-**Where the maps are.** `make perf` works in a directory beside the repo (`PERF_DIR` moves
-it), on the disk a GM's maps are on, because a save's cost is the flush to that disk:
+**Where the maps are.** `make perf` works in a directory inside the repo, ignored by git
+(`PERF_DIR` moves it), on the disk a GM's maps are on, because a save's cost is the flush to that disk:
 on tmpfs a flush is free and every saving row would read thirty times too cheap. The
 figures here are btrfs on an SSD.
 
@@ -488,15 +488,17 @@ generation counter and the copy is owed only while it is behind. It is written a
 but not `fsync`ed (`mapio_write_unflushed`): the flush is the whole cost of a save on a
 real disk, the autosave runs dozens of times a session on the main loop, and what it is
 for -- vtt crashing, the terminal closing -- the system survives with the file in hand.
-Only a system crash or power cut within about half a minute of it can lose it, and the
-map's own file is never touched by it. `:w`, a trip and every other save still flush.
-Median of nine on btrfs:
+Only a system crash or power cut within about half a minute of it can lose it -- or, on
+ext4 or xfs, leave just its start, which recovery refuses -- and the map's own file is
+never touched by it. `:w`, a trip and every other save still flush.
+`tools/saves.sh` prints this table (perf.sh cannot: a bench never writes an autosave);
+median of nine on btrfs:
 
 | map | bytes | autosave (unflushed) | `:w` (flushed) |
 |---|---|---|---|
-| 40×25, 24 creatures | 3.8 KB | 0.12 ms | 33 ms |
-| 200×200 | 121 KB | 1.4 ms | 45 ms |
-| 512×512 | 789 KB | 5.3 ms | 76 ms (worst of nine 211 ms) |
+| 40×25, 24 creatures | 4.0 KB | 0.15 ms (worst 0.2) | 33.42 ms (worst 55.7) |
+| 200×200 | 121.1 KB | 1.05 ms (worst 1.8) | 55.53 ms (worst 66.4) |
+| 512×512 | 789.1 KB | 5.28 ms (worst 5.7) | 66.71 ms (worst 141.0) |
 
 The flushed column is a save's cost, and the price of a power cut losing nothing. A snapshot was chosen
 over replaying the undo log because the log does not see everything the map is: the
