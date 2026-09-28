@@ -104,6 +104,15 @@ awk -v dir="$CHARS" 'BEGIN {
         close(f)
     }
 }'
+# Two maps linked both ways, each link landing on the other's end, so a party
+# can walk there and back every loop: the trip saves one map and opens the other.
+TOWN="$DIR/town.vtt"
+{ printf 'VTT 12\nname town\nsize 40 25\ntiles\n'
+  awk 'BEGIN{ for (y = 0; y < 25; y++) { for (x = 0; x < 40; x++) printf "."; print "" } }'
+  printf 'token player 2 2 1 "Aria"\narea 2 2 2 2 "Gate"\nlink 1 stairs 1 2 2 to "crypt" "Entrance"\n'; } > "$TOWN"
+{ printf 'VTT 12\nname crypt\nsize 40 25\ntiles\n'
+  awk 'BEGIN{ for (y = 0; y < 25; y++) { for (x = 0; x < 40; x++) printf "."; print "" } }'
+  printf 'area 3 3 3 3 "Entrance"\nlink 1 stairs 1 3 3 to "town" "Gate"\n'; } > "$DIR/crypt.vtt"
 VOIDY="$DIR/voidy.vtt"
 awk 'BEGIN {
     w = 200; h = 200;
@@ -347,6 +356,7 @@ run "play, logging"        "$MOB"    80x24  ':play\r:log on\rt\rlllljjjj\r'
 run "play, rolling"        "$MOB"    80x24  ':play\r:roll 2d6+3\r:roll +1\r'
 run "play, 500 characters" "$MOB"    80x24  ':play\ritebeast-4\t\t\ru'
 run "play, scene of 500"   "$HORDE"  80x24  ':play\r:scene save A\r:scene A\ru'
+run "play, map trip there+back" "$TOWN" 80x24 ':play\r:C3\rgogo'
 run "play, handout, 4 watch" "$MOB"  80x24  ':play\r:handout say The door reads: SPEAK, FRIEND\r:handout off\r' "--bench-clients 4"
 run "agent, room + 12"     "$VOIDY"  80x24  'u' "--bench-ctl $DIR/room.ctl"
 run "agent, plan of rooms" "$VOIDMAP" 80x24  'u' "--bench-ctl $DIR/plan.ctl"

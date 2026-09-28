@@ -1154,3 +1154,274 @@ void test_floor_big_camera(void)
     sandbox_leave(&sb);
     if (system(cmd) != 0) { }
 }
+
+/* ------------------------------------------------------ links to another map */
+
+/* A map file of w x h floor, with the named area given (x0..y1), at dir/name.vtt. */
+static void write_floor_map(const char *dir, const char *name, int w, int h, const char *area,
+                            int x0, int y0, int x1, int y1)
+{
+    char path[700];
+    snprintf(path, sizeof path, "%s/%s.vtt", dir, name);
+    FILE *f = fopen(path, "w");
+    if (!f) return;
+    fprintf(f, "VTT 7\nname %s\nsize %d %d\ntiles\n", name, w, h);
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) fputc('.', f);
+        fputc('\n', f);
+    }
+    if (area) fprintf(f, "area %d %d %d %d \"%s\"\n", x0, y0, x1, y1, area);
+    fclose(f);
+}
+
+void test_map_links(void)
+{
+    Sandbox sb = sandbox_enter("maplinks");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    char err[256], path[700];
+
+    CASE("a link to another map: one end, one way; its file line round-trips at version 12");
+    Map *m = map_new(10, 8, "town");
+    map_fill_tiles(m, 0, 0, 9, 7, TILE_FLOOR);
+    Link l;
+    memset(&l, 0, sizeof l);
+    l.num = 4; l.kind = LINK_STAIRS; l.size = 2;
+    l.x[0] = l.x[1] = 2; l.y[0] = l.y[1] = 2;
+    str_lcpy(l.to_map, "crypt", sizeof l.to_map);
+    str_lcpy(l.to_place, "Lower hall", sizeof l.to_place);
+    CHECK(link_problem(m, &l) == NULL);                    /* its two ends are one: no overlap */
+    CHECK_EQ(link_ends(&l), 1);
+    Undo u;
+    undo_init(&u);
+    undo_begin(&u);
+    CHECK(undo_set_link(&u, m, &l));
+    undo_end(&u);
+    snprintf(path, sizeof path, "%s/town.vtt", sb.dir);
+    CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+    char *text = slurp(path);
+    CHECK(text && !strncmp(text, "VTT 12\n", 7));
+    CHECK(text && strstr(text, "link 4 stairs 2 2 2 to \"crypt\" \"Lower hall\"\n") != NULL);
+    free(text);
+    Map *back = mapio_load(path, err, sizeof err);
+    CHECK(back && back->nlinks == 1);
+    if (back) {
+        CHECK(!strcmp(back->links[0].to_map, "crypt") && !strcmp(back->links[0].to_place, "Lower hall"));
+        CHECK(back->links[0].x[1] == 2 && back->links[0].y[1] == 2);
+        map_free(back);
+    }
+
+    CASE("undo keeps a link to another map whole: its names ride in the slot too");
+    undo_undo(&u, m);
+    CHECK_EQ(m->nlinks, 0);
+    undo_redo(&u, m);
+    CHECK(m->nlinks == 1 && !strcmp(m->links[0].to_map, "crypt") && !strcmp(m->links[0].to_place, "Lower hall"));
+    undo_free(&u);
+    map_free(m);
+
+    CASE("the loader drops a line that does not read, and a bad map name");
+    {
+        const char *bad =
+            "VTT 12\nname b\nsize 4 3\ntiles\n....\n....\n....\n"
+            "link 1 stairs 1 0 0 to \"crypt\"\n"
+            "link 2 stairs 1 1 1 to \"../x\" \"Hall\"\n"
+            "link 3 stairs 1 2 2 to \"crypt\" \"Hall\" oneway\n"
+            "link 4 stairs 1 3 2 to \"crypt\" \"Hall\" secret\n";
+        snprintf(path, sizeof path, "%s/bad.vtt", sb.dir);
+        FILE *f = fopen(path, "w");
+        if (f) { fputs(bad, f); fclose(f); }
+        Map *b = mapio_load(path, err, sizeof err);
+        CHECK(b && b->nlinks == 1 && b->links[0].num == 4 && b->links[0].secret);
+        map_free(b);
+    }
+
+    CASE("landing: the formation kept, inside the area, nearest its middle; no room refuses");
+    Map *d = map_new(12, 10, "crypt");
+    map_fill_tiles(d, 0, 0, 11, 9, TILE_FLOOR);
+    map_area_set(d, "Hall", 2, 2, 8, 6);
+    Token party[2];
+    memset(party, 0, sizeof party);
+    party[0].x = 0; party[0].y = 0; party[0].size = 1;
+    party[1].x = 1; party[1].y = 1; party[1].size = 2;       /* a 2x2 beside it: the box is 3x3 */
+    int ax, ay;
+    char why[200];
+    CHECK(link_land(d, "Hall", party, 2, &ax, &ay, why, sizeof why));
+    CHECK(ax == 4 && ay == 3);                               /* box 4..6 x 3..5, centered on 5,4 */
+    tokens_add(&d->tokens, (Token){ .x = 5, .y = 4, .size = 1, .kind = TOKEN_ENEMY, .label = "Rat" });
+    CHECK(link_land(d, "Hall", party, 2, &ax, &ay, why, sizeof why));
+    for (int i = 0; i < 2; i++)
+        CHECK(!token_meets(&d->tokens.v[0], ax + party[i].x, ay + party[i].y, party[i].size, party[i].size));
+    CHECK(ax >= 2 && ay >= 2 && ax + 2 <= 8 && ay + 2 <= 6);   /* still inside */
+    map_area_set(d, "Closet", 10, 8, 11, 9);
+    CHECK(!link_land(d, "Closet", party, 2, &ax, &ay, why, sizeof why));
+    CHECK(strstr(why, "no room in crypt's Closet for 2 creatures") != NULL);
+    CHECK(link_land(d, "K9", party, 1, &ax, &ay, why, sizeof why) && ax == 10 && ay == 8);
+    CHECK(!link_land(d, "Nowhere", party, 1, &ax, &ay, why, sizeof why) && strstr(why, "no area or square called Nowhere"));
+    map_free(d);
+
+    CASE("making one: :link to checks the file beside this map and the place in it");
+    write_floor_map(sb.dir, "crypt", 12, 10, "Entrance", 2, 2, 5, 5);
+    write_floor_map(sb.dir, "town", 12, 8, "Gate", 0, 0, 2, 2);
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    snprintf(path, sizeof path, "%s/town.vtt", sb.dir);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Map *t = a.map;
+    a.ed.cx = 6; a.ed.cy = 3;
+    press(&a, ":link to nowhere Entrance\r");
+    CHECK(strstr(a.status, "no map nowhere beside this one") != NULL);
+    press(&a, ":link to crypt Attic\r");
+    CHECK(strstr(a.status, "crypt has no area or square called Attic") != NULL);
+    press(&a, ":link to ../crypt Entrance\r");
+    CHECK(strstr(a.status, "a map's name is its file's") != NULL);
+    press(&a, ":link to crypt Entrance\r");
+    CHECK_EQ(t->nlinks, 1);
+    CHECK(!strcmp(t->links[0].to_map, "crypt") && t->links[0].x[0] == 6);
+    CHECK(strstr(a.status, "-> crypt, Entrance") != NULL);
+    press(&a, ":link 1 reverse\r");
+    CHECK(strstr(a.status, "leads to another map") != NULL);
+
+    CASE("drawn with an arrow after its number");
+    rnd_begin(&r);
+    app_draw(&a);
+    ByteBuf f;
+    bb_init(&f, 65536);
+    rnd_dump(&r, &f);
+    bb_putc(&f, '\0');
+    CHECK(strstr((char *)f.data, "1\xe2\x86\x92") != NULL);
+    bb_free(&f);
+
+    CASE("g o: nobody on it says so; the party goes, this map is saved, the other opens with them");
+    press(&a, ":w\r");
+    app_key(&a, (Key){ KEY_F2, 0, 0 });
+    press(&a, ":G4\rgo");
+    CHECK(strstr(a.status, "nobody on stairs 1") != NULL);
+    a.ed.cx = 6; a.ed.cy = 3; press(&a, "ipAria\r");
+    a.ed.cx = 0; a.ed.cy = 7; press(&a, "ieBram\r");         /* stays behind */
+    t->tokens.v[0].turn = TURN_IN | TURN_ACTING;
+    t->tokens.v[0].init = 15;
+    token_add_status(&t->tokens.v[0], 0, "blessed");
+    press(&a, ":serve\r");
+    CHECK(net_active(&a.net));
+    press(&a, ":handout say A draft blows up the stairs\r");
+    a.ed.cx = 6; a.ed.cy = 3;
+    press(&a, "go");
+    CHECK(a.map && !strcmp(a.map->name, "crypt"));
+    CHECK_EQ(a.screen, SCREEN_PLAY);
+    CHECK_EQ(a.map->tokens.n, 1);
+    const Token *arr = &a.map->tokens.v[0];
+    CHECK(!strcmp(arr->label, "Aria") && arr->nstatus == 1 && arr->turn == 0);
+    CHECK(arr->x >= 2 && arr->x <= 5 && arr->y >= 2 && arr->y <= 5);
+    CHECK(a.ed.cx == arr->x && a.ed.cy == arr->y);
+    CHECK(net_active(&a.net));                              /* the phones followed */
+    CHECK(!a.handout_up);
+    CHECK(a.map->modified);                                 /* the arrivals are unsaved here */
+    CHECK(strstr(a.status, "Aria took stairs 1 from town to crypt, Entrance") != NULL);
+    CHECK(strstr(a.status, "no way back yet: in build mode :link to town PLACE") != NULL);
+    CHECK_EQ(a.status_gm, 1);
+    Map *saved = mapio_load(path, err, sizeof err);
+    CHECK(saved && saved->tokens.n == 1 && !strcmp(saved->tokens.v[0].label, "Bram"));
+    map_free(saved);
+
+    CASE("the way back, made in the other map, says nothing of a missing way back");
+    app_key(&a, (Key){ KEY_F1, 0, 0 });
+    a.ed.cx = 8; a.ed.cy = 8;
+    press(&a, ":link to town Gate\r");
+    CHECK_EQ(a.map->nlinks, 1);
+    press(&a, ":w\r");
+    app_key(&a, (Key){ KEY_F2, 0, 0 });
+    Token *aria = &a.map->tokens.v[0];
+    aria->x = 8; aria->y = 8;
+    map_touch(a.map);
+    a.ed.cx = 8; a.ed.cy = 8;
+    press(&a, "go");
+    CHECK(!strcmp(a.map->name, "town"));
+    CHECK(strstr(a.status, "Aria took stairs 1 from crypt to town, Gate") != NULL);
+    CHECK(strstr(a.status, "no way back") == NULL);
+    CHECK_EQ(a.map->tokens.n, 2);
+
+    CASE("refused, nothing moving: no room there, a crash's autosave there, a map never saved");
+    press(&a, ":w\r");
+    a.ed.cx = 6; a.ed.cy = 3;
+    int ai = -1;
+    for (int i = 0; i < a.map->tokens.n; i++) if (!strcmp(a.map->tokens.v[i].label, "Aria")) ai = i;
+    a.map->tokens.v[ai].x = 6; a.map->tokens.v[ai].y = 3;
+    char cpath[700], apath[720];
+    snprintf(cpath, sizeof cpath, "%s/crypt.vtt", sb.dir);
+    Map *cm = mapio_load(cpath, err, sizeof err);
+    snprintf(apath, sizeof apath, "%s.autosave", cpath);
+    CHECK(cm && mapio_save(cm, apath, err, sizeof err) == 0);
+    map_free(cm);
+    struct timespec later[2] = { { 0, UTIME_NOW }, { time(NULL) + 60, 0 } };
+    utimensat(AT_FDCWD, apath, later, 0);
+    press(&a, "go");
+    CHECK(!strcmp(a.map->name, "town"));
+    CHECK(strstr(a.status, "unsaved work from a crash") != NULL);
+    unlink(apath);
+    Map *full = mapio_load(cpath, err, sizeof err);
+    for (int y = 2; y <= 5; y++)
+        for (int x = 2; x <= 5; x++) {
+            Token rat;
+            memset(&rat, 0, sizeof rat);
+            rat.x = (int16_t)x; rat.y = (int16_t)y; rat.size = 1; rat.kind = TOKEN_ENEMY;
+            tokens_add(&full->tokens, rat);
+        }
+    CHECK(mapio_save(full, cpath, err, sizeof err) == 0);
+    map_free(full);
+    press(&a, "go");
+    CHECK(!strcmp(a.map->name, "town"));
+    CHECK(strstr(a.status, "no room in crypt's Entrance") != NULL);
+    char keep[MAP_PATH_MAX];
+    str_lcpy(keep, a.map->path, sizeof keep);
+    a.map->path[0] = '\0';                                  /* as a map never saved has */
+    press(&a, "go");
+    CHECK(!strcmp(a.map->name, "town"));
+    CHECK(strstr(a.status, "save this map first") != NULL);
+    str_lcpy(a.map->path, keep, sizeof a.map->path);
+
+    CASE("--check: W151 for a link whose map or place is not there");
+    {
+        snprintf(path, sizeof path, "%s/lost.vtt", sb.dir);
+        FILE *lf = fopen(path, "w");
+        if (lf) {
+            fputs("VTT 12\nname lost\nsize 4 3\ntiles\n....\n....\n....\n"
+                  "link 1 stairs 1 0 0 to \"crypt\" \"Attic\"\nlink 2 portal 1 3 2 to \"nowhere\" \"Hall\"\n", lf);
+            fclose(lf);
+        }
+        char *buf = NULL; size_t bn = 0;
+        FILE *out = open_memstream(&buf, &bn);
+        maptools_check(out, path, 0);
+        fclose(out);
+        CHECK(strstr(buf, "W151") != NULL);
+        CHECK(strstr(buf, "stairs 1 to crypt, Attic leads nowhere: crypt has no area or square called Attic") != NULL);
+        CHECK(strstr(buf, "portal 2 to nowhere, Hall leads nowhere: no map nowhere beside this one") != NULL);
+        free(buf);
+    }
+
+    CASE("the channel makes one, checked; refuses reverse; the links read shows it");
+    app_key(&a, (Key){ KEY_F1, 0, 0 });
+    char *ans = ctl_ask(&a, "link K7 to crypt \"Entrance\" portal secret");
+    CHECK(ans && strncmp(ans, "ok", 2) == 0);
+    free(ans);
+    int li = -1;
+    for (int i = 0; i < a.map->nlinks; i++) if (a.map->links[i].kind == LINK_PORTAL) li = i;
+    CHECK(li >= 0 && a.map->links[li].secret && !strcmp(a.map->links[li].to_place, "Entrance"));
+    ans = ctl_ask(&a, "link B2 to crypt Attic");
+    CHECK(ans && strstr(ans, "crypt has no area or square called Attic") != NULL);
+    free(ans);
+    char req[64];
+    snprintf(req, sizeof req, "link %d reverse", a.map->links[li].num);
+    ans = ctl_ask(&a, req);
+    CHECK(ans && strstr(ans, "leads to another map") != NULL);
+    free(ans);
+    ans = ctl_ask(&a, "links");
+    CHECK(ans && strstr(ans, "-> crypt, Entrance") != NULL);
+    free(ans);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}

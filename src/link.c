@@ -5,6 +5,7 @@
 #include <strings.h>
 
 #include "floor.h"
+#include "mapio.h"
 #include "fog.h"
 #include "util.h"
 
@@ -51,6 +52,13 @@ void link_end_name(const Link *l, int end, char *out, size_t outsz)
     snprintf(out, outsz, "%s-%s", a, b);
 }
 
+int link_map_name_ok(const char *name)
+{
+    size_t n = strlen(name);
+    if (n == 0 || n >= LINK_MAP_MAX || name[0] == '.' || name[0] == ' ' || name[n - 1] == ' ') return 0;
+    return strpbrk(name, "\"/\\") == NULL;
+}
+
 void link_status(const Map *m, int x, int y, int gm, char *out, size_t outsz)
 {
     out[0] = '\0';
@@ -60,6 +68,13 @@ void link_status(const Map *m, int x, int y, int gm, char *out, size_t outsz)
     if (l->secret && !gm) return;
     char name[32], there[2 * MAP_COORD_MAX + 2];
     link_name(l, name, sizeof name);
+    /* Another map: the players hear where it goes, the GM its place too
+     * (a place is an area's name, which is the GM's). */
+    if (l->to_map[0]) {
+        snprintf(out, outsz, "  %s%s to %s%s%s", l->secret ? "secret " : "", name, l->to_map,
+                 gm ? ", " : "", gm ? l->to_place : "");
+        return;
+    }
     /* Where it leads is a square's name, and the players are not told the
      * names of squares fog hides. */
     if (!gm && fog_ground_hidden(m, l->x[1 - end], l->y[1 - end])) {
@@ -81,6 +96,11 @@ void link_describe(const Link *l, char *out, size_t outsz)
     char name[32], a[2 * MAP_COORD_MAX + 2], b[2 * MAP_COORD_MAX + 2];
     link_name(l, name, sizeof name);
     link_end_name(l, 0, a, sizeof a);
+    if (l->to_map[0]) {
+        snprintf(out, outsz, "%-12s %s -> %s, %s%s%s", name, a, l->to_map, l->to_place,
+                 l->size == 2 ? "  2x2" : l->size == 3 ? "  3x3" : "", l->secret ? "  secret" : "");
+        return;
+    }
     link_end_name(l, 1, b, sizeof b);
     snprintf(out, outsz, "%-12s %s %s %s%s%s%s", name, a, l->oneway ? "->" : "<->", b,
              l->size == 2 ? "  2x2" : l->size == 3 ? "  3x3" : "",
@@ -147,18 +167,20 @@ const char *link_misplaced(const Map *m, const Link *l)
     if (l->size < 1 || l->size > LINK_SIZE_MAX) return "a link's ends are 1, 2 or 3 squares across";
     if (l->kind >= LINK_KIND_COUNT)             return "not a kind of link";
     if (l->num < 1 || l->num > LINK_NUM_MAX)    return "links are numbered 1 to 99";
-    int s = l->size;
-    for (int e = 0; e < 2; e++) {
+    if (l->to_map[0] && (!link_map_name_ok(l->to_map) || !l->to_place[0]))
+        return "a link to another map names the map and a place in it";
+    int s = l->size, ends = link_ends(l);
+    for (int e = 0; e < ends; e++) {
         if (l->x[e] < 0 || l->y[e] < 0 || l->x[e] + s > m->w || l->y[e] + s > m->h)
             return "an end is off the map";
     }
-    if (blocks_meet(l->x[0], l->y[0], s, s, l->x[1], l->y[1], s, s))
+    if (ends == 2 && blocks_meet(l->x[0], l->y[0], s, s, l->x[1], l->y[1], s, s))
         return "the two ends overlap";
     for (int i = 0; i < m->nlinks; i++) {
         const Link *o = &m->links[i];
         if (o->num == l->num) continue;
-        for (int e = 0; e < 2; e++)
-            for (int f = 0; f < 2; f++)
+        for (int e = 0; e < ends; e++)
+            for (int f = 0; f < link_ends(o); f++)
                 if (blocks_meet(l->x[e], l->y[e], s, s, o->x[f], o->y[f], o->size, o->size))
                     return "another link is already there";
     }
@@ -203,6 +225,10 @@ int link_trip(const Map *m, int li, int from, int enforce, LinkTrip *t)
     const Link *l = &m->links[li];
     char name[32];
     link_name(l, name, sizeof name);
+    if (l->to_map[0]) {
+        snprintf(t->why, sizeof t->why, "%s leads to another map", name);
+        return 0;
+    }
     if (l->oneway && from != 0) {
         char at[MAP_COORD_MAX];
         map_coord_name(l->x[0], l->y[0], at, sizeof at);
@@ -258,4 +284,103 @@ int link_trip(const Map *m, int li, int from, int enforce, LinkTrip *t)
         }
     }
     return t->n;
+}
+
+/* ------------------------------------------------------- another map */
+
+/* The file a link to another map names: beside this map's own. 0 when this
+ * map has no file to be beside. */
+int link_map_path(const Map *m, const char *to_map, char *buf, size_t sz)
+{
+    if (!m->path[0]) return 0;
+    const char *slash = strrchr(m->path, '/');
+    int dl = slash ? (int)(slash - m->path) : 0;
+    int n = slash ? snprintf(buf, sz, "%.*s/%s.vtt", dl, m->path, to_map) : snprintf(buf, sz, "%s.vtt", to_map);
+    return n > 0 && (size_t)n < sz;
+}
+
+/* Checks a link to another map could be made: the file there, and the place
+ * in it an area or a square on ground. NULL, or why not in buf. */
+const char *link_map_check(const Map *m, const char *to_map, const char *place, char *buf, size_t sz)
+{
+    char path[MAP_PATH_MAX + 32], err[MAPIO_ERR_MAX];
+    if (!link_map_name_ok(to_map)) {
+        snprintf(buf, sz, "%.30s: a map's name is its file's without .vtt, under %d characters", to_map, LINK_MAP_MAX);
+        return buf;
+    }
+    if (!link_map_path(m, to_map, path, sizeof path)) {
+        snprintf(buf, sz, "save this map first (:w NAME) - the other map is found beside it");
+        return buf;
+    }
+    Map *d = mapio_load(path, err, sizeof err);
+    if (!d) { snprintf(buf, sz, "no map %.30s beside this one (%.80s)", to_map, path); return buf; }
+    const char *why = NULL;
+    int x, y, ai = map_area_find(d, place);
+    if (ai < 0) {
+        if (!map_coord_parse(place, &x, &y) || !map_in_bounds(d, x, y))
+            { snprintf(buf, sz, "%.30s has no area or square called %.31s", to_map, place); why = buf; }
+        else if (map_tile(d, x, y) == TILE_VOID)
+            { snprintf(buf, sz, "%.31s in %.30s is void", place, to_map); why = buf; }
+    }
+    map_free(d);
+    return why;
+}
+
+
+static int lands(const Map *m, const Token *party, int n, int ax, int ay)
+{
+    for (int i = 0; i < n; i++) {
+        int x0 = ax + party[i].x, y0 = ay + party[i].y, s = party[i].size;
+        for (int y = y0; y < y0 + s; y++)
+            for (int x = x0; x < x0 + s; x++)
+                if (!map_in_bounds(m, x, y) || map_tile(m, x, y) == TILE_VOID) return 0;
+        if (tokens_overlapping(&m->tokens, x0, y0, s, -1, TOKEN_ANY_KIND) >= 0) return 0;
+    }
+    return 1;
+}
+
+int link_land(const Map *dst, const char *place, const Token *party, int n,
+              int *ax, int *ay, char *why, size_t whysz)
+{
+    /* The formation's box, from the end's corner. */
+    int fx0 = 0, fy0 = 0, fx1 = 0, fy1 = 0;
+    for (int i = 0; i < n; i++) {
+        if (i == 0 || party[i].x < fx0) fx0 = party[i].x;
+        if (i == 0 || party[i].y < fy0) fy0 = party[i].y;
+        if (i == 0 || party[i].x + party[i].size - 1 > fx1) fx1 = party[i].x + party[i].size - 1;
+        if (i == 0 || party[i].y + party[i].size - 1 > fy1) fy1 = party[i].y + party[i].size - 1;
+    }
+    int bx0, by0, bx1, by1, inside;
+    int ai = map_area_find(dst, place), px, py;
+    if (ai >= 0) {
+        const Area *ar = &dst->areas[ai];
+        bx0 = ar->x0; by0 = ar->y0; bx1 = ar->x1; by1 = ar->y1;
+        inside = 1;
+    } else if (map_coord_parse(place, &px, &py) && map_in_bounds(dst, px, py)) {
+        bx0 = bx1 = px; by0 = by1 = py;
+        inside = 0;
+    } else {
+        snprintf(why, whysz, "%.24s has no area or square called %.31s", dst->name, place);
+        return 0;
+    }
+    /* Twice the middles, so a box of even width has a middle between squares. */
+    long mx = bx0 + bx1, my = by0 + by1, best = -1;
+    int  lo_x = inside ? bx0 - fx0 : 0 - fx0, hi_x = inside ? bx1 - fx1 : dst->w - 1 - fx1;
+    int  lo_y = inside ? by0 - fy0 : 0 - fy0, hi_y = inside ? by1 - fy1 : dst->h - 1 - fy1;
+    for (int y = lo_y; y <= hi_y; y++)
+        for (int x = lo_x; x <= hi_x; x++) {
+            long cx = 2L * x + fx0 + fx1 - mx, cy = 2L * y + fy0 + fy1 - my;
+            long d = cx * cx + cy * cy;
+            if (best >= 0 && d >= best) continue;
+            if (!lands(dst, party, n, x, y)) continue;
+            best = d; *ax = x; *ay = y;
+        }
+    if (best < 0) {
+        if (inside) snprintf(why, whysz, "no room in %.24s's %.31s for %d creature%s as they stand",
+                             dst->name, place, n, n == 1 ? "" : "s");
+        else        snprintf(why, whysz, "no room in %.24s for %d creature%s as they stand",
+                             dst->name, n, n == 1 ? "" : "s");
+        return 0;
+    }
+    return 1;
 }

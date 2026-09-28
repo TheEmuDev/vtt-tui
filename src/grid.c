@@ -704,9 +704,11 @@ void grid_draw_links(Renderer *r, const Map *m, const GridView *g, const Theme *
         if (l->secret && !reveal) continue;
         uint32_t glyph = link_glyph(l->kind, ascii);
         uint32_t fg    = l->secret ? th->dim : th->accent;
-        char     num[4];
-        int      nlen = snprintf(num, sizeof num, "%d", l->num);
-        for (int e = 0; e < 2; e++) {
+        /* A link to another map says so: an arrow after its number. */
+        char     num[8];
+        int      nlen = snprintf(num, sizeof num, "%d%s", l->num, l->to_map[0] ? (ascii ? ">" : "\xe2\x86\x92") : "");
+        int      ncells = l->to_map[0] ? nlen - (ascii ? 0 : 2) : nlen;   /* the arrow is one cell */
+        for (int e = 0; e < link_ends(l); e++) {
             if (l->x[e] > x1 || l->x[e] + l->size - 1 < x0 || l->y[e] > y1 || l->y[e] + l->size - 1 < y0)
                 continue;
             for (int k = 0; k < l->size * l->size; k++) {
@@ -717,14 +719,16 @@ void grid_draw_links(Renderer *r, const Map *m, const GridView *g, const Theme *
                 sy += (ih - 1) / 2;
                 /* The number where it fits beside the glyph, on the end's
                  * first square; the glyph alone everywhere else. */
-                int withnum = k == 0 && iw >= 1 + nlen;
-                int w = withnum ? 1 + nlen : 1;
+                int withnum = k == 0 && iw >= 1 + ncells;
+                int w = withnum ? 1 + ncells : 1;
                 int cx = sx + (iw - w) / 2;
                 Cell *c = rnd_at(r, cx, sy);
                 if (c) { c->ch = glyph; c->fg = fg; }
-                for (int d = 0; withnum && d < nlen; d++) {
+                for (int d = 0, b = 0; withnum && b < nlen; d++) {
+                    uint32_t cp;
+                    b += utf8_decode(num + b, (size_t)(nlen - b), &cp);
                     c = rnd_at(r, cx + 1 + d, sy);
-                    if (c) { c->ch = (uint32_t)num[d]; c->fg = fg; }
+                    if (c) { c->ch = cp; c->fg = fg; }
                 }
             }
         }

@@ -162,6 +162,38 @@ int app_open_map(App *a, const char *path)
     return 0;
 }
 
+static void drop_autosave(const App *a);
+
+/* A trip's half of opening a map (docs/MAPLINKS.md): the map in hand, already
+ * saved, is put down and `m` taken up in play mode. Unlike :e the server,
+ * the session log and the phones carry on -- the table walked through a
+ * door, it did not close the book. The play settings carry on too; what
+ * points into the old map (the selection, the range, the ruler, pings) goes.
+ * A handout is the encounter's and comes down. */
+void app_travel_to(App *a, Map *m)
+{
+    if (a->handout_up) net_set_handout(&a->net, "", 0, a->now_ms);
+    a->handout_up = 0;
+    a->handout_title[0] = a->handout_body[0] = '\0';
+    drop_autosave(a);
+    map_free(a->map);
+    a->map = m;
+    undo_clear(&a->undo);
+    play_focus(&a->play, -1);
+    a->play.visual = 0;
+    a->play.clock  = -1;
+    range_clear(&a->play.range);
+    a->ruler.active = 0;
+    ed_init(&a->ed, m);
+    app_floor_reset(a);
+    ed_layout(&a->ed, m, a->rnd->w, a->rnd->h);
+    a->screen = SCREEN_PLAY;
+    a->autosave_gen = a->seen_gen = m->gen;
+    a->npings = a->npinged = 0;
+    a->agent_ring.until_ms = 0;
+    a->dirty = 1;
+}
+
 /* Recovery is asked in the way a shell asks about a core file: the map is
  * open as it was saved, and this offers the newer copy over it. Saying no
  * throws the copy away, so the question is asked once. */

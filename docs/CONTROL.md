@@ -79,6 +79,7 @@ as `--describe` names them. Lines run in order, so a read sees the edits before 
 | `fog paint REGION N` | paints the region into fog patch N (0 scrubs) |
 | `room NAME ...`, `area NAME ...`, `door ROOM SIDE ...`, `corridor A B ...` | the room language (added after stamps): named areas, rooms placed beside rooms, doors by side, corridors; docs/AGENTS.md has the whole of it |
 | `stamp NAME SQUARE [rotate 90\|180\|270] [mirror]` | a saved stamp, top-left square here, turned then mirrored; see-through and all or nothing like the GM's `p` (added with stamps) |
+| `link A to MAP PLACE [KIND] [size N] [secret]` | a link to another map, checked against that file (added with links between map files, docs/MAPLINKS.md); taking one opens maps, which stays the GM's |
 | `link A B [KIND] [size N] [oneway] [secret]`, `link N ... \| remove` | a link between two places, or a change to link N (added with links); docs/AGENTS.md has the details |
 | `floor NAME LEVEL`, `floor NAME off` | mark a named area a floor, or unmark it (added with floors) |
 | `scene NAME`; `scene save NAME [REGION]`, `scene NAME remove` | put a scene back (an edit, one step with the request); save or remove one, each alone in its request since neither is in the undo log (added with scenes) |

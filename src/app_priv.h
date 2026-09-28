@@ -91,6 +91,10 @@ void app_pick_open(App *a, PickWhat what, int kind, const char *initial);
 void app_pick_key(App *a, Key k);
 void app_character_command(App *a, const char *rest);
 
+/* app.c: a trip through a link to another map puts this map down (saved)
+ * and takes `m` up, keeping the server, the log and the play settings. */
+void app_travel_to(App *a, Map *m);
+
 /* app_handout.c: :handout; app_handout_show puts one up by name. */
 void app_handout_command(App *a, const char *rest);
 void app_handout_show(App *a, const char *name);

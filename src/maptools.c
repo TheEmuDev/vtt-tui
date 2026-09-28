@@ -645,9 +645,10 @@ void maptools_describe(FILE *out, const Map *m, int json)
             json_kint(&j, "size", l->size);
             json_key(&j, "oneway"); json_bool(&j, l->oneway);
             json_key(&j, "secret"); json_bool(&j, l->secret);
+            if (l->to_map[0]) { json_kstr(&j, "to_map", l->to_map); json_kstr(&j, "to_place", l->to_place); }
             json_key(&j, "ends");
             json_open(&j, '[');
-            for (int e = 0; e < 2; e++) {
+            for (int e = 0; e < link_ends(l); e++) {
                 json_open(&j, '{');
                 link_end_name(l, e, buf, sizeof buf);
                 json_kstr(&j, "at", buf);
@@ -747,6 +748,15 @@ void maptools_describe(FILE *out, const Map *m, int json)
             }
             for (int li = 0; li < m->nlinks; li++) {
                 const Link *l = &m->links[li];
+                if (l->to_map[0]) {
+                    if (rooms_at(&r, m, l->x[0], l->y[0]) != i) continue;
+                    char name[32], here[2 * MAP_COORD_MAX + 2];
+                    link_name(l, name, sizeof name);
+                    link_end_name(l, 0, here, sizeof here);
+                    fprintf(out, "  %-12s %-8s leads to %s, %s (another map)%s\n", name, here, l->to_map, l->to_place,
+                            l->secret ? "  secret" : "");
+                    continue;
+                }
                 for (int e = 0; e < 2; e++) {
                     if (rooms_at(&r, m, l->x[e], l->y[e]) != i) continue;
                     char name[32], here[2 * MAP_COORD_MAX + 2], there[2 * MAP_COORD_MAX + 2], where[80];
@@ -1013,6 +1023,17 @@ static void check_map(const Map *m, Findings *fs)
         map_coord_name(vx, vy, where, sizeof where);
         snprintf(msg, sizeof msg, "%s has an end on void: nobody can land there", name);
         map_finding(fs, "W150", "link-on-void", vx, vy, 0, where, msg);
+    }
+    /* A link to another map: the file beside this one, and its place. */
+    for (int i = 0; i < m->nlinks; i++) {
+        const Link *l = &m->links[i];
+        char why[200];
+        if (!l->to_map[0] || !link_map_check(m, l->to_map, l->to_place, why, sizeof why)) continue;
+        char name[32];
+        link_name(l, name, sizeof name);
+        map_coord_name(l->x[0], l->y[0], where, sizeof where);
+        snprintf(msg, sizeof msg, "%s to %s, %s leads nowhere: %s", name, l->to_map, l->to_place, why);
+        map_finding(fs, "W151", "link-to-nowhere", l->x[0], l->y[0], 0, where, msg);
     }
 }
 

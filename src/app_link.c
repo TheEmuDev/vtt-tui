@@ -8,10 +8,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #include "app_priv.h"
+#include "fog.h"
 #include "link.h"
+#include "mapio.h"
 #include "prof.h"
+#include "turn.h"
 
 /* ------------------------------------------------------------ build: g l */
 
@@ -89,6 +93,106 @@ void app_link_cancel(App *a)
     app_set_status(a, "link canceled");
 }
 
+/* ------------------------------------------------- another map: the trip */
+
+/* g o on a link to another map: whoever stands on the end goes there,
+ * keeping formation, and so do the GM and the phones. Checked whole before
+ * anything moves; the map left is saved. */
+static void travel(App *a, int li)
+{
+    PROF_ZONE("link.trip.map");
+    Map *m = a->map;
+    Link l = m->links[li];
+    char name[32], msg[320], why[200], path[MAP_PATH_MAX + 32], err[MAPIO_ERR_MAX];
+    link_name(&l, name, sizeof name);
+#define REFUSE(...) do { snprintf(why, sizeof why, __VA_ARGS__); \
+                         if (l.secret) app_set_status_gm(a, why); else app_set_status(a, why); return; } while (0)
+    if (!link_map_path(m, l.to_map, path, sizeof path))
+        REFUSE("save this map first (:w NAME) - %.30s is found beside it", l.to_map);
+    struct stat sh, st;
+    if (stat(m->path, &sh) == 0 && stat(path, &st) == 0 && sh.st_dev == st.st_dev && sh.st_ino == st.st_ino)
+        REFUSE("%s leads to this map", name);
+
+    /* Who goes: everyone on the end, at their offsets from its corner. */
+    Token party[LINK_TRIP_MAX];
+    int   idx[LINK_TRIP_MAX], n = 0;
+    for (int i = 0; i < m->tokens.n; i++) {
+        if (!token_meets(&m->tokens.v[i], l.x[0], l.y[0], l.size, l.size)) continue;
+        if (n == LINK_TRIP_MAX) REFUSE("more than %d creatures on %s", LINK_TRIP_MAX, name);
+        party[n] = m->tokens.v[i];
+        party[n].x = (int16_t)(party[n].x - l.x[0]);
+        party[n].y = (int16_t)(party[n].y - l.y[0]);
+        idx[n++] = i;
+    }
+    if (!n) REFUSE("nobody on %s", name);
+
+    Map *d = mapio_load(path, err, sizeof err);
+    if (!d) REFUSE("%s leads to %.30s, which is not there (%.80s)", name, l.to_map, path);
+    char autosave[MAP_PATH_MAX + 16];
+    mapio_autosave_path(d, autosave, sizeof autosave);
+    if (mapio_autosave_newer(d->path, autosave, NULL)) {
+        map_free(d);
+        REFUSE("%.30s has unsaved work from a crash - open it with :e first, to recover it or let it go", l.to_map);
+    }
+    int ax, ay;
+    if (!link_land(d, l.to_place, party, n, &ax, &ay, why, sizeof why)) {
+        map_free(d);
+        if (l.secret) app_set_status_gm(a, why); else app_set_status(a, why);
+        return;
+    }
+
+    /* They leave, and the map they leave is saved; a failed save puts them
+     * back and goes nowhere. */
+    undo_begin(&a->undo);
+    for (int k = n - 1; k >= 0; k--) {
+        turn_before_remove(m, &a->undo, idx[k]);
+        undo_del_token(&a->undo, m, idx[k]);
+    }
+    turn_settle(m, &a->undo);
+    undo_end(&a->undo);
+    if (mapio_save(m, m->path, err, sizeof err) != 0) {
+        undo_undo(&a->undo, m);
+        map_free(d);
+        REFUSE("%.120s - nobody went", err);
+    }
+#undef REFUSE
+    char left[MAP_NAME_MAX];
+    str_lcpy(left, m->name, sizeof left);
+    char stem[MAP_PATH_MAX];
+    const char *base = strrchr(m->path, '/');
+    str_lcpy(stem, base ? base + 1 : m->path, sizeof stem);
+    size_t sl = strlen(stem);
+    if (sl > 4 && !strcmp(stem + sl - 4, ".vtt")) stem[sl - 4] = '\0';
+
+    app_travel_to(a, d);
+    int first = -1;
+    char who[160] = "";
+    for (int k = 0; k < n; k++) {
+        Token t = party[k];
+        t.x = (int16_t)(ax + t.x);
+        t.y = (int16_t)(ay + t.y);
+        t.turn = 0;                           /* the fight stays behind */
+        t.init = 0;
+        tokens_unique_label(&d->tokens, party[k].label, t.label, sizeof t.label);
+        int at = tokens_add(&d->tokens, t);
+        if (first < 0) first = at;
+        size_t wl = strlen(who);
+        if (wl < 100) snprintf(who + wl, sizeof who - wl, "%s%.30s", k ? ", " : "", token_name(&t));
+    }
+    map_touch(d);
+    fog_recompute(d);
+    a->ed.cx = d->tokens.v[first].x;
+    a->ed.cy = d->tokens.v[first].y;
+    grid_center_on(&a->ed.view, d, a->ed.cx, a->ed.cy);
+
+    /* The way back, if there is none. */
+    int back = 0;
+    for (int i = 0; i < d->nlinks; i++) back |= !strcmp(d->links[i].to_map, stem);
+    snprintf(msg, sizeof msg, "%s took %s from %.30s to %.30s, %.31s%s%s%s", who, name, left, d->name, l.to_place,
+             back ? "" : " - no way back yet: in build mode :link to ", back ? "" : stem, back ? "" : " PLACE makes one");
+    app_note_gm(a, msg);
+}
+
 /* ------------------------------------------------------------- play: g o */
 
 void app_link_go(App *a, int li, int end, int enforce, int *moved_dx, int *moved_dy)
@@ -99,6 +203,7 @@ void app_link_go(App *a, int li, int end, int enforce, int *moved_dx, int *moved
     const Link *l = &m->links[li];
     char name[32], msg[160];
     link_name(l, name, sizeof name);
+    if (l->to_map[0]) { travel(a, li); return; }
 
     if (!link_trip(m, li, end, enforce, &tr)) {
         if (l->secret) app_set_status_gm(a, tr.why);
@@ -145,8 +250,11 @@ static void list_links(App *a)
         link_name(l, name, sizeof name);
         link_end_name(l, 0, e0, sizeof e0);
         link_end_name(l, 1, e1, sizeof e1);
-        int n = snprintf(one, sizeof one, "%s %s %s%s%s%s", i ? "," : "", name, e0,
-                         l->oneway ? ">" : "-", e1, l->secret ? " secret" : "");
+        int n = l->to_map[0]
+            ? snprintf(one, sizeof one, "%s %s %s>%s, %s%s", i ? "," : "", name, e0, l->to_map, l->to_place,
+                       l->secret ? " secret" : "")
+            : snprintf(one, sizeof one, "%s %s %s%s%s%s", i ? "," : "", name, e0,
+                       l->oneway ? ">" : "-", e1, l->secret ? " secret" : "");
         if (off + n + 24 >= (int)sizeof msg && i + 1 < m->nlinks) break;
         if (off + n >= (int)sizeof msg) break;
         memcpy(msg + off, one, (size_t)n + 1);
@@ -162,6 +270,43 @@ void app_link_command(App *a, const char *rest)
     Editor *e = &a->ed;
     char    msg[160];
     if (!*rest) { list_links(a); return; }
+
+    /* :link to MAP PLACE -- the brush's block at the cursor, to a place in
+     * another map beside this one. */
+    if (!strncmp(rest, "to ", 3)) {
+        if (a->screen != SCREEN_EDITOR) { app_set_status_gm(a, "links are made in build mode - F1 first"); return; }
+        char to_map[64] = "", place[AREA_NAME_MAX + 16] = "", why[200];
+        const char *p = rest + 3;
+        while (*p == ' ') p++;
+        size_t k = strcspn(p, " ");
+        snprintf(to_map, sizeof to_map, "%.*s", (int)(k < sizeof to_map - 1 ? k : sizeof to_map - 1), p);
+        p += k;
+        while (*p == ' ') p++;
+        str_lcpy(place, p, sizeof place);
+        if (!to_map[0] || !place[0]) { app_set_status_gm(a, ":link to MAP PLACE - PLACE an area or a square in MAP"); return; }
+        if (strlen(place) >= AREA_NAME_MAX) { app_set_status_gm(a, "no area has a name that long"); return; }
+        if (link_map_check(m, to_map, place, why, sizeof why)) { app_set_status_gm(a, why); return; }
+        Link nl;
+        memset(&nl, 0, sizeof nl);
+        nl.num  = (uint8_t)link_free_num(m);
+        nl.kind = e->link_kind;
+        nl.size = (uint8_t)e->brush;
+        nl.x[0] = nl.x[1] = (int16_t)e->cx;
+        nl.y[0] = nl.y[1] = (int16_t)e->cy;
+        str_lcpy(nl.to_map, to_map, sizeof nl.to_map);
+        str_lcpy(nl.to_place, place, sizeof nl.to_place);
+        if (!nl.num) { app_set_status_gm(a, "the map holds all the links it can"); return; }
+        const char *bad = link_problem(m, &nl);
+        if (bad) { snprintf(msg, sizeof msg, "no link here: %s", bad); app_set_status_gm(a, msg); return; }
+        e->link_on = 0;
+        undo_begin(&a->undo);
+        (void)undo_set_link(&a->undo, m, &nl);
+        undo_end(&a->undo);
+        char line[160];
+        link_describe(&nl, line, sizeof line);
+        app_note_gm(a, line);
+        return;
+    }
 
     char words[8][16];
     int  nw = 0;
@@ -231,6 +376,12 @@ void app_link_command(App *a, const char *rest)
         else if (!strcmp(words[i], "twoway"))   l.oneway = 0;
         else if (!strcmp(words[i], "secret"))   l.secret = 1;
         else if (!strcmp(words[i], "seen"))     l.secret = 0;
+        else if (l.to_map[0] && (!strcmp(words[i], "oneway") || !strcmp(words[i], "twoway") ||
+                                  !strcmp(words[i], "reverse"))) {
+            snprintf(msg, sizeof msg, "link %d leads to another map: it has one end here, and goes one way", l.num);
+            app_set_status_gm(a, msg);
+            return;
+        }
         else if (!strcmp(words[i], "reverse")) {
             int16_t x = l.x[0], y = l.y[0];
             l.x[0] = l.x[1]; l.y[0] = l.y[1];

@@ -1239,6 +1239,28 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
                 return 0;
             }
             first = 2;
+        } else if (n >= 4 && !strcmp(w[2], "to")) {
+            /* link A to MAP PLACE [KIND] [size N] [secret]: to another map. */
+            l.num = (uint8_t)link_free_num(m);
+            if (!l.num) BAD("the map holds %d links", MAP_LINKS_MAX);
+            if (n < 5) BAD("link SQUARE to MAP PLACE [KIND] [size N] [secret] - PLACE an area or a square in MAP");
+            l.size = 1;
+            for (int i = 5; i < n; i++) {
+                int k = link_kind_from_name(w[i]), sz;
+                if (k >= 0) l.kind = (uint8_t)k;
+                else if (!strcmp(w[i], "secret")) l.secret = 1;
+                else if (!strcmp(w[i], "size") && i + 1 < n && word_int(w[i + 1], 1, LINK_SIZE_MAX, &sz)) { l.size = (uint8_t)sz; i++; }
+                else BAD("%.20s: after the place goes a kind, size N or secret", w[i]);
+            }
+            if (strlen(w[4]) >= AREA_NAME_MAX) BAD("no area has a name that long");
+            char why[200];
+            if (link_map_check(m, w[3], w[4], why, sizeof why)) BAD("%s", why);
+            str_lcpy(l.to_map, w[3], sizeof l.to_map);
+            str_lcpy(l.to_place, w[4], sizeof l.to_place);
+            int ax, ay;
+            if (!link_spot(m, w[1], l.size, -1, -1, &ax, &ay, err, errsz)) return -1;
+            l.x[0] = l.x[1] = (int16_t)ax; l.y[0] = l.y[1] = (int16_t)ay;
+            first = n;
         } else {
             l.num = (uint8_t)link_free_num(m);
             if (!l.num) BAD("the map holds %d links", MAP_LINKS_MAX);
@@ -1259,6 +1281,8 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
         }
         for (int i = first; i < n; i++) {
             int k = link_kind_from_name(w[i]);
+            if (l.to_map[0] && (!strcmp(w[i], "oneway") || !strcmp(w[i], "twoway") || !strcmp(w[i], "reverse")))
+                BAD("link %d leads to another map: it has one end here, and goes one way", l.num);
             if (k >= 0)                                l.kind = (uint8_t)k;
             else if (!strcmp(w[i], "oneway"))          l.oneway = 1;
             else if (!strcmp(w[i], "twoway"))          l.oneway = 0;
@@ -1275,7 +1299,7 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
         const char *why = link_problem(m, &l);
         if (why) BAD("%s", why);
         (void)undo_set_link(u, m, &l);
-        for (int e = 0; e < 2; e++) touched(ed, l.x[e], l.y[e], l.x[e] + l.size - 1, l.y[e] + l.size - 1);
+        for (int e = 0; e < link_ends(&l); e++) touched(ed, l.x[e], l.y[e], l.x[e] + l.size - 1, l.y[e] + l.size - 1);
         return 0;
     }
     else if (!strcmp(v, "stamp")) {

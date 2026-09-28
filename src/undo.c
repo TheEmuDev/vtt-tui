@@ -392,7 +392,22 @@ int undo_remove_area(Undo *u, Map *m, const char *name)
 
 /* A link in a token slot, carried whole in the note: size 1 says there is
  * one, 0 that there is none. */
-_Static_assert(sizeof(Link) <= TOKEN_NOTE_MAX, "a link fits in a token's note");
+/* A link rides in a token slot: its first bytes in .note, the rest (a link
+ * to another map's names) in .label. */
+_Static_assert(sizeof(Link) <= TOKEN_NOTE_MAX + TOKEN_LABEL_MAX, "a link fits in a token's note and label");
+#define LINK_IN_NOTE (sizeof(Link) < TOKEN_NOTE_MAX ? sizeof(Link) : TOKEN_NOTE_MAX)
+
+static void link_pack(Token *t, const Link *l)
+{
+    memcpy(t->note, l, LINK_IN_NOTE);
+    if (sizeof(Link) > LINK_IN_NOTE) memcpy(t->label, (const char *)l + LINK_IN_NOTE, sizeof(Link) - LINK_IN_NOTE);
+}
+
+static void link_unpack(Link *l, const Token *t)
+{
+    memcpy(l, t->note, LINK_IN_NOTE);
+    if (sizeof(Link) > LINK_IN_NOTE) memcpy((char *)l + LINK_IN_NOTE, t->label, sizeof(Link) - LINK_IN_NOTE);
+}
 
 static Token link_slot(const Link *l)
 {
@@ -400,15 +415,15 @@ static Token link_slot(const Link *l)
     memset(&t, 0, sizeof t);
     if (!l) return t;
     t.size = 1;
-    memcpy(t.note, l, sizeof *l);
+    link_pack(&t, l);
     return t;
 }
 
 static void link_from_slot(Map *m, const Token *want, const Token *other)
 {
     Link l;
-    if (want->size) { memcpy(&l, want->note, sizeof l); (void)link_put(m, &l); return; }
-    memcpy(&l, other->note, sizeof l);
+    if (want->size) { link_unpack(&l, want); (void)link_put(m, &l); return; }
+    link_unpack(&l, other);
     (void)link_remove(m, l.num);
 }
 

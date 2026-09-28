@@ -22,8 +22,8 @@ any code, and moves to the README when it ships. Ideas not yet decided live in I
    the players' screens and taken down again: `:handout NAME`, `:handout say TEXT`,
    `:handout off`. Plan: docs/HANDOUTS.md.
 5. **Links between map files.** A link end that opens another map and carries the party
-   over (the town to the dungeon): links and floors across a campaign. The largest: it
-   touches opening maps, the autosave and the players' connection.
+   over (the town to the dungeon): `:link to crypt Entrance`, `g o`. Plan:
+   docs/MAPLINKS.md.
 
 **Housekeeping** (2026-09-27): the `:` command chain became a table, and `tests/run.c` was
 split by area. CLAUDE.md's watch list keeps what is left.

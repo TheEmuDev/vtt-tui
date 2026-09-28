@@ -76,6 +76,11 @@ typedef enum {
     LINK_PORTAL,
     LINK_KIND_COUNT,
 } LinkKind;
+/* A link to another map file (docs/MAPLINKS.md) has one end here and names
+ * the other: the map, by its file's name beside this one's, and a place in
+ * it -- a named area, or a square. Its second end is kept equal to its first,
+ * so a loop over both ends does no harm; link_ends says how many are here. */
+#define LINK_MAP_MAX 24
 typedef struct {
     int16_t x[2], y[2];           /* each end's top-left square */
     uint8_t num;                  /* 1..LINK_NUM_MAX */
@@ -83,7 +88,11 @@ typedef struct {
     uint8_t size;                 /* each end is size x size, 1..LINK_SIZE_MAX */
     uint8_t oneway;               /* taken from end 0 only */
     uint8_t secret;               /* the GM's alone: never drawn for the players */
+    char    to_map[LINK_MAP_MAX]; /* "" for a link on this map */
+    char    to_place[AREA_NAME_MAX];
 } Link;
+
+static inline int link_ends(const Link *l) { return l->to_map[0] ? 1 : 2; }
 /* A scene: the creatures and the fight saved under a name and put back
  * (docs/SCENES.md, scene.h). With `boxed` it is the creatures meeting the
  * box, and putting it back replaces only those; without, the whole map's,

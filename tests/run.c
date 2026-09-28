@@ -26,6 +26,7 @@ int main(void)
         { "characters", test_characters },
         { "ctlchars", test_ctl_characters },
         { "scenes", test_scenes },
+        { "maplinks", test_map_links },
         { "handouts", test_handouts },
         { "joinframe", test_join_frame },
         { "handoutkeys", test_handout_keys },

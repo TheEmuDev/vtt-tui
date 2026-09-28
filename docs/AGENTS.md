@@ -80,6 +80,7 @@ magic, go on the same map apart from each other, separated by void, and a link j
 | line | does |
 |---|---|
 | `link Hall Tower [KIND] [size 2\|3] [oneway] [secret]` | a new link, numbered the lowest number free. Each end is a room's name (the free ground nearest its middle) or a square (the end's top-left). KIND `stairs` (default) `ladder` `trapdoor` `portal`; `size 3` makes each end 3x3, room for a party; `oneway` runs from the first end only; `secret` hides it from the players. Both ends on ground, apart, and on no other link's squares |
+| `link B2 to crypt Entrance [KIND] [size N] [secret]` | a link to another map: one end here (a square, or a room's middle), the party arriving in `crypt.vtt`'s area `Entrance` (or a square there); the file must be beside this map's and the place must be there. Taking it is the GM's (`g o`) |
 | `link 3 portal oneway`, `link 3 reverse`, `link 3 remove` | change link 3 (a kind, `oneway`, `twoway`, `reverse` swaps its ends, `secret`, `seen`), or remove it |
 
 **Creatures.**

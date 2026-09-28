@@ -61,6 +61,28 @@ typedef struct {
  * holds. Returns the number going, or 0 with `why` said. */
 int  link_trip(const Map *m, int li, int from, int enforce, LinkTrip *t);
 
+/* A map a link may lead to: its file's name without .vtt, 1 to
+ * LINK_MAP_MAX-1 characters, no quote or slash, not hidden. */
+int  link_map_name_ok(const char *name);
+
+/* The file a link to another map names: beside m's own file. 0 when m has
+ * no file to be beside. */
+int  link_map_path(const Map *m, const char *to_map, char *buf, size_t sz);
+
+/* Could a link from m lead to PLACE in TO_MAP: the file there, and the place
+ * in it an area or a square on ground? NULL, or why not in buf. It reads the
+ * other file. */
+const char *link_map_check(const Map *m, const char *to_map, const char *place, char *buf, size_t sz);
+
+/* Where a party arriving through a link to another map lands in `dst`. The
+ * party is n creatures at offsets (their x, y) from the near end's top-left,
+ * kept in formation. `place` is a named area -- the formation inside it,
+ * nearest its middle -- or a square, the formation's box nearest it. Every
+ * square must be ground and free. Returns 1 with the far end's top-left in
+ * *ax, *ay, or 0 with why. */
+int  link_land(const Map *dst, const char *place, const Token *party, int n,
+               int *ax, int *ay, char *why, size_t whysz);
+
 /* "stairs 3" -- how a link is named in every message. */
 void link_name(const Link *l, char *out, size_t outsz);
 /* An end's squares: "C3", or "C3-D4" for a block. */

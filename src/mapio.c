@@ -28,7 +28,7 @@
  * v3 added status markers on tokens. An older reader would ignore those lines
  * and silently drop them, which loses combat state from a saved fight, so it
  * refuses too. Each version still loads everything older. */
-#define FORMAT_VERSION 11
+#define FORMAT_VERSION 12
 
 /* Version 4 added the turn order. A map with no fight in it is still written
  * as version 3, which says everything it needs and stays loadable by the
@@ -51,6 +51,9 @@
 /* Version 11 added scenes: an older reader would read a scene's creatures
  * as the map's own. */
 #define FORMAT_BEFORE_SCENES   10
+/* Version 12 added links to other map files: an older reader would read the
+ * line's "to" as a square and drop the link, and the way out with it. */
+#define FORMAT_BEFORE_MAPLINKS 11
 
 /* Fog rows: a held tile of patch 1..15 is one of these, in order. */
 static const char FOG_HELD_CHARS[FOG_PATCH_MAX + 1] = "123456789!\"#$%&";
@@ -132,7 +135,9 @@ int mapio_write(const Map *m, const char *path, char *err, size_t errsz)
     for (int i = 0; i < m->nareas; i++) v9 |= m->areas[i].floor;
     int v10 = tokens_any_hidden(&m->tokens);
     int v11 = m->nscenes > 0;
-    fprintf(f, "VTT %d\n", v11 ? FORMAT_VERSION : v10 ? FORMAT_BEFORE_SCENES : v9 ? FORMAT_BEFORE_HIDDEN : v8 ? FORMAT_BEFORE_FLOORS : v7 ? FORMAT_BEFORE_LINKS : v6 ? FORMAT_BEFORE_AREAS : v5 ? FORMAT_BEFORE_COUNTERS
+    int v12 = 0;
+    for (int i = 0; i < m->nlinks; i++) v12 |= m->links[i].to_map[0] != '\0';
+    fprintf(f, "VTT %d\n", v12 ? FORMAT_VERSION : v11 ? FORMAT_BEFORE_MAPLINKS : v10 ? FORMAT_BEFORE_SCENES : v9 ? FORMAT_BEFORE_HIDDEN : v8 ? FORMAT_BEFORE_FLOORS : v7 ? FORMAT_BEFORE_LINKS : v6 ? FORMAT_BEFORE_AREAS : v5 ? FORMAT_BEFORE_COUNTERS
                           : fight ? FORMAT_BEFORE_CLOCKS : FORMAT_BEFORE_TURNS);
     fprintf(f, "name %s\n", m->name);
     fprintf(f, "size %d %d\n", m->w, m->h);
@@ -172,9 +177,13 @@ int mapio_write(const Map *m, const char *path, char *err, size_t errsz)
         if (m->areas[i].floor) fprintf(f, "floor \"%s\" %d\n", m->areas[i].name, m->areas[i].level);
     for (int i = 0; i < m->nlinks; i++) {
         const Link *l = &m->links[i];
-        fprintf(f, "link %d %s %d %d %d %d %d%s%s\n", l->num, link_kind_name(l->kind), l->size,
-                l->x[0], l->y[0], l->x[1], l->y[1],
-                l->oneway ? " oneway" : "", l->secret ? " secret" : "");
+        if (l->to_map[0])
+            fprintf(f, "link %d %s %d %d %d to \"%s\" \"%s\"%s\n", l->num, link_kind_name(l->kind), l->size,
+                    l->x[0], l->y[0], l->to_map, l->to_place, l->secret ? " secret" : "");
+        else
+            fprintf(f, "link %d %s %d %d %d %d %d%s%s\n", l->num, link_kind_name(l->kind), l->size,
+                    l->x[0], l->y[0], l->x[1], l->y[1],
+                    l->oneway ? " oneway" : "", l->secret ? " secret" : "");
     }
 
     /* Scenes: a scene line, its creatures and fight as the map's are
@@ -557,10 +566,43 @@ static int parse_area_line(Map *m, const char *line)
  * does not know or a number already used. Where the ends are is checked
  * once the whole file is in (link_misplaced wants the size), see the end of
  * mapio_load_diag. */
+/* link N KIND SIZE X Y to "map" "place" [secret]: a link to another map. */
+static int parse_map_link(Map *m, int num, int k, int size, int x0, int y0, const char *p)
+{
+    Link l;
+    memset(&l, 0, sizeof l);
+    l.num = (uint8_t)num; l.kind = (uint8_t)k; l.size = (uint8_t)size;
+    l.x[0] = l.x[1] = (int16_t)x0; l.y[0] = l.y[1] = (int16_t)y0;
+    /* Two quoted words, then words. */
+    char *dst[2] = { l.to_map, l.to_place };
+    size_t cap[2] = { sizeof l.to_map, sizeof l.to_place };
+    for (int w = 0; w < 2; w++) {
+        while (*p == ' ') p++;
+        if (*p != '"') return -1;
+        const char *q = strchr(p + 1, '"');
+        if (!q || (size_t)(q - p - 1) >= cap[w]) return -1;
+        memcpy(dst[w], p + 1, (size_t)(q - p - 1));
+        p = q + 1;
+    }
+    while (*p == ' ') p++;
+    if (!strcmp(p, "secret")) l.secret = 1;
+    else if (*p) return -1;
+    if (!link_map_name_ok(l.to_map) || !l.to_place[0]) return -1;
+    return link_put(m, &l) >= 0 ? 0 : -1;
+}
+
 static int parse_link_line(Map *m, const char *line)
 {
     int num, size, x0, y0, x1, y1, consumed = 0;
     char kind[16];
+    if (sscanf(line, "link %d %15s %d %d %d to%n", &num, kind, &size, &x0, &y0, &consumed) == 5 && consumed &&
+        (line[consumed] == ' ' || !line[consumed])) {
+        int k = link_kind_from_name(kind);
+        if (k < 0 || num < 1 || num > LINK_NUM_MAX || size < 1 || size > LINK_SIZE_MAX) return -1;
+        if (x0 < 0 || y0 < 0 || x0 > INT16_MAX || y0 > INT16_MAX || link_find(m, num) >= 0) return -1;
+        return parse_map_link(m, num, k, size, x0, y0, line + consumed);
+    }
+    consumed = 0;
     if (sscanf(line, "link %d %15s %d %d %d %d %d%n", &num, kind, &size, &x0, &y0, &x1, &y1, &consumed) < 7)
         return -1;
     int k = link_kind_from_name(kind);

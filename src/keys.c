@@ -163,6 +163,7 @@ static const KeyDoc BUILD[] = {
     KEY("g l",    "make a link: g l on one end, g l on the other; the brush is its size"),
     KEY(":link ladder", "what g l makes: stairs, ladder, trapdoor or portal"),
     KEY(":link 3 oneway", "change it: a kind, oneway, twoway, reverse, secret, seen, remove"),
+    KEY(":link to crypt Entrance", "a link from here to an area or square in crypt.vtt; g o takes it in play mode"),
 
     GROUP("Fog"),
     KEY(":fog Crypt", "make a patch, or pick one, for g f to paint"),

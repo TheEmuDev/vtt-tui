@@ -520,10 +520,30 @@ visible to the players, except for ends that fog hides.
 | `:link 3 secret`, `:link 3 seen` | hide it from the players, or show it |
 | `:link 3 remove` | remove it |
 | `:link ladder` | the kind `g l` makes next |
+| `:link to crypt Entrance` | a link from the cursor (the brush's size) to the area Entrance, or a square, in crypt.vtt |
 
 Several changes can go on one line (`:link 3 portal oneway secret`). Every change can be
 undone with `u`. The status line names the link under the cursor and where it leads
 (`stairs 3 to K12`).
+
+**Links to another map.** A link can lead to another map file: the town gate to the
+dungeon, a portal to another plane. In build mode, set the brush to the end's size, put the
+cursor on it and type `:link to crypt Entrance`. The end is here; the other map is
+`crypt.vtt` in the same folder as this map, and the party arrives in its named area
+`Entrance` (or at a square: `:link to crypt C4`). The map must have been saved, and vtt
+checks that the other map and the place exist. The end shows its number with an arrow
+(`≡4→`). Kinds, `secret` and `remove` work as for any link; such a link has one end here and
+always runs one way.
+
+In play mode, `g o` on the end takes everyone standing on it to the other map, in the same
+formation, as close to the middle of the area (or to the square) as they fit. This map is
+saved as they leave, and the other map opens with them in it; the players' devices follow.
+Creatures that travel keep their markers, counters, notes and hidden setting, but leave the
+turn order. A handout comes down; the session log carries on. The trip is refused, and
+nobody moves, if the other map has no room for them as they stand, if it has unsaved work
+from a crash (open it with `:e` first), or if this map has never been saved. A trip cannot
+be undone with `u`; the way back is a link in the other map, made the same way. The status
+line says when the map you arrive in has no way back yet.
 
 ## Floors
 
@@ -1039,6 +1059,7 @@ W120 unreachable-room  room K2   18 squares, no door leads to it from room B2
 | `W130 fog-patch-empty` | a fog patch with no squares |
 | `W140 note-on-void` | a note on a square that is not map |
 | `W150 link-on-void` | a link with an end on a square that is not map (nobody can be sent there) |
+| `W151 link-to-nowhere` | a link to another map whose file is not beside this one, or has no such area or square, or the square is void |
 | `W160 floors-overlap` | two floors sharing squares |
 | `N021 row-short` | rows shorter than their section, read as trailing blanks |
 | `N105 door-off-map` | a door or window on the edge of the map |
@@ -1083,7 +1104,7 @@ typing a command or drawing a wall. The full request language is in
 Maps are plain text, one record per line:
 
 ```
-VTT 11
+VTT 12
 name Goblin Ambush
 size 16 9
 zoom 1
@@ -1176,6 +1197,7 @@ padded with spaces.
 | `area X0 Y0 X1 Y1 "Name"` | a named area |
 | `floor "Name" LEVEL` | the named area is a floor at that level |
 | `link N KIND SIZE X0 Y0 X1 Y1 [oneway] [secret]` | link number N between the SIZE×SIZE blocks whose top-left squares are X0,Y0 and X1,Y1; one-way links run from the first |
+| `link N KIND SIZE X0 Y0 to "MAP" "PLACE" [secret]` | link number N from the block at X0,Y0 to PLACE (an area's name or a square) in MAP.vtt beside this file |
 | `scene "Name" [X0 Y0 X1 Y1]` ... `endscene` | a [scene](#scenes-scene); the creature lines and `round`/`spotlight gm` between them are the scene's, not the map's |
 | `fog on`, `fog soft-edge` | fog settings |
 | `fogpatch N NAME reveal R\|manual memory on\|off` | a fog patch; `fog` rows use `A`-`O` for patches 1-15 (unseen), `a`-`o` (seen), `1`-`9` `!"#$%&` (revealed by hand), `.` for none |
@@ -1194,8 +1216,9 @@ that can hold its contents:
 | 9 | floors |
 | 10 | hidden creatures |
 | 11 | scenes |
+| 12 | links to other maps |
 
-vtt reads every version up to 11 and refuses newer files.
+vtt reads every version up to 12 and refuses newer files.
 
 ## Performance
 
