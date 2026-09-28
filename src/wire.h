@@ -61,6 +61,10 @@ void wire_enc_free(WireEnc *e);
  * Cells that continue a run cost two bytes; a break costs a header. */
 void wire_enc_begin(WireEnc *e);
 void wire_enc_cell(WireEnc *e, int x, int y, const Cell *c);
+/* wire_enc_cell as a renderer observer (RndObserver's void context): calling
+ * it through a cast pointer of another type is undefined, however well it
+ * works. */
+void wire_observe_cell(void *enc, int x, int y, const Cell *c);
 void wire_enc_end(WireEnc *e);
 
 /* The whole front buffer as one FULL frame, for a client that just joined

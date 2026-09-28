@@ -151,6 +151,11 @@ void wire_enc_cell(WireEnc *e, int x, int y, const Cell *c)
     e->cells++;
 }
 
+void wire_observe_cell(void *enc, int x, int y, const Cell *c)
+{
+    wire_enc_cell(enc, x, y, c);
+}
+
 void wire_enc_end(WireEnc *e)
 {
     run_close(e);

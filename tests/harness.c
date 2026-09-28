@@ -3,6 +3,8 @@
 
 #include "harness.h"
 
+#include <dirent.h>
+
 int g_checks;
 int g_fails;
 const char *g_case = "";
@@ -171,13 +173,38 @@ Sandbox sandbox_enter(const char *tag)
     return s;
 }
 
+/* Everything under a sandbox, depth first; lstat, so a link is removed and
+ * never followed out of it. */
+static void remove_tree(const char *path)
+{
+    struct stat st;
+    if (lstat(path, &st) != 0) return;
+    if (S_ISDIR(st.st_mode)) {
+        DIR *d = opendir(path);
+        if (d) {
+            struct dirent *e;
+            char sub[1024];
+            while ((e = readdir(d))) {
+                if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")) continue;
+                snprintf(sub, sizeof sub, "%s/%s", path, e->d_name);
+                remove_tree(sub);
+            }
+            closedir(d);
+        }
+        rmdir(path);
+    } else {
+        unlink(path);
+    }
+}
+
 void sandbox_leave(Sandbox *s)
 {
     if (!s->ok) return;
     if (chdir(s->cwd) != 0) { }
     if (s->saved_xdg[0]) setenv("XDG_DATA_HOME", s->saved_xdg, 1);
     else                 unsetenv("XDG_DATA_HOME");
-    rmdir(s->datadir);
+    if (!strncmp(s->dir, "/tmp/vtt-", 9)) remove_tree(s->dir);
+    s->ok = 0;
 }
 
 /* ------------------------------------ colors, files, the tools, the server */

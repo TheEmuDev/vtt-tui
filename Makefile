@@ -70,8 +70,9 @@ $(BIN): $(OBJS)
 $(OBJDIR)/%.o: $(SRCDIR)/%.c
 	$(CC) $(BASEFLAGS) $(BUILDFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
 
-test: BUILDFLAGS := $(DBGFLAGS)
-test:
+# The release vtt too: the --apply and channel tests run ./vtt, and a stale
+# one would be tested silently.
+test: all
 	@mkdir -p $(OBJDIR)
 	$(CC) $(BASEFLAGS) $(DBGFLAGS) $(CFLAGS) -I$(TESTDIR) $(TESTWARN) \
 	    $(LIBSRCS) $(TESTSRCS) -o $(OBJDIR)/run-tests \

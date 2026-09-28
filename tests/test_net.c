@@ -88,7 +88,7 @@ void test_wire(void)
     draw_text(&r, 20, 3, "RED", -1, style(0xFF0000, 0x000000, ATTR_BOLD));
     draw_text(&r, 0, 5, "中", -1, style(0x112233, 0x000000, 0));
     wire_enc_begin(&e);
-    rnd_set_observer(&r, (RndObserver)wire_enc_cell, &e);
+    rnd_set_observer(&r, wire_observe_cell, &e);
     rnd_flush(&r, NULL);
     rnd_set_observer(&r, NULL, NULL);
     wire_enc_end(&e);
@@ -108,7 +108,7 @@ void test_wire(void)
     draw_text(&r, 20, 3, "RED", -1, style(0xFF0000, 0x000000, ATTR_BOLD));
     draw_text(&r, 0, 5, "中", -1, style(0x112233, 0x000000, 0));
     wire_enc_begin(&e);
-    rnd_set_observer(&r, (RndObserver)wire_enc_cell, &e);
+    rnd_set_observer(&r, wire_observe_cell, &e);
     rnd_flush(&r, NULL);
     rnd_set_observer(&r, NULL, NULL);
     wire_enc_end(&e);

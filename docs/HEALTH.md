@@ -45,7 +45,11 @@ before it was written down here. Nothing was changed by the check itself.
 - **Undefined behavior gcc hides**: net.c casts `wire_enc_cell` to `RndObserver` (a
   `WireEnc*` for a `void*`); clang's UBSan flags it, and `-fno-sanitize-recover` would stop
   a clang test run.
-- **Open.**
+- **Fixed**: `sandbox_leave` removes the whole sandbox (a run leaves nothing in `/tmp`; it
+  left 45); `make test` builds `vtt` first; the read-only-folder trip test is skipped as
+  root; `wire_observe_cell` is the observer (net.c and the tests), and `make test CC=clang
+  CFLAGS=-fno-sanitize-recover=all` passes. The directories earlier runs left in `/tmp` are
+  for the user to delete (`rm -rf /tmp/vtt-*`).
 
 ### 3. Test coverage and quality
 

@@ -730,7 +730,7 @@ void net_frame_begin(Net *n)
     if (!net_active(n) || n->ncl == 0) return;
     n->frame_bytes = 0;
     wire_enc_begin(&n->enc);
-    rnd_set_observer((Renderer *)n->rnd, (RndObserver)wire_enc_cell, &n->enc);
+    rnd_set_observer((Renderer *)n->rnd, wire_observe_cell, &n->enc);
 }
 
 void net_frame_end(Net *n, uint64_t now_ms)

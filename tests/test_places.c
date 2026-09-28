@@ -1394,14 +1394,18 @@ void test_map_links(void)
 
     CASE("a save that fails puts the party back, and leaves nothing to redo");
     write_floor_map(sb.dir, "crypt", 12, 10, "Entrance", 2, 2, 5, 5);   /* room again */
-    int before_n = a.map->tokens.n;
-    chmod(sb.dir, 0555);
-    press(&a, "go");
-    chmod(sb.dir, 0755);
-    CHECK(!strcmp(a.map->name, "town"));
-    CHECK_EQ(a.map->tokens.n, before_n);
-    CHECK(strstr(a.status, "nobody went") != NULL);
-    CHECK(!undo_can_redo(&a.undo));
+    if (geteuid() != 0) {                                   /* root writes anyway */
+        int before_n = a.map->tokens.n;
+        chmod(sb.dir, 0555);
+        press(&a, "go");
+        chmod(sb.dir, 0755);
+        CHECK(!strcmp(a.map->name, "town"));
+        CHECK_EQ(a.map->tokens.n, before_n);
+        CHECK(strstr(a.status, "nobody went") != NULL);
+        CHECK(!undo_can_redo(&a.undo));
+    } else {
+        printf("  (skipped as root: a read-only folder does not stop a save)\n");
+    }
     char keep[MAP_PATH_MAX];
     str_lcpy(keep, a.map->path, sizeof keep);
     a.map->path[0] = '\0';                                  /* as a map never saved has */
