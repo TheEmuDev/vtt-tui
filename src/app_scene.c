@@ -7,6 +7,7 @@
 
 #include "app_priv.h"
 #include "scene.h"
+#include "turn.h"
 
 void app_scene_restore(App *a, const char *name)
 {
@@ -24,6 +25,7 @@ void app_scene_restore(App *a, const char *name)
     play_focus(&a->play, -1);
     a->play.visual = 0;
     range_clear(&a->play.range);
+    a->last_acting = turn_acting(a->map);   /* the index is a new creature's: no turn started */
     snprintf(msg, sizeof msg, "scene %.31s is back - %d creature%s, u takes it back",
              a->map->scenes[i].name, n, n == 1 ? "" : "s");
     app_note_gm(a, msg);
@@ -72,10 +74,20 @@ void app_scene_command(App *a, const char *verb, const char *rest)
     if (!strcmp(verb, "scenes")) { list(a); return; }
     if (!*rest) { app_pick_open(a, PICK_SCENE, -1, ""); return; }
 
+    /* The words, with the spaces round them and between them made single. */
+    char line[160];
+    size_t k = 0;
+    for (const char *p = rest; *p && k + 1 < sizeof line; p++)
+        if (*p != ' ' || (k && line[k - 1] != ' ')) line[k++] = *p;
+    while (k && line[k - 1] == ' ') k--;
+    line[k] = '\0';
+    rest = line;
+
     if (!strncmp(rest, "save", 4) && (rest[4] == ' ' || !rest[4])) {
         const char *nm = rest + 4;
         while (*nm == ' ') nm++;
         if (!*nm) { app_set_status_gm(a, ":scene save NAME keeps the creatures as they stand"); return; }
+        if (a->play.grabbed) { app_set_status_gm(a, "put the creature down first - enter"); return; }
         int box[4], boxed = drawn_box(a, box);
         int i = scene_save(a->map, nm, boxed ? box : NULL, err, sizeof err);
         if (i < 0) { app_set_status_gm(a, err); return; }

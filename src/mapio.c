@@ -342,7 +342,7 @@ static int looks_like_record(const char *line)
     static const char *const words[] = {
         "tiles", "vedges", "hedges", "fog", "fogpatch", "token", "tokenstatus",
         "tokenturn", "tokencounter", "tokennote", "tokenhidden", "note", "area", "floor", "link", "spotlight", "clock",
-        "roll", "round", "name", "size", "zoom", "scale", "ruleset", "metric", NULL,
+        "roll", "round", "name", "size", "zoom", "scale", "ruleset", "metric", "scene", "endscene", NULL,
     };
     size_t n = 0;
     while (line[n] >= 'a' && line[n] <= 'z') n++;
@@ -774,7 +774,7 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
                     m->scenes[m->nscenes++] = scene_new;
                 } else {
                     tokens_free(&m->tokens);
-                    if (strcmp(line, "endscene") != 0)
+                    if (strcmp(line, "endscene") != 0 && scene_keep)
                         diag(ld, scene_line, -1, "W025", "scene-dropped",
                              "scene %.31s dropped: another began before its endscene", scene_new.name);
                 }
@@ -815,7 +815,11 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
             scene_spot = SPOTLIGHT_GM;
         } else if (in_scene && !strncmp(line, "round ", 6)) {
             int round = 0;
-            if (sscanf(line, "round %d", &round) == 1) scene_round = iclamp(round, 0, INT16_MAX);
+            if (sscanf(line, "round %d", &round) == 1) {
+                scene_round = iclamp(round, 0, INT16_MAX);
+                if (scene_round != round)
+                    diag(ld, ld->line, -1, "W020", "clamped", "round %d is out of range; %d is used", round, scene_round);
+            }
         } else if (!strcmp(line, "fog")) {
             Section sec = { "fog", h, w, 2, 0, 0, w };
             fog_line = ld->line;

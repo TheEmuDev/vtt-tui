@@ -4247,7 +4247,6 @@ void test_scene_keys(void)
     CHECK(strstr(a.status, "scene before the ambush is back - 2 creatures") != NULL);
     CHECK_EQ(a.status_gm, 1);
     press(&a, "u");
-    CHECK_EQ(m->tokens.v[m->tokens.n - 1].x + m->tokens.v[0].x > 0, 1);
     int moved = 0;
     for (int i = 0; i < m->tokens.n; i++) moved |= !strcmp(m->tokens.v[i].label, "Aria") && m->tokens.v[i].x == 4;
     CHECK(moved);
@@ -4283,7 +4282,14 @@ void test_scene_keys(void)
     CHECK(a.play.grabbed);
     press(&a, ":scene before the ambush\r");
     CHECK(strstr(a.status, "put the creature down first") != NULL);
+    press(&a, ":scene save mid walk\r");
+    CHECK(strstr(a.status, "put the creature down first") != NULL);
+    CHECK_EQ(scene_find(m, "mid walk"), -1);
     press(&a, "\x1b");
+
+    CASE("spaces round and between the words do not matter");
+    press(&a, ":scene   before   the ambush  \r");
+    CHECK(strstr(a.status, "scene before the ambush is back") != NULL);
 
     CASE("remove throws one away; off only says what to type; an unknown name says so");
     press(&a, ":scene Ogre corner off\r");

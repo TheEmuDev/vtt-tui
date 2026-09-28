@@ -12,6 +12,12 @@ int scene_name_ok(const char *name)
 {
     size_t n = strlen(name);
     if (n == 0 || n >= SCENE_NAME_MAX || name[0] == ' ' || name[n - 1] == ' ') return 0;
+    /* save and diff are the command's own words: a scene named "save x"
+     * could be saved but never put back by name. */
+    for (const char *w = "save\0diff\0"; *w; w += strlen(w) + 1) {
+        size_t k = strlen(w);
+        if (!strncasecmp(name, w, k) && (name[k] == '\0' || name[k] == ' ')) return 0;
+    }
     return strchr(name, '"') == NULL;
 }
 
@@ -32,7 +38,8 @@ int scene_save(Map *m, const char *name, const int *box, char *err, size_t errsz
 {
     PROF_ZONE("scene.save");
     if (!scene_name_ok(name)) {
-        snprintf(err, errsz, "a scene's name is 1-%d characters, no quote", SCENE_NAME_MAX - 1);
+        snprintf(err, errsz, "a scene's name is 1-%d characters, no quote, not starting with save or diff",
+                 SCENE_NAME_MAX - 1);
         return -1;
     }
     int i = scene_find(m, name);

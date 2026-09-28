@@ -180,16 +180,22 @@ int map_resize(Map *m, int w, int h)
         const Token *t = &m->tokens.v[i];
         if (t->x + t->size > w || t->y + t->size > h) tokens_remove(&m->tokens, i);
     }
-    /* Scenes the same: a box is cut to what is left, and one left with
-     * nothing is the whole of what is left. */
-    for (int k = 0; k < m->nscenes; k++) {
+    /* Scenes the same: a box is cut to what is left. A scene whose box the
+     * shrink cut away goes: it holds nothing, and put back as a whole-map
+     * scene it would clear the map. */
+    for (int k = m->nscenes - 1; k >= 0; k--) {
         Scene *sc = &m->scenes[k];
         for (int i = sc->tokens.n - 1; i >= 0; i--) {
             const Token *t = &sc->tokens.v[i];
             if (t->x + t->size > w || t->y + t->size > h) tokens_remove(&sc->tokens, i);
         }
         if (!sc->boxed) continue;
-        if (sc->x0 >= w || sc->y0 >= h) sc->boxed = 0;
+        if (sc->x0 >= w || sc->y0 >= h) {
+            tokens_free(&sc->tokens);
+            memmove(sc, sc + 1, (size_t)(m->nscenes - k - 1) * sizeof *sc);
+            m->nscenes--;
+            continue;
+        }
         sc->x1 = (int16_t)imin(sc->x1, w - 1);
         sc->y1 = (int16_t)imin(sc->y1, h - 1);
     }

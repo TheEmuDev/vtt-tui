@@ -1253,6 +1253,8 @@ void test_scenes(void)
     memset(longname, 'x', 32); longname[32] = '\0';
     CHECK(!scene_name_ok(longname));
     CHECK(scene_save(m, "a\"b", NULL, err, sizeof err) < 0 && strstr(err, "no quote"));
+    CHECK(!scene_name_ok("save") && !scene_name_ok("Save me") && !scene_name_ok("diff x"));
+    CHECK(scene_name_ok("saved game") && scene_name_ok("differently"));
 
     CASE("save keeps every creature as it stands, and the round and spotlight");
     unsigned gen = m->gen;
@@ -1432,8 +1434,10 @@ void test_scenes(void)
             CHECK(t->x + t->size <= 7 && t->y + t->size <= 5);
         }
     CHECK(m->scenes[1].boxed && m->scenes[1].x1 == 6 && m->scenes[1].y1 == 4);
+    int had = m->nscenes;
     map_resize(m, 3, 3);
-    CHECK_EQ(m->scenes[1].boxed, 0);                       /* the box went off the map */
+    CHECK_EQ(m->nscenes, had - 1);                         /* the box went off the map: the scene goes */
+    CHECK_EQ(m->scenes[0].boxed, 0);
 
     tokens_free(&saved);
     undo_free(&u);

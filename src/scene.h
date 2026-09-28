@@ -13,7 +13,7 @@
  * one back is. */
 
 /* 1 to SCENE_NAME_MAX-1 characters, no quote, not starting or ending in a
- * space. */
+ * space, and not starting with the word save or diff. */
 int  scene_name_ok(const char *name);
 
 /* The scene of that name (ignoring case), or -1. */

@@ -1307,8 +1307,17 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
         if (i < 0) BAD("no scene called %.31s", w[1]);
         if (scene_restore(m, u, i, err, errsz) < 0) return -1;
         const Scene *sc = &m->scenes[i];
-        if (sc->boxed) { x0 = sc->x0; y0 = sc->y0; x1 = sc->x1; y1 = sc->y1; }
-        else           { x0 = 0; y0 = 0; x1 = m->w - 1; y1 = m->h - 1; }
+        if (sc->boxed) {
+            /* The box, and any creature of the scene hanging over its edge. */
+            x0 = sc->x0; y0 = sc->y0; x1 = sc->x1; y1 = sc->y1;
+            for (int k = 0; k < sc->tokens.n; k++) {
+                const Token *t = &sc->tokens.v[k];
+                x0 = imin(x0, t->x); y0 = imin(y0, t->y);
+                x1 = imax(x1, t->x + t->size - 1); y1 = imax(y1, t->y + t->size - 1);
+            }
+        }
+        else { x0 = 0; y0 = 0; x1 = m->w - 1; y1 = m->h - 1; }
+        a->last_acting = turn_acting(m);     /* the index is a new creature's: no turn started */
         ed->deleted = 1;                     /* the indices behind are new */
         play_focus(&a->play, -1);
         a->play.visual = 0;
@@ -1347,7 +1356,7 @@ static const char *lonely(char w[][CTL_WORD_MAX], int n)
 /* A scene put back is an edit; the scene's other lines are not. */
 static int scene_is_edit(char w[][CTL_WORD_MAX], int n)
 {
-    return n == 2 && !strcmp(w[0], "scene") && strcmp(w[1], "save") != 0;
+    return n == 2 && !strcmp(w[0], "scene") && strcmp(w[1], "save") != 0 && strcmp(w[1], "diff") != 0;
 }
 
 static int is_edit(const char *v)
@@ -1369,6 +1378,10 @@ static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FIL
     if (!strcmp(v, "scene") && !scene_is_edit(w, n)) {
         /* scene diff NAME, a read; scene save NAME [REGION] and scene NAME
          * remove, each alone in its request. */
+        if (n < 2 || (n != 3 && !strcmp(w[1], "diff"))) {
+            snprintf(err, errsz, "scene NAME, scene save NAME [REGION], scene NAME remove, or scene diff NAME");
+            return -1;
+        }
         if (n == 3 && !strcmp(w[1], "diff")) {
             int i = scene_find(m, w[2]);
             if (i < 0) { snprintf(err, errsz, "no scene called %.31s", w[2]); return -1; }

@@ -153,6 +153,7 @@ static void scene_findings(void)
         "scene \"Good\"\nendscene\n"
         "scene \"Boxed\" 0 0 9 9\nendscene\n"
         "endscene\n"
+        "scene \"\ntoken enemy 1 1 1 \"Lost\"\n"
         "scene \"Open\"\ntoken enemy 2 2 1 \"Rat\"\n";
     if (write(fd, text, strlen(text)) < 0) { close(fd); unlink(path); return; }
     close(fd);
@@ -162,6 +163,8 @@ static void scene_findings(void)
     CHECK(strstr(t, "scene Boxed dropped: its box is not on the map") != NULL);
     CHECK(strstr(t, "endscene with no scene open") != NULL);
     CHECK(strstr(t, "scene Open dropped: the file ends before its endscene") != NULL);
+    CHECK(strstr(t, "scene ? dropped: its name does not read") != NULL);
+    CHECK(strstr(t, "scene  dropped") == NULL);            /* one finding for the unnamed block, not two */
     free(t);
     char err[200];
     Map *m = mapio_load(path, err, sizeof err);

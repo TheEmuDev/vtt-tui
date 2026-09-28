@@ -1597,6 +1597,12 @@ void test_ctl_scenes(void)
     t = ctl_ask(&a, "scene save");
     CHECK(t && strstr(t, "scene save NAME [REGION]") != NULL);
     free(t);
+    t = ctl_ask(&a, "scene");
+    CHECK(t && strstr(t, "scene save NAME [REGION]") != NULL);
+    free(t);
+    t = ctl_ask(&a, "scene diff");
+    CHECK(t && strstr(t, "scene diff NAME") != NULL);
+    free(t);
 
     CASE("in play mode: reads work, saving and putting back are refused as edits are");
     app_key(&a, (Key){ KEY_F2, 0, 0 });

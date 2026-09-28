@@ -14,7 +14,7 @@ it is.
 | a box | `:scene save NAME` with a `v` box up saves the creatures in the box, and the scene keeps the box: putting it back replaces only the creatures in it |
 | putting one back | at once, one undo step; no question, since `u` takes it back |
 | removing one | `:scene NAME remove` (docs/KEYS.md rule 9: `off` never destroys) |
-| where | build and play mode; refused while a creature is carried |
+| where | build and play mode; saving and putting back are refused while a creature is carried |
 | privacy | every message about a scene is the GM's (`app_note_gm`): "after the ambush" is a spoiler |
 | undo | putting a scene back is a step; saving and removing one are not, as saving a named roll is not |
 | the channel | `scene save NAME [REGION]`, `scene NAME`, `scene NAME remove`, and the reads `scenes` and `scene diff NAME`. Saving and removing change nothing the undo log can take back, so each must be alone in its request, as `undo` is |
@@ -22,8 +22,8 @@ it is.
 ## Shape
 
 - **On the map.** `Map.scenes[16]`, each a name, an optional box, the round and spotlight,
-  and its own `TokenList`. Names are compared ignoring case, 1-31 characters, no quote.
-  Saved in the map file from version 11: `scene "Name"` (with `x0 y0 x1 y1` for a box),
+  and its own `TokenList`. Names are compared ignoring case, 1-31 characters, no quote,
+  and do not start with the words `save` or `diff` (the command's own). Saved in the map file from version 11: `scene "Name"` (with `x0 y0 x1 y1` for a box),
   then the ordinary creature lines and `round`/`spotlight gm`, then `endscene`. The loader
   reads a scene's creature lines with the scene's list swapped in for the map's, so every
   creature parser serves both. A scene with no `endscene`, or a second `scene` line before
@@ -42,7 +42,8 @@ it is.
   side, markers, counters, note, hidden, turn place), then the round and spotlight for a
   whole scene; `no changes` when there are none.
 - **Resizing the map** drops scene creatures that no longer fit, and a scene's box is
-  clipped (a box wholly off the map makes it a whole-map scene of what is left).
+  clipped; a scene whose box is wholly cut away goes, since it holds nothing and would
+  clear the map if put back as a whole-map scene.
 
 ## Build order
 
