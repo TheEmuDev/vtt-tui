@@ -13,6 +13,7 @@ reference; this page is why it is the way it is.
 | who closes it | the GM puts it up and takes it down; a player may close it on their own phone and reopen it with a button while it is up. A new handout opens on every phone, closed or not |
 | formatting | plain text, line breaks kept; nothing else |
 | off and on | `:handout off` takes it down and keeps it; `:handout on` puts it back (docs/KEYS.md rule 9) |
+| its lifetime | the encounter's: up across build and play, down (and forgotten) when the map closes, even with a server kept alive for the next map |
 | not here | pictures (a drawn map as an image), a handout for one player (the phones have no identity), the control channel |
 
 ## Shape
@@ -49,6 +50,12 @@ reference; this page is why it is the way it is.
 - **The page budget.** The card took the page past 12 KB. `tools/embed.sh` now drops the
   page's block comments when it embeds it: the budget is what every phone is sent, and the
   source keeps its comments. 10.1 KB as sent.
+- **The review** (2026-09-27) found two older leaks of the same kind, fixed with it: the
+  `:` line the GM was typing was drawn into the players' frame (and `app_view_differs`
+  did not count it), and a raw client that sent `VTT1` without finishing its hello -- so
+  without the join code -- was sent the frame stream. A phone reconnecting after a
+  handout came down kept it, so the handout record now always follows a `FULL`, empty
+  when there is none.
 
 ## Instrumentation
 

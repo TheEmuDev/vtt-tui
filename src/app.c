@@ -1345,6 +1345,11 @@ static void close_server_with_map(App *a)
 void app_close_map(App *a)
 {
     a->preview = 0;
+    /* A handout is the encounter's: it comes down with the map, before a
+     * server kept alive carries on to the next one. */
+    if (a->handout_up) net_set_handout(&a->net, "", 0, a->now_ms);
+    a->handout_up = 0;
+    a->handout_title[0] = a->handout_body[0] = '\0';
     drop_autosave(a);
     close_server_with_map(a);
     slog_close(&a->slog);

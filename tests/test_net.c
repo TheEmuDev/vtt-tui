@@ -1608,10 +1608,12 @@ void test_handouts(void)
     WireDec d1;
     wire_dec_init(&d1, &WC_SINK, &c1);
     net_recv_until(&n, w1, &d1, &c1, 1, 0);
+    CHECK_EQ(recv_handouts(&n, w1, &d1, &c1, 1, 0), 0);
+    CHECK_EQ((int)c1.handout_n, 0);                        /* a FULL is always followed by one, empty */
     net_set_live(&n, 0);
     const char *tomb = "Tomb\nHere lies Aldric.\n\nDo not open the door.";
     net_set_handout(&n, tomb, strlen(tomb), 0);
-    CHECK_EQ(recv_handouts(&n, w1, &d1, &c1, 1, 0), 0);
+    CHECK_EQ(recv_handouts(&n, w1, &d1, &c1, 2, 0), 0);
     CHECK(!strcmp(c1.handout, tomb));
 
     CASE("a watcher that joins while it is up gets it after its FULL");
@@ -1628,7 +1630,7 @@ void test_handouts(void)
 
     CASE("taken down: every client gets the empty record, and a newcomer gets none");
     net_set_handout(&n, "", 0, 0);
-    CHECK_EQ(recv_handouts(&n, w1, &d1, &c1, 2, 0), 0);
+    CHECK_EQ(recv_handouts(&n, w1, &d1, &c1, 3, 0), 0);
     CHECK_EQ(recv_handouts(&n, w2, &d2, &c2, 2, 0), 0);
     CHECK(c1.handout_n == 0 && c2.handout_n == 0);
     close(w1);
@@ -1646,7 +1648,23 @@ void test_handouts(void)
     WireDec d3;
     wire_dec_init(&d3, &WC_SINK, &c3);
     CHECK_EQ(recv_handouts(&n, w3, &d3, &c3, 1, 0), 0);
+    CHECK(!strcmp(c3.handout, tomb));
     close(w3);
+
+    CASE("a watcher that has not finished its hello -- no join code yet -- is sent no frames");
+    net_set_live(&n, 1);
+    int half = net_connect(n.port);
+    CHECK_EQ((int)write(half, "VTT1", 4), 4);
+    for (int k = 0; k < 5; k++) net_pump(&n, 0);
+    rnd_begin(&r);
+    draw_text(&r, 0, 0, "a frame", -1, style(0xFFFFFF, 0, 0));
+    net_frame_begin(&n);
+    rnd_flush(&r, NULL);
+    net_frame_end(&n, 0);
+    net_pump(&n, 0);
+    struct pollfd hp = { half, POLLIN, 0 };
+    CHECK_EQ(poll(&hp, 1, 50), 0);                          /* nothing arrived */
+    close(half);
     net_stop(&n);
     rnd_free(&r);
 }
@@ -1669,7 +1687,7 @@ void test_join_frame(void)
     CHECK_EQ(app_open_map(&a, path), 0);
     app_key(&a, (Key){ KEY_F2, 0, 0 });
 
-    CASE("the first FULL a joining watcher gets is the players' view, never the GM's screen");
+    CASE("the first FULL a joining watcher gets is the players' picture -- blank before one is drawn -- never the GM's screen");
     press(&a, ":serve\r");
     app_note_gm(&a, "SECRET the ogre is a mimic");
     app_frame(&a, NULL, 0);                                /* the loop draws after every key */

@@ -601,7 +601,7 @@ static void handout_line(void *ctx, int i, const char *s, size_t n)
 {
     HandoutDraw *h = ctx;
     if (i >= h->rows) return;
-    char buf[1024];
+    char buf[4096];                    /* a line is cells wide, not bytes: combining marks */
     if (n >= sizeof buf) n = sizeof buf - 1;
     memcpy(buf, s, n);
     buf[n] = '\0';

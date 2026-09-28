@@ -822,7 +822,7 @@ While a handout is up the title bar says `HANDOUT`, and `:player preview` shows 
 the players see it. A player can close the card with `×` and reopen it with the `handout`
 button for as long as it is up; showing a new handout opens it again on every screen. A
 device that connects while a handout is up gets it too, and the terminal mirror shows it as
-a box. A handout stays up in build mode.
+a box. A handout stays up in build mode, and comes down when the map is closed.
 
 ## Sessions and files
 

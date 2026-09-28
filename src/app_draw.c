@@ -18,16 +18,21 @@
 /* The status message, then its colored spans over the top. A span is drawn
  * only when all of it survived the ellipsis; half a number in gold would be
  * a different number. */
+/* Does the frame being drawn carry the status message? The players' frame
+ * carries no GM-only message, and over fog no message at all: most of what
+ * the app says names a creature or a square, and one placed in the dark
+ * would be announced to the table. */
+static int status_msg_shown(const App *a)
+{
+    return !(a->view == VIEW_PLAYERS && (a->status_gm || a->psplit ||
+                                         (a->map && (fog_any(a->map) || tokens_any_hidden(&a->map->tokens)))));
+}
+
 void app_draw_status_msg(App *a, int x, int y, int maxw)
 {
     Renderer    *r  = a->rnd;
     const Theme *th = a->th;
-    /* The players' frame carries no GM-only message, and over fog no message
-     * at all: most of what the app says names a creature or a square, and
-     * one placed in the dark would be announced to the table. */
-    if (a->view == VIEW_PLAYERS && (a->status_gm || a->psplit ||
-                                    (a->map && (fog_any(a->map) || tokens_any_hidden(&a->map->tokens)))))
-        return;
+    if (!status_msg_shown(a)) return;
 
     draw_text_ellipsis(r, x, y, a->status, maxw, style(th->dim, th->bg, 0));
 
@@ -280,7 +285,7 @@ static void draw_editor_body(App *a)
      * gets everything left over, rather than a fixed half that truncates it
      * on a wide terminal for no reason. */
     int msg_w = 0;
-    if (a->status[0]) msg_w = imin(text_width(a->status), imax(0, r->w * 2 / 3));
+    if (a->status[0] && status_msg_shown(a)) msg_w = imin(text_width(a->status), imax(0, r->w * 2 / 3));
 
     draw_text_ellipsis(r, 1, sy, status, imax(0, r->w - msg_w - 3),
                        style(th->fg, th->bg, 0));
@@ -295,10 +300,12 @@ static void draw_editor_body(App *a)
         /* Through app_keymap_id rather than deciding again here: the bar and
          * the ? page have to name the same mode, and this branch had already
          * drifted -- it did not know about the box. */
-        if (a->ed.mode != ED_COMMAND)
-            ui_keybar(r, th, keys_map(app_keymap_id(a)));
-        if (a->ed.mode == ED_COMMAND)
+        /* What the GM is typing is the GM's: the players' frame keeps the
+         * bar. */
+        if (a->ed.mode == ED_COMMAND && a->view == VIEW_GM)
             ui_cmdline_draw(r, th, &a->ed.cmd, r->h - 1, ':');
+        else
+            ui_keybar(r, th, keys_map(app_keymap_id(a)));
         return;
     }
 
@@ -328,7 +335,7 @@ static void draw_editor_body(App *a)
 
     /* The command line replaces the keybinding bar while it is open, the way
      * vim's does. */
-    if (a->ed.mode == ED_COMMAND)
+    if (a->ed.mode == ED_COMMAND && a->view == VIEW_GM)
         ui_cmdline_draw(r, th, &a->ed.cmd, r->h - 1, ':');
 }
 
@@ -423,6 +430,7 @@ int app_view_differs(const App *a)
 {
     if (a->preview) return a->handout_up;     /* the GM is already looking at it, but for the card */
     if (a->modal != MODAL_NONE) return 1;
+    if (a->ed.mode == ED_COMMAND) return 1;       /* the : line being typed */
     if (a->status_gm && a->status[0]) return 1;
     if (a->screen == SCREEN_PLAY && a->map && fog_any(a->map)) return 1;
     if (prof_overlay_visible()) return 1;

@@ -4432,6 +4432,15 @@ void test_handout_keys(void)
     CHECK(strstr(a.status, "no handout called") != NULL);
     CHECK(!strcmp(a.handout_body, "SPEAK, FRIEND"));          /* none of those replaced it */
 
+    CASE("what the GM types after : is never in the players' frame");
+    press(&a, ":handout say SECRET WORDS");
+    CHECK_EQ(a.ed.mode, ED_COMMAND);
+    CHECK(app_view_differs(&a));
+    pf = players_text(&a, &r);
+    CHECK(strstr(pf, "SECRET") == NULL);
+    free(pf);
+    press(&a, "\x1b");
+
     CASE("the picker: every file, its first line beside it; enter puts it up");
     press(&a, ":handout\r");
     CHECK_EQ(a.modal, MODAL_PICKER);
@@ -4457,9 +4466,16 @@ void test_handout_keys(void)
     CHECK(strstr((char *)f.data, "Letter") != NULL);
     CHECK(strstr((char *)f.data, "a b c d") != NULL);
     CHECK(strstr((char *)f.data, "…") != NULL);               /* nine lines do not fit in twelve rows' box */
-    CHECK(strstr((char *)f.data, "Supercalifragilistic") != NULL);   /* a long word is cut, not lost */
+    CHECK(strstr((char *)f.data, "Supercalifragilistic") != NULL);   /* a long word is cut, not lost: */
+    CHECK(strstr((char *)f.data, "-and-more") != NULL);              /* its end is on the next line */
     bb_free(&f);
     rnd_free(&small);
+
+    CASE("closing the map takes the handout down and forgets it");
+    CHECK(a.handout_up);
+    press(&a, ":q!\r");
+    CHECK(a.map == NULL);
+    CHECK(!a.handout_up && !a.handout_body[0] && a.net.handout_len == 0);
 
     app_free(&a);
     rnd_free(&r);

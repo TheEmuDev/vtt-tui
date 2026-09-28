@@ -346,10 +346,10 @@ static void client_send_full(Net *n, int i, uint64_t now_ms)
     if (n->enc.overflow) { client_close(n, i); return; }
     if (client_send_synced(n, i, n->enc.buf, n->enc.len) < 0) return;
     n->joined = 1;
-    if (n->handout_len) {
-        uint8_t rec[3 + WIRE_HANDOUT_MAX];
-        if (client_send_frame(n, i, rec, wire_handout(rec, n->handout, n->handout_len)) < 0) return;
-    }
+    /* The handout always follows, empty when there is none: a phone coming
+     * back must drop a card taken down while it was away. */
+    uint8_t rec[3 + WIRE_HANDOUT_MAX];
+    if (client_send_frame(n, i, rec, wire_handout(rec, n->handout, n->handout_len)) < 0) return;
     client_flush(n, i, now_ms);
 }
 
@@ -751,7 +751,8 @@ void net_frame_end(Net *n, uint64_t now_ms)
      * when it finishes. */
     for (int i = 0; i < n->ncl; i++) {
         NetClient *c = &n->cl[i];
-        if (c->kind != CL_WS && c->kind != CL_RAW) continue;
+        /* A watcher only once its hello -- and the join code -- is in. */
+        if (c->kind != CL_WS && !(c->kind == CL_RAW && c->greeted)) continue;
         if (client_send_synced(n, i, n->enc.buf, n->enc.len) < 0) { i--; continue; }
         if (client_flush(n, i, now_ms) < 0) i--;
     }
