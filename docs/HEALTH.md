@@ -137,7 +137,14 @@ Measurement:
   load, `:w`, `:character save`, the trip's steps, `scene diff`, `link_map_check`, the
   watcher, the stamp and handout pickers).
 - About a dozen PERFORMANCE.md paragraphs quote numbers the tables no longer hold.
-- **Open.**
+- **Partly fixed** (item 4): creatures off the window are culled (`grid_visible_squares`;
+  500 on 200x200 drew in 85µs, now 40µs against 29µs for 24; `test_cull` proves a culled
+  one would have drawn nothing); new rows `play, 24/500 on 200x200`; the three mislabeled
+  rows renamed for what they measure; a full trace is reported and its call counts marked
+  `+`; PERFORMANCE.md regenerated. **Still open**: key handling outside the frame columns,
+  phone bytes unpublished, p50/p99 from the last 256 frames, zones never fired and paths
+  with none, W151's reload per link, the picker's four ranking passes, the dozen stale
+  paragraphs.
 
 ### 6. Duplication and organization
 

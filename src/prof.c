@@ -338,6 +338,9 @@ void prof_trace_close(void)
     fclose(f);
 
     fprintf(stderr, "vtt: wrote %zu trace events to %s\n", P.ntrace, P.trace_path);
+    if (P.ntrace == TRACE_MAX)
+        fprintf(stderr, "vtt: the trace is full (%d events): later calls are not in it -- "
+                        "fewer --bench-loops for a complete one\n", TRACE_MAX);
     P.trace_path[0] = '\0';
 }
 

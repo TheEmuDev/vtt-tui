@@ -103,6 +103,7 @@ int main(void)
         { "statusio", test_status_io },
         { "tokedit",  test_token_edit_undo },
         { "statusdraw", test_status_draw },
+        { "cull",       test_cull },
         { "clearstatus", test_clear_status_keys },
         { "trail",    test_trail },
         { "traildraw", test_trail_draw },

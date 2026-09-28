@@ -142,6 +142,11 @@ void grid_draw_token_ghost(Renderer *r, const GridView *g, int tx, int ty,
  * between them, so a multi-tile token reads as one solid piece. */
 void grid_token_area(const GridView *g, int tx, int ty, int size, Rect *out);
 
+/* The squares the viewport shows, with a square to spare on every side (a
+ * creature's markers sit in the row above it): anything wholly outside draws
+ * nothing, so a loop over creatures can skip it and cost follows the window. */
+void grid_visible_squares(const GridView *g, int *x0, int *y0, int *x1, int *y1);
+
 /* The glyph a terrain is drawn with, so the blank kinds can be identified as
  * such: void and floor are the only two, which is why those two alone have to
  * be told apart by their background. */

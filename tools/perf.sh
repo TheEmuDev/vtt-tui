@@ -87,6 +87,7 @@ BIG=$(genmap big     200 200 1 0)     # far more map than window
 MOB=$(genmap mob      40 25 0 24)     # 24 tokens, each wearing a marker
 HORDE=$(genmap horde  60 40 0 500)    # 500 creatures: what a scene puts back at worst
 BIGMOB=$(genmap bigmob 200 200 0 24)  # the route search's worst case: big and crowded
+BIGHORDE=$(genmap bighorde 200 200 0 500) # as many, mostly off the window: cost follows the window
 PLAIN=$(genmap plain   40 25 0 24 none) # no ruleset: r is a radius, not a band
 FIGHT=$(genmap fight   40 25 0 24 daggerheart 1)  # all 24 in the turn order
 # MOB with its first enemy hidden: the players' frame is drawn, not copied.
@@ -255,6 +256,9 @@ run() {
     "$BIN" "$_map" --bench "$DIR/keys" --bench-loops "$LOOPS" --size "$_size" $_extra \
         --trace "$DIR/t.json" > /dev/null 2> "$DIR/out" \
         || { echo "  $_label FAILED" >&2; return; }
+    # Its zone rows then count only the calls before the cap.
+    _full=""
+    grep -q "trace is full" "$DIR/out" && _full=+
 
     awk -v label="$_label" -v size="$_size" '
         /^  frame/           { p50 = $5; p99 = $7 }
@@ -265,7 +269,7 @@ run() {
         }
     ' "$DIR/out"
 
-    python3 "$DIR/sum.py" "$DIR/t.json" "$_label $_size" >> "$DIR/ev"
+    python3 "$DIR/sum.py" "$DIR/t.json" "$_label $_size" "$_full" >> "$DIR/ev"
 }
 
 : > "$DIR/ev"
@@ -273,7 +277,9 @@ run() {
 cat > "$DIR/sum.py" <<'SUMMARIZER'
 import json, sys
 
-path, label = sys.argv[1], sys.argv[2]
+# A trace that filled up stopped recording partway: the timings still sample
+# every zone (each loop runs the whole script), the call count is a floor.
+path, label, full = sys.argv[1], sys.argv[2], sys.argv[3]
 try:
     events = json.load(open(path))["traceEvents"]
 except Exception:
@@ -287,8 +293,8 @@ for e in events:
 for name, durs in by.items():
     durs.sort()
     n = len(durs)
-    print("%s\t%.2f\t%.2f\t%.2f\t%d\t%s"
-          % (name, durs[n // 2], durs[min(n - 1, int(n * 0.99))], durs[-1], n, label))
+    print("%s\t%.2f\t%.2f\t%.2f\t%d%s\t%s"
+          % (name, durs[n // 2], durs[min(n - 1, int(n * 0.99))], durs[-1], n, full, label))
 SUMMARIZER
 
 echo '| scenario             | size   | frame p50 | frame p99 | cells | bytes |'
@@ -310,6 +316,8 @@ run "play, 24 tokens"      "$MOB"    80x24  ':play\rjjllkkhh'
 run "play, 24 tokens"      "$MOB"    200x50 ':play\rjjllkkhh'
 run "play, carrying"       "$MOB"    80x24  ':play\rt\rlllljjjj\r'
 run "play, carry 200x200"  "$BIGMOB" 80x24  ':play\rt\rlllllllljjjjjjjj\r'
+run "play, 24 on 200x200"  "$BIGMOB" 80x24  ':play\rjjllkkhh'
+run "play, 500 on 200x200" "$BIGHORDE" 80x24 ':play\rjjllkkhh'
 run "play, 3x3 cursor"     "$MOB"    80x24  ':play\r3bllllhhhh'
 run "play, choosing"       "$MOB"    80x24  ':play\r3b\r\r\r\rjjjj'
 run "play, group box"      "$MOB"    80x24  ':play\rvlllljjjj'
@@ -324,7 +332,7 @@ run "play, fight cycling"  "$FIGHT"  80x24  ':play\rttttTTTT'
 run "play, spotlight"      "$MOB"    80x24  ':play\raa'
 run "play, named roll"     "$MOB"    80x24  ':play\r:roll attack = 2d12+3\r:roll attack\r:roll att\r'
 run "play, fog"            "$MOB"    80x24  ':fog all\r:play\rjjllkkhh'
-run "play, fog, 4 watchers" "$MOB"   80x24  ':fog all\r:play\rjjllkkhh' "--bench-clients 4"
+run "play, fog all dark, 4 watch" "$MOB"   80x24  ':fog all\r:play\rjjllkkhh' "--bench-clients 4"
 run "play, fog by hand"    "$MOB"    80x24  ':fog all\r:play\rgrghllgrghhh'
 run "play, fog range, 4 watchers" "$MOB" 80x24 ':fog all\r:play\rtgR6rllhh' "--bench-clients 4"
 run "play, fog sight"      "$MOB"    80x24  ':fog all 6\r:play\rf\rllllhhhh\r'
@@ -343,7 +351,7 @@ run "build, 64 links"      "$LINKS"  80x24  'jjllkkhh'
 run "play, 64 links"       "$LINKS"  80x24  ':play\rjjllkkhh'
 run "play, link there+back" "$LINKS" 80x24  ':play\r:a1\rgogo'
 run "build, one floor"     "$FLOORS" 80x24  ':floor Ground\rjjllkkhh'
-run "play, floors split, 4 watchers" "$FLOORS" 80x24 ':play\r:floor Upper\rjjllkkhh' "--bench-clients 4"
+run "play, other floor, 4 watchers" "$FLOORS" 80x24 ':play\r:floor Upper\rjjllkkhh' "--bench-clients 4"
 run "play, floor steps"    "$FLOORS" 80x24  ':play\r][]['
 run "play, counters"       "$MOB"    80x24  ':play\rtsvhp 9\r><><><><'
 run "play, clocks"         "$MOB"    80x24  ':play\r:clock Dragon 6\r:clock Ritual 8\r:tick Dragon 2\r:tick -2\r'
@@ -360,7 +368,7 @@ run "play, rolling"        "$MOB"    80x24  ':play\r:roll 2d6+3\r:roll +1\r'
 run "play, 500 characters" "$MOB"    80x24  ':play\ritebeast-4\t\t\ru'
 run "play, scene of 500"   "$HORDE"  80x24  ':play\r:scene save A\r:scene A\ru'
 run "play, map trip there+back" "$TOWN" 80x24 ':play\r:C3\rgogo'
-run "play, handout, 4 watch" "$MOB"  80x24  ':play\r:handout say The door reads: SPEAK, FRIEND\r:handout off\r' "--bench-clients 4"
+run "play, handout typed, 4 watch" "$MOB"  80x24  ':play\r:handout say The door reads: SPEAK, FRIEND\r:handout off\r' "--bench-clients 4"
 run "agent, room + 12"     "$VOIDY"  80x24  'u' "--bench-ctl $DIR/room.ctl"
 run "agent, plan of rooms" "$VOIDMAP" 80x24  'u' "--bench-ctl $DIR/plan.ctl"
 run "agent, dump 512x512"  "$HUGE"   80x24  'lh' "--bench-ctl $DIR/dump.ctl"
@@ -374,6 +382,6 @@ echo
 echo '| path             | p50     | p99     | worst   | calls | heaviest scenario      |'
 echo '|------------------|---------|---------|---------|-------|------------------------|'
 sort -t"$TAB" -k1,1 -k3,3gr "$DIR/ev" | awk -F"$TAB" '
-    !seen[$1]++ { printf "| %-16s | %5.1fus | %5.1fus | %5.1fus | %5d | %-22s |\n",
+    !seen[$1]++ { printf "| %-16s | %5.1fus | %5.1fus | %5.1fus | %5s | %-22s |\n",
                          $1, $2, $3, $4, $5, $6 }
 ' | sort

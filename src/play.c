@@ -652,12 +652,16 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
      * you cannot see the extent of is one you will move by accident. While
      * the box is open the ring is live, so the box shows what it has caught
      * before you commit to it rather than after. */
+    int vx0, vy0, vx1, vy1;
+    grid_visible_squares(&e->view, &vx0, &vy0, &vx1, &vy1);
+#define OFF_SCREEN(t) ((t)->x > vx1 || (t)->y > vy1 || (t)->x + (t)->size - 1 < vx0 || (t)->y + (t)->size - 1 < vy0)
     for (int i = 0; i < m->tokens.n; i++) {
         /* Deliberately not wrapped in a zone: it is one rectangle test per
          * token, and at one PROF_ZONE per token per frame the instrument cost
          * more than the thing it was measuring. group.box measures the
          * enumeration on the keystroke paths instead. */
         const Token *t = &m->tokens.v[i];
+        if (OFF_SCREEN(t)) continue;
         if (players && fog_token_unseen(m, t, fogp)) {
             /* At the soft edge the party sees that something is there, and
              * its shape, and nothing else -- unless it is hidden. */
@@ -673,9 +677,11 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
 
     /* After every token, so a marker is never buried under the next one. */
     for (int i = 0; i < m->tokens.n; i++) {
+        if (OFF_SCREEN(&m->tokens.v[i])) continue;
         if (players && fog_token_unseen(m, &m->tokens.v[i], fogp)) continue;
         grid_draw_token_status(r, &e->view, &m->tokens.v[i], th, ascii);
     }
+#undef OFF_SCREEN
 
     /* Recoloring the tile's four boundary corners keeps the cursor visible
      * on top of a token without painting over the box-drawing underneath. */

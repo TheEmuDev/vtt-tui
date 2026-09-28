@@ -4503,3 +4503,83 @@ void test_handout_keys(void)
     rnd_free(&r);
     sandbox_leave(&sb);
 }
+
+/* Creatures off the window are skipped before any drawing: the frame must
+ * be the one it would be without them, and one just inside must still draw.
+ * Every square in a band round the view, a 1x1 and a 3x3 creature each, a
+ * marker and a label on both, at two zooms. */
+void test_cull(void)
+{
+    Map *m = map_new(60, 40, "cull");
+    map_fill_tiles(m, 0, 0, 59, 39, TILE_FLOOR);
+    Play p;
+    play_init(&p);
+    Renderer r;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    Editor e;
+    ed_init(&e, m);
+    e.labels = 0;
+    ed_layout(&e, m, 80, 24);
+    e.cx = 30; e.cy = 20;
+    grid_center_on(&e.view, m, e.cx, e.cy);
+
+    CASE("a creature off the window draws nothing, one on its edge still draws");
+    for (int zoom = 0; zoom < 2; zoom++) {
+        e.view.zoom = zoom;
+        grid_center_on(&e.view, m, e.cx, e.cy);
+        ByteBuf none;
+        bb_init(&none, 32768);
+        rnd_begin(&r);
+        play_draw(&r, m, &e, &p, &THEME_DARK, 0, 0);
+        rnd_dump(&r, &none);
+        bb_putc(&none, '\0');
+
+        int vx0, vy0, vx1, vy1, culled = 0, drawn = 0, wrong = 0;
+        grid_visible_squares(&e.view, &vx0, &vy0, &vx1, &vy1);
+        for (int size = 1; size <= 3; size += 2)
+            for (int y = vy0 - 3; y <= vy1 + 3; y++)
+                for (int x = vx0 - 3; x <= vx1 + 3; x++) {
+                    int edge = x <= vx0 + 1 || x >= vx1 - 1 || y <= vy0 + 1 || y >= vy1 - 1;
+                    if (!edge || x < 0 || y < 0 || x + size > 60 || y + size > 40) continue;
+                    Token t;
+                    memset(&t, 0, sizeof t);
+                    t.x = (int16_t)x; t.y = (int16_t)y; t.size = (uint8_t)size; t.kind = TOKEN_ENEMY;
+                    str_lcpy(t.label, "Wide Goblin", sizeof t.label);
+                    token_add_status(&t, 0, "Poisoned");
+                    int off = x > vx1 || y > vy1 || x + size - 1 < vx0 || y + size - 1 < vy0;
+                    ByteBuf one;
+                    bb_init(&one, 32768);
+                    rnd_begin(&r);
+                    play_draw(&r, m, &e, &p, &THEME_DARK, 0, 0);
+                    if (off) {
+                        /* What play_draw skipped, drawn anyway under its clip:
+                         * it must leave the frame as it was. */
+                        ClipRect saved = grid_clip_push(&r, &e.view, m);
+                        grid_draw_token(&r, &e.view, &t, &THEME_DARK, 0, 0);
+                        grid_draw_token_status(&r, &e.view, &t, &THEME_DARK, 0);
+                        rnd_clip_restore(&r, saved);
+                    } else {
+                        tokens_add(&m->tokens, t);
+                        rnd_begin(&r);
+                        play_draw(&r, m, &e, &p, &THEME_DARK, 0, 0);
+                        m->tokens.n = 0;
+                    }
+                    rnd_dump(&r, &one);
+                    bb_putc(&one, '\0');
+                    int same = !strcmp(one.data, none.data);
+                    if (off && !same) wrong++;       /* it would have drawn: the cull hid it */
+                    culled += off;
+                    drawn  += !off && !same;
+                    bb_free(&one);
+                }
+        CHECK_EQ(wrong, 0);
+        CHECK(culled > 0);
+        CHECK(drawn > 0);
+        bb_free(&none);
+    }
+
+    rnd_free(&r);
+    map_free(m);
+}
+
