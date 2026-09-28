@@ -17,6 +17,9 @@
  *   'E'                          end of frame: present it
  *   'Z'                          keep-alive to a watcher; nothing to draw (a browser gets
  *                                a WebSocket ping instead)
+ *   'H' u16 n, u8 text[n]        the handout (docs/HANDOUTS.md): UTF-8, its title, a
+ *                                newline, its body; n 0 takes it down. Not a frame:
+ *                                it may come between any two records
  *
  * All integers little-endian. Glyphs are sixteen-bit: everything the grid
  * draws is in the basic plane, and a rare astral glyph goes out as the
@@ -30,6 +33,7 @@
  * not. */
 
 #define WIRE_PAL_MAX  256
+#define WIRE_HANDOUT_MAX 2200    /* a handout record's text: a title and 2 KB of body */
 #define WIRE_RUN_MAX  4096       /* glyphs in one run; a row is never wider */
 
 typedef struct {
@@ -71,6 +75,10 @@ size_t wire_enc_palette(const WireEnc *e, int from, uint8_t *out, size_t cap);
  * when the last client leaves, so the table cannot grow across a session. */
 void wire_enc_reset_palette(WireEnc *e);
 
+/* A handout record for `text` (n bytes, at most WIRE_HANDOUT_MAX; 0 takes it
+ * down) into out, which holds 3 + n. Returns the bytes written. */
+size_t wire_handout(uint8_t *out, const char *text, size_t n);
+
 /* ------------------------------------------------------------- decoder */
 
 typedef struct {
@@ -80,6 +88,7 @@ typedef struct {
                 const uint16_t *glyphs);
     void (*end)(void *ctx);
     void (*keepalive)(void *ctx);
+    void (*handout)(void *ctx, const char *text, size_t n);    /* n 0: taken down */
 } WireSink;
 
 /* Consumes bytes as they arrive; a record split across reads is held until

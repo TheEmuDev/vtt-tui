@@ -896,6 +896,11 @@ static void cmd_character(App *a, const char *verb, const char *rest)
     app_character_command(a, rest);
 }
 
+static void cmd_handout(App *a, const char *verb, const char *rest)
+{
+    app_handout_command(a, rest);
+}
+
 static void cmd_scene(App *a, const char *verb, const char *rest)
 {
     app_scene_command(a, verb, rest);
@@ -1047,6 +1052,7 @@ static const struct {
     { "stamp", NULL, cmd_stamp },
     { "character", "characters", cmd_character },
     { "scene", "scenes", cmd_scene },
+    { "handout", "handouts", cmd_handout },
     { "link", "links", cmd_link },
     { "floor", "floors", cmd_floor },
     { "area", "areas", cmd_area },

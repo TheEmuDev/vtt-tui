@@ -309,6 +309,13 @@ void test_draw(void)
 
 void test_util(void)
 {
+    CASE("utf8_valid: well-formed text passes; stray bytes, cut sequences and NUL do not");
+    CHECK(utf8_valid("plain", 5));
+    CHECK(utf8_valid("caf\xc3\xa9 \xe2\x80\x94 \xef\xbf\xbd", 13));   /* a real U+FFFD is fine */
+    CHECK(!utf8_valid("caf\xe9", 4));
+    CHECK(!utf8_valid("\xe2\x80", 2));
+    CHECK(!utf8_valid("a\0b", 3));
+
     CASE("byte buffer growth and integer formatting");
     ByteBuf b;
     bb_init(&b, 4);

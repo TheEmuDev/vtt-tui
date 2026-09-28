@@ -30,7 +30,7 @@ game-specific readouts such as range bands (see [Rulesets](#rulesets)).
   reset an encounter, a ruler and area-of-effect templates.
 - Turn order or a spotlight, clocks, dice and named rolls, a session log.
 - Fog of war that the party's creatures reveal as they move.
-- A players' view in any browser on the local network, with tap-to-point.
+- A players' view in any browser on the local network, with tap-to-point and text handouts.
 - Tools for AI agents to build and edit maps, from a file or live alongside the GM.
 
 Written in C11 with no dependencies beyond libc, POSIX and `-lm`.
@@ -804,6 +804,26 @@ line (`ping at C4`). Players ping by tapping a square on their device (at most o
 second per device). The GM pings with `g p`: the cursor's squares, or the selection. Over fog,
 players see a ping only on squares they can see.
 
+**Handouts.** A handout is a short text card on the players' devices: an inscription, a
+letter, a riddle. It appears over the map in a readable font, whatever the map's size on
+the screen. Write prepared handouts as plain text files in
+`~/.local/share/vtt/handouts/NAME.txt` (or `$XDG_DATA_HOME/vtt/handouts/`), up to 2 KB each;
+line breaks are kept.
+
+| command | action |
+|---------|--------|
+| `:handout NAME` | show NAME.txt on every player's screen, titled NAME |
+| `:handout` | choose a handout from [the picker](#the-picker) |
+| `:handout say TEXT` | show a line of text made up on the spot |
+| `:handout off` | take the handout down |
+| `:handout on` | show the last handout again |
+
+While a handout is up the title bar says `HANDOUT`, and `:player preview` shows the card as
+the players see it. A player can close the card with `×` and reopen it with the `handout`
+button for as long as it is up; showing a new handout opens it again on every screen. A
+device that connects while a handout is up gets it too, and the terminal mirror shows it as
+a box. A handout stays up in build mode.
+
 ## Sessions and files
 
 ### Session log (`:log`)
@@ -916,6 +936,7 @@ use. Available: `none`, `daggerheart`.
 | `:stamp ...` | save, load and choose [stamps](#build-mode) |
 | `:character ...` | save and place [characters](#characters-character-i-t) |
 | `:scene ...`, `:scenes` | save, put back and list [scenes](#scenes-scene) |
+| `:handout ...` | show a [handout](#the-players-view-serve-mirror) on the players' screens; `:handout off` takes it down |
 | `:link ...`, `:links` | change, remove, list and jump to [links](#links-stairs-ladders-trapdoors-portals) |
 | `:floor ...`, `:floors` | mark, show and list [floors](#floors) |
 | `:turns` | list the [turn order](#turn-order-a); `:turns end` ends the fight |

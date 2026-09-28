@@ -44,11 +44,14 @@ typedef enum {
     MODAL_PICKER,            /* a list filtered as the GM types: App.picker */
 } ModalKind;
 
+/* A handout's body: 2 KB of text, and its NUL. */
+#define HANDOUT_BODY_MAX 2049
+
 /* App.pending after i t: not a key of its own, so no key can collide. */
 #define PENDING_IT 0x110000u
 
 /* What the picker is choosing from. */
-typedef enum { PICK_CHARACTER, PICK_STAMP, PICK_SCENE } PickWhat;
+typedef enum { PICK_CHARACTER, PICK_STAMP, PICK_SCENE, PICK_HANDOUT } PickWhat;
 
 typedef enum {
     PROMPT_NONE,
@@ -176,6 +179,13 @@ typedef struct {
 
     TextPrompt prompt;
     PromptWhat prompt_what;
+
+    /* The handout (docs/HANDOUTS.md): the last one shown, kept so
+     * :handout on puts it back, and whether it is up on the players'
+     * screens. The server holds its own copy for phones that join later. */
+    char       handout_title[64];
+    char       handout_body[HANDOUT_BODY_MAX];
+    int        handout_up;
 
     /* The picker (MODAL_PICKER): the character templates or the stamps, and
      * for a character the side it goes down on, -1 for the side it was

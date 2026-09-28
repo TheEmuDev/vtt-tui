@@ -25,7 +25,16 @@ static void wc_run(void *ctx, int x, int y, int n, uint8_t fg, uint8_t bg, uint8
     }
 }
 
-static const WireSink WC_SINK = { wc_full, wc_pal, wc_run, wc_end, wc_keepalive };
+static void wc_handout(void *ctx, const char *text, size_t n)
+{
+    WireCatch *c = ctx;
+    c->handouts++;
+    memcpy(c->handout, text, n);
+    c->handout[n] = '\0';
+    c->handout_n = n;
+}
+
+static const WireSink WC_SINK = { wc_full, wc_pal, wc_run, wc_end, wc_keepalive, wc_handout };
 
 void test_wire(void)
 {
@@ -1539,4 +1548,164 @@ void test_webpage(void)
     const char *w = strstr(WEBPAGE, "const WASM='");
     CHECK(w != NULL);
     if (w) CHECK(strncmp(w + 12, "AGFzbQEAAAAB", 12) == 0);   /* \0asm, version 1, a type section */
+}
+
+/* ---------------------------------------------------------------- handouts */
+
+/* Reads until the client has seen `want` handout records. */
+static int recv_handouts(Net *n, int fd, WireDec *d, WireCatch *c, int want, uint64_t now_ms)
+{
+    uint8_t buf[8192];
+    for (int tries = 0; tries < 50 && c->handouts < want; tries++) {
+        net_pump(n, now_ms);
+        struct pollfd p = { fd, POLLIN, 0 };
+        if (poll(&p, 1, 10) <= 0) continue;
+        ssize_t got = read(fd, buf, sizeof buf);
+        if (got <= 0) break;
+        wire_dec_feed(d, buf, (size_t)got);
+    }
+    return c->handouts >= want ? 0 : -1;
+}
+
+void test_handouts(void)
+{
+    CASE("wire: an H record carries the text whole, byte by byte too; n 0 takes it down");
+    {
+        const char *text = "Tomb\nHere lies Aldric.";
+        uint8_t rec[3 + WIRE_HANDOUT_MAX];
+        size_t  rl = wire_handout(rec, text, strlen(text));
+        CHECK_EQ((int)rl, 3 + (int)strlen(text));
+        WireCatch c;
+        memset(&c, 0, sizeof c);
+        WireDec d;
+        wire_dec_init(&d, &WC_SINK, &c);
+        for (size_t i = 0; i < rl; i++) wire_dec_feed(&d, rec + i, 1);
+        CHECK_EQ(c.handouts, 1);
+        CHECK(!strcmp(c.handout, text));
+        rl = wire_handout(rec, "", 0);
+        wire_dec_feed(&d, rec, rl);
+        CHECK(c.handouts == 2 && c.handout_n == 0);
+        uint8_t bad[3] = { 'H', 0xFF, 0xFF };                /* longer than any handout */
+        wire_dec_feed(&d, bad, 3);
+        CHECK_EQ(d.bad, 1);
+    }
+
+    Renderer r;
+    rnd_init(&r);
+    rnd_resize(&r, 40, 12);
+    rnd_flush(&r, NULL);
+    Net n;
+    net_init(&n);
+    char err[128];
+    CHECK_EQ(net_start(&n, 0, &r, err, sizeof err), 0);
+    net_set_live(&n, 1);
+
+    CASE("put up, a watcher already there gets it at once, live or not");
+    int w1 = net_connect(n.port);
+    CHECK_EQ((int)write(w1, "VTT1\n", 5), 5);
+    WireCatch c1;
+    memset(&c1, 0, sizeof c1);
+    WireDec d1;
+    wire_dec_init(&d1, &WC_SINK, &c1);
+    net_recv_until(&n, w1, &d1, &c1, 1, 0);
+    net_set_live(&n, 0);
+    const char *tomb = "Tomb\nHere lies Aldric.\n\nDo not open the door.";
+    net_set_handout(&n, tomb, strlen(tomb), 0);
+    CHECK_EQ(recv_handouts(&n, w1, &d1, &c1, 1, 0), 0);
+    CHECK(!strcmp(c1.handout, tomb));
+
+    CASE("a watcher that joins while it is up gets it after its FULL");
+    net_set_live(&n, 1);
+    int w2 = net_connect(n.port);
+    CHECK_EQ((int)write(w2, "VTT1\n", 5), 5);
+    WireCatch c2;
+    memset(&c2, 0, sizeof c2);
+    WireDec d2;
+    wire_dec_init(&d2, &WC_SINK, &c2);
+    CHECK_EQ(recv_handouts(&n, w2, &d2, &c2, 1, 0), 0);
+    CHECK(c2.fulls >= 1 && !strcmp(c2.handout, tomb));
+    CHECK_EQ(n.joined, 1);                                  /* the app is asked for a fresh frame */
+
+    CASE("taken down: every client gets the empty record, and a newcomer gets none");
+    net_set_handout(&n, "", 0, 0);
+    CHECK_EQ(recv_handouts(&n, w1, &d1, &c1, 2, 0), 0);
+    CHECK_EQ(recv_handouts(&n, w2, &d2, &c2, 2, 0), 0);
+    CHECK(c1.handout_n == 0 && c2.handout_n == 0);
+    close(w1);
+    close(w2);
+
+    CASE("a restarted server keeps the handout for the phones that come back");
+    net_set_handout(&n, tomb, strlen(tomb), 0);
+    net_stop(&n);
+    CHECK_EQ(net_start(&n, 0, &r, err, sizeof err), 0);
+    CHECK_EQ((int)n.handout_len, (int)strlen(tomb));
+    int w3 = net_connect(n.port);
+    CHECK_EQ((int)write(w3, "VTT1\n", 5), 5);
+    WireCatch c3;
+    memset(&c3, 0, sizeof c3);
+    WireDec d3;
+    wire_dec_init(&d3, &WC_SINK, &c3);
+    CHECK_EQ(recv_handouts(&n, w3, &d3, &c3, 1, 0), 0);
+    close(w3);
+    net_stop(&n);
+    rnd_free(&r);
+}
+
+/* A phone joining before the first players' frame was once sent the GM's own
+ * screen. Anything GM-only on it would reach the table. */
+void test_join_frame(void)
+{
+    Sandbox sb = sandbox_enter("joinframe");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    write_map_file(sb.dir, "fight.vtt");
+    char path[600];
+    snprintf(path, sizeof path, "%s/fight.vtt", sb.dir);
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    app_key(&a, (Key){ KEY_F2, 0, 0 });
+
+    CASE("the first FULL a joining watcher gets is the players' view, never the GM's screen");
+    press(&a, ":serve\r");
+    app_note_gm(&a, "SECRET the ogre is a mimic");
+    app_frame(&a, NULL, 0);                                /* the loop draws after every key */
+    int w = net_connect(a.net.port);
+    CHECK_EQ((int)write(w, "VTT1\n", 5), 5);
+    WireCatch c;
+    memset(&c, 0, sizeof c);
+    WireDec d;
+    wire_dec_init(&d, &WC_SINK, &c);
+    CHECK_EQ(net_recv_until(&a.net, w, &d, &c, 1, 0), 0);
+    int leaked = 0;
+    for (int y = 0; y < 24 && y < 32; y++) {
+        char row[81];
+        for (int x = 0; x < 64; x++) row[x] = c.grid[y * 64 + x].ch < 128 && c.grid[y * 64 + x].ch ? (char)c.grid[y * 64 + x].ch : ' ';
+        row[64] = '\0';
+        if (strstr(row, "SECRET")) leaked = 1;
+    }
+    CHECK_EQ(leaked, 0);
+    close(w);
+
+    CASE("in build mode a joining watcher gets a blank screen, not the editor");
+    app_key(&a, (Key){ KEY_F1, 0, 0 });
+    net_stop(&a.net);
+    press(&a, ":serve\r");
+    app_frame(&a, NULL, 0);
+    w = net_connect(a.net.port);
+    CHECK_EQ((int)write(w, "VTT1\n", 5), 5);
+    memset(&c, 0, sizeof c);
+    wire_dec_init(&d, &WC_SINK, &c);
+    CHECK_EQ(net_recv_until(&a.net, w, &d, &c, 1, 0), 0);
+    int drawn = 0;
+    for (int i = 0; i < 64 * 24; i++) drawn |= c.grid[i].ch > ' ';
+    CHECK_EQ(drawn, 0);
+    close(w);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
 }

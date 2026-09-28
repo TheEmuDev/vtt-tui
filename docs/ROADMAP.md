@@ -19,8 +19,8 @@ any code, and moves to the README when it ships. Ideas not yet decided live in I
    back: reset an encounter, stage "before" and "after the ambush", give an agent a point
    to diff against (the channel's unplanned checkpoints, CONTROL.md). Plan: docs/SCENES.md.
 4. **Handouts on the phones.** A short text card -- an inscription, a letter -- pushed to
-   the players' screens and taken down again. The page and server already carry messages;
-   the work is the card and a `:handout` command.
+   the players' screens and taken down again: `:handout NAME`, `:handout say TEXT`,
+   `:handout off`. Plan: docs/HANDOUTS.md.
 5. **Links between map files.** A link end that opens another map and carries the party
    over (the town to the dungeon): links and floors across a campaign. The largest: it
    touches opening maps, the autosave and the players' connection.

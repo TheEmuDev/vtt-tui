@@ -347,6 +347,7 @@ run "play, logging"        "$MOB"    80x24  ':play\r:log on\rt\rlllljjjj\r'
 run "play, rolling"        "$MOB"    80x24  ':play\r:roll 2d6+3\r:roll +1\r'
 run "play, 500 characters" "$MOB"    80x24  ':play\ritebeast-4\t\t\ru'
 run "play, scene of 500"   "$HORDE"  80x24  ':play\r:scene save A\r:scene A\ru'
+run "play, handout, 4 watch" "$MOB"  80x24  ':play\r:handout say The door reads: SPEAK, FRIEND\r:handout off\r' "--bench-clients 4"
 run "agent, room + 12"     "$VOIDY"  80x24  'u' "--bench-ctl $DIR/room.ctl"
 run "agent, plan of rooms" "$VOIDMAP" 80x24  'u' "--bench-ctl $DIR/plan.ctl"
 run "agent, dump 512x512"  "$HUGE"   80x24  'lh' "--bench-ctl $DIR/dump.ctl"

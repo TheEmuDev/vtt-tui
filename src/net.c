@@ -153,6 +153,10 @@ int net_start(Net *n, uint16_t port, const Renderer *r, char *err, size_t errsz)
     rnd_init(&n->players);
     rnd_resize(&n->players, r->w, r->h);
     n->players.clear_cell = r->clear_cell;
+    /* Blank until the app draws the players' view into it: this is what a
+     * phone joining first is sent, never the GM's screen. */
+    rnd_begin(&n->players);
+    rnd_flush(&n->players, NULL);
     n->rnd       = r;
     n->live      = 1;
     n->stale     = 0;
@@ -203,7 +207,14 @@ void net_stop(Net *n)
     wire_enc_free(&n->enc);
     rnd_set_observer((Renderer *)n->rnd, NULL, NULL);
     rnd_free(&n->players);
+    /* The handout is the table's, not the server's: a restarted server
+     * hands it to the phones as they come back. */
+    char   keep[sizeof n->handout];
+    size_t kl = n->handout_len;
+    memcpy(keep, n->handout, kl);
     net_init(n);
+    memcpy(n->handout, keep, kl);
+    n->handout_len = kl;
 }
 
 Renderer *net_players_renderer(Net *n, const Renderer *gm)
@@ -216,11 +227,15 @@ Renderer *net_players_renderer(Net *n, const Renderer *gm)
         n->rnd   = &n->players;
         n->stale = 1;
     }
+    n->players.clear_cell = gm->clear_cell;
     if (n->players.w != gm->w || n->players.h != gm->h) {
         rnd_resize(&n->players, gm->w, gm->h);
+        /* A blank picture, not the renderer's force-a-redraw cells: a phone
+         * joining before anything is drawn here is sent this. */
+        rnd_begin(&n->players);
+        rnd_flush(&n->players, NULL);
         n->stale = 1;                     /* a new size wants a new FULL */
     }
-    n->players.clear_cell = gm->clear_cell;
     return &n->players;
 }
 
@@ -329,7 +344,13 @@ static void client_send_full(Net *n, int i, uint64_t now_ms)
 {
     wire_enc_full(&n->enc, n->rnd);
     if (n->enc.overflow) { client_close(n, i); return; }
-    if (client_send_synced(n, i, n->enc.buf, n->enc.len) == 0) client_flush(n, i, now_ms);
+    if (client_send_synced(n, i, n->enc.buf, n->enc.len) < 0) return;
+    n->joined = 1;
+    if (n->handout_len) {
+        uint8_t rec[3 + WIRE_HANDOUT_MAX];
+        if (client_send_frame(n, i, rec, wire_handout(rec, n->handout, n->handout_len)) < 0) return;
+    }
+    client_flush(n, i, now_ms);
 }
 
 /* -------------------------------------------------------------- reading */
@@ -684,6 +705,24 @@ void net_set_live(Net *n, int live)
     if (!net_active(n)) return;
     if (!n->live && live) n->stale = 1;
     n->live = live;
+}
+
+void net_set_handout(Net *n, const char *text, size_t len, uint64_t now_ms)
+{
+    if (len > sizeof n->handout) len = sizeof n->handout;
+    if (len) memcpy(n->handout, text, len);
+    n->handout_len = len;
+    if (!net_active(n)) return;
+    PROF_ZONE("handout.send");
+    uint8_t rec[3 + WIRE_HANDOUT_MAX];
+    size_t  rl = wire_handout(rec, text, len);
+    /* Only stream clients: one still shaking hands gets it with its FULL. */
+    for (int i = 0; i < n->ncl; i++) {
+        NetClient *c = &n->cl[i];
+        if (c->kind != CL_WS && !(c->kind == CL_RAW && c->greeted)) continue;
+        if (client_send_frame(n, i, rec, rl) < 0) { i--; continue; }
+        if (client_flush(n, i, now_ms) < 0) i--;
+    }
 }
 
 void net_frame_begin(Net *n)

@@ -12,6 +12,8 @@
 #include "net.h"
 #include "render.h"
 #include "term.h"
+#include "theme.h"
+#include "ui.h"
 #include "util.h"
 #include "wire.h"
 
@@ -23,6 +25,10 @@ typedef struct {
     uint32_t  pal[WIRE_PAL_MAX];
     int       frames;
     int       ascii;
+    /* The handout up, split at its first newline into a title and a body;
+     * body[0] 0 when none is. */
+    char      title[128];
+    char      body[WIRE_HANDOUT_MAX + 1];
 } Watch;
 
 static void on_full(void *ctx, int w, int h)
@@ -76,6 +82,8 @@ static void paint(Watch *wt)
             memcpy(&r->back[(size_t)(oy + y) * (size_t)r->w + (size_t)ox],
                    &wt->grid[(size_t)y * (size_t)wt->gw], (size_t)w * sizeof(Cell));
     }
+    if (wt->body[0] || wt->title[0])
+        ui_handout_draw(r, &THEME_DARK, wt->title, wt->body, wt->ascii ? &BOX_ASCII : &BOX_ROUND);
     rnd_flush(r, wt->t);
 }
 
@@ -88,7 +96,22 @@ static void on_end(void *ctx)
 
 static void on_keepalive(void *ctx) { (void)ctx; }
 
-static const WireSink SINK = { on_full, on_pal, on_run, on_end, on_keepalive };
+static void on_handout(void *ctx, const char *text, size_t n)
+{
+    Watch *wt = ctx;
+    const char *nl = memchr(text, '\n', n);
+    size_t tl = nl ? (size_t)(nl - text) : n;
+    if (tl >= sizeof wt->title) tl = sizeof wt->title - 1;
+    memcpy(wt->title, text, tl);
+    wt->title[tl] = '\0';
+    size_t bl = nl ? n - (size_t)(nl + 1 - text) : 0;
+    if (bl > WIRE_HANDOUT_MAX) bl = WIRE_HANDOUT_MAX;
+    if (bl) memcpy(wt->body, nl + 1, bl);
+    wt->body[bl] = '\0';
+    paint(wt);
+}
+
+static const WireSink SINK = { on_full, on_pal, on_run, on_end, on_keepalive, on_handout };
 
 /* host:port, host:port?k=CODE, or host:port/CODE. */
 static int parse_target(const char *target, char *host, size_t hs, char *port, size_t ps,

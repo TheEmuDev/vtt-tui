@@ -342,6 +342,12 @@ int stamp_list(char (*names)[MAP_NAME_MAX], int max)
 
 int stamp_list_in(const char *dir, char (*names)[MAP_NAME_MAX], int max)
 {
+    return stamp_list_ext(dir, ".vtt", names, max);
+}
+
+int stamp_list_ext(const char *dir, const char *ext, char (*names)[MAP_NAME_MAX], int max)
+{
+    size_t el = strlen(ext);
     DIR *d = opendir(dir);
     if (!d) return 0;
     /* All of them, sorted, then the first max: a listing cut short is cut
@@ -351,10 +357,10 @@ int stamp_list_in(const char *dir, char (*names)[MAP_NAME_MAX], int max)
     struct dirent *e;
     while ((e = readdir(d))) {
         size_t len = strlen(e->d_name);
-        if (len < 5 || strcmp(e->d_name + len - 4, ".vtt") != 0 || len - 4 >= MAP_NAME_MAX) continue;
+        if (len <= el || strcmp(e->d_name + len - el, ext) != 0 || len - el >= MAP_NAME_MAX) continue;
         char name[MAP_NAME_MAX];
-        memcpy(name, e->d_name, len - 4);
-        name[len - 4] = '\0';
+        memcpy(name, e->d_name, len - el);
+        name[len - el] = '\0';
         if (!stamp_name_ok(name)) continue;
         if (n == cap) {
             cap = cap ? cap * 2 : 32;

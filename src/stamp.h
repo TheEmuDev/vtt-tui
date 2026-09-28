@@ -53,6 +53,8 @@ int  stamp_list(char (*names)[MAP_NAME_MAX], int max);
 /* The listing of any such directory: every NAME.vtt whose NAME passes
  * stamp_name_ok. names may be NULL with max 0, to count. */
 int  stamp_list_in(const char *dir, char (*names)[MAP_NAME_MAX], int max);
+/* The same for files ending in `ext` (".txt" for handouts). */
+int  stamp_list_ext(const char *dir, const char *ext, char (*names)[MAP_NAME_MAX], int max);
 
 /* The preview: the stamp shown on the map at (x,y) for one draw, without a
  * change to the map -- no undo, no Map.gen, no sight. Swaps the stamp's

@@ -52,6 +52,10 @@ int utf8_decode(const char *s, size_t len, uint32_t *cp);
 #define UTIL_WIDTH_FASTPATH_LO 0x2100u
 #define UTIL_WIDTH_FASTPATH_HI 0x2E80u
 
+/* Is s[0..len) well-formed UTF-8 (no stray continuation bytes, no
+ * truncated sequence, no NUL)? */
+int utf8_valid(const char *s, size_t len);
+
 /* Display width of a codepoint in terminal cells: 0, 1, or 2. */
 int utf8_width(uint32_t cp);
 

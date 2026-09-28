@@ -101,6 +101,12 @@ typedef struct {
     NetPing         inbox[NET_MAX_CLIENTS];
     int             ninbox;
     uint32_t        next_id;
+    int             joined;     /* a client was sent its first FULL: the app redraws */
+    /* The handout up on the players' screens, as its record's text (title,
+     * newline, body); length 0 for none. Sent when it changes and to every
+     * client that joins while it is up. */
+    char            handout[WIRE_HANDOUT_MAX];
+    size_t          handout_len;
 
     /* Counters for the profiler: per frame, and over the server's life. */
     uint32_t frame_bytes;
@@ -151,6 +157,10 @@ void net_service(Net *n, const struct pollfd *fds, int count, uint64_t now_ms);
 void net_frame_begin(Net *n);
 void net_frame_end(Net *n, uint64_t now_ms);
 void net_set_live(Net *n, int live);
+/* Puts the handout up on every screen, or takes it down (n 0), and keeps it
+ * for clients that join later. Sent at once, live or not: a handout is not a
+ * frame and does not wait for play mode. */
+void net_set_handout(Net *n, const char *text, size_t len, uint64_t now_ms);
 
 /* Exposed for the tests: the WebSocket accept key for a client key, and the
  * primitives behind it. */

@@ -39,6 +39,7 @@ static void stamp_detail(const Map *s, char *buf, size_t sz)
 static UiPickItem *pick_items(const App *a, PickWhat what, int *count)
 {
     PROF_ZONE("picker.open");
+    if (what == PICK_HANDOUT) return app_handout_items(count);
     if (what == PICK_SCENE) {
         const Map *m = a->map;
         *count = m ? m->nscenes : 0;
@@ -79,6 +80,12 @@ void app_pick_open(App *a, PickWhat what, int kind, const char *initial)
     UiPickItem *items = pick_items(a, what, &n);
     if (!n) {
         if (what == PICK_SCENE) app_set_status_gm(a, "no scenes - :scene save NAME keeps the creatures as they stand");
+        else if (what == PICK_HANDOUT) {
+            char dir[MAP_PATH_MAX], msg[MAP_PATH_MAX + 64];
+            stamp_data_dir("handouts", dir, sizeof dir);
+            snprintf(msg, sizeof msg, "no handouts - write NAME.txt in %.200s, or :handout say TEXT", dir);
+            app_set_status_gm(a, msg);
+        }
         else app_set_status(a, what == PICK_CHARACTER
             ? "no characters saved yet - :character save keeps the creature under the cursor"
             : "no stamps yet - y copies, :stamp save NAME keeps it");
@@ -87,6 +94,7 @@ void app_pick_open(App *a, PickWhat what, int kind, const char *initial)
     char title[64];
     if (what == PICK_STAMP)      snprintf(title, sizeof title, "Stamp");
     else if (what == PICK_SCENE) snprintf(title, sizeof title, "Scene to put back");
+    else if (what == PICK_HANDOUT) snprintf(title, sizeof title, "Handout to show the players");
     else if (kind < 0)      snprintf(title, sizeof title, "Character");
     else                    snprintf(title, sizeof title, "Character, as %s %s",
                                      kind == TOKEN_ENEMY ? "an" : "a", token_kind_name((uint8_t)kind));
@@ -131,6 +139,7 @@ void app_pick_key(App *a, Key k)
 
     if (a->pick_what == PICK_STAMP) app_stamp_command(a, name);
     else if (a->pick_what == PICK_SCENE) { if (a->map) app_scene_restore(a, name); }
+    else if (a->pick_what == PICK_HANDOUT) app_handout_show(a, name);
     else if (a->map && a->screen == SCREEN_PLAY) place_character(a, name, a->pick_kind);
 }
 

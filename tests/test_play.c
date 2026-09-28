@@ -4315,3 +4315,153 @@ void test_scene_keys(void)
     rnd_free(&r);
     sandbox_leave(&sb);
 }
+
+/* ---------------------------------------------------------------- handouts */
+
+static void write_text(const char *path, const char *text, size_t n)
+{
+    FILE *f = fopen(path, "wb");
+    if (!f) return;
+    fwrite(text, 1, n, f);
+    fclose(f);
+}
+
+void test_handout_keys(void)
+{
+    Sandbox sb = sandbox_enter("handoutkeys");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK(ctl_blank_map(&a, sb.dir, 12, 8));
+    if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    app_key(&a, (Key){ KEY_F2, 0, 0 });
+    char dir[MAP_PATH_MAX], path[MAP_PATH_MAX + 32];
+    stamp_data_dir("handouts", dir, sizeof dir);
+
+    CASE("none yet: :handout says where to write one");
+    press(&a, ":handout\r");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK(strstr(a.status, "no handouts - write NAME.txt in") != NULL);
+    press(&a, ":handout on\r");
+    CHECK(strstr(a.status, "no handout yet") != NULL);
+    press(&a, ":handout off\r");
+    CHECK(strstr(a.status, "no handout is up") != NULL);
+
+    CASE(":handout NAME puts the file up: the name its title, CRLF and tabs cleaned, blank tail dropped");
+    dir_make(dir);
+    snprintf(path, sizeof path, "%s/tomb.txt", dir);
+    const char *tomb = "Here lies Aldric.\r\n\r\n\tDo not open the door.\r\n\r\n";
+    write_text(path, tomb, strlen(tomb));
+    press(&a, ":handout tomb\r");
+    CHECK_EQ(a.handout_up, 1);
+    CHECK(!strcmp(a.handout_title, "tomb"));
+    CHECK(!strcmp(a.handout_body, "Here lies Aldric.\n\n Do not open the door."));
+    CHECK(strstr(a.status, "handout up: tomb") != NULL);
+    CHECK_EQ(a.status_gm, 1);
+    CHECK((int)a.net.handout_len == (int)strlen("tomb\nHere lies Aldric.\n\n Do not open the door."));
+
+    CASE("the title bar says so, in both views");
+    rnd_begin(&r);
+    app_draw(&a);
+    ByteBuf f;
+    bb_init(&f, 65536);
+    rnd_dump(&r, &f);
+    bb_putc(&f, '\0');
+    CHECK(strstr((char *)f.data, "HANDOUT  PLAY") != NULL);
+    CHECK(strstr((char *)f.data, "Here lies") == NULL);        /* the GM's own screen has no card */
+    bb_free(&f);
+    char *pf = players_text(&a, &r);
+    CHECK(strstr(pf, "HANDOUT  PLAY") != NULL);
+    CHECK(strstr(pf, "Here lies") == NULL);                  /* the phones draw their own */
+    free(pf);
+
+    CASE(":player preview shows the card, and the players' frame is then drawn apart");
+    press(&a, ":player preview\r");
+    CHECK(a.preview);
+    CHECK(app_view_differs(&a));
+    rnd_begin(&r);
+    app_draw(&a);
+    bb_init(&f, 65536);
+    rnd_dump(&r, &f);
+    bb_putc(&f, '\0');
+    CHECK(strstr((char *)f.data, "Here lies Aldric.") != NULL);
+    CHECK(strstr((char *)f.data, "tomb") != NULL);
+    bb_free(&f);
+    press(&a, ":player preview\r");
+    CHECK(!a.preview);
+
+    CASE("off takes it down and keeps it; on puts it back");
+    press(&a, ":handout off\r");
+    CHECK_EQ(a.handout_up, 0);
+    CHECK_EQ((int)a.net.handout_len, 0);
+    CHECK(strstr(a.status, ":handout on puts it back") != NULL);
+    press(&a, ":handout on\r");
+    CHECK_EQ(a.handout_up, 1);
+    CHECK(strstr(a.status, "handout up again: tomb") != NULL);
+
+    CASE(":handout say puts a line up with no title");
+    press(&a, ":handout say SPEAK, FRIEND\r");
+    CHECK(a.handout_up && !a.handout_title[0] && !strcmp(a.handout_body, "SPEAK, FRIEND"));
+    CHECK(a.net.handout_len == strlen("\nSPEAK, FRIEND"));
+    press(&a, ":handout say\r");
+    CHECK(strstr(a.status, ":handout say TEXT") != NULL);
+
+    CASE("refused: no such file, too long, not UTF-8, empty, a path");
+    press(&a, ":handout nope\r");
+    CHECK(strstr(a.status, "no handout called nope") != NULL);
+    char *big = xmalloc(3000);
+    memset(big, 'x', 3000);
+    snprintf(path, sizeof path, "%s/big.txt", dir);
+    write_text(path, big, 3000);
+    free(big);
+    press(&a, ":handout big\r");
+    CHECK(strstr(a.status, "over 2048 bytes") != NULL);
+    snprintf(path, sizeof path, "%s/latin.txt", dir);
+    write_text(path, "caf\xe9", 4);
+    press(&a, ":handout latin\r");
+    CHECK(strstr(a.status, "not UTF-8") != NULL);
+    snprintf(path, sizeof path, "%s/blank.txt", dir);
+    write_text(path, "\n\n", 2);
+    press(&a, ":handout blank\r");
+    CHECK(strstr(a.status, "is empty") != NULL);
+    press(&a, ":handout ../tomb\r");
+    CHECK(strstr(a.status, "no handout called") != NULL);
+    CHECK(!strcmp(a.handout_body, "SPEAK, FRIEND"));          /* none of those replaced it */
+
+    CASE("the picker: every file, its first line beside it; enter puts it up");
+    press(&a, ":handout\r");
+    CHECK_EQ(a.modal, MODAL_PICKER);
+    CHECK_EQ(a.picker.n, 4);
+    int ti = -1;
+    for (int i = 0; i < a.picker.n; i++) if (!strcmp(a.picker.items[i].name, "tomb")) ti = i;
+    CHECK(ti >= 0 && !strcmp(a.picker.items[ti].detail, "Here lies Aldric."));
+    press(&a, "tom\r");
+    CHECK(!strcmp(a.handout_title, "tomb"));
+
+    CASE("the card wraps to its box, keeps line breaks, and says when it is cut short");
+    Renderer small;
+    rnd_init(&small);
+    rnd_resize(&small, 40, 12);
+    rnd_begin(&small);
+    ui_handout_draw(&small, &THEME_DARK, "Letter",
+                    "a b c d e f g h i j k l m n o p q r s t u v w x y z aa bb cc dd\n"
+                    "Supercalifragilisticexpialidocious-and-more\nline\nline\nline\nline\nline\nline\nline",
+                    &BOX_ROUND);
+    bb_init(&f, 8192);
+    rnd_dump(&small, &f);
+    bb_putc(&f, '\0');
+    CHECK(strstr((char *)f.data, "Letter") != NULL);
+    CHECK(strstr((char *)f.data, "a b c d") != NULL);
+    CHECK(strstr((char *)f.data, "…") != NULL);               /* nine lines do not fit in twelve rows' box */
+    CHECK(strstr((char *)f.data, "Supercalifragilistic") != NULL);   /* a long word is cut, not lost */
+    bb_free(&f);
+    rnd_free(&small);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}

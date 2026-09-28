@@ -11,11 +11,20 @@ body{display:flex;align-items:center;justify-content:center}
 #c{display:block;image-rendering:pixelated;touch-action:pinch-zoom}
 #s{position:fixed;left:0;bottom:0;padding:2px 6px;background:rgba(14,14,18,.85);color:#60647a;font:11px monospace;pointer-events:none}
 #s b{color:#8ac8ff;font-weight:normal}
+#h,#hb{position:fixed;background:#f3ead6;color:#2a241a;font:17px/1.5 Georgia,serif;border:0;border-radius:6px;box-shadow:0 4px 30px #000}
+#h{left:50%;top:50%;transform:translate(-50%,-50%);width:min(34em,88vw);max-height:80vh;overflow:auto;box-sizing:border-box;padding:1em 1.3em;user-select:text}
+[hidden]{display:none!important}
+#ht{margin-right:1.5em;font-weight:bold}
+#hx{position:absolute;right:.3em;top:0;border:0;background:none;font:28px sans-serif}
+#hp{white-space:pre-wrap;overflow-wrap:anywhere}
+#hb{right:9px;bottom:9px;padding:.4em 1em}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <div id="s">connecting…</div>
+<div id="h" hidden><button id="hx" aria-label="close">×</button><div id="ht"></div><p id="hp"></p></div>
+<button id="hb" hidden>handout</button>
 <script>
 'use strict';
 /* vtt remote view. The GM's terminal, drawn the way a terminal draws it:
@@ -194,9 +203,25 @@ function feed(u8){
       p+=2*k;
     }else if(t===0x45){p++;schedule()}                     // 'E': present
     else if(t===0x5a){p++}                                 // 'Z': keep-alive
+    else if(t===0x48){                                     // 'H' n text: the handout, n 0 down
+      const k=dv.getUint16(p+1,true);handout(dec.decode(u8.subarray(p+3,p+3+k)));p+=3+k;
+    }
     else break;
   }
 }
+
+/* ---- the handout: the GM's to put up and take down; a player may close it
+ * and the button reopens it. A new one opens even if the last was closed. */
+const E=id=>document.getElementById(id),dec=new TextDecoder(),hd=E('h'),hb=E('hb'),ht=E('ht'),hp=E('hp');
+let hkey='';
+function handout(s){
+  const nl=s.indexOf('\n');
+  ht.textContent=nl<0?s:s.slice(0,nl);ht.hidden=!ht.textContent;hp.textContent=nl<0?'':s.slice(nl+1);
+  if(s!==hkey){hd.hidden=!s;hb.hidden=true;hd.scrollTop=0}
+  hkey=s;
+}
+E('hx').onclick=()=>{hd.hidden=true;hb.hidden=false};
+hb.onclick=()=>{hd.hidden=false;hb.hidden=true};
 
 /* ---- connection */
 function status(m){

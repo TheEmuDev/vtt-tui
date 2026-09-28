@@ -15,10 +15,17 @@ cd "$(dirname "$0")/.."
     echo '#pragma GCC diagnostic ignored "-Woverlength-strings"'
     echo
     echo 'const char WEBPAGE[] ='
-    sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/    "/' -e 's/$/\\n"/' web/index.html
+    # Block comments are the source's, not the phone's: every byte of the
+    # page goes to every phone, and the budget (docs/REMOTE.md) is what is
+    # sent. Lines a comment leaves empty go too. // comments stay: a naive
+    # cut would take ws:// with them.
+    python3 -c 'import re,sys; s=re.sub(r"/\*.*?\*/", "", sys.stdin.read(), flags=re.S); sys.stdout.write("".join(l for l in s.splitlines(True) if l.strip()))' < web/index.html |
+    sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/    "/' -e 's/$/\\n"/'
     echo '    ;'
     echo
     echo 'const size_t WEBPAGE_LEN = sizeof WEBPAGE - 1;'
 } > src/webpage.c
 
-printf 'src/webpage.c: %s bytes of page\n' "$(wc -c < web/index.html)"
+printf 'src/webpage.c: %s bytes of page as sent (%s in web/index.html)\n' \
+    "$(python3 -c 'import re,sys; s=re.sub(r"/\*.*?\*/", "", sys.stdin.read(), flags=re.S); print(len("".join(l for l in s.splitlines(True) if l.strip()).encode()))' < web/index.html)" \
+    "$(wc -c < web/index.html)"

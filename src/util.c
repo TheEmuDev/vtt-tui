@@ -151,6 +151,20 @@ int utf8_decode(const char *s, size_t len, uint32_t *cp)
     return need + 1;
 }
 
+int utf8_valid(const char *s, size_t len)
+{
+    size_t i = 0;
+    while (i < len) {
+        uint32_t cp;
+        int n = utf8_decode(s + i, len - i, &cp);
+        if (cp == 0) return 0;
+        /* A bad byte decodes as U+FFFD in one byte; a real U+FFFD is three. */
+        if (cp == 0xFFFDu && n == 1) return 0;
+        i += (size_t)n;
+    }
+    return 1;
+}
+
 /* Compact wcwidth. Only the ranges a map/UI can realistically contain are
  * modeled: combining marks are zero-width, CJK and emoji are double-width,
  * everything else (Latin, box drawing, block elements, geometric shapes) is

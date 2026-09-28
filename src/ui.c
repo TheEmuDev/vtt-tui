@@ -552,6 +552,90 @@ void ui_picker_draw(Renderer *r, const Theme *th, const UiPicker *pk,
     draw_text(r, box.x + 2, box.y + h - 1, foot, box.w - 4, dim);
 }
 
+/* -------------------------------------------------------------- handout */
+
+/* Calls line() for each line of `text` wrapped at `width` cells: at a space
+ * when there is one, else mid-word. Returns how many lines. */
+static int wrap(const char *text, int width, void (*line)(void *ctx, int i, const char *s, size_t n),
+                void *ctx)
+{
+    int         lines = 0;
+    const char *p = text;
+    for (;;) {
+        const char *eol = strchr(p, '\n');
+        const char *end = eol ? eol : p + strlen(p);
+        /* One paragraph, cut into lines. */
+        do {
+            const char *q = p, *brk = NULL;
+            int w = 0;
+            while (q < end) {
+                uint32_t cp;
+                int n = utf8_decode(q, (size_t)(end - q), &cp);
+                int cw = utf8_width(cp);
+                if (w + cw > width) break;
+                if (cp == ' ') brk = q;
+                w += cw;
+                q += n;
+            }
+            const char *cut = q;
+            if (q < end && brk && brk > p) cut = brk;     /* break at the last space */
+            if (q < end && cut == p) cut = q > p ? q : p + 1;
+            if (line) line(ctx, lines, p, (size_t)(cut - p));
+            lines++;
+            p = cut;
+            while (p < end && *p == ' ') p++;            /* the space it broke at */
+        } while (p < end);
+        if (!eol) break;
+        p = eol + 1;
+    }
+    return lines;
+}
+
+typedef struct {
+    Renderer *r;
+    int       x, y, rows, width;
+    Style     s;
+} HandoutDraw;
+
+static void handout_line(void *ctx, int i, const char *s, size_t n)
+{
+    HandoutDraw *h = ctx;
+    if (i >= h->rows) return;
+    char buf[1024];
+    if (n >= sizeof buf) n = sizeof buf - 1;
+    memcpy(buf, s, n);
+    buf[n] = '\0';
+    draw_text(h->r, h->x, h->y + i, buf, h->width, h->s);
+}
+
+void ui_handout_draw(Renderer *r, const Theme *th, const char *title, const char *body,
+                     const BoxGlyphs *frame)
+{
+    PROF_ZONE("handout.draw");
+    int w  = imin(64, r->w - 4);
+    int iw = w - 6;
+    if (iw < 8 || r->h < 5) return;
+    int lines = wrap(body, iw, NULL, NULL);
+    int rows  = imin(lines, r->h - 6);
+    if (rows < 1) rows = 1;
+    Rect box = rect_center(rect(0, 0, r->w, r->h), w, rows + 4);
+
+    Style fs    = style(th->accent, th->bg, 0);
+    Style label = style(th->fg, th->bg, ATTR_BOLD);
+    Style text  = style(th->fg, th->bg, 0);
+    draw_fill(r, box, ' ', text);
+    draw_box(r, box, frame, fs);
+    if (title && title[0]) {
+        draw_text(r, box.x + 2, box.y, " ", 1, fs);
+        draw_text(r, box.x + 3, box.y, title, box.w - 7, label);
+        draw_text(r, box.x + 3 + imin(text_width(title), box.w - 7), box.y, " ", 1, fs);
+    }
+    HandoutDraw h = { r, box.x + 3, box.y + 2, rows, iw, text };
+    wrap(body, iw, handout_line, &h);
+    if (lines > rows)
+        draw_text(r, box.x + box.w - 5, box.y + box.h - 1, " … ", 3, style(th->dim, th->bg, 0));
+}
+
 /* ---------------------------------------------------------------- modal */
 
 void ui_modal(Renderer *r, const Theme *th, const char *title, const char *body,

@@ -95,6 +95,9 @@ typedef struct {
     uint32_t pal[256];
     Cell     grid[64 * 32];
     int      runs, glyphs;
+    int      handouts;                /* 'H' records seen, and the last one's text */
+    char     handout[WIRE_HANDOUT_MAX + 1];
+    size_t   handout_n;
 } WireCatch;
 
 typedef struct { int fd; char buf[8192]; size_t n; int done, reset; } CtlReader;
@@ -240,6 +243,9 @@ void test_picker(void);
 void test_characters(void);
 void test_ctl_characters(void);
 void test_scenes(void);
+void test_handouts(void);
+void test_join_frame(void);
+void test_handout_keys(void);
 void test_scene_keys(void);
 void test_ctl_scenes(void);
 void test_gray_marker(void);

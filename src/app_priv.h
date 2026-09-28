@@ -91,6 +91,11 @@ void app_pick_open(App *a, PickWhat what, int kind, const char *initial);
 void app_pick_key(App *a, Key k);
 void app_character_command(App *a, const char *rest);
 
+/* app_handout.c: :handout; app_handout_show puts one up by name. */
+void app_handout_command(App *a, const char *rest);
+void app_handout_show(App *a, const char *name);
+UiPickItem *app_handout_items(int *count);
+
 /* app_scene.c: :scene and :scenes; app_scene_restore puts one back by name. */
 void app_scene_command(App *a, const char *verb, const char *rest);
 void app_scene_restore(App *a, const char *name);

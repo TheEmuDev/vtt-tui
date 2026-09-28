@@ -119,6 +119,15 @@ int  ui_picker_chosen(const UiPicker *pk);
 void ui_picker_draw(Renderer *r, const Theme *th, const UiPicker *pk,
                     const BoxGlyphs *frame);
 
+/* -------------------------------------------------------------- handout */
+
+/* The handout card (docs/HANDOUTS.md): its title on the border, its body
+ * wrapped to the box, line breaks kept, centered; cut short with an ellipsis
+ * when the screen is not tall enough. The terminal mirror and the GM's
+ * :player preview draw it; the phones draw their own. */
+void ui_handout_draw(Renderer *r, const Theme *th, const char *title, const char *body,
+                     const BoxGlyphs *frame);
+
 /* ---------------------------------------------------------------- modal */
 
 void ui_modal(Renderer *r, const Theme *th, const char *title, const char *body,

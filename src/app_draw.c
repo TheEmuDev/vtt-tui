@@ -186,7 +186,9 @@ static void draw_editor_body(App *a)
     if (a->screen == SCREEN_PLAY) turn_status_view(m, a->view == VIEW_PLAYERS, fight, sizeof fight);
     snprintf(left, sizeof left, "%.63s%s%s%.120s", m->name, m->modified ? " [+]" : "",
              fight[0] ? "    " : "", fight);
-    ui_titlebar(r, th, left, a->screen == SCREEN_PLAY ? "PLAY" : "BUILD");
+    /* A handout up is true for the whole table, so both views say it. */
+    ui_titlebar(r, th, left, a->screen == SCREEN_PLAY ? (a->handout_up ? "HANDOUT  PLAY" : "PLAY")
+                                                      : (a->handout_up ? "HANDOUT  BUILD" : "BUILD"));
 
     int playing = (a->screen == SCREEN_PLAY);
 
@@ -332,7 +334,13 @@ static void draw_editor_body(App *a)
 
 void app_draw(App *a)
 {
-    app_draw_view(a, a->preview && a->screen == SCREEN_PLAY ? VIEW_PLAYERS : VIEW_GM);
+    int preview = a->preview && a->screen == SCREEN_PLAY;
+    app_draw_view(a, preview ? VIEW_PLAYERS : VIEW_GM);
+    /* The card the phones draw for themselves, for the GM previewing them.
+     * Never in the players' frame: app_view_differs keeps it from being
+     * copied there. */
+    if (preview && a->handout_up)
+        ui_handout_draw(a->rnd, a->th, a->handout_title, a->handout_body, a->ascii ? &BOX_ASCII : &BOX_ROUND);
 }
 
 void app_draw_view(App *a, View view)
@@ -413,7 +421,7 @@ void app_current_counter(const App *a, char *buf, size_t bufsz)
 
 int app_view_differs(const App *a)
 {
-    if (a->preview) return 0;                 /* the GM is already looking at it */
+    if (a->preview) return a->handout_up;     /* the GM is already looking at it, but for the card */
     if (a->modal != MODAL_NONE) return 1;
     if (a->status_gm && a->status[0]) return 1;
     if (a->screen == SCREEN_PLAY && a->map && fog_any(a->map)) return 1;
@@ -453,7 +461,13 @@ void app_frame(App *a, Term *t, uint64_t now_ms)
      * buffers. Either way the players' renderer diffs against what the
      * clients are showing, which is the only thing that makes a diff
      * stream, and a FULL on resync, correct. */
-    Renderer *pr = wanted ? net_players_renderer(net, r) : NULL;
+    /* The server's picture is the players' renderer from the first frame it
+     * is up, clients or not: until then it is the GM's own terminal, and a
+     * phone joining then would be sent the GM's screen as its first FULL --
+     * notes, counters, hidden creatures, build mode. Blank until play mode
+     * draws into it. */
+    Renderer *pr = net_active(net) ? net_players_renderer(net, r) : NULL;
+    if (!wanted) pr = NULL;
     if (pr) {
         if (app_view_differs(a)) {
             PROF_ZONE("net.players_frame");

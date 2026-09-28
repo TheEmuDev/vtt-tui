@@ -300,6 +300,9 @@ void app_tick(App *a, uint64_t now_ms)
 {
     a->now_ms = now_ms;
     if (net_active(&a->net)) {
+        /* A phone that just joined was sent the last players' frame; draw
+         * a current one. */
+        if (a->net.joined) { a->net.joined = 0; a->dirty = 1; }
         NetPing in[NET_MAX_CLIENTS];
         int n = net_take_pings(&a->net, in, NET_MAX_CLIENTS);
         for (int i = 0; i < n; i++) app_ping_cell(a, in[i].who, in[i].sx, in[i].sy);

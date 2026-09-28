@@ -12,7 +12,7 @@ measured against them.
 |---|---|
 | server, per frame per client | 2 µs, and zero bytes when nothing changed |
 | server memory | fixed at `:serve`: one 64 KB send buffer per client, eight clients, no heap after that |
-| the page | one request, under 12 KB, no fonts or scripts fetched, no framework |
+| the page | one request, under 12 KB as sent (tools/embed.sh drops its block comments), no fonts or scripts fetched, no framework |
 | client memory | one cell buffer plus one glyph atlas, both allocated once |
 | client, per keystroke frame | 0.5 ms on a mid-range phone; a full 200×50 frame in 5 ms |
 | latency added by our code | one write per frame per client, sent the moment the GM's frame is |
@@ -28,6 +28,12 @@ measured against them.
   cannot differ, copies the GM's back buffer across. Its flush hands each
   changed cell to the encoder, so its front buffer is always exactly what
   the clients show. A new client gets a `FULL` from that front, then `DIFF`s.
+  That front is the players' from the first frame after `:serve`, drawn or blank --
+  until 2026-09-27 it was the GM's own terminal until a client first wanted a frame,
+  so a phone joining then was sent the GM's screen (found building handouts).
+- **The handout** (docs/HANDOUTS.md) is an `'H'` record, not a frame: its text, sent
+  when it changes and after a new client's `FULL`. The page draws it as an HTML card;
+  the terminal mirror as a box.
 - **Runs, not cells.** A record is a run of consecutive cells in one row
   sharing colors: an 8-byte header and two bytes a glyph. Colors are
   one-byte indices into a palette sent as colors are first met. Glyphs are
