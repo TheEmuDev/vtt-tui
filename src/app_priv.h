@@ -91,6 +91,10 @@ void app_pick_open(App *a, PickWhat what, int kind, const char *initial);
 void app_pick_key(App *a, Key k);
 void app_character_command(App *a, const char *rest);
 
+/* app_scene.c: :scene and :scenes; app_scene_restore puts one back by name. */
+void app_scene_command(App *a, const char *verb, const char *rest);
+void app_scene_restore(App *a, const char *name);
+
 /* app_stamp.c: y, p, the stamp mode's keys, :stamp. */
 void app_stamp_yank(App *a);
 void app_stamp_lift(App *a);

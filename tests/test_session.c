@@ -1193,3 +1193,249 @@ void test_turn_keys(void)
     rnd_free(&r);
     sandbox_leave(&sb);
 }
+
+/* ------------------------------------------------------------------ scenes */
+
+static Token scene_token(int x, int y, int size, uint8_t kind, const char *label)
+{
+    Token t;
+    memset(&t, 0, sizeof t);
+    t.x = (int16_t)x; t.y = (int16_t)y; t.size = (uint8_t)size; t.kind = kind;
+    str_lcpy(t.label, label, sizeof t.label);
+    return t;
+}
+
+/* Do the map's creatures equal the list, one for one, in order? */
+static int tokens_same(const TokenList *a, const TokenList *b)
+{
+    if (a->n != b->n) return 0;
+    for (int i = 0; i < a->n; i++)
+        if (!token_equal(&a->v[i], &b->v[i])) return 0;
+    return 1;
+}
+
+static TokenList tokens_copy(const TokenList *l)
+{
+    TokenList c;
+    memset(&c, 0, sizeof c);
+    for (int i = 0; i < l->n; i++) tokens_add(&c, l->v[i]);
+    return c;
+}
+
+void test_scenes(void)
+{
+    Map *m = map_new(12, 8, "Scenes");
+    map_fill_tiles(m, 0, 0, 11, 7, TILE_FLOOR);
+    Undo u;
+    undo_init(&u);
+    char err[200];
+
+    Token aria = scene_token(1, 1, 1, TOKEN_PLAYER, "Aria");
+    aria.ncounters = 1;
+    str_lcpy(aria.counters[0].name, "HP", sizeof aria.counters[0].name);
+    aria.counters[0].value = 6; aria.counters[0].max = 6;
+    tokens_add(&m->tokens, aria);
+    Token ogre = scene_token(6, 4, 2, TOKEN_ENEMY, "Ogre");
+    ogre.hidden = 1;
+    token_add_status(&ogre, 0, "enraged");
+    tokens_add(&m->tokens, ogre);
+    tokens_add(&m->tokens, scene_token(9, 1, 1, TOKEN_ENEMY, ""));
+    turn_join(m, &u, 0, 18);
+    turn_join(m, &u, 1, 12);
+    turn_take(m, &u, 0);                                   /* Aria acts: the fight has begun */
+    undo_set_round(&u, m, 1);
+    m->spotlight = SPOTLIGHT_GM;
+
+    CASE("names: 1-31 characters, spaces inside, no quote; found ignoring case");
+    CHECK(scene_name_ok("before the ambush"));
+    CHECK(!scene_name_ok("") && !scene_name_ok(" lead") && !scene_name_ok("trail ") && !scene_name_ok("a\"b"));
+    char longname[40];
+    memset(longname, 'x', 32); longname[32] = '\0';
+    CHECK(!scene_name_ok(longname));
+    CHECK(scene_save(m, "a\"b", NULL, err, sizeof err) < 0 && strstr(err, "no quote"));
+
+    CASE("save keeps every creature as it stands, and the round and spotlight");
+    unsigned gen = m->gen;
+    int s0 = scene_save(m, "Before", NULL, err, sizeof err);
+    CHECK_EQ(s0, 0);
+    CHECK(m->gen != gen && m->modified);
+    CHECK(tokens_same(&m->scenes[0].tokens, &m->tokens));
+    CHECK(m->scenes[0].round == m->round && m->round >= 1);
+    CHECK_EQ(m->scenes[0].spotlight, SPOTLIGHT_GM);
+    CHECK_EQ(scene_find(m, "BEFORE"), 0);
+    TokenList saved = tokens_copy(&m->tokens);
+    int round0 = m->round;
+
+    CASE("diff with nothing changed says nothing");
+    {
+        char *buf = NULL; size_t n = 0;
+        FILE *f = open_memstream(&buf, &n);
+        CHECK_EQ(scene_diff(f, m, 0), 0);
+        fclose(f);
+        free(buf);
+    }
+
+    CASE("the fight goes on: moves, a death, a newcomer, wounds, markers, a new round");
+    undo_move_token(&u, m, 0, 3, 3);
+    Token hurt = m->tokens.v[0];
+    hurt.counters[0].value = 2;
+    undo_edit_token(&u, m, 0, hurt);
+    Token calm = m->tokens.v[1];
+    token_clear_status(&calm);
+    calm.hidden = 0;
+    undo_edit_token(&u, m, 1, calm);
+    undo_del_token(&u, m, 2);
+    undo_add_token(&u, m, scene_token(0, 7, 1, TOKEN_ENEMY, "Imp"));
+    undo_set_round(&u, m, round0 + 2);
+    undo_set_spotlight(&u, m, SPOTLIGHT_PLAYERS);
+
+    CASE("diff says each: moved, changed, gone, new, the round and spotlight");
+    {
+        char *buf = NULL; size_t n = 0;
+        FILE *f = open_memstream(&buf, &n);
+        int lines = scene_diff(f, m, 0);
+        fclose(f);
+        CHECK_EQ(lines, 7);
+        CHECK(strstr(buf, "moved \"Aria\" B2 -> D4\n") != NULL);
+        CHECK(strstr(buf, "changed \"Aria\": HP 2/6 (was 6/6)\n") != NULL);
+        CHECK(strstr(buf, "changed \"Ogre\": markers none (was enraged), hidden no (was yes)\n") != NULL);
+        CHECK(strstr(buf, "gone (enemy) at J2\n") != NULL);
+        CHECK(strstr(buf, "new \"Imp\" at A8\n") != NULL);
+        char want[48];
+        snprintf(want, sizeof want, "round %d (was %d)\n", round0 + 2, round0);
+        CHECK(strstr(buf, want) != NULL);
+        CHECK(strstr(buf, "spotlight players (was gm)\n") != NULL);
+        free(buf);
+    }
+
+    CASE("putting it back: every creature as saved, the round and spotlight; one undo step");
+    TokenList before = tokens_copy(&m->tokens);
+    int depth = u.depth;
+    CHECK_EQ(scene_restore(m, &u, 0, err, sizeof err), 3);
+    CHECK(tokens_same(&m->tokens, &saved));
+    CHECK_EQ(m->round, round0);
+    CHECK_EQ(m->spotlight, SPOTLIGHT_GM);
+    CHECK_EQ(u.depth, depth + 1);
+    CHECK(undo_balanced(&u));
+
+    CASE("u takes the whole of it back, redo puts it back again");
+    undo_undo(&u, m);
+    CHECK(tokens_same(&m->tokens, &before));
+    CHECK_EQ(m->round, round0 + 2);
+    undo_redo(&u, m);
+    CHECK(tokens_same(&m->tokens, &saved));
+    tokens_free(&before);
+
+    CASE("a boxed scene: only the creatures meeting the box, and only they go back");
+    int box[4] = { 5, 3, 8, 6 };                           /* round the Ogre */
+    int s1 = scene_save(m, "Ravine", box, err, sizeof err);
+    CHECK_EQ(s1, 1);
+    CHECK(m->scenes[1].boxed && m->scenes[1].tokens.n == 1);
+    CHECK(!strcmp(m->scenes[1].tokens.v[0].label, "Ogre"));
+    undo_move_token(&u, m, 0, 10, 0);                      /* Aria wanders off, outside */
+    undo_move_token(&u, m, 1, 1, 5);                       /* the Ogre leaves the ravine */
+    undo_add_token(&u, m, scene_token(7, 5, 1, TOKEN_ENEMY, "Rat"));   /* a rat moves in */
+    int ogres = 0;
+    CHECK(scene_restore(m, &u, 1, err, sizeof err) == 1);
+    for (int i = 0; i < m->tokens.n; i++) ogres += !strcmp(m->tokens.v[i].label, "Ogre");
+    CHECK_EQ(ogres, 2);                                    /* the one outside stays: it no longer meets the box */
+    int rat = -1, aria_i = -1;
+    for (int i = 0; i < m->tokens.n; i++) {
+        if (!strcmp(m->tokens.v[i].label, "Rat")) rat = i;
+        if (!strcmp(m->tokens.v[i].label, "Aria")) aria_i = i;
+    }
+    CHECK_EQ(rat, -1);                                     /* in the box, so replaced */
+    CHECK(aria_i >= 0 && m->tokens.v[aria_i].x == 10);     /* outside, untouched */
+
+    CASE("a boxed scene keeps the turn with a creature outside that holds it");
+    undo_undo(&u, m);                                      /* before that restore */
+    int acting = turn_acting(m);
+    CHECK(acting >= 0 && !strcmp(m->tokens.v[acting].label, "Aria"));
+    Map *m2 = map_new(12, 8, "Turns");
+    map_fill_tiles(m2, 0, 0, 11, 7, TILE_FLOOR);
+    tokens_add(&m2->tokens, scene_token(0, 0, 1, TOKEN_PLAYER, "Aria"));
+    tokens_add(&m2->tokens, scene_token(6, 4, 1, TOKEN_ENEMY, "Wolf"));
+    turn_join(m2, &u, 0, 5);
+    turn_join(m2, &u, 1, 10);
+    turn_take(m2, &u, 1);                                  /* the wolf acts when saved */
+    int wbox[4] = { 5, 3, 8, 6 };
+    CHECK(scene_save(m2, "Den", wbox, err, sizeof err) == 0);
+    turn_take(m2, &u, 0);                                  /* now Aria acts */
+    CHECK(scene_restore(m2, &u, 0, err, sizeof err) == 1);
+    CHECK_EQ(turn_acting(m2), 0);
+    CHECK(m2->tokens.v[1].turn == TURN_IN);                /* the wolf keeps its place, not the turn */
+
+    CASE("a creature outside the box under one coming back refuses the lot, changing nothing");
+    Token big = scene_token(4, 3, 2, TOKEN_ENEMY, "Troll");
+    tokens_add(&m2->tokens, big);
+    int tbox[4] = { 5, 4, 5, 4 };                          /* meets the troll's corner only */
+    CHECK(scene_save(m2, "Corner", tbox, err, sizeof err) == 1);
+    int ti = m2->tokens.n - 1;
+    undo_move_token(&u, m2, ti, 8, 0);                     /* the troll leaves */
+    undo_add_token(&u, m2, scene_token(4, 3, 1, TOKEN_PLAYER, "Cara"));   /* Cara stands in its old corner */
+    TokenList held = tokens_copy(&m2->tokens);
+    unsigned g2 = m2->gen;
+    CHECK(scene_restore(m2, &u, 1, err, sizeof err) < 0);
+    CHECK(strstr(err, "Troll would come back onto Cara at E4") != NULL);
+    CHECK(tokens_same(&m2->tokens, &held));
+    CHECK_EQ(m2->gen, g2);
+    tokens_free(&held);
+    map_free(m2);
+
+    CASE("saving under a name that is there replaces it; sixteen at most; remove");
+    CHECK_EQ(scene_save(m, "ravine", NULL, err, sizeof err), 1);   /* same slot, now whole */
+    CHECK(!m->scenes[1].boxed && !strcmp(m->scenes[1].name, "ravine"));
+    for (int i = 2; i < MAP_SCENES_MAX; i++) {
+        char nm[16];
+        snprintf(nm, sizeof nm, "s%d", i);
+        CHECK(scene_save(m, nm, NULL, err, sizeof err) == i);
+    }
+    CHECK(scene_save(m, "one more", NULL, err, sizeof err) < 0 && strstr(err, "remove makes room"));
+    scene_remove(m, 0);
+    CHECK_EQ(m->nscenes, MAP_SCENES_MAX - 1);
+    CHECK(!strcmp(m->scenes[0].name, "ravine"));
+
+    CASE("the file keeps scenes: version 11, a box, hidden, markers, counters, turns");
+    char path[] = "/tmp/vtt-scenes-XXXXXX";
+    int fd = mkstemp(path);
+    if (fd >= 0) close(fd);
+    while (m->nscenes > 1) scene_remove(m, m->nscenes - 1);
+    m->scenes[0].tokens.v[1].hidden = 1;
+    CHECK(scene_save(m, "Pass", box, err, sizeof err) == 1);
+    CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+    char *text = slurp(path);
+    CHECK(text && !strncmp(text, "VTT 11\n", 7));
+    CHECK(text && strstr(text, "scene \"Pass\" 5 3 8 6\n") != NULL);
+    free(text);
+    Map *l = mapio_load(path, err, sizeof err);
+    CHECK(l != NULL);
+    if (l) {
+        CHECK_EQ(l->nscenes, 2);
+        CHECK(tokens_same(&l->tokens, &m->tokens));
+        for (int i = 0; i < 2 && i < l->nscenes; i++) {
+            CHECK(!strcmp(l->scenes[i].name, m->scenes[i].name));
+            CHECK(tokens_same(&l->scenes[i].tokens, &m->scenes[i].tokens));
+            CHECK_EQ(l->scenes[i].round, m->scenes[i].round);
+            CHECK_EQ(l->scenes[i].spotlight, m->scenes[i].spotlight);
+            CHECK_EQ(l->scenes[i].boxed, m->scenes[i].boxed);
+        }
+        CHECK(l->scenes[1].x0 == 5 && l->scenes[1].y1 == 6);
+        map_free(l);
+    }
+    unlink(path);
+
+    CASE("a shrink drops scene creatures that no longer fit and cuts the box");
+    map_resize(m, 7, 5);
+    for (int k = 0; k < m->nscenes; k++)
+        for (int i = 0; i < m->scenes[k].tokens.n; i++) {
+            const Token *t = &m->scenes[k].tokens.v[i];
+            CHECK(t->x + t->size <= 7 && t->y + t->size <= 5);
+        }
+    CHECK(m->scenes[1].boxed && m->scenes[1].x1 == 6 && m->scenes[1].y1 == 4);
+    map_resize(m, 3, 3);
+    CHECK_EQ(m->scenes[1].boxed, 0);                       /* the box went off the map */
+
+    tokens_free(&saved);
+    undo_free(&u);
+    map_free(m);
+}

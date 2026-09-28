@@ -48,7 +48,7 @@ typedef enum {
 #define PENDING_IT 0x110000u
 
 /* What the picker is choosing from. */
-typedef enum { PICK_CHARACTER, PICK_STAMP } PickWhat;
+typedef enum { PICK_CHARACTER, PICK_STAMP, PICK_SCENE } PickWhat;
 
 typedef enum {
     PROMPT_NONE,

@@ -16,6 +16,7 @@
 #include "maptools.h"
 #include "prof.h"
 #include "character.h"
+#include "scene.h"
 #include "stamp.h"
 #include "util.h"
 
@@ -1300,6 +1301,19 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
         map_free(st);
         if (!ok) return -1;
     }
+    else if (!strcmp(v, "scene")) {
+        /* scene NAME: put it back, one step with the rest of the request. */
+        int i = scene_find(m, w[1]);
+        if (i < 0) BAD("no scene called %.31s", w[1]);
+        if (scene_restore(m, u, i, err, errsz) < 0) return -1;
+        const Scene *sc = &m->scenes[i];
+        if (sc->boxed) { x0 = sc->x0; y0 = sc->y0; x1 = sc->x1; y1 = sc->y1; }
+        else           { x0 = 0; y0 = 0; x1 = m->w - 1; y1 = m->h - 1; }
+        ed->deleted = 1;                     /* the indices behind are new */
+        play_focus(&a->play, -1);
+        a->play.visual = 0;
+        range_clear(&a->play.range);
+    }
     else if (!strcmp(v, "token")) {
         if (token_line(a, w, n, ed, err, errsz) < 0) return -1;
         x1 = -1; x0 = y0 = y1 = 0;           /* token_line has said where */
@@ -1319,9 +1333,26 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
  * bounds the memory one 64 KB request can make the undo log take. */
 #define CTL_OPS_MAX (2UL * MAP_MAX_DIM * MAP_MAX_DIM)
 
+/* Lines that change nothing the undo log can take back, so they cannot roll
+ * back with the lines around them and go in a request of their own: the
+ * agent's undo, and saving or removing a scene. The verb, or NULL. */
+static const char *lonely(char w[][CTL_WORD_MAX], int n)
+{
+    if (n >= 1 && !strcmp(w[0], "undo")) return "undo";
+    if (n >= 2 && !strcmp(w[0], "scene") && !strcmp(w[1], "save")) return "scene save";
+    if (n == 3 && !strcmp(w[0], "scene") && !strcmp(w[2], "remove")) return "scene NAME remove";
+    return NULL;
+}
+
+/* A scene put back is an edit; the scene's other lines are not. */
+static int scene_is_edit(char w[][CTL_WORD_MAX], int n)
+{
+    return n == 2 && !strcmp(w[0], "scene") && strcmp(w[1], "save") != 0;
+}
+
 static int is_edit(const char *v)
 {
-    static const char *const EDITS[] = { "room", "area", "door", "corridor", "tile", "wall", "edge", "note", "fog", "token", "stamp", "link", "floor" };
+    static const char *const EDITS[] = { "room", "area", "door", "corridor", "tile", "wall", "edge", "note", "fog", "token", "stamp", "link", "floor", "scene" };
     for (size_t i = 0; i < sizeof EDITS / sizeof *EDITS; i++)
         if (!strcmp(v, EDITS[i])) return 1;
     return 0;
@@ -1334,6 +1365,45 @@ static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FIL
 {
     Map *m = a->map;
     const char *v = w[0];
+
+    if (!strcmp(v, "scene") && !scene_is_edit(w, n)) {
+        /* scene diff NAME, a read; scene save NAME [REGION] and scene NAME
+         * remove, each alone in its request. */
+        if (n == 3 && !strcmp(w[1], "diff")) {
+            int i = scene_find(m, w[2]);
+            if (i < 0) { snprintf(err, errsz, "no scene called %.31s", w[2]); return -1; }
+            if (!scene_diff(out, m, i)) fputs("no changes\n", out);
+            return 0;
+        }
+        if (n == 3 && !strcmp(w[2], "off")) { snprintf(err, errsz, "scene %.31s remove throws a scene away", w[1]); return -1; }
+        int save = !strcmp(w[1], "save");
+        if (save ? (n < 3 || n > 4) : !(n == 3 && !strcmp(w[2], "remove"))) {
+            snprintf(err, errsz, "scene NAME, scene save NAME [REGION], scene NAME remove, or scene diff NAME");
+            return -1;
+        }
+        const char *busy = app_ctl_busy(a);
+        if (busy) { str_lcpy(err, busy, errsz); return -2; }
+        char msg[160];
+        if (save) {
+            int box[4], boxed = n == 4;
+            if (boxed && !region(m, w[3], &box[0], &box[1], &box[2], &box[3], err, errsz)) return -1;
+            int i = scene_save(m, w[2], boxed ? box : NULL, err, errsz);
+            if (i < 0) return -1;
+            char what[64];
+            scene_describe(m, i, what, sizeof what);
+            fprintf(out, "saved scene \"%s\": %s\n", m->scenes[i].name, what);
+            snprintf(msg, sizeof msg, "agent: saved scene %.31s (%s)", m->scenes[i].name, what);
+        } else {
+            int i = scene_find(m, w[1]);
+            if (i < 0) { snprintf(err, errsz, "no scene called %.31s", w[1]); return -1; }
+            snprintf(msg, sizeof msg, "agent: removed scene %.31s", m->scenes[i].name);
+            fprintf(out, "removed scene \"%s\"\n", m->scenes[i].name);
+            scene_remove(m, i);
+        }
+        app_note_gm(a, msg);
+        a->dirty = 1;
+        return 0;
+    }
 
     if (is_edit(v)) {
         if (!ed->lines) {
@@ -1409,6 +1479,17 @@ static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FIL
         }
         if (!k) fputs("no stamps\n", out);
         else if (k > 64) fprintf(out, "... and %d more\n", k - 64);
+        return 0;
+    }
+    if (!strcmp(v, "scenes")) {
+        /* The map's scenes: what `scene NAME` puts back. */
+        if (n > 1) { snprintf(err, errsz, "scenes takes nothing after it"); return -1; }
+        char what[64];
+        for (int i = 0; i < m->nscenes; i++) {
+            scene_describe(m, i, what, sizeof what);
+            fprintf(out, "\"%s\"  %s\n", m->scenes[i].name, what);
+        }
+        if (!m->nscenes) fputs("no scenes\n", out);
         return 0;
     }
     if (!strcmp(v, "characters")) {
@@ -1497,9 +1578,12 @@ static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FIL
 }
 
 /* 0 when the request holds `undo` and any other line. */
-static int undo_alone(const char *p)
+/* The first line that must go alone, when the request holds more than one
+ * line; NULL when it is fine. */
+static const char *not_alone(const char *p)
 {
-    int lines = 0, undo = 0;
+    int lines = 0;
+    const char *verb = NULL;
     while (*p) {
         const char *end = strchr(p, '\n');
         size_t      ll  = end ? (size_t)(end - p) : strlen(p);
@@ -1512,11 +1596,11 @@ static int undo_alone(const char *p)
         }
         if (n != 0 && !(n > 0 && w[0][0] == '#')) {
             lines++;
-            undo |= n > 0 && !strcmp(w[0], "undo");
+            if (n > 0 && !verb) verb = lonely(w, n);
         }
         p = end ? end + 1 : p + ll;
     }
-    return !undo || lines == 1;
+    return lines > 1 ? verb : NULL;
 }
 
 /* A request's edits are in: close the batch and tell both sides. */
@@ -1566,10 +1650,11 @@ char *app_ctl_exec(App *a, const char *req, size_t *len)
         snprintf(verdict, sizeof verdict, "error: a nul byte in the request");
         p = "";
     }
-    /* `undo` goes alone: it cannot be rolled back with the lines around it,
-     * so a request that holds it holds nothing else. */
-    if (strcmp(verdict, "ok") == 0 && !undo_alone(p))
-        snprintf(verdict, sizeof verdict, "error: undo goes in a request of its own");
+    /* `undo`, and saving or removing a scene, go alone: they cannot be
+     * rolled back with the lines around them, so a request that holds one
+     * holds nothing else. */
+    const char *lone = strcmp(verdict, "ok") == 0 ? not_alone(p) : NULL;
+    if (lone) snprintf(verdict, sizeof verdict, "error: %s goes in a request of its own", lone);
     if (strcmp(verdict, "ok") != 0) p = "";
     while (*p) {
         const char *end = strchr(p, '\n');

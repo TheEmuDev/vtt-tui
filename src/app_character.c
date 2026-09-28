@@ -1,5 +1,5 @@
 /* Character templates in play mode (docs/CHARACTERS.md): i t e and i t p,
- * :character, and the picker both it and :stamp choose from. The templates
+ * :character, and the picker it, :stamp and :scene choose from. The templates
  * themselves -- files, saving, placing -- are character.c's. */
 
 #include <stdio.h>
@@ -9,6 +9,7 @@
 #include "app_priv.h"
 #include "character.h"
 #include "prof.h"
+#include "scene.h"
 #include "stamp.h"
 
 /* ---------------------------------------------------------------- picker */
@@ -33,10 +34,22 @@ static void stamp_detail(const Map *s, char *buf, size_t sz)
     if (!n) snprintf(buf, sz, "%dx%d", s->w, s->h);
 }
 
-/* Every saved one, each read for what the picker says of it. */
-static UiPickItem *pick_items(PickWhat what, int *count)
+/* Every saved one, each read for what the picker says of it; a map's scenes
+ * are in hand already. */
+static UiPickItem *pick_items(const App *a, PickWhat what, int *count)
 {
     PROF_ZONE("picker.open");
+    if (what == PICK_SCENE) {
+        const Map *m = a->map;
+        *count = m ? m->nscenes : 0;
+        if (!*count) return NULL;
+        UiPickItem *items = xmalloc(sizeof *items * (size_t)*count);
+        for (int i = 0; i < *count; i++) {
+            str_lcpy(items[i].name, m->scenes[i].name, sizeof items[i].name);
+            scene_describe(m, i, items[i].detail, sizeof items[i].detail);
+        }
+        return items;
+    }
     int n = what == PICK_CHARACTER ? character_list(NULL, 0) : stamp_list(NULL, 0);
     *count = 0;
     if (n <= 0) return NULL;
@@ -63,15 +76,17 @@ static UiPickItem *pick_items(PickWhat what, int *count)
 void app_pick_open(App *a, PickWhat what, int kind, const char *initial)
 {
     int n;
-    UiPickItem *items = pick_items(what, &n);
+    UiPickItem *items = pick_items(a, what, &n);
     if (!n) {
-        app_set_status(a, what == PICK_CHARACTER
+        if (what == PICK_SCENE) app_set_status_gm(a, "no scenes - :scene save NAME keeps the creatures as they stand");
+        else app_set_status(a, what == PICK_CHARACTER
             ? "no characters saved yet - :character save keeps the creature under the cursor"
             : "no stamps yet - y copies, :stamp save NAME keeps it");
         return;
     }
     char title[64];
-    if (what == PICK_STAMP) snprintf(title, sizeof title, "Stamp");
+    if (what == PICK_STAMP)      snprintf(title, sizeof title, "Stamp");
+    else if (what == PICK_SCENE) snprintf(title, sizeof title, "Scene to put back");
     else if (kind < 0)      snprintf(title, sizeof title, "Character");
     else                    snprintf(title, sizeof title, "Character, as %s %s",
                                      kind == TOKEN_ENEMY ? "an" : "a", token_kind_name((uint8_t)kind));
@@ -115,6 +130,7 @@ void app_pick_key(App *a, Key k)
     if (r < 0) { app_set_status(a, "canceled"); return; }
 
     if (a->pick_what == PICK_STAMP) app_stamp_command(a, name);
+    else if (a->pick_what == PICK_SCENE) { if (a->map) app_scene_restore(a, name); }
     else if (a->map && a->screen == SCREEN_PLAY) place_character(a, name, a->pick_kind);
 }
 

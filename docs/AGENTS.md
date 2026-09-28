@@ -92,6 +92,16 @@ magic, go on the same map apart from each other, separated by void, and a link j
 | `token move Ghoul F6`, `token del Ghoul` | by label (any case), or a square it stands on |
 | `token set Ghoul label "..."`, `size 2`, `note "..."`, `hidden on\|off` | |
 
+**Scenes.** A scene is the creatures as they stand, saved on the map under a name: a
+checkpoint to compare against or go back to. Saving and removing one change nothing `undo`
+can take back, so each goes in a request of its own.
+
+| line | does |
+|---|---|
+| `scene save "Before" [REGION]` | alone in its request: save every creature, or those meeting REGION (an area name works), with the round and spotlight |
+| `scene "Before"` | put it back: one undo step with the rest of the request; a boxed scene replaces only the creatures in its box |
+| `scene "Before" remove` | alone in its request: throw it away |
+
 **Reads.**
 
 | line | answers |
@@ -101,6 +111,8 @@ magic, go on the same map apart from each other, separated by void, and a link j
 | `check [json]` | mistakes: loose doors, creatures on void, rooms nothing reaches ([codes](../README.md#map-tools---dump-map---check---describe)) |
 | `stamps` | the GM's saved stamps and their sizes |
 | `characters` | the GM's saved characters: name, label, side, size, counters, rolls |
+| `scenes` | the map's scenes: name, creatures, round, box |
+| `scene diff "Before"` | what changed since: `moved "Ghoul" C3 -> D5`, `gone`, `new`, `changed "Aria": HP 4/6 (was 6/6), ...`, the round; `no changes` |
 | `links [json]` | every link: its number, kind, ends, size, one-way and secret |
 | `floors` | the floors, top first, with their levels and extents, and which the GM is looking at |
 | `status` | live only: the map, the floor on the GM's screen, whether edits are taken now |

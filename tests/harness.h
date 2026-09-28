@@ -36,6 +36,8 @@
 #include "link.h"
 #include "floor.h"
 #include "character.h"
+#include "scene.h"
+#include "turn.h"
 #include "stamp.h"
 #include "theme.h"
 #include "token.h"
@@ -237,6 +239,9 @@ void test_stamp_keys(void);
 void test_picker(void);
 void test_characters(void);
 void test_ctl_characters(void);
+void test_scenes(void);
+void test_scene_keys(void);
+void test_ctl_scenes(void);
 void test_gray_marker(void);
 void test_areas(void);
 void test_links(void);

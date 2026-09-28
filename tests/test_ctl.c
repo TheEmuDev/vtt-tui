@@ -1521,3 +1521,96 @@ void test_ctl_characters(void)
     rnd_free(&r);
     sandbox_leave(&sb);
 }
+
+/* ---------------------------------------------------- scenes on the channel */
+
+void test_ctl_scenes(void)
+{
+    Sandbox sb = sandbox_enter("ctlscenes");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK(ctl_blank_map(&a, sb.dir, 12, 8));
+    if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    Map *m = a.map;
+    char *t = ctl_ask(&a, "token add player B2 \"Aria\"\ntoken add enemy F6 size 2 \"Ogre\"");
+    free(t);
+
+    CASE("scenes with none; scene save alone saves, and with a region only those in it");
+    t = ctl_ask(&a, "scenes");
+    CHECK(t && strstr(t, "no scenes") != NULL);
+    free(t);
+    t = ctl_ask(&a, "scene save \"Start\"");
+    CHECK(t && strstr(t, "ok\nsaved scene \"Start\": 2 creatures\n") == t);
+    free(t);
+    t = ctl_ask(&a, "area Den E5:H8\nscene save Den Den");
+    CHECK(t && strstr(t, "error: scene save goes in a request of its own") != NULL);
+    free(t);
+    t = ctl_ask(&a, "area Den E5:H8");
+    free(t);
+    t = ctl_ask(&a, "scene save Den Den");
+    CHECK(t && strstr(t, "saved scene \"Den\": 1 creature, E5:H8") != NULL);
+    free(t);
+    t = ctl_ask(&a, "scenes");
+    CHECK(t && strstr(t, "\"Start\"  2 creatures\n\"Den\"  1 creature, E5:H8\n") != NULL);
+    free(t);
+
+    CASE("scene diff reads what changed, anywhere; no changes when nothing did");
+    t = ctl_ask(&a, "scene diff Start");
+    CHECK(t && strstr(t, "ok\nno changes\n") == t);
+    free(t);
+    t = ctl_ask(&a, "token move Aria D4\ntoken set Ogre hidden on");
+    free(t);
+    t = ctl_ask(&a, "scene diff start");
+    CHECK(t && strstr(t, "moved \"Aria\" B2 -> D4\n") != NULL);
+    CHECK(t && strstr(t, "changed \"Ogre\": hidden yes (was no)\n") != NULL);
+    free(t);
+
+    CASE("scene NAME puts it back as an edit, all or nothing with the request");
+    t = ctl_ask(&a, "scene Start\ntile Z99 water");
+    CHECK(t && strncmp(t, "error: line 2", 13) == 0);
+    free(t);
+    CHECK_EQ(m->tokens.v[0].x, 3);                         /* rolled back: Aria still at D4 */
+    t = ctl_ask(&a, "scene Start");
+    CHECK(t && strstr(t, "ok\n") == t);
+    free(t);
+    CHECK_EQ(m->tokens.v[0].x, 1);
+    CHECK(!m->tokens.v[1].hidden);
+    t = ctl_ask(&a, "undo");
+    free(t);
+    CHECK_EQ(m->tokens.v[0].x, 3);
+
+    CASE("remove goes alone too; off says what to type; bad forms say the forms");
+    t = ctl_ask(&a, "scene Den off");
+    CHECK(t && strstr(t, "scene Den remove") != NULL && m->nscenes == 2);
+    free(t);
+    t = ctl_ask(&a, "scene Den remove");
+    CHECK(t && strstr(t, "removed scene \"Den\"") != NULL && m->nscenes == 1);
+    free(t);
+    t = ctl_ask(&a, "scene diff Den");
+    CHECK(t && strstr(t, "no scene called Den") != NULL);
+    free(t);
+    t = ctl_ask(&a, "scene save");
+    CHECK(t && strstr(t, "scene save NAME [REGION]") != NULL);
+    free(t);
+
+    CASE("in play mode: reads work, saving and putting back are refused as edits are");
+    app_key(&a, (Key){ KEY_F2, 0, 0 });
+    t = ctl_ask(&a, "scene diff Start");
+    CHECK(t && strncmp(t, "ok", 2) == 0);
+    free(t);
+    t = ctl_ask(&a, "scene save Late");
+    CHECK(t && strncmp(t, "busy:", 5) == 0);
+    free(t);
+    t = ctl_ask(&a, "scene Start");
+    CHECK(t && strncmp(t, "busy:", 5) == 0);
+    free(t);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}

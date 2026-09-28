@@ -82,6 +82,7 @@ WALLED=$(genmap walled 40 25 1 0)     # every edge walled: junction worst case
 OPEN=$(genmap open    40 25 0 0)      # nothing to resolve: the floor of the cost
 BIG=$(genmap big     200 200 1 0)     # far more map than window
 MOB=$(genmap mob      40 25 0 24)     # 24 tokens, each wearing a marker
+HORDE=$(genmap horde  60 40 0 500)    # 500 creatures: what a scene puts back at worst
 BIGMOB=$(genmap bigmob 200 200 0 24)  # the route search's worst case: big and crowded
 PLAIN=$(genmap plain   40 25 0 24 none) # no ruleset: r is a radius, not a band
 FIGHT=$(genmap fight   40 25 0 24 daggerheart 1)  # all 24 in the turn order
@@ -345,6 +346,7 @@ run "play, carry, 4 watch" "$MOB"    80x24  ':play\rt\rlllljjjj\r' "--bench-clie
 run "play, logging"        "$MOB"    80x24  ':play\r:log on\rt\rlllljjjj\r'
 run "play, rolling"        "$MOB"    80x24  ':play\r:roll 2d6+3\r:roll +1\r'
 run "play, 500 characters" "$MOB"    80x24  ':play\ritebeast-4\t\t\ru'
+run "play, scene of 500"   "$HORDE"  80x24  ':play\r:scene save A\r:scene A\ru'
 run "agent, room + 12"     "$VOIDY"  80x24  'u' "--bench-ctl $DIR/room.ctl"
 run "agent, plan of rooms" "$VOIDMAP" 80x24  'u' "--bench-ctl $DIR/plan.ctl"
 run "agent, dump 512x512"  "$HUGE"   80x24  'lh' "--bench-ctl $DIR/dump.ctl"

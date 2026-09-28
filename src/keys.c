@@ -29,6 +29,7 @@ static const KeyDoc PLAY[] = {
     KEY("i e",    "place an enemy"),
     KEY("i t e  i t p", "place a saved character as an enemy / a player: a list to pick from"),
     KEY(":character save", "save the creature under the cursor as a character   :character NAME picks one"),
+    KEY(":scene save Ambush", "keep every creature as it stands (a v box: those in it)   :scene Ambush puts them back"),
     KEY("b  B",   "the cursor's size, cycled; resizes the selected"),
     KEY("2b",     "name the size outright -- 1, 2 or 3"),
     { "enter",    "pick up or put down; a big cursor walks what it covers",

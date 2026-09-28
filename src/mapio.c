@@ -17,6 +17,7 @@
 #include "fog.h"
 #include "link.h"
 #include "ruler.h"
+#include "scene.h"
 #include "turn.h"
 #include "util.h"
 
@@ -27,7 +28,7 @@
  * v3 added status markers on tokens. An older reader would ignore those lines
  * and silently drop them, which loses combat state from a saved fight, so it
  * refuses too. Each version still loads everything older. */
-#define FORMAT_VERSION 10
+#define FORMAT_VERSION 11
 
 /* Version 4 added the turn order. A map with no fight in it is still written
  * as version 3, which says everything it needs and stays loadable by the
@@ -47,6 +48,9 @@
 #define FORMAT_BEFORE_LINKS    7
 #define FORMAT_BEFORE_FLOORS   8
 #define FORMAT_BEFORE_HIDDEN   9
+/* Version 11 added scenes: an older reader would read a scene's creatures
+ * as the map's own. */
+#define FORMAT_BEFORE_SCENES   10
 
 /* Fog rows: a held tile of patch 1..15 is one of these, in order. */
 static const char FOG_HELD_CHARS[FOG_PATCH_MAX + 1] = "123456789!\"#$%&";
@@ -66,6 +70,38 @@ static void put_edge_row(FILE *f, const uint8_t *row, int n, char wall_char)
     for (int i = 0; i < n; i++)
         fputc(row[i] == EDGE_WALL ? wall_char : edge_file_char(row[i]), f);
     fputc('\n', f);
+}
+
+/* Creatures, each followed by the lines that hang on it. The map's and each
+ * scene's are written the same way. */
+static void put_tokens(FILE *f, const TokenList *l)
+{
+    for (int i = 0; i < l->n; i++) {
+        const Token *t = &l->v[i];
+        fprintf(f, "token %s %d %d %d \"%s\"\n",
+                token_kind_name(t->kind), t->x, t->y, t->size, t->label);
+
+        /* Markers follow the token they hang on, so a token line stays short
+         * and the attachment needs no index to go wrong. */
+        for (int j = 0; j < t->nstatus; j++)
+            fprintf(f, "tokenstatus %s \"%s\"\n",
+                    status_color_name(t->status[j].color), t->status[j].label);
+
+        if (t->note[0]) fprintf(f, "tokennote \"%s\"\n", t->note);
+        if (t->hidden)  fputs("tokenhidden\n", f);
+        for (int j = 0; j < t->ncounters; j++)
+            fprintf(f, "tokencounter %s %d %d\n", t->counters[j].name,
+                    t->counters[j].value, t->counters[j].max);
+
+        /* Its place in the turn order, the same way: "tokenturn 15",
+         * "tokenturn 15 acting", or "tokenturn - acting" for a creature
+         * holding the turn from outside the order. */
+        if (t->turn) {
+            if (t->turn & TURN_IN) fprintf(f, "tokenturn %d", t->init);
+            else                   fputs("tokenturn -", f);
+            fputs((t->turn & TURN_ACTING) ? " acting\n" : "\n", f);
+        }
+    }
 }
 
 int mapio_write(const Map *m, const char *path, char *err, size_t errsz)
@@ -95,7 +131,8 @@ int mapio_write(const Map *m, const char *path, char *err, size_t errsz)
     int v9 = 0;
     for (int i = 0; i < m->nareas; i++) v9 |= m->areas[i].floor;
     int v10 = tokens_any_hidden(&m->tokens);
-    fprintf(f, "VTT %d\n", v10 ? FORMAT_VERSION : v9 ? FORMAT_BEFORE_HIDDEN : v8 ? FORMAT_BEFORE_FLOORS : v7 ? FORMAT_BEFORE_LINKS : v6 ? FORMAT_BEFORE_AREAS : v5 ? FORMAT_BEFORE_COUNTERS
+    int v11 = m->nscenes > 0;
+    fprintf(f, "VTT %d\n", v11 ? FORMAT_VERSION : v10 ? FORMAT_BEFORE_SCENES : v9 ? FORMAT_BEFORE_HIDDEN : v8 ? FORMAT_BEFORE_FLOORS : v7 ? FORMAT_BEFORE_LINKS : v6 ? FORMAT_BEFORE_AREAS : v5 ? FORMAT_BEFORE_COUNTERS
                           : fight ? FORMAT_BEFORE_CLOCKS : FORMAT_BEFORE_TURNS);
     fprintf(f, "name %s\n", m->name);
     fprintf(f, "size %d %d\n", m->w, m->h);
@@ -116,32 +153,7 @@ int mapio_write(const Map *m, const char *path, char *err, size_t errsz)
     for (int y = 0; y <= m->h; y++)
         put_edge_row(f, m->hedges + (size_t)y * (size_t)m->w, m->w, '-');
 
-    for (int i = 0; i < m->tokens.n; i++) {
-        const Token *t = &m->tokens.v[i];
-        fprintf(f, "token %s %d %d %d \"%s\"\n",
-                token_kind_name(t->kind), t->x, t->y, t->size, t->label);
-
-        /* Markers follow the token they hang on, so a token line stays short
-         * and the attachment needs no index to go wrong. */
-        for (int j = 0; j < t->nstatus; j++)
-            fprintf(f, "tokenstatus %s \"%s\"\n",
-                    status_color_name(t->status[j].color), t->status[j].label);
-
-        if (t->note[0]) fprintf(f, "tokennote \"%s\"\n", t->note);
-        if (t->hidden)  fputs("tokenhidden\n", f);
-        for (int j = 0; j < t->ncounters; j++)
-            fprintf(f, "tokencounter %s %d %d\n", t->counters[j].name,
-                    t->counters[j].value, t->counters[j].max);
-
-        /* Its place in the turn order, the same way: "tokenturn 15",
-         * "tokenturn 15 acting", or "tokenturn - acting" for a creature
-         * holding the turn from outside the order. */
-        if (t->turn) {
-            if (t->turn & TURN_IN) fprintf(f, "tokenturn %d", t->init);
-            else                   fputs("tokenturn -", f);
-            fputs((t->turn & TURN_ACTING) ? " acting\n" : "\n", f);
-        }
-    }
+    put_tokens(f, &m->tokens);
     if (m->round > 0) fprintf(f, "round %d\n", m->round);
     if (m->spotlight == SPOTLIGHT_GM) fputs("spotlight gm\n", f);
     for (int i = 0; i < CLOCK_MAX; i++)
@@ -163,6 +175,19 @@ int mapio_write(const Map *m, const char *path, char *err, size_t errsz)
         fprintf(f, "link %d %s %d %d %d %d %d%s%s\n", l->num, link_kind_name(l->kind), l->size,
                 l->x[0], l->y[0], l->x[1], l->y[1],
                 l->oneway ? " oneway" : "", l->secret ? " secret" : "");
+    }
+
+    /* Scenes: a scene line, its creatures and fight as the map's are
+     * written, and an end. */
+    for (int i = 0; i < m->nscenes; i++) {
+        const Scene *sc = &m->scenes[i];
+        fprintf(f, "scene \"%s\"", sc->name);
+        if (sc->boxed) fprintf(f, " %d %d %d %d", sc->x0, sc->y0, sc->x1, sc->y1);
+        fputc('\n', f);
+        put_tokens(f, &sc->tokens);
+        if (sc->round > 0) fprintf(f, "round %d\n", sc->round);
+        if (sc->spotlight == SPOTLIGHT_GM) fputs("spotlight gm\n", f);
+        fputs("endscene\n", f);
     }
 
     /* Fog: the switches, the patches, then one row a map row, a character a
@@ -729,9 +754,69 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
     int link_line[LINK_NUM_MAX + 1] = { 0 };   /* where each link was read, for its finding */
     struct { char name[AREA_NAME_MAX]; int level, line; } floors[MAP_AREAS_MAX];
     int last_token_read = 0;       /* the last token line made a creature */
+    /* Inside a scene block its creature lines go to the scene: its list is
+     * swapped in for the map's, so every creature parser serves both, and the
+     * map's is held here until endscene. */
+    int       in_scene = 0, scene_keep = 0, scene_line = 0, scene_round = 0, scene_spot = SPOTLIGHT_PLAYERS;
+    Scene     scene_new;
+    TokenList map_tokens;
+    memset(&scene_new, 0, sizeof scene_new);
+    memset(&map_tokens, 0, sizeof map_tokens);
     int nfloors = 0;
     while (read_line(ld, line, sizeof line) >= 0) {
-        if (!strcmp(line, "fog")) {
+        if (!strncmp(line, "scene ", 6) || !strcmp(line, "endscene")) {
+            if (in_scene) {
+                /* The block closes: kept, or thrown away. */
+                if (!strcmp(line, "endscene") && scene_keep) {
+                    scene_new.tokens    = m->tokens;
+                    scene_new.round     = scene_round;
+                    scene_new.spotlight = scene_spot;
+                    m->scenes[m->nscenes++] = scene_new;
+                } else {
+                    tokens_free(&m->tokens);
+                    if (strcmp(line, "endscene") != 0)
+                        diag(ld, scene_line, -1, "W025", "scene-dropped",
+                             "scene %.31s dropped: another began before its endscene", scene_new.name);
+                }
+                m->tokens = map_tokens;
+                in_scene  = 0;
+            } else if (!strcmp(line, "endscene")) {
+                diag(ld, ld->line, -1, "W025", "scene-dropped", "endscene with no scene open, ignored");
+            }
+            if (!strcmp(line, "endscene")) continue;
+
+            /* scene "Name" [x0 y0 x1 y1] */
+            memset(&scene_new, 0, sizeof scene_new);
+            const char *q = parse_quoted(line + 6, scene_new.name, sizeof scene_new.name) ? strrchr(line + 7, '"') : NULL;
+            int b[4], nb = q ? sscanf(q + 1, "%d %d %d %d", &b[0], &b[1], &b[2], &b[3]) : 0;
+            const char *why = NULL;
+            if (!q || q <= line + 6 || !scene_name_ok(scene_new.name)) why = "its name does not read";
+            else if (nb != 0 && nb != 4 && nb != EOF) why = "its box does not read";
+            else if (nb == 4 && (!map_in_bounds(m, b[0], b[1]) || !map_in_bounds(m, b[2], b[3]) ||
+                                 b[2] < b[0] || b[3] < b[1])) why = "its box is not on the map";
+            else if (scene_find(m, scene_new.name) >= 0) why = "a scene of that name came before it";
+            else if (m->nscenes >= MAP_SCENES_MAX) why = "a map holds 16 scenes";
+            if (why) diag(ld, ld->line, -1, "W025", "scene-dropped", "scene %.31s dropped: %s",
+                          scene_new.name[0] ? scene_new.name : "?", why);
+            if (nb == 4) {
+                scene_new.boxed = 1;
+                scene_new.x0 = (int16_t)b[0]; scene_new.y0 = (int16_t)b[1];
+                scene_new.x1 = (int16_t)b[2]; scene_new.y1 = (int16_t)b[3];
+            }
+            in_scene    = 1;
+            scene_keep  = !why;
+            scene_line  = ld->line;
+            scene_round = 0;
+            scene_spot  = SPOTLIGHT_PLAYERS;
+            map_tokens  = m->tokens;
+            memset(&m->tokens, 0, sizeof m->tokens);
+            last_token_read = 0;
+        } else if (in_scene && !strcmp(line, "spotlight gm")) {
+            scene_spot = SPOTLIGHT_GM;
+        } else if (in_scene && !strncmp(line, "round ", 6)) {
+            int round = 0;
+            if (sscanf(line, "round %d", &round) == 1) scene_round = iclamp(round, 0, INT16_MAX);
+        } else if (!strcmp(line, "fog")) {
             Section sec = { "fog", h, w, 2, 0, 0, w };
             fog_line = ld->line;
             for (int y = 0; y < h; y++) {
@@ -852,7 +937,25 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
     }
 #undef RECORD
     fclose(f);
+    if (in_scene) {
+        tokens_free(&m->tokens);
+        m->tokens = map_tokens;
+        diag(ld, scene_line, -1, "W025", "scene-dropped", "scene %.31s dropped: the file ends before its endscene",
+             scene_new.name);
+    }
     turn_sanitize(m);
+    /* Each scene's order the same way, its list swapped in for the call. */
+    for (int i = 0; i < m->nscenes; i++) {
+        TokenList keep = m->tokens;
+        int round = m->round;
+        m->tokens = m->scenes[i].tokens;
+        m->round  = m->scenes[i].round;
+        turn_sanitize(m);
+        m->scenes[i].tokens = m->tokens;
+        m->scenes[i].round  = m->round;
+        m->tokens = keep;
+        m->round  = round;
+    }
     /* A fog row that names a patch no fogpatch line created is no fog; and
      * the extents are rebuilt from the rows, whatever order the lines came
      * in -- a fogpatch line after the section, or twice, would otherwise

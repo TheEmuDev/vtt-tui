@@ -4197,3 +4197,115 @@ void test_characters(void)
     rnd_free(&r);
     sandbox_leave(&sb);
 }
+
+/* ------------------------------------------------------------ :scene keys */
+
+void test_scene_keys(void)
+{
+    Sandbox sb = sandbox_enter("scenekeys");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK(ctl_blank_map(&a, sb.dir, 12, 8));
+    if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    Map *m = a.map;
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+    a.ed.cx = 1; a.ed.cy = 1; press(&a, "ipAria\r");
+    a.ed.cx = 5; a.ed.cy = 5; press(&a, "ieOgre\r");
+
+    CASE("no scenes: :scene and :scenes say how to make one");
+    press(&a, ":scene\r");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK(strstr(a.status, "no scenes") != NULL);
+    press(&a, ":scenes\r");
+    CHECK(strstr(a.status, "no scenes") != NULL);
+
+    CASE(":scene save NAME keeps them; the message is the GM's alone");
+    press(&a, ":scene save before the ambush\r");
+    CHECK_EQ(m->nscenes, 1);
+    CHECK(strstr(a.status, "scene before the ambush saved - 2 creatures") != NULL);
+    CHECK_EQ(a.status_gm, 1);
+    CHECK(app_view_differs(&a));
+    char *pf = players_text(&a, &r);
+    CHECK(strstr(pf, "ambush") == NULL);
+    free(pf);
+
+    CASE("move them, then :scene NAME puts them back, one u away; the selection is cleared");
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "\rlll\r");
+    CHECK_EQ(m->tokens.v[0].x, 4);
+    press(&a, "t");
+    CHECK(a.play.sel >= 0);
+    press(&a, ":scene before the ambush\r");
+    CHECK_EQ(m->tokens.v[0].x, 1);
+    CHECK_EQ(a.play.sel, -1);
+    CHECK(strstr(a.status, "scene before the ambush is back - 2 creatures") != NULL);
+    CHECK_EQ(a.status_gm, 1);
+    press(&a, "u");
+    CHECK_EQ(m->tokens.v[m->tokens.n - 1].x + m->tokens.v[0].x > 0, 1);
+    int moved = 0;
+    for (int i = 0; i < m->tokens.n; i++) moved |= !strcmp(m->tokens.v[i].label, "Aria") && m->tokens.v[i].x == 4;
+    CHECK(moved);
+
+    CASE(":scene alone is the picker; enter puts the highlighted one back");
+    press(&a, ":scene\r");
+    CHECK_EQ(a.modal, MODAL_PICKER);
+    CHECK(!strcmp(a.picker.items[0].name, "before the ambush"));
+    CHECK(!strcmp(a.picker.items[0].detail, "2 creatures"));
+    press(&a, "amb\r");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    int back = 0;
+    for (int i = 0; i < m->tokens.n; i++) back |= !strcmp(m->tokens.v[i].label, "Aria") && m->tokens.v[i].x == 1;
+    CHECK(back);
+
+    CASE("a v box saves only what is in it, and says the box");
+    a.ed.cx = 4; a.ed.cy = 4;
+    press(&a, "vll");
+    CHECK(a.play.visual);
+    press(&a, "jj:scene save Ogre corner\r");
+    CHECK_EQ(a.play.visual, 0);
+    int oc = scene_find(m, "ogre corner");
+    CHECK(oc >= 0 && m->scenes[oc].boxed && m->scenes[oc].tokens.n == 1);
+    CHECK(strstr(a.status, "1 creature, E5:G7") != NULL);
+
+    CASE(":scenes lists them");
+    press(&a, ":scenes\r");
+    CHECK(strstr(a.status, "scenes: before the ambush (2 creatures), Ogre corner (1 creature, E5:G7)") != NULL);
+
+    CASE("refused while a creature is carried");
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "\r");
+    CHECK(a.play.grabbed);
+    press(&a, ":scene before the ambush\r");
+    CHECK(strstr(a.status, "put the creature down first") != NULL);
+    press(&a, "\x1b");
+
+    CASE("remove throws one away; off only says what to type; an unknown name says so");
+    press(&a, ":scene Ogre corner off\r");
+    CHECK_EQ(m->nscenes, 2);
+    CHECK(strstr(a.status, ":scene Ogre corner remove") != NULL);
+    press(&a, ":scene Ogre corner remove\r");
+    CHECK_EQ(m->nscenes, 1);
+    CHECK(strstr(a.status, "scene Ogre corner removed") != NULL);
+    press(&a, ":scene nowhere\r");
+    CHECK(strstr(a.status, "no scene called nowhere") != NULL);
+    press(&a, ":scene save\r");
+    CHECK(strstr(a.status, ":scene save NAME") != NULL);
+
+    CASE("build mode too, with its v box");
+    app_key(&a, (Key){ KEY_F1, 0, 0 });
+    a.ed.cx = 0; a.ed.cy = 0;
+    press(&a, "vjj:scene save west\r");
+    int w = scene_find(m, "west");
+    CHECK(w >= 0 && m->scenes[w].boxed && m->scenes[w].x1 == 0 && m->scenes[w].y1 == 2);
+    CHECK_EQ(a.ed.mode, ED_NORMAL);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}

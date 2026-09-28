@@ -84,6 +84,21 @@ typedef struct {
     uint8_t oneway;               /* taken from end 0 only */
     uint8_t secret;               /* the GM's alone: never drawn for the players */
 } Link;
+/* A scene: the creatures and the fight saved under a name and put back
+ * (docs/SCENES.md, scene.h). With `boxed` it is the creatures meeting the
+ * box, and putting it back replaces only those; without, the whole map's,
+ * and the round and spotlight with them. */
+#define MAP_SCENES_MAX 16
+#define SCENE_NAME_MAX 32
+typedef struct {
+    char      name[SCENE_NAME_MAX];
+    uint8_t   boxed;
+    int16_t   x0, y0, x1, y1;         /* inclusive, when boxed */
+    int       round;
+    int       spotlight;
+    TokenList tokens;                 /* owned */
+} Scene;
+
 #define NOTE_MAX      TOKEN_NOTE_MAX
 typedef struct {
     int16_t x, y;
@@ -226,6 +241,8 @@ typedef struct {
     int  nareas;
     Link links[MAP_LINKS_MAX];    /* in number order */
     int  nlinks;
+    Scene scenes[MAP_SCENES_MAX]; /* in the order they were saved */
+    int   nscenes;
     uint8_t *fog;                         /* w*h, see FOG_* */
     int      fog_on;                      /* the master switch */
     int      fog_soft_edge;               /* the map's default for patches that follow it */

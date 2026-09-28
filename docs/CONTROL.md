@@ -18,7 +18,7 @@ the agent's; this page is why it is the way it is.
 | freedom | free editing, undo as the safety net; no drafts to approve |
 | a request | one undo batch, all or nothing: a line that fails rolls the whole request back and says which line and why |
 | fog | `fog paint` only; making and setting patches stays `:fog`'s |
-| not here | saving, opening, closing maps (the files stay the GM's); checkpoints and diffs; a room-level description language; MCP; undoing part of an agent's batch (IDEAS.md) |
+| not here | saving, opening, closing maps (the files stay the GM's); a room-level description language; MCP; undoing part of an agent's batch (IDEAS.md) |
 
 ## Shape
 
@@ -58,6 +58,7 @@ as `--describe` names them. Lines run in order, so a read sees the edits before 
 | `check [json]` | `--check` of the map in memory (so no file line numbers) |
 | `stamps` | the saved stamps and their sizes |
 | `characters` | the saved character templates (added with character templates, docs/CHARACTERS.md) |
+| `scenes`, `scene diff NAME` | the map's scenes, and what changed since one was saved: the checkpoints this page once left for later (added with scenes, docs/SCENES.md) |
 | `links [json]` | every link (added with links) |
 | `floors` | the floors and which the GM is looking at (added with floors) |
 | `marked [json]` | what the GM is pointing at: the cursor, a `v` box (rect or circle), wall mode's corner and anchor, the selected creatures and a selection box, the ruler's ends, the GM's last `g p` and each phone's last ping with their age, and the floor on the GM's screen (`floor`). A ping stays on record after its ring fades. |
@@ -80,6 +81,7 @@ as `--describe` names them. Lines run in order, so a read sees the edits before 
 | `stamp NAME SQUARE [rotate 90\|180\|270] [mirror]` | a saved stamp, top-left square here, turned then mirrored; see-through and all or nothing like the GM's `p` (added with stamps) |
 | `link A B [KIND] [size N] [oneway] [secret]`, `link N ... \| remove` | a link between two places, or a change to link N (added with links); docs/AGENTS.md has the details |
 | `floor NAME LEVEL`, `floor NAME off` | mark a named area a floor, or unmark it (added with floors) |
+| `scene NAME`; `scene save NAME [REGION]`, `scene NAME remove` | put a scene back (an edit, one step with the request); save or remove one, each alone in its request since neither is in the undo log (added with scenes) |
 | `undo` | takes back the agent's last request, only while nothing came after it; alone in its request, since it cannot roll back with other lines |
 
 Edits are refused, with `busy:` and the reason, when a prompt or dialog is open, the `:`

@@ -139,6 +139,42 @@ static char *check_text(const char *path, int json, int *rc, size_t *len)
     return buf;
 }
 
+/* A scene's block that does not stand is dropped with W025, and the map's
+ * own creatures are not touched by it. */
+static void scene_findings(void)
+{
+    char path[] = "/tmp/vtt-w025-XXXXXX";
+    int fd = mkstemp(path);
+    if (fd < 0) return;
+    const char *text =
+        "VTT 11\nname W\nsize 4 3\ntiles\n....\n....\n....\n"
+        "token player 0 0 1 \"Aria\"\n"
+        "scene \"Good\"\ntoken enemy 1 1 1 \"Imp\"\nround 3\nendscene\n"
+        "scene \"Good\"\nendscene\n"
+        "scene \"Boxed\" 0 0 9 9\nendscene\n"
+        "endscene\n"
+        "scene \"Open\"\ntoken enemy 2 2 1 \"Rat\"\n";
+    if (write(fd, text, strlen(text)) < 0) { close(fd); unlink(path); return; }
+    close(fd);
+    int rc;
+    char *t = check_text(path, 0, &rc, NULL);
+    CHECK(strstr(t, "scene Good dropped: a scene of that name came before it") != NULL);
+    CHECK(strstr(t, "scene Boxed dropped: its box is not on the map") != NULL);
+    CHECK(strstr(t, "endscene with no scene open") != NULL);
+    CHECK(strstr(t, "scene Open dropped: the file ends before its endscene") != NULL);
+    free(t);
+    char err[200];
+    Map *m = mapio_load(path, err, sizeof err);
+    CHECK(m != NULL);
+    if (m) {
+        CHECK_EQ(m->nscenes, 1);
+        CHECK(m->tokens.n == 1 && !strcmp(m->tokens.v[0].label, "Aria"));
+        CHECK(m->scenes[0].tokens.n == 1 && m->scenes[0].round == 0);   /* no fight: the round is sanitized */
+        map_free(m);
+    }
+    unlink(path);
+}
+
 void test_map_tools_check(void)
 {
     int    rc;
@@ -153,6 +189,9 @@ void test_map_tools_check(void)
         CHECK(strstr(t, "no findings") != NULL);
         free(t);
     }
+
+    CASE("scenes that do not stand are dropped with W025");
+    scene_findings();
 
     CASE("the broken fixture: one of every mistake, each found, in a stable order; exit 1");
     char *t = check_text("tests/fixtures/broken.vtt", 0, &rc, &n);

@@ -120,6 +120,7 @@ void map_free(Map *m)
     free(m->fog);
     map_sight_drop(m);
     tokens_free(&m->tokens);
+    for (int i = 0; i < m->nscenes; i++) tokens_free(&m->scenes[i].tokens);
     free(m);
 }
 
@@ -178,6 +179,19 @@ int map_resize(Map *m, int w, int h)
     for (int i = m->tokens.n - 1; i >= 0; i--) {
         const Token *t = &m->tokens.v[i];
         if (t->x + t->size > w || t->y + t->size > h) tokens_remove(&m->tokens, i);
+    }
+    /* Scenes the same: a box is cut to what is left, and one left with
+     * nothing is the whole of what is left. */
+    for (int k = 0; k < m->nscenes; k++) {
+        Scene *sc = &m->scenes[k];
+        for (int i = sc->tokens.n - 1; i >= 0; i--) {
+            const Token *t = &sc->tokens.v[i];
+            if (t->x + t->size > w || t->y + t->size > h) tokens_remove(&sc->tokens, i);
+        }
+        if (!sc->boxed) continue;
+        if (sc->x0 >= w || sc->y0 >= h) sc->boxed = 0;
+        sc->x1 = (int16_t)imin(sc->x1, w - 1);
+        sc->y1 = (int16_t)imin(sc->y1, h - 1);
     }
     for (int i = m->nnotes - 1; i >= 0; i--)
         if (m->notes[i].x >= w || m->notes[i].y >= h)
