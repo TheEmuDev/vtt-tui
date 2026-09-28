@@ -536,8 +536,8 @@ checks that the other map and the place exist. The end shows its number with an 
 always runs one way.
 
 In play mode, `g o` on the end takes everyone standing on it to the other map, in the same
-formation, as close to the middle of the area (or to the square) as they fit. This map is
-saved as they leave, and the other map opens with them in it; the players' devices follow.
+formation, as close to the middle of the area (or to the square) as they fit. Both maps are
+saved: this one without them, the other with them; the players' devices follow.
 Creatures that travel keep their markers, counters, notes and hidden setting, but leave the
 turn order. A handout comes down; the session log carries on. The trip is refused, and
 nobody moves, if the other map has no room for them as they stand, if it has unsaved work

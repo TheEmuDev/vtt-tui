@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/stat.h>
 
 #include "floor.h"
 #include "mapio.h"
@@ -68,11 +69,11 @@ void link_status(const Map *m, int x, int y, int gm, char *out, size_t outsz)
     if (l->secret && !gm) return;
     char name[32], there[2 * MAP_COORD_MAX + 2];
     link_name(l, name, sizeof name);
-    /* Another map: the players hear where it goes, the GM its place too
-     * (a place is an area's name, which is the GM's). */
+    /* Another map: the GM hears where it goes; the players only its name,
+     * since a map's file name and an area's are the GM's. */
     if (l->to_map[0]) {
-        snprintf(out, outsz, "  %s%s to %s%s%s", l->secret ? "secret " : "", name, l->to_map,
-                 gm ? ", " : "", gm ? l->to_place : "");
+        if (gm) snprintf(out, outsz, "  %s%s to %s, %s", l->secret ? "secret " : "", name, l->to_map, l->to_place);
+        else    snprintf(out, outsz, "  %s", name);    /* a file's name can spoil: "dragon-lair" */
         return;
     }
     /* Where it leads is a square's name, and the players are not told the
@@ -292,7 +293,10 @@ int link_trip(const Map *m, int li, int from, int enforce, LinkTrip *t)
  * map has no file to be beside. */
 int link_map_path(const Map *m, const char *to_map, char *buf, size_t sz)
 {
-    if (!m->path[0]) return 0;
+    /* A map that has never been written has nothing to be beside yet. */
+    struct stat st;
+    if (!m->path[0] || stat(m->path, &st) != 0) return 0;
+    if (sz > MAP_PATH_MAX) sz = MAP_PATH_MAX;         /* what a loaded map can hold as its path */
     const char *slash = strrchr(m->path, '/');
     int dl = slash ? (int)(slash - m->path) : 0;
     int n = slash ? snprintf(buf, sz, "%.*s/%s.vtt", dl, m->path, to_map) : snprintf(buf, sz, "%s.vtt", to_map);
@@ -313,7 +317,7 @@ const char *link_map_check(const Map *m, const char *to_map, const char *place, 
         return buf;
     }
     Map *d = mapio_load(path, err, sizeof err);
-    if (!d) { snprintf(buf, sz, "no map %.30s beside this one (%.80s)", to_map, path); return buf; }
+    if (!d) { snprintf(buf, sz, "no map %.30s beside this one", to_map); return buf; }
     const char *why = NULL;
     int x, y, ai = map_area_find(d, place);
     if (ai < 0) {

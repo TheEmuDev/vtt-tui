@@ -35,12 +35,25 @@ reference; this page is why it is the way it is.
   the party leaves through the undo log, this map is saved (a failed save takes that back
   and goes nowhere), `app_travel_to` swaps the maps -- keeping the server, the session log
   and the play settings, dropping what points into the old map -- and the party arrives,
-  labeled as a paste is, their turn places gone. The arrivals are unsaved changes in the
-  new map, which the autosave covers.
+  their turn places gone, a label numbered only when it clashes with one there. The new
+  map is saved with them in it: a trip is never half on disk.
 - **The file**: version 12, `link N KIND SIZE X Y to "MAP" "PLACE" [secret]`.
 - **The map tools**: `--check` W151 when the other file or its place is missing (it reads
   the file beside the one checked); `--describe` lists such a link as an exit, and its JSON
   carries `to_map` and `to_place`.
+
+## As built: what the review changed
+
+- **The destination is saved too.** At first only the map left was written, and the party
+  lived only in memory until the autosave -- which a "quit without saving" deletes, and a
+  headless run never writes. The other map was just read and had no newer autosave, so
+  writing it over clobbers nothing.
+- **A failed save** is taken back with `undo_abort` inside the open batch, so nothing is
+  left to redo that would remove the party without a trip.
+- **Refusals are the GM's**, except "nobody on stairs 1": the others name files and the
+  other map's areas. The players' status line names a link to another map without the
+  map, since a file's name can spoil ("dragon-lair").
+- **A map never written** has nothing to be beside: `link_map_path` wants the file there.
 
 ## Instrumentation
 

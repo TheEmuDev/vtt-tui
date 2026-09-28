@@ -1283,6 +1283,15 @@ void test_map_links(void)
     CHECK(strstr(a.status, "-> crypt, Entrance") != NULL);
     press(&a, ":link 1 reverse\r");
     CHECK(strstr(a.status, "leads to another map") != NULL);
+    int depth0 = a.undo.depth;
+    press(&a, ":link 1 oneway\r");
+    CHECK(strstr(a.status, "leads to another map") != NULL);
+    CHECK_EQ(a.undo.depth, depth0);
+    char ls[160];
+    link_status(t, 6, 3, 0, ls, sizeof ls);
+    CHECK(!strcmp(ls, "  stairs 1"));                      /* the players hear no file's name */
+    link_status(t, 6, 3, 1, ls, sizeof ls);
+    CHECK(!strcmp(ls, "  stairs 1 to crypt, Entrance"));
 
     CASE("drawn with an arrow after its number");
     rnd_begin(&r);
@@ -1318,7 +1327,14 @@ void test_map_links(void)
     CHECK(a.ed.cx == arr->x && a.ed.cy == arr->y);
     CHECK(net_active(&a.net));                              /* the phones followed */
     CHECK(!a.handout_up);
-    CHECK(a.map->modified);                                 /* the arrivals are unsaved here */
+    CHECK(!a.map->modified);                                /* written where they arrived too */
+    {
+        char cp[700];
+        snprintf(cp, sizeof cp, "%s/crypt.vtt", sb.dir);
+        Map *cm0 = mapio_load(cp, err, sizeof err);
+        CHECK(cm0 && cm0->tokens.n == 1 && !strcmp(cm0->tokens.v[0].label, "Aria"));
+        map_free(cm0);
+    }
     CHECK(strstr(a.status, "Aria took stairs 1 from town to crypt, Entrance") != NULL);
     CHECK(strstr(a.status, "no way back yet: in build mode :link to town PLACE") != NULL);
     CHECK_EQ(a.status_gm, 1);
@@ -1374,6 +1390,18 @@ void test_map_links(void)
     press(&a, "go");
     CHECK(!strcmp(a.map->name, "town"));
     CHECK(strstr(a.status, "no room in crypt's Entrance") != NULL);
+    CHECK_EQ(a.status_gm, 1);                               /* an area's name is the GM's */
+
+    CASE("a save that fails puts the party back, and leaves nothing to redo");
+    write_floor_map(sb.dir, "crypt", 12, 10, "Entrance", 2, 2, 5, 5);   /* room again */
+    int before_n = a.map->tokens.n;
+    chmod(sb.dir, 0555);
+    press(&a, "go");
+    chmod(sb.dir, 0755);
+    CHECK(!strcmp(a.map->name, "town"));
+    CHECK_EQ(a.map->tokens.n, before_n);
+    CHECK(strstr(a.status, "nobody went") != NULL);
+    CHECK(!undo_can_redo(&a.undo));
     char keep[MAP_PATH_MAX];
     str_lcpy(keep, a.map->path, sizeof keep);
     a.map->path[0] = '\0';                                  /* as a map never saved has */

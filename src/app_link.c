@@ -105,8 +105,8 @@ static void travel(App *a, int li)
     Link l = m->links[li];
     char name[32], msg[320], why[200], path[MAP_PATH_MAX + 32], err[MAPIO_ERR_MAX];
     link_name(&l, name, sizeof name);
-#define REFUSE(...) do { snprintf(why, sizeof why, __VA_ARGS__); \
-                         if (l.secret) app_set_status_gm(a, why); else app_set_status(a, why); return; } while (0)
+    /* Refusals are the GM's: they name files, and the other map's places. */
+#define REFUSE(...) do { snprintf(why, sizeof why, __VA_ARGS__); app_set_status_gm(a, why); return; } while (0)
     if (!link_map_path(m, l.to_map, path, sizeof path))
         REFUSE("save this map first (:w NAME) - %.30s is found beside it", l.to_map);
     struct stat sh, st;
@@ -124,10 +124,14 @@ static void travel(App *a, int li)
         party[n].y = (int16_t)(party[n].y - l.y[0]);
         idx[n++] = i;
     }
-    if (!n) REFUSE("nobody on %s", name);
+    if (!n) {                                 /* the one the table may hear */
+        snprintf(why, sizeof why, "nobody on %s", name);
+        if (l.secret) app_set_status_gm(a, why); else app_set_status(a, why);
+        return;
+    }
 
     Map *d = mapio_load(path, err, sizeof err);
-    if (!d) REFUSE("%s leads to %.30s, which is not there (%.80s)", name, l.to_map, path);
+    if (!d) REFUSE("%s leads to %.30s, which is not beside this map", name, l.to_map);
     char autosave[MAP_PATH_MAX + 16];
     mapio_autosave_path(d, autosave, sizeof autosave);
     if (mapio_autosave_newer(d->path, autosave, NULL)) {
@@ -137,24 +141,24 @@ static void travel(App *a, int li)
     int ax, ay;
     if (!link_land(d, l.to_place, party, n, &ax, &ay, why, sizeof why)) {
         map_free(d);
-        if (l.secret) app_set_status_gm(a, why); else app_set_status(a, why);
+        app_set_status_gm(a, why);
         return;
     }
 
-    /* They leave, and the map they leave is saved; a failed save puts them
-     * back and goes nowhere. */
+    /* They leave, and the map they leave is saved; a failed save takes that
+     * back -- out of the log too -- and goes nowhere. */
     undo_begin(&a->undo);
     for (int k = n - 1; k >= 0; k--) {
         turn_before_remove(m, &a->undo, idx[k]);
         undo_del_token(&a->undo, m, idx[k]);
     }
     turn_settle(m, &a->undo);
-    undo_end(&a->undo);
     if (mapio_save(m, m->path, err, sizeof err) != 0) {
-        undo_undo(&a->undo, m);
+        undo_abort(&a->undo, m);
         map_free(d);
         REFUSE("%.120s - nobody went", err);
     }
+    undo_end(&a->undo);
 #undef REFUSE
     char left[MAP_NAME_MAX];
     str_lcpy(left, m->name, sizeof left);
@@ -173,13 +177,25 @@ static void travel(App *a, int li)
         t.y = (int16_t)(ay + t.y);
         t.turn = 0;                           /* the fight stays behind */
         t.init = 0;
-        tokens_unique_label(&d->tokens, party[k].label, t.label, sizeof t.label);
+        /* A label is kept when nobody here has it -- a paste's numbering would
+         * turn "Goblin 2" into Goblin -- and numbered only when it clashes. */
+        int clash = 0;
+        for (int j = 0; j < d->tokens.n && !clash; j++) clash = t.label[0] && !strcmp(d->tokens.v[j].label, t.label);
+        if (clash) tokens_unique_label(&d->tokens, party[k].label, t.label, sizeof t.label);
         int at = tokens_add(&d->tokens, t);
         if (first < 0) first = at;
         size_t wl = strlen(who);
         if (wl < 100) snprintf(who + wl, sizeof who - wl, "%s%.30s", k ? ", " : "", token_name(&t));
     }
     map_touch(d);
+    /* The party is written where it arrived, as it was where it left: a
+     * trip is never half on disk. The file was just read and had no newer
+     * autosave, so nothing of anyone's is written over. */
+    char saved[80] = "";
+    if (mapio_save(d, d->path, err, sizeof err) != 0)
+        snprintf(saved, sizeof saved, " - NOT SAVED here: %.50s, :w", err);
+    else
+        a->autosave_gen = d->gen;
     fog_recompute(d);
     a->ed.cx = d->tokens.v[first].x;
     a->ed.cy = d->tokens.v[first].y;
@@ -188,8 +204,9 @@ static void travel(App *a, int li)
     /* The way back, if there is none. */
     int back = 0;
     for (int i = 0; i < d->nlinks; i++) back |= !strcmp(d->links[i].to_map, stem);
-    snprintf(msg, sizeof msg, "%s took %s from %.30s to %.30s, %.31s%s%s%s", who, name, left, d->name, l.to_place,
-             back ? "" : " - no way back yet: in build mode :link to ", back ? "" : stem, back ? "" : " PLACE makes one");
+    snprintf(msg, sizeof msg, "%s took %s from %.30s to %.30s, %.31s%s%s%s%s", who, name, left, d->name, l.to_place,
+             saved, back ? "" : " - no way back yet: in build mode :link to ", back ? "" : stem,
+             back ? "" : " PLACE makes one");
     app_note_gm(a, msg);
 }
 
@@ -348,7 +365,8 @@ void app_link_command(App *a, const char *rest)
         char name[32], at[2 * MAP_COORD_MAX + 2];
         link_name(l, name, sizeof name);
         link_end_name(l, to, at, sizeof at);
-        snprintf(msg, sizeof msg, "%s at %s - :link %d again for the other end", name, at, l->num);
+        if (l->to_map[0]) snprintf(msg, sizeof msg, "%s at %s - it leads to %.24s, %.31s", name, at, l->to_map, l->to_place);
+        else snprintf(msg, sizeof msg, "%s at %s - :link %d again for the other end", name, at, l->num);
         app_set_status_gm(a, msg);
         return;
     }
@@ -371,17 +389,17 @@ void app_link_command(App *a, const char *rest)
     }
     for (int i = 1; i < nw; i++) {
         int k = link_kind_from_name(words[i]);
+        if (l.to_map[0] && (!strcmp(words[i], "oneway") || !strcmp(words[i], "twoway") ||
+                            !strcmp(words[i], "reverse"))) {
+            snprintf(msg, sizeof msg, "link %d leads to another map: it has one end here, and goes one way", l.num);
+            app_set_status_gm(a, msg);
+            return;
+        }
         if (k >= 0)                             l.kind = (uint8_t)k;
         else if (!strcmp(words[i], "oneway"))   l.oneway = 1;
         else if (!strcmp(words[i], "twoway"))   l.oneway = 0;
         else if (!strcmp(words[i], "secret"))   l.secret = 1;
         else if (!strcmp(words[i], "seen"))     l.secret = 0;
-        else if (l.to_map[0] && (!strcmp(words[i], "oneway") || !strcmp(words[i], "twoway") ||
-                                  !strcmp(words[i], "reverse"))) {
-            snprintf(msg, sizeof msg, "link %d leads to another map: it has one end here, and goes one way", l.num);
-            app_set_status_gm(a, msg);
-            return;
-        }
         else if (!strcmp(words[i], "reverse")) {
             int16_t x = l.x[0], y = l.y[0];
             l.x[0] = l.x[1]; l.y[0] = l.y[1];
