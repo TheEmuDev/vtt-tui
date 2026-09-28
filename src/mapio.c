@@ -16,6 +16,7 @@
 #include "floor.h"
 #include "fog.h"
 #include "link.h"
+#include "prof.h"
 #include "ruler.h"
 #include "scene.h"
 #include "turn.h"
@@ -107,8 +108,9 @@ static void put_tokens(FILE *f, const TokenList *l)
     }
 }
 
-int mapio_write(const Map *m, const char *path, char *err, size_t errsz)
+static int write_map(const Map *m, const char *path, int flush, char *err, size_t errsz)
 {
+    PROF_ZONE("mapio.write");
     char tmp[MAP_PATH_MAX + 8];
     snprintf(tmp, sizeof tmp, "%s.tmp", path);
 
@@ -235,7 +237,10 @@ int mapio_write(const Map *m, const char *path, char *err, size_t errsz)
     }
 
     int ok = (fflush(f) == 0);
-    if (ok) ok = (fsync(fileno(f)) == 0) || errno == EINVAL;   /* pipes are fine */
+    if (ok && flush) {
+        PROF_ZONE("mapio.fsync");
+        ok = (fsync(fileno(f)) == 0) || errno == EINVAL;   /* pipes are fine */
+    }
     if (fclose(f) != 0) ok = 0;
 
     if (!ok) {
@@ -249,6 +254,16 @@ int mapio_write(const Map *m, const char *path, char *err, size_t errsz)
         return -1;
     }
     return 0;
+}
+
+int mapio_write(const Map *m, const char *path, char *err, size_t errsz)
+{
+    return write_map(m, path, 1, err, errsz);
+}
+
+int mapio_write_unflushed(const Map *m, const char *path, char *err, size_t errsz)
+{
+    return write_map(m, path, 0, err, errsz);
 }
 
 int mapio_save(Map *m, const char *path, char *err, size_t errsz)
@@ -708,6 +723,7 @@ Map *mapio_load(const char *path, char *err, size_t errsz)
 
 Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, void *ctx)
 {
+    PROF_ZONE("mapio.load");
     FILE *f = fopen(path, "r");
     if (!f) {
         snprintf(err, errsz, "cannot open %s: %s", path, strerror(errno));

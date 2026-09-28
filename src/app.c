@@ -383,7 +383,7 @@ int app_autosave(App *a)
      * this generation counts as attempted: a failure that stayed "owed"
      * would be retried on every turn of the loop, with poll told not to
      * wait, which is a spinning process for as long as the map is unsaved. */
-    int rc = mapio_write(a->map, autosave, err, sizeof err);
+    int rc = mapio_write_unflushed(a->map, autosave, err, sizeof err);
     a->autosave_gen = a->map->gen;
     return rc == 0 ? 0 : -1;
 }

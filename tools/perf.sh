@@ -29,7 +29,10 @@ LOOPS=${LOOPS:-400}
 
 [ -x "$BIN" ] || { echo "no $BIN -- run make first" >&2; exit 1; }
 
-DIR=$(mktemp -d)
+# The maps live beside the repo, on the filesystem a GM's maps would be on:
+# /tmp is often memory, where flushing a save to the disk costs nothing and
+# the save and trip rows would quote a figure no table sees.
+DIR=$(mktemp -d "${PERF_DIR:-.}/.perf.XXXXXX")
 trap 'rm -rf "$DIR"' EXIT
 export XDG_DATA_HOME="$DIR/xdg"
 mkdir -p "$XDG_DATA_HOME"

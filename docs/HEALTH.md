@@ -23,9 +23,14 @@ before it was written down here. Nothing was changed by the check itself.
   flushes twice before the arrival frame is drawn.
 - PERFORMANCE.md's autosave table ("fsync included") and its trip paragraph are tmpfs
   figures.
-- **Open.** Measure saves on the real filesystem, then decide how the autosave and trips
-  flush -- a durability tradeoff (skipping the flush for the recovery autosave loses nothing
-  on a vtt crash, only on an OS crash or power loss), so it wants a plan and the user's call.
+- **Fixed** (the user chose: the autosave skips the flush, everything else keeps it).
+  Measured on btrfs first: an autosave-sized write is 0.1-5 ms unflushed against 33-76 ms
+  flushed (median of nine, 40×25 to 512×512), so the autosave now writes and renames
+  without `fsync` (`mapio_write_unflushed`); a vtt crash still finds it, a power cut within
+  half a minute can lose it, the map's own file is never at risk. `:w`, trips and other
+  saves flush as before -- a trip stays at about 65 ms, two flushes, accepted as the cost
+  of a deliberate map change. `make perf` now works beside the repo, `mapio.write`,
+  `mapio.fsync` and `mapio.load` are zones, and PERFORMANCE.md is regenerated there.
 
 ### 2. Test hygiene
 

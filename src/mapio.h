@@ -9,8 +9,13 @@
 /* Writes via a temporary file and rename(), so an interrupted save can never
  * leave a half-written map where the original was. mapio_write leaves the
  * map's own path and modified flag alone, for a copy that is not "the
- * save"; mapio_save is the save. */
+ * save"; mapio_save is the save. Both flush the file to the disk before the
+ * rename; mapio_write_unflushed does not, for the recovery autosave: a vtt
+ * crash still finds it (the system holds it), only a system crash or power
+ * cut within half a minute can lose it, and the map's own file is untouched
+ * either way. */
 int  mapio_write(const Map *m, const char *path, char *err, size_t errsz);
+int  mapio_write_unflushed(const Map *m, const char *path, char *err, size_t errsz);
 int  mapio_save(Map *m, const char *path, char *err, size_t errsz);
 
 /* The recovery autosave that goes beside a map: path + ".autosave". A map
