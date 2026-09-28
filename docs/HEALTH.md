@@ -101,7 +101,13 @@ are error paths.
   "towards"; mixed terms (token/creature, remote view/players' view, trace/wall mode, you/the
   GM); gaps on the `?` page; the README's documentation table lacks CHARACTERS, HANDOUTS,
   MAPLINKS and SCENES; `:roll NAME =` is the one destructive command not spelled `remove`.
-- **Open.**
+- **Fixed** (dd89d71): where maps live, requirements and install, the selected creature,
+  `--watch` (which now takes the pasted address), the free `:serve` port, the `?` page (a
+  wide key gets its own line), the three wrong facts, "round"/"towards", the documentation
+  table, `:roll NAME remove`. **Still open**: the mixed terms (token/creature, remote
+  view/players' view, trace/wall mode) and the gaps on the `?` page; no history or design
+  argument was found left in the README. "Drawing cost depends on the size of the window"
+  becomes true with §5's creature culling.
 
 ### 5. Performance and profiling
 
