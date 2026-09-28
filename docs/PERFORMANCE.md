@@ -8,6 +8,13 @@ Recorded on an **Intel i7-4510U @ 2.00GHz**, gcc 16.2.1, `-O2`. Treat the absolu
 numbers as a baseline for *this* machine and the ratios between rows as the part that
 travels.
 
+**Known gaps (health check, 2026-09-28; docs/HEALTH.md §1, §5).** Every save here was
+measured on tmpfs, where a flush is free: on the GM's own disk (btrfs here) the same save
+was 29 ms against 1 ms, so the autosave table and the map-trip figures understate real
+saves by about thirty times. The frame columns also leave out key handling, bytes sent to
+the phones are not published, and several rows measure something other than their label.
+These are to be fixed before the numbers below are taken as the whole story.
+
 ## The budget
 
 A keystroke has about **16ms** before a person notices. Nothing here is close, and the

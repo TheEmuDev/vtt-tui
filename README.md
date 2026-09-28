@@ -1247,6 +1247,7 @@ has measurements for every path; `make perf` regenerates them.
 | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | performance measurements |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | features decided on, in the order they will be built |
 | [docs/IDEAS.md](docs/IDEAS.md) | features considered and not built |
+| [docs/HEALTH.md](docs/HEALTH.md) | project health checks: what each found, and what is still open |
 
 ## License
 

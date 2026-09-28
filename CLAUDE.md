@@ -151,14 +151,26 @@ Bench scripts replay whole; no toggles — use loop-neutral pairs (`llllhhhh`,
 
 ## Watch list
 
-Tech debt looked at in the 2026-09-26 health check and left on purpose. Each
-has the point at which it stops being cheap to ignore; check it whenever the
-code it names is touched, and move an item out of here once it is fixed.
+Tech debt looked at in a health check and left on purpose. Each has the point
+at which it stops being cheap to ignore; check it whenever the code it names is
+touched, and move an item out of here once it is fixed. docs/HEALTH.md is the
+full record of each check -- what it found, the evidence, what is still open.
+The 2026-09-28 check's open items are there, in a proposed order.
 
 - **Squares and regions are parsed in two places:** `maptools_region` (clips,
   takes a bare row `5:6`) and app_ctl.c's `region` (strict, refuses off-map).
   Two is within the rule of three; a third caller makes them one function
-  with a clip flag, before the third copy is written.
+  with a clip flag, before the third copy is written. (2026-09-28: still two;
+  but "an area name, else a square, into a box" has reached three -- see
+  docs/HEALTH.md.)
+- **Two copies, left (2026-09-28):** removing a group highest index first with
+  `turn_before_remove`/`turn_settle` (app_play.c, app_link.c); describing a
+  character or a stamp (the picker and the channel); taking a creature out of
+  the fight (turn and init zeroed: stamp.c, character.c, app_link.c -- two
+  assignments each). A third copy of either of the first two, or any change to
+  what "out of the fight" means, makes them one function.
+- **`picker.open` reads every file** (about 12 µs each): 5 ms for 500 templates,
+  16 ms near 1,400. Cache details by mtime when someone's library gets there.
 
 ## Docs to keep in step
 
@@ -166,4 +178,5 @@ code it names is touched, and move an item out of here once it is fixed.
 in a plain instructional tone: what a feature does and how to use it, no history and no
 design argument -- that belongs in docs/),
 `docs/PERFORMANCE.md` (tables + a paragraph per finding), `src/keys.c` (the `?`
-page). A feature is not done until all three agree with the code.
+page). A feature is not done until all three agree with the code. `docs/HEALTH.md`
+records each health check; an item fixed says so there, by commit.

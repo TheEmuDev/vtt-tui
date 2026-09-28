@@ -27,3 +27,7 @@ any code, and moves to the README when it ships. Ideas not yet decided live in I
 
 **Housekeeping** (2026-09-27): the `:` command chain became a table, and `tests/run.c` was
 split by area. CLAUDE.md's watch list keeps what is left.
+
+**Health check** (2026-09-28): findings and a proposed order in docs/HEALTH.md -- disk
+flushes first (a plan), then test hygiene, the README's gaps, creature culling and the perf
+harness, test coverage, and behavior-neutral refactors.
