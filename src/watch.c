@@ -114,8 +114,8 @@ static void on_handout(void *ctx, const char *text, size_t n)
 static const WireSink SINK = { on_full, on_pal, on_run, on_end, on_keepalive, on_handout };
 
 /* host:port, host:port?k=CODE, or host:port/CODE. */
-static int parse_target(const char *target, char *host, size_t hs, char *port, size_t ps,
-                        char *code, size_t cs)
+int watch_parse_target(const char *target, char *host, size_t hs, char *port, size_t ps,
+                       char *code, size_t cs)
 {
     /* The address as :serve shows it, pasted whole, is fine too. */
     if (!strncmp(target, "http://", 7)) target += 7;
@@ -147,7 +147,7 @@ static int parse_target(const char *target, char *host, size_t hs, char *port, s
 int watch_main(const char *target, int ascii)
 {
     char host[256], port[8], code[16];
-    if (parse_target(target, host, sizeof host, port, sizeof port, code, sizeof code) < 0) {
+    if (watch_parse_target(target, host, sizeof host, port, sizeof port, code, sizeof code) < 0) {
         fprintf(stderr, "vtt: --watch wants the address the GM's :serve shows, host:port?k=code\n");
         return 2;
     }

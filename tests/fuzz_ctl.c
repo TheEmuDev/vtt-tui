@@ -13,6 +13,7 @@
 
 #include "app.h"
 #include "render.h"
+#include "scene.h"
 #include "stamp.h"
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size);
@@ -52,5 +53,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     while (undo_undo(&app.undo, app.map)) { }
     undo_clear(&app.undo);
     app.ctl_undoable = 0;
+    /* Saving a scene is no edit, so the log does not take it back. */
+    while (app.map->nscenes > 0) scene_remove(app.map, app.map->nscenes - 1);
     return 0;
 }

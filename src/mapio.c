@@ -780,6 +780,16 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
         body_line  = ld->line;
     }
 
+    /* A name is one line of text: a control character in it (a carriage
+     * return from another system) would not survive being written again. */
+    {
+        size_t k = 0;
+        for (size_t j = 0; name[j]; j++)
+            if ((unsigned char)name[j] >= 0x20 && name[j] != 0x7f) name[k++] = name[j];
+        name[k] = '\0';
+        if (!k) str_lcpy(name, "untitled", sizeof name);
+    }
+
     if (w == 0 && h == 0) {
         snprintf(err, errsz, "no size line before the sections (header lines -- name, size, "
                              "scale... -- come first)");

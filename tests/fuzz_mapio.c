@@ -28,6 +28,22 @@ static const char *spill(const uint8_t *data, size_t size, char *path, size_t pa
     return path;
 }
 
+static char *slurp_file(const char *path, size_t *n)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) return NULL;
+    size_t cap = 4096, len = 0;
+    char *buf = malloc(cap);
+    size_t got;
+    while (buf && (got = fread(buf + len, 1, cap - len, f)) > 0) {
+        len += got;
+        if (len == cap) { char *nb = realloc(buf, cap *= 2); if (!nb) { free(buf); buf = NULL; } else buf = nb; }
+    }
+    fclose(f);
+    *n = len;
+    return buf;
+}
+
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size);
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
@@ -50,11 +66,29 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
         fclose(sink);
     }
 
-    char out[64];
+    /* Whatever loads, saved, must read back as the same map: saved again it
+     * is the same bytes. Unflushed: the disk is not what is under test. */
+    char out[64], out2[72];
     snprintf(out, sizeof out, "%s.out", in);
-    if (mapio_save(m, out, err, sizeof err) == 0) {
+    snprintf(out2, sizeof out2, "%s.out2", in);
+    if (mapio_write_unflushed(m, out, err, sizeof err) == 0) {
         Map *again = mapio_load(out, err, sizeof err);
-        if (again) map_free(again);
+        if (!again) {
+            fprintf(stderr, "a saved map does not load: %s\n", err);
+            abort();
+        }
+        if (mapio_write_unflushed(again, out2, err, sizeof err) == 0) {
+            size_t n1 = 0, n2 = 0;
+            char *a = slurp_file(out, &n1), *b = slurp_file(out2, &n2);
+            if (a && b && (n1 != n2 || memcmp(a, b, n1) != 0)) {
+                fprintf(stderr, "saved, loaded and saved again, the map changed\n");
+                abort();
+            }
+            free(a);
+            free(b);
+            unlink(out2);
+        }
+        map_free(again);
         unlink(out);
     }
     map_free(m);

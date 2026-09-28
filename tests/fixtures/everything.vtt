@@ -1,0 +1,73 @@
+VTT 12
+name Goblin Ambush
+size 16 9
+zoom 1
+scale 5
+metric alt
+ruleset daggerheart
+tiles
+................
+................
+................
+................
+................
+................
+................
+................
+................
+vedges
+|               |
+|               |
+|               |
+|               |
+|               |
+|               |
+|               |
+|               |
+|               |
+hedges
+----------------
+                
+                
+                
+                
+                
+                
+                
+                
+----------------
+token player 2 2 1 "Aria"
+tokenstatus red "Poisoned"
+tokennote "wants the amulet"
+tokencounter HP 4 6
+tokenturn 18 acting
+token enemy 10 4 2 "Ogre"
+tokenhidden
+tokenturn 12
+round 2
+spotlight gm
+clock Dragon 3 6
+clock Fuse 4 4 down
+roll attack "2d12+3"
+note 5 3 "pressure plate"
+area 1 1 6 4 "Crypt"
+area 0 0 15 8 "Ground"
+floor "Ground" 0
+link 1 stairs 1 5 2 14 2
+link 2 portal 2 1 6 12 6 oneway secret
+link 3 stairs 1 7 7 to "town" "Gate"
+scene "Ambush"
+token enemy 12 5 1 "Goblin"
+endscene
+fog on
+fogpatch 1 Crypt reveal 2 memory on
+fog
+AaaaAA..........
+aaaaaA..........
+aaaaaA..........
+aaaaaA..........
+AaaaAA..........
+................
+................
+................
+................

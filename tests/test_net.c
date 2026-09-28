@@ -1,6 +1,7 @@
 /* Tests: the wire format, the server and its clients, the players' frame, pings, :serve, the phone page. */
 
 #include "harness.h"
+#include "watch.h"
 
 /* ---------------------------------------------------------------- wire */
 
@@ -1727,3 +1728,33 @@ void test_join_frame(void)
     rnd_free(&r);
     sandbox_leave(&sb);
 }
+
+/* --watch takes the address as :serve shows it, pasted whole, or less. */
+void test_watch_target(void)
+{
+    char host[64], port[8], code[16];
+    #define PARSES(in, h, p, c) do {                                              \
+        CHECK_EQ(watch_parse_target(in, host, sizeof host, port, sizeof port,    \
+                                    code, sizeof code), 0);                      \
+        CHECK_EQ(strcmp(host, h), 0);                                            \
+        CHECK_EQ(strcmp(port, p), 0);                                            \
+        CHECK_EQ(strcmp(code, c), 0);                                            \
+    } while (0)
+
+    CASE("the address :serve shows, with or without http://");
+    PARSES("http://192.168.1.10:41873/?k=482913", "192.168.1.10", "41873", "482913");
+    PARSES("192.168.1.10:41873/?k=482913", "192.168.1.10", "41873", "482913");
+    PARSES("192.168.1.10:41873?k=482913", "192.168.1.10", "41873", "482913");
+
+    CASE("the code as a path, or none at all");
+    PARSES("table.local:7777/482913", "table.local", "7777", "482913");
+    PARSES("table.local:7777", "table.local", "7777", "");
+
+    CASE("no host or no port is refused");
+    CHECK_EQ(watch_parse_target(":7777", host, sizeof host, port, sizeof port, code, sizeof code), -1);
+    CHECK_EQ(watch_parse_target("table.local", host, sizeof host, port, sizeof port, code, sizeof code), -1);
+    CHECK_EQ(watch_parse_target("table.local:", host, sizeof host, port, sizeof port, code, sizeof code), -1);
+    CHECK_EQ(watch_parse_target("http://:7777", host, sizeof host, port, sizeof port, code, sizeof code), -1);
+    #undef PARSES
+}
+

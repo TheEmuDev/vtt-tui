@@ -599,6 +599,15 @@ void test_mapio(void)
     write_file(path, "VTT 99\nsize 4 4\n");
     CHECK(mapio_load(path, err, sizeof err) == NULL);
 
+    CASE("a name of control characters (fuzz) reads as untitled, and stays so when saved");
+    {
+        FILE *cf = fopen(path, "w");
+        if (cf) { fputs("VTT 2\nname \r\r\x01\r\nsize 2 2\ntiles\n..\n..\n", cf); fclose(cf); }
+        Map *cm = mapio_load(path, err, sizeof err);
+        CHECK(cm != NULL);
+        if (cm) { CHECK_EQ(strcmp(cm->name, "untitled"), 0); map_free(cm); }
+    }
+
     CASE("a missing file reports rather than aborts");
     CHECK(mapio_load("/tmp/vtt-does-not-exist-xyz.vtt", err, sizeof err) == NULL);
 

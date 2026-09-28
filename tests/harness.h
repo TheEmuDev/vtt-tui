@@ -204,6 +204,7 @@ void test_cycle_keys(void);
 void test_play_focus(void);
 void test_status_draw(void);
 void test_cull(void);
+void test_watch_target(void);
 void test_hidden(void);
 void test_dice(void);
 void test_session_log(void);
