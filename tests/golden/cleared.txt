@@ -17,4 +17,4 @@
     ┃───┼───┼───┼───┼───┼───┼───┼───┗━━━━━━━╸───╺━━━━━━━━━━━┛───┼───┃   
   8 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃   
  NORMAL  C3  void  [wall/floor]  zoom 1  map 16x9       cleared to void 
- hjkl move  HJKL wall  w trace  t/T kind  f paint                ? keys 
+ hjkl move  HJKL wall  w trace  t kind  f paint                  ? keys 

@@ -632,7 +632,7 @@ void test_roll_command(void)
     press(&a, ":roll arrow = d6\r");
     press(&a, ":roll a\r");
     CHECK(strstr(a.status, "more than one roll") != NULL);
-    press(&a, ":roll arrow =\r");
+    press(&a, ":roll arrow remove\r");
     press(&a, ":roll nothing\r");
     CHECK(strstr(a.status, "no roll called nothing") != NULL);
 
@@ -656,13 +656,22 @@ void test_roll_command(void)
         }
     }
 
-    CASE(":roll NAME = with nothing after it forgets the roll");
+    CASE(":roll NAME remove removes the roll; NAME = with nothing after it only asks");
     press(&a, ":roll bite =\r");
-    CHECK(strstr(a.status, "forgot bite") != NULL);
+    CHECK(strstr(a.status, ":roll bite remove removes it") != NULL);
+    press(&a, ":roll bite\r");
+    CHECK(strstr(a.status, "no roll called bite") == NULL);   /* still there */
+    press(&a, ":roll bite remove\r");
+    CHECK(strstr(a.status, "removed roll bite") != NULL);
     press(&a, ":roll bite\r");
     CHECK(strstr(a.status, "no roll called bite") != NULL);
-    press(&a, ":roll att =\r");                       /* a prefix will not do for forgetting */
+    press(&a, ":roll att remove\r");                  /* a prefix will not do for removing */
     CHECK(strstr(a.status, "no roll called att") != NULL);
+    {
+        int kept = 0;
+        for (int i = 0; i < ROLL_MAX; i++) kept |= !strcmp(a.map->rolls[i].name, "attack");
+        CHECK(kept);
+    }
 
     app_free(&a);
     rnd_free(&r);

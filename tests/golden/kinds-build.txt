@@ -13,4 +13,4 @@
   7 │   │   │   │   │═══│═══│═══│   │   │   │   │   │   │   │   │   │   
     ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤   
  NORMAL  I5  floor  [wall/floor]  zoom 1… opened Kinds (16x8, 0 tokens) 
- hjkl move  HJKL wall  w trace  t/T kind  f paint                ? keys 
+ hjkl move  HJKL wall  w trace  t kind  f paint                  ? keys 

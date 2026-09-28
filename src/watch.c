@@ -117,6 +117,8 @@ static const WireSink SINK = { on_full, on_pal, on_run, on_end, on_keepalive, on
 static int parse_target(const char *target, char *host, size_t hs, char *port, size_t ps,
                         char *code, size_t cs)
 {
+    /* The address as :serve shows it, pasted whole, is fine too. */
+    if (!strncmp(target, "http://", 7)) target += 7;
     const char *colon = strrchr(target, ':');
     if (!colon || colon == target) return -1;
     size_t hl = (size_t)(colon - target);
@@ -146,7 +148,7 @@ int watch_main(const char *target, int ascii)
 {
     char host[256], port[8], code[16];
     if (parse_target(target, host, sizeof host, port, sizeof port, code, sizeof code) < 0) {
-        fprintf(stderr, "vtt: --watch wants host:port, as the GM's :serve shows it\n");
+        fprintf(stderr, "vtt: --watch wants the address the GM's :serve shows, host:port?k=code\n");
         return 2;
     }
 

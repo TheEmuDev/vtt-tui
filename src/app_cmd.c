@@ -257,12 +257,27 @@ static void rolls_list(App *a)
 
 /* :roll 2d6+3            an expression
  * :roll attack           a saved roll by name, or a prefix of it
- * :roll attack = 2d12+3  save one;  :roll attack =  forgets it */
+ * :roll attack = 2d12+3  save one;  :roll attack remove  removes it */
 static void roll_command(App *a, const char *rest)
 {
     Map  *m = a->map;
     char  msg[160];
     const char *eq = strchr(rest, '=');
+
+    /* NAME remove: the whole name, as a prefix would remove the wrong one. */
+    const char *gap = strchr(rest, ' ');
+    if (!eq && gap && !strcmp(gap + 1, "remove") && gap - rest < ROLL_NAME_MAX) {
+        char name[ROLL_NAME_MAX];
+        snprintf(name, sizeof name, "%.*s", (int)(gap - rest), rest);
+        int idx = roll_find(m, name);
+        if (idx >= 0 && strcasecmp(m->rolls[idx].name, name) != 0) idx = -1;
+        if (idx < 0) { snprintf(msg, sizeof msg, "no roll called %s", name); app_set_status(a, msg); return; }
+        snprintf(msg, sizeof msg, "removed roll %s", m->rolls[idx].name);
+        memset(&m->rolls[idx], 0, sizeof m->rolls[idx]);
+        map_touch(m);
+        app_note(a, msg);
+        return;
+    }
 
     if (eq) {
         char name[ROLL_NAME_MAX + 8] = { 0 };
@@ -281,11 +296,8 @@ static void roll_command(App *a, const char *rest)
         int idx = roll_find(m, name);
         if (idx >= 0 && strcasecmp(m->rolls[idx].name, name) != 0) idx = -1;   /* a prefix is not the name */
         if (!*expr) {
-            if (idx < 0) { snprintf(msg, sizeof msg, "no roll called %s", name); app_set_status(a, msg); return; }
-            snprintf(msg, sizeof msg, "forgot %s", m->rolls[idx].name);
-            memset(&m->rolls[idx], 0, sizeof m->rolls[idx]);
-            map_touch(m);
-            app_note(a, msg);
+            snprintf(msg, sizeof msg, "%s = what? :roll %s = 2d6+3 saves it, :roll %s remove removes it", name, name, name);
+            app_set_status(a, msg);
             return;
         }
         /* The expression must be something :roll would take, and the name

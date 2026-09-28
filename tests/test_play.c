@@ -2528,10 +2528,32 @@ void test_help_page(void)
     rnd_dump(&r, &f);
     bb_putc(&f, '\0');
     CHECK(strcmp(top.data, f.data) != 0);
-    CHECK(strstr(f.data, "next / previous turn") != NULL);   /* below the first fold */
+    CHECK(strstr(top.data, "yank -- copy it") == NULL);      /* below the first fold */
+    CHECK(strstr(f.data, "yank -- copy it") != NULL);
     bb_free(&top);
     bb_free(&f);
     press(&a, "g");
+
+    CASE("a key wider than its column is shown whole, on a line of its own");
+    {
+        int seen_link = 0, seen_scene = 0, seen_serve = 0;
+        for (int t = 0; t < a.help_lines; t += 10) {
+            a.help_top = t;
+            rnd_begin(&r);
+            app_draw(&a);
+            bb_init(&f, 32768);
+            rnd_dump(&r, &f);
+            bb_putc(&f, '\0');
+            seen_link  |= strstr(f.data, ":link to crypt Entrance") != NULL;
+            seen_scene |= strstr(f.data, ":scene save Ambush") != NULL;
+            seen_serve |= strstr(f.data, ":serve --stay-alive") != NULL;
+            bb_free(&f);
+        }
+        CHECK(seen_link);
+        CHECK(seen_scene);
+        CHECK(seen_serve);
+        a.help_top = 0;
+    }
 
     CASE("j and k scroll, and the top does not go negative");
     CHECK_EQ(a.help_top, 0);

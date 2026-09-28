@@ -104,7 +104,7 @@ static const KeyDoc PLAY[] = {
     GROUP("Dice and the log"),
     KEY(":roll 2d6+3", "roll dice, shown die by die"),
     KEY(":roll +2",    "the ruleset's action roll -- Daggerheart's Hope and Fear d12s"),
-    KEY(":roll attack = 2d12+3", "save a roll under a name; :roll attack rolls it, :rolls lists them"),
+    KEY(":roll attack = 2d12+3", "save a roll under a name; :roll attack rolls it, :rolls lists them, :roll attack remove"),
     KEY(":log",        "the session log, on or off  (:log on, :log off, :log file)"),
 
     GROUP("Undo and elsewhere"),
@@ -152,7 +152,7 @@ static const KeyDoc BUILD[] = {
     GROUP("Walls and doors"),
     { "H J K L",  "wall on the west / south / north / east face", "HJKL", "wall" },
     { "w",        "trace mode: walk the cursor and leave wall behind", NULL, "trace" },
-    { "t",        "cycle which boundary H J K L and the pen lay", "t/T", "kind" },
+    { "t",        "cycle which boundary H J K L and the pen lay", "t", "kind" },
     KEY("o  O",   "open or close a door / a secret door"),
 
     GROUP("Floors"),

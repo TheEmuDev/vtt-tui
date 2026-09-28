@@ -99,13 +99,23 @@ static int page_row(Page *p, int x, const char *text, Style s)
     return y;
 }
 
+/* A key wider than its column (a command with an example, ":link to crypt
+ * Entrance") gets a line of its own and its description the next, as a man
+ * page does, rather than being cut. */
 static void page_key(Page *p, const KeyDoc *d, Style ks, Style ts)
 {
+    int wide = text_width(d->keys) > PAGE_TEXT_X - PAGE_KEY_X - 1;
     int y = p->y0 + p->line - p->top;
     p->line++;
+    if (wide) {
+        if (y >= p->y0 && y <= p->y1)
+            draw_text_ellipsis(p->r, PAGE_KEY_X, y, d->keys, p->w - PAGE_KEY_X - 2, ks);
+        y = p->y0 + p->line - p->top;
+        p->line++;
+    }
     if (y < p->y0 || y > p->y1) return;
 
-    draw_text(p->r, PAGE_KEY_X, y, d->keys, PAGE_TEXT_X - PAGE_KEY_X - 1, ks);
+    if (!wide) draw_text(p->r, PAGE_KEY_X, y, d->keys, PAGE_TEXT_X - PAGE_KEY_X - 1, ks);
     draw_text_ellipsis(p->r, PAGE_TEXT_X, y, d->what, p->w - PAGE_TEXT_X - 2, ts);
 }
 

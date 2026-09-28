@@ -37,19 +37,29 @@ Written in C11 with no dependencies beyond libc, POSIX and `-lm`.
 
 ## Getting started
 
+vtt needs a C11 compiler, `make`, and a terminal with UTF-8 (`--ascii` if it cannot draw
+box characters). It is built and tested on Linux. Players need only a browser.
+
 ```sh
-make            # build (release, -O2)
-./vtt           # the menu: open or create a map
-./vtt crypt.vtt # open a map directly
+make                              # build (release, -O2)
+./vtt                             # the menu: open or create a map
+./vtt crypt.vtt                   # open a map file directly
+cp vtt ~/.local/bin/              # optional: run it as plain `vtt` from anywhere
 ```
 
-Maps are kept in the current directory and in `~/.local/share/vtt/maps`. Press `?` at any
+The examples below say `vtt`; from the build directory that is `./vtt`. Press `?` at any
 time for every key available where you are.
+
+**Where maps are kept.** The menu lists the maps in the current directory and in
+`~/.local/share/vtt/maps` (`$XDG_DATA_HOME/vtt/maps`). A map created with **New Map**, and a
+bare name given to `:w` or `:e` (`:w crypt`, `:e town`), is in `~/.local/share/vtt/maps`. To
+use another folder, give a path: `:w ./crypt.vtt`, `:e ~/games/town.vtt`, or `vtt
+~/games/town.vtt`.
 
 A first session:
 
 1. Choose **New Map**, give it a name and a size. It starts as a floored room with a wall
-   round it.
+   around it.
 2. Draw: `w` enters wall mode, `space` puts the pen down, `hjkl` lays walls, `esc` returns.
    To add a door, press `t` until the status line says `boundary: door`, then `H` `J` `K` or `L` puts
    one on that side of the cursor's square.
@@ -77,7 +87,8 @@ vtt [options] [map.vtt]
   --serve [PORT]     start the players' view at startup (:serve does it later)
   --stay-alive       keep that server running when the map closes
   --no-pings         ignore taps from the players' phones
-  --watch HOST:PORT  mirror a serving vtt in this terminal, read-only
+  --watch ADDRESS    mirror a serving vtt in this terminal, read-only; ADDRESS is
+                     what :serve shows (host:port?k=code, http:// or not)
   --agent            open the control channel at startup (:agent on does it later)
   --ctl [REQUEST]    send a request to a running vtt and print the answer
                      (no REQUEST, or -: read it from stdin)
@@ -97,7 +108,7 @@ vtt [options] [map.vtt]
   --dump-frame       render one frame as plain text and exit
   --size WxH         screen size for headless modes (default 80x24)
   --bench PATH       replay a script headlessly and report frame statistics
-  --bench-loops N    how many times --bench replays it (default 400)
+  --bench-loops N    how many times --bench replays it (default 50)
   --bench-clients N  attach N players' views to a --bench run
   --bench-pings      and have each of them ping every frame
   --bench-ctl FILE   run a control-channel request at the start of each --bench loop
@@ -153,7 +164,7 @@ screen cells plus the one-cell boundary it shares with its neighbor:
 | 2 | 5×2 | ~13×7 |
 | 3 | 7×3 | ~9×5 |
 
-**Labels.** Column letters and row numbers are shown round the map; `#` toggles them. The
+**Labels.** Column letters and row numbers are shown around the map; `#` toggles them. The
 cursor's row and column are highlighted. At tight zoom levels the labels are shown for every
 second or third column.
 
@@ -245,7 +256,7 @@ room by walking its outline. A pen-down stroke is one undo step.
 | `t` | choose what the pen lays (wall, door, window, …) |
 | `d` | erase instead of lay |
 | `v` `V` | anchor a box / circle at this corner |
-| `enter` | wall round the anchored shape |
+| `enter` | wall around the anchored shape |
 | `esc` | clear the anchor, or leave wall mode |
 
 **Stamps.** A stamp is a piece of map you can place again: a pillar, a table and benches, a
@@ -292,6 +303,12 @@ mode. A map holds up to 64 square notes. Notes are never shown to the players.
 ## Play mode
 
 Play mode is for running the encounter. `F2` switches to it.
+
+**The selected creature.** Keys that act on a creature (`c`, `b`, `r`, `s a`, `s v`, `s i`,
+`s t` and others) act on the *selected* one: the creature you last placed or picked up,
+jumped to with `t` `f` `e` or `/`, or gave the turn. It is ringed on the map and named on the
+status line, and it stays selected when the cursor moves away. `esc` clears the selection;
+with nothing selected, those keys act on the creature under the cursor.
 
 | key | action |
 |-----|--------|
@@ -346,7 +363,7 @@ While it is carried:
 - The status line shows the number of steps along the route.
 
 The distance is the straight-line distance by the map's metric; the step count follows the
-route round walls, so the two differ when a wall is in the way. Each key press is one undo
+route around walls, so the two differ when a wall is in the way. Each key press is one undo
 step. A creature can pass through creatures on its own side but not through enemies; walls
 and closed doors block both. `Ctrl-w` turns all blocking off.
 
@@ -377,7 +394,7 @@ status markers.
 
 **Status markers.** `s a` adds a marker to the selected creature: a word of your choice in a
 color chosen with `s c`. Markers are drawn as the first letter of the word above the
-creature; the status line spells them out. A creature shows four, with more continuing below.
+creature; the status line spells them out. A creature holds up to four.
 `s d` removes one, asking which when there are several.
 
 **Counters.** `s v` edits numbers kept on the selected creature, such as hit points. Each
@@ -633,7 +650,7 @@ is selected. The highlight stays anchored to that creature as it moves.
   band.
 
 `R` changes the shape (circle, cone, line, square), or a count selects one (`2R` is the cone).
-Cones, lines and squares point towards the cursor.
+Cones, lines and squares point toward the cursor.
 
 | shape | covers |
 |-------|--------|
@@ -732,7 +749,7 @@ action roll (Daggerheart's duality roll); without a ruleset it asks for an expre
 ```
 :roll attack = 2d12+3    save            :roll attack     roll it
 :roll swing = duality +2 the action roll with a modifier
-:rolls                   list            :roll attack =   remove it
+:rolls                   list            :roll attack remove   remove it
 ```
 
 A unique prefix works (`:roll att`). Dice expressions always take precedence over names. A
@@ -789,29 +806,30 @@ fogged areas). While the GM is in build mode or a menu, the players' view keeps 
 
 | command | action |
 |---------|--------|
-| `:serve` | start serving; the status line shows the address and join code. Typed again while serving, it shows them again without restarting |
-| `:serve 7777` | serve on a fixed port; if already serving on 7777, show the address again. A different port restarts the server, with a new join code |
+| `:serve` | start serving on a free port; the status line shows the address and join code. Typed again while serving, it shows them again without restarting |
+| `:serve 7777` | serve on a fixed port, the same every session; if already serving on 7777, show the address again. A different port restarts the server, with a new join code |
 | `:serve --stay-alive` | keep serving after the map closes; `--no-stay-alive` reverts |
 | `:serve --no-pings` | ignore taps from phones; `--pings` accepts them again |
 | `:serve off` | stop serving and disconnect everyone |
 | `:mirror` | open a second terminal window showing the players' view |
 | `:player preview` | show the players' view on the GM's screen; `q` returns |
-| `vtt --watch HOST:PORT` | show the players' view in a terminal on another machine |
+| `vtt --watch ADDRESS` | show the players' view in a terminal on another machine; ADDRESS is the one `:serve` shows, join code included |
 
 **Connecting a phone or tablet.** The device needs a browser and the same Wi-Fi network as the
 GM's machine.
 
 1. Open the map, press `F2`, and type `:serve`. The status line shows an address such as
-   `http://192.168.1.10:7777/?k=482913`.
+   `http://192.168.1.10:41873/?k=482913`.
 2. Open that address, including the `?k=` join code, in the device's browser. Landscape
    orientation works best.
 3. The map appears and follows the GM's screen.
 
 The page is served by vtt and needs no internet connection. It scales the map to the screen,
-keeps the screen awake and reconnects automatically. The join code is new each time the
-server starts; with `:serve 7777` the port stays the same.
+keeps the screen awake and reconnects automatically. The port and the join code are new
+each time the server starts; with `:serve 7777` the port stays the same.
 
-If the device cannot connect, check that the GM machine's firewall allows the port, and that
+If the device cannot connect, check that the GM machine's firewall allows the port (with a
+firewall, use a fixed port such as `:serve 7777` and allow that one), and that
 the network does not isolate wireless clients from each other (common on guest networks).
 The join code keeps out other devices on the network; the connection is not encrypted.
 
@@ -873,7 +891,9 @@ Unsaved changes are copied to `name.vtt.autosave` next to the map shortly after 
 editing. Saving, or discarding changes on purpose, removes the copy. If vtt exits
 unexpectedly, the next time the map is opened it offers to recover the changes. The copy
 covers vtt or its terminal closing. A power cut or a computer that stops without shutting
-down can lose the last half minute of unsaved work, so save with `:w` when you pause.
+down can lose the last half minute of unsaved work, so save with `:w` when you pause. A
+copy the power cut left incomplete is not recovered: vtt says so and keeps it as
+`name.vtt.autosave.damaged`.
 
 ```
 ╭─ Unsaved work found ───────────────────────────────────────╮
@@ -1096,7 +1116,7 @@ changed J2:O6: 3 lines, one undo step
 session and saves it; `--new WxH` creates an empty map first if the file does not exist.
 
 Each request is applied as a single undo step, and only if every line in it succeeds. The GM
-sees a summary on the status line and a highlight round the changed squares. Edits are
+sees a summary on the status line and a highlight around the changed squares. Edits are
 accepted only in build mode, and not while the GM is in the middle of an action such as
 typing a command or drawing a wall. The full request language is in
 [docs/AGENTS.md](docs/AGENTS.md).
@@ -1141,7 +1161,8 @@ fog
 ```
 
 (The `tiles`, `vedges`, `hedges` and `fog` sections are followed by their rows; see below.)
-Coordinates in the file are 0-based `x y`. The file has no comment syntax.
+Coordinates in the file are 0-based `x y`. The file has no comment syntax. A recovery
+autosave ends with a line `end`, which shows it was written whole; reading stops there.
 
 **Sections.** A map `W` squares wide and `H` tall has:
 
@@ -1231,7 +1252,7 @@ no CPU. Drawing cost depends on the size of the window, not of the map.
 | | 80×24 | 200×50 |
 |---|---|---|
 | build mode, 200×200 map | 31 µs | 128 µs |
-| play mode, 24 creatures | 31 µs | 112 µs |
+| play mode, 24 creatures | 32 µs | 114 µs |
 
 `F12` shows a live profiler overlay with per-zone timings. [docs/PERFORMANCE.md](docs/PERFORMANCE.md)
 has measurements for every path; `make perf` regenerates them.
@@ -1242,6 +1263,10 @@ has measurements for every path; `make perf` regenerates them.
 |---|---|
 | [docs/AGENTS.md](docs/AGENTS.md) | for AI agents: building and editing maps |
 | [docs/KEYS.md](docs/KEYS.md) | the rules for choosing key bindings |
+| [docs/CHARACTERS.md](docs/CHARACTERS.md) | character templates and the picker |
+| [docs/SCENES.md](docs/SCENES.md) | scenes: saving and restoring an encounter |
+| [docs/HANDOUTS.md](docs/HANDOUTS.md) | handouts on the players' screens |
+| [docs/MAPLINKS.md](docs/MAPLINKS.md) | links between map files |
 | [docs/CONTROL.md](docs/CONTROL.md) | the control channel's design |
 | [docs/REMOTE.md](docs/REMOTE.md) | the players' view: server, page and watcher |
 | [docs/FLOORS.md](docs/FLOORS.md) | floors: the view, the players' floor, and room for stacked layers |
