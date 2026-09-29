@@ -94,8 +94,22 @@ says what happened. The Fear pool stays set aside (IDEAS.md).
     `:summon 3 lackey far` puts three of a template at that band from the selected
     creature, on free ground, numbered. Needs item 9.
 
-Suggested order: 6 and 9 together (the card and what it holds), then 10, 17, 16, 12, 11,
-18, 19, 7, 8, 13, 14, 15.
+**Any ruleset** (decided 2026-09-29):
+
+20. **Picture handouts.** `:handout crypt-door.jpg` sends an image from the handouts
+    folder to the players' screens -- a creature, a drawn map, a letter's scan -- shown as
+    the text card is, closable the same way; the terminal names it. The image travels as
+    data over the existing connection, not as page code, so the page's size budget holds.
+21. **A camera for a TV.** `:player camera follow|party|hold`: the players' view follows
+    the GM's screen (as now), frames every player creature, or holds still while the GM
+    scouts elsewhere. The players' view already has its own camera for floors.
+22. **Export a map as SVG.** `vtt --svg crypt.vtt`: walls, doors, windows, terrain, labels
+    and the grid as SVG (plain text, no dependencies), creatures optional; GM-only things
+    (secret doors, notes, fog) left out unless asked. To print a battle map, or post the
+    dungeon after the session.
+
+Suggested order: 16 and 17 (small, every fight), then 6 and 9 together (the card and what
+it holds), then 10, 20, 21, 12, 18, 8, 19, 22, 7, 11; 13, 14 and 15 when play asks for them.
 
 **Housekeeping** (2026-09-27): the `:` command chain became a table, and `tests/run.c` was
 split by area. CLAUDE.md's watch list keeps what is left.
