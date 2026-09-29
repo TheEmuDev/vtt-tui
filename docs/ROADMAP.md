@@ -107,9 +107,12 @@ says what happened. The Fear pool stays set aside (IDEAS.md).
     and the grid as SVG (plain text, no dependencies), creatures optional; GM-only things
     (secret doors, notes, fog) left out unless asked. To print a battle map, or post the
     dungeon after the session.
+23. **A secret to one player.** `:tell Aria You notice the floor is warm here`: a handout
+    to one phone only. Each phone picks a name when it joins (a player creature, or free
+    text), which later per-player features can use too; the join step is the real work.
 
 Suggested order: 16 and 17 (small, every fight), then 6 and 9 together (the card and what
-it holds), then 10, 20, 21, 12, 18, 8, 19, 22, 7, 11; 13, 14 and 15 when play asks for them.
+it holds), then 10, 20, 21, 23, 12, 18, 8, 19, 22, 7, 11; 13, 14 and 15 when play asks for them.
 
 **Housekeeping** (2026-09-27): the `:` command chain became a table, and `tests/run.c` was
 split by area. CLAUDE.md's watch list keeps what is left.
