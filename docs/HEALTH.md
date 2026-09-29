@@ -78,7 +78,17 @@ are error paths.
   the GM's frame unchecked).
 - Structure: test_play.c is 4,483 lines and 40 suites; scenes are tested in three files and
   handouts in two; CLAUDE.md's tests row is stale; run.c cannot run one suite.
-- **Open.**
+- **Mostly fixed** (8525e48..5c5ffd6): the loader fuzzer compares save, load, save byte for
+  byte (it found a name of carriage returns that did not survive; fixed), seeded with a
+  version 12 fixture of every record; the channel fuzzer drops its scenes per input and has
+  seeds for the new lines; `watch_parse_target` is tested; the v12 link and v11 scene
+  refusals and the scene round clamp (`test_loader_damage`); the busy refusals; the page's
+  `feed()` run under node against the C decoder (`test_page_feed`, skipped without node);
+  the server's 404, wrong code, close frame, ninth client, handout cap and slow watcher
+  (`test_net_edges`); the four tests that claimed more now check it; golden frames of the
+  `:q` question, the `:` line and play's box. **Still open**: main.c's argument errors and
+  script parser, watch.c's loop, WebSocket continuation frames, the recover and delete
+  dialogs as frames, and the structure bullet (item 6).
 
 ### 4. Documentation: where a user gets stuck
 
@@ -137,9 +147,9 @@ Measurement:
   load, `:w`, `:character save`, the trip's steps, `scene diff`, `link_map_check`, the
   watcher, the stamp and handout pickers).
 - About a dozen PERFORMANCE.md paragraphs quote numbers the tables no longer hold.
-- **Partly fixed** (item 4): creatures off the window are culled (`grid_visible_squares`;
+- **Partly fixed** (item 4): creatures off the window are culled (`grid_visible_tiles` plus a square;
   500 on 200x200 drew in 85µs, now 40µs against 29µs for 24; `test_cull` proves a culled
-  one would have drawn nothing); new rows `play, 24/500 on 200x200`; the three mislabeled
+  one would have drawn nothing, and fails when the margin is removed); new rows `play, 24/500 on 200x200`; the three mislabeled
   rows renamed for what they measure; a full trace is reported and its call counts marked
   `+`; PERFORMANCE.md regenerated. **Still open**: key handling outside the frame columns,
   phone bytes unpublished, p50/p99 from the last 256 frames, zones never fired and paths
