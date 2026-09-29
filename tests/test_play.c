@@ -4180,7 +4180,16 @@ void test_characters(void)
     CASE("the picker is the GM's: never in the players' frame, and the frame is drawn apart");
     press(&a, "ite");
     CHECK(app_view_differs(&a));
-    char *pf = players_text(&a, &r);
+    rnd_begin(&r);
+    app_draw_view(&a, VIEW_GM);
+    ByteBuf gf;
+    bb_init(&gf, 65536);
+    rnd_dump(&r, &gf);
+    bb_putc(&gf, '\0');
+    CHECK(strstr(gf.data, "Character") != NULL);             /* on the GM's screen... */
+    CHECK(strstr(gf.data, "Crypt Ghoul  enemy") != NULL);
+    bb_free(&gf);
+    char *pf = players_text(&a, &r);                         /* ...and not the players' */
     CHECK(strstr(pf, "Character") == NULL);
     CHECK(strstr(pf, "Crypt Ghoul  enemy") == NULL);
     free(pf);

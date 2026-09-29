@@ -1791,30 +1791,26 @@ void test_delete_map(void)
     CHECK(strstr(a.status, "nothing") != NULL);
 
     /* A file that will not unlink must report, not pretend. */
-    CASE("a delete that fails reports instead of lying");
+    CASE("a delete that fails reports instead of lying, and keeps the file");
     write_map_file(dir, "guard.vtt");
-    char sub[1200];
-    snprintf(sub, sizeof sub, "%.1000s/locked", dir);
-    if (mkdir(sub, 0755) == 0) {
-        write_map_file(sub, "inner.vtt");
-        chmod(sub, 0500);                  /* readable, not writable */
+    press(&a, "r");                        /* the list again */
+    CHECK_EQ(a.nentries, 1);
+    if (geteuid() != 0) {                  /* root deletes anyway */
+        chmod(dir, 0500);                  /* readable, not writable */
+        press(&a, "dy");
+        chmod(dir, 0700);
+        CHECK_EQ(a.modal, MODAL_MESSAGE);
+        CHECK(strstr(a.modal_title, "delete") != NULL || strstr(a.modal_title, "Delete") != NULL);
+        CHECK_EQ(file_exists(dir, "guard.vtt"), 1);
+        CHECK_EQ(a.nentries, 1);
+        press(&a, "\r");
+    } else {
+        printf("  (skipped as root: a read-only folder does not stop a delete)\n");
     }
-    press(&a, "r");
-    CHECK(a.nentries >= 1);
 
     app_free(&a);
     rnd_free(&r);
-
     sandbox_leave(&sb);
-
-    /* Tidy up whatever survived. */
-    chmod(sub, 0700);
-    char p2[1400];
-    snprintf(p2, sizeof p2, "%.1200s/inner.vtt", sub); unlink(p2);
-    rmdir(sub);
-    snprintf(p2, sizeof p2, "%.1200s/alpha.vtt", dir); unlink(p2);
-    snprintf(p2, sizeof p2, "%.1200s/guard.vtt", dir); unlink(p2);
-    rmdir(dir);
 }
 
 /* Reads the map's title straight out of the file, to check the rename reached

@@ -1174,6 +1174,13 @@ static void write_floor_map(const char *dir, const char *name, int w, int h, con
     fclose(f);
 }
 
+static void count_e014(void *ctx, int line, int col, const char *code,
+                       const char *slug, const char *msg)
+{
+    (void)line; (void)col; (void)slug; (void)msg;
+    if (!strcmp(code, "E014")) ++*(int *)ctx;
+}
+
 void test_map_links(void)
 {
     Sandbox sb = sandbox_enter("maplinks");
@@ -1230,8 +1237,10 @@ void test_map_links(void)
         snprintf(path, sizeof path, "%s/bad.vtt", sb.dir);
         FILE *f = fopen(path, "w");
         if (f) { fputs(bad, f); fclose(f); }
-        Map *b = mapio_load(path, err, sizeof err);
+        int dropped = 0;
+        Map *b = mapio_load_diag(path, err, sizeof err, count_e014, &dropped);
         CHECK(b && b->nlinks == 1 && b->links[0].num == 4 && b->links[0].secret);
+        CHECK_EQ(dropped, 3);                                 /* each one said */
         map_free(b);
     }
 

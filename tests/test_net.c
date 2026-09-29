@@ -635,7 +635,9 @@ void test_net_msg(void)
         /* A ping, then a reset, seen by a poll that reported only the data:
          * the pong's write fails and closes the client, and the next one
          * slides into its slot while the frame loop is still running. */
-        int x = netmsg_ws(&n, now), y = netmsg_ws(&n, now);
+        int x = netmsg_ws(&n, now);
+        uint32_t xid = n.cl[n.ncl - 1].id;
+        int y = netmsg_ws(&n, now);
         CHECK(x >= 0 && y >= 0);
         uint32_t yid = n.cl[n.ncl - 1].id;
         uint8_t f[] = { 0x89, 0x84, 1, 2, 3, 4, 'p' ^ 1, 'i' ^ 2, 'n' ^ 3, 'g' ^ 4 };
@@ -643,14 +645,20 @@ void test_net_msg(void)
         struct linger l = { 1, 0 };
         setsockopt(x, SOL_SOCKET, SO_LINGER, &l, sizeof l);
         close(x);
-        struct timespec ts = { 0, 50000000 };
-        nanosleep(&ts, NULL);
+        /* Until the server's end has the ping and the reset, not a fixed
+         * sleep: a slow machine must not turn this into a test of nothing. */
         struct pollfd fds[1 + NET_MAX_CLIENTS];
-        int k = net_pollfds(&n, fds, 1 + NET_MAX_CLIENTS);
-        poll(fds, (nfds_t)k, 20);
+        int k = 0, seen = 0;
+        for (int t = 0; t < 200 && !seen; t++) {
+            k = net_pollfds(&n, fds, 1 + NET_MAX_CLIENTS);
+            poll(fds, (nfds_t)k, 10);
+            for (int i = 1; i < k; i++) seen |= (fds[i].revents & (POLLIN | POLLHUP | POLLERR)) != 0;
+        }
+        CHECK(seen);
         for (int i = 1; i < k; i++) if (fds[i].revents & POLLIN) fds[i].revents = POLLIN;
-        net_service(&n, fds, k, now);                       /* ASan is the check */
+        net_service(&n, fds, k, now);                       /* and ASan */
         for (int i = 0; i < 5; i++) net_pump(&n, now);
+        CHECK(!netmsg_client_open(&n, xid));                /* the one whose pong failed */
         CHECK(netmsg_client_open(&n, yid));
         CHECK(netmsg_client_open(&n, bid));
         close(y);
