@@ -353,6 +353,35 @@ int ui_prompt_key(TextPrompt *p, Key k)
     return 0;
 }
 
+/* A dialog's frame: the box cleared, its border in `border`, and the title
+ * padded off the border on the top edge. Every dialog here is one. */
+static void dialog_frame(Renderer *r, const Theme *th, Rect box, const BoxGlyphs *frame,
+                         uint32_t border, const char *title)
+{
+    Style fs = style(border, th->bg, 0);
+    draw_fill(r, box, ' ', style(th->fg, th->bg, 0));
+    draw_box(r, box, frame, fs);
+    if (!title || !title[0]) return;
+    draw_text(r, box.x + 2, box.y, " ", 1, fs);
+    draw_text(r, box.x + 3, box.y, title, box.w - 7, style(th->fg, th->bg, ATTR_BOLD));
+    draw_text(r, box.x + 3 + imin(text_width(title), box.w - 7), box.y, " ", 1, fs);
+}
+
+/* A one-line entry field, scrolled so the cursor stays in view in a long
+ * entry, the cursor cell in the accent. */
+static void entry_field(Renderer *r, const Theme *th, Rect field, const TextPrompt *p)
+{
+    Style fst = style(th->fg, th->sel_bg, 0);
+    draw_fill(r, field, ' ', fst);
+    char before[UI_PROMPT_MAX];
+    memcpy(before, p->buf, (size_t)p->cursor);
+    before[p->cursor] = '\0';
+    int cw = text_width(before), shift = imax(0, cw - (field.w - 2));
+    draw_text(r, field.x, field.y, p->buf + imin(shift, p->len), field.w - 1, fst);
+    Cell *c = rnd_at(r, field.x + cw - shift, field.y);
+    if (c) { c->bg = th->accent; c->fg = th->bg; }
+}
+
 void ui_prompt_draw(Renderer *r, const Theme *th, const TextPrompt *p,
                     const BoxGlyphs *frame)
 {
@@ -360,33 +389,10 @@ void ui_prompt_draw(Renderer *r, const Theme *th, const TextPrompt *p,
     int h = p->hint[0] ? 6 : 5;
     Rect box = rect_center(rect(0, 0, r->w, r->h), w, h);
 
-    Style fs    = style(th->accent, th->bg, 0);
-    Style label = style(th->fg, th->bg, ATTR_BOLD);
-    Style text  = style(th->fg, th->bg, 0);
-    Style dim   = style(th->dim, th->bg, 0);
+    Style dim = style(th->dim, th->bg, 0);
 
-    draw_fill(r, box, ' ', text);
-    draw_box(r, box, frame, fs);
-    draw_text(r, box.x + 2, box.y, " ", 1, fs);
-    draw_text(r, box.x + 3, box.y, p->title, box.w - 6, label);
-    draw_text(r, box.x + 3 + text_width(p->title), box.y, " ", 1, fs);
-
-    int fy = box.y + 2;
-    Rect field = rect(box.x + 2, fy, box.w - 4, 1);
-    draw_fill(r, field, ' ', style(th->fg, th->sel_bg, 0));
-
-    /* Scroll the field so the cursor stays visible in a long entry. */
-    char before[UI_PROMPT_MAX];
-    memcpy(before, p->buf, (size_t)p->cursor);
-    before[p->cursor] = '\0';
-    int cw = text_width(before);
-    int shift = imax(0, cw - (field.w - 2));
-
-    Style field_style = style(th->fg, th->sel_bg, 0);
-    draw_text(r, field.x, fy, p->buf + imin(shift, p->len), field.w - 1, field_style);
-
-    Cell *c = rnd_at(r, field.x + (cw - shift), fy);
-    if (c) { c->bg = th->accent; c->fg = th->bg; }
+    dialog_frame(r, th, box, frame, th->accent, p->title);
+    entry_field(r, th, rect(box.x + 2, box.y + 2, box.w - 4, 1), p);
 
     if (p->hint[0]) draw_text(r, box.x + 2, box.y + 4, p->hint, box.w - 4, dim);
     draw_text(r, box.x + 2, box.y + h - 1, " enter accept   esc cancel ", box.w - 4, dim);
@@ -517,29 +523,12 @@ void ui_picker_draw(Renderer *r, const Theme *th, const UiPicker *pk,
     int h = rows + 6;
     Rect box = rect_center(rect(0, 0, r->w, r->h), w, h);
 
-    Style fs    = style(th->accent, th->bg, 0);
-    Style label = style(th->fg, th->bg, ATTR_BOLD);
     Style text  = style(th->fg, th->bg, 0);
     Style dim   = style(th->dim, th->bg, 0);
     Style hi    = style(th->fg, th->sel_bg, ATTR_BOLD);
 
-    draw_fill(r, box, ' ', text);
-    draw_box(r, box, frame, fs);
-    draw_text(r, box.x + 2, box.y, " ", 1, fs);
-    draw_text(r, box.x + 3, box.y, pk->p.title, box.w - 6, label);
-    draw_text(r, box.x + 3 + imin(text_width(pk->p.title), box.w - 6), box.y, " ", 1, fs);
-
-    Rect field = rect(box.x + 2, box.y + 2, box.w - 4, 1);
-    draw_fill(r, field, ' ', style(th->fg, th->sel_bg, 0));
-    /* Scrolled so the cursor stays in view, as the prompt's field is. */
-    char before[UI_PROMPT_MAX];
-    memcpy(before, pk->p.buf, (size_t)pk->p.cursor);
-    before[pk->p.cursor] = '\0';
-    int cw = text_width(before), shift = imax(0, cw - (field.w - 2));
-    draw_text(r, field.x, field.y, pk->p.buf + imin(shift, pk->p.len), field.w - 1,
-              style(th->fg, th->sel_bg, 0));
-    Cell *c = rnd_at(r, field.x + cw - shift, field.y);
-    if (c) { c->bg = th->accent; c->fg = th->bg; }
+    dialog_frame(r, th, box, frame, th->accent, pk->p.title);
+    entry_field(r, th, rect(box.x + 2, box.y + 2, box.w - 4, 1), &pk->p);
 
     /* The highlight on screen: the list scrolls a page at a time. */
     int ly = box.y + 4, top = pk->sel / rows * rows;
@@ -630,16 +619,8 @@ void ui_handout_draw(Renderer *r, const Theme *th, const char *title, const char
     if (rows < 1) rows = 1;
     Rect box = rect_center(rect(0, 0, r->w, r->h), w, rows + 4);
 
-    Style fs    = style(th->accent, th->bg, 0);
-    Style label = style(th->fg, th->bg, ATTR_BOLD);
     Style text  = style(th->fg, th->bg, 0);
-    draw_fill(r, box, ' ', text);
-    draw_box(r, box, frame, fs);
-    if (title && title[0]) {
-        draw_text(r, box.x + 2, box.y, " ", 1, fs);
-        draw_text(r, box.x + 3, box.y, title, box.w - 7, label);
-        draw_text(r, box.x + 3 + imin(text_width(title), box.w - 7), box.y, " ", 1, fs);
-    }
+    dialog_frame(r, th, box, frame, th->accent, title);
     HandoutDraw h = { r, box.x + 3, box.y + 2, rows, iw, text };
     wrap(body, iw, handout_line, &h);
     if (lines > rows)
@@ -657,18 +638,10 @@ void ui_modal(Renderer *r, const Theme *th, const char *title, const char *body,
 
     Rect box = rect_center(rect(0, 0, r->w, r->h), w, 7);
 
-    Style fs    = style(th->warn, th->bg, 0);
-    Style label = style(th->fg, th->bg, ATTR_BOLD);
     Style text  = style(th->fg, th->bg, 0);
     Style dim   = style(th->dim, th->bg, 0);
 
-    draw_fill(r, box, ' ', text);
-    draw_box(r, box, frame, fs);
-
-    /* Pad the title off the border, the way the prompt does. */
-    draw_text(r, box.x + 2, box.y, " ", 1, fs);
-    draw_text(r, box.x + 3, box.y, title, box.w - 7, label);
-    draw_text(r, box.x + 3 + imin(text_width(title), box.w - 7), box.y, " ", 1, fs);
+    dialog_frame(r, th, box, frame, th->warn, title);
 
     draw_text_ellipsis(r, box.x + 3, box.y + 2, body, box.w - 6, text);
     if (footer) draw_text(r, box.x + 3, box.y + 4, footer, box.w - 6, dim);
@@ -693,17 +666,9 @@ void ui_choice(Renderer *r, const Theme *th, const char *title,
 
     Rect box = rect_center(rect(0, 0, r->w, r->h), w, n + 5);
 
-    Style fs    = style(th->warn, th->bg, 0);
-    Style label = style(th->fg, th->bg, ATTR_BOLD);
-    Style text  = style(th->fg, th->bg, 0);
     Style dim   = style(th->dim, th->bg, 0);
 
-    draw_fill(r, box, ' ', text);
-    draw_box(r, box, frame, fs);
-
-    draw_text(r, box.x + 2, box.y, " ", 1, fs);
-    draw_text(r, box.x + 3, box.y, title, box.w - 7, label);
-    draw_text(r, box.x + 3 + imin(text_width(title), box.w - 7), box.y, " ", 1, fs);
+    dialog_frame(r, th, box, frame, th->warn, title);
 
     _Static_assert(UI_CHOICE_MAX <= 9, "the row numbers have to stay one key each");
 

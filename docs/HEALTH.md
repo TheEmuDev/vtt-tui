@@ -164,7 +164,7 @@ Three copies or more (the rule of three):
   fourth data-directory copy in `mapio_default_dir`. **Fixed**: store.c.
 - A name followed by a trailing verb (`:area`, `:scene`, `:floor`) parsed three different
   ways; word splitting in `:` commands in three styles.
-- The dialog frame and padded title drawn five times in ui.c, and not the same way.
+- The dialog frame and padded title drawn five times in ui.c, and not the same way. **Fixed**: `dialog_frame`, and `entry_field` for the prompt's and picker's field.
 - `.vtt` stems and "the file beside this map" (seven and three sites); reading a whole file
   with a cap (four, with different limits); the free roll slot (three); jumping the cursor
   to a place (three); the link modifier words (the app and the channel); the quoted-name
