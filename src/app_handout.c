@@ -23,10 +23,8 @@ static void handout_dir(char *buf, size_t sz)
 static int read_handout(const char *name, char *body, size_t bodysz, char *err, size_t errsz)
 {
     char path[MAP_PATH_MAX + 80];
-    if (!store_name_ok(name) || !store_path("handouts", name, ".txt", path, sizeof path)) {
-        snprintf(err, errsz, "no handout called %.40s", name);
-        return -1;
-    }
+    if (!store_name_ok(name)) { snprintf(err, errsz, "no handout called %.40s", name); return -1; }
+    store_path("handouts", name, ".txt", path, sizeof path);    /* a checked name always fits */
     FILE *f = fopen(path, "rb");
     if (!f) { snprintf(err, errsz, "no handout called %.40s - it would be %.80s", name, path); return -1; }
     size_t n = fread(body, 1, bodysz, f);

@@ -160,7 +160,14 @@ int main(int argc, char **argv)
     }
 
     prof_shutdown();
-    if (!ran) { fprintf(stderr, "no suite by that name\n"); return 2; }
+    /* A name that matched nothing is a typo, beside a real one or not. */
+    int unknown = 0;
+    for (int k = 1; k < argc; k++) {
+        int found = 0;
+        for (size_t i = 0; i < sizeof suites / sizeof *suites && !found; i++) found = !strcmp(argv[k], suites[i].name);
+        if (!found) { fprintf(stderr, "no suite called %s\n", argv[k]); unknown = 1; }
+    }
+    if (unknown || (argc >= 2 && !ran)) return 2;
 
     printf("\n%d checks, %d failures\n", g_checks, g_fails);
     return g_fails ? 1 : 0;
