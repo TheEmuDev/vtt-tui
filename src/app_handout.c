@@ -9,12 +9,12 @@
 #include <string.h>
 
 #include "app_priv.h"
-#include "stamp.h"
+#include "store.h"
 
 /* $XDG_DATA_HOME/vtt/handouts, else ~/.local/share/vtt/handouts. */
 static void handout_dir(char *buf, size_t sz)
 {
-    stamp_data_dir("handouts", buf, sz);
+    store_dir("handouts", buf, sz);
 }
 
 /* Reads NAME.txt into body: UTF-8, at most HANDOUT_BODY_MAX-1 bytes, line
@@ -23,7 +23,7 @@ static void handout_dir(char *buf, size_t sz)
 static int read_handout(const char *name, char *body, size_t bodysz, char *err, size_t errsz)
 {
     char dir[MAP_PATH_MAX], path[MAP_PATH_MAX + 80];
-    if (!stamp_name_ok(name)) { snprintf(err, errsz, "no handout called %.40s", name); return -1; }
+    if (!store_name_ok(name)) { snprintf(err, errsz, "no handout called %.40s", name); return -1; }
     handout_dir(dir, sizeof dir);
     snprintf(path, sizeof path, "%s/%s.txt", dir, name);
     FILE *f = fopen(path, "rb");
@@ -80,12 +80,10 @@ UiPickItem *app_handout_items(int *count)
 {
     char dir[MAP_PATH_MAX];
     handout_dir(dir, sizeof dir);
-    int n = stamp_list_ext(dir, ".txt", NULL, 0);
+    int n;
+    char (*names)[MAP_NAME_MAX] = store_list_all(dir, ".txt", &n);
     *count = 0;
     if (n <= 0) return NULL;
-    char (*names)[MAP_NAME_MAX] = xmalloc((size_t)n * MAP_NAME_MAX);
-    int again = stamp_list_ext(dir, ".txt", names, n);
-    if (again < n) n = again;
     UiPickItem *items = xmalloc(sizeof *items * (size_t)(n > 0 ? n : 1));
     char *body = xmalloc(HANDOUT_BODY_MAX), err[200];
     for (int i = 0; i < n; i++) {

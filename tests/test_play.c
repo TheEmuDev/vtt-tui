@@ -4371,7 +4371,7 @@ void test_handout_keys(void)
     if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
     app_key(&a, (Key){ KEY_F2, 0, 0 });
     char dir[MAP_PATH_MAX], path[MAP_PATH_MAX + 32];
-    stamp_data_dir("handouts", dir, sizeof dir);
+    store_dir("handouts", dir, sizeof dir);
 
     CASE("none yet: :handout says where to write one");
     press(&a, ":handout\r");

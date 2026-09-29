@@ -11,7 +11,7 @@
  * again by name on any map. A template is a map file in the characters
  * directory, the creature's size square, holding the one creature at its
  * corner and the saved rolls; so the loader, the writer and the map tools
- * work on it unchanged. Names follow the stamp rules (stamp_name_ok). */
+ * work on it unchanged. Names follow the store rule (store_name_ok). */
 
 /* $XDG_DATA_HOME/vtt/characters, else ~/.local/share/vtt/characters. */
 void character_dir(char *buf, size_t sz);
@@ -36,7 +36,7 @@ Map *character_load(const char *name, char *err, size_t errsz);
 /* The template's creature. */
 static inline const Token *character_token(const Map *tpl) { return &tpl->tokens.v[0]; }
 
-/* The names, sorted; returns how many there are (see stamp_list_in). */
+/* The names, sorted; returns how many there are (see store_list). */
 int  character_list(char (*names)[MAP_NAME_MAX], int max);
 
 /* Puts the template's creature down with its top-left square at (x,y) as

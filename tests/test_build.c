@@ -973,10 +973,10 @@ void test_stamps(void)
     CASE("files: saved by name, listed, loaded back the same; names are never paths");
     {
         Sandbox sb = sandbox_enter("stamps");
-        CHECK_EQ(stamp_name_ok("pillar-row_2"), 1);
-        CHECK_EQ(stamp_name_ok("../x"), 0);
-        CHECK_EQ(stamp_name_ok(""), 0);
-        CHECK_EQ(stamp_name_ok("a b"), 0);
+        CHECK_EQ(store_name_ok("pillar-row_2"), 1);
+        CHECK_EQ(store_name_ok("../x"), 0);
+        CHECK_EQ(store_name_ok(""), 0);
+        CHECK_EQ(store_name_ok("a b"), 0);
         CHECK_EQ(stamp_save(s, "../evil", err, sizeof err), -1);
         CHECK_EQ(stamp_save(s, "Piece", err, sizeof err), 0);
         CHECK_EQ(stamp_save(s, "Altar", err, sizeof err), 0);

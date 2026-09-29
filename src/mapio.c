@@ -19,6 +19,7 @@
 #include "prof.h"
 #include "ruler.h"
 #include "scene.h"
+#include "store.h"
 #include "turn.h"
 #include "util.h"
 
@@ -1102,13 +1103,7 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
 
 void mapio_default_dir(char *buf, size_t bufsz)
 {
-    const char *xdg = getenv("XDG_DATA_HOME");
-    if (xdg && xdg[0]) {
-        snprintf(buf, bufsz, "%s/vtt/maps", xdg);
-        return;
-    }
-    const char *home = getenv("HOME");
-    snprintf(buf, bufsz, "%s/.local/share/vtt/maps", home && home[0] ? home : ".");
+    store_dir("maps", buf, bufsz);
 }
 
 void mapio_resolve_path(const char *name, char *buf, size_t bufsz)

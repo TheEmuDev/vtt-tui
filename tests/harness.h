@@ -17,6 +17,7 @@
 #include <time.h>
 #include <unistd.h>
 #include "app.h"
+#include "store.h"
 #include "counter.h"
 #include "fog.h"
 #include "net.h"

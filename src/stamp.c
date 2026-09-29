@@ -1,4 +1,5 @@
 #include "stamp.h"
+#include "store.h"
 
 #include <dirent.h>
 #include <stdio.h>
@@ -271,45 +272,19 @@ int stamp_place(Map *m, Undo *u, const Map *s, int x, int y, char *err, size_t e
 
 /* ----------------------------------------------------------------- files */
 
-void stamp_data_dir(const char *sub, char *buf, size_t sz)
-{
-    const char *xdg = getenv("XDG_DATA_HOME");
-    if (xdg && xdg[0]) { snprintf(buf, sz, "%s/vtt/%s", xdg, sub); return; }
-    const char *home = getenv("HOME");
-    snprintf(buf, sz, "%s/.local/share/vtt/%s", home && home[0] ? home : ".", sub);
-}
-
 void stamp_dir(char *buf, size_t sz)
 {
-    stamp_data_dir("stamps", buf, sz);
-}
-
-int stamp_name_ok(const char *name)
-{
-    if (!name[0] || strlen(name) >= MAP_NAME_MAX) return 0;
-    for (const char *p = name; *p; p++)
-        if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') ||
-              *p == '-' || *p == '_'))
-            return 0;
-    return 1;
-}
-
-static int stamp_path(const char *name, char *buf, size_t sz)
-{
-    char dir[MAP_PATH_MAX];
-    stamp_dir(dir, sizeof dir);
-    int n = snprintf(buf, sz, "%s/%s.vtt", dir, name);
-    return n > 0 && (size_t)n < sz;
+    store_dir("stamps", buf, sz);
 }
 
 int stamp_save(const Map *s, const char *name, char *err, size_t errsz)
 {
     char path[MAP_PATH_MAX], dir[MAP_PATH_MAX];
-    if (!stamp_name_ok(name)) {
+    if (!store_name_ok(name)) {
         snprintf(err, errsz, "a stamp's name is letters, digits, - and _");
         return -1;
     }
-    if (!stamp_path(name, path, sizeof path)) { snprintf(err, errsz, "the stamp's path is too long"); return -1; }
+    if (!store_path("stamps", name, ".vtt", path, sizeof path)) { snprintf(err, errsz, "the stamp's path is too long"); return -1; }
     stamp_dir(dir, sizeof dir);
     dir_make(dir);
     Map copy = *s;                       /* the file says its name */
@@ -320,8 +295,8 @@ int stamp_save(const Map *s, const char *name, char *err, size_t errsz)
 Map *stamp_load(const char *name, char *err, size_t errsz)
 {
     char path[MAP_PATH_MAX];
-    if (!stamp_name_ok(name)) { snprintf(err, errsz, "no stamp called %.40s", name); return NULL; }
-    if (!stamp_path(name, path, sizeof path)) { snprintf(err, errsz, "the stamp's path is too long"); return NULL; }
+    if (!store_name_ok(name)) { snprintf(err, errsz, "no stamp called %.40s", name); return NULL; }
+    if (!store_path("stamps", name, ".vtt", path, sizeof path)) { snprintf(err, errsz, "the stamp's path is too long"); return NULL; }
     Map *s = mapio_load(path, err, errsz);
     if (!s) { snprintf(err, errsz, "no stamp called %.40s", name); return NULL; }
     /* Fog is a map's, never a stamp's, whatever the file was edited to say. */
@@ -331,48 +306,11 @@ Map *stamp_load(const char *name, char *err, size_t errsz)
     return s;
 }
 
-static int name_cmp(const void *a, const void *b) { return strcmp((const char *)a, (const char *)b); }
-
 int stamp_list(char (*names)[MAP_NAME_MAX], int max)
 {
     char dir[MAP_PATH_MAX];
     stamp_dir(dir, sizeof dir);
-    return stamp_list_in(dir, names, max);
-}
-
-int stamp_list_in(const char *dir, char (*names)[MAP_NAME_MAX], int max)
-{
-    return stamp_list_ext(dir, ".vtt", names, max);
-}
-
-int stamp_list_ext(const char *dir, const char *ext, char (*names)[MAP_NAME_MAX], int max)
-{
-    size_t el = strlen(ext);
-    DIR *d = opendir(dir);
-    if (!d) return 0;
-    /* All of them, sorted, then the first max: a listing cut short is cut
-     * at the end of the alphabet, not wherever the directory happened to. */
-    char (*all)[MAP_NAME_MAX] = NULL;
-    int n = 0, cap = 0;
-    struct dirent *e;
-    while ((e = readdir(d))) {
-        size_t len = strlen(e->d_name);
-        if (len <= el || strcmp(e->d_name + len - el, ext) != 0 || len - el >= MAP_NAME_MAX) continue;
-        char name[MAP_NAME_MAX];
-        memcpy(name, e->d_name, len - el);
-        name[len - el] = '\0';
-        if (!stamp_name_ok(name)) continue;
-        if (n == cap) {
-            cap = cap ? cap * 2 : 32;
-            all = xrealloc(all, (size_t)cap * MAP_NAME_MAX);
-        }
-        str_lcpy(all[n++], name, MAP_NAME_MAX);
-    }
-    closedir(d);
-    if (n > 1) qsort(all, (size_t)n, MAP_NAME_MAX, name_cmp);
-    for (int i = 0; i < n && i < max; i++) str_lcpy(names[i], all[i], MAP_NAME_MAX);
-    free(all);
-    return n;
+    return store_list(dir, ".vtt", names, max);
 }
 
 /* --------------------------------------------------------------- preview */

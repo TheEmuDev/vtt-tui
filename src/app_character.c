@@ -11,6 +11,7 @@
 #include "prof.h"
 #include "scene.h"
 #include "stamp.h"
+#include "store.h"
 
 /* ---------------------------------------------------------------- picker */
 
@@ -51,13 +52,13 @@ static UiPickItem *pick_items(const App *a, PickWhat what, int *count)
         }
         return items;
     }
-    int n = what == PICK_CHARACTER ? character_list(NULL, 0) : stamp_list(NULL, 0);
+    char dir[MAP_PATH_MAX];
+    if (what == PICK_CHARACTER) character_dir(dir, sizeof dir);
+    else                        stamp_dir(dir, sizeof dir);
+    int n;
+    char (*names)[MAP_NAME_MAX] = store_list_all(dir, ".vtt", &n);
     *count = 0;
     if (n <= 0) return NULL;
-    char (*names)[MAP_NAME_MAX] = xmalloc((size_t)n * MAP_NAME_MAX);
-    /* A file saved between the two readings is left for the next open. */
-    int again = what == PICK_CHARACTER ? character_list(names, n) : stamp_list(names, n);
-    if (again < n) n = again;
     UiPickItem *items = xmalloc(sizeof *items * (size_t)n);
     for (int i = 0; i < n; i++) {
         char err[160];
@@ -82,7 +83,7 @@ void app_pick_open(App *a, PickWhat what, int kind, const char *initial)
         if (what == PICK_SCENE) app_set_status_gm(a, "no scenes - :scene save NAME keeps the creatures as they stand");
         else if (what == PICK_HANDOUT) {
             char dir[MAP_PATH_MAX], msg[MAP_PATH_MAX + 64];
-            stamp_data_dir("handouts", dir, sizeof dir);
+            store_dir("handouts", dir, sizeof dir);
             snprintf(msg, sizeof msg, "no handouts - write NAME.txt in %.200s, or :handout say TEXT", dir);
             app_set_status_gm(a, msg);
         }

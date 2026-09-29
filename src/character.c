@@ -9,11 +9,12 @@
 #include "play.h"
 #include "prof.h"
 #include "stamp.h"
+#include "store.h"
 #include "util.h"
 
 void character_dir(char *buf, size_t sz)
 {
-    stamp_data_dir("characters", buf, sz);
+    store_dir("characters", buf, sz);
 }
 
 void character_name_from_label(const char *label, char *out, size_t outsz)
@@ -65,7 +66,7 @@ static int roll_named(const Map *m, const char *name)
 int character_save(const Map *m, int idx, const char *name,
                    const char *const *rolls, int nrolls, char *err, size_t errsz)
 {
-    if (!stamp_name_ok(name)) { snprintf(err, errsz, "a character's name is letters, digits, - and _"); return -1; }
+    if (!store_name_ok(name)) { snprintf(err, errsz, "a character's name is letters, digits, - and _"); return -1; }
     if (idx < 0 || idx >= m->tokens.n) { snprintf(err, errsz, "no creature to save"); return -1; }
     Token t = m->tokens.v[idx];
     fresh(&t);
@@ -104,7 +105,7 @@ int character_save(const Map *m, int idx, const char *name,
 Map *character_load(const char *name, char *err, size_t errsz)
 {
     char path[MAP_PATH_MAX], why[160];
-    if (!stamp_name_ok(name) || !path_of(name, path, sizeof path)) {
+    if (!store_name_ok(name) || !path_of(name, path, sizeof path)) {
         snprintf(err, errsz, "no character called %.40s", name);
         return NULL;
     }
@@ -123,7 +124,7 @@ int character_list(char (*names)[MAP_NAME_MAX], int max)
 {
     char dir[MAP_PATH_MAX];
     character_dir(dir, sizeof dir);
-    return stamp_list_in(dir, names, max);
+    return store_list(dir, ".vtt", names, max);
 }
 
 int character_place(Map *m, Undo *u, const Map *tpl, int kind, int x, int y, int hidden,

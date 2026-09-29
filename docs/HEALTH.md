@@ -161,7 +161,7 @@ Measurement:
 Three copies or more (the rule of three):
 - The saved-things store -- data directory, `dir/NAME.ext`, "count, allocate, list again",
   the file-name rule -- lives in stamp.c but serves stamps, characters and handouts, with a
-  fourth data-directory copy in `mapio_default_dir`.
+  fourth data-directory copy in `mapio_default_dir`. **Fixed**: store.c.
 - A name followed by a trailing verb (`:area`, `:scene`, `:floor`) parsed three different
   ways; word splitting in `:` commands in three styles.
 - The dialog frame and padded title drawn five times in ui.c, and not the same way.
