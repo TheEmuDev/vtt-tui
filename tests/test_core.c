@@ -1470,6 +1470,26 @@ void test_golden(void)
         golden("kinds-play", 72, 16, "tests/fixtures/kinds.vtt", seg, 1, 0);
     }
 
+    /* The GM's own screens, never sent to the players and so never seen
+     * in their frame: a question, the : line half typed, play mode's box. */
+    CASE("the unsaved-changes question on :q");
+    {
+        static const char *const seg[] = { "x", ":q\r" };
+        golden("quit-unsaved", 72, 20, FIXTURE, seg, 2, 0);
+    }
+
+    CASE("a : command half typed");
+    {
+        static const char *const seg[] = { "\x1b[12~", ":roll 2d6+" };
+        golden("command-line", 72, 20, FIXTURE, seg, 2, 0);
+    }
+
+    CASE("play mode's selection box");
+    {
+        static const char *const seg[] = { "\x1b[12~", "gg0jjlv", "jjlll" };
+        golden("play-box", 72, 20, FIXTURE, seg, 3, 0);
+    }
+
     CASE("a narrow terminal still lays out");
     {
         static const char *const seg[] = { "" };
