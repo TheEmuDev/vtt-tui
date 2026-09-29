@@ -68,9 +68,10 @@ void slog_write(SessionLog *l, const char *msg)
 void slog_default_path(const Map *m, char *buf, size_t bufsz)
 {
     if (m->path[0]) {
-        size_t n = strlen(m->path);
-        int    vtt = n > 4 && strcmp(m->path + n - 4, ".vtt") == 0;
-        snprintf(buf, bufsz, "%.*s.log", (int)(vtt ? n - 4 : n), m->path);
+        char stem[MAP_PATH_MAX];
+        str_lcpy(stem, m->path, sizeof stem);
+        str_cut_suffix(stem, ".vtt");
+        snprintf(buf, bufsz, "%s.log", stem);
         return;
     }
     char dir[MAP_PATH_MAX];

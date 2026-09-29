@@ -39,10 +39,7 @@ void character_name_from_label(const char *label, char *out, size_t outsz)
 
 static int path_of(const char *name, char *buf, size_t sz)
 {
-    char dir[MAP_PATH_MAX];
-    character_dir(dir, sizeof dir);
-    int n = snprintf(buf, sz, "%s/%s.vtt", dir, name);
-    return n > 0 && (size_t)n < sz;
+    return store_path("characters", name, ".vtt", buf, sz);
 }
 
 /* What a template's creature is, apart from any one fight. */

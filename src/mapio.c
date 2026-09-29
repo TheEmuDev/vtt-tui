@@ -1109,9 +1109,10 @@ void mapio_default_dir(char *buf, size_t bufsz)
 void mapio_resolve_path(const char *name, char *buf, size_t bufsz)
 {
     char with_ext[MAP_PATH_MAX];
-    size_t n = strlen(name);
-    int has_ext = n > 4 && strcmp(name + n - 4, ".vtt") == 0;
-    snprintf(with_ext, sizeof with_ext, "%s%s", name, has_ext ? "" : ".vtt");
+    str_lcpy(with_ext, name, sizeof with_ext);
+    str_cut_suffix(with_ext, ".vtt");                /* one ".vtt", typed or not */
+    size_t n = strlen(with_ext);
+    snprintf(with_ext + n, sizeof with_ext - n, ".vtt");
 
     if (!strncmp(with_ext, "~/", 2) && getenv("HOME")) {     /* as a shell would */
         snprintf(buf, bufsz, "%s%s", getenv("HOME"), with_ext + 1);
