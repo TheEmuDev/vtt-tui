@@ -102,6 +102,12 @@ void app_delete_map(App *a, const char *path);
 /* app_build.c: build mode's keys (wall mode's among them). */
 void app_editor_key(App *a, Key k);
 
+/* app_ctl_marked.c: the channel's `marked` read, as text or JSON; and
+ * app_ctl.c's words for a screen and a build mode, as the channel says them. */
+void app_ctl_marked(App *a, FILE *out, int json);
+const char *app_ctl_screen_name(Screen s);
+const char *app_ctl_mode_name(EdMode m);
+
 /* app_picker.c: the picker (characters, stamps, scenes, handouts). kind is
  * the side a character goes down on, -1 for its own. */
 void app_pick_open(App *a, PickWhat what, int kind, const char *initial);

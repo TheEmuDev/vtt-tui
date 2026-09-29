@@ -489,6 +489,15 @@ void map_coord_name(int x, int y, char *out, size_t outsz)
     snprintf(out, outsz, "%s%d", buf, y + 1);
 }
 
+void map_region_name(int x0, int y0, int x1, int y1, char *out, size_t outsz)
+{
+    char a[MAP_COORD_MAX], b[MAP_COORD_MAX];
+    map_coord_name(x0, y0, a, sizeof a);
+    if (x0 == x1 && y0 == y1) { str_lcpy(out, a, outsz); return; }
+    map_coord_name(x1, y1, b, sizeof b);
+    snprintf(out, outsz, "%s:%s", a, b);
+}
+
 int map_coord_parse(const char *s, int *x, int *y)
 {
     if (!s || !*s) return 0;

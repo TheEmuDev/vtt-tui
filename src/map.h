@@ -146,6 +146,8 @@ typedef struct {
 #define MAP_COORD_MAX 12
 
 void map_coord_name(int x, int y, char *out, size_t outsz);
+/* "C3" for one square, "B2:F6" for more. */
+void map_region_name(int x0, int y0, int x1, int y1, char *out, size_t outsz);
 
 /* Parses "d6", "AA12", or "6" on its own -- a row with no column, which
  * leaves *x untouched. Returns 0 when the text is not a coordinate, which a

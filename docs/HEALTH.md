@@ -178,7 +178,8 @@ Three copies or more (the rule of three):
 Organization:
 - The picker's glue (four lists) lives in app_character.c. **Fixed**: app_picker.c.
 - app.c (2,075 lines) holds the map browser and build mode's keys; app_ctl.c (1,781) holds
-  the room language and an if-chain of reads.
+  the room language and an if-chain of reads. **Fixed**: app_browser.c and app_build.c (app.c 1,394
+  lines), corridor.c and app_ctl_marked.c (app_ctl.c 1,330).
 - CLAUDE.md's file table is stale in several rows (app_priv.h, the character row, tests)
   and has no rows for util.c, ui.c, main.c, map.c.
 - The watch list's square/region parsers are still two copies.
