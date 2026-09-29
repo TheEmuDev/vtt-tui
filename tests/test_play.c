@@ -4552,9 +4552,9 @@ void test_cull(void)
                     Token t;
                     memset(&t, 0, sizeof t);
                     t.x = (int16_t)x; t.y = (int16_t)y; t.size = (uint8_t)size; t.kind = TOKEN_ENEMY;
-                    t.turn = TURN_IN | TURN_ACTING;
+                    t.turn = (uint8_t)(TURN_IN | TURN_ACTING);
                     str_lcpy(t.label, "Wide Goblin", sizeof t.label);
-                    for (int k = 0; k < TOKEN_STATUS_MAX; k++) token_add_status(&t, k, "Marked");
+                    for (int k = 0; k < TOKEN_STATUS_MAX; k++) token_add_status(&t, (uint8_t)k, "Marked");
                     int off = x > vx1 || y > vy1 || x + size - 1 < vx0 || y + size - 1 < vy0;
                     /* The frame with it on the map, and the frame without it
                      * with it drawn anyway, uncut, under play_draw's clip:

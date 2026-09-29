@@ -206,6 +206,7 @@ void test_status_draw(void);
 void test_cull(void);
 void test_watch_target(void);
 void test_loader_damage(void);
+void test_page_feed(void);
 void test_hidden(void);
 void test_dice(void);
 void test_session_log(void);

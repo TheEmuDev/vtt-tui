@@ -1758,3 +1758,120 @@ void test_watch_target(void)
     #undef PARSES
 }
 
+/* The page decodes the wire with its own code, feed() in web/index.html. It
+ * runs under node here (tests/page_feed.js) over a stream the C encoder
+ * wrote -- a full frame of a real map in play mode, a diff after some keys,
+ * a handout -- and must end with the cells the C decoder ends with. Skipped
+ * where there is no node. */
+void test_page_feed(void)
+{
+    if (system("command -v node >/dev/null 2>&1") != 0) {
+        printf("  (skipped: no node to run the page's decoder)\n");
+        return;
+    }
+    Sandbox sb = sandbox_enter("pagefeed");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+
+    enum { W = 60, H = 20 };
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, W, H);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, "tests/fixtures/everything.vtt"), 0);
+    press(&a, ":play\r");
+
+    WireEnc e;
+    wire_enc_init(&e, 1 << 16);
+    ByteBuf stream;
+    bb_init(&stream, 1 << 16);
+    uint8_t pal[2048];
+
+    /* The first frame whole, its palette first, as the server sends it. */
+    rnd_begin(&r);
+    app_draw(&a);
+    rnd_flush(&r, NULL);
+    wire_enc_full(&e, &r);
+    size_t pn = wire_enc_palette(&e, 0, pal, sizeof pal);
+    bb_put(&stream, pal, pn);
+    bb_put(&stream, e.buf, e.len);
+    int had = e.npal;
+
+    /* Then what changed after some keys: a creature picked up and moved. */
+    press(&a, "tt\rll\r");
+    rnd_begin(&r);
+    app_draw(&a);
+    wire_enc_begin(&e);
+    rnd_set_observer(&r, wire_observe_cell, &e);
+    rnd_flush(&r, NULL);
+    rnd_set_observer(&r, NULL, NULL);
+    wire_enc_end(&e);
+    pn = wire_enc_palette(&e, had, pal, sizeof pal);
+    bb_put(&stream, pal, pn);
+    bb_put(&stream, e.buf, e.len);
+    CHECK(e.cells > 0);
+
+    uint8_t ho[64];
+    const char *text = "Tomb\nHere lies \xc3\x89lan";
+    size_t hn = wire_handout(ho, text, strlen(text));
+    bb_put(&stream, ho, hn);
+
+    char spath[640], cmd[1600];
+    snprintf(spath, sizeof spath, "%s/stream.bin", sb.dir);
+    FILE *f = fopen(spath, "wb");
+    if (f) { fwrite(stream.data, 1, stream.len, f); fclose(f); }
+
+    /* What the C decoder makes of the same bytes, in the script's form. */
+    WireCatch c;
+    memset(&c, 0, sizeof c);
+    WireDec d;
+    wire_dec_init(&d, &WC_SINK, &c);
+    CHECK_EQ((int)wire_dec_feed(&d, (const uint8_t *)stream.data, stream.len), (int)stream.len);
+    CHECK_EQ(d.bad, 0);
+    ByteBuf want;
+    bb_init(&want, 1 << 16);
+    char cell[64];
+    snprintf(cell, sizeof cell, "%dx%d\n", c.w, c.h);
+    bb_puts(&want, cell);
+    for (int y = 0; y < c.h; y++) {
+        for (int x = 0; x < c.w; x++) {
+            const Cell *g = &c.grid[y * 64 + x];
+            snprintf(cell, sizeof cell, "%s%u.%06x.%06x.%u", x ? " " : "", (unsigned)g->ch,
+                     (unsigned)(g->fg & 0xFFFFFF), (unsigned)(g->bg & 0xFFFFFF), (unsigned)g->attr);
+            bb_puts(&want, cell);
+        }
+        bb_putc(&want, '\n');
+    }
+    bb_puts(&want, "handout:");
+    bb_puts(&want, c.handout);
+    bb_putc(&want, '\n');
+    bb_putc(&want, '\0');
+
+    CASE("the page's feed() decodes the stream to the cells the C decoder does");
+    snprintf(cmd, sizeof cmd, "node tests/page_feed.js web/index.html '%s'", spath);
+    FILE *pp = popen(cmd, "r");
+    CHECK(pp != NULL);
+    ByteBuf got;
+    bb_init(&got, 1 << 16);
+    if (pp) {
+        char buf[4096];
+        size_t n;
+        while ((n = fread(buf, 1, sizeof buf, pp)) > 0) bb_put(&got, buf, n);
+        CHECK_EQ(pclose(pp), 0);
+    }
+    bb_putc(&got, '\0');
+    CHECK_EQ(c.w, W);
+    CHECK_EQ(c.h, H);
+    CHECK(strstr(got.data, "handout:Tomb\nHere lies \xc3\x89lan") != NULL);
+    CHECK_EQ(strcmp(got.data, want.data), 0);
+
+    bb_free(&got);
+    bb_free(&want);
+    bb_free(&stream);
+    wire_enc_free(&e);
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
