@@ -17,7 +17,8 @@ figures here are btrfs on an SSD.
 key handling (a picker opening, a trip, an undo trim never shows in them), and bytes sent
 to the phones are not published. A zone's call count marked `+` is a floor: that
 scenario filled the trace (200,000 events), though every zone is still sampled, since each
-loop runs the whole script. The help page is 14% dearer than before (41 to 46µs, A/B'd):
+loop runs the whole script. The help page is 14% dearer than before (41 to 46µs, A/B'd side by side; the table's run
+read it higher):
 a key wider than its column is measured on every line to give it one of its own.
 
 ## The budget
@@ -31,8 +32,8 @@ Two properties matter more than any single figure:
 
 - **Cost follows the window, not the map.** A 200×200 map costs the same at 80×24 as a
   40×25 one does. Every drawing path culls to the visible tiles first, creatures included:
-  500 on a 200×200 map draw in 40µs against 29µs for 24 (they drew in 85µs before the
-  creatures were culled, A/B'd; the 11µs left is a handful of walks of the whole list --
+  500 on a 200×200 map draw in 41µs against 33µs for 24 (they drew in 85µs before the
+  creatures were culled, A/B'd; the 8µs left is a handful of walks of the whole list --
   `floor.pick`, `turn.status`, the panel, the cursor's size -- each a microsecond or two).
 - **Idle costs nothing.** `poll()` blocks until there is input; there is no frame loop.
 
@@ -361,7 +362,7 @@ frame whether any patch is live; a map with none takes the path it always took, 
 32.2µs: one byte load and a mask a visible tile, writing the dim color into cells that were
 being written anyway. The players' frame over fog is cheaper to draw than the GM's -- a hidden
 tile is a `continue` with no writes, and walls between hidden tiles are never resolved -- so
-`play, fog all dark, 4 watch` at 67.3µs is the second draw the plan priced in, less than the
+`play, fog all dark, 4 watch` at 60.3µs is the second draw the plan priced in, less than the
 differing-frame row pays for a note. `fog.paint` is 0.2µs a brush stroke, a handful of 20-byte
 undo ops. `fog.reveal`, a `g r` or `g h`, is 6.1µs: a footprint of undo ops, or a
 patch's extent for `g R`. `fog.blank`, the pass that takes the dark back out of a range wash or a trail in the
@@ -603,10 +604,10 @@ the far end, which redraws the window; that is the cost of a jump, not of the li
 culls to its box, so `build, one floor` draws fewer cells than the whole map (12 cells and
 176 bytes a frame, against 209). When the players are on a floor the GM is not showing,
 their frame cannot be copied from the GM's and is drawn again through its own camera:
-`play, other floor, 4 watchers` is 78.4µs against 52.3µs for `play, 4 watchers`, the same
+`play, other floor, 4 watchers` is 57.1µs against 52.0µs for `play, 4 watchers`, the same
 cost as any frame that differs (`play, 4 watchers, differing`). `floor.pick` runs after
-every key and before every draw to keep the players' floor current: 0.1µs, a walk of the
-creatures. `floor.switch` is under a microsecond.
+every key and before every draw to keep the players' floor current: 0.1µs for 24
+creatures, 1.3µs for 500, a walk of them all. `floor.switch` is under a microsecond.
 
 **A hidden creature costs the players' frame its copy.** With anything hidden the players'
 frame is drawn rather than copied from the GM's, so `play, hidden, 4 watchers` is 79.5µs against
@@ -629,7 +630,7 @@ GM's message does.** Putting a handout up is one `'H'` record to each client
 (`handout.send`, 16µs for four watchers); the frames around it are ordinary
 (`play, handout typed, 4 watch`, 59µs; mostly typing the `:handout say` line). The same commits made four rows 15-20% cheaper --
 `play, fog all dark, 4 watch` 75.5µs to 62.9µs, fog sight 87.3 to 69.7, soft edge 82.7 to 67.3,
-floors split 80.1 to 66.3 -- A/B'd against 3c7cf55 over three runs each. It is the
+other floor 80.1 to 66.3 -- A/B'd against 3c7cf55 over three runs each. It is the
 review fix for the players' status line: it was cut short by the width of the GM's
 message even where that message is not drawn for the players, so every key that changed
 the GM's message changed the players' frame too, and was encoded and sent (216 bytes a

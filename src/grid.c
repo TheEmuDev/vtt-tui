@@ -113,18 +113,6 @@ void grid_tile_interior(const GridView *g, int tx, int ty, int *sx, int *sy)
     *sy += 1;
 }
 
-void grid_visible_squares(const GridView *g, int *x0, int *y0, int *x1, int *y1)
-{
-    int pw = zoom_pw(g->zoom), ph = zoom_ph(g->zoom);
-    /* Floor division: the camera sits left of or above the map when the map
-     * is smaller than the view. */
-    int cx = g->cam_x, cy = g->cam_y;
-    *x0 = (cx >= 0 ? cx / pw : -((-cx + pw - 1) / pw)) - 1;
-    *y0 = (cy >= 0 ? cy / ph : -((-cy + ph - 1) / ph)) - 1;
-    *x1 = (cx + g->view.w) / pw + 1;
-    *y1 = (cy + g->view.h) / ph + 1;
-}
-
 void grid_bounds(const GridView *g, const Map *m, int *x0, int *y0, int *x1, int *y1)
 {
     *x0 = 0; *y0 = 0; *x1 = m->w - 1; *y1 = m->h - 1;

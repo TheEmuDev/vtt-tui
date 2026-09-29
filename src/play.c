@@ -652,8 +652,12 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
      * you cannot see the extent of is one you will move by accident. While
      * the box is open the ring is live, so the box shows what it has caught
      * before you commit to it rather than after. */
+    /* A creature wholly outside the squares shown, with one to spare (its
+     * ring, turn bars and a fifth marker reach the boundary line round it),
+     * draws nothing: skipping it makes the cost follow the window. */
     int vx0, vy0, vx1, vy1;
-    grid_visible_squares(&e->view, &vx0, &vy0, &vx1, &vy1);
+    grid_visible_tiles(&e->view, m, &vx0, &vy0, &vx1, &vy1);
+    vx0--; vy0--; vx1++; vy1++;
 #define OFF_SCREEN(t) ((t)->x > vx1 || (t)->y > vy1 || (t)->x + (t)->size - 1 < vx0 || (t)->y + (t)->size - 1 < vy0)
     for (int i = 0; i < m->tokens.n; i++) {
         /* Deliberately not wrapped in a zone: it is one rectangle test per

@@ -4525,9 +4525,13 @@ void test_cull(void)
     grid_center_on(&e.view, m, e.cx, e.cy);
 
     CASE("a creature off the window draws nothing, one on its edge still draws");
-    for (int zoom = 0; zoom < 2; zoom++) {
+    for (int zoom = 0; zoom < ZOOM_COUNT; zoom++) {
         e.view.zoom = zoom;
         grid_center_on(&e.view, m, e.cx, e.cy);
+        /* On a square's edge, so the boundary line beyond the last square
+         * shown is on screen: what the one square to spare is for. */
+        e.view.cam_x -= e.view.cam_x % zoom_pw(zoom);
+        e.view.cam_y -= e.view.cam_y % zoom_ph(zoom);
         ByteBuf none;
         bb_init(&none, 32768);
         rnd_begin(&r);
@@ -4536,42 +4540,47 @@ void test_cull(void)
         bb_putc(&none, '\0');
 
         int vx0, vy0, vx1, vy1, culled = 0, drawn = 0, wrong = 0;
-        grid_visible_squares(&e.view, &vx0, &vy0, &vx1, &vy1);
+        grid_visible_tiles(&e.view, m, &vx0, &vy0, &vx1, &vy1);
+        vx0--; vy0--; vx1++; vy1++;                        /* as play_draw does */
         for (int size = 1; size <= 3; size += 2)
             for (int y = vy0 - 3; y <= vy1 + 3; y++)
                 for (int x = vx0 - 3; x <= vx1 + 3; x++) {
                     int edge = x <= vx0 + 1 || x >= vx1 - 1 || y <= vy0 + 1 || y >= vy1 - 1;
                     if (!edge || x < 0 || y < 0 || x + size > 60 || y + size > 40) continue;
+                    /* Everything that reaches past a creature's squares: its
+                     * turn bars, and a fifth marker on the row below. */
                     Token t;
                     memset(&t, 0, sizeof t);
                     t.x = (int16_t)x; t.y = (int16_t)y; t.size = (uint8_t)size; t.kind = TOKEN_ENEMY;
+                    t.turn = TURN_IN | TURN_ACTING;
                     str_lcpy(t.label, "Wide Goblin", sizeof t.label);
-                    token_add_status(&t, 0, "Poisoned");
+                    for (int k = 0; k < TOKEN_STATUS_MAX; k++) token_add_status(&t, k, "Marked");
                     int off = x > vx1 || y > vy1 || x + size - 1 < vx0 || y + size - 1 < vy0;
-                    ByteBuf one;
-                    bb_init(&one, 32768);
+                    /* The frame with it on the map, and the frame without it
+                     * with it drawn anyway, uncut, under play_draw's clip:
+                     * the cull must never change the picture. */
+                    ByteBuf with, drawn_anyway;
+                    bb_init(&with, 32768);
+                    bb_init(&drawn_anyway, 32768);
+                    tokens_add(&m->tokens, t);
                     rnd_begin(&r);
                     play_draw(&r, m, &e, &p, &THEME_DARK, 0, 0);
-                    if (off) {
-                        /* What play_draw skipped, drawn anyway under its clip:
-                         * it must leave the frame as it was. */
-                        ClipRect saved = grid_clip_push(&r, &e.view, m);
-                        grid_draw_token(&r, &e.view, &t, &THEME_DARK, 0, 0);
-                        grid_draw_token_status(&r, &e.view, &t, &THEME_DARK, 0);
-                        rnd_clip_restore(&r, saved);
-                    } else {
-                        tokens_add(&m->tokens, t);
-                        rnd_begin(&r);
-                        play_draw(&r, m, &e, &p, &THEME_DARK, 0, 0);
-                        m->tokens.n = 0;
-                    }
-                    rnd_dump(&r, &one);
-                    bb_putc(&one, '\0');
-                    int same = !strcmp(one.data, none.data);
-                    if (off && !same) wrong++;       /* it would have drawn: the cull hid it */
+                    rnd_dump(&r, &with);
+                    bb_putc(&with, '\0');
+                    m->tokens.n = 0;
+                    rnd_begin(&r);
+                    play_draw(&r, m, &e, &p, &THEME_DARK, 0, 0);
+                    ClipRect saved = grid_clip_push(&r, &e.view, m);
+                    grid_draw_token(&r, &e.view, &t, &THEME_DARK, 0, 0);
+                    grid_draw_token_status(&r, &e.view, &t, &THEME_DARK, 0);
+                    rnd_clip_restore(&r, saved);
+                    rnd_dump(&r, &drawn_anyway);
+                    bb_putc(&drawn_anyway, '\0');
+                    if (strcmp(with.data, drawn_anyway.data)) wrong++;
                     culled += off;
-                    drawn  += !off && !same;
-                    bb_free(&one);
+                    drawn  += strcmp(with.data, none.data) != 0;
+                    bb_free(&with);
+                    bb_free(&drawn_anyway);
                 }
         CHECK_EQ(wrong, 0);
         CHECK(culled > 0);
