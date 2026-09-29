@@ -184,7 +184,7 @@ Organization:
   the room language and an if-chain of reads. **Fixed**: app_browser.c and app_build.c (app.c 1,394
   lines), corridor.c and app_ctl_marked.c (app_ctl.c 1,330).
 - CLAUDE.md's file table is stale in several rows (app_priv.h, the character row, tests)
-  and has no rows for util.c, ui.c, main.c, map.c.
+  and has no rows for util.c, ui.c, main.c, map.c. **Fixed**: every source file has a row.
 - The watch list's square/region parsers are still two copies.
 - **Open.**
 
