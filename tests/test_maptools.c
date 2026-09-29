@@ -572,3 +572,100 @@ void test_map_diag(void)
 
     sandbox_leave(&sb);
 }
+
+/* A version 12 map with one damaged line: what the loader says, and what it
+ * keeps. The base is a 6x4 room; `tail` goes after the tiles. */
+typedef struct { const char *code; int n; } Found;
+
+static void found_code(void *ctx, int line, int col, const char *code,
+                       const char *slug, const char *msg)
+{
+    Found *f = ctx;
+    (void)line; (void)col; (void)slug; (void)msg;
+    if (!strcmp(code, f->code)) f->n++;
+}
+
+static int damaged(const char *dir, const char *tail, const char *code, int *nlinks, int *nscenes, int *round)
+{
+    char path[600], err[160];
+    snprintf(path, sizeof path, "%s/damaged.vtt", dir);
+    FILE *f = fopen(path, "w");
+    if (!f) return -1;
+    fprintf(f, "VTT 12\nname D\nsize 6 4\ntiles\n......\n......\n......\n......\n%s", tail);
+    fclose(f);
+    Found fd = { code, 0 };
+    Map *m = mapio_load_diag(path, err, sizeof err, found_code, &fd);
+    unlink(path);
+    if (!m) return -1;
+    if (nlinks) *nlinks = m->nlinks;
+    if (nscenes) *nscenes = m->nscenes;
+    if (round) *round = m->nscenes ? m->scenes[0].round : -1;
+    map_free(m);
+    return fd.n;
+}
+
+void test_loader_damage(void)
+{
+    Sandbox sb = sandbox_enter("damage");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    int nl = -1, ns = -1, rd = -1;
+
+    CASE("a link to another map that does not read is dropped, and said");
+    static const char *const bad_links[] = {
+        "link 1 stairs 1 0 0 to town \"Gate\"\n",              /* the map unquoted */
+        "link 1 stairs 1 0 0 to \"town\" \"Gate\" oneway\n",  /* a word it does not take */
+        "link 1 stairs 1 0 0 to \"town\" \"\"\n",             /* no place */
+        "link 1 stairs 1 0 0 to \"to/wn\" \"Gate\"\n",        /* a path, not a name */
+        "link 1 stairs 1 0 0 to \"town\n",                      /* the quote never closes */
+        "link 1 stairs 9 0 0 to \"town\" \"Gate\"\n",         /* too big */
+        "link 0 stairs 1 0 0 to \"town\" \"Gate\"\n",         /* no number 0 */
+        "link 1 elevator 1 0 0 to \"town\" \"Gate\"\n",       /* no such kind */
+    };
+    for (size_t i = 0; i < sizeof bad_links / sizeof bad_links[0]; i++) {
+        CHECK_EQ(damaged(sb.dir, bad_links[i], "E014", &nl, NULL, NULL), 1);
+        CHECK_EQ(nl, 0);
+    }
+    CHECK_EQ(damaged(sb.dir, "link 1 stairs 1 0 0 to \"town\" \"Gate\" secret\n", "E014", &nl, NULL, NULL), 0);
+    CHECK_EQ(nl, 1);                                         /* the good one, for contrast */
+    CHECK_EQ(damaged(sb.dir, "link 1 stairs 1 0 0 to \"town\" \"Gate\"\n"
+                             "link 1 ladder 1 2 2 to \"crypt\" \"Hall\"\n", "E014", &nl, NULL, NULL), 1);
+    CHECK_EQ(nl, 1);                                         /* a number used twice: the first stays */
+
+    CASE("a scene cut short, boxed off the map or upside down, or a seventeenth, is dropped");
+    CHECK_EQ(damaged(sb.dir, "scene \"A\"\ntoken enemy 1 1 1 \"G\"\nscene \"B\"\nendscene\n", "W025", NULL, &ns, NULL), 1);
+    CHECK_EQ(ns, 1);                                         /* A went; B stayed */
+    CHECK_EQ(damaged(sb.dir, "scene \"A\" 4 3 1 1\nendscene\n", "W025", NULL, &ns, NULL), 1);
+    CHECK_EQ(ns, 0);
+    CHECK_EQ(damaged(sb.dir, "scene \"A\" 0 0 9 9\nendscene\n", "W025", NULL, &ns, NULL), 1);
+    CHECK_EQ(ns, 0);
+    CHECK_EQ(damaged(sb.dir, "scene \"A\" 0 0\nendscene\n", "W025", NULL, &ns, NULL), 1);
+    CHECK_EQ(ns, 0);
+    CHECK_EQ(damaged(sb.dir, "scene \"A\"\ntoken enemy 1 1 1 \"G\"\n", "W025", NULL, &ns, NULL), 1);
+    CHECK_EQ(ns, 0);                                         /* the file ends inside it */
+    {
+        char many[17 * 32] = "";
+        for (int i = 0; i < 17; i++) {
+            size_t l = strlen(many);
+            snprintf(many + l, sizeof many - l, "scene \"S%d\"\nendscene\n", i);
+        }
+        CHECK_EQ(damaged(sb.dir, many, "W025", NULL, &ns, NULL), 1);
+        CHECK_EQ(ns, MAP_SCENES_MAX);
+    }
+
+    CASE("a scene's round out of range is clamped, and said; with nobody in the order it is none");
+    #define FIGHTER "token enemy 1 1 1 \"G\"\ntokenturn 5\n"
+    CHECK_EQ(damaged(sb.dir, "scene \"A\"\n" FIGHTER "round 99999\nendscene\n", "W020", NULL, &ns, &rd), 1);
+    CHECK_EQ(ns, 1);
+    CHECK_EQ(rd, INT16_MAX);
+    CHECK_EQ(damaged(sb.dir, "scene \"A\"\n" FIGHTER "round -3\nendscene\n", "W020", NULL, &ns, &rd), 1);
+    CHECK_EQ(rd, 0);
+    CHECK_EQ(damaged(sb.dir, "scene \"A\"\n" FIGHTER "round 3\nendscene\n", "W020", NULL, &ns, &rd), 0);
+    CHECK_EQ(rd, 3);
+    CHECK_EQ(damaged(sb.dir, "scene \"A\"\ntoken enemy 1 1 1 \"G\"\nround 3\nendscene\n", "W020", NULL, &ns, &rd), 0);
+    CHECK_EQ(rd, 0);
+    #undef FIGHTER
+
+    sandbox_leave(&sb);
+}
+

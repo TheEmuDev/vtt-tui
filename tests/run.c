@@ -105,6 +105,7 @@ int main(void)
         { "statusdraw", test_status_draw },
         { "cull",       test_cull },
         { "watchaddr",  test_watch_target },
+        { "damage",     test_loader_damage },
         { "clearstatus", test_clear_status_keys },
         { "trail",    test_trail },
         { "traildraw", test_trail_draw },

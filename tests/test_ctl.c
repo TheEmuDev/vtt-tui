@@ -142,6 +142,27 @@ void test_ctl(void)
     CHECK(app_ctl_busy(&a) != NULL && strstr(app_ctl_busy(&a), "part way"));
     press(&a, "\x1b");
     CHECK(app_ctl_busy(&a) == NULL);
+    press(&a, "sn");                                        /* a note's prompt */
+    CHECK_EQ(a.modal, MODAL_PROMPT);
+    CHECK(app_ctl_busy(&a) != NULL && strstr(app_ctl_busy(&a), "prompt"));
+    t = ctl_ask(&a, "tile A1 water");
+    CHECK(t && !strncmp(t, "busy: the GM is answering a prompt", 34));
+    free(t);
+    t = ctl_ask(&a, "status");                               /* a read is answered */
+    CHECK(t && !strncmp(t, "ok\n", 3));
+    free(t);
+    press(&a, "\x1b");
+    CHECK(app_ctl_busy(&a) == NULL);
+    a.modal = MODAL_PICKER;                                  /* a list to choose from */
+    CHECK(app_ctl_busy(&a) != NULL && strstr(app_ctl_busy(&a), "choosing from a list"));
+    a.modal = MODAL_NONE;
+    a.modal = MODAL_MESSAGE;                                 /* a message on the screen */
+    CHECK(app_ctl_busy(&a) != NULL && strstr(app_ctl_busy(&a), "a question is open"));
+    a.modal = MODAL_NONE;
+    press(&a, "w l");                                        /* the pen down, a wall laid */
+    CHECK(app_ctl_busy(&a) != NULL && strstr(app_ctl_busy(&a), "laying wall"));
+    press(&a, " \x1b");
+    CHECK(app_ctl_busy(&a) == NULL);
     Key f2 = { KEY_F2, 0, 0 };
     app_key(&a, f2);
     CHECK_EQ(a.screen, SCREEN_PLAY);
