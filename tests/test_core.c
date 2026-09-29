@@ -510,6 +510,16 @@ static void write_file(const char *path, const char *text)
     if (f) { fputs(text, f); fclose(f); }
 }
 
+typedef struct { const char *code; int n; } CodeCount;
+
+static void count_code(void *ctx, int line, int col, const char *code,
+                       const char *slug, const char *msg)
+{
+    CodeCount *c = ctx;
+    (void)line; (void)col; (void)slug; (void)msg;
+    if (!strcmp(code, c->code)) c->n++;
+}
+
 void test_mapio(void)
 {
     char path[] = "/tmp/vtt-test-XXXXXX";
@@ -603,8 +613,10 @@ void test_mapio(void)
     {
         FILE *cf = fopen(path, "w");
         if (cf) { fputs("VTT 2\nname \r\r\x01\r\nsize 2 2\ntiles\n..\n..\n", cf); fclose(cf); }
-        Map *cm = mapio_load(path, err, sizeof err);
+        CodeCount w027 = { "W027", 0 };
+        Map *cm = mapio_load_diag(path, err, sizeof err, count_code, &w027);
         CHECK(cm != NULL);
+        CHECK_EQ(w027.n, 1);
         if (cm) { CHECK_EQ(strcmp(cm->name, "untitled"), 0); map_free(cm); }
     }
 
@@ -1471,7 +1483,7 @@ void test_golden(void)
     }
 
     /* The GM's own screens, never sent to the players and so never seen
-     * in their frame: a question, the : line half typed, play mode's box. */
+     * in their frame: a question, the : line half typed. */
     CASE("the unsaved-changes question on :q");
     {
         static const char *const seg[] = { "x", ":q\r" };
@@ -1482,12 +1494,6 @@ void test_golden(void)
     {
         static const char *const seg[] = { "\x1b[12~", ":roll 2d6+" };
         golden("command-line", 72, 20, FIXTURE, seg, 2, 0);
-    }
-
-    CASE("play mode's selection box");
-    {
-        static const char *const seg[] = { "\x1b[12~", "gg0jjlv", "jjlll" };
-        golden("play-box", 72, 20, FIXTURE, seg, 3, 0);
     }
 
     CASE("a narrow terminal still lays out");
@@ -2153,15 +2159,6 @@ void test_unique_label(void)
 
 /* The recovery autosave: a copy beside the file once changes go quiet,
  * gone with a save or a discard, offered back after a crash. */
-typedef struct { const char *code; int n; } CodeCount;
-
-static void count_code(void *ctx, int line, int col, const char *code,
-                       const char *slug, const char *msg)
-{
-    CodeCount *c = ctx;
-    (void)line; (void)col; (void)slug; (void)msg;
-    if (!strcmp(code, c->code)) c->n++;
-}
 
 void test_autosave(void)
 {

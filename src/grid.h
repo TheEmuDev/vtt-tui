@@ -113,6 +113,10 @@ void grid_draw_corner_cursor(Renderer *r, const GridView *g, int cx, int cy,
 /* Draws a token: players as circles, enemies as squares sitting inside the
  * grid square. Declared here rather than in token.h because it needs the
  * view transform, and token.h sits below map.h in the include order. */
+/* Creatures drawn since the start, any way: the tests' proof that play_draw
+ * skips the ones off the window. An increment, nothing more. */
+extern unsigned long grid_tokens_drawn;
+
 void grid_draw_token(Renderer *r, const GridView *g, const Token *t,
                      const Theme *th, int selected, int ascii);
 

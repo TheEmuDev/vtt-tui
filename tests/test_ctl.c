@@ -154,13 +154,19 @@ void test_ctl(void)
     press(&a, "\x1b");
     CHECK(app_ctl_busy(&a) == NULL);
     a.modal = MODAL_PICKER;                                  /* a list to choose from */
-    CHECK(app_ctl_busy(&a) != NULL && strstr(app_ctl_busy(&a), "choosing from a list"));
+    t = ctl_ask(&a, "tile A1 water");
+    CHECK(t && !strncmp(t, "busy: the GM is choosing from a list", 36));
+    free(t);
     a.modal = MODAL_NONE;
     a.modal = MODAL_MESSAGE;                                 /* a message on the screen */
-    CHECK(app_ctl_busy(&a) != NULL && strstr(app_ctl_busy(&a), "a question is open"));
+    t = ctl_ask(&a, "tile A1 water");
+    CHECK(t && !strncmp(t, "busy: a question is open", 24));
+    free(t);
     a.modal = MODAL_NONE;
     press(&a, "w l");                                        /* the pen down, a wall laid */
-    CHECK(app_ctl_busy(&a) != NULL && strstr(app_ctl_busy(&a), "laying wall"));
+    t = ctl_ask(&a, "tile A1 water");
+    CHECK(t && !strncmp(t, "busy: the GM is laying wall", 27));
+    free(t);
     press(&a, " \x1b");
     CHECK(app_ctl_busy(&a) == NULL);
     Key f2 = { KEY_F2, 0, 0 };

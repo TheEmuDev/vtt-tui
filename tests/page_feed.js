@@ -3,7 +3,7 @@
 // can compare it with the C decoder: the page is a third decoder and would
 // otherwise only ever be checked by eye.
 //
-//   node tests/page_feed.js web/index.html STREAM
+//   node tests/page_feed.js PAGE STREAM      (PAGE: the page as served)
 //
 // Prints "WxH", then a line per row: each cell as glyph.fg.bg.attr (colors
 // as RRGGBB through the palette), then "handout:" and the last handout.

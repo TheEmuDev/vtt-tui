@@ -31,7 +31,7 @@ maintainer; this file is what survives a context reset, so keep it true.
 
 ```
 make            release build (-O2), profiler compiled in
-make test       ASan+UBSan build, unit + golden-frame tests (VTT_UPDATE_GOLDEN=1 regenerates)
+make test       ASan+UBSan build, unit + golden-frame tests (VTT_UPDATE_GOLDEN=1 regenerates; VTT_REQUIRE_NODE=1 fails rather than skips the page decoder test)
 make perf       one perf run; publish the per-row MEDIAN of three quiet runs (tools/median.py a b c)
 ./vtt map.vtt --dump-map [--region B2:K12]      the whole map as text in the file's alphabet
 ./vtt map.vtt --describe [--json]    rooms (rooms_build: every door splits), doors, contents

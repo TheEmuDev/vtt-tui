@@ -738,6 +738,7 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
 
     char   line[MAP_MAX_DIM + 64];
     int    version = 0, w = 0, h = 0, zoom = 1;
+    int    name_line = 0;
     char   name[MAP_NAME_MAX] = "untitled";
     double scale = MAP_SCALE_DEFAULT;
     int    metric = MAP_METRIC_DEFAULT;
@@ -760,7 +761,7 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
     int  body_line  = ld->line;
     int  zoom_line = 0, scale_line = 0, ruleset_line = 0;
     while (read_line(ld, line, sizeof line) >= 0) {
-        if (!strncmp(line, "name ", 5))       str_lcpy(name, line + 5, sizeof name);
+        if (!strncmp(line, "name ", 5))       { str_lcpy(name, line + 5, sizeof name); name_line = ld->line; }
         else if (!strncmp(line, "size ", 5))  sscanf(line, "size %d %d", &w, &h);
         else if (!strncmp(line, "zoom ", 5))  { sscanf(line, "zoom %d", &zoom); zoom_line = ld->line; }
         else if (!strncmp(line, "scale ", 6)) { sscanf(line, "scale %lf", &scale); scale_line = ld->line; }
@@ -786,6 +787,8 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
         size_t k = 0;
         for (size_t j = 0; name[j]; j++)
             if ((unsigned char)name[j] >= 0x20 && name[j] != 0x7f) name[k++] = name[j];
+        if (name[k]) diag(ld, name_line, -1, "W027", "name-cleaned",
+                          "control characters taken out of the map's name%s", k ? "" : ": it is untitled");
         name[k] = '\0';
         if (!k) str_lcpy(name, "untitled", sizeof name);
     }

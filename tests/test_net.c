@@ -1771,9 +1771,58 @@ void test_watch_target(void)
  * wrote -- a full frame of a real map in play mode, a diff after some keys,
  * a handout -- and must end with the cells the C decoder ends with. Skipped
  * where there is no node. */
+extern const char   WEBPAGE[];
+extern const size_t WEBPAGE_LEN;
+
+/* tools/embed.sh's cut, in C: block comments out, then every line left
+ * with nothing but white space. */
+static char *embed_cut(const char *html)
+{
+    size_t n = strlen(html);
+    char *nc = malloc(n + 1), *out = malloc(n + 1);
+    size_t k = 0, o = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (html[i] == '/' && html[i + 1] == '*') {
+            const char *end = strstr(html + i + 2, "*/");
+            if (!end) break;
+            i = (size_t)(end - html) + 1;
+            continue;
+        }
+        nc[k++] = html[i];
+    }
+    nc[k] = '\0';
+    for (char *line = nc; *line; ) {
+        char *nl = strchr(line, '\n');
+        size_t len = nl ? (size_t)(nl - line) + 1 : strlen(line);
+        int blank = 1;
+        for (size_t j = 0; j < len; j++) if (!isspace((unsigned char)line[j])) blank = 0;
+        if (!blank) { memcpy(out + o, line, len); o += len; }
+        line += len;
+    }
+    out[o] = '\0';
+    free(nc);
+    return out;
+}
+
 void test_page_feed(void)
 {
+    CASE("the page served is web/index.html as tools/embed.sh cuts it: webpage.c is in step");
+    {
+        char *html = slurp("web/index.html");
+        CHECK(html != NULL);
+        if (html) {
+            char *cut = embed_cut(html);
+            CHECK_EQ(strlen(cut), WEBPAGE_LEN);
+            CHECK(strcmp(cut, WEBPAGE) == 0);       /* else: run tools/embed.sh */
+            free(cut);
+            free(html);
+        }
+    }
+
     if (system("command -v node >/dev/null 2>&1") != 0) {
+        /* VTT_REQUIRE_NODE=1 makes a missing node a failure, for a run that
+         * must not quietly lose this. */
+        CHECK(getenv("VTT_REQUIRE_NODE") == NULL);
         printf("  (skipped: no node to run the page's decoder)\n");
         return;
     }
@@ -1825,7 +1874,11 @@ void test_page_feed(void)
     size_t hn = wire_handout(ho, text, strlen(text));
     bb_put(&stream, ho, hn);
 
-    char spath[640], cmd[1600];
+    /* The page as the binary serves it, not the source beside it. */
+    char page[640], spath[640], cmd[1600];
+    snprintf(page, sizeof page, "%s/page.html", sb.dir);
+    FILE *pg = fopen(page, "w");
+    if (pg) { fwrite(WEBPAGE, 1, WEBPAGE_LEN, pg); fclose(pg); }
     snprintf(spath, sizeof spath, "%s/stream.bin", sb.dir);
     FILE *f = fopen(spath, "wb");
     if (f) { fwrite(stream.data, 1, stream.len, f); fclose(f); }
@@ -1857,7 +1910,7 @@ void test_page_feed(void)
     bb_putc(&want, '\0');
 
     CASE("the page's feed() decodes the stream to the cells the C decoder does");
-    snprintf(cmd, sizeof cmd, "node tests/page_feed.js web/index.html '%s'", spath);
+    snprintf(cmd, sizeof cmd, "node tests/page_feed.js '%s' '%s'", page, spath);
     FILE *pp = popen(cmd, "r");
     CHECK(pp != NULL);
     ByteBuf got;
@@ -1883,13 +1936,16 @@ void test_page_feed(void)
     sandbox_leave(&sb);
 }
 
-/* Read what is there, briefly; 0 when the other end has closed. */
-static int drain(int fd, char *buf, size_t cap)
+/* Read what is there, waiting up to ms for it; 0 when the other end has
+ * closed, -1 when nothing came. */
+static int drain_ms(int fd, char *buf, size_t cap, int ms)
 {
     struct pollfd p = { fd, POLLIN, 0 };
-    if (poll(&p, 1, 20) <= 0) return -1;
+    if (poll(&p, 1, ms) <= 0) return -1;
     return (int)read(fd, buf, cap);
 }
+
+static int drain(int fd, char *buf, size_t cap) { return drain_ms(fd, buf, cap, 20); }
 
 /* The server's edges: what it refuses and what it drops, each checked by
  * what the client sees and by the server's own count. */
@@ -1992,9 +2048,13 @@ void test_net_edges(void)
     {
         uint32_t before = n.dropped;
         net_set_live(&n, 1);
-        /* w[7] never reads; the others are read now and then. Every frame
-         * changes every cell, so each is a whole screen's worth. */
-        for (int f = 0; f < 4000 && n.dropped == before; f++) {
+        /* w[7] never reads; the others are read as they go. Every frame
+         * changes every cell, so each is a whole screen's worth. The queue
+         * overflows only once the kernel's buffers between the two are full,
+         * and those are the kernel's size (megabytes): the bound is bytes
+         * sent, far past any of them, not a count of frames. */
+        uint64_t start = n.total_bytes;
+        for (int f = 0; n.dropped == before && n.total_bytes - start < (uint64_t)512 << 20; f++) {
             rnd_begin(&r);
             char line[61];
             for (int y = 0; y < 16; y++) {
@@ -2006,7 +2066,7 @@ void test_net_edges(void)
             rnd_flush(&r, NULL);
             net_frame_end(&n, now);
             net_pump(&n, now);
-            for (int k = 0; k < NET_MAX_CLIENTS - 1; k++) while (drain(w[k], buf, sizeof buf) > 0) { }
+            for (int k = 0; k < NET_MAX_CLIENTS - 1; k++) while (drain_ms(w[k], buf, sizeof buf, 0) > 0) { }
         }
         CHECK_EQ(n.dropped, before + 1);
         CHECK_EQ(n.ncl, NET_MAX_CLIENTS - 1);

@@ -281,10 +281,13 @@ static int in_ellipse(int i, int j, int w, int h)
 
 /* `base` is the fill; a silhouette passes its own neutral one and nothing
  * else of the creature's -- no ring, no turn bars, no name. */
+unsigned long grid_tokens_drawn;
+
 static void token_draw(Renderer *r, const GridView *g, const Token *t,
                        const Theme *th, int selected, int ascii, uint32_t base,
                        int silhouette)
 {
+    grid_tokens_drawn++;
     Rect a;
     grid_token_area(g, t->x, t->y, t->size, &a);
     if (a.w < 1 || a.h < 1) return;

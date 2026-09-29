@@ -4548,7 +4548,7 @@ void test_cull(void)
         rnd_dump(&r, &none);
         bb_putc(&none, '\0');
 
-        int vx0, vy0, vx1, vy1, culled = 0, drawn = 0, wrong = 0;
+        int vx0, vy0, vx1, vy1, culled = 0, drawn = 0, wrong = 0, skipped_not = 0;
         grid_visible_tiles(&e.view, m, &vx0, &vy0, &vx1, &vy1);
         vx0--; vy0--; vx1++; vy1++;                        /* as play_draw does */
         for (int size = 1; size <= 3; size += 2)
@@ -4573,7 +4573,11 @@ void test_cull(void)
                     bb_init(&drawn_anyway, 32768);
                     tokens_add(&m->tokens, t);
                     rnd_begin(&r);
+                    unsigned long drew = grid_tokens_drawn;
                     play_draw(&r, m, &e, &p, &THEME_DARK, 0, 0);
+                    drew = grid_tokens_drawn - drew;
+                    if (off && drew) skipped_not++;  /* off the window, and drawn */
+                    if (!off && !drew) wrong++;      /* on it, and not */
                     rnd_dump(&r, &with);
                     bb_putc(&with, '\0');
                     m->tokens.n = 0;
@@ -4592,6 +4596,7 @@ void test_cull(void)
                     bb_free(&drawn_anyway);
                 }
         CHECK_EQ(wrong, 0);
+        CHECK_EQ(skipped_not, 0);                        /* the cull happens */
         CHECK(culled > 0);
         CHECK(drawn > 0);
         bb_free(&none);
@@ -4599,5 +4604,46 @@ void test_cull(void)
 
     rnd_free(&r);
     map_free(m);
+}
+
+/* Play mode's box is a tint, which no text dump shows: the cells under it
+ * take the selection background, and only while it is open. */
+void test_play_box(void)
+{
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 72, 20);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, "tests/fixtures/two-rooms.vtt"), 0);
+    press(&a, "\x1b[12~");
+    a.ed.cx = 2; a.ed.cy = 2;
+
+    CASE("v's box tints what it covers, and nothing once closed");
+    press(&a, "vjjlll");
+    CHECK(a.play.visual);
+    rnd_begin(&r);
+    app_draw(&a);
+    int inside = 0, outside = 0;
+    for (int y = 0; y < r.h; y++)
+        for (int x = 0; x < r.w; x++) {
+            if (r.back[y * r.w + x].bg != a.th->sel_bg) continue;
+            int tx, ty;
+            if (grid_screen_to_tile(&a.ed.view, a.map, x, y, &tx, &ty) &&
+                tx >= 2 && tx <= 5 && ty >= 2 && ty <= 4) inside++;
+            else outside++;
+        }
+    CHECK(inside > 0);
+    CHECK_EQ(outside, 0);
+    press(&a, "\x1b");
+    CHECK(!a.play.visual);
+    rnd_begin(&r);
+    app_draw(&a);
+    int left = 0;
+    for (int i = 0; i < r.w * r.h; i++) left += r.back[i].bg == a.th->sel_bg;
+    CHECK_EQ(left, 0);
+
+    app_free(&a);
+    rnd_free(&r);
 }
 
