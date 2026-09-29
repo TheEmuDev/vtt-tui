@@ -1883,3 +1883,137 @@ void test_page_feed(void)
     sandbox_leave(&sb);
 }
 
+/* Read what is there, briefly; 0 when the other end has closed. */
+static int drain(int fd, char *buf, size_t cap)
+{
+    struct pollfd p = { fd, POLLIN, 0 };
+    if (poll(&p, 1, 20) <= 0) return -1;
+    return (int)read(fd, buf, cap);
+}
+
+/* The server's edges: what it refuses and what it drops, each checked by
+ * what the client sees and by the server's own count. */
+void test_net_edges(void)
+{
+    Renderer r;
+    rnd_init(&r);
+    rnd_resize(&r, 60, 16);
+    rnd_begin(&r);
+    draw_text(&r, 1, 1, "the table", -1, style(0xD8D8E0, 0x0E0E12, 0));
+    rnd_flush(&r, NULL);
+    Net n;
+    net_init(&n);
+    char err[128], buf[4096];
+    uint64_t now = 1000;
+    CHECK_EQ(net_start(&n, 0, &r, err, sizeof err), 0);
+
+    CASE("a path it does not serve is a 404");
+    {
+        int b = net_connect(n.port);
+        char req[200];
+        snprintf(req, sizeof req, "GET /nothing?k=%s HTTP/1.1\r\nHost: x\r\n\r\n", n.code);
+        CHECK_EQ((int)write(b, req, strlen(req)), (int)strlen(req));
+        char resp[512] = { 0 };
+        size_t rl = 0;
+        for (int i = 0; i < 20 && !strstr(resp, "not found"); i++) {
+            net_pump(&n, now);
+            int got = drain(b, resp + rl, sizeof resp - 1 - rl);
+            if (got > 0) rl += (size_t)got;
+        }
+        CHECK(strncmp(resp, "HTTP/1.1 404", 12) == 0);
+        close(b);
+        for (int i = 0; i < 5; i++) net_pump(&n, now);
+    }
+
+    CASE("a watcher from another machine with the wrong code is closed");
+    {
+        int b = net_connect(n.port);
+        net_pump(&n, now);                                 /* accepted */
+        for (int i = 0; i < n.ncl; i++) if (n.cl[i].kind == CL_NEW) n.cl[i].local = 0;
+        char hello[32];
+        snprintf(hello, sizeof hello, "VTT1%s\n", strcmp(n.code, "000000") ? "000000" : "111111");
+        CHECK_EQ((int)write(b, hello, strlen(hello)), (int)strlen(hello));
+        int got = -1;
+        for (int i = 0; i < 20 && got != 0; i++) { net_pump(&n, now); got = drain(b, buf, sizeof buf); }
+        CHECK_EQ(got, 0);                                  /* closed, nothing sent */
+        CHECK_EQ(net_clients(&n), 0);
+        close(b);
+    }
+
+    CASE("a browser's close frame closes it");
+    {
+        int s = netmsg_ws(&n, now);
+        CHECK(s >= 0);
+        CHECK_EQ(n.ncl, 1);
+        ws_send(s, 0x88, "", 0, 1);
+        for (int i = 0; i < 20 && n.ncl; i++) net_pump(&n, now);
+        CHECK_EQ(n.ncl, 0);
+        close(s);
+    }
+
+    CASE("with every slot taken, the ninth connection is turned away and the eight kept");
+    int w[NET_MAX_CLIENTS];
+    for (int k = 0; k < NET_MAX_CLIENTS; k++) {
+        w[k] = net_connect(n.port);
+        CHECK_EQ((int)write(w[k], "VTT1\n", 5), 5);
+        for (int i = 0; i < 5; i++) net_pump(&n, now);
+    }
+    CHECK_EQ(n.ncl, NET_MAX_CLIENTS);
+    {
+        int extra = net_connect(n.port);
+        int got = -1;
+        for (int i = 0; i < 20 && got != 0; i++) { net_pump(&n, now); got = drain(extra, buf, sizeof buf); }
+        CHECK_EQ(got, 0);
+        CHECK_EQ(n.ncl, NET_MAX_CLIENTS);
+        close(extra);
+    }
+
+    CASE("a handout over the cap is cut to it");
+    {
+        char big[WIRE_HANDOUT_MAX + 500];
+        memset(big, 'x', sizeof big);
+        net_set_handout(&n, big, sizeof big, now);
+        CHECK_EQ(n.handout_len, (size_t)WIRE_HANDOUT_MAX);
+        WireCatch c;
+        memset(&c, 0, sizeof c);
+        WireDec d;
+        wire_dec_init(&d, &WC_SINK, &c);
+        /* Its greeting's empty handout first, then this one. */
+        for (int i = 0; i < 40 && c.handout_n == 0; i++) {
+            net_pump(&n, now);
+            int got = drain(w[0], buf, sizeof buf);
+            if (got > 0) wire_dec_feed(&d, (uint8_t *)buf, (size_t)got);
+        }
+        CHECK_EQ(c.handout_n, (size_t)WIRE_HANDOUT_MAX);
+        net_set_handout(&n, "", 0, now);
+    }
+
+    CASE("a watcher that never reads is dropped once its queue is full, and counted; the rest are not");
+    {
+        uint32_t before = n.dropped;
+        net_set_live(&n, 1);
+        /* w[7] never reads; the others are read now and then. Every frame
+         * changes every cell, so each is a whole screen's worth. */
+        for (int f = 0; f < 4000 && n.dropped == before; f++) {
+            rnd_begin(&r);
+            char line[61];
+            for (int y = 0; y < 16; y++) {
+                for (int x = 0; x < 60; x++) line[x] = (char)('a' + (f + x + y) % 26);
+                line[60] = '\0';
+                draw_text(&r, 0, y, line, -1, style(0xD8D8E0, 0x0E0E12, 0));
+            }
+            net_frame_begin(&n);
+            rnd_flush(&r, NULL);
+            net_frame_end(&n, now);
+            net_pump(&n, now);
+            for (int k = 0; k < NET_MAX_CLIENTS - 1; k++) while (drain(w[k], buf, sizeof buf) > 0) { }
+        }
+        CHECK_EQ(n.dropped, before + 1);
+        CHECK_EQ(n.ncl, NET_MAX_CLIENTS - 1);
+    }
+
+    for (int k = 0; k < NET_MAX_CLIENTS; k++) close(w[k]);
+    net_stop(&n);
+    rnd_free(&r);
+}
+

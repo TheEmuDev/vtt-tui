@@ -107,6 +107,7 @@ int main(void)
         { "watchaddr",  test_watch_target },
         { "damage",     test_loader_damage },
         { "pagefeed",   test_page_feed },
+        { "netedges",   test_net_edges },
         { "clearstatus", test_clear_status_keys },
         { "trail",    test_trail },
         { "traildraw", test_trail_draw },
