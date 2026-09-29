@@ -85,6 +85,23 @@ void app_command_key(App *a, Key k);
 /* app_draw.c: the status message and its colored spans, as the bars draw it. */
 void app_draw_status_msg(App *a, int x, int y, int maxw);
 
+/* app.c: a message in a dialog; quitting, asking first about unsaved work. */
+void app_show_message(App *a, const char *title, const char *body);
+void app_request_quit(App *a);
+
+/* app_browser.c: the menu and the map browser, and the file operations they
+ * and the prompts ask for. */
+void app_menu_key(App *a, Key k);
+void app_browser_key(App *a, Key k);
+void app_refresh_entries(App *a);
+void app_rescan_keeping_place(App *a);
+void app_rename_map(App *a, const char *from, const char *typed);
+void app_duplicate_map(App *a, const char *from, const char *typed);
+void app_delete_map(App *a, const char *path);
+
+/* app_build.c: build mode's keys (wall mode's among them). */
+void app_editor_key(App *a, Key k);
+
 /* app_picker.c: the picker (characters, stamps, scenes, handouts). kind is
  * the side a character goes down on, -1 for its own. */
 void app_pick_open(App *a, PickWhat what, int kind, const char *initial);

@@ -6,7 +6,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -14,7 +13,6 @@
 #include "counter.h"
 #include "floor.h"
 #include "fog.h"
-#include "draw.h"
 #include "prof.h"
 
 
@@ -116,7 +114,7 @@ static void app_note_more(App *a, const char *msg)
     a->dirty = 1;
 }
 
-static void show_message(App *a, const char *title, const char *body)
+void app_show_message(App *a, const char *title, const char *body)
 {
     a->modal = MODAL_MESSAGE;
     str_lcpy(a->modal_title, title, sizeof a->modal_title);
@@ -133,7 +131,7 @@ int app_open_map(App *a, const char *path)
     char err[MAPIO_ERR_MAX] = { 0 };
     Map *m = mapio_load(path, err, sizeof err);
     if (!m) {
-        show_message(a, "Cannot open map", err);
+        app_show_message(a, "Cannot open map", err);
         return -1;
     }
 
@@ -243,11 +241,11 @@ static void recover_autosave(App *a)
         char body[192];
         snprintf(body, sizeof body, "Kept as %.80s. The map is open as last saved.%s",
                  base ? base + 1 : shown, kept ? "" : " n at the next open discards it.");
-        show_message(a, "The autosave is incomplete", body);
+        app_show_message(a, "The autosave is incomplete", body);
         return;
     }
     Map *m = mapio_load(a->pending_file, err, sizeof err);
-    if (!m) { show_message(a, "Cannot read the autosave", err); return; }
+    if (!m) { app_show_message(a, "Cannot read the autosave", err); return; }
 
     /* It stands in for the map, under the map's own path, and counts as
      * unsaved: the file on disk is still the older one until :w. */
@@ -469,7 +467,7 @@ int app_save_map(App *a, const char *path)
     char autosave[MAP_PATH_MAX + 16];
     mapio_autosave_path(a->map, autosave, sizeof autosave);
     if (mapio_save(a->map, path, err, sizeof err) != 0) {
-        show_message(a, "Cannot save map", err);
+        app_show_message(a, "Cannot save map", err);
         return -1;
     }
     unlink(autosave);
@@ -479,290 +477,6 @@ int app_save_map(App *a, const char *path)
     snprintf(msg, sizeof msg, "wrote %.170s", path);
     app_set_status(a, msg);
     return 0;
-}
-
-static void app_refresh_entries(App *a)
-{
-    free(a->entries);
-    a->entries  = NULL;
-    a->nentries = mapio_scan(&a->entries);
-    a->browser.sel = 0;
-    a->browser.top = 0;
-}
-
-/* Rescans without losing your place, so deleting several in a row does not
- * send the caret back to the top each time. */
-static void app_rescan_keeping_place(App *a)
-{
-    int sel = a->browser.sel;
-    app_refresh_entries(a);
-    a->browser.sel = iclamp(sel, 0, imax(0, a->nentries - 1));
-    ui_list_move(&a->browser, a->nentries, 0, app_menu_visible_rows(a));
-}
-
-/* Copies bytes, refusing to write over anything. The "x" mode is C11's
- * exclusive create, so the check and the create are one operation rather than
- * a test that another process could slip past. */
-static int copy_file(const char *from, const char *to, char *err, size_t errsz)
-{
-    FILE *in = fopen(from, "rb");
-    if (!in) {
-        snprintf(err, errsz, "%.60s", strerror(errno));
-        return -1;
-    }
-
-    FILE *out = fopen(to, "wbx");
-    if (!out) {
-        snprintf(err, errsz, errno == EEXIST ? "already exists" : "%.60s",
-                 strerror(errno));
-        fclose(in);
-        return -1;
-    }
-
-    char   buf[8192];
-    size_t n;
-    int    ok = 1;
-    while ((n = fread(buf, 1, sizeof buf, in)) > 0)
-        if (fwrite(buf, 1, n, out) != n) { ok = 0; break; }
-    if (ferror(in)) ok = 0;
-
-    fclose(in);
-    if (fclose(out) != 0) ok = 0;
-
-    if (!ok) {
-        snprintf(err, errsz, "%.60s", strerror(errno));
-        unlink(to);          /* never leave half a map behind */
-        return -1;
-    }
-    return 0;
-}
-
-/* Splits a map path into the directory it lives in and its name without the
- * extension, which is what both renaming and duplicating start from. */
-static void split_map_path(const char *path, char *dir, size_t dirsz,
-                           char *base, size_t basesz)
-{
-    str_lcpy(dir, path, dirsz);
-    char *slash = strrchr(dir, '/');
-    if (slash) *slash = '\0';
-    else       str_lcpy(dir, ".", dirsz);
-
-    const char *name = strrchr(path, '/');
-    name = name ? name + 1 : path;
-    str_lcpy(base, name, basesz);
-    str_cut_suffix(base, ".vtt");
-}
-
-/* Strips a trailing " copy" or " copy 3" so that duplicating a duplicate
- * counts up from the original rather than stacking the word: a copy of
- * "goblin copy" should be offered "goblin copy 2", not "goblin copy copy". */
-static void strip_copy_suffix(char *base)
-{
-    size_t n = strlen(base);
-
-    /* Walk back over a trailing number, if there is one. */
-    size_t end = n;
-    while (end > 0 && base[end - 1] >= '0' && base[end - 1] <= '9') end--;
-    if (end < n && end > 0 && base[end - 1] == ' ') end--;
-    else if (end < n) return;                  /* digits with no space before */
-
-    const size_t clen = 5;                     /* " copy" */
-    if (end >= clen && strncmp(base + end - clen, " copy", clen) == 0)
-        base[end - clen] = '\0';
-}
-
-/* "goblin ambush" -> "goblin ambush copy", then "copy 2" and so on, so the
- * offered name is one you can accept without thinking. */
-static void suggest_copy_name(const char *dir, const char *base,
-                              char *out, size_t outsz)
-{
-    char root[MAP_NAME_MAX];
-    str_lcpy(root, base, sizeof root);
-    strip_copy_suffix(root);
-    if (!root[0]) str_lcpy(root, base, sizeof root);
-
-    for (int i = 1; i < 100; i++) {
-        char cand[MAP_NAME_MAX];
-        if (i == 1) snprintf(cand, sizeof cand, "%.40s copy", root);
-        else        snprintf(cand, sizeof cand, "%.40s copy %d", root, i);
-
-        char path[MAP_PATH_MAX];
-        snprintf(path, sizeof path, "%.400s/%.80s.vtt", dir, cand);
-        if (access(path, F_OK) != 0) { str_lcpy(out, cand, outsz); return; }
-    }
-    str_lcpy(out, base, outsz);
-}
-
-/* Validates a name the user typed and builds the path it names, beside the
- * file it came from. Reports the reason and returns -1 when it will not do. */
-static int build_dest_path(App *a, const char *from, const char *typed,
-                           char *base, size_t basesz, char *to, size_t tosz)
-{
-    str_lcpy(base, typed, basesz);
-
-    /* Trim an extension the user typed, so "x.vtt" does not become
-     * "x.vtt.vtt". */
-    str_cut_suffix(base, ".vtt");
-
-    if (!base[0]) { app_set_status(a, "canceled: a map needs a name"); return -1; }
-    if (strchr(base, '/')) {
-        app_set_status(a, "a name cannot contain '/': this names a map, not a path");
-        return -1;
-    }
-
-    char dir[MAP_PATH_MAX], unused[MAP_NAME_MAX];
-    split_map_path(from, dir, sizeof dir, unused, sizeof unused);
-    snprintf(to, tosz, "%.400s/%.80s.vtt", dir, base);
-    return 0;
-}
-
-/* Sets the title inside a saved map. Best effort: a map too damaged to load
- * keeps whatever title it had. */
-static int retitle_map(const char *path, const char *title)
-{
-    char err[MAPIO_ERR_MAX] = { 0 };
-    Map *m = mapio_load(path, err, sizeof err);
-    if (!m) return 0;
-
-    str_lcpy(m->name, title, sizeof m->name);
-    int ok = (mapio_save(m, path, err, sizeof err) == 0);
-    map_free(m);
-    return ok;
-}
-
-/* Rescans, then puts the caret on a particular file rather than leaving it on
- * whatever now sits at the old index. */
-static void select_path(App *a, const char *path)
-{
-    app_rescan_keeping_place(a);
-    for (int i = 0; i < a->nentries; i++) {
-        if (strcmp(a->entries[i].path, path) == 0) {
-            a->browser.sel = i;
-            ui_list_move(&a->browser, a->nentries, 0, app_menu_visible_rows(a));
-            return;
-        }
-    }
-}
-
-/* Renames the file, and then its title to match if the map will parse.
- *
- * The file move comes first and on its own: it preserves the contents exactly
- * and works even on a map too damaged to load, which is when you most want to
- * be able to move it out of the way. Updating the title is best-effort on top
- * of an already-completed rename, so a failure there costs nothing. */
-static void app_rename_map(App *a, const char *from, const char *typed)
-{
-    char base[MAP_NAME_MAX], to[MAP_PATH_MAX];
-    if (build_dest_path(a, from, typed, base, sizeof base, to, sizeof to) != 0) return;
-
-    if (strcmp(from, to) == 0) { app_set_status(a, "name unchanged"); return; }
-
-    /* link() fails if the destination exists, which makes this refuse to
-     * clobber another map rather than racing an access() check. Filesystems
-     * that will not hard-link fall back to a checked rename. */
-    if (link(from, to) == 0) {
-        if (unlink(from) != 0) {
-            char body[MAP_PATH_MAX + 96];
-            snprintf(body, sizeof body,
-                     "renamed, but the old file is still there: %.60s", strerror(errno));
-            show_message(a, "Partly renamed", body);
-        }
-    } else if (errno == EEXIST) {
-        char body[MAP_PATH_MAX + 64];
-        snprintf(body, sizeof body, "%.200s already exists", to);
-        show_message(a, "Cannot rename", body);
-        return;
-    } else {
-        if (access(to, F_OK) == 0) {
-            char body[MAP_PATH_MAX + 64];
-            snprintf(body, sizeof body, "%.200s already exists", to);
-            show_message(a, "Cannot rename", body);
-            return;
-        }
-        if (rename(from, to) != 0) {
-            char body[MAP_PATH_MAX + 96];
-            snprintf(body, sizeof body, "%.200s: %.60s", to, strerror(errno));
-            show_message(a, "Cannot rename", body);
-            return;
-        }
-    }
-
-    /* A recovery copy left by a crash follows the map it belongs to. */
-    static const char *const copies[] = { ".autosave", ".autosave.damaged" };  /* the second, one recovery refused */
-    for (int i = 0; i < 2; i++) {
-        char from_copy[MAP_PATH_MAX + 24], to_copy[MAP_PATH_MAX + 24];
-        snprintf(from_copy, sizeof from_copy, "%s%s", from, copies[i]);
-        snprintf(to_copy, sizeof to_copy, "%s%s", to, copies[i]);
-        if (rename(from_copy, to_copy) != 0 && errno != ENOENT) unlink(from_copy);
-    }
-
-    int titled = retitle_map(to, base);
-    select_path(a, to);
-
-    char msg[MAP_PATH_MAX + 64];
-    snprintf(msg, sizeof msg, "renamed to %.80s.vtt%s", base,
-             titled ? "" : "  (title unchanged: the map would not load)");
-    app_set_status(a, msg);
-}
-
-/* Copies the file, then retitles the copy. Byte-for-byte rather than load and
- * re-save, so the duplicate is exactly the original -- including a map the
- * loader would choke on. */
-static void app_duplicate_map(App *a, const char *from, const char *typed)
-{
-    char base[MAP_NAME_MAX], to[MAP_PATH_MAX];
-    if (build_dest_path(a, from, typed, base, sizeof base, to, sizeof to) != 0) return;
-
-    if (strcmp(from, to) == 0) {
-        app_set_status(a, "a copy needs a name of its own");
-        return;
-    }
-
-    char err[96] = { 0 };
-    if (copy_file(from, to, err, sizeof err) != 0) {
-        char body[MAP_PATH_MAX + 128];
-        snprintf(body, sizeof body, "%.200s: %.60s", to, err);
-        show_message(a, "Cannot duplicate", body);
-        return;
-    }
-
-    int titled = retitle_map(to, base);
-    select_path(a, to);
-
-    char msg[MAP_PATH_MAX + 64];
-    snprintf(msg, sizeof msg, "copied to %.80s.vtt%s", base,
-             titled ? "" : "  (title unchanged: the map would not load)");
-    app_set_status(a, msg);
-}
-
-static void app_delete_map(App *a, const char *path)
-{
-    char shown[MAP_PATH_MAX];
-    str_lcpy(shown, path, sizeof shown);
-
-    /* Its recovery copy goes with it, or a new map under this name would be
-     * offered the deleted one's contents. */
-    char copy[MAP_PATH_MAX + 24];
-    snprintf(copy, sizeof copy, "%s.autosave", path);
-    unlink(copy);
-    snprintf(copy, sizeof copy, "%s.autosave.damaged", path);
-    unlink(copy);
-
-    if (unlink(path) != 0) {
-        char body[MAP_PATH_MAX + 64];
-        snprintf(body, sizeof body, "%.200s: %.60s", shown, strerror(errno));
-        show_message(a, "Could not delete", body);
-        /* Rescan anyway: whatever went wrong, the list on screen may no
-         * longer match the disk. */
-        app_rescan_keeping_place(a);
-        return;
-    }
-
-    app_rescan_keeping_place(a);
-
-    char msg[MAP_PATH_MAX + 32];
-    snprintf(msg, sizeof msg, "deleted %.180s", shown);
-    app_set_status(a, msg);
 }
 
 /* -------------------------------------------------------------- prompts */
@@ -848,14 +562,14 @@ static void prompt_accept(App *a)
     case PROMPT_NEW_SIZE: {
         int w = 0, h = 0;
         if (sscanf(text, "%dx%d", &w, &h) != 2 && sscanf(text, "%d %d", &w, &h) != 2) {
-            show_message(a, "Bad size", "expected something like 40x25");
+            app_show_message(a, "Bad size", "expected something like 40x25");
             return;
         }
         if (w < MAP_MIN_DIM || h < MAP_MIN_DIM || w > MAP_MAX_DIM || h > MAP_MAX_DIM) {
             char body[128];
             snprintf(body, sizeof body, "size must be between %dx%d and %dx%d",
                      MAP_MIN_DIM, MAP_MIN_DIM, MAP_MAX_DIM, MAP_MAX_DIM);
-            show_message(a, "Bad size", body);
+            app_show_message(a, "Bad size", body);
             return;
         }
         app_new_map(a, a->pending_name, w, h);
@@ -1443,7 +1157,7 @@ void app_leave_map_for(App *a, const char *next)
 
 void app_leave_map(App *a) { app_leave_map_for(a, NULL); }
 
-static void app_request_quit(App *a)
+void app_request_quit(App *a)
 {
     if (a->map && a->map->modified) {
         a->modal = MODAL_CONFIRM_QUIT;
@@ -1453,222 +1167,6 @@ static void app_request_quit(App *a)
         return;
     }
     a->running = 0;
-}
-
-static void menu_key(App *a, Key k)
-{
-    if (k.kind == KEY_CHAR && k.mods == 0) {
-        switch (k.ch) {
-        case 'j': ui_list_move(&a->menu, APP_MENU_COUNT, 1, app_menu_visible_rows(a)); return;
-        case 'k': ui_list_move(&a->menu, APP_MENU_COUNT, -1, app_menu_visible_rows(a)); return;
-        case 'q': app_request_quit(a); return;
-        default: break;
-        }
-    }
-    if (k.kind == KEY_DOWN) { ui_list_move(&a->menu, APP_MENU_COUNT, 1, app_menu_visible_rows(a)); return; }
-    if (k.kind == KEY_UP)   { ui_list_move(&a->menu, APP_MENU_COUNT, -1, app_menu_visible_rows(a)); return; }
-
-    if (k.kind == KEY_ENTER) {
-        switch (a->menu.sel) {
-        case 0:
-            app_refresh_entries(a);
-            a->screen = SCREEN_BROWSER;
-            break;
-        case 1:
-            app_open_prompt(a, PROMPT_NEW_NAME, "New map", "saved as <name>.vtt", "");
-            break;
-        default:
-            app_request_quit(a);
-            break;
-        }
-    }
-}
-
-static void browser_key(App *a, Key k)
-{
-    int rows = app_menu_visible_rows(a);
-
-    if (k.kind == KEY_ESC) { a->screen = SCREEN_MENU; return; }
-    if (k.kind == KEY_DOWN) { ui_list_move(&a->browser, a->nentries, 1, rows); return; }
-    if (k.kind == KEY_UP)   { ui_list_move(&a->browser, a->nentries, -1, rows); return; }
-
-    if (k.kind == KEY_CHAR && k.mods == 0) {
-        switch (k.ch) {
-        case 'j': ui_list_move(&a->browser, a->nentries, 1, rows); return;
-        case 'k': ui_list_move(&a->browser, a->nentries, -1, rows); return;
-        case 'g': ui_list_move(&a->browser, a->nentries, -a->nentries, rows); return;
-        case 'G': ui_list_move(&a->browser, a->nentries, a->nentries, rows); return;
-        case 'r': app_refresh_entries(a); app_set_status(a, "rescanned"); return;
-
-        case 'R': {
-            if (a->nentries <= 0) { app_set_status(a, "nothing to rename"); return; }
-
-            str_lcpy(a->pending_file, a->entries[a->browser.sel].path,
-                     sizeof a->pending_file);
-
-            /* Pre-fill with the current name so a small correction is a small
-             * edit, and drop the extension since the prompt adds it back. */
-            char base[MAP_NAME_MAX];
-            str_lcpy(base, a->entries[a->browser.sel].name, sizeof base);
-            str_cut_suffix(base, ".vtt");
-
-            app_open_prompt(a, PROMPT_RENAME_MAP, "Rename map",
-                        "renames the file and its title", base);
-            return;
-        }
-
-        case 'c': {
-            if (a->nentries <= 0) { app_set_status(a, "nothing to duplicate"); return; }
-
-            const char *src = a->entries[a->browser.sel].path;
-            str_lcpy(a->pending_file, src, sizeof a->pending_file);
-
-            /* Offer a name that is already free, so accepting it is enough. */
-            char dir[MAP_PATH_MAX], base[MAP_NAME_MAX], suggested[MAP_NAME_MAX];
-            split_map_path(src, dir, sizeof dir, base, sizeof base);
-            suggest_copy_name(dir, base, suggested, sizeof suggested);
-
-            app_open_prompt(a, PROMPT_DUPLICATE_MAP, "Duplicate map",
-                        "copies the file and titles the copy", suggested);
-            return;
-        }
-
-        case 'd': {
-            if (a->nentries <= 0) { app_set_status(a, "nothing to delete"); return; }
-
-            /* The path is captured now rather than read back from the index
-             * when the answer comes in, so the confirmation and the deletion
-             * can never disagree about which file is meant. */
-            str_lcpy(a->pending_file, a->entries[a->browser.sel].path,
-                     sizeof a->pending_file);
-            a->modal = MODAL_CONFIRM_DELETE;
-            str_lcpy(a->modal_title, "Delete map?", sizeof a->modal_title);
-            str_lcpy(a->modal_body, a->pending_file, sizeof a->modal_body);
-            return;
-        }
-
-        case 'q': a->screen = SCREEN_MENU; return;
-        default: break;
-        }
-    }
-
-    if (k.kind == KEY_ENTER && a->nentries > 0)
-        app_open_map(a, a->entries[a->browser.sel].path);
-}
-
-/* -------------------------------------------------------------- wall mode */
-
-static void wall_key(App *a, Key k)
-{
-    Editor *e = &a->ed;
-    Map    *m = a->map;
-
-    if (k.kind == KEY_ESC) {
-        if (e->has_anchor) { e->has_anchor = 0; app_set_status(a, "anchor cleared"); return; }
-        undo_stroke_end(&a->undo);     /* close any stroke still in progress */
-        e->mode = ED_NORMAL;
-        e->pen = e->erase = 0;
-        /* The corner's square, kept on the floor shown: the far edge's
-         * corners have their square past it. */
-        int x0, y0, x1, y1;
-        grid_bounds(&e->view, m, &x0, &y0, &x1, &y1);
-        e->cx = iclamp(e->wx, x0, x1);
-        e->cy = iclamp(e->wy, y0, y1);
-        app_set_status(a, "");
-        return;
-    }
-
-    if (k.kind == KEY_ENTER) {
-        if (!e->has_anchor) { app_set_status(a, "set an anchor with v or V first"); return; }
-
-        EdShape s = ed_shape(e->shape, e->ax, e->ay, e->wx, e->wy, 1);
-        undo_stroke_end(&a->undo);     /* the shape is its own step */
-        ed_wall_shape(m, &a->undo, &s, e->erase ? EDGE_NONE : EDGE_WALL);
-        e->has_anchor = 0;
-
-        const char *what = (e->shape == ED_SHAPE_CIRCLE) ? "circle" : "rectangle";
-        char msg[64];
-        snprintf(msg, sizeof msg, "%s %s", e->erase ? "cleared" : "laid", what);
-        app_set_status(a, msg);
-        return;
-    }
-
-    if (k.kind == KEY_LEFT)  { ed_wall_step(e, m, &a->undo, -1, 0, take_count(e)); return; }
-    if (k.kind == KEY_RIGHT) { ed_wall_step(e, m, &a->undo,  1, 0, take_count(e)); return; }
-    if (k.kind == KEY_UP)    { ed_wall_step(e, m, &a->undo,  0, -1, take_count(e)); return; }
-    if (k.kind == KEY_DOWN)  { ed_wall_step(e, m, &a->undo,  0,  1, take_count(e)); return; }
-
-    if (k.kind == KEY_CHAR && (k.mods & MOD_CTRL) && k.ch == 'r') {
-        if (undo_redo(&a->undo, m)) app_set_status(a, "redo");
-        return;
-    }
-    if (k.kind != KEY_CHAR || k.mods != 0) return;
-
-    if (k.ch >= '1' && k.ch <= '9') { count_digit(e, k.ch); return; }
-
-    switch (k.ch) {
-    case 'h': ed_wall_step(e, m, &a->undo, -1,  0, take_count(e)); break;
-    case 'l': ed_wall_step(e, m, &a->undo,  1,  0, take_count(e)); break;
-    case 'k': ed_wall_step(e, m, &a->undo,  0, -1, take_count(e)); break;
-    case 'j': ed_wall_step(e, m, &a->undo,  0,  1, take_count(e)); break;
-
-    case ' ':
-        e->pen = !e->pen;
-        /* Lifting the pen ends the stroke, which is what makes the whole run
-         * a single undo step. */
-        if (!e->pen) undo_stroke_end(&a->undo);
-        app_set_status(a, e->pen ? "pen down - movement lays wall" : "pen up");
-        break;
-
-    case 'd':
-        /* Erasing is the same tool with the sign flipped, so the pen comes
-         * down with it rather than making the user press two keys. Switching
-         * direction starts a new stroke. */
-        undo_stroke_end(&a->undo);
-        e->erase = !e->erase;
-        if (e->erase) e->pen = 1;
-        app_set_status(a, e->erase ? "erasing - movement clears wall" : "laying wall");
-        break;
-
-    case 'v': case 'V': {
-        uint8_t want = (k.ch == 'V') ? ED_SHAPE_CIRCLE : ED_SHAPE_RECT;
-
-        /* The same key twice clears the anchor; the other one changes the
-         * shape and keeps it, the way v and V swap between vim's two visual
-         * modes rather than canceling each other. */
-        if (e->has_anchor && e->shape == want) {
-            e->has_anchor = 0;
-            app_set_status(a, "anchor cleared");
-            break;
-        }
-
-        if (!e->has_anchor) { e->ax = e->wx; e->ay = e->wy; }
-        e->has_anchor = 1;
-        e->shape      = want;
-        app_set_status(a, want == ED_SHAPE_CIRCLE
-                          ? "circle anchor - move out for the radius, enter to lay"
-                          : "anchor set - move and press enter");
-        break;
-    }
-
-    case 't': {
-        /* Changing what the pen lays starts a new stroke. */
-        undo_stroke_end(&a->undo);
-        ed_cycle_material(e);
-        char msg[64];
-        snprintf(msg, sizeof msg, "pen lays: %s", edge_name(e->material));
-        app_set_status(a, msg);
-        break;
-    }
-
-    case 'u': if (undo_undo(&a->undo, m)) app_set_status(a, "undo"); break;
-
-    case '+': case '=': ed_set_zoom(e, m, e->view.zoom + 1); break;
-    case '-': case '_': ed_set_zoom(e, m, e->view.zoom - 1); break;
-    case 'z': grid_center_on(&e->view, m, iclamp(e->wx, 0, m->w - 1),
-                             iclamp(e->wy, 0, m->h - 1)); break;
-    default: break;
-    }
 }
 
 /* ------------------------------------------------------------ ruler mode */
@@ -1780,215 +1278,6 @@ int app_ruler_key(App *a, Key k)
     return 1;
 }
 
-/* ------------------------------------------------------------ build mode */
-
-static void editor_key(App *a, Key k)
-{
-    Editor *e = &a->ed;
-    Map    *m = a->map;
-    if (!m) { a->screen = SCREEN_MENU; return; }
-
-    if (e->mode == ED_COMMAND) { app_command_key(a, k); return; }
-    if (e->mode == ED_STAMP)   { app_stamp_key(a, k); return; }
-    if (app_ruler_key(a, k))       { return; }
-    if (e->mode == ED_WALL)    { wall_key(a, k); return; }
-
-    if (k.kind == KEY_ESC) {
-        if (e->mode == ED_VISUAL) { e->mode = ED_NORMAL; app_set_status(a, ""); }
-        else if (e->link_on && !e->pending_g) app_link_cancel(a);
-        e->count = 0;
-        e->pending_g = 0;
-        return;
-    }
-
-    /* Arrows mirror hjkl so the editor is usable before the keys are learned. */
-    if (k.kind == KEY_LEFT)  { ed_move(e, m, -1, 0, take_count(e)); return; }
-    if (k.kind == KEY_RIGHT) { ed_move(e, m,  1, 0, take_count(e)); return; }
-    if (k.kind == KEY_UP)    { ed_move(e, m,  0, -1, take_count(e)); return; }
-    if (k.kind == KEY_DOWN)  { ed_move(e, m,  0,  1, take_count(e)); return; }
-
-    if (k.kind == KEY_CHAR && (k.mods & MOD_CTRL)) {
-        int page = imax(1, e->view.view.h / zoom_ph(e->view.zoom) / 2);
-        if (k.ch == 'd') { ed_move(e, m, 0,  1, page); return; }
-        if (k.ch == 'u') { ed_move(e, m, 0, -1, page); return; }
-        if (k.ch == 'r') {
-            if (undo_redo(&a->undo, m)) app_set_status(a, "redo");
-            return;
-        }
-        return;
-    }
-
-    if (k.kind != KEY_CHAR || k.mods != 0) return;
-
-    /* The one member of the s family build mode has: the same key as play
-     * mode, on the square, since creatures are play mode's to select. */
-    if (a->pending == 's') {
-        a->pending = 0;
-        if (k.ch == 'n') app_note_prompt(a, -1, e->cx, e->cy);
-        else             app_set_status(a, "s wants n for a note on this square");
-        return;
-    }
-
-    if (e->pending_g) {
-        e->pending_g = 0;
-        if (k.ch == 'g') { int x0, y0, x1, y1; grid_bounds(&e->view, m, &x0, &y0, &x1, &y1);
-                           e->cy = y0; grid_ensure_visible(&e->view, m, e->cx, e->cy, ED_SCROLLOFF); }
-        else if (k.ch == 'f' || k.ch == 'c') {
-            /* Painting fog is authoring, so it lives here with the terrain
-             * brush and takes the same footprint: the brush, or the box. */
-            int id = k.ch == 'f' ? e->fog_patch : 0;
-            if (k.ch == 'f' && (!id || !m->fog_patches[id - 1].name[0] || m->fog_patches[id - 1].dead)) {
-                app_set_status(a, "no fog patch to paint - :fog NAME makes one");
-                return;
-            }
-            int n = ed_apply_fog(e, m, &a->undo, id);
-            if (e->mode == ED_VISUAL) e->mode = ED_NORMAL;
-            char msg[96];
-            if (k.ch == 'f') snprintf(msg, sizeof msg, "fog %s over %d square%s",
-                                      m->fog_patches[id - 1].name, n, n == 1 ? "" : "s");
-            else             snprintf(msg, sizeof msg, "fog scrubbed from %d square%s", n, n == 1 ? "" : "s");
-            app_note(a, msg);
-        }
-        else if (k.ch == 'l') app_link_mark(a);
-        else if (k.ch == 'o') app_set_status(a, "creatures take links in play mode - F2");
-        else app_set_status(a, "g wants g for the top, f to paint fog, c to scrub it, l to make a link");
-        return;
-    }
-
-    if (k.ch >= '1' && k.ch <= '9') { count_digit(e, k.ch); return; }
-    if (k.ch == '0' && e->count)    { e->count *= 10; return; }
-
-    switch (k.ch) {
-    case 'h': ed_move(e, m, -1,  0, take_count(e)); break;
-    case 'l': ed_move(e, m,  1,  0, take_count(e)); break;
-    case 'k': ed_move(e, m,  0, -1, take_count(e)); break;
-    case 'j': ed_move(e, m,  0,  1, take_count(e)); break;
-
-    /* Shift-HJKL toggles the wall on that face of the cursor tile: the fast
-     * way to close a single gap without entering the tracing mode. */
-    case 'H': ed_toggle_edge(e, m, &a->undo, -1,  0); break;
-    case 'L': ed_toggle_edge(e, m, &a->undo,  1,  0); break;
-    case 'K': ed_toggle_edge(e, m, &a->undo,  0, -1); break;
-    case 'J': ed_toggle_edge(e, m, &a->undo,  0,  1); break;
-
-    case 'b': case 'B': {
-        e->brush = size_key(take_count_raw(e), e->brush, k.ch == 'b' ? 1 : -1);
-        char msg[32];
-        snprintf(msg, sizeof msg, "brush %dx%d", e->brush, e->brush);
-        app_set_status(a, msg);
-        break;
-    }
-
-    case '0': ed_move(e, m, -1, 0, MAP_MAX_DIM); break;       /* as far as the floor goes */
-    case '$': ed_move(e, m,  1, 0, MAP_MAX_DIM); break;
-    case 'g': e->pending_g = 1; break;
-    case 'G': ed_move(e, m, 0, 1, MAP_MAX_DIM); break;
-
-    case 'v': case 'V': {
-        uint8_t want = (k.ch == 'V') ? ED_SHAPE_CIRCLE : ED_SHAPE_RECT;
-
-        /* The same key twice leaves visual mode; the other one changes the
-         * shape and keeps the anchor, the way v and V swap between vim's two
-         * visual modes rather than canceling each other. */
-        if (e->mode == ED_VISUAL && e->shape == want) {
-            e->mode = ED_NORMAL;
-            app_set_status(a, "");
-            break;
-        }
-
-        if (e->mode != ED_VISUAL) { e->anchor_x = e->cx; e->anchor_y = e->cy; }
-        e->mode  = ED_VISUAL;
-        e->shape = want;
-        app_set_status(a, want == ED_SHAPE_CIRCLE
-                          ? "VISUAL circle - move out for the radius, f paints, x clears"
-                          : "VISUAL - f floor, x clear, esc cancel");
-        break;
-    }
-
-    case 'f': {
-        ed_apply_tiles(e, m, &a->undo, e->terrain);
-        char msg[64];
-        snprintf(msg, sizeof msg, "painted %s", tile_name(e->terrain));
-        if (e->mode == ED_VISUAL) e->mode = ED_NORMAL;
-        app_set_status(a, msg);
-        break;
-    }
-
-    case 't': {
-        ed_cycle_material(e);
-        char msg[64];
-        snprintf(msg, sizeof msg, "boundary: %s", edge_name(e->material));
-        app_set_status(a, msg);
-        break;
-    }
-
-    case 'T': {
-        ed_cycle_terrain(e);
-        char msg[64];
-        snprintf(msg, sizeof msg, "terrain: %s", tile_name(e->terrain));
-        app_set_status(a, msg);
-        break;
-    }
-
-    case 's':
-        a->pending = 's';
-        app_set_status(a, "s n: a note on this square");
-        break;
-
-    case 'o': case 'O': {
-        int secret = (k.ch == 'O');
-        int n = ed_toggle_doors(e, m, &a->undo, secret);
-        char msg[80];
-        if (n) snprintf(msg, sizeof msg, "toggled %d %s%s", n,
-                        secret ? "secret door" : "door", n == 1 ? "" : "s");
-        else   snprintf(msg, sizeof msg, "no %s on this tile",
-                        secret ? "secret doors" : "doors");
-        app_set_status(a, msg);
-        break;
-    }
-
-    case 'x':
-        ed_apply_tiles(e, m, &a->undo, TILE_VOID);
-        if (e->mode == ED_VISUAL) { e->mode = ED_NORMAL; app_set_status(a, "cleared to void"); }
-        break;
-
-    case ' ': ed_toggle_tile(e, m, &a->undo); break;
-
-    case 'u':
-        if (undo_undo(&a->undo, m)) app_set_status(a, "undo");
-        else                        app_set_status(a, "nothing to undo");
-        break;
-
-    case 'm': app_ruler_begin(a); break;
-
-    case 'y': app_stamp_yank(a); break;
-    case 'p': app_stamp_lift(a); break;
-
-    case 'w':
-        e->mode  = ED_WALL;
-        e->wx    = e->cx;
-        e->wy    = e->cy;
-        e->pen   = 0;
-        e->erase = 0;
-        e->has_anchor = 0;
-        app_set_status(a, "WALL - space pen, d erase, v anchor, esc back");
-        break;
-
-    case ':':
-        e->cmd_from_visual = e->mode == ED_VISUAL;
-        e->mode = ED_COMMAND;
-        ui_prompt_open(&e->cmd, "", "", "");
-        break;
-
-    case '+': case '=': ed_set_zoom(e, m, e->view.zoom + 1); break;
-    case '-': case '_': ed_set_zoom(e, m, e->view.zoom - 1); break;
-
-    case 'z': grid_center_on(&e->view, m, e->cx, e->cy); break;
-    case 'q': app_leave_map(a); break;
-    default: break;
-    }
-}
-
 static void app_key_dispatch(App *a, Key k);
 
 void app_fog_sync(App *a)
@@ -2090,9 +1379,9 @@ static void app_key_dispatch(App *a, Key k)
     }
 
     switch (a->screen) {
-    case SCREEN_MENU:    menu_key(a, k); break;
-    case SCREEN_BROWSER: browser_key(a, k); break;
-    case SCREEN_EDITOR:  editor_key(a, k); break;
+    case SCREEN_MENU:    app_menu_key(a, k); break;
+    case SCREEN_BROWSER: app_browser_key(a, k); break;
+    case SCREEN_EDITOR:  app_editor_key(a, k); break;
     case SCREEN_PLAY:
         app_play_key(a, k);
         /* The range template points at the cursor, wherever that key left it. */

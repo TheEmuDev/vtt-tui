@@ -62,9 +62,11 @@ Bench scripts replay whole; no toggles — use loop-neutral pairs (`llllhhhh`,
 |---|---|
 | `app_draw.c` | the frame: every screen, modals, the bars, `app_draw_view`, `app_view_differs` (the privacy boundary), `app_frame`, ping and agent-ring drawing (`ping_visible`) |
 | `app.c` | lifecycle, screens, prompts (`prompt_accept`), modals' keys, `app_key` dispatch, `app_note` (status + session log) vs `app_set_status` (status only); pings (`App.pings`, `app_ping`/`app_ping_cell`, drained and expired in `app_tick`, `app_ping_due` feeds the poll timeout, drawn after `play_draw` with `grid_draw_tile_ring`, only round visible squares in the players' frame over fog); `App.pinged` keeps each source's last ping after its ring comes down (`until_ms` there is when it was made) for the channel's `marked`, cleared with the map |
+| `app_browser.c` | the menu and the map browser (`app_menu_key`, `app_browser_key`), and the file operations they and the prompts ask for: rename, duplicate, delete (each with the `.autosave`/`.autosave.damaged` copy), `app_refresh_entries` |
+| `app_build.c` | build mode's keys: `app_editor_key` (normal mode) and wall (trace) mode's |
 | `app_play.c` | play-mode keys (`app_play_key`), prefix families `i`/`s`, `retired_key` hints; `s n` notes (build mode has the same key in `app.c`) |
 | `app_cmd.c` | every `:` command: the `COMMANDS` table (name, second name, `cmd_*` handler taking the verb and the rest of the line); a word not in it may be a square to jump to |
-| `app_priv.h` | what those three share; `count_digit`, `take_count` (silence=1), `take_count_raw` (silence=0) |
+| `app_priv.h` | what the app_*.c files share; `count_digit`, `take_count` (silence=1), `take_count_raw` (silence=0) |
 | `play.c/h` | play state, route search (`trail.path`), groups, the range overlay (`RangeGeom`, shapes) |
 | `turn.c/h` | turn order and spotlight: state is `Token.turn`/`Token.init` + `Map.round`/`Map.spotlight`, never a list; `turn_walk` also drives `t`/`f`/`e`; draws the side panel |
 | `editor.c` | build mode: brush, visual box/circle, wall trace |
