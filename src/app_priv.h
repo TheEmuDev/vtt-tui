@@ -85,11 +85,15 @@ void app_command_key(App *a, Key k);
 /* app_draw.c: the status message and its colored spans, as the bars draw it. */
 void app_draw_status_msg(App *a, int x, int y, int maxw);
 
-/* app_character.c: the picker (the character templates, the stamps) and
- * :character. kind is the side a character goes down on, -1 for its own. */
+/* app_picker.c: the picker (characters, stamps, scenes, handouts). kind is
+ * the side a character goes down on, -1 for its own. */
 void app_pick_open(App *a, PickWhat what, int kind, const char *initial);
 void app_pick_key(App *a, Key k);
+
+/* app_character.c: :character, and a named character put down at the
+ * cursor. */
 void app_character_command(App *a, const char *rest);
+void app_character_place(App *a, const char *name, int kind);
 
 /* app.c: a trip through a link to another map puts this map down (saved)
  * and takes `m` up, keeping the server, the log and the play settings. */

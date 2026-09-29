@@ -172,7 +172,7 @@ Three copies or more (the rule of three):
   app_ctl.c `region`, `link_map_check`, `link_land`).
 
 Organization:
-- The picker's glue (four lists) lives in app_character.c.
+- The picker's glue (four lists) lives in app_character.c. **Fixed**: app_picker.c.
 - app.c (2,075 lines) holds the map browser and build mode's keys; app_ctl.c (1,781) holds
   the room language and an if-chain of reads.
 - CLAUDE.md's file table is stale in several rows (app_priv.h, the character row, tests)
