@@ -107,7 +107,7 @@ says what happened. The Fear pool stays set aside (IDEAS.md).
     and the grid as SVG (plain text, no dependencies), creatures optional; GM-only things
     (secret doors, notes, fog) left out unless asked. To print a battle map, or post the
     dungeon after the session.
-23. **A secret to one player.** `:tell Aria You notice the floor is warm here`: a handout
+23. **Whisper to one player.** `:whisper Aria You notice the floor is warm here`: a handout
     to one phone only. Each phone picks a name when it joins (a player creature, or free
     text), which later per-player features can use too; the join step is the real work.
 
