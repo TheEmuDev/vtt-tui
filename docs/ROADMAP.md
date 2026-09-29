@@ -41,6 +41,45 @@ Items 2-5 are built (2026-09-27). Next, decided 2026-09-29:
    generator's notes as GM notes. For prep, which is all hand work or an agent's room
    language today. JSON read by hand, no dependencies.
 
+**Daggerheart** (decided 2026-09-29, from the SRD 2.0 of 2026-08-25). Each applies only
+under `:ruleset daggerheart`, keeps the core rules-agnostic (the ruleset supplies the
+numbers and words), and never rolls or ticks by itself: the dice stay physical and the GM
+says what happened. The Fear pool stays set aside (IDEAS.md).
+
+9. **Adversary stat blocks as templates.** A template gains the stat block's fields: tier,
+   type (Bruiser, Horde, Leader, Minion, Ranged, Skulk, Social, Solo, Standard, Support),
+   Difficulty, Major and Severe thresholds, attack modifier, standard attack (name,
+   range, damage), Experiences, and features (actions, reactions, passives, Fear
+   features), which item 6's card shows. With item 8, an import of the SRD's adversary
+   list from a file the GM downloads (the SRD's license asks for attribution; vtt ships
+   no SRD data).
+10. **Damage against thresholds.** `:dmg 11` on the selected adversary marks HP by its
+    thresholds -- 1 below Major, 2 at Major, 3 at Severe, 4 at twice Severe if the table
+    uses massive damage -- and says why. Minion (X): any damage defeats it, and every X
+    damage defeats another minion in range, which vtt lists. Horde (X): once half its HP is
+    marked the status line says its attack is now X.
+11. **Battle Points.** `:battle` tallies the adversaries on the map, or in a scene, by
+    type against [(3 x PCs in combat) + 2] and the SRD's adjustments (-1 easier, -2 for
+    two or more Solos, -2 for +1d4 damage, +1 for a lower-tier adversary, +1 with no
+    Bruiser, Horde, Leader or Solo, +2 harder) at the SRD's costs (Minions 1 per party-sized
+    group, Social or Support 1, Horde, Ranged, Skulk or Standard 2, Leader 3, Bruiser 4,
+    Solo 5).
+12. **Dynamic countdowns.** Clocks gain the SRD's kinds: progress and consequence clocks
+    that the GM advances by a roll's outcome (`:outcome success fear`: each moves 0-3 by
+    the SRD's chart), linked pairs, loops that grow or shrink, and long-term clocks that
+    advance on `:rest`.
+13. **Conditions.** Hidden, Restrained and Vulnerable as known markers carrying their
+    rules text; Vulnerable set when a creature marks its last Stress and cleared when it
+    clears any.
+14. **The action tracker** (the SRD's optional rule): each player's tokens in the
+    spotlight panel, three a scene by default, spent with a key and refilled per scene.
+15. **Adversary tokens and pools**: the tokens Slow and Relentless count on a stat
+    block, and pools shared by adversaries of a name, emptied when the scene ends.
+    Perhaps folded into item 9.
+
+Suggested order: 6 and 9 together (the card and what it holds), then 10, 12, 11, 7, 8,
+13, 14, 15.
+
 **Housekeeping** (2026-09-27): the `:` command chain became a table, and `tests/run.c` was
 split by area. CLAUDE.md's watch list keeps what is left.
 
