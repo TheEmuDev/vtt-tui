@@ -163,9 +163,13 @@ Three copies or more (the rule of three):
   the file-name rule -- lives in stamp.c but serves stamps, characters and handouts, with a
   fourth data-directory copy in `mapio_default_dir`. **Fixed**: store.c.
 - A name followed by a trailing verb (`:area`, `:scene`, `:floor`) parsed three different
-  ways; word splitting in `:` commands in three styles.
+  ways; word splitting in `:` commands in three styles. **Fixed**: `str_cut_word` (and `:roll`).
+  The word splitting is **left**: `sscanf` widths in `:clock`/`:tick`/`:fog` cut an
+  over-long word short where the channel's `split_words` refuses it, so one splitter would
+  change what those commands accept; worth doing when one of them is next changed.
 - The dialog frame and padded title drawn five times in ui.c, and not the same way. **Fixed**: `dialog_frame`, and `entry_field` for the prompt's and picker's field.
-- `.vtt` stems and "the file beside this map" (seven and three sites); reading a whole file
+- `.vtt` stems (**fixed**: `str_cut_suffix`, `path_stem`) and "the file beside this map"
+  (seven and three sites); reading a whole file
   with a cap (four, with different limits); the free roll slot (three); jumping the cursor
   to a place (three); the link modifier words (the app and the channel); the quoted-name
   validator core (three); "an area name, else a square" into a box (three:

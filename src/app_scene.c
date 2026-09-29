@@ -100,15 +100,13 @@ void app_scene_command(App *a, const char *verb, const char *rest)
     }
 
     str_lcpy(name, rest, sizeof name);
-    size_t n = strlen(name);
-    if (n > 4 && !strcmp(name + n - 4, " off") && scene_find(a->map, name) < 0) {
-        name[n - 4] = '\0';
+    /* A verb after the name, unless the whole of it is a scene's name. */
+    if (scene_find(a->map, name) < 0 && str_cut_word(name, "off")) {
         snprintf(msg, sizeof msg, ":scene %.31s remove throws a scene away", name);
         app_set_status_gm(a, msg);
         return;
     }
-    if (n > 7 && !strcmp(name + n - 7, " remove") && scene_find(a->map, name) < 0) {
-        name[n - 7] = '\0';
+    if (scene_find(a->map, name) < 0 && str_cut_word(name, "remove")) {
         int i = scene_find(a->map, name);
         if (i < 0) { snprintf(msg, sizeof msg, "no scene called %.31s", name); app_set_status_gm(a, msg); return; }
         snprintf(msg, sizeof msg, "scene %.31s removed", a->map->scenes[i].name);

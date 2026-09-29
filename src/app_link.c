@@ -163,10 +163,7 @@ static void travel(App *a, int li)
     char left[MAP_NAME_MAX];
     str_lcpy(left, m->name, sizeof left);
     char stem[MAP_PATH_MAX];
-    const char *base = strrchr(m->path, '/');
-    str_lcpy(stem, base ? base + 1 : m->path, sizeof stem);
-    size_t sl = strlen(stem);
-    if (sl > 4 && !strcmp(stem + sl - 4, ".vtt")) stem[sl - 4] = '\0';
+    path_stem(m->path, stem, sizeof stem);
 
     app_travel_to(a, d);
     int first = -1;
@@ -204,7 +201,7 @@ static void travel(App *a, int li)
     /* The way back, if there is none. */
     int back = 0;
     for (int i = 0; i < d->nlinks; i++) back |= !strcmp(d->links[i].to_map, stem);
-    snprintf(msg, sizeof msg, "%s took %s from %.30s to %.30s, %.31s%s%s%s%s", who, name, left, d->name, l.to_place,
+    snprintf(msg, sizeof msg, "%s took %s from %.30s to %.30s, %.31s%s%s%.40s%s", who, name, left, d->name, l.to_place,
              saved, back ? "" : " - no way back yet: in build mode :link to ", back ? "" : stem,
              back ? "" : " PLACE makes one");
     app_note_gm(a, msg);

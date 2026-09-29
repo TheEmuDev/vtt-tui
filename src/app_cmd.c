@@ -265,16 +265,12 @@ static void roll_command(App *a, const char *rest)
     const char *eq = strchr(rest, '=');
 
     /* NAME remove: the whole name, as a prefix would remove the wrong one. */
-    const char *gap = strchr(rest, ' ');
-    const char *verb = gap ? gap + strspn(gap, " ") : NULL;
-    size_t vl = verb ? strcspn(verb, " ") : 0;
-    if (!eq && gap && vl == 6 && !strncmp(verb, "remove", 6) && !verb[vl + strspn(verb + vl, " ")] &&
-        gap - rest < ROLL_NAME_MAX) {
-        char name[ROLL_NAME_MAX];
-        snprintf(name, sizeof name, "%.*s", (int)(gap - rest), rest);
-        int idx = roll_find(m, name);
-        if (idx >= 0 && strcasecmp(m->rolls[idx].name, name) != 0) idx = -1;
-        if (idx < 0) { snprintf(msg, sizeof msg, "no roll called %s", name); app_set_status(a, msg); return; }
+    char gone[ROLL_NAME_MAX + 16];
+    str_lcpy(gone, rest, sizeof gone);
+    if (!eq && str_cut_word(gone, "remove") && !strchr(gone, ' ') && strlen(gone) < ROLL_NAME_MAX) {
+        int idx = roll_find(m, gone);
+        if (idx >= 0 && strcasecmp(m->rolls[idx].name, gone) != 0) idx = -1;
+        if (idx < 0) { snprintf(msg, sizeof msg, "no roll called %s", gone); app_set_status(a, msg); return; }
         snprintf(msg, sizeof msg, "removed roll %s", m->rolls[idx].name);
         memset(&m->rolls[idx], 0, sizeof m->rolls[idx]);
         map_touch(m);
@@ -623,15 +619,12 @@ static void area_command(App *a, const char *verb, const char *rest)
     }
     char name[AREA_NAME_MAX + 8];
     str_lcpy(name, rest, sizeof name);
-    size_t n = strlen(name);
-    if (n > 4 && !strcmp(name + n - 4, " off")) {
-        name[n - 4] = '\0';
+    if (str_cut_word(name, "off")) {
         snprintf(msg, sizeof msg, ":area %.40s remove takes the name off", name);
         app_set_status_gm(a, msg);
         return;
     }
-    int off = n > 7 && !strcmp(name + n - 7, " remove");
-    if (off) name[n - 7] = '\0';
+    int off = str_cut_word(name, "remove");
     if (!map_area_name_ok(name)) {
         snprintf(msg, sizeof msg, "an area's name is 1-%d characters, no quote or colon, and not a square", AREA_NAME_MAX - 1);
         app_set_status_gm(a, msg);

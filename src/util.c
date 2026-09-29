@@ -245,6 +245,33 @@ size_t str_lcpy(char *dst, const char *src, size_t dstsz)
     return srclen;
 }
 
+int str_cut_word(char *s, const char *word)
+{
+    size_t n = strlen(s), wl = strlen(word);
+    while (n && s[n - 1] == ' ') n--;
+    if (n <= wl || strncmp(s + n - wl, word, wl) != 0 || s[n - wl - 1] != ' ') return 0;
+    n -= wl;
+    while (n && s[n - 1] == ' ') n--;
+    if (!n) return 0;
+    s[n] = '\0';
+    return 1;
+}
+
+int str_cut_suffix(char *s, const char *suffix)
+{
+    size_t n = strlen(s), sl = strlen(suffix);
+    if (n <= sl || strcmp(s + n - sl, suffix) != 0) return 0;
+    s[n - sl] = '\0';
+    return 1;
+}
+
+void path_stem(const char *path, char *out, size_t outsz)
+{
+    const char *base = strrchr(path, '/');
+    str_lcpy(out, base ? base + 1 : path, outsz);
+    str_cut_suffix(out, ".vtt");
+}
+
 const char *str_casestr(const char *hay, const char *needle)
 {
     if (!*needle) return hay;

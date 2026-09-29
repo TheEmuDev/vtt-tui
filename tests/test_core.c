@@ -331,6 +331,29 @@ void test_util(void)
     char dst[4];
     CHECK_EQ(str_lcpy(dst, "abcdef", sizeof dst), 6);
     CHECK_EQ(strcmp(dst, "abc"), 0);
+
+    CASE("str_cut_word cuts a verb after a name, and nothing else");
+    {
+        char n1[32] = "Lower hall remove", n2[32] = "Crypt  remove  ", n3[32] = "remove";
+        char n4[32] = "Crypt xremove", n5[32] = "Crypt off", n6[32] = "  remove";
+        CHECK(str_cut_word(n1, "remove") && !strcmp(n1, "Lower hall"));
+        CHECK(str_cut_word(n2, "remove") && !strcmp(n2, "Crypt"));
+        CHECK(!str_cut_word(n3, "remove") && !strcmp(n3, "remove"));   /* the only word: a name */
+        CHECK(!str_cut_word(n4, "remove") && !strcmp(n4, "Crypt xremove"));
+        CHECK(!str_cut_word(n5, "remove") && !strcmp(n5, "Crypt off"));
+        CHECK(!str_cut_word(n6, "remove"));
+    }
+
+    CASE("path_stem: the file's name, without its folder or .vtt");
+    {
+        char st[32];
+        path_stem("maps/crypt.vtt", st, sizeof st);  CHECK_EQ(strcmp(st, "crypt"), 0);
+        path_stem("crypt", st, sizeof st);           CHECK_EQ(strcmp(st, "crypt"), 0);
+        path_stem("/a/b.c.vtt", st, sizeof st);      CHECK_EQ(strcmp(st, "b.c"), 0);
+        path_stem("x.vttz", st, sizeof st);          CHECK_EQ(strcmp(st, "x.vttz"), 0);
+        char only[8] = ".vtt";
+        CHECK(!str_cut_suffix(only, ".vtt"));        /* nothing would be left */
+    }
 }
 
 /* ------------------------------------------------------------------- app */

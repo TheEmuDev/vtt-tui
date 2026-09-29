@@ -639,10 +639,7 @@ static int run_apply(const Options *o)
         }
         /* A new map is void: a plan draws what is there, from nothing. */
         char name[MAP_NAME_MAX];
-        const char *base = strrchr(o->map_path, '/');
-        str_lcpy(name, base ? base + 1 : o->map_path, sizeof name);
-        char *dot = strrchr(name, '.');
-        if (dot && !strcmp(dot, ".vtt")) *dot = '\0';
+        path_stem(o->map_path, name, sizeof name);
         Map *nm = map_new(o->new_w, o->new_h, name);
         int wrc = mapio_write(nm, o->map_path, err, sizeof err);
         map_free(nm);

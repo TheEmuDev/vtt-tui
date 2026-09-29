@@ -73,6 +73,20 @@ static inline int iclamp(int v, int lo, int hi) { return v < lo ? lo : (v > hi ?
 /* strlcpy semantics: always NUL-terminates, returns strlen(src). */
 size_t str_lcpy(char *dst, const char *src, size_t dstsz);
 
+/* "Crypt  remove " with word "remove": cuts the word and the spaces round
+ * it, leaving "Crypt", and returns 1; returns 0 and leaves s as it was when
+ * the last word is anything else, or the only one. How a : command reads
+ * a verb after a name that may itself have spaces in it. */
+int    str_cut_word(char *s, const char *word);
+
+/* Drops suffix (".vtt") from the end of s when s is longer than it;
+ * returns 1 when it did. */
+int    str_cut_suffix(char *s, const char *suffix);
+
+/* A path's file name without its folder or a ".vtt": "maps/crypt.vtt" is
+ * "crypt". */
+void   path_stem(const char *path, char *out, size_t outsz);
+
 /* Case-insensitive substring search, returning a pointer into `hay` or NULL.
  * Folds ASCII only: it exists to match what someone typed against a token
  * label, and getting "Goblin" from "gob" is the whole job. An empty needle

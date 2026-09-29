@@ -146,13 +146,12 @@ void app_floor_command(App *a, const char *verb, const char *rest)
     }
 
     /* The last word: off, a level, or part of the name. */
-    char *last = strrchr(name, ' ');
-    int   off = 0, level = 0, has_level = 0;
+    int   off = str_cut_word(name, "off"), level = 0, has_level = 0;
+    char *last = off ? NULL : strrchr(name, ' ');
     if (last) {
         char *end;
         long  v = strtol(last + 1, &end, 10);
-        if (!strcmp(last + 1, "off"))           { off = 1; *last = '\0'; }
-        else if (last[1] && !*end)              { level = (int)v; has_level = 1; *last = '\0'; }
+        if (last[1] && !*end) { level = (int)v; has_level = 1; *last = '\0'; }
         len = strlen(name);                     /* "Ground  0": the name ends at its last letter */
         while (len && name[len - 1] == ' ') name[--len] = '\0';
     }

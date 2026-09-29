@@ -550,9 +550,7 @@ static void split_map_path(const char *path, char *dir, size_t dirsz,
     const char *name = strrchr(path, '/');
     name = name ? name + 1 : path;
     str_lcpy(base, name, basesz);
-
-    size_t n = strlen(base);
-    if (n > 4 && strcmp(base + n - 4, ".vtt") == 0) base[n - 4] = '\0';
+    str_cut_suffix(base, ".vtt");
 }
 
 /* Strips a trailing " copy" or " copy 3" so that duplicating a duplicate
@@ -604,8 +602,7 @@ static int build_dest_path(App *a, const char *from, const char *typed,
 
     /* Trim an extension the user typed, so "x.vtt" does not become
      * "x.vtt.vtt". */
-    size_t n = strlen(base);
-    if (n > 4 && strcmp(base + n - 4, ".vtt") == 0) base[n - 4] = '\0';
+    str_cut_suffix(base, ".vtt");
 
     if (!base[0]) { app_set_status(a, "canceled: a map needs a name"); return -1; }
     if (strchr(base, '/')) {
@@ -1513,8 +1510,7 @@ static void browser_key(App *a, Key k)
              * edit, and drop the extension since the prompt adds it back. */
             char base[MAP_NAME_MAX];
             str_lcpy(base, a->entries[a->browser.sel].name, sizeof base);
-            size_t bn = strlen(base);
-            if (bn > 4 && strcmp(base + bn - 4, ".vtt") == 0) base[bn - 4] = '\0';
+            str_cut_suffix(base, ".vtt");
 
             app_open_prompt(a, PROMPT_RENAME_MAP, "Rename map",
                         "renames the file and its title", base);
