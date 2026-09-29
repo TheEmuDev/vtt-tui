@@ -77,8 +77,25 @@ says what happened. The Fear pool stays set aside (IDEAS.md).
     block, and pools shared by adversaries of a name, emptied when the scene ends.
     Perhaps folded into item 9.
 
-Suggested order: 6 and 9 together (the card and what it holds), then 10, 12, 11, 7, 8,
-13, 14, 15.
+16. **Movement readout that knows the rules.** Carrying a creature, the readout adds the
+    SRD's rule for the band it has reached: a PC under pressure moves within Close as part
+    of an action and needs an Agility Roll to go farther; an adversary moves within Close
+    for free, or within Very Far as a separate action ("Far: Agility Roll to do it
+    safely").
+17. **Group effects from a point.** The SRD's default area of effect: unless an effect
+    says otherwise, its targets are within Very Close of one origin point. A key (`g e`)
+    rings that area round the cursor and lists who is caught; a band word or count widens
+    it for the effects that say otherwise (`:effect close`).
+18. **Environment cards.** The SRD's environment stat block -- type, Difficulty, impulses,
+    features, Fear features, potential adversaries -- as a GM-only card on a map or a
+    named area, beside item 6's adversary card; its potential adversaries open the
+    template picker filtered to them.
+19. **Summoning at a range.** For features like "summon three Lackeys at Far range":
+    `:summon 3 lackey far` puts three of a template at that band from the selected
+    creature, on free ground, numbered. Needs item 9.
+
+Suggested order: 6 and 9 together (the card and what it holds), then 10, 17, 16, 12, 11,
+18, 19, 7, 8, 13, 14, 15.
 
 **Housekeeping** (2026-09-27): the `:` command chain became a table, and `tests/run.c` was
 split by area. CLAUDE.md's watch list keeps what is left.
