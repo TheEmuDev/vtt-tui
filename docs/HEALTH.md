@@ -77,7 +77,10 @@ are error paths.
   test_places.c:1221 (diagnostics unchecked), test_play.c:4158 (the picker's presence in
   the GM's frame unchecked).
 - Structure: test_play.c is 4,483 lines and 40 suites; scenes are tested in three files and
-  handouts in two; CLAUDE.md's tests row is stale; run.c cannot run one suite.
+  handouts in two; CLAUDE.md's tests row is stale; run.c cannot run one suite. **Fixed**: test_play.c split into
+  test_play.c, test_keys.c, test_marks.c, test_saved.c; `build/run-tests NAME...` runs
+  named suites; the tests row updated. Scenes and handouts are still tested across files
+  (the loader, the channel and the keys each beside their kind).
 - **Mostly fixed** (8525e48..5c5ffd6): the loader fuzzer compares save, load, save byte for
   byte (it found a name of carriage returns that did not survive; fixed), seeded with a
   version 12 fixture of every record; the channel fuzzer drops its scenes per input and has

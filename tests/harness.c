@@ -411,3 +411,15 @@ int ctl_blank_map(App *a, const char *dir, int w, int h)
     fclose(f);
     return app_open_map(a, path) == 0 && a->map != NULL;
 }
+
+/* The players' frame as text, drawn now. */
+char *players_text(App *a, Renderer *r)
+{
+    rnd_begin(r);
+    app_draw_view(a, VIEW_PLAYERS);
+    ByteBuf f;
+    bb_init(&f, 65536);
+    rnd_dump(r, &f);
+    bb_putc(&f, '\0');
+    return (char *)f.data;
+}

@@ -3,7 +3,9 @@
 
 #include "harness.h"
 
-int main(void)
+/* build/run-tests runs every suite; build/run-tests NAME... only the ones
+ * named (see the table), for the one being worked on. */
+int main(int argc, char **argv)
 {
     prof_init();
 
@@ -146,13 +148,19 @@ int main(void)
         { "golden", test_golden },
     };
 
+    int ran = 0;
     for (size_t i = 0; i < sizeof suites / sizeof *suites; i++) {
+        int wanted = argc < 2;
+        for (int k = 1; k < argc && !wanted; k++) wanted = !strcmp(argv[k], suites[i].name);
+        if (!wanted) continue;
+        ran++;
         int before = g_fails;
         suites[i].fn();
         printf("  %-8s %s\n", suites[i].name, g_fails == before ? "ok" : "FAILED");
     }
 
     prof_shutdown();
+    if (!ran) { fprintf(stderr, "no suite by that name\n"); return 2; }
 
     printf("\n%d checks, %d failures\n", g_checks, g_fails);
     return g_fails ? 1 : 0;

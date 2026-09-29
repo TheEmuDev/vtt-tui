@@ -112,6 +112,8 @@ typedef void (*DumpFn)(FILE *out, const Map *m, int x0, int y0, int x1, int y1);
 
 void feed(InputParser *p, const char *s);
 void golden_bytes(const char *name, const char *data, size_t len);
+/* The players' frame as text, drawn now; the caller frees it. */
+char *players_text(App *a, Renderer *r);
 void golden(const char *name, int w, int h, const char *map_path,
             const char *const *segments, int nsegments, int ascii);
 void write_map_file(const char *dir, const char *name);
