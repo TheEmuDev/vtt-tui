@@ -342,6 +342,7 @@ selected creature; with none it sets the size of the next one placed.
 | `g R` `g H` | reveal / hide the whole fog patch under the cursor |
 | `g p` | ping the cursor's squares on every screen |
 | `g o` | send the creatures on this [link](#links-stairs-ladders-trapdoors-portals)'s end to the other end |
+| `g e` | a [group effect](#group-effects-g-e) at the cursor: who it catches |
 | `Ctrl-w` | turn movement blocking off / on |
 | `esc` | cancel: close the selection, cancel a move, clear the range, deselect |
 | `u` `Ctrl-r` | undo / redo |
@@ -957,8 +958,11 @@ use. Available: `none`, `daggerheart`.
 
   | band | a player | an adversary |
   |------|----------|--------------|
-  | Melee to Close | part of an action | free with an action |
+  | Melee to Close | part of an action roll | free with an action |
   | Far, Very Far | Agility Roll to move | a separate action |
+
+  A player moving within Close outside an action roll needs the Agility Roll too; the line
+  cannot know which it is.
 
   ```
   MOVING  Aria 1x1  8 steps  from B2  walls on  Far: Agility Roll to move

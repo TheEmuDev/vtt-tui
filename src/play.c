@@ -924,6 +924,19 @@ int range_cycle(RangeOverlay *ro, const Map *m, int anchor_token, int cx, int cy
     return ro->band;
 }
 
+void range_history_changed(RangeOverlay *ro, const Map *m)
+{
+    if (!ro->active) return;
+    if (ro->token >= 0) {
+        int ax, ay, as;
+        range_anchor(ro, m, &ax, &ay, &as);
+        ro->token = -1;
+        ro->ax = ax;
+        ro->ay = ay;
+    }
+    ro->from = -1;
+}
+
 int range_burst(RangeOverlay *ro, const Map *m, int from_token, int cx, int cy, int count)
 {
     if (count < 0) count = 0;

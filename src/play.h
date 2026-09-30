@@ -77,6 +77,10 @@ int  range_aimed(const RangeOverlay *ro, const Map *m);
  * since the list is an array and later indices shift down. The overlay stays
  * put as a bare tile when the creature it followed is the one that went. */
 void range_token_removed(RangeOverlay *ro, int removed, int x, int y);
+/* After an undo or redo, which can add or remove creatures anywhere in the
+ * list: a highlight anchored to a creature stays where it is, on the square,
+ * and a burst forgets whose it was -- rather than following the wrong one. */
+void range_history_changed(RangeOverlay *ro, const Map *m);
 
 /* With a ruleset: off -> first band -> ... -> last band -> off, and a count
  * names a band outright (2r is the second). Without one, most games say

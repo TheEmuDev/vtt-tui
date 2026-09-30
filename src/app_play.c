@@ -650,8 +650,9 @@ void app_play_key(App *a, Key k)
         } else if (pl->grabbed) {
             play_cancel_move(a);
         } else if (pl->range.active) {
+            int burst = pl->range.burst;
             range_off(&pl->range);
-            app_set_status(a, "range overlay off");
+            app_set_status(a, burst ? "group effect off" : "range overlay off");
         } else {
             play_focus(pl, -1);
             app_set_status(a, "");
@@ -738,7 +739,12 @@ void app_play_key(App *a, Key k)
 
     if (k.kind == KEY_CHAR && (k.mods & MOD_CTRL)) {
         if (k.ch == 'r') {
-            if (undo_redo(&a->undo, m)) { play_trail_sync(pl, m); app_note(a, "redo"); }
+            if (undo_redo(&a->undo, m)) {
+                if (pl->sel >= m->tokens.n) play_focus(pl, -1);
+                play_trail_sync(pl, m);
+                range_history_changed(&pl->range, m);
+                app_note(a, "redo");
+            }
             return;
         }
         if (k.ch == 'w') {
@@ -1105,13 +1111,7 @@ void app_play_key(App *a, Key k)
              * particular creature rather than following the wrong one. */
             if (pl->sel >= m->tokens.n) play_focus(pl, -1);
             play_trail_sync(pl, m);
-            if (pl->range.token >= 0) {
-                int ax, ay, as;
-                range_anchor(&pl->range, m, &ax, &ay, &as);
-                pl->range.token = -1;
-                pl->range.ax = ax;
-                pl->range.ay = ay;
-            }
+            range_history_changed(&pl->range, m);
             app_note(a, "undo");
         } else {
             app_set_status(a, "nothing to undo");

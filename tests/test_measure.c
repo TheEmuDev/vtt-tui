@@ -807,6 +807,21 @@ void test_group_effect(void)
         CHECK_EQ(ro.from, -1);
     }
 
+    CASE("an undo forgets whose the burst was, rather than naming the wrong creature");
+    press(&a, "\x1b");
+    press(&a, ":B2\r\rl\r");                     /* Aria one step east: something to undo */
+    CHECK_EQ(a.map->tokens.v[0].x, 2);
+    press(&a, "ge");
+    CHECK_EQ(a.play.range.from, 0);
+    press(&a, "u");
+    CHECK_EQ(a.map->tokens.v[0].x, 1);
+    CHECK_EQ(a.play.range.from, -1);
+    CHECK(a.play.range.active && a.play.range.burst);
+
+    CASE("esc on a burst says the group effect is off");
+    press(&a, "\x1b");
+    CHECK(strstr(a.status, "group effect off") != NULL);
+
     CASE("the burst replaces r's highlight, and r's replaces the burst");
     press(&a, "\x1b");
     press(&a, "r");
@@ -816,13 +831,23 @@ void test_group_effect(void)
     press(&a, "\x1b");
 
     CASE("without a ruleset it is one square round, and a count is squares");
-    press(&a, ":ruleset none\r");
+    press(&a, ":ruleset none\r:B2\r\r\r");            /* Aria selected again */
     a.ed.cx = 8; a.ed.cy = 5;
     press(&a, "ge");
     CHECK(strstr(burst_line(&a), "Range burst at I6, 45 ft from Aria (5 ft, 1 sq)") != NULL);
     press(&a, "\x1b");
     press(&a, "4ge");
     CHECK(strstr(burst_line(&a), "(20 ft, 4 sq)") != NULL);
+    press(&a, "\x1b");
+
+    CASE("a burst follows the cursor when [ and ] move it to another floor");
+    CHECK_EQ(app_open_map(&a, "tests/fixtures/floors.vtt"), 0);
+    press(&a, ":play\r]:D3\rge");
+    CHECK(a.play.range.burst);
+    press(&a, "]");
+    CHECK(a.ed.cx != 3);                                     /* ] moved the cursor */
+    CHECK_EQ(a.play.range.ax, a.ed.cx);
+    CHECK_EQ(a.play.range.ay, a.ed.cy);
     press(&a, "\x1b");
 
     CASE("build mode says where group effects are");

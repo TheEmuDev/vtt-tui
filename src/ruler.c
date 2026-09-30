@@ -78,7 +78,7 @@ double dist_tiles(DistMetric m, int dx, int dy)
  * part of an action and needs an Agility Roll to go farther safely; an
  * adversary moves within Close for free as part of an action, or within
  * Very Far as a separate action. */
-#define DH_NEAR_PC  "part of an action"
+#define DH_NEAR_PC  "part of an action roll"
 #define DH_FAR_PC   "Agility Roll to move"
 #define DH_NEAR_ADV "free with an action"
 #define DH_FAR_ADV  "a separate action"

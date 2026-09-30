@@ -1292,6 +1292,9 @@ void app_key(App *a, Key k)
 {
     a->key_saw_hidden = a->map && tokens_any_hidden(&a->map->tokens);
     app_key_dispatch(a, k);
+    /* The range template and a burst point at the cursor, wherever the key
+     * left it -- [ and ], a detour through build mode and :play included. */
+    if (a->map && a->screen == SCREEN_PLAY) range_set_aim(&a->play.range, a->ed.cx, a->ed.cy);
     app_floor_sync(a);
     app_fog_sync(a);
 }
@@ -1384,8 +1387,6 @@ static void app_key_dispatch(App *a, Key k)
     case SCREEN_EDITOR:  app_editor_key(a, k); break;
     case SCREEN_PLAY:
         app_play_key(a, k);
-        /* The range template points at the cursor, wherever that key left it. */
-        if (a->map) range_set_aim(&a->play.range, a->ed.cx, a->ed.cy);
         break;
     case SCREEN_HELP:    break;               /* handled above */
     }

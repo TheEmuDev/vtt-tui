@@ -1024,6 +1024,7 @@ static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FIL
         const char *busy = app_ctl_busy(a);
         if (busy) { str_lcpy(err, busy, errsz); return -2; }
         undo_undo(&a->undo, m);
+        range_history_changed(&a->play.range, m);
         a->ctl_undoable = 0;
         app_fog_sync(a);
         a->dirty = 1;
