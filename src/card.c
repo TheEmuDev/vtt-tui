@@ -30,12 +30,8 @@ char *card_clean(const char *text)
         if (*p == '\r') { if (p[1] != '\n') t[n++] = '\n'; continue; }
         t[n++] = *p;
     }
-    /* Cut inside a character: the next byte is one of its continuations, so
-     * the ones already copied go, and its first byte with them. */
-    if (((unsigned char)*p & 0xC0) == 0x80) {
-        while (n > 0 && ((unsigned char)t[n - 1] & 0xC0) == 0x80) n--;
-        if (n > 0) n--;
-    }
+    t[n] = *p;                               /* the next byte, for the cut to see */
+    n = utf8_cut(t, n);                      /* cut short: not inside a character */
     while (n > 0 && (t[n - 1] == '\n' || t[n - 1] == ' ')) n--;
     t[n] = '\0';
     return t;
@@ -62,3 +58,17 @@ const char *card_of(const Map *m, const Token *t)
     int i = card_find(m, t->card);
     return i >= 0 ? m->cards[i].text : NULL;
 }
+
+void card_first_line(const char *text, char *buf, size_t sz)
+{
+    size_t n = 0;
+    const char *p = text ? text : "";
+    for (; *p && *p != '\n' && n + 1 < sz; p++) {
+        if (p[0] == '*' && p[1] == '*') { p++; continue; }
+        buf[n++] = *p;
+    }
+    buf[n] = *p;                             /* the next byte, for the cut to see */
+    n = utf8_cut(buf, n);
+    buf[n] = '\0';
+}
+

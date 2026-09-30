@@ -5,6 +5,7 @@
 #include <string.h>
 #include <strings.h>
 
+#include "card.h"
 #include "mapio.h"
 #include "play.h"
 #include "prof.h"
@@ -74,6 +75,10 @@ int character_save(const Map *m, int idx, const char *name,
 
     Map *c = map_new(t.size, t.size, name);
     for (int i = 0; i < t.size * t.size; i++) c->tiles[i] = TILE_FLOOR;
+    /* Its card goes with it; a name with no card on this map, nowhere. */
+    const char *card = card_of(m, &t);
+    if (card) card_set(c, t.card, card);
+    else      t.card[0] = '\0';
     tokens_add(&c->tokens, t);
     int kept = 0;
     for (int r = 0; r < nrolls; r++) {
@@ -148,6 +153,19 @@ int character_place(Map *m, Undo *u, const Map *tpl, int kind, int x, int y, int
     undo_begin(u);
     int idx = undo_add_token(u, m, t);
     size_t off = 0;
+    /* Its card, when the map has none by that name; the map's own is kept,
+     * as its rolls are. A card is not in the undo history: one brought by a
+     * placing that is undone stays on the map, named by nobody. */
+    const char *card = card_of(tpl, &t);
+    if (card) {
+        int ci = card_find(m, t.card);
+        char buf[96] = "";
+        if (ci >= 0 && strcmp(m->cards[ci].text, card) != 0)
+            snprintf(buf, sizeof buf, "kept this map's card %s", t.card);
+        else if (ci < 0 && card_set(m, t.card, card) < 0)
+            snprintf(buf, sizeof buf, "no room for card %s", t.card);
+        if (buf[0]) { snprintf(said, saidsz, "%s", buf); off = strlen(said); }
+    }
     for (int r = 0; r < ROLL_MAX; r++) {
         const NamedRoll *nr = &tpl->rolls[r];
         if (!nr->name[0]) continue;

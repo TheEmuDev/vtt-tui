@@ -127,10 +127,7 @@ static void put_card(FILE *f, const Card *c)
         size_t at = 0;
         do {
             size_t take = len - at;
-            if (take > CARD_PIECE) {
-                take = CARD_PIECE;
-                while (take > 0 && ((unsigned char)p[at + take] & 0xC0) == 0x80) take--;
-            }
+            if (take > CARD_PIECE) take = utf8_cut(p + at, CARD_PIECE);
             fprintf(f, "%s%.*s\n", lead, (int)take, p + at);
             lead = "+ ";
             at += take;

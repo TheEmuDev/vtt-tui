@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "app_priv.h"
+#include "card.h"
 #include "character.h"
 #include "prof.h"
 #include "scene.h"
@@ -18,7 +19,13 @@
 static void character_detail(const Map *c, char *buf, size_t sz)
 {
     const Token *t = character_token(c);
-    int off = snprintf(buf, sz, "%s%s%s %dx%d", t->label, t->label[0] ? "  " : "",
+    /* Its card's first line says more than its label: "Acid Burrower -
+     * Tier 1 Solo". The picker filters on it too, so "solo" finds them. */
+    char what[TOKEN_LABEL_MAX + 64];
+    const char *card = card_of(c, t);
+    if (card) card_first_line(card, what, sizeof what);
+    else      str_lcpy(what, t->label, sizeof what);
+    int off = snprintf(buf, sz, "%s%s%s %dx%d", what, what[0] ? "  " : "",
                        token_kind_name(t->kind), t->size, t->size);
     for (int i = 0; i < t->ncounters && off > 0 && (size_t)off < sz; i++)
         off += snprintf(buf + off, sz - (size_t)off, "%s%s %d", i ? ", " : "  ",

@@ -9,6 +9,7 @@
 #include <strings.h>
 
 #include "app_priv.h"
+#include "card.h"
 #include "corridor.h"
 #include "fog.h"
 #include "floor.h"
@@ -1093,6 +1094,12 @@ static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FIL
                 fprintf(out, "%s%s %d", j ? ", " : "  ", t->counters[j].name, t->counters[j].max);
             for (int j = 0, r = 0; j < ROLL_MAX; j++)
                 if (c->rolls[j].name[0]) fprintf(out, "%s%s = %s", r++ ? ", " : "  rolls ", c->rolls[j].name, c->rolls[j].expr);
+            const char *card = card_of(c, t);
+            if (card) {
+                char first[128];
+                card_first_line(card, first, sizeof first);
+                fprintf(out, "  card: %s", first);
+            }
             fputc('\n', out);
             map_free(c);
         }

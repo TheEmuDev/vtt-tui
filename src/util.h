@@ -55,6 +55,9 @@ int utf8_decode(const char *s, size_t len, uint32_t *cp);
 /* Is s[0..len) well-formed UTF-8 (no stray continuation bytes, no
  * truncated sequence, no NUL)? */
 int utf8_valid(const char *s, size_t len);
+/* How much of s to keep to cut it at n bytes without halving a character:
+ * n, or less when s[n] continues the character before it. */
+size_t utf8_cut(const char *s, size_t n);
 
 /* Display width of a codepoint in terminal cells: 0, 1, or 2. */
 int utf8_width(uint32_t cp);

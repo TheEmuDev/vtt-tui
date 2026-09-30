@@ -344,6 +344,12 @@ void test_util(void)
         CHECK(!str_cut_word(n6, "remove"));
     }
 
+    CASE("utf8_cut keeps a cut from halving a character");
+    CHECK_EQ(utf8_cut("ab\xc3\xa9" "cd", 3), (size_t)2);         /* inside the \xc3\xa9 */
+    CHECK_EQ(utf8_cut("ab\xc3\xa9" "cd", 4), (size_t)4);         /* after it */
+    CHECK_EQ(utf8_cut("ab\xc3\xa9" "cd", 2), (size_t)2);
+    CHECK_EQ(utf8_cut("\xe2\x80\xa6", 2), (size_t)0);
+
     CASE("path_stem: the file's name, without its folder or .vtt");
     {
         char st[32];

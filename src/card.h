@@ -21,6 +21,10 @@ int         card_set(Map *m, const char *name, const char *text);
  * CARD_TEXT_MAX-1 bytes on a character's edge, no blank lines at either end. */
 char       *card_clean(const char *text);
 
+/* A card's first line, "**" marks dropped, into buf: what a listing says of
+ * it ("Acid Burrower - Tier 1 Solo"). */
+void        card_first_line(const char *text, char *buf, size_t sz);
+
 /* The text a creature shows: its card's, or NULL when it names none or one
  * the map does not have. */
 const char *card_of(const Map *m, const Token *t);

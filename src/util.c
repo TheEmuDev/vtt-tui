@@ -151,6 +151,12 @@ int utf8_decode(const char *s, size_t len, uint32_t *cp)
     return need + 1;
 }
 
+size_t utf8_cut(const char *s, size_t n)
+{
+    while (n > 0 && ((unsigned char)s[n] & 0xC0) == 0x80) n--;
+    return n;
+}
+
 int utf8_valid(const char *s, size_t len)
 {
     size_t i = 0;

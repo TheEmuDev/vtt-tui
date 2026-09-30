@@ -339,3 +339,78 @@ void test_card_edit(void)
     sandbox_leave(&sb);
 }
 
+/* A character template keeps its card, and placing it brings the card. */
+void test_card_templates(void)
+{
+    Sandbox sb = sandbox_enter("cardtpl");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    char err[160], said[160];
+
+    CASE("saving a creature saves its card; loading the template has it");
+    Map *m = map_new(8, 4, "src");
+    map_fill_tiles(m, 0, 0, 7, 3, TILE_FLOOR);
+    card_set(m, "Ogre", "Ogre - Tier 2 Bruiser\nDifficulty: 14");
+    Token t;
+    memset(&t, 0, sizeof t);
+    t.size = 2; t.kind = TOKEN_ENEMY;
+    str_lcpy(t.label, "Ogre", sizeof t.label);
+    str_lcpy(t.card, "Ogre", sizeof t.card);
+    tokens_add(&m->tokens, t);
+    CHECK_EQ(character_save(m, 0, "ogre", NULL, 0, err, sizeof err), 0);
+    Map *tpl = character_load("ogre", err, sizeof err);
+    CHECK(tpl != NULL);
+    if (tpl) CHECK(card_of(tpl, character_token(tpl)) && !strncmp(card_of(tpl, character_token(tpl)), "Ogre - Tier 2", 13));
+
+    CASE("placing it into a map without the card brings the card");
+    Map *d = map_new(8, 4, "dest");
+    map_fill_tiles(d, 0, 0, 7, 3, TILE_FLOOR);
+    Undo u;
+    undo_init(&u);
+    int idx = tpl ? character_place(d, &u, tpl, -1, 1, 1, 0, said, sizeof said, err, sizeof err) : -1;
+    CHECK(idx >= 0);
+    CHECK(card_find(d, "Ogre") >= 0);
+    if (idx >= 0) CHECK(card_of(d, &d->tokens.v[idx]) != NULL);
+
+    CASE("a map with its own card of that name keeps it, and says so");
+    card_set(d, "Ogre", "Our ogre is different");
+    idx = tpl ? character_place(d, &u, tpl, -1, 4, 1, 0, said, sizeof said, err, sizeof err) : -1;
+    CHECK(idx >= 0);
+    CHECK_EQ(strcmp(d->cards[card_find(d, "Ogre")].text, "Our ogre is different"), 0);
+    CHECK(strstr(said, "kept this map's card Ogre") != NULL);
+
+    CASE("a creature naming a card its map lacks is saved without the name");
+    Token lone = t;
+    str_lcpy(lone.card, "Nobody", sizeof lone.card);
+    lone.x = 4;
+    tokens_add(&m->tokens, lone);
+    CHECK_EQ(character_save(m, 1, "lone", NULL, 0, err, sizeof err), 0);
+    Map *ltpl = character_load("lone", err, sizeof err);
+    CHECK(ltpl && character_token(ltpl)->card[0] == '\0');
+    map_free(ltpl);
+
+    CASE("the channel's characters read gives the card's first line");
+    {
+        Renderer r;
+        App      a;
+        rnd_init(&r);
+        rnd_resize(&r, 80, 24);
+        app_init(&a, NULL, &r);
+        char path[640];
+        snprintf(path, sizeof path, "%s/d.vtt", sb.dir);
+        CHECK_EQ(mapio_save(d, path, err, sizeof err), 0);
+        CHECK_EQ(app_open_map(&a, path), 0);
+        char *ans = ctl_ask(&a, "characters");
+        CHECK(ans && strstr(ans, "ogre  \"Ogre\" enemy 2x2  card: Ogre - Tier 2 Bruiser") != NULL);
+        free(ans);
+        app_free(&a);
+        rnd_free(&r);
+    }
+
+    undo_free(&u);
+    map_free(d);
+    map_free(tpl);
+    map_free(m);
+    sandbox_leave(&sb);
+}
+
