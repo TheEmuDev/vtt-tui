@@ -75,6 +75,7 @@ make test       # unit and golden-frame tests
 make perf       # performance measurements (see docs/PERFORMANCE.md)
 make fuzz       # libFuzzer on the map loader (clang); FUZZ_SECONDS=600 for longer
 make fuzz-ctl   # libFuzzer on control-channel requests
+make fuzz-json  # libFuzzer on the JSON reader imports use
 ```
 
 ## Options

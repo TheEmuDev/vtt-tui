@@ -17,6 +17,8 @@
 #include <time.h>
 #include <unistd.h>
 #include "app.h"
+#include "json.h"
+#include "import.h"
 #include "store.h"
 #include "counter.h"
 #include "fog.h"
@@ -218,6 +220,8 @@ void test_cards(void);
 void test_card_box(void);
 void test_card_edit(void);
 void test_card_templates(void);
+void test_json_read(void);
+void test_import(void);
 void test_hidden(void);
 void test_dice(void);
 void test_session_log(void);

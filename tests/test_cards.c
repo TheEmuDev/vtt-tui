@@ -414,3 +414,132 @@ void test_card_templates(void)
     sandbox_leave(&sb);
 }
 
+/* The JSON reader, which imports read other people's files through. */
+void test_json_read(void)
+{
+    char err[160];
+    #define PARSE(txt) json_parse(txt, strlen(txt), err, sizeof err)
+
+    CASE("objects, arrays, strings, numbers, true, false and null");
+    JsonVal *v = PARSE("\xef\xbb\xbf [ {\"a\": 1.5e2, \"b\": [true, false, null], \"c\": \"x\"}, -3, \"\" ]");
+    CHECK(v && v->kind == JSON_ARR && v->n == 3);
+    if (v) {
+        const JsonVal *o = &v->kids[0];
+        CHECK(o->kind == JSON_OBJ && o->n == 3);
+        CHECK(json_get(o, "a") && json_get(o, "a")->num == 150.0);
+        CHECK(json_get(o, "b") && json_get(o, "b")->n == 3 && json_get(o, "b")->kids[0].b == 1);
+        CHECK(json_text(json_get(o, "c")) && !strcmp(json_text(json_get(o, "c")), "x"));
+        CHECK(json_get(o, "missing") == NULL);
+        CHECK(v->kids[1].num == -3.0);
+        CHECK(json_text(&v->kids[2]) && !json_text(&v->kids[2])[0]);
+    }
+    json_free(v);
+
+    CASE("escapes are decoded, \\u as UTF-8, a surrogate pair as one character");
+    v = PARSE("\"a\\\"b\\\\c\\/d\\ne\\u00e9\\ud83d\\ude00\"");
+    CHECK(v && json_text(v) && !strcmp(json_text(v), "a\"b\\c/d\ne\xc3\xa9\xf0\x9f\x98\x80"));
+    json_free(v);
+
+    CASE("anything that is not JSON is refused, saying where");
+    static const char *const bad[] = {
+        "", "[1,]", "{\"a\" 1}", "[1 2]", "\"open", "{\"a\":}", "tru", "01x", "-", "1.", "1e",
+        "\"\\q\"", "\"\\ud800\"", "\"\\udc00\"", "\"\\u12\"", "\"a\tb\"", "[1] 2", "{1:2}", "\"\\u0000\"",
+        "\"\xff\"",
+    };
+    for (size_t i = 0; i < sizeof bad / sizeof bad[0]; i++) {
+        v = PARSE(bad[i]);
+        CHECK(v == NULL);
+        CHECK(strstr(err, "not JSON at line") != NULL);
+        json_free(v);
+    }
+    v = PARSE("[1,\n2,\n]");
+    CHECK(v == NULL && strstr(err, "line 3") != NULL);
+
+    CASE("nesting past 64 is refused, not recursed into");
+    {
+        char deep[200];
+        memset(deep, '[', 100);
+        memset(deep + 100, ']', 100);
+        v = json_parse(deep, sizeof deep, err, sizeof err);
+        CHECK(v == NULL && strstr(err, "64") != NULL);
+        memset(deep, '[', 60);
+        memset(deep + 60, ']', 60);
+        v = json_parse(deep, 120, err, sizeof err);
+        CHECK(v != NULL);
+        json_free(v);
+    }
+    #undef PARSE
+}
+
+/* --import-adversaries: a list made templates with cards. A made-up list:
+ * vtt ships no SRD data. */
+void test_import(void)
+{
+    Sandbox sb = sandbox_enter("import");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    char path[640], err[320];
+    snprintf(path, sizeof path, "%s/adv.json", sb.dir);
+    FILE *f = fopen(path, "w");
+    if (f) {
+        fputs("\xef\xbb\xbf[\n"
+              " {\"name\": \"Cave Bat\", \"tier\": \"1\", \"type\": \"Minion\", \"difficulty\": 10,"
+              "  \"thresholds\": \"None\", \"hp\": \"1\", \"stress\": \"1\", \"atk\": \"-1\", \"attack\": \"Bite\","
+              "  \"range\": \"Melee\", \"damage\": \"2 phy\", \"description\": \"A bat.\","
+              "  \"feature\": [{\"name\": \"Minion (3) - Passive\", \"text\": \"Defeated by **any** damage.\"}]},\n"
+              " {\"name\": \"Stone Troll\", \"tier\": 2, \"type\": \"Bruiser\", \"hp\": 9},\n"
+              " {\"name\": \"???\"},\n"
+              " {\"tier\": \"1\"}\n"
+              "]\n", f);
+        fclose(f);
+    }
+    FILE *out = tmpfile();
+
+    CASE("each adversary becomes a template: an enemy, 1x1, full, with its stat block as its card");
+    CHECK_EQ(import_adversaries(path, 0, out, err, sizeof err), 2);
+    Map *bat = character_load("Cave-Bat", err, sizeof err);
+    CHECK(bat != NULL);
+    if (bat) {
+        const Token *t = character_token(bat);
+        CHECK(t->kind == TOKEN_ENEMY && t->size == 1 && !strcmp(t->label, "Cave Bat"));
+        CHECK(t->ncounters == 2 && t->counters[0].value == 1 && t->counters[1].max == 1);
+        const char *c = card_of(bat, t);
+        CHECK(c && !strncmp(c, "Cave Bat - Tier 1 Minion\nA bat.\n", 32));
+        CHECK(c && strstr(c, "Difficulty: 10   Thresholds: None   HP: 1   Stress: 1\n") != NULL);
+        CHECK(c && strstr(c, "Attack: -1   Bite (Melee) 2 phy\n") != NULL);
+        CHECK(c && strstr(c, "\n\nMinion (3) - Passive: Defeated by **any** damage.") != NULL);
+        map_free(bat);
+    }
+    Map *troll = character_load("Stone-Troll", err, sizeof err);
+    CHECK(troll != NULL);                                    /* a sparse one: what it has */
+    if (troll) {
+        const char *c = card_of(troll, character_token(troll));
+        CHECK(c && !strcmp(c, "Stone Troll - Tier 2 Bruiser\nHP: 9"));
+        map_free(troll);
+    }
+
+    CASE("again, the ones there are kept; --force replaces them");
+    CHECK_EQ(import_adversaries(path, 0, out, err, sizeof err), 0);
+    CHECK_EQ(import_adversaries(path, 1, out, err, sizeof err), 2);
+    rewind(out);
+    char said[2048] = "";
+    size_t n = fread(said, 1, sizeof said - 1, out);
+    said[n] = '\0';
+    CHECK(strstr(said, "imported 2 adversaries") != NULL);
+    CHECK(strstr(said, "2 already there, kept (--force replaces them)") != NULL);
+    CHECK(strstr(said, "skipped ???: its name makes no file name") != NULL);
+    fclose(out);
+
+    CASE("a file that is not a list, or not JSON, is refused with why");
+    f = fopen(path, "w");
+    if (f) { fputs("{\"name\": \"x\"}", f); fclose(f); }
+    CHECK_EQ(import_adversaries(path, 0, stdout, err, sizeof err), -1);
+    CHECK(strstr(err, "not a list of adversaries") != NULL);
+    f = fopen(path, "w");
+    if (f) { fputs("[{\"name\": ]", f); fclose(f); }
+    CHECK_EQ(import_adversaries(path, 0, stdout, err, sizeof err), -1);
+    CHECK(strstr(err, "not JSON at line 1") != NULL);
+
+    sandbox_leave(&sb);
+}
+

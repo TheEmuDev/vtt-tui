@@ -105,4 +105,8 @@ int fd_nonblock_cloexec(int fd);
  * that is there already is fine. Errors are left to whatever then writes. */
 void dir_make(const char *dir);
 
+/* A whole file on the heap, NUL-terminated, its length in *len. NULL when
+ * it cannot be read, or -- *too_big set -- when it is over cap bytes. */
+char *file_read(const char *path, size_t cap, size_t *len, int *too_big);
+
 #endif /* VTT_UTIL_H */

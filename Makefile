@@ -54,7 +54,7 @@ DEPS      := $(OBJS:.o=.d)
 LIBSRCS   := $(filter-out $(SRCDIR)/main.c,$(SRCS))
 TESTSRCS  := $(filter-out $(TESTDIR)/fuzz_%.c,$(wildcard $(TESTDIR)/*.c))
 
-.PHONY: all debug test bench perf fuzz fuzz-ctl clean help
+.PHONY: all debug test bench perf fuzz fuzz-ctl fuzz-json clean help
 .DEFAULT_GOAL := all
 
 all: BUILDFLAGS := $(RELFLAGS)
@@ -103,6 +103,12 @@ fuzz-ctl:
 	clang $(BASEFLAGS) -O1 -g -DVTT_PROF=0 -fsanitize=fuzzer,address,undefined \
 	    $(LIBSRCS) $(TESTDIR)/fuzz_ctl.c -o $(OBJDIR)/fuzz-ctl $(LDLIBS)
 	$(OBJDIR)/fuzz-ctl -max_total_time=$(FUZZ_SECONDS) -max_len=65536 $(OBJDIR)/fuzz-ctl-corpus
+
+fuzz-json:
+	@mkdir -p $(OBJDIR)/fuzz-json-corpus && cp $(TESTDIR)/fuzz-json/* $(OBJDIR)/fuzz-json-corpus/
+	clang $(BASEFLAGS) -O1 -g -DVTT_PROF=0 -fsanitize=fuzzer,address,undefined \
+	    $(LIBSRCS) $(TESTDIR)/fuzz_json.c -o $(OBJDIR)/fuzz-json $(LDLIBS)
+	$(OBJDIR)/fuzz-json -max_total_time=$(FUZZ_SECONDS) -max_len=65536 $(OBJDIR)/fuzz-json-corpus
 
 clean:
 	@rm -rf $(OBJDIR) $(BIN)

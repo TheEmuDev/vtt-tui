@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include "app.h"
+#include "import.h"
 #include "dice.h"
 #include "draw.h"
 #include "input.h"
@@ -52,6 +53,8 @@ typedef struct {
     long        ctl_pid;            /* --ctl-pid N: which vtt; 0 the only one */
     const char *bench_ctl;          /* --bench-ctl FILE: a request run each bench loop */
     const char *apply;              /* --apply FILE: run a request against the map, save it */
+    const char *import_adv;         /* --import-adversaries FILE: SRD adversaries as characters */
+    int         force;              /* --force: the import replaces templates already there */
     int         new_w, new_h;       /* --new WxH: the map --apply starts from, when it is not there */
 } Options;
 
@@ -91,6 +94,9 @@ static void usage(void)
         "  --apply FILE       run FILE's control-channel requests against the map and save it\n"
         "                     (all or nothing; docs/AGENTS.md)\n"
         "  --new WxH          with --apply, the size of a new, empty map when the file is not there\n"
+        "  --import-adversaries FILE\n"
+        "                     the Daggerheart SRD's adversaries (JSON) as character templates,\n"
+        "                     each with its stat block as a card; --force replaces ones already there\n"
         "  -h, --help         this message\n",
         stdout);
 }
@@ -119,6 +125,8 @@ static int parse_args(Options *o, int argc, char **argv)
         else if (!strcmp(a, "--agent"))      o->agent = 1;
         else if (!strcmp(a, "--bench-ctl") && i + 1 < argc) o->bench_ctl = argv[++i];
         else if (!strcmp(a, "--apply") && i + 1 < argc) o->apply = argv[++i];
+        else if (!strcmp(a, "--import-adversaries") && i + 1 < argc) o->import_adv = argv[++i];
+        else if (!strcmp(a, "--force"))      o->force = 1;
         else if (!strcmp(a, "--new") && i + 1 < argc) {
             if (sscanf(argv[++i], "%dx%d", &o->new_w, &o->new_h) != 2 || o->new_w < 1 || o->new_h < 1 ||
                 o->new_w > MAP_MAX_DIM || o->new_h > MAP_MAX_DIM)
@@ -185,18 +193,10 @@ typedef struct {
 static char *read_script_bytes(const char *path, size_t *out_len,
                                size_t **out_pauses, size_t *out_npauses)
 {
-    FILE *f = fopen(path, "rb");
-    if (!f) die("cannot open script %s: %s", path, strerror(errno));
-
-    fseek(f, 0, SEEK_END);
-    long sz = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    if (sz < 0) die("cannot size script %s", path);
-
-    char  *raw = xmalloc((size_t)sz + 1);
-    size_t n   = fread(raw, 1, (size_t)sz, f);
-    fclose(f);
-    raw[n] = '\0';
+    size_t n   = 0;
+    int    big = 0;
+    char  *raw = file_read(path, (size_t)64 << 20, &n, &big);
+    if (!raw) die(big ? "script %s is over 64 MB" : "cannot open script %s", path);
 
     char   *out     = xmalloc(n + 1);
     size_t *pauses  = xmalloc((n + 1) * sizeof(size_t));
@@ -342,13 +342,9 @@ static int run_headless(const Options *o)
         char  *ctl_req = NULL;
         size_t ctl_len = 0;
         if (o->bench_ctl) {
-            FILE *f = fopen(o->bench_ctl, "rb");
-            if (!f) die("cannot read %s", o->bench_ctl);
-            ctl_req = malloc(CTL_REQ_CAP + 1);
-            if (!ctl_req) die("out of memory");
-            ctl_len = fread(ctl_req, 1, CTL_REQ_CAP, f);
-            ctl_req[ctl_len] = '\0';
-            fclose(f);
+            int big = 0;
+            ctl_req = file_read(o->bench_ctl, CTL_REQ_CAP, &ctl_len, &big);
+            if (!ctl_req) die(big ? "%s is over 64 KB" : "cannot read %s", o->bench_ctl);
         }
 
         uint64_t bench_clock_ms = 1000;
@@ -622,13 +618,10 @@ static int run_apply(const Options *o)
 {
     if (!o->map_path) { fputs("vtt: --apply needs a map file\n", stderr); return 2; }
     char err[256];
-    FILE *pf = fopen(o->apply, "rb");
-    if (!pf) { fprintf(stderr, "vtt: cannot read %s\n", o->apply); return 2; }
-    char  *req = xmalloc(CTL_REQ_CAP + 2);
-    size_t len = fread(req, 1, CTL_REQ_CAP + 1, pf);
-    fclose(pf);
-    if (len > CTL_REQ_CAP) { fprintf(stderr, "vtt: %s is over 64 KB\n", o->apply); free(req); return 2; }
-    req[len] = '\0';
+    size_t len = 0;
+    int    big = 0;
+    char  *req = file_read(o->apply, CTL_REQ_CAP, &len, &big);
+    if (!req) { fprintf(stderr, big ? "vtt: %s is over 64 KB\n" : "vtt: cannot read %s\n", o->apply); return 2; }
 
     int made = 0;                   /* this run made the file: a failure takes it away */
     if (access(o->map_path, F_OK) != 0) {
@@ -690,6 +683,12 @@ int main(int argc, char **argv)
     if (o.tool) return run_tool(&o);
     if (o.ctl)  return ctl_client_main(o.ctl_req, o.ctl_pid);
     if (o.apply) return run_apply(&o);
+    if (o.import_adv) {
+        char err[320];
+        int n = import_adversaries(o.import_adv, o.force, stdout, err, sizeof err);
+        if (n < 0) fprintf(stderr, "vtt: %s\n", err);
+        return n < 0 ? 2 : 0;
+    }
 
     draw_set_ascii(o.ascii);
     if (o.watch) return watch_main(o.watch, o.ascii);

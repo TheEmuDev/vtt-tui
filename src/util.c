@@ -299,6 +299,34 @@ int fd_nonblock_cloexec(int fd)
     return 0;
 }
 
+char *file_read(const char *path, size_t cap, size_t *len, int *too_big)
+{
+    if (too_big) *too_big = 0;
+    FILE *f = fopen(path, "rb");
+    if (!f) return NULL;
+    size_t size = 4096, n = 0;
+    char  *buf = xmalloc(size);
+    for (;;) {
+        if (n + 1 >= size) {
+            if (size > cap + 1) break;
+            buf = xrealloc(buf, size *= 2);
+        }
+        size_t r = fread(buf + n, 1, size - n - 1, f);
+        if (!r) break;
+        n += r;
+    }
+    int err = ferror(f);
+    fclose(f);
+    if (err || n > cap) {
+        if (n > cap && too_big) *too_big = 1;
+        free(buf);
+        return NULL;
+    }
+    buf[n] = '\0';
+    if (len) *len = n;
+    return buf;
+}
+
 void dir_make(const char *dir)
 {
     char   partial[4096];

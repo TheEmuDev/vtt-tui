@@ -50,6 +50,7 @@ tools/saves.sh  a save flushed and unflushed, three map sizes, on the real disk 
 VTT_FOGDIFF_OPS=36000 ./build/run-tests   the long run of the fog differential test
 make fuzz       libFuzzer on the map loader (clang), FUZZ_SECONDS=600 for longer
 make fuzz-ctl   libFuzzer on control-channel requests (tests/fuzz_ctl.c, corpus tests/fuzz-ctl)
+make fuzz-json  libFuzzer on the JSON reader (tests/fuzz_json.c, corpus tests/fuzz-json)
 tools/embed.sh  after editing web/index.html; tools/blit_wasm.py after editing the blitter
 ./vtt map.vtt --serve 7777      serve; a raw client: printf 'VTT1\n' | nc 127.0.0.1 7777
 ./vtt map --bench keys --bench-clients 4   the frame with four watchers attached
