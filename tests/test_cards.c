@@ -1,6 +1,8 @@
 /* Tests: cards -- the map's table, a creature's card, the file. */
 
 #include "harness.h"
+
+#include <dirent.h>
 #include "card.h"
 
 typedef struct { const char *code; int n; } CardCodes;
@@ -224,5 +226,116 @@ void test_card_box(void)
 
     app_free(&a);
     rnd_free(&r);
+}
+
+/* An "editor" for s k: a script doing to the file what the GM would. */
+static void set_editor(const char *dir, const char *script)
+{
+    char path[640], cmd[700];
+    snprintf(path, sizeof path, "%s/edit.sh", dir);
+    FILE *f = fopen(path, "w");
+    if (f) { fputs(script, f); fclose(f); }
+    snprintf(cmd, sizeof cmd, "sh %s", path);
+    setenv("VISUAL", cmd, 1);
+}
+
+static int leftover_card_files(const char *dir)
+{
+    DIR *d = opendir(dir);
+    int n = 0;
+    struct dirent *e;
+    while (d && (e = readdir(d))) n += !strncmp(e->d_name, "vtt-card-", 9);
+    if (d) closedir(d);
+    return n;
+}
+
+void test_card_edit(void)
+{
+    Sandbox sb = sandbox_enter("cardedit");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    char path[600];
+    snprintf(path, sizeof path, "%s/c.vtt", sb.dir);
+    FILE *f = fopen(path, "w");
+    if (f) {
+        fputs("VTT 2\nname c\nsize 10 4\nzoom 1\nruleset daggerheart\ntiles\n"
+              "..........\n..........\n..........\n..........\n"
+              "token enemy 1 1 1 \"Goblin\"\ntoken enemy 3 1 1 \"Goblin 2\"\ntoken player 5 1 1 \"Aria\"\n", f);
+        fclose(f);
+    }
+    const char *old_visual = getenv("VISUAL"), *old_tmp = getenv("TMPDIR");
+    char keep_visual[256] = "", keep_tmp[256] = "";
+    if (old_visual) str_lcpy(keep_visual, old_visual, sizeof keep_visual);
+    if (old_tmp)    str_lcpy(keep_tmp, old_tmp, sizeof keep_tmp);
+    setenv("TMPDIR", sb.dir, 1);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 24);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    press(&a, ":play\r");
+
+    CASE("s k on a creature with no card opens the ruleset's stat block to fill in");
+    set_editor(sb.dir, "sed -i 's/Difficulty: 11/Difficulty: 14/' \"$1\"\n");
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "sk");
+    int gi = card_find(a.map, "Goblin");
+    CHECK(gi >= 0);
+    if (gi >= 0) {
+        const char *t = a.map->cards[gi].text;
+        CHECK(!strncmp(t, "Goblin - Tier 1 Standard\n", 25));
+        CHECK(strstr(t, "Difficulty: 14   Thresholds: 5/10") != NULL);
+        CHECK(strchr(t, '#') == NULL);                          /* the help lines left out */
+    }
+    CHECK_EQ(strcmp(a.map->tokens.v[0].card, "Goblin"), 0);
+    CHECK_EQ(strcmp(a.map->tokens.v[1].card, "Goblin"), 0);   /* Goblin 2 has it too */
+    CHECK_EQ(a.map->tokens.v[2].card[0], '\0');               /* Aria does not */
+    CHECK(strstr(a.status, "given to 1 more Goblin") != NULL);
+    CHECK_EQ(a.map->modified, 1);
+    CHECK_EQ(leftover_card_files(sb.dir), 0);
+
+    CASE("an existing card opens as it is; an addition is kept");
+    set_editor(sb.dir, "sed -i '1a Motives: steal, run' \"$1\"\n");
+    press(&a, "sk");
+    CHECK(strstr(a.map->cards[gi].text, "Standard\nMotives: steal, run\n") != NULL);
+    CHECK(strstr(a.status, "card Goblin saved") != NULL);
+
+    CASE("quitting untouched, emptying it, or the editor failing changes nothing");
+    set_editor(sb.dir, "true\n");
+    char before[CARD_TEXT_MAX];
+    str_lcpy(before, a.map->cards[gi].text, sizeof before);
+    press(&a, "sk");
+    CHECK(strstr(a.status, "card unchanged") != NULL);
+    set_editor(sb.dir, ": > \"$1\"\n");
+    press(&a, "sk");
+    CHECK(strstr(a.status, "empty card changes nothing") != NULL);
+    set_editor(sb.dir, "exit 3\n");
+    press(&a, "sk");
+    CHECK(strstr(a.status, "did not finish") != NULL);
+    CHECK_EQ(strcmp(a.map->cards[gi].text, before), 0);
+    CHECK_EQ(leftover_card_files(sb.dir), 0);
+
+    CASE("a new card left as it started is not written");
+    set_editor(sb.dir, "true\n");
+    a.ed.cx = 5; a.ed.cy = 1;
+    press(&a, "sk");
+    CHECK(strstr(a.status, "no card written") != NULL);
+    CHECK_EQ(card_find(a.map, "Aria"), -1);
+    CHECK_EQ(a.map->tokens.v[2].card[0], '\0');
+
+    CASE("without a ruleset a new card starts with the label alone");
+    press(&a, ":ruleset none\r");
+    set_editor(sb.dir, "printf 'Aria\\nThe party\\x27s scout\\n' > \"$1\"\n");
+    press(&a, "sk");
+    int ai = card_find(a.map, "Aria");
+    CHECK(ai >= 0 && !strcmp(a.map->cards[ai].text, "Aria\nThe party's scout"));
+
+    app_free(&a);
+    rnd_free(&r);
+    if (keep_visual[0]) setenv("VISUAL", keep_visual, 1); else unsetenv("VISUAL");
+    if (keep_tmp[0]) setenv("TMPDIR", keep_tmp, 1); else unsetenv("TMPDIR");
+    sandbox_leave(&sb);
 }
 

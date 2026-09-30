@@ -58,6 +58,9 @@ void rnd_free(Renderer *r);
 
 /* Reallocates for a new size and forces a full repaint. No-op if unchanged. */
 void rnd_resize(Renderer *r, int w, int h);
+/* The terminal's contents are not what front says -- another program had
+ * the screen -- so the next flush writes every cell. */
+void rnd_invalidate(Renderer *r);
 
 typedef void (*RndObserver)(void *ctx, int x, int y, const Cell *c);
 static inline void rnd_set_observer(Renderer *r, RndObserver fn, void *ctx)

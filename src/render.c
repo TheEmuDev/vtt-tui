@@ -25,6 +25,11 @@ void rnd_free(Renderer *r)
     memset(r, 0, sizeof *r);
 }
 
+void rnd_invalidate(Renderer *r)
+{
+    for (size_t i = 0; i < r->ncells; i++) r->front[i].ch = 0xFFFFFFFFu;
+}
+
 void rnd_resize(Renderer *r, int w, int h)
 {
     if (w == r->w && h == r->h) return;

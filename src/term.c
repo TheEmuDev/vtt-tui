@@ -47,19 +47,9 @@ static void on_fatal(int sig)
     raise(sig);
 }
 
-int term_init(Term *t)
+/* Raw mode over the saved settings. */
+static int make_raw(Term *t)
 {
-    memset(t, 0, sizeof *t);
-    t->in_fd  = STDIN_FILENO;
-    t->out_fd = STDOUT_FILENO;
-    t->sig_pipe[0] = t->sig_pipe[1] = -1;
-
-    if (!isatty(t->in_fd) || !isatty(t->out_fd)) {
-        errno = ENOTTY;
-        return -1;
-    }
-    if (tcgetattr(t->in_fd, &t->saved) < 0) return -1;
-
     struct termios raw = t->saved;
     /* Disable canonical mode, echo, and signal generation so every keystroke
      * (Ctrl-C included) arrives as a plain byte for the input parser. */
@@ -73,6 +63,23 @@ int term_init(Term *t)
 
     if (tcsetattr(t->in_fd, TCSAFLUSH, &raw) < 0) return -1;
     t->raw = 1;
+    return 0;
+}
+
+int term_init(Term *t)
+{
+    memset(t, 0, sizeof *t);
+    t->in_fd  = STDIN_FILENO;
+    t->out_fd = STDOUT_FILENO;
+    t->sig_pipe[0] = t->sig_pipe[1] = -1;
+
+    if (!isatty(t->in_fd) || !isatty(t->out_fd)) {
+        errno = ENOTTY;
+        return -1;
+    }
+    if (tcgetattr(t->in_fd, &t->saved) < 0) return -1;
+
+    if (make_raw(t) < 0) return -1;
 
     /* The terminal descriptors are deliberately left blocking. In a terminal
      * stdin and stdout are the same open file description, so setting
@@ -134,6 +141,33 @@ void term_shutdown(Term *t)
     if (t->sig_pipe[0] >= 0) { close(t->sig_pipe[0]); t->sig_pipe[0] = -1; }
     if (t->sig_pipe[1] >= 0) { close(t->sig_pipe[1]); t->sig_pipe[1] = -1; }
     g_term = NULL;
+}
+
+void term_suspend(Term *t)
+{
+    if (!t) return;
+    if (t->altscreen) {
+        term_write(t, ESC_SGR_RESET, sizeof ESC_SGR_RESET - 1);
+        term_write(t, ESC_CURS_SHOW, sizeof ESC_CURS_SHOW - 1);
+        term_write(t, ESC_ALT_OFF, sizeof ESC_ALT_OFF - 1);
+        t->altscreen = 0;
+    }
+    if (t->raw) {
+        tcsetattr(t->in_fd, TCSAFLUSH, &t->saved);
+        t->raw = 0;
+    }
+}
+
+int term_resume(Term *t)
+{
+    if (!t) return -1;
+    if (!t->raw && make_raw(t) < 0) return -1;
+    term_update_size(t);
+    term_write(t, ESC_ALT_ON, sizeof ESC_ALT_ON - 1);
+    term_write(t, ESC_CURS_HIDE, sizeof ESC_CURS_HIDE - 1);
+    term_write(t, ESC_CLEAR, sizeof ESC_CLEAR - 1);
+    t->altscreen = 1;
+    return 0;
 }
 
 int term_update_size(Term *t)

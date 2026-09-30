@@ -115,6 +115,7 @@ int main(int argc, char **argv)
         { "burst",      test_group_effect },
         { "cards",      test_cards },
         { "cardbox",    test_card_box },
+        { "cardedit",   test_card_edit },
         { "clearstatus", test_clear_status_keys },
         { "trail",    test_trail },
         { "traildraw", test_trail_draw },

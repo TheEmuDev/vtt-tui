@@ -25,6 +25,12 @@ int  term_init(Term *t);
 /* Restores everything. Safe to call more than once. */
 void term_shutdown(Term *t);
 
+/* Hands the terminal to another program -- an editor -- and takes it back:
+ * the main screen and cooked mode, then raw mode and the alternate screen,
+ * cleared (the caller repaints everything). The signal pipe stays armed. */
+void term_suspend(Term *t);
+int  term_resume(Term *t);
+
 /* Re-reads the window size into t->w/t->h. Returns 1 if it changed. */
 int  term_update_size(Term *t);
 

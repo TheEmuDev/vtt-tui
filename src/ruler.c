@@ -83,6 +83,20 @@ double dist_tiles(DistMetric m, int dx, int dy)
 #define DH_NEAR_ADV "free with an action"
 #define DH_FAR_ADV  "a separate action"
 
+/* The SRD's adversary stat block, laid out as the import lays one out, at
+ * the tier 1 benchmarks (Difficulty 11, attack +1). */
+#define DH_CARD \
+    "%s - Tier 1 Standard\n" \
+    "What it looks like, and how it acts.\n" \
+    "Motives: \n" \
+    "Difficulty: 11   Thresholds: 5/10   HP: 3   Stress: 1\n" \
+    "Attack: +1   Weapon (Melee) 1d6+1 phy\n" \
+    "Experience: \n" \
+    "\n" \
+    "Feature - Passive: what it always does.\n" \
+    "Feature - Action: what it does in the spotlight.\n" \
+    "Feature - Reaction: what it does when something happens.\n"
+
 static const RangeBand DAGGERHEART_BANDS[] = {
     { "Melee",       5.0,      DH_NEAR_PC, DH_NEAR_ADV },  /* touching distance: an adjacent square */
     { "Very Close", 15.0,      DH_NEAR_PC, DH_NEAR_ADV },  /* the short edge of a game card, 2-3 in */
@@ -92,12 +106,12 @@ static const RangeBand DAGGERHEART_BANDS[] = {
 };
 
 static const Ruleset RULESETS[] = {
-    { "none",        NULL, 0, 1, NULL, 0, 0, NULL, -1 },
+    { "none",        NULL, 0, 1, NULL, 0, 0, NULL, -1, NULL },
     /* A group effect's targets are within Very Close of one origin point
      * "unless stated otherwise" (the SRD's Area of Effect). */
     { "daggerheart", DAGGERHEART_BANDS,
       (int)(sizeof DAGGERHEART_BANDS / sizeof *DAGGERHEART_BANDS), 1, "duality", 1, 1,
-      "HP Stress Armor", 1 },
+      "HP Stress Armor", 1, DH_CARD },
 };
 
 #define NRULESETS ((int)(sizeof RULESETS / sizeof *RULESETS))

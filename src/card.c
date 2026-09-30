@@ -18,21 +18,13 @@ int card_find(const Map *m, const char *name)
     return -1;
 }
 
-int card_set(Map *m, const char *name, const char *text)
+char *card_clean(const char *text)
 {
-    if (!card_name_ok(name)) return -1;
-    int i = card_find(m, name);
-    if (i < 0) {
-        if (m->ncards >= MAP_CARDS_MAX) return -1;
-        i = m->ncards++;
-        memset(&m->cards[i], 0, sizeof m->cards[i]);
-        str_lcpy(m->cards[i].name, name, sizeof m->cards[i].name);
-    }
-    /* \r\n and lone \r become \n; cut on a character's edge; no trailing
-     * blank lines, and none at the start either. */
+    /* \r\n and lone \r become \n; cut on a character's edge; no blank
+     * lines at the start or the end. */
     char *t = xmalloc(CARD_TEXT_MAX);
     size_t n = 0;
-    const char *p = text;
+    const char *p = text ? text : "";
     while (*p == '\n' || *p == '\r') p++;
     for (; *p && n + 1 < CARD_TEXT_MAX; p++) {
         if (*p == '\r') { if (p[1] != '\n') t[n++] = '\n'; continue; }
@@ -46,8 +38,21 @@ int card_set(Map *m, const char *name, const char *text)
     }
     while (n > 0 && (t[n - 1] == '\n' || t[n - 1] == ' ')) n--;
     t[n] = '\0';
+    return t;
+}
+
+int card_set(Map *m, const char *name, const char *text)
+{
+    if (!card_name_ok(name)) return -1;
+    int i = card_find(m, name);
+    if (i < 0) {
+        if (m->ncards >= MAP_CARDS_MAX) return -1;
+        i = m->ncards++;
+        memset(&m->cards[i], 0, sizeof m->cards[i]);
+        str_lcpy(m->cards[i].name, name, sizeof m->cards[i].name);
+    }
     free(m->cards[i].text);
-    m->cards[i].text = t;
+    m->cards[i].text = card_clean(text);
     return i;
 }
 

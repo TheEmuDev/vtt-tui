@@ -68,6 +68,10 @@ typedef struct {
     /* The band a group effect covers round its origin unless it says
      * otherwise (g e), as an index into bands; -1 for none in particular. */
     int              effect_band;
+    /* A new card's text for s k to start from, "%s" the creature's label:
+     * the game's stat block with its labels ready to fill in. NULL for
+     * just the label. */
+    const char      *card_skeleton;
 } Ruleset;
 
 const Ruleset *ruleset_by_name(const char *name);   /* NULL if unknown */

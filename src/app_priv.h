@@ -102,6 +102,9 @@ void app_delete_map(App *a, const char *path);
 /* app_build.c: build mode's keys (wall mode's among them). */
 void app_editor_key(App *a, Key k);
 
+/* app_card.c: s k -- the creature's card in the GM's editor. */
+void app_card_edit(App *a);
+
 /* app_ctl_marked.c: the channel's `marked` read, as text or JSON; and
  * app_ctl.c's words for a screen and a build mode, as the channel says them. */
 void app_ctl_marked(App *a, FILE *out, int json);

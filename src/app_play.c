@@ -551,7 +551,8 @@ static int pending_key(App *a, Key k)
         if (k.ch == 'n') { app_note_prompt(a, play_target_token(a), a->ed.cx, a->ed.cy); return 1; }
         if (k.ch == 'v') { counters_prompt(a); return 1; }
         if (k.ch == 'h') { hide_toggle(a); return 1; }
-        app_set_status(a, "s wants a add, c color, d drop, i initiative, t take the turn, n note, v counters, h hide");
+        if (k.ch == 'k') { app_card_edit(a); return 1; }
+        app_set_status(a, "s wants a add, c color, d drop, i initiative, t take the turn, n note, v counters, h hide, k card");
         return 1;
     }
     return 1;
@@ -828,7 +829,7 @@ void app_play_key(App *a, Key k)
 
     case 's':
         a->pending = 's';
-        app_set_status(a, "s    a add marker    c color    d drop    i initiative    t take the turn    n note    v counters    h hide");
+        app_set_status(a, "s    a add marker    c color    d drop    i initiative    t take the turn    n note    v counters    h hide    k card");
         break;
 
     case '<': case '>': {
