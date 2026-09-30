@@ -975,7 +975,7 @@ static void cmd_card(App *a, const char *verb, const char *rest)
         return;
     }
     if (*rest) { app_set_status(a, ":card, :card on, or :card off"); return; }
-    int i = a->play.sel >= 0 && a->play.sel < m->tokens.n ? a->play.sel : app_token_under_cursor(a);
+    int i = app_target_token(a);
     if (i < 0) { app_set_status(a, "no creature here - :card shows the selected one's card"); return; }
     if (!card_of(m, &m->tokens.v[i])) {
         char msg[96];

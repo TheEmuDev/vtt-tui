@@ -128,9 +128,10 @@ void ui_picker_draw(Renderer *r, const Theme *th, const UiPicker *pk,
 /* A creature's card in a box, its title on the top edge: the text wrapped
  * to the box, "**bold**" drawn bold and "_emphasis_" marks dropped, from
  * wrapped line `top` on, and a "..." on the bottom edge when there is more.
- * Returns how many wrapped lines the text makes. */
+ * `lines` is ui_card_lines' answer when the caller has it, else -1. Returns
+ * how many wrapped lines the text makes. */
 int  ui_card_draw(Renderer *r, const Theme *th, Rect box, const char *title,
-                  const char *text, int top, const BoxGlyphs *frame);
+                  const char *text, int top, int lines, const BoxGlyphs *frame);
 /* How many wrapped lines the text makes in a box box_w wide. */
 int  ui_card_lines(const char *text, int box_w);
 

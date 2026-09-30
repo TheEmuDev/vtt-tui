@@ -87,6 +87,10 @@ int import_adversaries(const char *path, int force, FILE *out, char *err, size_t
     if (doc->kind != JSON_ARR) { json_free(doc); snprintf(err, errsz, "%.200s is not a list of adversaries", path); return -1; }
 
     int written = 0, kept = 0, skipped = 0;
+    /* The names written this run: two long names cut to one would be one
+     * template, the second written over the first. */
+    char (*done)[CARD_NAME_MAX] = xmalloc((size_t)(doc->n > 0 ? doc->n : 1) * CARD_NAME_MAX);
+    int ndone = 0;
     char dir[MAP_PATH_MAX];
     character_dir(dir, sizeof dir);
     for (int i = 0; i < doc->n; i++) {
@@ -96,6 +100,9 @@ int import_adversaries(const char *path, int force, FILE *out, char *err, size_t
         if (!label || !label[0]) { skipped++; continue; }
         character_name_from_label(label, name, sizeof name);
         if (!card_name_ok(name)) { fprintf(out, "skipped %s: its name makes no file name\n", label); skipped++; continue; }
+        int twice = 0;
+        for (int k = 0; k < ndone && !twice; k++) twice = !strcmp(done[k], name);
+        if (twice) { fprintf(out, "skipped %s: cut to %s, the name of one before it\n", label, name); skipped++; continue; }
 
         char path_out[MAP_PATH_MAX];
         if (!store_path("characters", name, ".vtt", path_out, sizeof path_out)) { skipped++; continue; }
@@ -108,7 +115,10 @@ int import_adversaries(const char *path, int force, FILE *out, char *err, size_t
         memset(&t, 0, sizeof t);
         t.size = 1;
         t.kind = TOKEN_ENEMY;
-        str_lcpy(t.label, label, sizeof t.label);
+        if (str_lcpy(t.label, label, sizeof t.label) >= sizeof t.label) {
+            t.label[utf8_cut(label, sizeof t.label - 1)] = '\0';     /* not inside a character */
+            fprintf(out, "%s: its label is cut to \"%s\" (the card keeps the whole name)\n", label, t.label);
+        }
         char nb[32];
         int hp = atoi(field(o, "hp", nb, sizeof nb)), st = atoi(field(o, "stress", nb, sizeof nb));
         if (hp > 0) counter_set(&t, "HP", hp, hp);
@@ -121,11 +131,12 @@ int import_adversaries(const char *path, int force, FILE *out, char *err, size_t
         str_lcpy(t.card, name, sizeof t.card);
         tokens_add(&m->tokens, t);
         char e2[MAPIO_ERR_MAX];
-        if (character_save(m, 0, name, NULL, 0, e2, sizeof e2) == 0) written++;
+        if (character_save(m, 0, name, NULL, 0, e2, sizeof e2) == 0) { written++; str_lcpy(done[ndone++], name, CARD_NAME_MAX); }
         else { fprintf(out, "skipped %s: %s\n", label, e2); skipped++; }
         map_free(m);
     }
     json_free(doc);
+    free(done);
     fprintf(out, "imported %d adversar%s into %s", written, written == 1 ? "y" : "ies", dir);
     if (kept) fprintf(out, " - %d already there, kept (--force replaces them)", kept);
     if (skipped) fprintf(out, " - %d skipped", skipped);

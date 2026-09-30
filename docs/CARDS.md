@@ -10,8 +10,8 @@ adversaries can be imported as templates with cards. Roadmap items 6 and 9, sign
 | question | answer |
 |---|---|
 | where a card lives | on the map, in a table of cards by name, as named rolls are; a creature names its card (every Goblin names `Goblin`), so editing one edits it for them all. A creature is a fixed-size record copied through the undo log, and a card is kilobytes |
-| its form | plain text. The core knows no fields; the Daggerheart ruleset reads the lines it needs by their label (`Type:`, `Difficulty:`, `Thresholds: 8/15`) for `:dmg` and Battle Points later. `**bold**` is drawn bold, other markdown dropped |
-| editing | `s k` opens the card in `$EDITOR`, as git opens a commit message: pre-filled with the card, or for a creature without one a skeleton (the stat block's labels under Daggerheart), and `#` help lines at the end that are stripped on save. vtt pauses meanwhile; the phones keep the last frame. Not in the undo history -- the editor has its own |
+| its form | plain text. The core knows no fields; the Daggerheart ruleset reads the lines it needs by their label (`Type:`, `Difficulty:`, `Thresholds: 8/15`) for `:dmg` and Battle Points later. `**bold**` is drawn bold and `_emphasis_` marks dropped; other markdown shows as typed |
+| editing | `s k` opens the card in `$EDITOR`, as git opens a commit message: pre-filled with the card, or for a creature without one a skeleton (the stat block's labels under Daggerheart), and help below a scissors line (`# ---- >8 ----`, as git's) that is left out on save -- a card's own `#` lines are kept. vtt pauses meanwhile; the phones keep the last frame. Not in the undo history -- the editor has its own |
 | showing | a box over the map's right edge for the selected creature, GM-only, cut with "..." when long; `:card` shows it whole, scrollable; `:card off` and `:card on` hide and show the box (a setting) |
 | templates | `:character save` saves the card with the creature; placing copies it into the map when the map has no card of that name, as rolls are |
 | the import | `vtt --import-adversaries FILE`: the SRD's adversary list as JSON (the GM downloads it; vtt ships no SRD data, whose license asks for attribution) becomes character templates -- an enemy, 1x1, HP and Stress full, a card laid out as the stat block, no rolls (the dice are physical and the card shows attack and damage). Existing templates are kept unless `--force` |
@@ -46,4 +46,23 @@ adversaries can be imported as templates with cards. Roadmap items 6 and 9, sign
   channel request rolled back, leaves that card on the map, named by nobody).
 - **The import** takes fields as strings or numbers and leaves out a line whose fields are all
   missing; `utf8_cut`, `file_read` and the JSON reader (`make fuzz-json`) came with it.
+
+## As reviewed
+
+The review of 94bac1d..7fd9ace found, and these fixed:
+- a card of bytes that are not UTF-8 stalled the writer (a piece cut at zero bytes), and the
+  autosave with it: `card_clean` now makes every card text (bad bytes as U+FFFD, control
+  characters dropped, tabs spaces, line-end spaces trimmed), and the writer never takes zero;
+- an undo of an edit made before `s k` took the card away: `OP_TOKEN_EDIT` keeps the
+  creature's card name, which is not in the log;
+- a card's own `#` lines were lost: the help is below a scissors line, and only that goes;
+- an editor trimming line ends turned an untouched skeleton into a card: the trim is part of
+  `card_clean`, so both sides compare trimmed;
+- over 4 KB the loader kept later short lines; now the rest goes;
+- `$VISUAL` with quotes: run through `eval`, as git runs it;
+- the import cut two SRD names silently, and two cut to one would collide: said, and refused;
+- `_Mana Beam._` kept its closing mark; a new card went to a player of the enemy's name; stamps
+  kept card names they carry no cards for;
+- five copies of "the selected creature, else the one under the cursor" (one of them using
+  the wrong footprint) are `app_target_token`; the box wraps the card once less a frame.
 

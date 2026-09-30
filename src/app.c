@@ -1193,10 +1193,17 @@ void app_request_quit(App *a)
  * the square in its corner. A 3x3 cursor covers nine squares and a creature
  * standing on any of them is under it, which is the only reading that matches
  * what the cursor draws. */
-int app_token_under_cursor(App *a)
+int app_target_token_under(const App *a)
 {
     return tokens_covered_next(&a->map->tokens, a->ed.cx, a->ed.cy,
                                play_cursor_size(&a->play, a->map), -1);
+}
+
+int app_target_token(const App *a)
+{
+    const Play *pl = &a->play;
+    if (pl->sel >= 0 && pl->sel < a->map->tokens.n) return pl->sel;
+    return app_target_token_under(a);
 }
 
 /* Starts measuring at the cursor. In play mode the anchor snaps to a token
@@ -1207,7 +1214,7 @@ void app_ruler_begin(App *a)
     int     x = e->cx, y = e->cy;
 
     if (a->screen == SCREEN_PLAY) {
-        int idx = app_token_under_cursor(a);
+        int idx = app_target_token_under(a);
         if (idx >= 0) {
             x = a->map->tokens.v[idx].x;
             y = a->map->tokens.v[idx].y;

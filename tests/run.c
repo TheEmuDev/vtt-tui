@@ -119,6 +119,7 @@ int main(int argc, char **argv)
         { "cardtpl",    test_card_templates },
         { "jsonread",   test_json_read },
         { "import",     test_import },
+        { "cardfixes",  test_card_fixes },
         { "clearstatus", test_clear_status_keys },
         { "trail",    test_trail },
         { "traildraw", test_trail_draw },

@@ -530,8 +530,15 @@ static void apply(const Undo *u, Map *m, const Op *o, int forward)
         else         token_insert_at(&m->tokens, o->x, *tok);
         break;
     case OP_TOKEN_EDIT:
-        if (o->x >= 0 && o->x < m->tokens.n)
-            m->tokens.v[o->x] = forward ? tok[1] : tok[0];
+        if (o->x >= 0 && o->x < m->tokens.n) {
+            /* Which card a creature shows is not in the log (docs/CARDS.md):
+             * taking back a marker must not take its card away with it. */
+            Token *d = &m->tokens.v[o->x];
+            char card[CARD_NAME_MAX];
+            memcpy(card, d->card, sizeof card);
+            *d = forward ? tok[1] : tok[0];
+            memcpy(d->card, card, sizeof card);
+        }
         break;
     case OP_ROUND:
         m->round = forward ? o->y : o->x;

@@ -128,6 +128,7 @@ static void put_card(FILE *f, const Card *c)
         do {
             size_t take = len - at;
             if (take > CARD_PIECE) take = utf8_cut(p + at, CARD_PIECE);
+            if (!take) take = len - at < CARD_PIECE ? len - at : CARD_PIECE;   /* not text: never stall on it */
             fprintf(f, "%s%.*s\n", lead, (int)take, p + at);
             lead = "+ ";
             at += take;
@@ -782,7 +783,7 @@ typedef struct {
 
 static void card_take(Loader *ld, CardRead *cr, const char *text, int newline)
 {
-    if (!cr->keep) return;
+    if (!cr->keep || cr->clamped) return;          /* past the limit, the rest goes */
     size_t add = strlen(text) + (newline && cr->n ? 1 : 0);
     if (cr->n + add + 1 > CARD_TEXT_MAX) {
         if (!cr->clamped)

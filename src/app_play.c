@@ -127,7 +127,7 @@ static int play_action_group(App *a, int *out, int max)
         return pl->ngroup;
     }
 
-    int idx = app_token_under_cursor(a);
+    int idx = app_target_token_under(a);
     if (idx < 0) return 0;
     if (max > 0) out[0] = idx;
     return 1;
@@ -164,12 +164,6 @@ static void group_name(const Map *m, const int *idx, int n, char *buf, size_t bu
 
 /* The creature a command acts on: the selection when there is one, otherwise
  * whatever the cursor is over. */
-static int play_target_token(App *a)
-{
-    Play *pl = &a->play;
-    if (pl->sel >= 0 && pl->sel < a->map->tokens.n) return pl->sel;
-    return app_token_under_cursor(a);
-}
 
 /* g r and g h: the GM's own light, over the cursor's footprint or the box.
  * Only painted ground answers; the rest of the map is always lit. */
@@ -245,7 +239,7 @@ static void fog_hand_patch(App *a, int on)
 /* s v: the prompt that reads and changes a creature's counters. */
 static void counters_prompt(App *a)
 {
-    int idx = play_target_token(a);
+    int idx = app_target_token(a);
     if (idx < 0) { app_set_status(a, "no creature here to count"); return; }
     const Token *t = &a->map->tokens.v[idx];
     a->pending_token = idx;
@@ -270,7 +264,7 @@ static void counters_prompt(App *a)
 static void counter_step(App *a, int delta)
 {
     PROF_ZONE("counter.step");
-    int idx = play_target_token(a);
+    int idx = app_target_token(a);
     if (idx < 0) { app_set_status(a, "no creature here - < and > step its counter"); return; }
     Token t = a->map->tokens.v[idx];
     const char *who = token_name(&t);
@@ -330,7 +324,7 @@ static void place_token(App *a, uint8_t kind)
 static void status_add(App *a)
 {
     Play *pl = &a->play;
-    int idx = play_target_token(a);
+    int idx = app_target_token(a);
     if (idx < 0) { app_set_status(a, "no token here to mark"); return; }
 
     const Token *t = &a->map->tokens.v[idx];
@@ -356,7 +350,7 @@ static void status_color(App *a)
 static void status_drop(App *a)
 {
     Map *m = a->map;
-    int idx = play_target_token(a);
+    int idx = app_target_token(a);
     if (idx < 0) { app_set_status(a, "no token here"); return; }
 
     const Token *t = &m->tokens.v[idx];
@@ -381,7 +375,7 @@ static void status_drop(App *a)
 /* s i: the selected creature's place in the turn order. */
 static void turn_prompt(App *a)
 {
-    int idx = play_target_token(a);
+    int idx = app_target_token(a);
     if (idx < 0) { app_set_status(a, "no token here to put in the turn order"); return; }
 
     const Token *t = &a->map->tokens.v[idx];
@@ -427,7 +421,7 @@ static void hide_toggle(App *a)
 static void turn_hand_over(App *a)
 {
     if (a->play.grabbed) { app_set_status(a, "put it down first - enter drops, esc cancels"); return; }
-    int idx = play_target_token(a);
+    int idx = app_target_token(a);
     if (idx < 0) { app_set_status(a, "no token here to hand the turn to"); return; }
 
     turn_take(a->map, &a->undo, idx);
@@ -473,7 +467,7 @@ static void link_here(App *a)
 
     int end, li = link_at(m, e->cx, e->cy, &end);
     if (li < 0) {
-        int t = app_token_under_cursor(a);
+        int t = app_target_token_under(a);
         if (t >= 0) {
             const Token *tk = &m->tokens.v[t];
             li = link_meets(m, tk->x, tk->y, tk->size, tk->size, &end);
@@ -548,7 +542,7 @@ static int pending_key(App *a, Key k)
         if (k.ch == 'd') { status_drop(a);   return 1; }
         if (k.ch == 'i') { turn_prompt(a);   return 1; }
         if (k.ch == 't') { turn_hand_over(a); return 1; }
-        if (k.ch == 'n') { app_note_prompt(a, play_target_token(a), a->ed.cx, a->ed.cy); return 1; }
+        if (k.ch == 'n') { app_note_prompt(a, app_target_token(a), a->ed.cx, a->ed.cy); return 1; }
         if (k.ch == 'v') { counters_prompt(a); return 1; }
         if (k.ch == 'h') { hide_toggle(a); return 1; }
         if (k.ch == 'k') { app_card_edit(a); return 1; }
@@ -994,7 +988,7 @@ void app_play_key(App *a, Key k)
         /* Anchored to the selection when there is one, so the highlight
          * follows that creature as it moves. */
         int anchor = (pl->sel >= 0 && pl->sel < m->tokens.n) ? pl->sel : -1;
-        if (anchor < 0) anchor = app_token_under_cursor(a);
+        if (anchor < 0) anchor = app_target_token_under(a);
 
         int band = range_cycle(&pl->range, m, anchor, e->cx, e->cy,
                                take_count_raw(e));

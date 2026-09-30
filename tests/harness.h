@@ -222,6 +222,7 @@ void test_card_edit(void);
 void test_card_templates(void);
 void test_json_read(void);
 void test_import(void);
+void test_card_fixes(void);
 void test_hidden(void);
 void test_dice(void);
 void test_session_log(void);

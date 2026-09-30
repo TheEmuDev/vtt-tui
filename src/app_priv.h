@@ -68,7 +68,6 @@ void app_follow_selection(App *a);
 void app_report_selection(App *a);
 void app_ruler_begin(App *a);
 int  app_ruler_key(App *a, Key k);
-int  app_token_under_cursor(App *a);
 void app_leave_map(App *a);
 void app_leave_map_for(App *a, const char *next);   /* :e -- ask, then open */
 void app_close_map(App *a);
@@ -101,6 +100,12 @@ void app_delete_map(App *a, const char *path);
 
 /* app_build.c: build mode's keys (wall mode's among them). */
 void app_editor_key(App *a, Key k);
+
+/* app.c: the creature a key acts on -- the selected one, else the one under
+ * the cursor's footprint (docs/KEYS.md, README "The selected creature") --
+ * or -1; and just the one under the cursor. */
+int app_target_token(const App *a);
+int app_target_token_under(const App *a);
 
 /* app_card.c: s k -- the creature's card in the GM's editor. */
 void app_card_edit(App *a);

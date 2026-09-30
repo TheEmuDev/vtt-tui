@@ -500,12 +500,15 @@ beside the map, and only on your screen: the players never see it.
 
 `s k` opens the card in your editor (`$VISUAL`, else `$EDITOR`, else `vi`), the way git opens a
 commit message. A creature without a card starts from a skeleton: under Daggerheart, the
-stat block's lines ready to fill in; otherwise its label. Lines starting with `#` are help and
-are left out. Save and quit to keep it; quit without saving, or empty it, to change nothing.
-`**word**` shows bold. Card edits are not undone by `u`.
+stat block's lines ready to fill in; otherwise its label. Below a line of dashes marked `>8`
+is help, left out when you save; a line of your own starting with `#` is kept. Save and quit
+to keep the card; quit without saving, or empty it, to change nothing. `**word**` shows bold
+and `_word_` shows plain. Card edits are not undone by `u` (and `u` never takes a card away).
+`$VISUAL` or `$EDITOR` may name the editor with its flags or in quotes, as for git. Bytes that
+are not UTF-8 are kept as the replacement character, and a card is at most 4 KB.
 
-Every creature of a kind shares one card: a new card goes to the creature and to the others
-with its name (`Goblin 2`, `Goblin 3`) that have none, and editing it changes it for all of
+Every creature of a kind shares one card: a new card goes to the creature and to the others on
+its side with its name (`Goblin 2`, `Goblin 3`) that have none, and editing it changes it for all of
 them. Cards are saved with the map, and a saved character keeps its card, so placing one
 brings its card too (a map that has its own card by that name keeps it, and says so).
 
@@ -1156,7 +1159,7 @@ W120 unreachable-room  room K2   18 squares, no door leads to it from room B2
 | `W016 unknown-ruleset`, `W017 unknown-metric` | an unknown setting |
 | `W018 fog-unknown-patch` | a fog row naming a patch that is not defined |
 | `W019 stray-row` | rows outside any section |
-| `W020 clamped` | a setting out of range, replaced by the nearest valid value |
+| `W020 clamped` | a setting out of range, replaced by the nearest valid value; a card over 4 KB, cut there |
 | `W022 edge-row-short` | a `vedges` row missing its east boundary |
 | `W023 link-dropped` | a link with an end off the map, its ends overlapping, or on another link's squares |
 | `W024 floor-dropped` | a floor naming no area, marked twice, or overlapping another |

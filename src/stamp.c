@@ -16,6 +16,7 @@
 /* A stamp's own creature: where it came from is not part of what it is. */
 static void fresh(Token *t)
 {
+    t->card[0] = '\0';              /* a stamp carries no cards: a name would name nothing */
     token_clear_status(t);
     t->turn = 0;
     t->init = 0;

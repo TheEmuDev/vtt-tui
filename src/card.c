@@ -20,18 +20,38 @@ int card_find(const Map *m, const char *name)
 
 char *card_clean(const char *text)
 {
-    /* \r\n and lone \r become \n; cut on a character's edge; no blank
-     * lines at the start or the end. */
+    /* One pass: line ends made \n; bytes that are not UTF-8 made U+FFFD, so
+     * what is kept always writes and reads back; control characters dropped,
+     * tabs made spaces; spaces at a line's end dropped (an editor may trim
+     * them, and a card should not change for it); whole characters only up
+     * to the limit; no blank lines at the start or the end. */
     char *t = xmalloc(CARD_TEXT_MAX);
-    size_t n = 0;
-    const char *p = text ? text : "";
-    while (*p == '\n' || *p == '\r') p++;
-    for (; *p && n + 1 < CARD_TEXT_MAX; p++) {
-        if (*p == '\r') { if (p[1] != '\n') t[n++] = '\n'; continue; }
-        t[n++] = *p;
+    size_t n = 0, line = 0;
+    const char *p = text ? text : "", *end = p + strlen(p);
+    while (p < end && (*p == '\n' || *p == '\r')) p++;
+    while (p < end) {
+        if (*p == '\n' || *p == '\r') {
+            if (*p == '\r' && p + 1 < end && p[1] == '\n') p++;
+            p++;
+            while (n > line && t[n - 1] == ' ') n--;
+            if (n + 2 > CARD_TEXT_MAX) break;
+            t[n++] = '\n';
+            line = n;
+            continue;
+        }
+        uint32_t cp;
+        int k = utf8_decode(p, (size_t)(end - p), &cp);
+        char enc[4];
+        int  m = 0;
+        if (cp == '\t') enc[m++] = ' ';
+        else if (cp < 0x20 || cp == 0x7F) m = 0;                      /* dropped */
+        else if (cp == 0xFFFD && !(k == 3 && !memcmp(p, "\xef\xbf\xbd", 3))) m = utf8_encode(0xFFFD, enc);
+        else { memcpy(enc, p, (size_t)k); m = k; }
+        if (n + (size_t)m + 1 > CARD_TEXT_MAX) break;
+        memcpy(t + n, enc, (size_t)m);
+        n += (size_t)m;
+        p += k;
     }
-    t[n] = *p;                               /* the next byte, for the cut to see */
-    n = utf8_cut(t, n);                      /* cut short: not inside a character */
     while (n > 0 && (t[n - 1] == '\n' || t[n - 1] == ' ')) n--;
     t[n] = '\0';
     return t;

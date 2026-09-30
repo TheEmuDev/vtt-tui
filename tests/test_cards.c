@@ -3,6 +3,7 @@
 #include "harness.h"
 
 #include <dirent.h>
+#include <sys/stat.h>
 #include "card.h"
 
 typedef struct { const char *code; int n; } CardCodes;
@@ -92,7 +93,8 @@ void test_cards(void)
         if (back) {
             CHECK_EQ(back->ncards, 3);
             int oi = card_find(back, "ogre");
-            CHECK(oi >= 0 && !strcmp(back->cards[oi].text, text));
+            CHECK(oi >= 0 && !strcmp(back->cards[oi].text, m->cards[card_find(m, "ogre")].text));
+            CHECK(oi >= 0 && strstr(back->cards[oi].text, "stomp89\n| not a new line") != NULL);   /* its trailing space trimmed */
             CHECK_EQ(strcmp(back->tokens.v[0].card, "ogre"), 0);
             map_free(back);
         }
@@ -224,6 +226,61 @@ void test_card_box(void)
     press(&a, "\x1b[11~");
     CHECK_EQ(app_card_shown(&a), -1);
 
+    CASE("_emphasis_ marks go, closing after punctuation too; snake_case stays");
+    press(&a, "\x1b[12~");
+    card_set(a.map, "ogre", "Ogre\n_Mana Beam._ The snake_case stays.");
+    a.play.sel = ogre;
+    rnd_begin(&r);
+    app_draw_view(&a, VIEW_GM);
+    {
+        ByteBuf g;
+        bb_init(&g, 65536);
+        rnd_dump(&r, &g);
+        bb_putc(&g, '\0');
+        CHECK(strstr(g.data, "Mana Beam. The") != NULL);
+        CHECK(strstr(g.data, "snake_case") != NULL);
+        bb_free(&g);
+    }
+
+    CASE("the box never covers its creature");
+    {
+        Token *t = &a.map->tokens.v[ogre];
+        int ox = t->x, oy = t->y;
+        t->x = (int16_t)(a.map->w - t->size);                       /* the top right corner */
+        t->y = 0;
+        grid_center_on(&a.ed.view, a.map, t->x, t->y);
+        rnd_begin(&r);
+        app_draw_view(&a, VIEW_GM);
+        Rect c;
+        grid_token_area(&a.ed.view, t->x, t->y, t->size, &c);
+        int covered = 0;
+        for (int y = c.y; y < c.y + c.h; y++)
+            for (int x = c.x; x < c.x + c.w; x++) {
+                const Cell *cell = &r.back[y * r.w + x];
+                covered |= cell->ch == 0x2502 || cell->ch == 0x256D;   /* the box's frame on it */
+            }
+        CHECK(!covered);
+        t->x = (int16_t)ox; t->y = (int16_t)oy;
+    }
+
+    CASE(":card scrolls a long card, and not past its end");
+    {
+        char longcard[3000];
+        int n = 0;
+        for (int i = 0; i < 60; i++) n += snprintf(longcard + n, sizeof longcard - (size_t)n, "line %d\n", i);
+        card_set(a.map, "ogre", longcard);
+        a.play.sel = ogre;
+        press(&a, ":card\r");
+        rnd_begin(&r); app_draw(&a);
+        press(&a, "jjj");
+        rnd_begin(&r); app_draw(&a);
+        CHECK_EQ(a.card_top, 3);
+        press(&a, "G");
+        rnd_begin(&r); app_draw(&a);
+        CHECK(a.card_top > 3 && a.card_top < 60);
+        press(&a, "\x1b");
+    }
+
     app_free(&a);
     rnd_free(&r);
 }
@@ -331,6 +388,86 @@ void test_card_edit(void)
     press(&a, "sk");
     int ai = card_find(a.map, "Aria");
     CHECK(ai >= 0 && !strcmp(a.map->cards[ai].text, "Aria\nThe party's scout"));
+
+    CASE("an undo of an edit made before s k gave the card keeps the card");
+    press(&a, ":ruleset daggerheart\r");
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "\x1b");
+    a.map->tokens.v[0].card[0] = '\0';                        /* Goblin with no card yet */
+    press(&a, "sh");                                          /* an edit, logged with no card */
+    CHECK(a.map->tokens.v[0].hidden);
+    set_editor(sb.dir, "sed -i '1a Hides well.' \"$1\"\n");
+    press(&a, "sk");                                          /* the card, given after it */
+    CHECK_EQ(strcmp(a.map->tokens.v[0].card, "Goblin"), 0);
+    press(&a, "u");                                           /* takes the hiding back */
+    CHECK(!a.map->tokens.v[0].hidden);
+    CHECK_EQ(strcmp(a.map->tokens.v[0].card, "Goblin"), 0);   /* not the card */
+
+    CASE("the card's own # lines are kept; only what is below the scissors goes");
+    card_set(a.map, "Goblin", "Goblin\n# Tactics\nhit and run");
+    set_editor(sb.dir, "true\n");
+    press(&a, "sk");
+    CHECK(strstr(a.status, "card unchanged") != NULL);
+    CHECK_EQ(strcmp(a.map->cards[card_find(a.map, "Goblin")].text, "Goblin\n# Tactics\nhit and run"), 0);
+
+    CASE("an editor that trims line ends leaves a new card's start unwritten");
+    {
+        Token w;
+        memset(&w, 0, sizeof w);
+        w.x = 0; w.y = 3; w.size = 1; w.kind = TOKEN_ENEMY;
+        str_lcpy(w.label, "Wight", sizeof w.label);
+        tokens_add(&a.map->tokens, w);
+        w.x = 2;
+        str_lcpy(w.label, "Bat", sizeof w.label);
+        tokens_add(&a.map->tokens, w);
+    }
+    a.play.sel = -1;
+    a.ed.cx = 0; a.ed.cy = 3;
+    set_editor(sb.dir, "sed -i 's/ *$//' \"$1\"\n");
+    press(&a, "sk");
+    CHECK(strstr(a.status, "no card written") != NULL);
+
+    CASE("an editor named with quotes and a space runs; $EDITOR serves without $VISUAL");
+    {
+        char dir2[700], ed[760], cmd[800];
+        snprintf(dir2, sizeof dir2, "%s/my editors", sb.dir);
+        mkdir(dir2, 0755);
+        snprintf(ed, sizeof ed, "%s/ed.sh", dir2);
+        FILE *ef = fopen(ed, "w");
+        if (ef) { fputs("sed -i 's/Difficulty: 11/Difficulty: 12/' \"$1\"\n", ef); fclose(ef); }
+        snprintf(cmd, sizeof cmd, "sh \"%s\"", ed);
+        setenv("VISUAL", cmd, 1);
+        a.ed.cx = 2; a.ed.cy = 3;                               /* Bat, no card yet */
+        press(&a, "sk");
+        CHECK(card_find(a.map, "Bat") >= 0 && strstr(a.map->cards[card_find(a.map, "Bat")].text, "Difficulty: 12"));
+        unsetenv("VISUAL");
+        setenv("EDITOR", "true", 1);
+        press(&a, "sk");
+        CHECK(strstr(a.status, "card unchanged") != NULL);
+        setenv("VISUAL", "no-such-editor-anywhere", 1);
+        press(&a, "sk");
+        CHECK(strstr(a.status, "no editor to run") != NULL);
+        unsetenv("EDITOR");
+    }
+
+    CASE("a new card goes only to creatures on the same side");
+    {
+        Token pl;
+        memset(&pl, 0, sizeof pl);
+        pl.x = 7; pl.y = 1; pl.size = 1; pl.kind = TOKEN_PLAYER;
+        str_lcpy(pl.label, "Kobold", sizeof pl.label);
+        tokens_add(&a.map->tokens, pl);
+        Token en = pl;
+        en.x = 8; en.kind = TOKEN_ENEMY;
+        str_lcpy(en.label, "Kobold 2", sizeof en.label);
+        tokens_add(&a.map->tokens, en);
+        set_editor(sb.dir, "sed -i '1a Sneaky.' \"$1\"\n");
+        a.play.sel = -1;
+        a.ed.cx = 8; a.ed.cy = 1;
+        press(&a, "sk");
+        CHECK_EQ(strcmp(a.map->tokens.v[a.map->tokens.n - 1].card, "Kobold"), 0);
+        CHECK_EQ(a.map->tokens.v[a.map->tokens.n - 2].card[0], '\0');  /* the player Kobold */
+    }
 
     app_free(&a);
     rnd_free(&r);
@@ -539,6 +676,95 @@ void test_import(void)
     if (f) { fputs("[{\"name\": ]", f); fclose(f); }
     CHECK_EQ(import_adversaries(path, 0, stdout, err, sizeof err), -1);
     CHECK(strstr(err, "not JSON at line 1") != NULL);
+
+    sandbox_leave(&sb);
+}
+
+/* What the review of the cards found, each kept from coming back. */
+void test_card_fixes(void)
+{
+    Sandbox sb = sandbox_enter("cardfix");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    char path[640], err[320];
+    snprintf(path, sizeof path, "%s/f.vtt", sb.dir);
+
+    CASE("a card of bytes that are not text loads as text, and saves without stalling");
+    {
+        FILE *f = fopen(path, "w");
+        if (f) {
+            fputs("VTT 13\nname f\nsize 2 2\ntiles\n..\n..\ncard \"a\"\n| ", f);
+            for (int i = 0; i < 401; i++) fputc(0x80, f);
+            fputs("\x01ok\tthere\nendcard\n", f);
+            fclose(f);
+        }
+        Map *m = mapio_load(path, err, sizeof err);
+        CHECK(m != NULL);
+        if (m) {
+            const char *t = m->cards[0].text;
+            CHECK(utf8_valid(t, strlen(t)));
+            CHECK(strstr(t, "\xef\xbf\xbd") != NULL);           /* U+FFFD in their place */
+            CHECK(strstr(t, "ok there") != NULL);                 /* the control byte gone, the tab a space */
+            CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);    /* returns: no stall */
+            map_free(m);
+        }
+    }
+
+    CASE("past the size limit the rest of a card goes, later short lines too");
+    {
+        FILE *f = fopen(path, "w");
+        if (f) {
+            fputs("VTT 13\nname f\nsize 2 2\ntiles\n..\n..\ncard \"a\"\n", f);
+            for (int i = 0; i < 12; i++) { fputs("| ", f); for (int k = 0; k < 390; k++) fputc('a' + i, f); fputc('\n', f); }
+            fputs("| tail\nendcard\n", f);
+            fclose(f);
+        }
+        CardCodes cc = { "W020", 0 };
+        Map *m = mapio_load_diag(path, err, sizeof err, card_code, &cc);
+        CHECK(m && cc.n == 1);
+        if (m) {
+            CHECK(strlen(m->cards[0].text) < CARD_TEXT_MAX);
+            CHECK(strstr(m->cards[0].text, "tail") == NULL);
+            map_free(m);
+        }
+    }
+
+    CASE("a stamp keeps no card names: it carries no cards");
+    {
+        Map *m = map_new(4, 4, "s");
+        map_fill_tiles(m, 0, 0, 3, 3, TILE_FLOOR);
+        card_set(m, "Ogre", "Ogre");
+        Token t;
+        memset(&t, 0, sizeof t);
+        t.size = 1; t.kind = TOKEN_ENEMY;
+        str_lcpy(t.card, "Ogre", sizeof t.card);
+        tokens_add(&m->tokens, t);
+        Map *st = stamp_copy(m, 0, 0, 3, 3);
+        CHECK(st && st->tokens.n == 1 && st->tokens.v[0].card[0] == '\0');
+        map_free(st);
+        map_free(m);
+    }
+
+    CASE("the import says when it cuts a long name, and two cut to one are not one");
+    {
+        char jpath[640];
+        snprintf(jpath, sizeof jpath, "%s/long.json", sb.dir);
+        FILE *f = fopen(jpath, "w");
+        if (f) {
+            fputs("[{\"name\": \"Fallen Warlord: Undefeated Champion\"},"
+                  " {\"name\": \"Fallen Warlord: Undefeated Champions All\"}]", f);
+            fclose(f);
+        }
+        FILE *out = tmpfile();
+        CHECK_EQ(import_adversaries(jpath, 0, out, err, sizeof err), 1);
+        rewind(out);
+        char said[1024] = "";
+        size_t n = fread(said, 1, sizeof said - 1, out);
+        said[n] = '\0';
+        fclose(out);
+        CHECK(strstr(said, "its label is cut to \"Fallen Warlord: Undefeated Cham\"") != NULL);
+        CHECK(strstr(said, "the name of one before it") != NULL);
+    }
 
     sandbox_leave(&sb);
 }

@@ -630,19 +630,24 @@ void ui_handout_draw(Renderer *r, const Theme *th, const char *title, const char
 
 /* ----------------------------------------------------------------- card */
 
-/* The text as shown: "**" toggles bold and goes, an "_" that opens or
- * closes emphasis goes (one inside a word, snake_case, stays); bold[i]
- * says whether out[i] is bold. */
+/* The text as shown: "**" toggles bold and goes; an "_" that opens
+ * emphasis (not after a letter or digit, not before a space) or closes it
+ * (not after a space, not before a letter or digit, so "_Mana Beam._"
+ * closes after its full stop) goes, and one inside a word, snake_case,
+ * stays. bold[i] says whether out[i] is bold. */
 static size_t card_display(const char *in, char *out, uint8_t *bold, size_t cap)
 {
     size_t n = 0;
-    int    on = 0;
+    int    on = 0, em = 0;
     for (const char *p = in; *p && n + 1 < cap; p++) {
         if (p[0] == '*' && p[1] == '*') { on = !on; p++; continue; }
         if (*p == '_') {
-            int before = p > in && isalnum((unsigned char)p[-1]);
-            int after  = isalnum((unsigned char)p[1]);
-            if (before != after) continue;
+            int word_before = p > in && isalnum((unsigned char)p[-1]);
+            int word_after  = isalnum((unsigned char)p[1]);
+            int space_before = p == in || isspace((unsigned char)p[-1]);
+            int space_after  = !p[1] || isspace((unsigned char)p[1]);
+            if (!em && !word_before && !space_after) { em = 1; continue; }
+            if (em && !space_before && !word_after)  { em = 0; continue; }
         }
         bold[n] = (uint8_t)on;
         out[n++] = *p;
@@ -690,7 +695,7 @@ int ui_card_lines(const char *text, int box_w)
 }
 
 int ui_card_draw(Renderer *r, const Theme *th, Rect box, const char *title,
-                 const char *text, int top, const BoxGlyphs *frame)
+                 const char *text, int top, int lines, const BoxGlyphs *frame)
 {
     PROF_ZONE("card.draw");
     static char    shown[CARD_TEXT_MAX];
@@ -700,7 +705,7 @@ int ui_card_draw(Renderer *r, const Theme *th, Rect box, const char *title,
     int iw = box.w - 4, rows = box.h - 2;
     if (iw < 4 || rows < 1) return 0;
     dialog_frame(r, th, box, frame, th->accent, title);
-    int lines = wrap(shown, iw, NULL, NULL);
+    if (lines < 0) lines = wrap(shown, iw, NULL, NULL);
     CardDraw c = { r, box.x + 2, box.y + 1, top, rows, iw, shown, bold,
                    style(th->fg, th->bg, 0), style(th->fg, th->bg, ATTR_BOLD) };
     wrap(shown, iw, card_line, &c);

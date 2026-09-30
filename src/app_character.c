@@ -34,7 +34,7 @@ void app_character_place(App *a, const char *name, int kind)
  * what it placed, and the GM saving means the one they are pointing at. */
 static int target(App *a)
 {
-    int i = app_token_under_cursor(a);
+    int i = app_target_token_under(a);
     if (i >= 0) return i;
     Play *pl = &a->play;
     return pl->sel >= 0 && pl->sel < a->map->tokens.n ? pl->sel : -1;
