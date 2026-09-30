@@ -20,6 +20,13 @@ maintainer; this file is what survives a context reset, so keep it true.
   `model: "fable"`) reviews every finished change before it is reported
   done -- verify its findings and fix what holds up. The user will name
   different models when that changes.
+- **Every review includes the health check's questions** (the user, 2026-09-29), for the
+  change and what it touches, beside correctness: duplication (the rule of three -- a
+  third copy is extracted), organization (the right file, a file grown too big),
+  performance (a new path has a `PROF_ZONE` and a perf row; the window, not the map, sets
+  the cost; stale PERFORMANCE.md numbers), test gaps (would a test fail if the behavior
+  broke? error paths, the players' frame), and the docs (does the README tell a user how to
+  use it; CLAUDE.md, KEYS.md, the design doc in step). docs/HEALTH.md is the full list.
 - **Rules-agnostic core.** Game-specific behavior lives behind the `Ruleset`
   table in `ruler.c` (bands, `action_roll`, `spotlight`, `countdown`), documented under the README's
   *Rulesets* section with a subsection per game. Nothing else may know a game.
