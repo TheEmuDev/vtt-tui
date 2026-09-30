@@ -27,7 +27,7 @@ any code, and moves to the README when it ships. Ideas not yet decided live in I
 
 Items 2-5 are built (2026-09-27). Next, decided 2026-09-29:
 
-6. **Adversary reference cards.** A multi-line, GM-only card saved with a character
+6. **Adversary reference cards.** *Built 2026-09-29 (docs/CARDS.md).* A multi-line, GM-only card saved with a character
    template -- difficulty, thresholds, attack, features, whatever the GM writes -- edited
    with `s k` and shown in a side panel for the selected creature, open while the fight
    runs. What the book is otherwise open for mid-turn. Reuses the handout card's wrapping
@@ -46,7 +46,7 @@ under `:ruleset daggerheart`, keeps the core rules-agnostic (the ruleset supplie
 numbers and words), and never rolls or ticks by itself: the dice stay physical and the GM
 says what happened. The Fear pool stays set aside (IDEAS.md).
 
-9. **Adversary stat blocks as templates.** A template gains the stat block's fields: tier,
+9. **Adversary stat blocks as templates.** *Built 2026-09-29 with 6, as cards read by label and `--import-adversaries` (docs/CARDS.md).* A template gains the stat block's fields: tier,
    type (Bruiser, Horde, Leader, Minion, Ranged, Skulk, Social, Solo, Standard, Support),
    Difficulty, Major and Severe thresholds, attack modifier, standard attack (name,
    range, damage), Experiences, and features (actions, reactions, passives, Fear
@@ -111,7 +111,7 @@ says what happened. The Fear pool stays set aside (IDEAS.md).
     to one phone only. Each phone picks a name when it joins (a player creature, or free
     text), which later per-player features can use too; the join step is the real work.
 
-Suggested order: 16 and 17 (built), then 6 and 9 together (the card and what
+Suggested order: 16 and 17 (built), then 6 and 9 together (built) (the card and what
 it holds), then 10, 20, 21, 23, 12, 18, 8, 19, 22, 7, 11; 13, 14 and 15 when play asks for them.
 
 **Housekeeping** (2026-09-27): the `:` command chain became a table, and `tests/run.c` was

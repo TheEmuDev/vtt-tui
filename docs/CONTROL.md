@@ -57,7 +57,7 @@ as `--describe` names them. Lines run in order, so a read sees the edits before 
 | `describe [json]` | `--describe` |
 | `check [json]` | `--check` of the map in memory (so no file line numbers) |
 | `stamps` | the saved stamps and their sizes |
-| `characters` | the saved character templates (added with character templates, docs/CHARACTERS.md) |
+| `characters` | the saved character templates, each with its card's first line when it has one (added with character templates, docs/CHARACTERS.md; cards, docs/CARDS.md) |
 | `scenes`, `scene diff NAME` | the map's scenes, and what changed since one was saved: the checkpoints this page once left for later (added with scenes, docs/SCENES.md) |
 | `links [json]` | every link (added with links) |
 | `floors` | the floors and which the GM is looking at (added with floors) |
@@ -72,7 +72,7 @@ as `--describe` names them. Lines run in order, so a read sees the edits before 
 | `wall REGION [EDGE]` | the region's outline as EDGE (default wall; `none` clears) |
 | `edge BOUNDARY EDGE` | one boundary. EDGE: none wall door open window secret opensecret |
 | `token add player\|enemy SQ [size N] [hidden] "Label"` | a creature; `hidden` keeps it off the players' screens (added with hidden creatures) |
-| `token add player\|enemy SQ from NAME [hidden]` | a character template; its rolls go through the log (`OP_ROLL`), so a failed request takes them back too (added with character templates) |
+| `token add player\|enemy SQ from NAME [hidden]` | a character template; its rolls go through the log (`OP_ROLL`), so a failed request takes them back too (added with character templates). Its card comes with it when the map has none by that name; cards are not in the log, so a failed request leaves such a card on the map, named by nobody |
 | `token move WHO SQ`, `token del WHO` | WHO is a label, or a square it stands on |
 | `token set WHO label "..."\|size N\|note "..."\|hidden on\|off` | |
 | `note SQ "text"`, `note SQ` | a GM-only note on a square, or clears it |

@@ -94,6 +94,9 @@ vtt [options] [map.vtt]
   --ctl [REQUEST]    send a request to a running vtt and print the answer
                      (no REQUEST, or -: read it from stdin)
   --ctl-pid N [REQ]  with several vtts running, send to the one with pid N
+  --import-adversaries FILE
+                     the Daggerheart SRD's adversaries as characters with cards
+                     (see Cards); --force replaces ones already saved
   --apply FILE       run FILE's requests against the map and save it
   --new WxH          with --apply, create an empty map of this size if the file is missing
 
@@ -332,6 +335,7 @@ selected creature; with none it sets the size of the next one placed.
 | `s n` | note on the selected creature, or on the square if none is selected |
 | `s h` | hide the creature from the players, or show it again |
 | `s v` | edit the selected creature's counters |
+| `s k` | write the creature's [card](#cards-s-k-card) in your editor |
 | `<` `>` | decrease / increase the current counter by one (`3<` by three) |
 | `s i` | set initiative (a blank answer removes the creature from the turn order) |
 | `s t` | give the turn to the selected creature |
@@ -470,6 +474,53 @@ or a label matches anywhere, ignoring case, and the closest matches come first.
 | `up` `down` (`Ctrl-p` `Ctrl-n`) | move the highlight |
 | `enter` | take the highlighted one |
 | `esc` | cancel |
+
+## Cards (`s k`, `:card`)
+
+A card is what you keep about a kind of creature: its stat block, its tactics, anything you
+want in front of you while it acts. In play mode the selected creature's card shows in a box
+beside the map, and only on your screen: the players never see it.
+
+```
+╭─ Acid Burrower ─────────────────────────────╮
+│ Acid Burrower - Tier 1 Solo                 │
+│ A horse-sized insect with digging claws.    │
+│ Difficulty: 14   Thresholds: 8/15   HP: 8   │
+│ Attack: +3   Claws (Very Close) 1d12+2 phy  │
+│                                             │
+│ Relentless (3) - Passive: The Burrower can… │
+╰───────────────────────────────────────── … ─╯
+```
+
+| key or command | action |
+|----------------|--------|
+| `s k` | write the selected creature's card (else the one under the cursor's) in your editor |
+| `:card` | show the card whole; `j` `k` `ctrl-d` `ctrl-u` `g` `G` scroll, `esc` closes |
+| `:card off` `:card on` | hide or show the box beside the map |
+
+`s k` opens the card in your editor (`$VISUAL`, else `$EDITOR`, else `vi`), the way git opens a
+commit message. A creature without a card starts from a skeleton: under Daggerheart, the
+stat block's lines ready to fill in; otherwise its label. Lines starting with `#` are help and
+are left out. Save and quit to keep it; quit without saving, or empty it, to change nothing.
+`**word**` shows bold. Card edits are not undone by `u`.
+
+Every creature of a kind shares one card: a new card goes to the creature and to the others
+with its name (`Goblin 2`, `Goblin 3`) that have none, and editing it changes it for all of
+them. Cards are saved with the map, and a saved character keeps its card, so placing one
+brings its card too (a map that has its own card by that name keeps it, and says so).
+
+### Importing the SRD's adversaries
+
+```sh
+vtt --import-adversaries adversaries.json
+```
+
+reads the Daggerheart SRD's adversary list as JSON -- such as `adversaries.json` from the
+[daggerheart-srd](https://github.com/seansbox/daggerheart-srd) project -- and saves each
+adversary as a character with its stat block as its card: an enemy, 1×1, HP and Stress full.
+Place one with `i t e` and the picker; typing a type (`solo`, `minion`) finds them. Characters
+already saved are kept unless `--force` is given. vtt includes no SRD content; the SRD's license
+asks that it be credited where it is used.
 
 ## Scenes (`:scene`)
 
@@ -1167,7 +1218,7 @@ typing a command or drawing a wall. The full request language is in
 Maps are plain text, one record per line:
 
 ```
-VTT 12
+VTT 13
 name Goblin Ambush
 size 16 9
 zoom 1
@@ -1185,12 +1236,17 @@ tokencounter HP 4 6
 token enemy 10 4 2 "Ogre"
 tokenhidden
 tokenturn 12
+tokencard "Ogre"
 round 2
 spotlight gm
 clock Dragon 3 6
 clock Fuse 4 4 down
 roll attack "2d12+3"
 note 5 3 "pressure plate"
+card "Ogre"
+| Ogre - Tier 2 Bruiser
+| Difficulty: 14   Thresholds: 10/20
+endcard
 area 1 1 6 4 "Crypt"
 area 0 0 15 8 "Ground"
 floor "Ground" 0
@@ -1202,7 +1258,9 @@ fog
 ```
 
 (The `tiles`, `vedges`, `hedges` and `fog` sections are followed by their rows; see below.)
-Coordinates in the file are 0-based `x y`. The file has no comment syntax. A recovery
+Coordinates in the file are 0-based `x y`. The file has no comment syntax. A card's text
+follows its `card` line a line at a time after `| `; a long line continues on lines starting
+`+ `. A recovery
 autosave ends with a line `end`, which shows it was written whole; reading stops there.
 
 **Sections.** A map `W` squares wide and `H` tall has:
@@ -1305,6 +1363,7 @@ has measurements for every path; `make perf` regenerates them.
 | [docs/AGENTS.md](docs/AGENTS.md) | for AI agents: building and editing maps |
 | [docs/KEYS.md](docs/KEYS.md) | the rules for choosing key bindings |
 | [docs/CHARACTERS.md](docs/CHARACTERS.md) | character templates and the picker |
+| [docs/CARDS.md](docs/CARDS.md) | cards, and importing the SRD's adversaries |
 | [docs/SCENES.md](docs/SCENES.md) | scenes: saving and restoring an encounter |
 | [docs/HANDOUTS.md](docs/HANDOUTS.md) | handouts on the players' screens |
 | [docs/MAPLINKS.md](docs/MAPLINKS.md) | links between map files |

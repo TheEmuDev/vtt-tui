@@ -91,6 +91,8 @@ static const KeyDoc PLAY[] = {
     KEY(":notes", "where the notes are"),
     GROUP("Hidden creatures"),
     KEY("s h",    "hide it from the players, dimmed on yours; again shows it   :hidden lists them"),
+    KEY("s k",    "its card in your editor; shown beside the map while selected"),
+    KEY(":card",  "the card whole   :card off / :card on hide and show the box"),
 
     GROUP("Tools"),
     KEY("m",      "measure (the ruler)"),

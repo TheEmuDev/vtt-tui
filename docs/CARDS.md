@@ -9,14 +9,14 @@ adversaries can be imported as templates with cards. Roadmap items 6 and 9, sign
 
 | question | answer |
 |---|---|
-| where a card lives | on the map, in a table of cards by name, as named rolls are; a creature names its card (every Goblin names `goblin`), so editing one edits it for them all. A creature is a fixed-size record copied through the undo log, and a card is kilobytes |
+| where a card lives | on the map, in a table of cards by name, as named rolls are; a creature names its card (every Goblin names `Goblin`), so editing one edits it for them all. A creature is a fixed-size record copied through the undo log, and a card is kilobytes |
 | its form | plain text. The core knows no fields; the Daggerheart ruleset reads the lines it needs by their label (`Type:`, `Difficulty:`, `Thresholds: 8/15`) for `:dmg` and Battle Points later. `**bold**` is drawn bold, other markdown dropped |
 | editing | `s k` opens the card in `$EDITOR`, as git opens a commit message: pre-filled with the card, or for a creature without one a skeleton (the stat block's labels under Daggerheart), and `#` help lines at the end that are stripped on save. vtt pauses meanwhile; the phones keep the last frame. Not in the undo history -- the editor has its own |
 | showing | a box over the map's right edge for the selected creature, GM-only, cut with "..." when long; `:card` shows it whole, scrollable; `:card off` and `:card on` hide and show the box (a setting) |
 | templates | `:character save` saves the card with the creature; placing copies it into the map when the map has no card of that name, as rolls are |
 | the import | `vtt --import-adversaries FILE`: the SRD's adversary list as JSON (the GM downloads it; vtt ships no SRD data, whose license asks for attribution) becomes character templates -- an enemy, 1x1, HP and Stress full, a card laid out as the stat block, no rolls (the dice are physical and the card shows attack and damage). Existing templates are kept unless `--force` |
 | JSON | read by hand, no dependencies; item 8's generator import reuses it |
-| the file | version 13: `card "NAME"` then the text's lines each as `\| text`, then `endcard`; `tokencard "NAME"` on a creature. A map with no cards stays at its version |
+| the file | version 13: `card "NAME"` then the text's lines each as `\| text` (a long one continued on `+ ` lines), then `endcard`; `tokencard "NAME"` on a creature. A map with no cards stays at its version |
 | the channel | `characters` gives each template's card's first line; `token add ... from NAME` brings the card |
 
 ## Build order
@@ -28,3 +28,22 @@ adversaries can be imported as templates with cards. Roadmap items 6 and 9, sign
 4. Templates carry cards.
 5. The JSON reader; `--import-adversaries`.
 6. README, the `?` page, CONTROL.md; a perf row; the review.
+
+## As built
+
+- **Names** are a saved character's: the label without its copy number, anything but a letter
+  or digit made `-` (`Crypt Ghoul 2` is `Crypt-Ghoul`), case kept.
+- **A new card** goes to the creature and to the others of its name with none; one whose
+  text is still the skeleton it started from is not written, as git will not commit an
+  untouched template.
+- **The editor** runs through the shell (`$VISUAL`, else `$EDITOR`, else `vi`) so an editor
+  named with flags works; vtt ignores ctrl-c and ctrl-backslash while it waits, as `system()`
+  does, hands the terminal back with `term_suspend`/`term_resume`, and repaints every cell.
+- **The box** moves to the bottom, then the left, rather than cover its creature. A GM frame
+  with a card showing is never copied to the players (`app_card_shown` in
+  `app_view_differs`).
+- **Not in the undo log:** an edit, and a card a placing brought (a placing undone, or a
+  channel request rolled back, leaves that card on the map, named by nobody).
+- **The import** takes fields as strings or numbers and leaves out a line whose fields are all
+  missing; `utf8_cut`, `file_read` and the JSON reader (`make fuzz-json`) came with it.
+
