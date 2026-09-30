@@ -38,6 +38,12 @@ typedef struct {
     int ax, ay;        /* anchor tile, used when token is -1 */
     int shape;         /* RangeShape; a setting, so switching off keeps it */
     int aimx, aimy;    /* the tile the template points at: the cursor */
+    /* g e: a group effect's burst. Its origin is the cursor and follows it,
+     * it is always a circle, and `from` is the creature whose reach the GM
+     * is checking it against (-1 for none): the status line gives the band
+     * from that creature to the origin. */
+    int burst;
+    int from;
 } RangeOverlay;
 
 /* A radius can be named by a count, so it is capped: twice the largest map
@@ -48,6 +54,12 @@ typedef struct {
  * keeps the shape, which is a setting like the cursor's size. */
 void range_clear(RangeOverlay *ro);
 void range_off(RangeOverlay *ro);
+
+/* g e: a burst round the cursor, from_token's (or -1), its reach the
+ * ruleset's area band -- or the band a count names; without bands, a count
+ * of squares and 1 by default. Returns 0, or -1 when it was on and a bare
+ * press took it off. */
+int range_burst(RangeOverlay *ro, const Map *m, int from_token, int cx, int cy, int count);
 
 /* R: the next shape, or the one a count names (2R is the cone). */
 int         range_cycle_shape(RangeOverlay *ro, int count);

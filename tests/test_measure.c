@@ -729,3 +729,108 @@ void test_move_rules(void)
     sandbox_leave(&sb);
 }
 
+/* g e: a group effect's burst round the cursor, following it; Very Close
+ * under Daggerheart unless a count names another band; who is caught; how
+ * far it lands from the selected creature. */
+static const char *burst_line(App *a)
+{
+    static char buf[256];
+    range_status(&a->play.range, a->map, buf, sizeof buf);
+    return buf;
+}
+
+void test_group_effect(void)
+{
+    Sandbox sb = sandbox_enter("burst");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    char path[600];
+    snprintf(path, sizeof path, "%s/ge.vtt", sb.dir);
+    FILE *f = fopen(path, "w");
+    if (f) {
+        fputs("VTT 2\nname ge\nsize 30 12\nzoom 1\nruleset daggerheart\ntiles\n", f);
+        for (int y = 0; y < 12; y++) fputs("..............................\n", f);
+        fputs("token player 1 1 1 \"Aria\"\ntoken enemy 8 5 1 \"Ogre\"\n"
+              "token enemy 9 6 1 \"Goblin\"\ntoken enemy 20 5 1 \"Distant\"\n", f);
+        fclose(f);
+    }
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 110, 24);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    press(&a, ":play\r");
+
+    CASE("g e is a Very Close burst at the cursor, and says who it catches");
+    a.ed.cx = 8; a.ed.cy = 5;
+    press(&a, "ge");
+    CHECK(a.play.range.active && a.play.range.burst);
+    CHECK(strstr(burst_line(&a), "Very Close burst at I6 (15 ft, 3 sq) - 2 caught: Ogre, Goblin") != NULL);
+    CHECK(range_contains(&a.play.range, a.map, 11, 5));
+    CHECK(!range_contains(&a.play.range, a.map, 12, 5));
+
+    CASE("it follows the cursor");
+    press(&a, "lll");
+    CHECK_EQ(a.play.range.ax, 11);
+    CHECK(strstr(burst_line(&a), "burst at L6") != NULL);
+    CHECK(range_contains(&a.play.range, a.map, 14, 5) && !range_contains(&a.play.range, a.map, 7, 5));
+
+    CASE("g e again takes it off; a count names another band");
+    press(&a, "ge");
+    CHECK(!a.play.range.active);
+    CHECK(strstr(a.status, "group effect off") != NULL);
+    a.ed.cx = 8; a.ed.cy = 5;
+    press(&a, "3ge");
+    CHECK(strstr(burst_line(&a), "Close burst at I6 (30 ft, 6 sq)") != NULL);
+    press(&a, "\x1b");
+    CHECK(!a.play.range.active);
+
+    CASE("with a creature selected: the band from it to where the burst lands; it can catch its own");
+    press(&a, ":B2\r\r\r");                     /* pick Aria up and put her down: selected */
+    CHECK_EQ(a.play.sel, 0);
+    a.ed.cx = 8; a.ed.cy = 5;
+    press(&a, "ge");
+    CHECK(strstr(burst_line(&a), "burst at I6, Far from Aria (15 ft, 3 sq)") != NULL);
+    a.ed.cx = 2; a.ed.cy = 2;
+    press(&a, "ge3ge");
+    CHECK(strstr(burst_line(&a), "caught: Aria") != NULL);
+    CHECK_EQ(a.play.range.from, 0);
+
+    CASE("the creature it is from, removed, is forgotten; one before it shifts the index");
+    {
+        RangeOverlay ro = a.play.range;
+        ro.from = 2;
+        range_token_removed(&ro, 1, 0, 0);
+        CHECK_EQ(ro.from, 1);
+        range_token_removed(&ro, 1, 0, 0);
+        CHECK_EQ(ro.from, -1);
+    }
+
+    CASE("the burst replaces r's highlight, and r's replaces the burst");
+    press(&a, "\x1b");
+    press(&a, "r");
+    CHECK(a.play.range.active && !a.play.range.burst);
+    press(&a, "ge");
+    CHECK(a.play.range.burst);
+    press(&a, "\x1b");
+
+    CASE("without a ruleset it is one square round, and a count is squares");
+    press(&a, ":ruleset none\r");
+    a.ed.cx = 8; a.ed.cy = 5;
+    press(&a, "ge");
+    CHECK(strstr(burst_line(&a), "Range burst at I6, 45 ft from Aria (5 ft, 1 sq)") != NULL);
+    press(&a, "\x1b");
+    press(&a, "4ge");
+    CHECK(strstr(burst_line(&a), "(20 ft, 4 sq)") != NULL);
+    press(&a, "\x1b");
+
+    CASE("build mode says where group effects are");
+    press(&a, "\x1b[11~ge");
+    CHECK(strstr(a.status, "play mode") != NULL);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+

@@ -808,7 +808,7 @@ void play_status(const Play *p, const Map *m, const Editor *e, int gm, char *buf
 
 /* ---------------------------------------------------------- range overlay */
 
-void range_clear(RangeOverlay *ro) { memset(ro, 0, sizeof *ro); ro->token = -1; }
+void range_clear(RangeOverlay *ro) { memset(ro, 0, sizeof *ro); ro->token = -1; ro->from = -1; }
 
 void range_off(RangeOverlay *ro)
 {
@@ -835,11 +835,15 @@ void range_set_aim(RangeOverlay *ro, int cx, int cy)
 {
     ro->aimx = cx;
     ro->aimy = cy;
+    if (ro->burst) { ro->ax = cx; ro->ay = cy; }    /* a burst goes where it is aimed */
 }
 
 void range_token_removed(RangeOverlay *ro, int removed, int x, int y)
 {
-    if (!ro->active || ro->token < 0) return;
+    if (!ro->active) return;
+    if (ro->from == removed)     ro->from = -1;
+    else if (ro->from > removed) ro->from--;
+    if (ro->token < 0) return;
 
     if (ro->token == removed) {
         /* Fall back to where it stood, so the highlight does not silently
@@ -920,6 +924,29 @@ int range_cycle(RangeOverlay *ro, const Map *m, int anchor_token, int cx, int cy
     return ro->band;
 }
 
+int range_burst(RangeOverlay *ro, const Map *m, int from_token, int cx, int cy, int count)
+{
+    if (count < 0) count = 0;
+    if (ro->active && ro->burst && !count) { range_off(ro); return -1; }
+
+    const Ruleset *rs = bands_of(m);
+    int shape = ro->shape;
+    range_clear(ro);
+    ro->shape  = shape;                 /* the setting survives; a burst ignores it */
+    ro->active = 1;
+    ro->burst  = 1;
+    ro->from   = from_token;
+    ro->ax = ro->aimx = cx;
+    ro->ay = ro->aimy = cy;
+    if (rs) {
+        int dflt = rs->effect_band >= 0 && rs->effect_band < rs->nbands ? rs->effect_band : 0;
+        ro->band = count > 0 ? iclamp(count, 1, rs->nbands) - 1 : dflt;
+    } else {
+        ro->radius = count > 0 ? iclamp(count, 1, RANGE_RADIUS_MAX) : 1;
+    }
+    return 0;
+}
+
 void range_anchor(const RangeOverlay *ro, const Map *m, int *ax, int *ay, int *asize)
 {
     if (ro->token >= 0 && ro->token < m->tokens.n) {
@@ -983,7 +1010,7 @@ static int range_geom(const RangeOverlay *ro, const Map *m, const Ruleset **rs, 
     if (g->reach < 0) return 0;
 
     range_anchor(ro, m, &g->ax, &g->ay, &g->asize);
-    g->shape  = ro->shape;
+    g->shape  = ro->burst ? RANGE_CIRCLE : ro->shape;
     g->scale  = m->scale_ft;
     g->metric = (DistMetric)m->metric;
     g->ox     = g->ax + g->asize / 2.0;
@@ -1103,7 +1130,7 @@ void range_status(const RangeOverlay *ro, const Map *m, char *buf, size_t bufsz)
      * printed the way every other readout prints a distance. A band has a
      * name to lead with; a plain radius is just its reach; a shape other
      * than the circle says so. */
-    char name[48];
+    char name[128];
     if (geo.shape == RANGE_CIRCLE)
         snprintf(name, sizeof name, "%s", rs ? rs->bands[ro->band].name : "Range");
     else if (rs)
@@ -1122,6 +1149,23 @@ void range_status(const RangeOverlay *ro, const Map *m, char *buf, size_t bufsz)
         dist_fmt(ft, sizeof ft, geo.reach);
         dist_fmt(sq, sizeof sq, m->scale_ft > 0 ? geo.reach / m->scale_ft : 0.0);
         snprintf(reach, sizeof reach, "%s ft, %s sq", ft, sq);
+    }
+
+    if (ro->burst) {
+        /* Where it is centered, and how far that is from the creature whose
+         * effect it is, so the GM can hold it against the effect's range. */
+        char at[MAP_COORD_MAX], whose[80] = "";
+        map_coord_name(geo.ax, geo.ay, at, sizeof at);
+        if (ro->from >= 0 && ro->from < m->tokens.n) {
+            const Token *f = &m->tokens.v[ro->from];
+            double units = footprint_dist(geo.metric, f->x, f->y, f->size, geo.ax, geo.ay, NULL, NULL) * m->scale_ft;
+            const char *band = ruleset_band(rs, units);
+            char ft[24];
+            dist_fmt(ft, sizeof ft, units);
+            if (band) snprintf(whose, sizeof whose, ", %s from %.24s", band, token_name(f));
+            else      snprintf(whose, sizeof whose, ", %s ft from %.24s", ft, token_name(f));
+        }
+        snprintf(name, sizeof name, "%.20s burst at %s%.60s", rs ? rs->bands[ro->band].name : "Range", at, whose);
     }
 
     char from[40] = "here";
@@ -1171,8 +1215,12 @@ void range_status(const RangeOverlay *ro, const Map *m, char *buf, size_t bufsz)
                             blocked ? "*" : "");
     }
 
-    snprintf(buf, bufsz, "%s (%s) from %s - %d in range%s%s%s",
-             name, reach, from, count,
-             count ? ": " : "", names,
-             hidden ? "   * no line of sight" : "");
+    if (ro->burst)
+        snprintf(buf, bufsz, "%s (%s) - %d caught%s%s%s", name, reach, count,
+                 count ? ": " : "", names, hidden ? "   * no line of sight" : "");
+    else
+        snprintf(buf, bufsz, "%s (%s) from %s - %d in range%s%s%s",
+                 name, reach, from, count,
+                 count ? ": " : "", names,
+                 hidden ? "   * no line of sight" : "");
 }

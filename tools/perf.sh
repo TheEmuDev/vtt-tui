@@ -365,6 +365,7 @@ run "play, GM ping"        "$MOB"    80x24  ':play\rgpllgphh'
 run "play, carry, 4 watch" "$MOB"    80x24  ':play\rt\rlllljjjj\r' "--bench-clients 4"
 run "play, logging"        "$MOB"    80x24  ':play\r:log on\rt\rlllljjjj\r'
 run "play, rolling"        "$MOB"    80x24  ':play\r:roll 2d6+3\r:roll +1\r'
+run "play, group effect"   "$MOB"    80x24  ':play\r2gellllhhhhjjkk'
 run "play, 500 characters" "$MOB"    80x24  ':play\ritebeast-4\t\t\ru'
 run "play, scene of 500"   "$HORDE"  80x24  ':play\r:scene save A\r:scene A\ru'
 run "play, map trip there+back" "$TOWN" 80x24 ':play\r:C3\rgogo'

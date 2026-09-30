@@ -112,6 +112,7 @@ int main(int argc, char **argv)
         { "netedges",   test_net_edges },
         { "playbox",    test_play_box },
         { "moverules",  test_move_rules },
+        { "burst",      test_group_effect },
         { "clearstatus", test_clear_status_keys },
         { "trail",    test_trail },
         { "traildraw", test_trail_draw },

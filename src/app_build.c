@@ -195,6 +195,7 @@ void app_editor_key(App *a, Key k)
         }
         else if (k.ch == 'l') app_link_mark(a);
         else if (k.ch == 'o') app_set_status(a, "creatures take links in play mode - F2");
+        else if (k.ch == 'e') app_set_status(a, "group effects are play mode's - F2, then g e");
         else app_set_status(a, "g wants g for the top, f to paint fog, c to scrub it, l to make a link");
         return;
     }

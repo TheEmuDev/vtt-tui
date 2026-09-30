@@ -671,6 +671,23 @@ Close (30 ft, 6 sq) from Aria - 3 in range: Ogre, Goblin*, Bram   * no line of s
 `esc` removes the highlight. Selecting a different creature also removes a highlight
 anchored to a creature.
 
+### Group effects (`g e`)
+
+`g e` shows a group effect: a circle centered on the cursor that moves with the cursor, for
+finding where a spell or blast should land. The status line says who is caught and, when a
+creature is selected, how far the center is from it, so you can check the effect's own
+range:
+
+```
+Very Close burst at I6, Far from Aria (15 ft, 3 sq) - 2 caught: Ogre, Goblin
+```
+
+The circle's size is the ruleset's area size: Very Close under Daggerheart, whose group
+effects reach that far around one point unless they say otherwise. A count names another
+band (`3ge` is Close). Without a ruleset it is one square around, and a count is squares
+(`4ge`). `g e` again or `esc` removes it. A group effect and the range highlight replace each
+other.
+
 ## Running a fight
 
 ### Turn order (`a`)
@@ -961,6 +978,8 @@ use. Available: `none`, `daggerheart`.
   SRD's variants are made by hand: a random start is `:clock Ambush d6`, a looping countdown
   is `:tick Ambush reset`, and a countdown that moves with the fiction is ticked in either
   direction.
+- **Group effects** (`g e`) are Very Close around their center unless a count names another
+  band.
 - **Duality dice.** A bare `:roll` or `:roll +2` rolls two d12s, Hope and Fear, and reports
   the total and which die was higher:
 

@@ -526,8 +526,19 @@ static int pending_key(App *a, Key k)
         if (k.ch == 'R' || k.ch == 'H') { fog_hand_patch(a, k.ch == 'R'); return 1; }
         if (k.ch == 'p') { ping_here(a); return 1; }
         if (k.ch == 'o') { link_here(a); return 1; }
+        if (k.ch == 'e') {
+            /* A group effect lands at the cursor; the selected creature is
+             * whose it is, for the band from it to where it lands. */
+            Play *pl = &a->play;
+            int from = pl->sel >= 0 && pl->sel < a->map->tokens.n ? pl->sel : -1;
+            if (range_burst(&pl->range, a->map, from, a->ed.cx, a->ed.cy, take_count_raw(&a->ed)) < 0)
+                app_set_status(a, "group effect off");
+            else
+                a->status[0] = '\0';
+            return 1;
+        }
         if (k.ch == 'l') { app_set_status(a, "links are made in build mode - F1, then g l on each end"); return 1; }
-        app_set_status(a, "g wants r to light, h to darken -- R and H for the whole patch, p to ping, o to take a link");
+        app_set_status(a, "g wants r to light, h to darken -- R and H for the whole patch, p to ping, o to take a link, e for a group effect");
         return 1;
     }
 
@@ -806,7 +817,7 @@ void app_play_key(App *a, Key k)
 
     case 'g':
         a->pending = 'g';
-        app_set_status(a, "g    r light    h darken    R light the patch    H darken it    p ping    o take a link");
+        app_set_status(a, "g    r light    h darken    R light the patch    H darken it    p ping    o take a link    e group effect");
         break;
 
     case 's':

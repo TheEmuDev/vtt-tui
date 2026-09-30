@@ -96,6 +96,7 @@ static const KeyDoc PLAY[] = {
     KEY("m",      "measure (the ruler)"),
     KEY("r",      "range: cycle the bands, or grow a square a press (20r)"),
     KEY("R",      "its shape: circle, cone, line, square (2R names one); the cursor aims"),
+    KEY("g e",    "group effect: a burst at the cursor, following it; Very Close under Daggerheart, 3ge Close"),
     KEY("o  O",   "open or close a door / a secret door"),
     KEY("g o",    "take the link here: everyone on that end goes through, as one u"),
     KEY(":link 3", "jump to link 3's end, again for the other   :links lists them"),
