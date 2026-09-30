@@ -16,5 +16,5 @@
   7 ┃   │   │   │   │   │   │   │   ┃   │   │   │   │   │   ┃   │   ┃   
     ┃───┼───┼───┼───┼───┼───┼───┼───┗━━━━━━━╸───╺━━━━━━━━━━━┛───┼───┃   
   8 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃   
- MOVING  Aria 1x1  3 steps  from … picked up - enter drops, esc cancels 
+ MOVING  Aria 1x1  3 steps  from C3  walls on                           
  hjkl move  enter drop  esc cancel  u undo                       ? keys 

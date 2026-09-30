@@ -74,19 +74,30 @@ double dist_tiles(DistMetric m, int dx, int dy)
  * Out of Range as beyond that -- a fiction call about the scene, not a
  * distance. Anything the cursor can reach is on the map, so it can never be
  * Out of Range. */
+/* Movement under pressure, from the SRD: a PC can move within Close as
+ * part of an action and needs an Agility Roll to go farther safely; an
+ * adversary moves within Close for free as part of an action, or within
+ * Very Far as a separate action. */
+#define DH_NEAR_PC  "part of an action"
+#define DH_FAR_PC   "Agility Roll to move"
+#define DH_NEAR_ADV "free with an action"
+#define DH_FAR_ADV  "a separate action"
+
 static const RangeBand DAGGERHEART_BANDS[] = {
-    { "Melee",       5.0 },        /* touching distance: an adjacent square */
-    { "Very Close", 15.0 },        /* the short edge of a game card, 2-3 in  */
-    { "Close",      30.0 },        /* a pen or pencil, 5-6 in                */
-    { "Far",        60.0 },        /* the long edge of a sheet of paper, 11-12 in */
-    { "Very Far",   INFINITY },    /* beyond Far, anywhere still in the scene */
+    { "Melee",       5.0,      DH_NEAR_PC, DH_NEAR_ADV },  /* touching distance: an adjacent square */
+    { "Very Close", 15.0,      DH_NEAR_PC, DH_NEAR_ADV },  /* the short edge of a game card, 2-3 in */
+    { "Close",      30.0,      DH_NEAR_PC, DH_NEAR_ADV },  /* a pen or pencil, 5-6 in */
+    { "Far",        60.0,      DH_FAR_PC,  DH_FAR_ADV  },  /* the long edge of a sheet of paper, 11-12 in */
+    { "Very Far",   INFINITY,  DH_FAR_PC,  DH_FAR_ADV  },  /* beyond Far, anywhere still in the scene */
 };
 
 static const Ruleset RULESETS[] = {
-    { "none",        NULL, 0, 1, NULL, 0, 0, NULL },
+    { "none",        NULL, 0, 1, NULL, 0, 0, NULL, -1 },
+    /* A group effect's targets are within Very Close of one origin point
+     * "unless stated otherwise" (the SRD's Area of Effect). */
     { "daggerheart", DAGGERHEART_BANDS,
       (int)(sizeof DAGGERHEART_BANDS / sizeof *DAGGERHEART_BANDS), 1, "duality", 1, 1,
-      "HP Stress Armor" },
+      "HP Stress Armor", 1 },
 };
 
 #define NRULESETS ((int)(sizeof RULESETS / sizeof *RULESETS))
@@ -104,12 +115,18 @@ const Ruleset *ruleset_at(int i)
     return (i >= 0 && i < NRULESETS) ? &RULESETS[i] : NULL;
 }
 
-const char *ruleset_band(const Ruleset *rs, double units)
+const RangeBand *ruleset_band_of(const Ruleset *rs, double units)
 {
     if (!rs || !rs->bands) return NULL;
     for (int i = 0; i < rs->nbands; i++)
-        if (units <= rs->bands[i].max) return rs->bands[i].name;
-    return rs->bands[rs->nbands - 1].name;
+        if (units <= rs->bands[i].max) return &rs->bands[i];
+    return &rs->bands[rs->nbands - 1];
+}
+
+const char *ruleset_band(const Ruleset *rs, double units)
+{
+    const RangeBand *b = ruleset_band_of(rs, units);
+    return b ? b->name : NULL;
 }
 
 /* ------------------------------------------------------------------ ruler */

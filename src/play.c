@@ -731,11 +731,23 @@ void play_status(const Play *p, const Map *m, const Editor *e, int gm, char *buf
                          t->label[0] ? t->label : token_kind_name(t->kind), t->size, t->size, walls);
                 return;
             }
+            /* What moving this far takes, when the ruleset says: the band
+             * of the straight distance from the start, as the label beside
+             * the creature measures it, and its rule for this side. The
+             * table's rule, so the players' line has it too. */
+            char rule[96] = "";
+            int  dx = t->x - p->origin_x, dy = t->y - p->origin_y;
+            if (dx || dy) {
+                double units = dist_tiles((DistMetric)m->metric, dx, dy) * m->scale_ft;
+                const RangeBand *b = ruleset_band_of(ruleset_by_name(m->ruleset), units);
+                const char *how = !b ? NULL : t->kind == TOKEN_PLAYER ? b->move_player : b->move_enemy;
+                if (how) snprintf(rule, sizeof rule, "  %s: %s", b->name, how);
+            }
             snprintf(buf, bufsz,
-                     "MOVING  %.20s %dx%d  %d step%s%s  from %s  %s",
+                     "MOVING  %.20s %dx%d  %d step%s%s  from %s  %s%s",
                      t->label[0] ? t->label : token_kind_name(t->kind),
                      t->size, t->size, p->steps, p->steps == 1 ? "" : "s", route,
-                     from, walls);
+                     from, walls, rule);
             return;
         }
         /* Spell the markers out here: the map shows their initials, and the

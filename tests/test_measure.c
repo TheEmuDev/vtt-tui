@@ -666,3 +666,66 @@ void test_range_sight(void)
 
     map_free(m);
 }
+
+/* The MOVING line under a ruleset says what moving that far takes, by side,
+ * from the band of the straight distance -- on the players' line too. */
+static char *moving_line(App *a, int gm)
+{
+    static char buf[256];
+    play_status(&a->play, a->map, &a->ed, gm, buf, sizeof buf);
+    return buf;
+}
+
+void test_move_rules(void)
+{
+    Sandbox sb = sandbox_enter("moverules");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    char path[600];
+    snprintf(path, sizeof path, "%s/mv.vtt", sb.dir);
+    FILE *f = fopen(path, "w");
+    if (f) {
+        fputs("VTT 2\nname mv\nsize 30 10\nzoom 1\nruleset daggerheart\ntiles\n", f);
+        for (int y = 0; y < 10; y++) fputs("..............................\n", f);
+        fputs("token player 1 1 1 \"Aria\"\ntoken enemy 1 5 1 \"Ogre\"\n", f);
+        fclose(f);
+    }
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    press(&a, ":play\r");
+
+    CASE("a player carried within Close: part of an action; past it, an Agility Roll");
+    press(&a, ":B2\r\rll");
+    CHECK(strstr(moving_line(&a, 1), "Very Close: part of an action") != NULL);
+    press(&a, "llllll");
+    CHECK(strstr(moving_line(&a, 1), "Far: Agility Roll to move") != NULL);
+    CHECK(strstr(moving_line(&a, 0), "Far: Agility Roll to move") != NULL);   /* the players' line */
+    CHECK_EQ(a.status[0], '\0');                             /* the pick-up hint has gone */
+    press(&a, "\x1b");
+
+    CASE("an adversary: free with an action within Close, a separate action past it");
+    press(&a, ":B6\r\rlll");
+    CHECK(strstr(moving_line(&a, 1), "Very Close: free with an action") != NULL);
+    press(&a, "lllll");
+    CHECK(strstr(moving_line(&a, 1), "Far: a separate action") != NULL);
+
+    CASE("back where it started there is nothing to say");
+    press(&a, "hhhhhhhh");
+    CHECK(strstr(moving_line(&a, 1), "action") == NULL);
+    press(&a, "\x1b");
+
+    CASE("without a ruleset the line is as it was");
+    press(&a, ":ruleset none\r:B2\r\rllllllll");
+    CHECK(strstr(moving_line(&a, 1), "Agility") == NULL);
+    CHECK(strstr(moving_line(&a, 1), "Far") == NULL);
+    press(&a, "\x1b");
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+

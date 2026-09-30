@@ -935,6 +935,19 @@ use. Available: `none`, `daggerheart`.
   | Very Far | beyond Far | 13+ |
 
   Thresholds are stored in feet, so changing `:scale` keeps them at the same distance.
+- **Movement under pressure.** While a creature is carried, the status line says what
+  moving that far takes, by the band of the straight distance from where it started:
+
+  | band | a player | an adversary |
+  |------|----------|--------------|
+  | Melee to Close | part of an action | free with an action |
+  | Far, Very Far | Agility Roll to move | a separate action |
+
+  ```
+  MOVING  Aria 1x1  8 steps  from B2  walls on  Far: Agility Roll to move
+  ```
+
+  The players' screens show it too.
 - **The spotlight** instead of an initiative order (see [Turn order](#turn-order-a)):
 
   ```

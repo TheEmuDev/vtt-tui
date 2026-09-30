@@ -589,7 +589,6 @@ void app_play_key(App *a, Key k)
             /* A movement key is what settles which creature was meant. The
              * cursor goes to it and takes its size before the first step, so
              * the move is made from where it will actually happen. */
-            int settling = pl->choosing;
             pl->choosing = 0;
 
             /* One keypress is one undo step, count and all. Without the batch
@@ -605,14 +604,15 @@ void app_play_key(App *a, Key k)
             }
             undo_end(&a->undo);
             if (moved) app_floor_note_move(a, &m->tokens.v[pl->group[0]]);
-            /* Being blocked is the more urgent news, so it wins; otherwise
-             * the offer to walk the crowd has to go, since it stopped being
-             * true the moment the choice was settled. */
+            /* Being blocked is the more urgent news, so it wins. Otherwise
+             * the message goes -- the pick-up hint and the offer to walk the
+             * crowd are both past, and the key bar says enter and esc -- so
+             * the MOVING line has the width for the ruleset's rule. */
             if (moved < times)
                 app_set_status(a, edge ? "edge of the floor - [ ] or a link to go elsewhere"
                                        : pl->enforce_walls ? "blocked" : "edge of the map");
-            else if (settling)
-                app_set_status(a, "picked up - enter drops, esc cancels");
+            else
+                a->status[0] = '\0';
             app_follow_selection(a);
         } else {
             ed_move(e, m, dx, dy, times);

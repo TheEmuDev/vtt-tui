@@ -37,6 +37,10 @@ double dist_tiles(DistMetric m, int dx, int dy);
 typedef struct {
     const char *name;
     double      max;
+    /* What moving this far takes, by side, as the carried creature's status
+     * line says it ("an Agility Roll to do it safely"); NULL says nothing. */
+    const char *move_player;
+    const char *move_enemy;
 } RangeBand;
 
 typedef struct {
@@ -61,11 +65,16 @@ typedef struct {
     /* The counters the game keeps on a creature, space-separated, for the
      * s v prompt to offer and to spell; NULL for none in particular. */
     const char      *counters;
+    /* The band a group effect covers round its origin unless it says
+     * otherwise (g e), as an index into bands; -1 for none in particular. */
+    int              effect_band;
 } Ruleset;
 
 const Ruleset *ruleset_by_name(const char *name);   /* NULL if unknown */
 const Ruleset *ruleset_at(int i);                   /* for listing */
 const char    *ruleset_band(const Ruleset *rs, double units);
+/* The band a distance falls in, or NULL for a ruleset without bands. */
+const RangeBand *ruleset_band_of(const Ruleset *rs, double units);
 
 /* ------------------------------------------------------------------ ruler */
 
