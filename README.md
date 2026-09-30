@@ -1111,6 +1111,7 @@ W120 unreachable-room  room K2   18 squares, no door leads to it from room B2
 | `W025 scene-dropped` | a scene with a bad name or box, a name used twice, a seventeenth, or no `endscene` |
 | `W026 after-end` | lines after an `end` line, which ends the file |
 | `W027 name-cleaned` | control characters in the map's name, taken out |
+| `W028 card-dropped`, `card-cut` | a card with a bad or repeated name, a sixty-fifth, one with no `endcard`, or a stray `endcard` |
 | `W102 door-to-void` | a door or window leading into void |
 | `W103 wall-in-void` | a wall with no map on either side |
 | `W104 door-loose` | a door or window with no wall at either end |

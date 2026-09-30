@@ -1,4 +1,4 @@
-VTT 12
+VTT 13
 name Goblin Ambush
 size 16 9
 zoom 1
@@ -44,12 +44,19 @@ tokenturn 18 acting
 token enemy 10 4 2 "Ogre"
 tokenhidden
 tokenturn 12
+tokencard "ogre"
 round 2
 spotlight gm
 clock Dragon 3 6
 clock Fuse 4 4 down
 roll attack "2d12+3"
 note 5 3 "pressure plate"
+card "ogre"
+| Ogre - Tier 2 Bruiser
+| Difficulty: 14   Thresholds: 10/20
+| 
+| Smash - Action: **2d10** physical
+endcard
 area 1 1 6 4 "Crypt"
 area 0 0 15 8 "Ground"
 floor "Ground" 0

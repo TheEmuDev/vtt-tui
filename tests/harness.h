@@ -214,6 +214,7 @@ void test_net_edges(void);
 void test_play_box(void);
 void test_move_rules(void);
 void test_group_effect(void);
+void test_cards(void);
 void test_hidden(void);
 void test_dice(void);
 void test_session_log(void);

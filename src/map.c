@@ -121,6 +121,7 @@ void map_free(Map *m)
     map_sight_drop(m);
     tokens_free(&m->tokens);
     for (int i = 0; i < m->nscenes; i++) tokens_free(&m->scenes[i].tokens);
+    for (int i = 0; i < m->ncards; i++) free(m->cards[i].text);
     free(m);
 }
 

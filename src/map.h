@@ -108,6 +108,17 @@ typedef struct {
     TokenList tokens;                 /* owned */
 } Scene;
 
+/* A card: text the GM keeps for a kind of creature -- a stat block,
+ * tactics, anything -- shown beside the map while one is selected, never to
+ * the players. Plain text; the core knows no fields (a ruleset may read
+ * lines by their label). The text is the map's own, on the heap. */
+#define MAP_CARDS_MAX 64
+#define CARD_TEXT_MAX 4096
+typedef struct {
+    char  name[CARD_NAME_MAX];
+    char *text;
+} Card;
+
 #define NOTE_MAX      TOKEN_NOTE_MAX
 typedef struct {
     int16_t x, y;
@@ -254,6 +265,8 @@ typedef struct {
     int  nlinks;
     Scene scenes[MAP_SCENES_MAX]; /* in the order they were saved */
     int   nscenes;
+    Card  cards[MAP_CARDS_MAX];   /* the GM's cards, by name; see card.h */
+    int   ncards;
     uint8_t *fog;                         /* w*h, see FOG_* */
     int      fog_on;                      /* the master switch */
     int      fog_soft_edge;               /* the map's default for patches that follow it */

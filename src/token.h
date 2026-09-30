@@ -5,6 +5,9 @@
 #include <stdint.h>
 #include <string.h>
 
+/* A card's name: a file name's rule (store_name_ok), as a template's is. */
+#define CARD_NAME_MAX 32
+
 #define TOKEN_LABEL_MAX 32
 #define TOKEN_SIZE_MAX  3
 /* A line of the GM's own text on a creature: what it wants, what it is
@@ -65,6 +68,10 @@ typedef struct {
      * hides a creature. fog_token_unseen (fog.h) is the question every
      * players' view asks. */
     uint8_t hidden;
+
+    /* The card it shows the GM, by name: every Goblin names "goblin", and the
+     * text lives once, in the map's table (card.h). "" for none. */
+    char    card[CARD_NAME_MAX];
 } Token;
 
 #define TURN_IN     0x01u   /* has a place in the order */

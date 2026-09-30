@@ -11,6 +11,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "card.h"
 #include "clock.h"
 #include "counter.h"
 #include "floor.h"
@@ -30,7 +31,7 @@
  * v3 added status markers on tokens. An older reader would ignore those lines
  * and silently drop them, which loses combat state from a saved fight, so it
  * refuses too. Each version still loads everything older. */
-#define FORMAT_VERSION 12
+#define FORMAT_VERSION 13
 
 /* Version 4 added the turn order. A map with no fight in it is still written
  * as version 3, which says everything it needs and stays loadable by the
@@ -56,6 +57,8 @@
 /* Version 12 added links to other map files: an older reader would read the
  * line's "to" as a square and drop the link, and the way out with it. */
 #define FORMAT_BEFORE_MAPLINKS 11
+/* Version 13 added cards (docs/CARDS.md): a map with none is still 12. */
+#define FORMAT_BEFORE_CARDS    12
 
 /* Fog rows: a held tile of patch 1..15 is one of these, in order. */
 static const char FOG_HELD_CHARS[FOG_PATCH_MAX + 1] = "123456789!\"#$%&";
@@ -106,7 +109,36 @@ static void put_tokens(FILE *f, const TokenList *l)
             else                   fputs("tokenturn -", f);
             fputs((t->turn & TURN_ACTING) ? " acting\n" : "\n", f);
         }
+        if (t->card[0]) fprintf(f, "tokencard \"%s\"\n", t->card);
     }
+}
+
+/* A card: its name, then its text a line at a time behind "| ", a long
+ * line split into pieces behind "+ " so no line outgrows what the loader
+ * reads -- cut on a character's edge -- then "endcard". */
+#define CARD_PIECE 400
+static void put_card(FILE *f, const Card *c)
+{
+    fprintf(f, "card \"%s\"\n", c->name);
+    const char *p = c->text ? c->text : "";
+    while (*p) {
+        size_t len = strcspn(p, "\n");
+        const char *lead = "| ";
+        size_t at = 0;
+        do {
+            size_t take = len - at;
+            if (take > CARD_PIECE) {
+                take = CARD_PIECE;
+                while (take > 0 && ((unsigned char)p[at + take] & 0xC0) == 0x80) take--;
+            }
+            fprintf(f, "%s%.*s\n", lead, (int)take, p + at);
+            lead = "+ ";
+            at += take;
+        } while (at < len);
+        p += len;
+        if (*p == '\n') p++;
+    }
+    fputs("endcard\n", f);
 }
 
 static int write_map(const Map *m, const char *path, int autosave, char *err, size_t errsz)
@@ -140,7 +172,11 @@ static int write_map(const Map *m, const char *path, int autosave, char *err, si
     int v11 = m->nscenes > 0;
     int v12 = 0;
     for (int i = 0; i < m->nlinks; i++) v12 |= m->links[i].to_map[0] != '\0';
-    fprintf(f, "VTT %d\n", v12 ? FORMAT_VERSION : v11 ? FORMAT_BEFORE_MAPLINKS : v10 ? FORMAT_BEFORE_SCENES : v9 ? FORMAT_BEFORE_HIDDEN : v8 ? FORMAT_BEFORE_FLOORS : v7 ? FORMAT_BEFORE_LINKS : v6 ? FORMAT_BEFORE_AREAS : v5 ? FORMAT_BEFORE_COUNTERS
+    int v13 = m->ncards > 0;
+    for (int i = 0; i < m->tokens.n && !v13; i++) v13 = m->tokens.v[i].card[0] != '\0';
+    for (int s = 0; s < m->nscenes && !v13; s++)
+        for (int i = 0; i < m->scenes[s].tokens.n && !v13; i++) v13 = m->scenes[s].tokens.v[i].card[0] != '\0';
+    fprintf(f, "VTT %d\n", v13 ? FORMAT_VERSION : v12 ? FORMAT_BEFORE_CARDS : v11 ? FORMAT_BEFORE_MAPLINKS : v10 ? FORMAT_BEFORE_SCENES : v9 ? FORMAT_BEFORE_HIDDEN : v8 ? FORMAT_BEFORE_FLOORS : v7 ? FORMAT_BEFORE_LINKS : v6 ? FORMAT_BEFORE_AREAS : v5 ? FORMAT_BEFORE_COUNTERS
                           : fight ? FORMAT_BEFORE_CLOCKS : FORMAT_BEFORE_TURNS);
     fprintf(f, "name %s\n", m->name);
     fprintf(f, "size %d %d\n", m->w, m->h);
@@ -173,6 +209,7 @@ static int write_map(const Map *m, const char *path, int autosave, char *err, si
             fprintf(f, "roll %s \"%s\"\n", m->rolls[i].name, m->rolls[i].expr);
     for (int i = 0; i < m->nnotes; i++)
         fprintf(f, "note %d %d \"%s\"\n", m->notes[i].x, m->notes[i].y, m->notes[i].text);
+    for (int i = 0; i < m->ncards; i++) put_card(f, &m->cards[i]);
     for (int i = 0; i < m->nareas; i++)
         fprintf(f, "area %d %d %d %d \"%s\"\n", m->areas[i].x0, m->areas[i].y0,
                 m->areas[i].x1, m->areas[i].y1, m->areas[i].name);
@@ -370,7 +407,7 @@ static int looks_like_record(const char *line)
 {
     static const char *const words[] = {
         "tiles", "vedges", "hedges", "fog", "fogpatch", "token", "tokenstatus",
-        "tokenturn", "tokencounter", "tokennote", "tokenhidden", "note", "area", "floor", "link", "spotlight", "clock",
+        "tokenturn", "tokencounter", "tokennote", "tokenhidden", "tokencard", "card", "endcard", "note", "area", "floor", "link", "spotlight", "clock",
         "roll", "round", "name", "size", "zoom", "scale", "ruleset", "metric", "scene", "endscene", NULL,
     };
     size_t n = 0;
@@ -561,6 +598,18 @@ static int parse_token_note_line(Map *m, const char *line)
     return 0;
 }
 
+/* tokencard "goblin": the card the creature read last shows. The card may
+ * come later in the file, or not at all -- a creature can name one the map
+ * has yet to be given. */
+static int parse_token_card_line(Map *m, const char *line, int last_read)
+{
+    if (m->tokens.n == 0 || !last_read) return -1;
+    char name[CARD_NAME_MAX + 8];
+    if (!parse_quoted(line + 10, name, sizeof name) || !card_name_ok(name)) return -1;
+    str_lcpy(m->tokens.v[m->tokens.n - 1].card, name, sizeof m->tokens.v[0].card);
+    return 0;
+}
+
 static int parse_note_line(Map *m, const char *line)
 {
     int x, y, consumed = 0;
@@ -726,6 +775,43 @@ Map *mapio_load(const char *path, char *err, size_t errsz)
     return mapio_load_diag(path, err, errsz, NULL, NULL);
 }
 
+/* A card being read: its lines gather here until endcard. */
+typedef struct {
+    int    on, keep, line, clamped;
+    char   name[CARD_NAME_MAX];
+    char  *buf;                    /* CARD_TEXT_MAX */
+    size_t n;
+} CardRead;
+
+static void card_take(Loader *ld, CardRead *cr, const char *text, int newline)
+{
+    if (!cr->keep) return;
+    size_t add = strlen(text) + (newline && cr->n ? 1 : 0);
+    if (cr->n + add + 1 > CARD_TEXT_MAX) {
+        if (!cr->clamped)
+            diag(ld, ld->line, -1, "W020", "clamped", "card %.31s is over %d bytes; the rest is dropped",
+                 cr->name, CARD_TEXT_MAX - 1);
+        cr->clamped = 1;
+        return;
+    }
+    if (newline && cr->n) cr->buf[cr->n++] = '\n';
+    memcpy(cr->buf + cr->n, text, strlen(text));
+    cr->n += strlen(text);
+    cr->buf[cr->n] = '\0';
+}
+
+/* The card closes: kept, or said to have been cut short. */
+static void card_close(Loader *ld, Map *m, CardRead *cr, const char *cut)
+{
+    if (cr->keep) {
+        if (cut) diag(ld, cr->line, -1, "W028", "card-cut", "card %.31s: %s", cr->name, cut);
+        cr->buf[cr->n] = '\0';
+        card_set(m, cr->name, cr->buf);
+    }
+    cr->on = cr->keep = 0;
+    cr->n = 0;
+}
+
 Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, void *ctx)
 {
     PROF_ZONE("mapio.load");
@@ -839,7 +925,38 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
     memset(&scene_new, 0, sizeof scene_new);
     memset(&map_tokens, 0, sizeof map_tokens);
     int nfloors = 0;
+    CardRead card;
+    memset(&card, 0, sizeof card);
+    card.buf = xmalloc(CARD_TEXT_MAX);
     while (read_line(ld, line, sizeof line) >= 0) {
+        /* A card's lines: "| " starts one, "+ " goes on with it, endcard
+         * closes it; anything else closes it too, cut short. */
+        if (card.on) {
+            if (line[0] == '|' || line[0] == '+') {
+                card_take(ld, &card, line[1] == ' ' ? line + 2 : line + 1, line[0] == '|');
+                continue;
+            }
+            if (!strcmp(line, "endcard")) { card_close(ld, m, &card, NULL); continue; }
+            card_close(ld, m, &card, "ends without endcard");
+        }
+        if (!strncmp(line, "card ", 5)) {
+            char cname[CARD_NAME_MAX + 8];
+            int  quoted = parse_quoted(line + 5, cname, sizeof cname);
+            memset(&card, 0, offsetof(CardRead, buf));
+            card.on = 1;
+            card.line = ld->line;
+            str_lcpy(card.name, cname, sizeof card.name);
+            const char *why = !quoted || !card_name_ok(cname) ? "its name does not read (letters, digits, - and _)"
+                            : card_find(m, cname) >= 0        ? "a card of that name came before it"
+                            : m->ncards >= MAP_CARDS_MAX     ? "a map holds 64 cards" : NULL;
+            if (why) diag(ld, ld->line, -1, "W028", "card-dropped", "card %.31s dropped: %s", cname, why);
+            card.keep = !why;
+            continue;
+        }
+        if (!strcmp(line, "endcard")) {
+            diag(ld, ld->line, -1, "W028", "card-dropped", "endcard with no card open, ignored");
+            continue;
+        }
         if (!strcmp(line, "end")) {                    /* an autosave's last line */
             while (ld->sink && read_line(ld, line, sizeof line) >= 0)
                 if (line[strspn(line, " ")]) {
@@ -964,6 +1081,8 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
             else diag(ld, ld->line, -1, "E014", "bad-record", "hidden marker dropped: its creature's line was not read");
         } else if (!strncmp(line, "tokennote ", 10)) {
             RECORD(parse_token_note_line(m, line), "creature note");
+        } else if (!strncmp(line, "tokencard ", 10)) {
+            RECORD(parse_token_card_line(m, line, last_token_read), "creature's card");
         } else if (!strncmp(line, "note ", 5)) {
             RECORD(parse_note_line(m, line), "note");
         } else if (!strncmp(line, "area ", 5)) {
@@ -1026,6 +1145,8 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
     }
 #undef RECORD
     fclose(f);
+    if (card.on) card_close(ld, m, &card, "the file ends before its endcard");
+    free(card.buf);
     if (in_scene) {
         tokens_free(&m->tokens);
         m->tokens = map_tokens;
