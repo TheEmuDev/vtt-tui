@@ -1,4 +1,5 @@
 #include "app_priv.h"
+#include "card.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -961,6 +962,32 @@ static void cmd_panel(App *a, const char *verb, const char *rest)
                                 : "turn panel off");
 }
 
+/* :card       the selected creature's card (else the one under the cursor), whole
+ * :card on    the box beside the map shows it (the default)
+ * :card off   the box does not; a setting, nothing is lost */
+static void cmd_card(App *a, const char *verb, const char *rest)
+{
+    Map *m = a->map;
+    if (!strcmp(rest, "on") || !strcmp(rest, "off")) {
+        a->card_box_off = !strcmp(rest, "off");
+        app_set_status(a, a->card_box_off ? "card box off - :card still shows a card whole"
+                                           : "card box on - the selected creature's card shows beside the map");
+        return;
+    }
+    if (*rest) { app_set_status(a, ":card, :card on, or :card off"); return; }
+    int i = a->play.sel >= 0 && a->play.sel < m->tokens.n ? a->play.sel : app_token_under_cursor(a);
+    if (i < 0) { app_set_status(a, "no creature here - :card shows the selected one's card"); return; }
+    if (!card_of(m, &m->tokens.v[i])) {
+        char msg[96];
+        snprintf(msg, sizeof msg, "%.30s has no card - s k writes one", token_name(&m->tokens.v[i]));
+        app_set_status_gm(a, msg);
+        return;
+    }
+    a->card_token = i;
+    a->card_top   = 0;
+    a->modal      = MODAL_CARD;
+}
+
 static void cmd_log(App *a, const char *verb, const char *rest)
 {
     Map *m = a->map;
@@ -1066,6 +1093,7 @@ static const struct {
     { "area", "areas", cmd_area },
     { "mirror", NULL, cmd_mirror },
     { "panel", NULL, cmd_panel },
+    { "card", NULL, cmd_card },
     { "log", NULL, cmd_log },
     { "zoom", NULL, cmd_zoom },
     { "hidden", NULL, cmd_hidden },

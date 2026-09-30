@@ -1,5 +1,6 @@
 #include "ui.h"
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -625,6 +626,87 @@ void ui_handout_draw(Renderer *r, const Theme *th, const char *title, const char
     wrap(body, iw, handout_line, &h);
     if (lines > rows)
         draw_text(r, box.x + box.w - 5, box.y + box.h - 1, " … ", 3, style(th->dim, th->bg, 0));
+}
+
+/* ----------------------------------------------------------------- card */
+
+/* The text as shown: "**" toggles bold and goes, an "_" that opens or
+ * closes emphasis goes (one inside a word, snake_case, stays); bold[i]
+ * says whether out[i] is bold. */
+static size_t card_display(const char *in, char *out, uint8_t *bold, size_t cap)
+{
+    size_t n = 0;
+    int    on = 0;
+    for (const char *p = in; *p && n + 1 < cap; p++) {
+        if (p[0] == '*' && p[1] == '*') { on = !on; p++; continue; }
+        if (*p == '_') {
+            int before = p > in && isalnum((unsigned char)p[-1]);
+            int after  = isalnum((unsigned char)p[1]);
+            if (before != after) continue;
+        }
+        bold[n] = (uint8_t)on;
+        out[n++] = *p;
+    }
+    out[n] = '\0';
+    return n;
+}
+
+typedef struct {
+    Renderer      *r;
+    int            x, y, top, rows, width;
+    const char    *base;
+    const uint8_t *bold;
+    Style          s, sb;
+} CardDraw;
+
+static void card_line(void *ctx, int i, const char *s, size_t n)
+{
+    CardDraw *c = ctx;
+    if (i < c->top || i >= c->top + c->rows) return;
+    int x = c->x, y = c->y + i - c->top;
+    /* Runs of one weight, each drawn in its style. */
+    size_t at = 0;
+    while (at < n) {
+        size_t off = (size_t)(s - c->base) + at, run = 1;
+        while (at + run < n && c->bold[off + run] == c->bold[off]) run++;
+        char buf[1024];
+        size_t k = run < sizeof buf ? run : sizeof buf - 1;
+        memcpy(buf, s + at, k);
+        buf[k] = '\0';
+        int w = text_width(buf);
+        draw_text(c->r, x, y, buf, imax(0, c->x + c->width - x), c->bold[off] ? c->sb : c->s);
+        x += w;
+        at += run;
+    }
+}
+
+int ui_card_lines(const char *text, int box_w)
+{
+    static char    shown[CARD_TEXT_MAX];
+    static uint8_t bold[CARD_TEXT_MAX];
+    if (box_w - 4 < 4) return 0;
+    card_display(text ? text : "", shown, bold, sizeof shown);
+    return wrap(shown, box_w - 4, NULL, NULL);
+}
+
+int ui_card_draw(Renderer *r, const Theme *th, Rect box, const char *title,
+                 const char *text, int top, const BoxGlyphs *frame)
+{
+    PROF_ZONE("card.draw");
+    static char    shown[CARD_TEXT_MAX];
+    static uint8_t bold[CARD_TEXT_MAX];
+    card_display(text ? text : "", shown, bold, sizeof shown);
+
+    int iw = box.w - 4, rows = box.h - 2;
+    if (iw < 4 || rows < 1) return 0;
+    dialog_frame(r, th, box, frame, th->accent, title);
+    int lines = wrap(shown, iw, NULL, NULL);
+    CardDraw c = { r, box.x + 2, box.y + 1, top, rows, iw, shown, bold,
+                   style(th->fg, th->bg, 0), style(th->fg, th->bg, ATTR_BOLD) };
+    wrap(shown, iw, card_line, &c);
+    if (lines > top + rows)
+        draw_text(r, box.x + box.w - 5, box.y + box.h - 1, " … ", 3, style(th->dim, th->bg, 0));
+    return lines;
 }
 
 /* ---------------------------------------------------------------- modal */

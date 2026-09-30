@@ -114,6 +114,7 @@ int main(int argc, char **argv)
         { "moverules",  test_move_rules },
         { "burst",      test_group_effect },
         { "cards",      test_cards },
+        { "cardbox",    test_card_box },
         { "clearstatus", test_clear_status_keys },
         { "trail",    test_trail },
         { "traildraw", test_trail_draw },

@@ -4,6 +4,7 @@
  * share. */
 
 #include "app_priv.h"
+#include "card.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -170,6 +171,28 @@ static void draw_editor(App *a)
     a->psplit  = 0;
 }
 
+/* The card box: over the map's right edge, at most half the view wide and
+ * as tall as the card, the GM's alone. */
+static void draw_card_box(App *a, int i)
+{
+    const Map   *m = a->map;
+    const Token *t = &m->tokens.v[i];
+    Rect v = a->ed.view.view;
+    int  w = imin(48, v.w / 2);
+    if (w < 20 || v.h < 5) return;
+    Rect box = rect(v.x + v.w - w, v.y, w, v.h);
+    box.h = imin(v.h, ui_card_lines(card_of(m, t), w) + 2);     /* as tall as it needs */
+    /* Never over the creature it is about: the bottom right, else the left. */
+    Rect c;
+    grid_token_area(&a->ed.view, t->x, t->y, t->size, &c);
+    #define OVER(b) (c.x < (b).x + (b).w && (b).x < c.x + c.w && c.y < (b).y + (b).h && (b).y < c.y + c.h)
+    if (OVER(box)) box.y = v.y + v.h - box.h;
+    if (OVER(box)) { box.x = v.x; box.y = v.y; }
+    if (OVER(box)) box.y = v.y + v.h - box.h;
+    #undef OVER
+    ui_card_draw(a->rnd, a->th, box, token_name(t), card_of(m, t), 0, a->ascii ? &BOX_ASCII : &BOX_ROUND);
+}
+
 static void draw_editor_body(App *a)
 {
     Renderer    *r  = a->rnd;
@@ -239,6 +262,12 @@ static void draw_editor_body(App *a)
         }
         rnd_clip_restore(r, saved);
     }
+    /* A creature's card, for the GM alone. */
+    if (playing && a->view == VIEW_GM) {
+        int ci = app_card_shown(a);
+        if (ci >= 0) draw_card_box(a, ci);
+    }
+
     /* And the agent's last change, for the GM alone. */
     if (a->agent_ring.until_ms && a->view == VIEW_GM) {
         const Ping *p = &a->agent_ring;
@@ -377,6 +406,17 @@ void app_draw_view(App *a, View view)
     switch (a->modal) {
     case MODAL_PROMPT:  ui_prompt_draw(a->rnd, a->th, &a->prompt, frame); break;
     case MODAL_PICKER:  ui_picker_draw(a->rnd, a->th, &a->picker, frame); break;
+    case MODAL_CARD: {
+        const Map *m = a->map;
+        if (!m || a->card_token < 0 || a->card_token >= m->tokens.n) break;
+        const Token *t = &m->tokens.v[a->card_token];
+        Rect box = rect_center(rect(0, 0, a->rnd->w, a->rnd->h), imin(72, a->rnd->w - 4), a->rnd->h - 4);
+        int rows = box.h - 2;
+        a->card_lines = ui_card_lines(card_of(m, t), box.w);
+        a->card_top = iclamp(a->card_top, 0, imax(0, a->card_lines - rows));
+        ui_card_draw(a->rnd, a->th, box, token_name(t), card_of(m, t), a->card_top, frame);
+        break;
+    }
     case MODAL_MESSAGE: ui_modal(a->rnd, a->th, a->modal_title, a->modal_body,
                                  "press any key", frame); break;
     case MODAL_CONFIRM_QUIT:
@@ -426,6 +466,18 @@ void app_current_counter(const App *a, char *buf, size_t bufsz)
     counter_default(rs ? rs->counters : NULL, buf, bufsz);
 }
 
+/* The creature whose card the box shows: the selected one, else the one
+ * under the cursor -- in play mode, the box on, a card to show. -1 for none. */
+int app_card_shown(const App *a)
+{
+    if (a->card_box_off || a->screen != SCREEN_PLAY || !a->map) return -1;
+    const Map *m = a->map;
+    int i = a->play.sel >= 0 && a->play.sel < m->tokens.n ? a->play.sel
+          : tokens_covered_next(&m->tokens, a->ed.cx, a->ed.cy, 1, -1);
+    return i >= 0 && card_of(m, &m->tokens.v[i]) ? i : -1;
+}
+
+
 int app_view_differs(const App *a)
 {
     if (a->preview) return a->handout_up;     /* the GM is already looking at it, but for the card */
@@ -435,6 +487,7 @@ int app_view_differs(const App *a)
     if (a->screen == SCREEN_PLAY && a->map && fog_any(a->map)) return 1;
     if (prof_overlay_visible()) return 1;
     if (a->agent_ring.until_ms) return 1;       /* the GM's alone */
+    if (app_card_shown(a) >= 0) return 1;       /* the card box is the GM's */
     if (a->screen == SCREEN_PLAY && a->map) {
         const Map  *m  = a->map;
         const Play *pl = &a->play;

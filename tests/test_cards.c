@@ -140,3 +140,89 @@ void test_cards(void)
     map_free(m);
     sandbox_leave(&sb);
 }
+
+/* The box beside the map, :card whole, and that neither reaches the players. */
+void test_card_box(void)
+{
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 24);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, "tests/fixtures/everything.vtt"), 0);
+    press(&a, ":play\r");
+    int ogre = -1;
+    for (int i = 0; i < a.map->tokens.n; i++) if (!strcmp(a.map->tokens.v[i].label, "Ogre")) ogre = i;
+    CHECK(ogre >= 0);
+
+    CASE("the selected creature's card shows beside the map, the GM's alone");
+    press(&a, ":K5\r\r\r");                                /* Ogre picked up and put down: selected */
+    CHECK_EQ(a.play.sel, ogre);
+    CHECK_EQ(app_card_shown(&a), ogre);
+    CHECK(app_view_differs(&a));
+    rnd_begin(&r);
+    app_draw_view(&a, VIEW_GM);
+    ByteBuf gm;
+    bb_init(&gm, 65536);
+    rnd_dump(&r, &gm);
+    bb_putc(&gm, '\0');
+    CHECK(strstr(gm.data, "Tier 2 Bruiser") != NULL);
+    bb_free(&gm);
+    char *pf = players_text(&a, &r);
+    CHECK(strstr(pf, "Tier 2 Bruiser") == NULL);
+    CHECK(strstr(pf, "Smash") == NULL);
+    free(pf);
+
+    CASE("**bold** is drawn bold and its marks are gone");
+    rnd_begin(&r);
+    app_draw_view(&a, VIEW_GM);
+    int found = 0, bold = 0, stars = 0;
+    for (int y = 0; y < r.h; y++)
+        for (int x = 0; x + 4 < r.w; x++) {
+            const Cell *c = &r.back[y * r.w + x];
+            if (c->ch == '*') stars++;
+            if (c->ch == '2' && r.back[y * r.w + x + 1].ch == 'd' && r.back[y * r.w + x + 2].ch == '1') {
+                found = 1;
+                bold = (c->attr & ATTR_BOLD) != 0;
+            }
+        }
+    CHECK(found && bold);
+    CHECK_EQ(stars, 0);
+
+    CASE(":card off hides the box, :card on shows it; nothing selected, the one under the cursor");
+    press(&a, ":card off\r");
+    CHECK_EQ(app_card_shown(&a), -1);
+    press(&a, ":card on\r");
+    CHECK_EQ(app_card_shown(&a), ogre);
+    press(&a, "\x1b");                                        /* the selection cleared */
+    CHECK_EQ(a.play.sel, -1);
+    a.ed.cx = 0; a.ed.cy = 0;
+    CHECK_EQ(app_card_shown(&a), -1);
+    a.ed.cx = 10; a.ed.cy = 4;
+    CHECK_EQ(app_card_shown(&a), ogre);
+
+    CASE(":card shows it whole and scrolls within it; esc puts it away");
+    press(&a, ":card\r");
+    CHECK_EQ(a.modal, MODAL_CARD);
+    rnd_begin(&r);
+    app_draw(&a);
+    press(&a, "jjjjjjjjjjjj");
+    rnd_begin(&r);
+    app_draw(&a);
+    CHECK_EQ(a.card_top, 0);                                   /* a short card does not scroll */
+    press(&a, "\x1b");
+    CHECK_EQ(a.modal, MODAL_NONE);
+
+    CASE("a creature with no card says how to write one; build mode shows no box");
+    a.ed.cx = 2; a.ed.cy = 2;                                  /* Aria */
+    press(&a, ":card\r");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK(strstr(a.status, "has no card - s k writes one") != NULL);
+    a.ed.cx = 10; a.ed.cy = 4;
+    press(&a, "\x1b[11~");
+    CHECK_EQ(app_card_shown(&a), -1);
+
+    app_free(&a);
+    rnd_free(&r);
+}
+

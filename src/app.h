@@ -42,6 +42,7 @@ typedef enum {
     MODAL_CLEAR_STATUS,   /* which of a token's markers to take off */
     MODAL_CONFIRM_RECOVER,   /* an autosave newer than the map: take it? */
     MODAL_PICKER,            /* a list filtered as the GM types: App.picker */
+    MODAL_CARD,              /* :card -- a creature's card whole, scrolled by card_top */
 } ModalKind;
 
 /* A handout's body: 2 KB of text, and its NUL. */
@@ -222,6 +223,14 @@ typedef struct {
     int      help_top;
     int      help_lines;   /* what the last draw measured, for clamping */
 
+    /* Cards (docs/CARDS.md): the box beside the map is on unless :card off
+     * says otherwise; :card's view is scrolled to card_top, and names whose
+     * card it shows (card_token), the last draw measuring card_lines. */
+    int      card_box_off;
+    int      card_top;
+    int      card_token;
+    int      card_lines;
+
     /* A prefix key waiting for the one that completes it -- i for placing, s
      * for markers, PENDING_IT for i t. 0 when nothing is pending. */
     uint32_t pending;
@@ -259,6 +268,9 @@ void app_frame(App *a, Term *t, uint64_t now_ms);
 
 /* Could the players' frame differ from the GM's right now? Conservative:
  * true unless nothing GM-only is on screen. This is a privacy boundary. */
+/* The creature whose card the box beside the map shows -- the selected
+ * one, else the one under the cursor, in play mode with the box on -- or -1. */
+int  app_card_shown(const App *a);
 int  app_view_differs(const App *a);
 
 /* The control channel (app_ctl.c). Runs one request against the app and
