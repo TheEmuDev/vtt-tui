@@ -47,6 +47,7 @@ typedef struct {
  * without one takes the damage off HP as it is. The card labels and feature
  * names it reads are the game's words, so they live here with the rest. */
 typedef struct {
+    const char *hp;           /* the counter damage marks: "HP" */
     const char *thresholds;   /* the card's "Major/Severe" label: "Thresholds" */
     const char *minion;       /* "Minion (X)": any damage defeats it, and every X another */
     const char *horde;        /* "Horde (X)": its attack deals X once half its HP is marked */
@@ -94,12 +95,17 @@ const RangeBand *ruleset_band_of(const Ruleset *rs, double units);
 /* ----------------------------------------------------------------- damage */
 
 /* The HP a hit marks, by thresholds: 0 for no damage, 1 below Major, 2 at
- * Major, 3 at Severe, 4 at twice Severe when the table plays massive damage.
+ * Major, 3 at Severe, 4 at twice Severe when the table plays massive damage;
+ * severe 0 is none, so 2 at most.
  * *tier, when asked for, names which ("Major"). */
 int  damage_marks(int dmg, int major, int severe, int massive, const char **tier);
 
+/* A threshold past this is a typo, and twice it must not overflow. */
+#define DAMAGE_THRESHOLD_MAX 99999
+
 /* The card's thresholds under the rule, "8/15": 1 with both read, else 0
- * (no line, or "None" as a Minion's says). */
+ * (no line, or "None" as a Minion's says). "4/None", as the SRD gives a few
+ * adversaries, is a Major with no Severe: *severe is 0. */
 int  damage_thresholds(const DamageRule *dr, const char *card, int *major, int *severe);
 
 /* A Minion's X from its card, or 0 when it is not one. */

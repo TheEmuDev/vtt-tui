@@ -539,8 +539,10 @@ creature, else the one under the cursor. The dice stay on the table: you type th
 | `:dmg massive on` `:dmg massive off` | play the massive damage rule (saved with the map) |
 
 Under Daggerheart, the HP marked follow the thresholds on the creature's
-[card](#cards-s-k-card), from its `Thresholds: 8/15` line: below Major 1 HP, at Major 2, at
-Severe 3, and with massive damage on, at twice Severe 4. 0 damage marks none. The status line
+[card](#cards-s-k-card), from its `Thresholds: 8/15` line (the SRD's own `**Thresholds:** 8/15 |`
+works too): below Major 1 HP, at Major 2, at Severe 3, and with massive damage on, at twice
+Severe 4. 0 damage marks none. A creature with `Thresholds: 4/None` has no Severe threshold,
+so it marks 2 at most. The status line
 says why, on your screen only:
 
 ```

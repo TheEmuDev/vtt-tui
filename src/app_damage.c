@@ -27,17 +27,32 @@ typedef struct {
     int         minion;          /* its X, or 0 */
     const char *tier;            /* damage_marks's word, or NULL */
     char        horde[24];       /* the attack it now has, when this hit took it past half */
+    const char *hpn;             /* the counter's name: "HP" */
 } Hit;
+
+/* The counter damage marks: the rule's, else HP. */
+static const char *hp_name(const DamageRule *dr)
+{
+    return dr && dr->hp ? dr->hp : "HP";
+}
+
+/* A creature's HP: its counter's index with value and max, or -1. */
+static int hp_of(const Token *t, const char *hpn, int *value, int *max)
+{
+    int i = counter_find(t, hpn);
+    if (i >= 0) { *value = t->counters[i].value; *max = t->counters[i].max; }
+    return i;
+}
 
 static void hit_one(const Map *m, const DamageRule *dr, int idx, int dmg, Hit *h)
 {
     const Token *t = &m->tokens.v[idx];
     memset(h, 0, sizeof *h);
     h->idx = idx;
-    h->hp  = counter_find(t, "HP");
+    h->hpn = hp_name(dr);
+    h->hp  = hp_of(t, h->hpn, &h->before, &h->max);
     if (h->hp < 0) { h->why = HIT_NO_HP; return; }
-    h->before = h->after = t->counters[h->hp].value;
-    h->max    = t->counters[h->hp].max;
+    h->after = h->before;
     if (h->before <= 0) { h->why = HIT_DOWN; return; }
 
     const char *card = card_of(m, t);
@@ -95,7 +110,7 @@ static void cmd_massive(App *a, const char *arg)
     }
     int on = !strcmp(arg, "on");
     if (m->massive != on) { m->massive = on; map_touch(m); }
-    app_note(a, on ? "massive damage on - damage at twice Severe marks 4 HP"
+    app_note_gm(a, on ? "massive damage on - damage at twice Severe marks 4 HP"
                    : "massive damage off - Severe and above marks 3 HP");
 }
 
@@ -140,8 +155,8 @@ static void minion_extra(char *msg, size_t sz, int *off, const Map *m, const Dam
     for (int i = 0; i < m->tokens.n; i++) {
         const Token *t = &m->tokens.v[i];
         if (hit[i] || t->kind != from->kind || !damage_minion(dr, card_of(m, t))) continue;
-        int hp = counter_find(t, "HP");
-        if (hp >= 0 && t->counters[hp].value <= 0) continue;
+        int value, max;
+        if (hp_of(t, hp_name(dr), &value, &max) >= 0 && value <= 0) continue;
         near[n].idx = i;
         near[n].d   = token_gap_units(m, from, t);
         n++;
@@ -164,31 +179,36 @@ static int put_hit(char *buf, size_t sz, const Map *m, const Hit *h, const char 
 {
     const char *name = token_name(&m->tokens.v[h->idx]);
     int marked = h->before - h->after, off;
+    const char *hpn = h->hpn;
     if (h->minion) {
-        off = !marked ? snprintf(buf, sz, brief ? "%.24s no HP" : "%.24s: %s marks no HP", name, amount)
-            : snprintf(buf, sz, brief ? "%.24s defeated" : "%.24s: %s defeats it (Minion %d)", name, amount, h->minion);
+        if (brief) off = !marked ? snprintf(buf, sz, "%.24s marks none", name)
+                                 : snprintf(buf, sz, "%.24s defeated", name);
+        else       off = !marked ? snprintf(buf, sz, "%.24s: %s marks no %s", name, amount, hpn)
+                                 : snprintf(buf, sz, "%.24s: %s defeats it (Minion %d)", name, amount, h->minion);
         return off;
     }
     if (brief) {
-        off = !marked ? snprintf(buf, sz, "%.24s no HP", name)
-            : !h->after ? snprintf(buf, sz, "%.24s %d HP, defeated", name, marked)
-            : snprintf(buf, sz, "%.24s %d HP (%d/%d)", name, marked, h->after, h->max);
+        off = !marked ? snprintf(buf, sz, "%.24s marks none", name)
+            : !h->after ? snprintf(buf, sz, "%.24s %d %s, defeated", name, marked, hpn)
+            : snprintf(buf, sz, "%.24s %d %s (%d/%d)", name, marked, hpn, h->after, h->max);
     } else if (h->tier) {
         char thr[32];
-        snprintf(thr, sizeof thr, " (%d/%d)", h->major, h->severe);
+        if (h->severe) snprintf(thr, sizeof thr, " (%d/%d)", h->major, h->severe);
+        else           snprintf(thr, sizeof thr, " (%d/None)", h->major);
         if (!marked)
-            off = snprintf(buf, sz, "%.24s: %s marks no HP", name, amount);
+            off = snprintf(buf, sz, "%.24s: %s marks no %s", name, amount, hpn);
         else
-            off = snprintf(buf, sz, "%.24s: %s is %s%s - %d HP marked, %s%d/%d%s", name, amount,
-                           h->tier, thr, marked, h->after ? "" : "defeated (",
+            off = snprintf(buf, sz, "%.24s: %s is %s%s - %d %s marked, %s%d/%d%s", name, amount,
+                           h->tier, thr, marked, hpn, h->after ? "" : "defeated (",
                            h->after, h->max, h->after ? " left" : ")");
     } else {
-        off = !h->after ? snprintf(buf, sz, "%.24s: %s damage - defeated (HP 0/%d)", name, amount, h->max)
-            : snprintf(buf, sz, "%.24s: %s damage - HP %d/%d", name, amount, h->after, h->max);
+        off = !h->after ? snprintf(buf, sz, "%.24s: %s damage - defeated (%s 0/%d)", name, amount, hpn, h->max)
+            : snprintf(buf, sz, "%.24s: %s damage - %s %d/%d", name, amount, hpn, h->after, h->max);
     }
     if (h->horde[0] && off < (int)sz)
         off += snprintf(buf + off, sz - (size_t)off,
-                        brief ? ", attack now %s" : " - half its HP marked: its attack now deals %s", h->horde);
+                        brief ? ", attack now %s" : " - half its %s marked: its attack now deals %s",
+                        brief ? h->horde : hpn, h->horde);
     return off;
 }
 
@@ -200,9 +220,9 @@ static void say_skip(App *a, const Map *m, const Hit *h)
     const char  *name = token_name(t);
     char msg[160];
     if (h->why == HIT_NO_HP)
-        snprintf(msg, sizeof msg, "no HP on %.24s - s v sets it: HP 5", name);
+        snprintf(msg, sizeof msg, "no %s on %.24s - s v sets it: %s 5", h->hpn, name, h->hpn);
     else if (h->why == HIT_DOWN)
-        snprintf(msg, sizeof msg, "%.24s is already defeated (HP 0/%d)", name, h->max);
+        snprintf(msg, sizeof msg, "%.24s is already defeated (%s 0/%d)", name, h->hpn, h->max);
     else if (!card_of(m, t))
         snprintf(msg, sizeof msg, "%.24s has no card - s k writes one with its Thresholds: 8/15", name);
     else
@@ -210,9 +230,11 @@ static void say_skip(App *a, const Map *m, const Hit *h)
     app_set_status_gm(a, msg);
 }
 
-static const char *skip_word(int why)
+/* Why a burst passed a creature over: "no HP counter". */
+static void skip_word(const Hit *h, char *buf, size_t sz)
 {
-    return why == HIT_NO_HP ? "no HP" : why == HIT_DOWN ? "already defeated" : "no thresholds";
+    if (h->why == HIT_NO_HP) snprintf(buf, sz, "no %s counter", h->hpn);
+    else snprintf(buf, sz, "%s", h->why == HIT_DOWN ? "already defeated" : "no thresholds");
 }
 
 void app_damage_command(App *a, const char *rest)
@@ -228,7 +250,10 @@ void app_damage_command(App *a, const char *rest)
 
     const char *end;
     int raw = parse_amount(rest, &end), half = 0;
-    if (raw >= 0 && !strncmp(end, "half", 4) && (!end[4] || end[4] == ' ')) { half = 1; end += 4; }
+    if (raw >= 0 && end > rest && end[-1] == ' ' && !strncmp(end, "half", 4) && (!end[4] || end[4] == ' ')) {
+        half = 1;
+        end += 4;
+    }
     if (raw >= 0) while (*end == ' ') end++;
     if (raw < 0 || *end) {
         app_set_status(a, ":dmg 11, :dmg 6+4, :dmg 11 half (resistance), or :dmg massive on|off");
@@ -306,9 +331,10 @@ void app_damage_command(App *a, const char *rest)
         int skipped = 0;
         for (int k = 0; k < n && off < (int)sizeof msg - 2; k++) {
             if (hits[k].why == HIT_OK) continue;
+            char why[32];
+            skip_word(&hits[k], why, sizeof why);
             off += snprintf(msg + off, sizeof msg - (size_t)off, "%s%.24s (%s)",
-                            skipped++ ? ", " : "; skipped ", token_name(&m->tokens.v[hits[k].idx]),
-                            skip_word(hits[k].why));
+                            skipped++ ? ", " : "; skipped ", token_name(&m->tokens.v[hits[k].idx]), why);
         }
     }
     if (dr && off < (int)sizeof msg) minion_extra(msg, sizeof msg, &off, m, dr, hits, n, hit, dmg);
@@ -322,8 +348,8 @@ int app_horde_note(const App *a, int idx, char *buf, size_t sz)
     const Map *m = a->map;
     const Ruleset *rs = ruleset_by_name(m->ruleset);
     const Token *t = &m->tokens.v[idx];
-    int hp = counter_find(t, "HP");
+    int value, max;
     buf[0] = '\0';
-    if (!rs || !rs->damage || hp < 0) return 0;
-    return damage_horde_attack(rs->damage, card_of(m, t), t->counters[hp].value, t->counters[hp].max, buf, sz);
+    if (!rs || !rs->damage || hp_of(t, hp_name(rs->damage), &value, &max) < 0) return 0;
+    return damage_horde_attack(rs->damage, card_of(m, t), value, max, buf, sz);
 }

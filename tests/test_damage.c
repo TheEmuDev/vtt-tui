@@ -5,6 +5,8 @@
 
 #include "card.h"
 
+#define DMG_TEST_MAX 99999
+
 static const char *DMG_MAP =
     "VTT 13\nname dmg\nsize 30 12\nzoom 1\nruleset daggerheart\ntiles\n";
 
@@ -32,6 +34,12 @@ static void write_dmg_map(const char *path)
           "| Horde (1d4+1) - Passive: When the Raiders have marked half or more of their HP...\nendcard\n"
           "card \"plain\"\n| Just words\nendcard\n", f);
     fclose(f);
+}
+
+static void count_w029(void *ctx, int line, int col, const char *code, const char *slug, const char *msg)
+{
+    (void)line; (void)col; (void)slug; (void)msg;
+    if (!strcmp(code, "W029")) ++*(int *)ctx;
 }
 
 static int find(const App *a, const char *label)
@@ -105,6 +113,33 @@ static void test_damage_rule(void)
     CHECK(!damage_thresholds(dr, "Thresholds: 8/15x", &major, &severe));
     CHECK(!damage_thresholds(NULL, card, &major, &severe));
     CHECK(ruleset_by_name("none")->damage == NULL);
+
+    CASE("the SRD's own forms: a Major with no Severe, and its bold, barred stat-block line");
+    CHECK(damage_thresholds(dr, "Thresholds: 4/None", &major, &severe));
+    CHECK(major == 4 && severe == 0);
+    CHECK(damage_thresholds(dr, "Thresholds: 4 / none", &major, &severe) && severe == 0);
+    CHECK(!damage_thresholds(dr, "Thresholds: 4/Nonesuch", &major, &severe));
+    CHECK(!damage_thresholds(dr, "Thresholds: None/4", &major, &severe));
+    CHECK_EQ(damage_marks(3, 4, 0, 0, NULL), 1);
+    CHECK_EQ(damage_marks(30, 4, 0, 0, &tier), 2);
+    CHECK(!strcmp(tier, "Major"));
+    CHECK_EQ(damage_marks(300, 4, 0, 1, NULL), 2);              /* no Severe, so no twice Severe */
+    const char *srd = "**Difficulty:** 14 | **Thresholds:** 8/15 | **HP:** 2 | **Stress:** 1";
+    CHECK(card_value(srd, "Thresholds", v, sizeof v) && !strcmp(v, "8/15"));
+    CHECK(card_value(srd, "Difficulty", v, sizeof v) && !strcmp(v, "14"));
+    CHECK(card_value(srd, "Stress", v, sizeof v) && !strcmp(v, "1"));
+    CHECK(damage_thresholds(dr, srd, &major, &severe) && major == 8 && severe == 15);
+    CHECK(card_feature("_Minion (3)_ - Passive", "Minion", v, sizeof v) && !strcmp(v, "3"));
+    CHECK(card_value("Motives: \xc3\xa9\xc3\xa9\xc3\xa9", "Motives", v, 4) && !strcmp(v, "\xc3\xa9"));
+
+    CASE("a threshold too big to be real is none, and twice it never overflows");
+    CHECK(!damage_thresholds(dr, "Thresholds: 1/2000000000", &major, &severe));
+    CHECK(damage_thresholds(dr, "Thresholds: 1/99999", &major, &severe) && severe == DAMAGE_THRESHOLD_MAX);
+    CHECK_EQ(damage_marks(DMG_TEST_MAX, 1, DAMAGE_THRESHOLD_MAX, 1, NULL), 3);
+    CHECK_EQ(damage_marks(2 * DAMAGE_THRESHOLD_MAX, 1, DAMAGE_THRESHOLD_MAX, 1, NULL), 4);
+
+    CASE("a Horde's type, how many to an HP, is not its attack");
+    CHECK(!damage_horde_attack(dr, "Horde (3/HP)\nThresholds: 5/11", 1, 4, v, sizeof v));
 
     CASE("a Minion's X; a Horde's attack only while half or more is marked and it is up");
     CHECK_EQ(damage_minion(dr, "Minion (4) - Passive"), 4);
@@ -207,8 +242,25 @@ void test_damage(void)
         CHECK(m && m->massive == 1);
         if (m) map_free(m);
     }
+    {
+        /* A rule it does not know is said and ignored. */
+        char p2[640], err[160];
+        snprintf(p2, sizeof p2, "%s/rules.vtt", sb.dir);
+        FILE *f = fopen(p2, "w");
+        if (f) { fputs("VTT 6\nname r\nsize 2 2\nrule bogus\nrule massive\ntiles\n..\n..\n", f); fclose(f); }
+        int w029 = 0;
+        Map *m = mapio_load_diag(p2, err, sizeof err, count_w029, &w029);
+        CHECK(m && m->massive == 1);
+        CHECK_EQ(w029, 1);
+        if (m) map_free(m);
+    }
     press(&a, ":dmg massive\r");
     CHECK(strstr(a.status, "massive damage on") != NULL);
+    press(&a, ":dmg massive on\r");
+    CHECK(a.status_gm);                                     /* the table's rule is the GM's to say */
+    pf = players_text(&a, &r);
+    CHECK(strstr(pf, "massive") == NULL);
+    free(pf);
     press(&a, ":dmg massive off\r");
     CHECK_EQ(a.map->massive, 0);
     press(&a, ":dmg massive maybe\r");
@@ -265,7 +317,7 @@ void test_damage(void)
 
     CASE("words it does not know are refused with the forms it takes");
     static const char *const bad[] = { ":dmg\r", ":dmg x\r", ":dmg 5 fire\r", ":dmg 5+\r", ":dmg -3\r",
-                                       ":dmg 100000\r", ":dmg 99999+1\r", ":dmg halfway\r", NULL };
+                                       ":dmg 100000\r", ":dmg 99999+1\r", ":dmg halfway\r", ":dmg 11half\r", NULL };
     for (int i = 0; bad[i]; i++) {
         dmg_on(&a, "Goblin", bad[i]);
         CHECK(strstr(a.status, ":dmg 11, :dmg 6+4") != NULL);
@@ -285,7 +337,7 @@ void test_damage(void)
     CHECK_EQ(hp(&a, "Raiders"), 2);
     CHECK_EQ(hp(&a, "Aria"), 6);
     CHECK(strstr(a.status, "9 damage to 3 caught: Goblin 2 HP (3/5), Raiders 2 HP (2/4), attack now 1d4+1; "
-                           "skipped Blank (no HP)") != NULL);
+                           "skipped Blank (no HP counter)") != NULL);
     pf = players_text(&a, &r);
     CHECK(strstr(pf, "caught: Goblin 2 HP") == NULL);
     free(pf);
@@ -303,8 +355,41 @@ void test_damage(void)
                            "within the attack's range: Rat 3 (Far)") != NULL);
     press(&a, "u");
 
+    CASE("a burst: massive and half apply to each; the defeated, the cardless and :dmg 0 say so");
+    press(&a, ":dmg massive on\r");
+    a.ed.cx = 5; a.ed.cy = 7;
+    press(&a, ":dmg 61 half\r");                            /* 31: twice Severe for the Goblin */
+    CHECK_EQ(hp(&a, "Goblin"), 1);
+    CHECK_EQ(hp(&a, "Raiders"), 0);                         /* 31 against 5/11 is twice Severe too */
+    CHECK(strstr(a.status, "61 halved to 31 damage to 3 caught: Goblin 4 HP (1/5), Raiders 4 HP, defeated; "
+                           "skipped Blank (no HP counter)") != NULL);
+    press(&a, "u");
+    press(&a, ":dmg massive off\r");
+    a.ed.cx = 11; a.ed.cy = 5;
+    press(&a, ":dmg 0\r");
+    CHECK(strstr(a.status, "0 damage to 2 caught: Rat 1 marks none, Rat 2 marks none") != NULL);
+    a.ed.cx = 15; a.ed.cy = 2;
+    press(&a, "\x1b");
+    press(&a, "2ge");
+    a.play.sel = -1;
+    press(&a, ":dmg 1\r");
+    CHECK(strstr(a.status, "skipped Nocard (no thresholds), Plain (no thresholds)") != NULL);
+    press(&a, "\x1b");
+    a.ed.cx = 25; a.ed.cy = 5;
+    press(&a, "ge:dmg 1\r");
+    CHECK(strstr(a.status, "skipped Rat 4 (already defeated)") != NULL);
+    press(&a, "\x1b");
+
+    CASE("the SRD's 4/None on a card: never Severe, and the message says None");
+    card_set(a.map, "plain", "Tiny Ooze\n**Difficulty:** 8 | **Thresholds:** 4/None | **HP:** 2");
+    dmg_on(&a, "Plain", ":dmg 30\r");
+    CHECK_EQ(hp(&a, "Plain"), 1);
+    CHECK(strstr(a.status, "Plain: 30 is Major (4/None) - 2 HP marked, 1/3 left") != NULL);
+    press(&a, "u");
+
     CASE("a burst over no one says so");
     a.ed.cx = 25; a.ed.cy = 10;
+    press(&a, "ge");
     press(&a, ":dmg 3\r");
     CHECK(strstr(a.status, "the group effect catches no one") != NULL);
     press(&a, "\x1b");

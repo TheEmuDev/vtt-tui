@@ -3,6 +3,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 
 #include "card.h"
 #include "prof.h"
@@ -107,7 +108,7 @@ static const RangeBand DAGGERHEART_BANDS[] = {
 };
 
 /* The SRD's names for what :dmg reads off an adversary's card. */
-static const DamageRule DAGGERHEART_DAMAGE = { "Thresholds", "Minion", "Horde" };
+static const DamageRule DAGGERHEART_DAMAGE = { "HP", "Thresholds", "Minion", "Horde" };
 
 static const Ruleset RULESETS[] = {
     { "none",        NULL, 0, 1, NULL, 0, 0, NULL, -1, NULL, NULL },
@@ -155,9 +156,11 @@ int damage_marks(int dmg, int major, int severe, int massive, const char **tier)
      * Damage rule. */
     const char *why;
     int marks;
-    if (dmg <= 0)                          { marks = 0; why = "no damage"; }
-    else if (massive && dmg >= 2 * severe) { marks = 4; why = "twice Severe"; }
-    else if (dmg >= severe)                { marks = 3; why = "Severe"; }
+    /* No Severe threshold (the SRD's "4/None") means 3 is never marked. */
+    int has_severe = severe > 0;
+    if (dmg <= 0)                                                 { marks = 0; why = "no damage"; }
+    else if (has_severe && massive && dmg - severe >= severe)     { marks = 4; why = "twice Severe"; }
+    else if (has_severe && dmg >= severe)                         { marks = 3; why = "Severe"; }
     else if (dmg >= major)                 { marks = 2; why = "Major"; }
     else                                   { marks = 1; why = "below Major"; }
     if (tier) *tier = why;
@@ -166,11 +169,18 @@ int damage_marks(int dmg, int major, int severe, int massive, const char **tier)
 
 int damage_thresholds(const DamageRule *dr, const char *card, int *major, int *severe)
 {
-    char v[32];
-    int  a, b;
+    char v[32], none[8];
+    int  a, b, k = 0;
     char tail;
     if (!dr || !card_value(card, dr->thresholds, v, sizeof v)) return 0;
-    if (sscanf(v, "%d / %d %c", &a, &b, &tail) != 2 || a < 1 || b < a) return 0;
+    if (sscanf(v, "%d / %d %c", &a, &b, &tail) == 2) {
+        if (a < 1 || b < a || b > DAMAGE_THRESHOLD_MAX) return 0;
+    } else if (sscanf(v, "%d / %7s %n", &a, none, &k) == 2 && !v[k] && !strcasecmp(none, "None")) {
+        if (a < 1 || a > DAMAGE_THRESHOLD_MAX) return 0;
+        b = 0;
+    } else {
+        return 0;
+    }
     *major  = a;
     *severe = b;
     return 1;
@@ -189,7 +199,9 @@ int damage_horde_attack(const DamageRule *dr, const char *card, int hp, int max,
                         char *buf, size_t sz)
 {
     if (!dr || max < 1 || hp <= 0 || 2 * (max - hp) < max) return 0;
-    return card_feature(card, dr->horde, buf, sz) && buf[0];
+    /* "Horde (3/HP)" at a line's start is the type, how many to an HP,
+     * not the attack. */
+    return card_feature(card, dr->horde, buf, sz) && buf[0] && !strchr(buf, '/');
 }
 
 /* ------------------------------------------------------------------ ruler */

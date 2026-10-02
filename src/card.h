@@ -30,8 +30,9 @@ void        card_first_line(const char *text, char *buf, size_t sz);
 const char *card_of(const Map *m, const Token *t);
 
 /* What a card says after "Label:" -- at a line's start or after a space,
- * case aside -- up to the line's end or a run of two spaces, the way a
- * card puts several on one line ("Thresholds: 8/15   HP: 3" gives "8/15").
+ * a bar or a bold mark, case aside -- up to the line's end, a run of two
+ * spaces or a bar, the ways a card puts several on one line ("Thresholds:
+ * 8/15   HP: 3" and the SRD's "**Thresholds:** 8/15 | HP: 3" give "8/15").
  * The first such label wins. 0 when the card has none. The core reads no
  * meaning into it; a ruleset does. */
 int         card_value(const char *text, const char *label, char *buf, size_t sz);
