@@ -988,6 +988,11 @@ static void cmd_card(App *a, const char *verb, const char *rest)
     a->modal      = MODAL_CARD;
 }
 
+static void cmd_dmg(App *a, const char *verb, const char *rest)
+{
+    app_damage_command(a, rest);
+}
+
 static void cmd_log(App *a, const char *verb, const char *rest)
 {
     Map *m = a->map;
@@ -1094,6 +1099,7 @@ static const struct {
     { "mirror", NULL, cmd_mirror },
     { "panel", NULL, cmd_panel },
     { "card", NULL, cmd_card },
+    { "dmg", "damage", cmd_dmg },
     { "log", NULL, cmd_log },
     { "zoom", NULL, cmd_zoom },
     { "hidden", NULL, cmd_hidden },

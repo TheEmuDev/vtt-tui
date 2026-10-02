@@ -81,6 +81,7 @@ static const KeyDoc PLAY[] = {
     GROUP("Counters"),
     KEY("s v",    "the creature's counters: hp 6, hp -2, stress 0/6, -hp"),
     KEY("<  >",   "one off / one on its current counter; 3< takes three"),
+    KEY(":dmg 11", "mark HP by its card's thresholds, all caught while g e is up; 11 half, massive on"),
     GROUP("Fog"),
     KEY("g r  g h", "light / darken the fog under the cursor or the box"),
     KEY("g R  g H", "the whole fog patch under the cursor"),

@@ -43,6 +43,15 @@ typedef struct {
     const char *move_enemy;
 } RangeBand;
 
+/* How a game marks HP from damage, for :dmg (docs/DAMAGE.md). A ruleset
+ * without one takes the damage off HP as it is. The card labels and feature
+ * names it reads are the game's words, so they live here with the rest. */
+typedef struct {
+    const char *thresholds;   /* the card's "Major/Severe" label: "Thresholds" */
+    const char *minion;       /* "Minion (X)": any damage defeats it, and every X another */
+    const char *horde;        /* "Horde (X)": its attack deals X once half its HP is marked */
+} DamageRule;
+
 typedef struct {
     const char      *name;
     const RangeBand *bands;
@@ -72,6 +81,8 @@ typedef struct {
      * the game's stat block with its labels ready to fill in. NULL for
      * just the label. */
     const char      *card_skeleton;
+    /* Marking HP by damage thresholds; NULL to take damage off HP as is. */
+    const DamageRule *damage;
 } Ruleset;
 
 const Ruleset *ruleset_by_name(const char *name);   /* NULL if unknown */
@@ -79,6 +90,25 @@ const Ruleset *ruleset_at(int i);                   /* for listing */
 const char    *ruleset_band(const Ruleset *rs, double units);
 /* The band a distance falls in, or NULL for a ruleset without bands. */
 const RangeBand *ruleset_band_of(const Ruleset *rs, double units);
+
+/* ----------------------------------------------------------------- damage */
+
+/* The HP a hit marks, by thresholds: 0 for no damage, 1 below Major, 2 at
+ * Major, 3 at Severe, 4 at twice Severe when the table plays massive damage.
+ * *tier, when asked for, names which ("Major"). */
+int  damage_marks(int dmg, int major, int severe, int massive, const char **tier);
+
+/* The card's thresholds under the rule, "8/15": 1 with both read, else 0
+ * (no line, or "None" as a Minion's says). */
+int  damage_thresholds(const DamageRule *dr, const char *card, int *major, int *severe);
+
+/* A Minion's X from its card, or 0 when it is not one. */
+int  damage_minion(const DamageRule *dr, const char *card);
+
+/* A Horde's changed attack while half or more of its HP is marked and it is
+ * still up: 1 with the X ("1d4+1") in buf, else 0. `hp`/`max` are its HP. */
+int  damage_horde_attack(const DamageRule *dr, const char *card, int hp, int max,
+                         char *buf, size_t sz);
 
 /* ------------------------------------------------------------------ ruler */
 

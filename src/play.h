@@ -103,6 +103,12 @@ void range_anchor(const RangeOverlay *ro, const Map *m,
  * nearest tile of the anchor's footprint. */
 double range_units_to(const RangeOverlay *ro, const Map *m, int tx, int ty);
 int    range_contains(const RangeOverlay *ro, const Map *m, int tx, int ty);
+/* The creatures the overlay catches -- any square covered, sight aside, as
+ * its status line counts them: out[i] set for each (out holds tokens.n).
+ * Returns how many. */
+int    range_caught(const RangeOverlay *ro, const Map *m, unsigned char *out);
+/* From a's footprint to the nearest square of b's, in the map's units. */
+double token_gap_units(const Map *m, const Token *a, const Token *b);
 
 void range_draw(Renderer *r, const Map *m, const GridView *g,
                 const RangeOverlay *ro, const Theme *th);

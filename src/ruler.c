@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "card.h"
 #include "prof.h"
 
 /* ---------------------------------------------------------------- metrics */
@@ -105,13 +106,16 @@ static const RangeBand DAGGERHEART_BANDS[] = {
     { "Very Far",   INFINITY,  DH_FAR_PC,  DH_FAR_ADV  },  /* beyond Far, anywhere still in the scene */
 };
 
+/* The SRD's names for what :dmg reads off an adversary's card. */
+static const DamageRule DAGGERHEART_DAMAGE = { "Thresholds", "Minion", "Horde" };
+
 static const Ruleset RULESETS[] = {
-    { "none",        NULL, 0, 1, NULL, 0, 0, NULL, -1, NULL },
+    { "none",        NULL, 0, 1, NULL, 0, 0, NULL, -1, NULL, NULL },
     /* A group effect's targets are within Very Close of one origin point
      * "unless stated otherwise" (the SRD's Area of Effect). */
     { "daggerheart", DAGGERHEART_BANDS,
       (int)(sizeof DAGGERHEART_BANDS / sizeof *DAGGERHEART_BANDS), 1, "duality", 1, 1,
-      "HP Stress Armor", 1, DH_CARD },
+      "HP Stress Armor", 1, DH_CARD, &DAGGERHEART_DAMAGE },
 };
 
 #define NRULESETS ((int)(sizeof RULESETS / sizeof *RULESETS))
@@ -141,6 +145,51 @@ const char *ruleset_band(const Ruleset *rs, double units)
 {
     const RangeBand *b = ruleset_band_of(rs, units);
     return b ? b->name : NULL;
+}
+
+/* ----------------------------------------------------------------- damage */
+
+int damage_marks(int dmg, int major, int severe, int massive, const char **tier)
+{
+    /* The SRD's Hit Points & Damage Thresholds, and its optional Massive
+     * Damage rule. */
+    const char *why;
+    int marks;
+    if (dmg <= 0)                          { marks = 0; why = "no damage"; }
+    else if (massive && dmg >= 2 * severe) { marks = 4; why = "twice Severe"; }
+    else if (dmg >= severe)                { marks = 3; why = "Severe"; }
+    else if (dmg >= major)                 { marks = 2; why = "Major"; }
+    else                                   { marks = 1; why = "below Major"; }
+    if (tier) *tier = why;
+    return marks;
+}
+
+int damage_thresholds(const DamageRule *dr, const char *card, int *major, int *severe)
+{
+    char v[32];
+    int  a, b;
+    char tail;
+    if (!dr || !card_value(card, dr->thresholds, v, sizeof v)) return 0;
+    if (sscanf(v, "%d / %d %c", &a, &b, &tail) != 2 || a < 1 || b < a) return 0;
+    *major  = a;
+    *severe = b;
+    return 1;
+}
+
+int damage_minion(const DamageRule *dr, const char *card)
+{
+    char v[16];
+    int  x;
+    char tail;
+    if (!dr || !card_feature(card, dr->minion, v, sizeof v)) return 0;
+    return sscanf(v, "%d %c", &x, &tail) == 1 && x > 0 ? x : 0;
+}
+
+int damage_horde_attack(const DamageRule *dr, const char *card, int hp, int max,
+                        char *buf, size_t sz)
+{
+    if (!dr || max < 1 || hp <= 0 || 2 * (max - hp) < max) return 0;
+    return card_feature(card, dr->horde, buf, sz) && buf[0];
 }
 
 /* ------------------------------------------------------------------ ruler */

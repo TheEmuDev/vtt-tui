@@ -53,7 +53,7 @@ says what happened. The Fear pool stays set aside (IDEAS.md).
    features), which item 6's card shows. With item 8, an import of the SRD's adversary
    list from a file the GM downloads (the SRD's license asks for attribution; vtt ships
    no SRD data).
-10. **Damage against thresholds.** `:dmg 11` on the selected adversary marks HP by its
+10. **Damage against thresholds.** *Built 2026-10-02 (docs/DAMAGE.md).* `:dmg 11` on the selected adversary marks HP by its
     thresholds -- 1 below Major, 2 at Major, 3 at Severe, 4 at twice Severe if the table
     uses massive damage -- and says why. Minion (X): any damage defeats it, and every X
     damage defeats another minion in range, which vtt lists. Horde (X): once half its HP is

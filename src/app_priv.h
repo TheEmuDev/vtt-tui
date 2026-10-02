@@ -110,6 +110,9 @@ int app_target_token_under(const App *a);
 /* app_card.c: s k -- the creature's card in the GM's editor. */
 void app_card_edit(App *a);
 
+/* app_damage.c: :dmg. */
+void app_damage_command(App *a, const char *rest);
+
 /* app_ctl_marked.c: the channel's `marked` read, as text or JSON; and
  * app_ctl.c's words for a screen and a build mode, as the channel says them. */
 void app_ctl_marked(App *a, FILE *out, int json);

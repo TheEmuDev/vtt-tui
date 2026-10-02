@@ -278,6 +278,7 @@ typedef struct {
     double scale_ft;                      /* feet per tile */
     char   ruleset[MAP_RULESET_MAX];      /* range-band table, "" for none */
     int    metric;                        /* DistMetric */
+    int    massive;                       /* :dmg plays the optional massive damage rule */
 
     TokenList tokens;
 } Map;

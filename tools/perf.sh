@@ -93,6 +93,9 @@ CARDMOB="$DIR/cardmob.vtt"
   printf '| Attack: +1   Club (Melee) 1d6+1 phy\n|\n'
   printf '| Group Attack - Action: **Spend a Fear** to choose a target and spotlight every Mob within Close range of it. They move into Melee and make one attack roll together; on a success they deal **1d6** physical damage each, combined.\n'
   printf 'endcard\n'; } > "$CARDMOB"
+# The same with HP on each: :dmg against the card's thresholds.
+DMGMOB="$DIR/dmgmob.vtt"
+awk '{ print } /^tokencard / { print "tokencounter HP 9 9" }' "$CARDMOB" > "$DMGMOB"
 HORDE=$(genmap horde  60 40 0 500)    # 500 creatures: what a scene puts back at worst
 BIGMOB=$(genmap bigmob 200 200 0 24)  # the route search's worst case: big and crowded
 BIGHORDE=$(genmap bighorde 200 200 0 500) # as many, mostly off the window: cost follows the window
@@ -375,6 +378,7 @@ run "play, logging"        "$MOB"    80x24  ':play\r:log on\rt\rlllljjjj\r'
 run "play, rolling"        "$MOB"    80x24  ':play\r:roll 2d6+3\r:roll +1\r'
 run "play, group effect"   "$MOB"    80x24  ':play\r2gellllhhhhjjkk'
 run "play, card box"      "$CARDMOB" 80x24 ':play\rtjjllkkhh'
+run "play, damage"         "$DMGMOB" 80x24  ':play\r4ge:dmg 6\ru'   # 13 caught
 run "play, 500 characters" "$MOB"    80x24  ':play\ritebeast-4\t\t\ru'
 run "play, scene of 500"   "$HORDE"  80x24  ':play\r:scene save A\r:scene A\ru'
 run "play, map trip there+back" "$TOWN" 80x24 ':play\r:C3\rgogo'

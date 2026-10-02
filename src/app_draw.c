@@ -191,7 +191,14 @@ static void draw_card_box(App *a, int i)
     if (OVER(box)) { box.x = v.x; box.y = v.y; }
     if (OVER(box)) box.y = v.y + v.h - box.h;
     #undef OVER
-    ui_card_draw(a->rnd, a->th, box, token_name(t), card_of(m, t), 0, lines, a->ascii ? &BOX_ASCII : &BOX_ROUND);
+    /* A Horde past half says what its attack is now, where the GM looks
+     * when it acts. */
+    char title[80], horde[24];
+    if (app_horde_note(a, i, horde, sizeof horde))
+        snprintf(title, sizeof title, "%.24s - attack now %s", token_name(t), horde);
+    else
+        snprintf(title, sizeof title, "%s", token_name(t));
+    ui_card_draw(a->rnd, a->th, box, title, card_of(m, t), 0, lines, a->ascii ? &BOX_ASCII : &BOX_ROUND);
 }
 
 static void draw_editor_body(App *a)

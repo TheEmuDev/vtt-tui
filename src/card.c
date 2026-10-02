@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include "store.h"
 #include "util.h"
@@ -92,3 +93,60 @@ void card_first_line(const char *text, char *buf, size_t sz)
     buf[n] = '\0';
 }
 
+
+/* Does a label start here: the start of a line or after a space, and not
+ * the end of a longer word ("Thresholds:" is not in "MyThresholds:")? */
+static int label_at(const char *text, const char *p, const char *label, size_t n)
+{
+    if (p > text && p[-1] != ' ' && p[-1] != '\n') return 0;
+    return !strncasecmp(p, label, n) && p[n] == ':';
+}
+
+int card_value(const char *text, const char *label, char *buf, size_t sz)
+{
+    size_t n = strlen(label);
+    buf[0] = '\0';
+    if (!text || !n || !sz) return 0;
+    for (const char *p = text; *p; p++) {
+        if (!label_at(text, p, label, n)) continue;
+        p += n + 1;
+        while (*p == ' ') p++;
+        /* Up to the line's end or a run of two spaces, which is how a card
+         * puts several on a line: "Thresholds: 8/15   HP: 3". */
+        size_t k = 0;
+        while (p[k] && p[k] != '\n' && !(p[k] == ' ' && p[k + 1] == ' ')) k++;
+        while (k && p[k - 1] == ' ') k--;
+        if (k >= sz) k = utf8_cut(p, sz - 1);
+        memcpy(buf, p, k);
+        buf[k] = '\0';
+        return 1;
+    }
+    return 0;
+}
+
+int card_feature(const char *text, const char *name, char *buf, size_t sz)
+{
+    size_t n = strlen(name);
+    buf[0] = '\0';
+    if (!text || !n || !sz) return 0;
+    for (const char *line = text; *line; ) {
+        const char *p = line;
+        while (*p == '*' || *p == '_' || *p == ' ') p++;     /* "**Minion (3)**" as typed */
+        if (!strncasecmp(p, name, n) && p[n] == ' ' && p[n + 1] == '(') {
+            p += n + 2;
+            const char *close = p;
+            while (*close && *close != ')' && *close != '\n') close++;
+            if (*close == ')') {
+                size_t k = (size_t)(close - p);
+                if (k >= sz) k = utf8_cut(p, sz - 1);
+                memcpy(buf, p, k);
+                buf[k] = '\0';
+                return 1;
+            }
+        }
+        const char *nl = strchr(line, '\n');
+        if (!nl) break;
+        line = nl + 1;
+    }
+    return 0;
+}

@@ -217,6 +217,7 @@ void test_play_box(void);
 void test_move_rules(void);
 void test_group_effect(void);
 void test_cards(void);
+void test_damage(void);
 void test_card_box(void);
 void test_card_edit(void);
 void test_card_templates(void);

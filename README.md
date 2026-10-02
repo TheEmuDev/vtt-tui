@@ -337,6 +337,7 @@ selected creature; with none it sets the size of the next one placed.
 | `s v` | edit the selected creature's counters |
 | `s k` | write the creature's [card](#cards-s-k-card) in your editor |
 | `<` `>` | decrease / increase the current counter by one (`3<` by three) |
+| `:dmg 11` | mark [damage](#damage-dmg) on its HP, by its card's thresholds |
 | `s i` | set initiative (a blank answer removes the creature from the turn order) |
 | `s t` | give the turn to the selected creature |
 | `a` `A` | next / previous turn |
@@ -524,6 +525,52 @@ adversary as a character with its stat block as its card: an enemy, 1×1, HP and
 Place one with `i t e` and the picker; typing a type (`solo`, `minion`) finds them. Characters
 already saved are kept unless `--force` is given. vtt includes no SRD content; the SRD's license
 asks that it be credited where it is used.
+
+## Damage (`:dmg`)
+
+`:dmg` marks damage rolled at the table on a creature's HP counter. It works on the selected
+creature, else the one under the cursor. The dice stay on the table: you type the total.
+
+| command | action |
+|---------|--------|
+| `:dmg 11` | mark 11 damage |
+| `:dmg 6+4` | damage from several sources at once, added up first |
+| `:dmg 11 half` | the creature resists it: half, rounded up, before the thresholds |
+| `:dmg massive on` `:dmg massive off` | play the massive damage rule (saved with the map) |
+
+Under Daggerheart, the HP marked follow the thresholds on the creature's
+[card](#cards-s-k-card), from its `Thresholds: 8/15` line: below Major 1 HP, at Major 2, at
+Severe 3, and with massive damage on, at twice Severe 4. 0 damage marks none. The status line
+says why, on your screen only:
+
+```
+Goblin: 11 is Major (8/15) - 2 HP marked, 3/5 left
+```
+
+At 0 HP the creature is defeated; vtt says so and leaves it on the map for you to remove. Under
+any other ruleset `:dmg 11` takes 11 off HP. `u` undoes it.
+
+**Minions.** A card with a `Minion (3)` line (the SRD's adversaries have one) is defeated by any
+damage, and every 3 damage defeats another Minion within range of the attack. Which ones is
+your call, so vtt lists the Minions on the same side that are still up, nearest first, and
+marks none of them:
+
+```
+Rat 1: 7 defeats it (Minion 3) - 7 damage defeats 2 more Minions within the attack's range: Rat 2 (Very Close), Rat 3 (Far)
+```
+
+`:dmg 1` defeats each one you pick.
+
+**Hordes.** A card with a `Horde (1d4+1)` line has a weaker attack once half or more of its HP
+is marked. The hit that gets it there says so, and the card box's title shows the new attack
+for as long as it lasts: `Pirate Raiders - attack now 1d4+1`.
+
+**Group effects.** While `g e` is up, `:dmg` hits every creature the burst catches, each against
+its own thresholds, as one undo step. Creatures with no HP or no thresholds are named as
+skipped. `esc` takes the burst down to damage one creature again.
+
+If a creature has no HP counter, `s v` sets one (`hp 5`); if its card has no thresholds, `s k`
+adds a `Thresholds: 8/15` line.
 
 ## Scenes (`:scene`)
 
@@ -989,8 +1036,8 @@ enforces rules. The setting is saved with the map. Without a ruleset (`none`, th
 distances are shown in squares and feet and the range highlight grows one square at a time.
 
 A ruleset defines range bands, the meaning of a bare `:roll`, whether turns use a spotlight
-instead of initiative, the default direction of new clocks, and the counters its creatures
-use. Available: `none`, `daggerheart`.
+instead of initiative, the default direction of new clocks, the counters its creatures
+use, and how `:dmg` marks HP. Available: `none`, `daggerheart`.
 
 ### Daggerheart
 
@@ -1050,6 +1097,8 @@ use. Available: `none`, `daggerheart`.
   The Hope die is shown in gold and the Fear die in purple. `:roll duality +2` makes the same
   roll under any ruleset.
 - **Counters**: HP, Stress and Armor.
+- **Damage thresholds.** `:dmg` marks HP by the card's `Thresholds:` line, and knows the
+  `Minion (X)` and `Horde (X)` features (see [Damage](#damage-dmg)).
 
 ## Commands
 
@@ -1076,6 +1125,7 @@ use. Available: `none`, `daggerheart`.
 | `:turns` | list the [turn order](#turn-order-a); `:turns end` ends the fight |
 | `:panel` | show / hide the side panel |
 | `:clock ...`, `:tick ...` | [clocks](#clocks-clock-tick) |
+| `:dmg ...` | mark [damage](#damage-dmg) on a creature's HP |
 | `:notes` | list where notes are |
 | `:hidden` | list the [hidden creatures](#play-mode) |
 | `:fog ...` | [fog of war](#fog-of-war-fog) |
@@ -1167,6 +1217,7 @@ W120 unreachable-room  room K2   18 squares, no door leads to it from room B2
 | `W026 after-end` | lines after an `end` line, which ends the file |
 | `W027 name-cleaned` | control characters in the map's name, taken out |
 | `W028 card-dropped`, `card-cut` | a card with a bad or repeated name, a sixty-fifth, one with no `endcard`, or a stray `endcard` |
+| `W029 unknown-rule` | a `rule` line naming a rule other than `massive`, ignored |
 | `W102 door-to-void` | a door or window leading into void |
 | `W103 wall-in-void` | a wall with no map on either side |
 | `W104 door-loose` | a door or window with no wall at either end |
@@ -1228,6 +1279,7 @@ zoom 1
 scale 5
 metric alt
 ruleset daggerheart
+rule massive
 tiles
 vedges
 hedges
@@ -1261,7 +1313,8 @@ fog
 ```
 
 (The `tiles`, `vedges`, `hedges` and `fog` sections are followed by their rows; see below.)
-Coordinates in the file are 0-based `x y`. The file has no comment syntax. A card's text
+Coordinates in the file are 0-based `x y`. The file has no comment syntax. `rule massive` is there while
+`:dmg massive on` is. A card's text
 follows its `card` line a line at a time after `| `; a long line continues on lines starting
 `+ `. A recovery
 autosave ends with a line `end`, which shows it was written whole; reading stops there.

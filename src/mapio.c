@@ -182,6 +182,8 @@ static int write_map(const Map *m, const char *path, int autosave, char *err, si
     fprintf(f, "scale %g\n", m->scale_ft);
     fprintf(f, "metric %s\n", dist_metric_name((DistMetric)m->metric));
     if (m->ruleset[0]) fprintf(f, "ruleset %s\n", m->ruleset);
+    /* No new version: a vtt without :dmg loses nothing by ignoring it. */
+    if (m->massive) fputs("rule massive\n", f);
 
     fputs("tiles\n", f);
     for (int y = 0; y < m->h; y++)
@@ -406,7 +408,7 @@ static int looks_like_record(const char *line)
     static const char *const words[] = {
         "tiles", "vedges", "hedges", "fog", "fogpatch", "token", "tokenstatus",
         "tokenturn", "tokencounter", "tokennote", "tokenhidden", "tokencard", "card", "endcard", "note", "area", "floor", "link", "spotlight", "clock",
-        "roll", "round", "name", "size", "zoom", "scale", "ruleset", "metric", "scene", "endscene", NULL,
+        "roll", "round", "name", "size", "zoom", "scale", "ruleset", "rule", "metric", "scene", "endscene", NULL,
     };
     size_t n = 0;
     while (line[n] >= 'a' && line[n] <= 'z') n++;
@@ -844,7 +846,7 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
     /* Header lines may appear in any order; the body sections must follow. */
     long body_start = ftell(f);
     int  body_line  = ld->line;
-    int  zoom_line = 0, scale_line = 0, ruleset_line = 0;
+    int  zoom_line = 0, scale_line = 0, ruleset_line = 0, massive = 0;
     while (read_line(ld, line, sizeof line) >= 0) {
         if (!strncmp(line, "name ", 5))       { str_lcpy(name, line + 5, sizeof name); name_line = ld->line; }
         else if (!strncmp(line, "size ", 5))  sscanf(line, "size %d %d", &w, &h);
@@ -853,6 +855,10 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
         else if (!strncmp(line, "ruleset ", 8)) {
             str_lcpy(ruleset, line + 8, sizeof ruleset);
             ruleset_line = ld->line;
+        }
+        else if (!strncmp(line, "rule ", 5)) {
+            if (!strcmp(line + 5, "massive")) massive = 1;
+            else diag(ld, ld->line, -1, "W029", "unknown-rule", "'%.40s': massive is the one there is; ignored", line + 5);
         }
         else if (!strncmp(line, "metric ", 7)) {
             char mn[32] = { 0 };
@@ -900,6 +906,7 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
     if (m->scale_ft != scale)
         diag(ld, scale_line, -1, "W020", "clamped", "scale %g is not a length; %g ft is used", scale, m->scale_ft);
     m->metric   = metric;
+    m->massive = massive;
     if (ruleset_by_name(ruleset)) str_lcpy(m->ruleset, ruleset, sizeof m->ruleset);
     else if (ruleset[0])
         diag(ld, ruleset_line, -1, "W016", "unknown-ruleset", "no ruleset called '%.40s'; the map has none", ruleset);
@@ -1131,7 +1138,7 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
             stray_at = ld->line;
         } else if (ld->sink && line[0]) {
             /* Unknown lines are ignored so a newer writer stays loadable. */
-            static const char *const header[] = { "name ", "size ", "zoom ", "scale ", "ruleset ", "metric ", NULL };
+            static const char *const header[] = { "name ", "size ", "zoom ", "scale ", "ruleset ", "rule ", "metric ", NULL };
             int is_header = 0;
             for (int k = 0; header[k] && !is_header; k++) is_header = !strncmp(line, header[k], strlen(header[k]));
             if (is_header)

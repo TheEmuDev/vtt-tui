@@ -114,6 +114,7 @@ int main(int argc, char **argv)
         { "moverules",  test_move_rules },
         { "burst",      test_group_effect },
         { "cards",      test_cards },
+        { "dmg",        test_damage },
         { "cardbox",    test_card_box },
         { "cardedit",   test_card_edit },
         { "cardtpl",    test_card_templates },

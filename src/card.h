@@ -29,4 +29,15 @@ void        card_first_line(const char *text, char *buf, size_t sz);
  * the map does not have. */
 const char *card_of(const Map *m, const Token *t);
 
+/* What a card says after "Label:" -- at a line's start or after a space,
+ * case aside -- up to the line's end or a run of two spaces, the way a
+ * card puts several on one line ("Thresholds: 8/15   HP: 3" gives "8/15").
+ * The first such label wins. 0 when the card has none. The core reads no
+ * meaning into it; a ruleset does. */
+int         card_value(const char *text, const char *label, char *buf, size_t sz);
+
+/* The X of a feature line starting "Name (X)" ("Minion (3) - Passive: ..."
+ * gives "3"), bold or emphasis marks before it allowed. 0 for none. */
+int         card_feature(const char *text, const char *name, char *buf, size_t sz);
+
 #endif /* VTT_CARD_H */

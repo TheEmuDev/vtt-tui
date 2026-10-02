@@ -1088,6 +1088,47 @@ static int geom_covers(const RangeGeom *g, int tx, int ty, int *nx, int *ny)
     return off <= 0.5 + 1e-9;                          /* RANGE_LINE */
 }
 
+/* Is a creature caught: any of its squares covered? *blocked says whether
+ * sight to the nearest of those is broken. */
+static int geom_catches(const RangeGeom *g, const Map *m, const Token *t, int *blocked)
+{
+    int    caught = 0, sx = g->ax, sy = g->ay, dx = t->x, dy = t->y;
+    double best = 1e30;
+    for (int y = t->y; y < t->y + t->size; y++) {
+        for (int x = t->x; x < t->x + t->size; x++) {
+            int nx = g->ax, ny = g->ay;
+            if (!geom_covers(g, x, y, &nx, &ny)) continue;
+            double d = dist_tiles(g->metric, x - nx, y - ny);
+            if (d < best) { best = d; sx = nx; sy = ny; dx = x; dy = y; }
+            caught = 1;
+        }
+    }
+    if (caught && blocked) *blocked = sight_blocked(m, sx, sy, dx, dy);
+    return caught;
+}
+
+int range_caught(const RangeOverlay *ro, const Map *m, unsigned char *out)
+{
+    RangeGeom g;
+    int n = 0;
+    memset(out, 0, (size_t)m->tokens.n);
+    if (!range_geom(ro, m, NULL, &g) || !g.aimed) return 0;
+    for (int i = 0; i < m->tokens.n; i++)
+        if (i != ro->token && geom_catches(&g, m, &m->tokens.v[i], NULL)) { out[i] = 1; n++; }
+    return n;
+}
+
+double token_gap_units(const Map *m, const Token *a, const Token *b)
+{
+    double best = 1e30;
+    for (int y = b->y; y < b->y + b->size; y++)
+        for (int x = b->x; x < b->x + b->size; x++) {
+            double d = footprint_dist((DistMetric)m->metric, a->x, a->y, a->size, x, y, NULL, NULL);
+            if (d < best) best = d;
+        }
+    return best * m->scale_ft;
+}
+
 int range_aimed(const RangeOverlay *ro, const Map *m)
 {
     RangeGeom g;
@@ -1203,22 +1244,10 @@ void range_status(const RangeOverlay *ro, const Map *m, char *buf, size_t bufsz)
     for (int i = 0; i < m->tokens.n; i++) {
         if (i == ro->token) continue;
         const Token *t = &m->tokens.v[i];
-
-        int    caught = 0, sx = geo.ax, sy = geo.ay, dx = t->x, dy = t->y;
-        double best = 1e30;
-        for (int y = t->y; y < t->y + t->size; y++) {
-            for (int x = t->x; x < t->x + t->size; x++) {
-                int nx = geo.ax, ny = geo.ay;
-                if (!geom_covers(&geo, x, y, &nx, &ny)) continue;
-                double d = dist_tiles(geo.metric, x - nx, y - ny);
-                if (d < best) { best = d; sx = nx; sy = ny; dx = x; dy = y; }
-                caught = 1;
-            }
-        }
-        if (!caught) continue;
+        int blocked;
+        if (!geom_catches(&geo, m, t, &blocked)) continue;
 
         count++;
-        int blocked = sight_blocked(m, sx, sy, dx, dy);
         if (blocked) hidden++;
 
         if (off < (int)sizeof names - 24)

@@ -271,6 +271,9 @@ void app_frame(App *a, Term *t, uint64_t now_ms);
 /* The creature whose card the box beside the map shows -- the selected
  * one, else the one under the cursor, in play mode with the box on -- or -1. */
 int  app_card_shown(const App *a);
+/* A Horde's changed attack while half or more of its HP is marked, for the
+ * card box's title: 1 with it in buf (app_damage.c). */
+int  app_horde_note(const App *a, int idx, char *buf, size_t sz);
 int  app_view_differs(const App *a);
 
 /* The control channel (app_ctl.c). Runs one request against the app and
