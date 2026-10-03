@@ -30,6 +30,8 @@ int main(int argc, char **argv)
         { "scenes", test_scenes },
         { "maplinks", test_map_links },
         { "handouts", test_handouts },
+        { "whisper",  test_whisper_net },
+        { "whisperapp", test_whisper_app },
         { "joinframe", test_join_frame },
         { "handoutkeys", test_handout_keys },
         { "scenekeys", test_scene_keys },

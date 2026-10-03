@@ -362,6 +362,7 @@ void app_tick(App *a, uint64_t now_ms)
         NetPing in[NET_MAX_CLIENTS];
         int n = net_take_pings(&a->net, in, NET_MAX_CLIENTS);
         for (int i = 0; i < n; i++) app_ping_cell(a, in[i].who, in[i].sx, in[i].sy);
+        app_whisper_tick(a);
     }
     if (ctl_active(&a->ctl)) {
         const char *req;

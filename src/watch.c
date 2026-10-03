@@ -111,7 +111,8 @@ static void on_handout(void *ctx, const char *text, size_t n)
     paint(wt);
 }
 
-static const WireSink SINK = { on_full, on_pal, on_run, on_end, on_keepalive, on_handout };
+/* The watcher is the table's: no whispers, no names to choose. */
+static const WireSink SINK = { on_full, on_pal, on_run, on_end, on_keepalive, on_handout, NULL, NULL };
 
 /* host:port, host:port?k=CODE, or host:port/CODE. */
 int watch_parse_target(const char *target, char *host, size_t hs, char *port, size_t ps,

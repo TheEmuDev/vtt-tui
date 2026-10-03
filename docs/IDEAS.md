@@ -58,7 +58,8 @@ against the code of 2026-09-25):
   up as `enter` does, step as `l` does, one undo batch a step, `esc` rewinds the walk,
   the GM's cursor follows the creature. No second carry: `play_step`, the trail, the
   move label, `undo_rewind_moves` and `play_status` all read `Play`.
-- **Identity.** The page asks for a name once (`localStorage`, or `?n=` in the URL the
+- **Identity.** *Built 2026-10-03 for whispers (docs/WHISPER.md): `n=` on `/ws`, a name
+  in the raw hello, `localStorage`; `:players` lists them. Bindings are what remains.* The page asks for a name once (`localStorage`, or `?n=` in the URL the
   GM hands out) and sends it as `&n=` on `/ws`; a raw hello may carry one
   (`VTT1<code> <name>`) so tests and the bench can be phones. `:serve who` lists them,
   `:serve as NAME LABEL` binds a name to a creature by label (unique substring),

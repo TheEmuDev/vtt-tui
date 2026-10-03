@@ -101,7 +101,13 @@ typedef struct {
     int      handouts;                /* 'H' records seen, and the last one's text */
     char     handout[WIRE_HANDOUT_MAX + 1];
     size_t   handout_n;
+    int      whispers, namelists;     /* 'W' and 'N' records seen, and the last of each */
+    char     whisper[WIRE_TEXT_MAX + 1];
+    char     names[WIRE_TEXT_MAX + 1];
 } WireCatch;
+
+/* test_net.c's decoder sink, filling a WireCatch. */
+extern const WireSink WC_SINK;
 
 typedef struct { int fd; char buf[8192]; size_t n; int done, reset; } CtlReader;
 
@@ -266,6 +272,8 @@ void test_ctl_characters(void);
 void test_scenes(void);
 void test_map_links(void);
 void test_handouts(void);
+void test_whisper_net(void);
+void test_whisper_app(void);
 void test_join_frame(void);
 void test_handout_keys(void);
 void test_scene_keys(void);

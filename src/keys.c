@@ -73,6 +73,7 @@ static const KeyDoc PLAY[] = {
     KEY(":mirror", "a second window mirroring play mode, to drag to a TV"),
     KEY(":serve off", "close the remote view and drop everyone"),
     KEY(":player preview", "see the players' frame on your own screen; q returns"),
+    KEY(":whisper Aria TEXT", "a card on Aria's phone alone; kept if it is asleep   :players lists the phones"),
 
     GROUP("Status markers"),
     KEY("s a",    "add a marker: a color and a word"),

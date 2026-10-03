@@ -34,6 +34,12 @@
 #define NET_IDLE_MS     60000
 #define NET_PING_RATE_MS 1000     /* a phone's pings: one a second, the rest dropped */
 #define NET_PING_COORD_MAX 4095   /* the largest screen cell a ping may name */
+/* Names (docs/WHISPER.md): a phone says who it is as it connects -- `n=` on
+ * /ws, or after the code in a raw hello -- and is that until it reconnects.
+ * Self-declared: the join code is the only door. */
+#define NET_NAME_MAX 25           /* 24 bytes of UTF-8 and the NUL */
+#define NET_KEPT_MAX 16           /* whispers waiting for a phone, one a name */
+#define NET_SEEN_MAX 16           /* names that have been here, for :whisper to a sleeper */
 
 typedef enum {
     CL_NEW = 0,     /* connected; first bytes not yet seen */
@@ -60,7 +66,15 @@ typedef struct {
     int        greeted;       /* a watcher's hello has been read */
     uint64_t   next_ping_ms;  /* the earliest its next ping is taken */
     uint64_t   probed_ms;     /* a browser: when we last asked if it was there */
+    char       name[NET_NAME_MAX];   /* who it says it is; "" for none */
 } NetClient;
+
+/* A whisper for a name with no phone here: given to the first that comes. */
+typedef struct {
+    char   name[NET_NAME_MAX];
+    char   text[WIRE_TEXT_MAX];
+    size_t len;
+} NetKept;
 
 /* A ping: a client pointing at a cell of the frame it is shown. The app
  * decides what square that is; the server only reads, limits and hands
@@ -107,6 +121,16 @@ typedef struct {
      * client that joins while it is up. */
     char            handout[WIRE_HANDOUT_MAX];
     size_t          handout_len;
+    /* Like the handout, these are the table's and outlive a restart: the
+     * names a phone is offered ('N', newline between), the whispers
+     * waiting, the names seen, and the arrivals the app has yet to say. */
+    char            offer[WIRE_TEXT_MAX];
+    size_t          offer_len;
+    NetKept         kept[NET_KEPT_MAX];
+    char            seen[NET_SEEN_MAX][NET_NAME_MAX];
+    int             nseen;
+    char            arrived[NET_MAX_CLIENTS][NET_NAME_MAX];
+    int             narrived;
 
     /* Counters for the profiler: per frame, and over the server's life. */
     uint32_t frame_bytes;
@@ -161,6 +185,31 @@ void net_set_live(Net *n, int live);
  * for clients that join later. Sent at once, live or not: a handout is not a
  * frame and does not wait for play mode. */
 void net_set_handout(Net *n, const char *text, size_t len, uint64_t now_ms);
+
+/* The names a phone may choose from (player creatures' labels, a newline
+ * between), sent to browsers when it changes and after each one's FULL. */
+void net_set_offer(Net *n, const char *text, size_t len, uint64_t now_ms);
+
+/* A whisper to every phone called `name` (case aside). Returns how many got
+ * it; with none here and `keep`, it waits for the first to come (the last
+ * one a name; the oldest name gives way when all are taken). */
+int  net_whisper(Net *n, const char *name, const char *text, size_t len, int keep, uint64_t now_ms);
+
+/* Has a phone called `name` been here, now or before (case aside)? */
+int  net_name_seen(const Net *n, const char *name);
+
+/* Hands over the next name to have arrived since the last call: 1, or 0
+ * when there are none. */
+int  net_take_arrival(Net *n, char *out, size_t sz);
+
+/* Who is watching, for :players: "Aria, Brin (2), 1 unnamed, 1 terminal",
+ * or "" for no one. */
+void net_who(const Net *n, char *buf, size_t sz);
+
+/* A name as a phone gave it, trimmed and checked: 1 with it in out, 0 for
+ * one that is empty, too long, not UTF-8 or has a control character. `len`
+ * bytes of `in`, %XX and + decoded first when `url` is set. */
+int  net_name_clean(const char *in, size_t len, int url, char out[NET_NAME_MAX]);
 
 /* Exposed for the tests: the WebSocket accept key for a client key, and the
  * primitives behind it. */

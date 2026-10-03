@@ -988,6 +988,17 @@ static void cmd_card(App *a, const char *verb, const char *rest)
     a->modal      = MODAL_CARD;
 }
 
+static void cmd_whisper(App *a, const char *verb, const char *rest)
+{
+    app_whisper_command(a, rest);
+}
+
+static void cmd_players(App *a, const char *verb, const char *rest)
+{
+    if (*rest) { app_set_status(a, ":players lists who is watching"); return; }
+    app_players_command(a);
+}
+
 static void cmd_dmg(App *a, const char *verb, const char *rest)
 {
     app_damage_command(a, rest);
@@ -1087,6 +1098,8 @@ static const struct {
     { "clock", NULL, cmd_clock },
     { "tick", NULL, cmd_tick },
     { "player", NULL, cmd_player },
+    { "players", NULL, cmd_players },
+    { "whisper", NULL, cmd_whisper },
     { "serve", NULL, cmd_serve },
     { "agent", NULL, cmd_agent },
     { "stamp", NULL, cmd_stamp },

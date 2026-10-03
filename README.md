@@ -30,7 +30,8 @@ game-specific readouts such as range bands (see [Rulesets](#rulesets)).
   reset an encounter, a ruler and area-of-effect templates.
 - Turn order or a spotlight, clocks, dice and named rolls, a session log.
 - Fog of war that the party's creatures reveal as they move.
-- A players' view in any browser on the local network, with tap-to-point and text handouts.
+- A players' view in any browser on the local network, with tap-to-point, text handouts and
+  whispers to one player.
 - Tools for AI agents to build and edit maps, from a file or live alongside the GM.
 
 Written in C11 with no dependencies beyond libc, POSIX and `-lm`.
@@ -114,6 +115,7 @@ vtt [options] [map.vtt]
   --bench PATH       replay a script headlessly and report frame statistics
   --bench-loops N    how many times --bench replays it (default 50)
   --bench-clients N  attach N players' views to a --bench run
+  --bench-names      those views are named phones, P1, P2... (for :whisper)
   --bench-pings      and have each of them ping every frame
   --bench-ctl FILE   run a control-channel request at the start of each --bench loop
   --trace PATH       write a Chrome Tracing profile on exit
@@ -985,6 +987,30 @@ button for as long as it is up; showing a new handout opens it again on every sc
 device that connects while a handout is up gets it too, and the terminal mirror shows it as
 a box. A handout stays up in build mode, and comes down when the map is closed.
 
+**Whispers.** A whisper is a handout for one player: only the phones with that player's name
+get it.
+
+| command | action |
+|---------|--------|
+| `:whisper NAME TEXT` | show TEXT on NAME's phone only, as a card marked *to you* |
+| `:players` | list the phones watching, by name, and any whisper waiting for one |
+
+When a phone first connects it asks *Who are you?*: it offers the player creatures on the map
+(by label), a box for any other name, and *just watching*. The phone remembers the answer and
+sends it every time it reconnects; the name button in the top-left corner changes it. Your
+status line says when a named phone arrives (`Aria's phone is here`).
+
+`:whisper Aria You notice the floor is warm here` sends to every phone named Aria (case does not
+matter, and a name may have spaces: `:whisper Crypt Ghoul ...`). If Aria's phone has been
+here but is not connected now -- a locked phone drops off within a minute -- the whisper
+waits and arrives when it reconnects; the last one for each name is kept. A name no phone has
+used is refused. The player closes the card with `×` and reopens the last whisper with the
+`whisper` button. Whispers never appear in the shared view, in the terminal mirror or on
+another phone; the session log keeps them on your side.
+
+Anyone with the join code can say they are Aria, and two phones with the same name both get
+its whispers. The join code is the only gate: this is for a table of friends.
+
 ## Sessions and files
 
 ### Session log (`:log`)
@@ -1122,6 +1148,7 @@ use, and how `:dmg` marks HP. Available: `none`, `daggerheart`.
 | `:character ...` | save and place [characters](#characters-character-i-t) |
 | `:scene ...`, `:scenes` | save, put back and list [scenes](#scenes-scene) |
 | `:handout ...` | show a [handout](#the-players-view-serve-mirror) on the players' screens; `:handout off` takes it down |
+| `:whisper NAME TEXT` | a [whisper](#the-players-view-serve-mirror) to one player's phone; `:players` lists who is watching |
 | `:link ...`, `:links` | change, remove, list and jump to [links](#links-stairs-ladders-trapdoors-portals) |
 | `:floor ...`, `:floors` | mark, show and list [floors](#floors) |
 | `:turns` | list the [turn order](#turn-order-a); `:turns end` ends the fight |
@@ -1424,6 +1451,7 @@ has measurements for every path; `make perf` regenerates them.
 | [docs/CARDS.md](docs/CARDS.md) | cards, and importing the SRD's adversaries |
 | [docs/SCENES.md](docs/SCENES.md) | scenes: saving and restoring an encounter |
 | [docs/HANDOUTS.md](docs/HANDOUTS.md) | handouts on the players' screens |
+| [docs/WHISPER.md](docs/WHISPER.md) | phones' names and whispers to one player |
 | [docs/MAPLINKS.md](docs/MAPLINKS.md) | links between map files |
 | [docs/CONTROL.md](docs/CONTROL.md) | the control channel's design |
 | [docs/REMOTE.md](docs/REMOTE.md) | the players' view: server, page and watcher |

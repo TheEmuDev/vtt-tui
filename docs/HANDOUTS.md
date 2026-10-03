@@ -14,7 +14,7 @@ reference; this page is why it is the way it is.
 | formatting | plain text, line breaks kept; nothing else |
 | off and on | `:handout off` takes it down and keeps it; `:handout on` puts it back (docs/KEYS.md rule 9) |
 | its lifetime | the encounter's: up across build and play, down (and forgotten) when the map closes, even with a server kept alive for the next map |
-| not here | pictures (a drawn map as an image), a handout for one player (the phones have no identity), the control channel |
+| not here | pictures (a drawn map as an image), a handout for one player (built later as whispers, docs/WHISPER.md, once the phones had names), the control channel |
 
 ## Shape
 

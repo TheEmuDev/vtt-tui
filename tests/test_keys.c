@@ -148,7 +148,7 @@ void test_help_page(void)
     CHECK(strstr(f.data, "cycle the bands") == NULL);   /* below the fold at 24 rows */
     bb_free(&f);
 
-    rnd_resize(&r, 90, 100);                   /* the play page has grown past eighty rows */
+    rnd_resize(&r, 90, 120);                   /* the play page has grown past a hundred rows */
     rnd_begin(&r);
     app_draw(&a);
     bb_init(&f, 65536);

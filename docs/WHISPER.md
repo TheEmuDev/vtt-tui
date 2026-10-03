@@ -51,3 +51,28 @@ joins, which later per-player features (item 21's camera, a ping that says who) 
 2. The page's sheet and remembering; checked in Chrome.
 3. `:whisper`, the `'W'` record, kept whispers; the page's card.
 4. Docs, perf row, the review (health-check questions included).
+
+## As built
+
+- **The name rides the connection, not a message.** The plan had the page send `N Aria` up
+  the socket. Built instead as docs/IDEAS.md's earlier phone-moves plan had it: `n=Aria` on
+  `/ws` (URL-encoded, so `Crypt Ghoul` works), and in a raw hello after the code
+  (`VTT1<code> Aria`), so the tests and the bench (`--bench-names`) can be phones. A phone is
+  its name for the life of its connection; choosing another reconnects at once. A bad name
+  (too long, control characters, not UTF-8) is no name, never a refusal.
+- **Where:** names, the offer, kept whispers, seen names and arrivals are in `net.c`
+  (`net_whisper`, `net_set_offer`, `net_who`, `net_take_arrival`, `net_name_clean`);
+  `app_whisper.c` has `:whisper`, `:players` and `app_whisper_tick`, which runs from
+  `app_tick` while serving: it keeps the offer in step with the player creatures (compared
+  before anything is sent) and says arrivals on the GM's line. The offer, the kept whispers
+  and the seen names outlive a restart of the server, as the handout does.
+- **Records:** `'W'` and `'N'` share the handout's shape (`wire_text`); the watcher's decoder
+  takes neither (`NULL` in its sink). `'N'` goes to browsers only.
+- **Matching:** `:whisper` takes the longest name a phone has used -- here now or seen
+  before -- that the line starts with. A player creature's label that no phone has chosen is
+  not a name yet.
+- **The page** is 11.4 KB as sent (11,682 bytes) of the 12 KB budget. Checked in Chrome
+  against a served map: the sheet offered the players' labels, a chosen name and a typed one
+  with a space reached the server, the phone came back as itself after the server restarted,
+  and the whisper card showed, closed and reopened. The sheet's text box overflowed its card
+  at first; fixed (`box-sizing`).

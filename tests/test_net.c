@@ -35,7 +35,23 @@ static void wc_handout(void *ctx, const char *text, size_t n)
     c->handout_n = n;
 }
 
-static const WireSink WC_SINK = { wc_full, wc_pal, wc_run, wc_end, wc_keepalive, wc_handout };
+static void wc_whisper(void *ctx, const char *text, size_t n)
+{
+    WireCatch *c = ctx;
+    c->whispers++;
+    memcpy(c->whisper, text, n);
+    c->whisper[n] = '\0';
+}
+
+static void wc_names(void *ctx, const char *text, size_t n)
+{
+    WireCatch *c = ctx;
+    c->namelists++;
+    memcpy(c->names, text, n);
+    c->names[n] = '\0';
+}
+
+const WireSink WC_SINK = { wc_full, wc_pal, wc_run, wc_end, wc_keepalive, wc_handout, wc_whisper, wc_names };
 
 void test_wire(void)
 {
@@ -1873,6 +1889,10 @@ void test_page_feed(void)
     const char *text = "Tomb\nHere lies \xc3\x89lan";
     size_t hn = wire_handout(ho, text, strlen(text));
     bb_put(&stream, ho, hn);
+    hn = wire_text(ho, 'N', "Aria\nBrin", 9);
+    bb_put(&stream, ho, hn);
+    hn = wire_text(ho, 'W', "The floor is warm", 17);
+    bb_put(&stream, ho, hn);
 
     /* The page as the binary serves it, not the source beside it. */
     char page[640], spath[640], cmd[1600];
@@ -1906,6 +1926,10 @@ void test_page_feed(void)
     }
     bb_puts(&want, "handout:");
     bb_puts(&want, c.handout);
+    bb_puts(&want, "\nnames:");
+    bb_puts(&want, c.names);
+    bb_puts(&want, "\nwhisper:");
+    bb_puts(&want, c.whisper);
     bb_putc(&want, '\n');
     bb_putc(&want, '\0');
 
@@ -1925,6 +1949,7 @@ void test_page_feed(void)
     CHECK_EQ(c.w, W);
     CHECK_EQ(c.h, H);
     CHECK(strstr(got.data, "handout:Tomb\nHere lies \xc3\x89lan") != NULL);
+    CHECK(strstr(got.data, "names:Aria\nBrin\nwhisper:The floor is warm\n") != NULL);
     CHECK_EQ(strcmp(got.data, want.data), 0);
 
     bb_free(&got);

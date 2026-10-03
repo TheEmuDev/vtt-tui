@@ -20,6 +20,10 @@
  *   'H' u16 n, u8 text[n]        the handout (docs/HANDOUTS.md): UTF-8, its title, a
  *                                newline, its body; n 0 takes it down. Not a frame:
  *                                it may come between any two records
+ *   'W' u16 n, u8 text[n]        a whisper (docs/WHISPER.md): UTF-8, sent only to the
+ *                                phones of the name it is for
+ *   'N' u16 n, u8 text[n]        the names a phone may choose from, a newline
+ *                                between each; sent to browsers only
  *
  * All integers little-endian. Glyphs are sixteen-bit: everything the grid
  * draws is in the basic plane, and a rare astral glyph goes out as the
@@ -34,6 +38,7 @@
 
 #define WIRE_PAL_MAX  256
 #define WIRE_HANDOUT_MAX 2200    /* a handout record's text: a title and 2 KB of body */
+#define WIRE_TEXT_MAX    WIRE_HANDOUT_MAX   /* any text record's: 'H', 'W', 'N' */
 #define WIRE_RUN_MAX  4096       /* glyphs in one run; a row is never wider */
 
 typedef struct {
@@ -79,9 +84,14 @@ size_t wire_enc_palette(const WireEnc *e, int from, uint8_t *out, size_t cap);
  * when the last client leaves, so the table cannot grow across a session. */
 void wire_enc_reset_palette(WireEnc *e);
 
-/* A handout record for `text` (n bytes, at most WIRE_HANDOUT_MAX; 0 takes it
- * down) into out, which holds 3 + n. Returns the bytes written. */
-size_t wire_handout(uint8_t *out, const char *text, size_t n);
+/* A text record -- 'H', 'W' or 'N' -- for `text` (n bytes, at most
+ * WIRE_TEXT_MAX; a handout of 0 takes it down) into out, which holds 3 + n.
+ * Returns the bytes written. */
+size_t wire_text(uint8_t *out, char tag, const char *text, size_t n);
+static inline size_t wire_handout(uint8_t *out, const char *text, size_t n)
+{
+    return wire_text(out, 'H', text, n);
+}
 
 /* ------------------------------------------------------------- decoder */
 
@@ -93,6 +103,8 @@ typedef struct {
     void (*end)(void *ctx);
     void (*keepalive)(void *ctx);
     void (*handout)(void *ctx, const char *text, size_t n);    /* n 0: taken down */
+    void (*whisper)(void *ctx, const char *text, size_t n);
+    void (*names)(void *ctx, const char *text, size_t n);
 } WireSink;
 
 /* Consumes bytes as they arrive; a record split across reads is held until

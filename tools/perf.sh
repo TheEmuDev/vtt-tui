@@ -370,6 +370,7 @@ run "play, 1 watcher"      "$MOB"    80x24  ':play\rjjllkkhh' "--bench-clients 1
 run "play, 4 watchers"     "$MOB"    80x24  ':play\rjjllkkhh' "--bench-clients 4"
 run "play, 4 watchers, differing" "$MOB" 80x24 ':play\rtsnhidden\rjjllkkhh' "--bench-clients 4"
 run "play, hidden, 4 watchers" "$HIDMOB" 80x24 ':play\rjjllkkhh' "--bench-clients 4"
+run "play, whisper, 4 named" "$MOB" 80x24  ':play\r:whisper P2 The floor is warm\r' "--bench-clients 4 --bench-names"
 run "play, pings, 4 watchers" "$MOB"  80x24  ':play\rjjllkkhh' "--bench-clients 4 --bench-pings"
 run "play, fog pings, 4 watchers" "$MOB" 80x24 ':fog all\r:play\rjjllkkhh' "--bench-clients 4 --bench-pings"
 run "play, GM ping"        "$MOB"    80x24  ':play\rgpllgphh'

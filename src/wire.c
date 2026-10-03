@@ -187,10 +187,10 @@ size_t wire_enc_palette(const WireEnc *e, int from, uint8_t *out, size_t cap)
     return n;
 }
 
-size_t wire_handout(uint8_t *out, const char *text, size_t n)
+size_t wire_text(uint8_t *out, char tag, const char *text, size_t n)
 {
-    if (n > WIRE_HANDOUT_MAX) n = WIRE_HANDOUT_MAX;
-    out[0] = 'H';
+    if (n > WIRE_TEXT_MAX) n = WIRE_TEXT_MAX;
+    out[0] = (uint8_t)tag;
     out[1] = (uint8_t)(n & 0xFF);
     out[2] = (uint8_t)(n >> 8);
     if (n) memcpy(out + 3, text, n);
@@ -216,9 +216,9 @@ static size_t record_len(const uint8_t *p, size_t have)
     case 'P': return 5;
     case 'E': return 1;
     case 'Z': return 1;
-    case 'H':
+    case 'H': case 'W': case 'N':
         if (have < 3) return 3;
-        return get16(p + 1) > WIRE_HANDOUT_MAX ? 0 : 3 + get16(p + 1);
+        return get16(p + 1) > WIRE_TEXT_MAX ? 0 : 3 + get16(p + 1);
     case 'R':
         if (have < 10) return 10;                     /* enough to read n */
         return 10 + 2 * get16(p + 5);
@@ -235,6 +235,8 @@ static void dispatch(WireDec *d, const uint8_t *p)
     case 'E': if (s->end)  s->end(d->ctx);  break;
     case 'Z': if (s->keepalive) s->keepalive(d->ctx); break;
     case 'H': if (s->handout) s->handout(d->ctx, (const char *)p + 3, get16(p + 1)); break;
+    case 'W': if (s->whisper) s->whisper(d->ctx, (const char *)p + 3, get16(p + 1)); break;
+    case 'N': if (s->names)   s->names(d->ctx, (const char *)p + 3, get16(p + 1)); break;
     case 'R': {
         int n = (int)get16(p + 5);
         uint16_t glyphs[WIRE_RUN_MAX];

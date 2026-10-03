@@ -110,6 +110,12 @@ int app_target_token_under(const App *a);
 /* app_card.c: s k -- the creature's card in the GM's editor. */
 void app_card_edit(App *a);
 
+/* app_whisper.c: :whisper, :players; and each tick, the names a phone is
+ * offered kept in step and the phones that arrived said. */
+void app_whisper_command(App *a, const char *rest);
+void app_players_command(App *a);
+void app_whisper_tick(App *a);
+
 /* app_damage.c: :dmg. */
 void app_damage_command(App *a, const char *rest);
 

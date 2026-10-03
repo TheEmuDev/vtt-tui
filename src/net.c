@@ -207,14 +207,20 @@ void net_stop(Net *n)
     wire_enc_free(&n->enc);
     rnd_set_observer((Renderer *)n->rnd, NULL, NULL);
     rnd_free(&n->players);
-    /* The handout is the table's, not the server's: a restarted server
-     * hands it to the phones as they come back. */
-    char   keep[sizeof n->handout];
-    size_t kl = n->handout_len;
-    memcpy(keep, n->handout, kl);
+    /* The handout, the names offered, the whispers waiting and the names
+     * seen are the table's, not the server's: a restarted server hands them
+     * to the phones as they come back. */
+    Net *keep = xmalloc(sizeof *keep);
+    memcpy(keep, n, sizeof *n);
     net_init(n);
-    memcpy(n->handout, keep, kl);
-    n->handout_len = kl;
+    memcpy(n->handout, keep->handout, keep->handout_len);
+    n->handout_len = keep->handout_len;
+    memcpy(n->offer, keep->offer, keep->offer_len);
+    n->offer_len = keep->offer_len;
+    memcpy(n->kept, keep->kept, sizeof n->kept);
+    memcpy(n->seen, keep->seen, sizeof n->seen);
+    n->nseen = keep->nseen;
+    free(keep);
 }
 
 Renderer *net_players_renderer(Net *n, const Renderer *gm)
@@ -337,6 +343,8 @@ static int client_send_synced(Net *n, int i, const uint8_t *frame, size_t len)
     return client_send_frame(n, i, frame, len);
 }
 
+static void client_named(Net *n, int i, uint64_t now_ms);
+
 /* The whole screen as it stands, for a client that has just arrived. The
  * shared encoder builds it, which may grow the palette; everyone else is
  * caught up before their next frame by client_send_synced. */
@@ -348,9 +356,184 @@ static void client_send_full(Net *n, int i, uint64_t now_ms)
     n->joined = 1;
     /* The handout always follows, empty when there is none: a phone coming
      * back must drop a card taken down while it was away. */
-    uint8_t rec[3 + WIRE_HANDOUT_MAX];
+    uint8_t rec[3 + WIRE_TEXT_MAX];
     if (client_send_frame(n, i, rec, wire_handout(rec, n->handout, n->handout_len)) < 0) return;
-    client_flush(n, i, now_ms);
+    /* A browser is told the names it may choose from; a watcher is the
+     * table's and chooses none. */
+    if (n->cl[i].kind == CL_WS &&
+        client_send_frame(n, i, rec, wire_text(rec, 'N', n->offer, n->offer_len)) < 0) return;
+    uint32_t id = n->cl[i].id;
+    if (client_flush(n, i, now_ms) < 0 || i >= n->ncl || n->cl[i].id != id) return;
+    if (n->cl[i].name[0]) client_named(n, i, now_ms);
+}
+
+/* ---------------------------------------------------------------- names */
+
+static int hexval(char c)
+{
+    return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10
+         : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+}
+
+/* The kept whispers stay packed at the front, oldest first. */
+static int kept_count(const Net *n)
+{
+    int k = 0;
+    while (k < NET_KEPT_MAX && n->kept[k].len) k++;
+    return k;
+}
+
+static void kept_remove(Net *n, int k)
+{
+    int used = kept_count(n);
+    memmove(&n->kept[k], &n->kept[k + 1], sizeof n->kept[0] * (size_t)(used - 1 - k));
+    memset(&n->kept[used - 1], 0, sizeof n->kept[0]);
+}
+
+int net_name_clean(const char *in, size_t len, int url, char out[NET_NAME_MAX])
+{
+    char   buf[3 * NET_NAME_MAX];
+    size_t k = 0;
+    for (size_t j = 0; j < len; j++) {
+        char ch = in[j];
+        if (url && ch == '+') ch = ' ';
+        else if (url && ch == '%') {
+            if (j + 2 >= len) return 0;
+            int hi = hexval(in[j + 1]), lo = hexval(in[j + 2]);
+            if (hi < 0 || lo < 0) return 0;
+            ch = (char)(hi << 4 | lo);
+            j += 2;
+        }
+        if (k >= sizeof buf) return 0;
+        buf[k++] = ch;
+    }
+    size_t a = 0;
+    while (a < k && buf[a] == ' ') a++;
+    while (k > a && buf[k - 1] == ' ') k--;
+    if (k == a || k - a > NET_NAME_MAX - 1 || !utf8_valid(buf + a, k - a)) return 0;
+    for (size_t j = a; j < k; j++)
+        if ((unsigned char)buf[j] < 0x20 || buf[j] == 0x7f) return 0;
+    memcpy(out, buf + a, k - a);
+    out[k - a] = '\0';
+    return 1;
+}
+
+int net_name_seen(const Net *n, const char *name)
+{
+    for (int k = 0; k < n->nseen; k++)
+        if (!strcasecmp(n->seen[k], name)) return 1;
+    return 0;
+}
+
+static int stream_client(const NetClient *c)
+{
+    return c->kind == CL_WS || (c->kind == CL_RAW && c->greeted);
+}
+
+/* A phone has said who it is, and has its FULL: remembered as seen, told
+ * to the app, and handed what was kept for it. */
+static void client_named(Net *n, int i, uint64_t now_ms)
+{
+    const char *name = n->cl[i].name;
+    if (!net_name_seen(n, name)) {
+        if (n->nseen == NET_SEEN_MAX) {
+            memmove(n->seen[0], n->seen[1], sizeof n->seen[0] * (NET_SEEN_MAX - 1));
+            n->nseen--;
+        }
+        str_lcpy(n->seen[n->nseen++], name, NET_NAME_MAX);
+    }
+    if (n->narrived < NET_MAX_CLIENTS) str_lcpy(n->arrived[n->narrived++], name, NET_NAME_MAX);
+    for (int k = 0; k < NET_KEPT_MAX; k++) {
+        NetKept *kp = &n->kept[k];
+        if (!kp->len || strcasecmp(kp->name, name)) continue;
+        uint8_t rec[3 + WIRE_TEXT_MAX];
+        size_t  rl = wire_text(rec, 'W', kp->text, kp->len);
+        kept_remove(n, k);
+        if (client_send_frame(n, i, rec, rl) < 0) return;
+        client_flush(n, i, now_ms);
+        return;
+    }
+}
+
+int net_take_arrival(Net *n, char *out, size_t sz)
+{
+    if (!n->narrived) return 0;
+    str_lcpy(out, n->arrived[0], sz);
+    memmove(n->arrived[0], n->arrived[1], sizeof n->arrived[0] * (size_t)(n->narrived - 1));
+    n->narrived--;
+    return 1;
+}
+
+void net_set_offer(Net *n, const char *text, size_t len, uint64_t now_ms)
+{
+    if (len > sizeof n->offer) len = sizeof n->offer;
+    if (len == n->offer_len && !memcmp(text, n->offer, len)) return;
+    memcpy(n->offer, text, len);
+    n->offer_len = len;
+    if (!net_active(n)) return;
+    PROF_ZONE("net.names");
+    uint8_t rec[3 + WIRE_TEXT_MAX];
+    size_t  rl = wire_text(rec, 'N', text, len);
+    for (int i = 0; i < n->ncl; i++) {
+        if (n->cl[i].kind != CL_WS) continue;
+        if (client_send_frame(n, i, rec, rl) < 0) { i--; continue; }
+        if (client_flush(n, i, now_ms) < 0) i--;
+    }
+}
+
+int net_whisper(Net *n, const char *name, const char *text, size_t len, int keep, uint64_t now_ms)
+{
+    PROF_ZONE("net.whisper");
+    if (len > WIRE_TEXT_MAX) len = WIRE_TEXT_MAX;
+    int got = 0;
+    if (net_active(n)) {
+        uint8_t rec[3 + WIRE_TEXT_MAX];
+        size_t  rl = wire_text(rec, 'W', text, len);
+        for (int i = 0; i < n->ncl; i++) {
+            NetClient *c = &n->cl[i];
+            if (!stream_client(c) || strcasecmp(c->name, name)) continue;
+            got++;
+            if (client_send_frame(n, i, rec, rl) < 0) { i--; continue; }
+            if (client_flush(n, i, now_ms) < 0) i--;
+        }
+    }
+    if (got || !keep) return got;
+
+    /* Kept, the last one for a name, newest at the end: a full table gives
+     * up its oldest. An empty whisper keeps nothing. */
+    if (!len) return 0;
+    for (int k = 0; k < kept_count(n); k++)
+        if (!strcasecmp(n->kept[k].name, name)) { kept_remove(n, k); break; }
+    if (kept_count(n) == NET_KEPT_MAX) kept_remove(n, 0);
+    NetKept *kp = &n->kept[kept_count(n)];
+    str_lcpy(kp->name, name, sizeof kp->name);
+    memcpy(kp->text, text, len);
+    kp->len = len;
+    return 0;
+}
+
+void net_who(const Net *n, char *buf, size_t sz)
+{
+    int off = 0, unnamed = 0, terminals = 0;
+    buf[0] = '\0';
+    for (int i = 0; i < n->ncl; i++) {
+        const NetClient *c = &n->cl[i];
+        if (!stream_client(c)) continue;
+        if (!c->name[0]) { if (c->kind == CL_WS) unnamed++; else terminals++; continue; }
+        int first = 1, count = 0;
+        for (int j = 0; j < n->ncl; j++) {
+            const NetClient *o = &n->cl[j];
+            if (!stream_client(o) || strcasecmp(o->name, c->name)) continue;
+            if (j < i) first = 0;
+            count++;
+        }
+        if (!first || off >= (int)sz) continue;
+        off += snprintf(buf + off, sz - (size_t)off, count > 1 ? "%s%s (%d)" : "%s%s",
+                        off ? ", " : "", c->name, count);
+    }
+    if (unnamed && off < (int)sz) off += snprintf(buf + off, sz - (size_t)off, "%s%d unnamed", off ? ", " : "", unnamed);
+    if (terminals && off < (int)sz)
+        snprintf(buf + off, sz - (size_t)off, "%s%d terminal%s", off ? ", " : "", terminals, terminals == 1 ? "" : "s");
 }
 
 /* -------------------------------------------------------------- reading */
@@ -429,6 +612,15 @@ static void http_request(Net *n, int i, uint64_t now_ms)
                            "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n"
                            "Connection: Upgrade\r\nSec-WebSocket-Accept: %s\r\n\r\n", accept);
         if (client_queue(n, i, hdr, (size_t)hl) < 0) return;
+        /* "n=Aria" in the query: who this phone says it is. A name that
+         * does not pass is no name, not a refusal. */
+        const char *q = strchr(target, '?');
+        for (const char *p = q; p && *p; p = strchr(p + 1, '&')) {
+            if (strncmp(p + 1, "n=", 2)) continue;
+            const char *v = p + 3;
+            net_name_clean(v, strcspn(v, "&"), 1, c->name);
+            break;
+        }
         c->kind   = CL_WS;
         c->in_len = 0;
         client_send_full(n, i, now_ms);
@@ -572,6 +764,13 @@ static void client_read(Net *n, int i, uint64_t now_ms)
             size_t rest = c->in_len - (size_t)(nl + 1 - c->in);
             *nl = '\0';
             c->in[c->in_len] = '\0';
+            /* A name may follow the code, after a space: the tests and the
+             * bench speak as phones this way; `vtt --watch` sends none. */
+            char *sp = strchr((char *)c->in + 4, ' ');
+            if (sp) {
+                *sp = '\0';
+                net_name_clean(sp + 1, strlen(sp + 1), 0, c->name);
+            }
             if (!c->local && strcmp((char *)c->in + 4, n->code) != 0) { client_close(n, i); return; }
             memmove(c->in, nl + 1, rest);
             c->in_len  = rest;

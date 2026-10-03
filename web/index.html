@@ -11,13 +11,18 @@ body{display:flex;align-items:center;justify-content:center}
 #c{display:block;image-rendering:pixelated;touch-action:pinch-zoom}
 #s{position:fixed;left:0;bottom:0;padding:2px 6px;background:rgba(14,14,18,.85);color:#60647a;font:11px monospace;pointer-events:none}
 #s b{color:#8ac8ff;font-weight:normal}
-#h,#hb{position:fixed;background:#f3ead6;color:#2a241a;font:17px/1.5 Georgia,serif;border:0;border-radius:6px;box-shadow:0 4px 30px #000}
-#h{left:50%;top:50%;transform:translate(-50%,-50%);width:min(34em,88vw);max-height:80vh;overflow:auto;box-sizing:border-box;padding:1em 1.3em;user-select:text}
+#h,#hb,#w,#wb,#q,#nb{position:fixed;background:#f3ead6;color:#2a241a;font:17px/1.5 Georgia,serif;border:0;border-radius:6px;box-shadow:0 4px 30px #000}
+#h,#w,#q{left:50%;top:50%;transform:translate(-50%,-50%);width:min(34em,88vw);max-height:80vh;overflow:auto;box-sizing:border-box;padding:1em 1.3em;user-select:text}
 [hidden]{display:none!important}
-#ht{margin-right:1.5em;font-weight:bold}
-#hx{position:absolute;right:.3em;top:0;border:0;background:none;font:28px sans-serif}
-#hp{white-space:pre-wrap;overflow-wrap:anywhere}
-#hb{right:9px;bottom:9px;padding:.4em 1em}
+#ht,#wt{margin-right:1.5em;font-weight:bold}
+#hx,#wx{position:absolute;right:.3em;top:0;border:0;background:none;font:28px sans-serif}
+#hp,#wp{white-space:pre-wrap;overflow-wrap:anywhere}
+#hb,#wb,#nb{padding:.4em 1em}
+#hb{right:9px;bottom:9px}
+#wb{right:9px;bottom:3.6em}
+#nb{left:9px;top:9px;opacity:.8}
+#w{background:#e6dcf3}
+#q button,#q input{display:block;width:100%;box-sizing:border-box;margin:.4em 0;font:inherit;padding:.3em}
 </style>
 </head>
 <body>
@@ -25,6 +30,10 @@ body{display:flex;align-items:center;justify-content:center}
 <div id="s">connecting…</div>
 <div id="h" hidden><button id="hx" aria-label="close">×</button><div id="ht"></div><p id="hp"></p></div>
 <button id="hb" hidden>handout</button>
+<div id="w" hidden><button id="wx" aria-label="close">×</button><div id="wt">to you</div><p id="wp"></p></div>
+<button id="wb" hidden>whisper</button>
+<button id="nb">who?</button>
+<div id="q" hidden><b>Who are you?</b><div id="ql"></div><input id="qi" maxlength="24" placeholder="another name"><button id="qo">that's me</button><button id="qw">just watching</button></div>
 <script>
 'use strict';
 /* vtt remote view. The GM's terminal, drawn the way a terminal draws it:
@@ -203,8 +212,9 @@ function feed(u8){
       p+=2*k;
     }else if(t===0x45){p++;schedule()}                     // 'E': present
     else if(t===0x5a){p++}                                 // 'Z': keep-alive
-    else if(t===0x48){                                     // 'H' n text: the handout, n 0 down
-      const k=dv.getUint16(p+1,true);handout(dec.decode(u8.subarray(p+3,p+3+k)));p+=3+k;
+    else if(t===0x48||t===0x57||t===0x4e){                 // 'H' handout, 'W' whisper, 'N' names: n text
+      const k=dv.getUint16(p+1,true),s=dec.decode(u8.subarray(p+3,p+3+k));p+=3+k;
+      (t===0x48?handout:t===0x57?whisper:names)(s);
     }
     else break;
   }
@@ -223,13 +233,38 @@ function handout(s){
 E('hx').onclick=()=>{hd.hidden=true;hb.hidden=false};
 hb.onclick=()=>{hd.hidden=false;hb.hidden=true};
 
+/* ---- who this phone is (docs/WHISPER.md): asked once, remembered, and
+ * sent as n= on every connect. "" is just watching; null is not asked yet. */
+let me=null;try{me=localStorage.getItem('vtt-name')}catch(e){}
+const nb=E('nb'),q=E('q'),ql=E('ql'),qi=E('qi'),wd=E('w'),wb=E('wb');
+nb.textContent=me||'who?';
+function setMe(v){
+  me=v;try{localStorage.setItem('vtt-name',v)}catch(e){}
+  q.hidden=true;nb.textContent=v||'who?';
+  if(ws){ws.onclose=null;ws.close();clearTimeout(retry);connect()}
+}
+function names(s){
+  ql.textContent='';
+  for(const v of s?s.split('\n'):[]){const b=document.createElement('button');b.textContent=v;b.onclick=()=>setMe(v);ql.appendChild(b)}
+  if(me===null)q.hidden=false;
+}
+nb.onclick=()=>{q.hidden=!q.hidden};
+E('qo').onclick=()=>{const v=qi.value.trim();if(v)setMe(v)};
+E('qw').onclick=()=>setMe('');
+
+/* ---- a whisper: for this phone alone; closed by the player, the button
+ * reopens the last one. */
+function whisper(s){E('wp').textContent=s;wd.hidden=false;wb.hidden=true;wd.scrollTop=0}
+E('wx').onclick=()=>{wd.hidden=true;wb.hidden=false};
+wb.onclick=()=>{wd.hidden=false;wb.hidden=true};
+
 /* ---- connection */
 function status(m){
   st.innerHTML=m||('<b>'+cols+'×'+rows+'</b> '+ms.toFixed(2)+' ms · '+last+' cells · '+frames);
 }
 function connect(){
   const k=new URLSearchParams(location.search).get('k')||'';
-  ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws?k='+k);
+  ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws?k='+k+(me?'&n='+encodeURIComponent(me):''));
   ws.binaryType='arraybuffer';
   ws.onopen=()=>{status('connected');if(navigator.wakeLock)navigator.wakeLock.request('screen').catch(()=>{})};
   ws.onmessage=e=>feed(new Uint8Array(e.data));

@@ -39,6 +39,7 @@ typedef struct {
     int         seeded;
     const char *watch;              /* --watch host:port: be a mirror */
     int         bench_clients;      /* --bench-clients N: loopback watchers on a bench */
+    int         bench_names;        /* --bench-names: they say they are P1, P2... as phones do */
     int         serve;              /* --serve: open the remote view at startup */
     int         serve_port;
     int         serve_stay;         /* --stay-alive: and keep it past the map */
@@ -78,6 +79,7 @@ static void usage(void)
         "  --no-pings         ignore taps from the phones on that server\n"
         "  --watch HOST:PORT  mirror a serving vtt in this terminal, read-only\n"
         "  --bench-clients N  attach N loopback watchers to a --bench run\n"
+        "  --bench-names      those watchers are named phones, P1, P2...\n"
         "  --bench-pings      and have each of them ping every frame\n"
         "  --bench-ctl FILE   run a control-channel request at the top of every --bench loop\n"
         "  --agent            open the control channel at startup (:agent on does it later)\n"
@@ -122,6 +124,7 @@ static int parse_args(Options *o, int argc, char **argv)
         else if (!strcmp(a, "--stay-alive")) o->serve_stay = 1;
         else if (!strcmp(a, "--no-pings"))   o->serve_no_pings = 1;
         else if (!strcmp(a, "--bench-pings")) o->bench_pings = 1;
+        else if (!strcmp(a, "--bench-names")) o->bench_names = 1;
         else if (!strcmp(a, "--agent"))      o->agent = 1;
         else if (!strcmp(a, "--bench-ctl") && i + 1 < argc) o->bench_ctl = argv[++i];
         else if (!strcmp(a, "--apply") && i + 1 < argc) o->apply = argv[++i];
@@ -322,7 +325,10 @@ static int run_headless(const Options *o)
                     sa.sin_port   = htons(a.net.port);
                     sa.sin_addr.s_addr = htonl(0x7F000001);
                     if (fd < 0 || connect(fd, (struct sockaddr *)&sa, sizeof sa) < 0) { if (fd >= 0) close(fd); break; }
-                    (void)!write(fd, "VTT1\n", 5);
+                    char hello[24];
+                    int  hl = o->bench_names ? snprintf(hello, sizeof hello, "VTT1 P%d\n", i + 1)
+                                             : snprintf(hello, sizeof hello, "VTT1\n");
+                    (void)!write(fd, hello, (size_t)hl);
                     int fl = fcntl(fd, F_GETFL, 0);
                     fcntl(fd, F_SETFL, fl | O_NONBLOCK);
                     cfd[ncf++] = fd;
