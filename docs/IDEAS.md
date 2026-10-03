@@ -4,6 +4,15 @@ Things worth building that were consciously not built, with the reason, so
 the reason can be re-examined rather than the idea re-invented. Add to the
 top; move an entry to the README when it ships.
 
+## Picture handouts
+
+*Parked 2026-10-03, after a full plan* (docs/PICTURES.md, roadmap item 20).
+`:handout crypt-door.jpg` would put an image on the phones: fetched by each phone over
+HTTP from vtt's own server, streamed from one copy, 16 connection slots so downloads fit
+beside 8 watchers, JPEG/PNG/GIF/WebP to 8 MB, a stand-in card in the terminal mirror. Why
+not now: in person, the GM would rather hand over a physical prop. It becomes worth it for
+remote play, or for showing art on a TV that runs the page in its browser.
+
 ## Stacked layers, and height
 
 *Wanted, not yet planned.* Links (2026-09-27) and the floor view (2026-09-27, FLOORS.md)
