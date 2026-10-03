@@ -34,9 +34,8 @@ joins, which later per-player features (item 21's camera, a ping that says who) 
 - `app_cmd.c` or a small `app_whisper.c`: `:whisper`, `:players`; keeping the offer list in
   step with the player creatures (after each key, as the fog sync is, compared cheaply).
 - `web/index.html`: the *Who are you?* sheet, local storage, the name button, the whisper
-  card and its reopen button. The page is 10.1 KB of a 12 KB budget, and pictures (item 20)
-  take some of it first; if the two do not fit, I will come back with what to trim rather
-  than raise the budget quietly.
+  card and its reopen button. The page is 10.1 KB of a 12 KB budget; if this does not fit, I
+  will come back with what to trim rather than raise the budget quietly.
 - Tests (`test_net.c`): names over real sockets, `N` edge cases (too long, empty, bad UTF-8,
   control bytes), a whisper reaching only its phones and never a watcher or another phone,
   kept for a sleeping phone and delivered on its return, two phones one name, the longest
