@@ -195,6 +195,9 @@ void net_set_offer(Net *n, const char *text, size_t len, uint64_t now_ms);
  * one a name; the oldest name gives way when all are taken). */
 int  net_whisper(Net *n, const char *name, const char *text, size_t len, int keep, uint64_t now_ms);
 
+/* Drops every whisper waiting: they were the encounter's, as a handout is. */
+void net_clear_kept(Net *n);
+
 /* Has a phone called `name` been here, now or before (case aside)? */
 int  net_name_seen(const Net *n, const char *name);
 

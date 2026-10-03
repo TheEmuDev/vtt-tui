@@ -58,7 +58,11 @@ void app_free(App *a)
 
 void app_set_status(App *a, const char *msg)
 {
-    str_lcpy(a->status, msg, sizeof a->status);
+    /* A message too long for the line is cut on a character's edge. */
+    size_t n = strlen(msg);
+    if (n >= sizeof a->status) n = utf8_cut(msg, sizeof a->status - 1);
+    memcpy(a->status, msg, n);
+    a->status[n] = '\0';
     a->nstatus_span = 0;
     /* A message made while anything was hidden is the GM's, even when the
      * key that made it took the last hidden creature away: "removed
@@ -173,6 +177,7 @@ void app_travel_to(App *a, Map *m)
     if (a->handout_up) net_set_handout(&a->net, "", 0, a->now_ms);
     a->handout_up = 0;
     a->handout_title[0] = a->handout_body[0] = '\0';
+    net_clear_kept(&a->net);             /* whispers waiting were the encounter's too */
     drop_autosave(a);
     map_free(a->map);
     a->map = m;
@@ -1144,6 +1149,7 @@ void app_close_map(App *a)
     if (a->handout_up) net_set_handout(&a->net, "", 0, a->now_ms);
     a->handout_up = 0;
     a->handout_title[0] = a->handout_body[0] = '\0';
+    net_clear_kept(&a->net);             /* whispers waiting were the encounter's too */
     drop_autosave(a);
     close_server_with_map(a);
     slog_close(&a->slog);

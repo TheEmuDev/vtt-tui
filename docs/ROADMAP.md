@@ -108,12 +108,12 @@ says what happened. The Fear pool stays set aside (IDEAS.md).
     and the grid as SVG (plain text, no dependencies), creatures optional; GM-only things
     (secret doors, notes, fog) left out unless asked. To print a battle map, or post the
     dungeon after the session.
-23. **Whisper to one player.** `:whisper Aria You notice the floor is warm here`: a handout
+23. **Whisper to one player.** *Built 2026-10-03 (docs/WHISPER.md).* `:whisper Aria You notice the floor is warm here`: a handout
     to one phone only. Each phone picks a name when it joins (a player creature, or free
     text), which later per-player features can use too; the join step is the real work.
 
 Suggested order: 16 and 17 (built), then 6 and 9 together (built) (the card and what
-it holds), then 10 (built), 23, 21, 12, 18, 8, 19, 22, 7, 11; 13, 14 and 15 when play asks for
+it holds), then 10 (built), 23 (built), 21, 12, 18, 8, 19, 22, 7, 11; 13, 14 and 15 when play asks for
 them. 20 is parked (docs/IDEAS.md).
 
 **Housekeeping** (2026-09-27): the `:` command chain became a table, and `tests/run.c` was

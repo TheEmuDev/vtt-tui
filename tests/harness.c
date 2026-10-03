@@ -340,6 +340,21 @@ int net_connect(uint16_t port)
     return fd;
 }
 
+/* A loopback browser: connected and its WebSocket upgrade sent, with the
+ * join code and `query` ("&n=Aria", or "") after it. Its fd, or -1. */
+int ws_connect(const Net *n, const char *query)
+{
+    int fd = net_connect(n->port);
+    if (fd < 0) return -1;
+    char up[400];
+    int  len = snprintf(up, sizeof up,
+                        "GET /ws?k=%s%s HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+                        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n",
+                        n->code, query);
+    if (write(fd, up, (size_t)len) != len) { close(fd); return -1; }
+    return fd;
+}
+
 /* One turn of the server's event loop, as main would run it. */
 void net_pump(Net *n, uint64_t now_ms)
 {

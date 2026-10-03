@@ -57,18 +57,6 @@ static void settle(Net *n, Phone *ps, int np)
     }
 }
 
-/* A browser through /ws with the query given, its frames unwrapped into c. */
-static int browser_open(Net *n, const char *query)
-{
-    int fd = net_connect(n->port);
-    char up[400];
-    snprintf(up, sizeof up,
-             "GET /ws?k=%s%s HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
-             "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n", n->code, query);
-    CHECK_EQ((int)write(fd, up, strlen(up)), (int)strlen(up));
-    return fd;
-}
-
 static void browser_read(Net *n, int fd, WireDec *d)
 {
     static uint8_t buf[65536];
@@ -203,8 +191,10 @@ void test_whisper_net(void)
     memset(&bc, 0, sizeof bc);
     WireDec bd;
     wire_dec_init(&bd, &WC_SINK, &bc);
-    int b = browser_open(&n, "&n=Crypt+Ghoul");
+    CHECK_EQ(net_whisper(&n, "Crypt Ghoul", "Kept for you", 12, 1, 0), 0);
+    int b = ws_connect(&n, "&n=Crypt+Ghoul");
     browser_read(&n, b, &bd);
+    CHECK(bc.whispers == 1 && !strcmp(bc.whisper, "Kept for you"));   /* a browser gets the kept one too */
     CHECK(bc.fulls >= 1);
     CHECK_EQ(bc.namelists, 1);
     CHECK(!strcmp(bc.names, "Aria\nBrin"));
@@ -217,14 +207,14 @@ void test_whisper_net(void)
     CHECK(!strcmp(bc.names, "Aria"));
     CHECK_EQ(net_whisper(&n, "crypt ghoul", "Psst", 4, 1, 0), 1);
     browser_read(&n, b, &bd);
-    CHECK(bc.whispers == 1 && !strcmp(bc.whisper, "Psst"));
+    CHECK(bc.whispers == 2 && !strcmp(bc.whisper, "Psst"));
 
     CASE("a bad name in the query is no name, not a refusal");
     WireCatch bc2;
     memset(&bc2, 0, sizeof bc2);
     WireDec bd2;
     wire_dec_init(&bd2, &WC_SINK, &bc2);
-    int b2 = browser_open(&n, "&n=%01x");
+    int b2 = ws_connect(&n, "&n=%01x");
     browser_read(&n, b2, &bd2);
     CHECK(bc2.fulls >= 1);
     net_who(&n, who, sizeof who);
@@ -268,12 +258,19 @@ void test_whisper_app(void)
     press(&a, ":serve\r");
     CHECK(net_active(&a.net));
 
-    CASE("the names offered are the players' creatures, once each, none hidden, no enemies");
+    CASE("the names offered are every player creature, once each, hidden ones too, no enemies");
     app_tick(&a, 0);
-    CHECK(a.net.offer_len == strlen("Aria\nCrypt") && !memcmp(a.net.offer, "Aria\nCrypt", a.net.offer_len));
+    CHECK(a.net.offer_len == strlen("Aria\nCrypt\nSpy") && !memcmp(a.net.offer, "Aria\nCrypt\nSpy", a.net.offer_len));
     press(&a, ":B2\rc\025Bryn\r");                     /* Aria relabeled */
     app_tick(&a, 0);
-    CHECK(a.net.offer_len == strlen("Bryn\nCrypt\naria") && !memcmp(a.net.offer, "Bryn\nCrypt\naria", a.net.offer_len));
+    CHECK(a.net.offer_len == strlen("Bryn\nCrypt\naria\nSpy") && !memcmp(a.net.offer, "Bryn\nCrypt\naria\nSpy", a.net.offer_len));
+
+    CASE("a player creature in the dark is still offered: the players are all at the table");
+    size_t lit = a.net.offer_len;
+    press(&a, ":fog all manual\r");
+    app_tick(&a, 0);
+    CHECK_EQ((int)a.net.offer_len, (int)lit);
+    press(&a, ":fog off\r");
 
     /* With a creature hidden no status line reaches the players at all,
      * which would hide a whisper said on the wrong side. */
@@ -320,7 +317,30 @@ void test_whisper_app(void)
     press(&a, ":players x\r");
     CHECK(strstr(a.status, ":players lists") != NULL);
 
+    CASE("with the server down a seen name's whisper is still kept, and :players says so");
     close(p2.fd);
+    press(&a, ":serve off\r");
+    press(&a, ":whisper Crypt Ghoul Even later\r");
+    CHECK(strstr(a.status, "Crypt Ghoul's phone is not here") != NULL);
+    press(&a, ":players\r");
+    CHECK(strstr(a.status, "no one can watch") && strstr(a.status, "a whisper waits for Crypt Ghoul"));
+
+    CASE("closing the map drops the whispers waiting, as it takes a handout down");
+    CHECK(a.net.kept[0].len > 0);
+    press(&a, ":q!\r");                                     /* the map put down */
+    CHECK(a.map == NULL);
+    CHECK_EQ((int)a.net.kept[0].len, 0);
+    CHECK(net_name_seen(&a.net, "Crypt Ghoul"));                 /* the people are still the people */
+
+    CASE("a status message too long for the line is cut on a character's edge");
+    {
+        char longmsg[200];
+        memset(longmsg, 'x', 158);
+        strcpy(longmsg + 158, "\xc3\xa9tail");
+        app_set_status(&a, longmsg);
+        CHECK_EQ((int)strlen(a.status), 158);
+        CHECK(utf8_valid(a.status, strlen(a.status)));
+    }
     app_free(&a);
     rnd_free(&r);
     sandbox_leave(&sb);

@@ -26,29 +26,31 @@ static void wc_run(void *ctx, int x, int y, int n, uint8_t fg, uint8_t bg, uint8
     }
 }
 
+/* The three text records, each counted and its last text kept. */
+static void wc_text(char *dst, int *count, const char *text, size_t n)
+{
+    (*count)++;
+    memcpy(dst, text, n);
+    dst[n] = '\0';
+}
+
 static void wc_handout(void *ctx, const char *text, size_t n)
 {
     WireCatch *c = ctx;
-    c->handouts++;
-    memcpy(c->handout, text, n);
-    c->handout[n] = '\0';
+    wc_text(c->handout, &c->handouts, text, n);
     c->handout_n = n;
 }
 
 static void wc_whisper(void *ctx, const char *text, size_t n)
 {
     WireCatch *c = ctx;
-    c->whispers++;
-    memcpy(c->whisper, text, n);
-    c->whisper[n] = '\0';
+    wc_text(c->whisper, &c->whispers, text, n);
 }
 
 static void wc_names(void *ctx, const char *text, size_t n)
 {
     WireCatch *c = ctx;
-    c->namelists++;
-    memcpy(c->names, text, n);
-    c->names[n] = '\0';
+    wc_text(c->names, &c->namelists, text, n);
 }
 
 const WireSink WC_SINK = { wc_full, wc_pal, wc_run, wc_end, wc_keepalive, wc_handout, wc_whisper, wc_names };
@@ -276,13 +278,8 @@ static int netmsg_raw(Net *n, uint64_t now)
 /* A browser past its upgrade, whatever it was sent read and thrown away. */
 static int netmsg_ws(Net *n, uint64_t now)
 {
-    int fd = net_connect(n->port);
+    int fd = ws_connect(n, "");
     if (fd < 0) return -1;
-    char up[300];
-    snprintf(up, sizeof up,
-             "GET /ws?k=%s HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
-             "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n", n->code);
-    if (write(fd, up, strlen(up)) != (ssize_t)strlen(up)) { close(fd); return -1; }
     char buf[65536];
     for (int i = 0; i < 20; i++) {
         net_pump(n, now);
@@ -799,12 +796,8 @@ void test_net_server(void)
     close(b);
 
     CASE("a WebSocket upgrade is answered with the right key and a full frame in binary messages");
-    int s = net_connect(n.port);
-    char up[300];
-    snprintf(up, sizeof up,
-             "GET /ws?k=%s HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
-             "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n", n.code);
-    CHECK_EQ((int)write(s, up, strlen(up)), (int)strlen(up));
+    int s = ws_connect(&n, "");
+    CHECK(s >= 0);
     memset(resp, 0, sizeof resp); rl = 0;
     for (int i = 0; i < 20 && !strstr(resp, "\r\n\r\n"); i++) {
         net_pump(&n, now);

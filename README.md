@@ -995,8 +995,8 @@ get it.
 | `:whisper NAME TEXT` | show TEXT on NAME's phone only, as a card marked *to you* |
 | `:players` | list the phones watching, by name, and any whisper waiting for one |
 
-When a phone first connects it asks *Who are you?*: it offers the player creatures on the map
-(by label), a box for any other name, and *just watching*. The phone remembers the answer and
+When a phone first connects it asks *Who are you?*: it offers every player creature on the map
+(by label), a box for any other name (up to 24 bytes), and *just watching*. The phone remembers the answer and
 sends it every time it reconnects; the name button in the top-left corner changes it. Your
 status line says when a named phone arrives (`Aria's phone is here`).
 
@@ -1006,7 +1006,8 @@ here but is not connected now -- a locked phone drops off within a minute -- the
 waits and arrives when it reconnects; the last one for each name is kept. A name no phone has
 used is refused. The player closes the card with `×` and reopens the last whisper with the
 `whisper` button. Whispers never appear in the shared view, in the terminal mirror or on
-another phone; the session log keeps them on your side.
+another phone; the session log keeps them on your side. Whispers still waiting are dropped
+when the map closes.
 
 Anyone with the join code can say they are Aria, and two phones with the same name both get
 its whispers. The join code is the only gate: this is for a table of friends.

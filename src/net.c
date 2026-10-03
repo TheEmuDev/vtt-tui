@@ -425,9 +425,32 @@ int net_name_seen(const Net *n, const char *name)
     return 0;
 }
 
+/* A client that gets the stream: a browser, or a watcher past its hello
+ * (and so its join code). One still shaking hands gets what it needs with
+ * its FULL. */
 static int stream_client(const NetClient *c)
 {
     return c->kind == CL_WS || (c->kind == CL_RAW && c->greeted);
+}
+
+/* A text record -- 'H', 'W', 'N' -- to the stream clients that want it:
+ * browsers only when `browsers`, only those called `name` when it is not
+ * NULL. Returns how many it reached; one dropped in the sending is not
+ * counted. */
+static int send_text(Net *n, char tag, const char *text, size_t len, const char *name, int browsers,
+                     uint64_t now_ms)
+{
+    uint8_t rec[3 + WIRE_TEXT_MAX];
+    size_t  rl = wire_text(rec, tag, text, len);
+    int     got = 0;
+    for (int i = 0; i < n->ncl; i++) {
+        const NetClient *c = &n->cl[i];
+        if (!stream_client(c) || (browsers && c->kind != CL_WS) || (name && strcasecmp(c->name, name))) continue;
+        if (client_send_frame(n, i, rec, rl) < 0) { i--; continue; }
+        if (client_flush(n, i, now_ms) < 0) { i--; continue; }
+        got++;
+    }
+    return got;
 }
 
 /* A phone has said who it is, and has its FULL: remembered as seen, told
@@ -443,16 +466,22 @@ static void client_named(Net *n, int i, uint64_t now_ms)
         str_lcpy(n->seen[n->nseen++], name, NET_NAME_MAX);
     }
     if (n->narrived < NET_MAX_CLIENTS) str_lcpy(n->arrived[n->narrived++], name, NET_NAME_MAX);
-    for (int k = 0; k < NET_KEPT_MAX; k++) {
+    for (int k = 0; k < kept_count(n); k++) {
         NetKept *kp = &n->kept[k];
-        if (!kp->len || strcasecmp(kp->name, name)) continue;
+        if (strcasecmp(kp->name, name)) continue;
+        /* Kept until it is sent: a phone dropped in the sending leaves it
+         * waiting for the next. */
         uint8_t rec[3 + WIRE_TEXT_MAX];
         size_t  rl = wire_text(rec, 'W', kp->text, kp->len);
+        if (client_send_frame(n, i, rec, rl) < 0 || client_flush(n, i, now_ms) < 0) return;
         kept_remove(n, k);
-        if (client_send_frame(n, i, rec, rl) < 0) return;
-        client_flush(n, i, now_ms);
         return;
     }
+}
+
+void net_clear_kept(Net *n)
+{
+    memset(n->kept, 0, sizeof n->kept);
 }
 
 int net_take_arrival(Net *n, char *out, size_t sz)
@@ -472,31 +501,14 @@ void net_set_offer(Net *n, const char *text, size_t len, uint64_t now_ms)
     n->offer_len = len;
     if (!net_active(n)) return;
     PROF_ZONE("net.names");
-    uint8_t rec[3 + WIRE_TEXT_MAX];
-    size_t  rl = wire_text(rec, 'N', text, len);
-    for (int i = 0; i < n->ncl; i++) {
-        if (n->cl[i].kind != CL_WS) continue;
-        if (client_send_frame(n, i, rec, rl) < 0) { i--; continue; }
-        if (client_flush(n, i, now_ms) < 0) i--;
-    }
+    send_text(n, 'N', text, len, NULL, 1, now_ms);
 }
 
 int net_whisper(Net *n, const char *name, const char *text, size_t len, int keep, uint64_t now_ms)
 {
     PROF_ZONE("net.whisper");
     if (len > WIRE_TEXT_MAX) len = WIRE_TEXT_MAX;
-    int got = 0;
-    if (net_active(n)) {
-        uint8_t rec[3 + WIRE_TEXT_MAX];
-        size_t  rl = wire_text(rec, 'W', text, len);
-        for (int i = 0; i < n->ncl; i++) {
-            NetClient *c = &n->cl[i];
-            if (!stream_client(c) || strcasecmp(c->name, name)) continue;
-            got++;
-            if (client_send_frame(n, i, rec, rl) < 0) { i--; continue; }
-            if (client_flush(n, i, now_ms) < 0) i--;
-        }
-    }
+    int got = net_active(n) ? send_text(n, 'W', text, len, name, 0, now_ms) : 0;
     if (got || !keep) return got;
 
     /* Kept, the last one for a name, newest at the end: a full table gives
@@ -913,15 +925,7 @@ void net_set_handout(Net *n, const char *text, size_t len, uint64_t now_ms)
     n->handout_len = len;
     if (!net_active(n)) return;
     PROF_ZONE("handout.send");
-    uint8_t rec[3 + WIRE_HANDOUT_MAX];
-    size_t  rl = wire_handout(rec, text, len);
-    /* Only stream clients: one still shaking hands gets it with its FULL. */
-    for (int i = 0; i < n->ncl; i++) {
-        NetClient *c = &n->cl[i];
-        if (c->kind != CL_WS && !(c->kind == CL_RAW && c->greeted)) continue;
-        if (client_send_frame(n, i, rec, rl) < 0) { i--; continue; }
-        if (client_flush(n, i, now_ms) < 0) i--;
-    }
+    send_text(n, 'H', text, len, NULL, 0, now_ms);
 }
 
 void net_frame_begin(Net *n)
@@ -951,7 +955,7 @@ void net_frame_end(Net *n, uint64_t now_ms)
     for (int i = 0; i < n->ncl; i++) {
         NetClient *c = &n->cl[i];
         /* A watcher only once its hello -- and the join code -- is in. */
-        if (c->kind != CL_WS && !(c->kind == CL_RAW && c->greeted)) continue;
+        if (!stream_client(c)) continue;
         if (client_send_synced(n, i, n->enc.buf, n->enc.len) < 0) { i--; continue; }
         if (client_flush(n, i, now_ms) < 0) i--;
     }

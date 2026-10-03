@@ -93,7 +93,7 @@ own frame time.
 | server, 2 µs per frame per client | 3.7 µs: the encode is shared, the rest is one `write` syscall per client. Missed by the syscall. Since the players' frame: plus 7 µs once per frame for the copy and second diff, or a second draw of about 27 µs when the views differ -- `docs/PERFORMANCE.md` has the rows. |
 | zero bytes when nothing changed | zero |
 | server memory fixed at `:serve` | 64 KB send and 4 KB request buffer per client, one 128 KB frame buffer, all at start |
-| the page under 12 KB, one request | 11.4 KB with whispers (2026-10-03), nothing fetched |
+| the page under 12 KB, one request | 11.5 KB with whispers (2026-10-03), nothing fetched |
 | client memory allocated once | a cell buffer, the atlas, and one WebAssembly memory holding the framebuffer and the tile arena, reallocated only on resize |
 | keystroke frame 0.5 ms on a phone | 0.2-0.5 ms in desktop Chrome for a cursor move; phones to be measured |
 | full 200×50 frame in 5 ms | 0.21 µs a cell in the copy loop puts it near 2 ms plus the pixel push; a 1220-cell scroll measured 0.7-2 ms |

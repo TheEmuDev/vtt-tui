@@ -11,16 +11,16 @@ joins, which later per-player features (item 21's camera, a ping that says who) 
 
 | question | answer |
 |---|---|
-| how a phone gets a name | on joining, the page asks *Who are you?* with a button for each player creature on the map (their labels, sent by the server; hidden ones left out), a box for anything else, and *Just watching* (no name, no whispers). The page sends `N Aria` up the WebSocket, as it sends `P col row` for a tap |
+| how a phone gets a name | on joining, the page asks *Who are you?* with a button for each player creature on the map (their labels, sent by the server; hidden ones and ones in the dark too -- every player is at the table), a box for anything else, and *Just watching* (no name, no whispers). The page sends `N Aria` up the WebSocket, as it sends `P col row` for a tap |
 | asking again | the phone remembers its answer (the browser's local storage) and sends it by itself on every reconnect, so a phone that slept or a server restarted asks nobody twice. A small `Aria` button at the top of the page changes it |
 | who may be who | anyone with the join code may say they are Aria -- this is a living room, and the code is the door. Two phones may both be Aria; both get Aria's whispers. The README says so plainly |
-| a name | 1 to 24 bytes of UTF-8 text, control characters refused, case kept for showing, matched case aside |
+| a name | 1 to 24 bytes of UTF-8 text (the page trims what is typed to fit), control characters refused, case kept for showing, matched case aside |
 | the terminal mirror | stays the table's: a watcher has no name and never gets a whisper, so a TV running `--watch` (or `:mirror`) shows nothing private |
 | `:whisper NAME TEXT` | the name is the longest connected name the line starts with (so `Crypt Ghoul` works), then the text. GM-only messages: `whispered to Aria (1 phone)` |
 | a phone asleep | phones lock their screens, and a locked phone drops off within a minute. A whisper to a name with no phone connected is **kept** -- the last one for each name, until delivered -- and the GM is told `Aria's phone is not here - it gets this when it comes back`. A name never seen is refused: `no phone is Aria - :players lists who is here` |
 | on the phone | a card like the handout's, marked *to you*, over the map and over any handout; the player closes it; a `whisper` button reopens the last one. A new whisper opens on top |
-| what the GM sees | `:players`: the phones, by name (`Aria, Brin, 2 watching, the mirror`); a phone naming itself says so in the GM's status line (`Aria's phone is here`). The session log keeps every whisper, GM-side |
-| privacy | the whisper is a record sent to the named phones' sockets only -- never in the shared frame, never to a watcher, never to another phone. `app_view_differs` is untouched: nothing is drawn. The list of names the page offers is the player creatures' labels, already on every screen |
+| what the GM sees | `:players`: the phones, by name (`Aria, Brin (2), 1 unnamed, 1 terminal`); a phone naming itself says so in the GM's status line (`Aria's phone is here`), not in the log. The session log keeps every whisper, GM-side |
+| privacy | the whisper is a record sent to the named phones' sockets only -- never in the shared frame, never to a watcher, never to another phone. `app_view_differs` is untouched: nothing is drawn. The list of names the page offers is every player creature's label: the party's own names, which every player at the table knows |
 | the server's part | per client a name; a `'W'` record (`u16 n`, UTF-8) sent to the clients of a name; an `'N'` record to browsers listing the names to offer, sent on join and when the player creatures change; the kept whispers (one per name, 16 names, 2 KB each) |
 | not here | a prepared or picture handout to one player (`:handout NAME to Aria` is the natural next step; pictures are parked, docs/PICTURES.md), a phone's reply, the control channel, per-player fog |
 
@@ -76,3 +76,33 @@ joins, which later per-player features (item 21's camera, a ping that says who) 
   with a space reached the server, the phone came back as itself after the server restarted,
   and the whisper card showed, closed and reopened. The sheet's text box overflowed its card
   at first; fixed (`box-sizing`).
+
+## As reviewed
+
+The review of f952f74 found, and these fixed:
+- the names offered skipped hidden player creatures but not ones in the dark. The fix first
+  made it ask `fog_token_unseen`; the user corrected that -- every player is at the table,
+  so every player creature is offered, hidden or in the dark (2026-10-03). It is rebuilt
+  only when the map changes (`App.offer_map`/`offer_gen`), so its cost per tick is a compare;
+- a phone dropped while a whisper was being sent was counted as reached, and a kept whisper
+  was removed before it was sent: `send_text` counts only what went, and a kept one goes
+  only once sent. `send_text` is now the one loop for every text record ('H', 'W', 'N'),
+  and `stream_client` the one test of who gets the stream;
+- a phone reconnecting on a flaky network put "Aria's phone is here" in the session log
+  every time: it is said on the status line only;
+- whispers waiting outlived the map: they are the encounter's, like the handout, and close
+  with it (`net_clear_kept` in `app_close_map` and `app_travel_to`); the names seen stay;
+- the page: changing the name while the socket was still connecting let the old socket's
+  error close the new one (each socket's handlers now name that socket); the name box
+  counted characters where the server counts bytes (trimmed to 24 bytes before sending);
+  the sheet opened again on every names record (once a page load now);
+- the session log kept only the first 100 bytes of a whisper (it keeps all of it now), and
+  a status message too long for the line could be cut inside a character -- any status
+  message, not only these: `app_set_status` cuts on a character's edge;
+- `:players` with the server down hid the whispers waiting;
+- the WebSocket upgrade request was written three times in the tests (`ws_connect` in
+  harness.c) and the three text-record sinks were one shape (`wc_text`).
+
+Left: the unframing loops in test_net.c and test_whisper.c read two different shapes of
+stream (with and without the 101's headers) and stay apart. A player creature's label of
+25-31 bytes is never offered (a phone may still type a shorter name). The page is 11.5 KB.

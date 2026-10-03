@@ -234,22 +234,24 @@ E('hx').onclick=()=>{hd.hidden=true;hb.hidden=false};
 hb.onclick=()=>{hd.hidden=false;hb.hidden=true};
 
 /* ---- who this phone is (docs/WHISPER.md): asked once, remembered, and
- * sent as n= on every connect. "" is just watching; null is not asked yet. */
-let me=null;try{me=localStorage.getItem('vtt-name')}catch(e){}
+ * sent as n= on every connect. "" is just watching; null is not asked yet.
+ * The sheet opens by itself once a page load; who? opens it again. */
+let me=null,asked=0;try{me=localStorage.getItem('vtt-name')}catch(e){}
 const nb=E('nb'),q=E('q'),ql=E('ql'),qi=E('qi'),wd=E('w'),wb=E('wb');
 nb.textContent=me||'who?';
 function setMe(v){
   me=v;try{localStorage.setItem('vtt-name',v)}catch(e){}
   q.hidden=true;nb.textContent=v||'who?';
-  if(ws){ws.onclose=null;ws.close();clearTimeout(retry);connect()}
+  if(ws){ws.onclose=ws.onerror=null;ws.close();clearTimeout(retry);connect()}
 }
 function names(s){
   ql.textContent='';
   for(const v of s?s.split('\n'):[]){const b=document.createElement('button');b.textContent=v;b.onclick=()=>setMe(v);ql.appendChild(b)}
-  if(me===null)q.hidden=false;
+  if(me===null&&!asked){asked=1;q.hidden=false}
 }
 nb.onclick=()=>{q.hidden=!q.hidden};
-E('qo').onclick=()=>{const v=qi.value.trim();if(v)setMe(v)};
+/* The server takes 24 bytes of UTF-8; the box counts characters. */
+E('qo').onclick=()=>{const c=[...qi.value.trim()];while(new TextEncoder().encode(c.join('')).length>24)c.pop();const v=c.join('').trim();if(v)setMe(v)};
 E('qw').onclick=()=>setMe('');
 
 /* ---- a whisper: for this phone alone; closed by the player, the button
@@ -264,12 +266,14 @@ function status(m){
 }
 function connect(){
   const k=new URLSearchParams(location.search).get('k')||'';
-  ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws?k='+k+(me?'&n='+encodeURIComponent(me):''));
-  ws.binaryType='arraybuffer';
-  ws.onopen=()=>{status('connected');if(navigator.wakeLock)navigator.wakeLock.request('screen').catch(()=>{})};
-  ws.onmessage=e=>feed(new Uint8Array(e.data));
-  ws.onclose=()=>{status('disconnected · retrying');retry=setTimeout(connect,2000)};
-  ws.onerror=()=>ws.close();
+  /* Each socket's handlers name that socket, not the latest: an error
+   * from one being replaced must not close its successor. */
+  const s=ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws?k='+k+(me?'&n='+encodeURIComponent(me):''));
+  s.binaryType='arraybuffer';
+  s.onopen=()=>{status('connected');if(navigator.wakeLock)navigator.wakeLock.request('screen').catch(()=>{})};
+  s.onmessage=e=>feed(new Uint8Array(e.data));
+  s.onclose=()=>{status('disconnected · retrying');retry=setTimeout(connect,2000)};
+  s.onerror=()=>s.close();
 }
 connect();
 

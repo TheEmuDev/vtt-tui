@@ -135,6 +135,7 @@ char *tool_text(const Map *m, int x0, int y0, int x1, int y1, size_t *len);
 int json_valid(const char *s);
 char *describe_text(const Map *m, int json, size_t *len);
 int net_connect(uint16_t port);
+int ws_connect(const Net *n, const char *query);
 void net_pump(Net *n, uint64_t now_ms);
 void front_text(const Renderer *r, ByteBuf *out);
 void write_sight_map(const char *dir, const char *name, int reveal, int memory);

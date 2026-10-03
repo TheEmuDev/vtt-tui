@@ -227,6 +227,10 @@ typedef struct {
      * says otherwise; :card's view is scrolled to card_top, and names whose
      * card it shows (card_token), the last draw measuring card_lines. */
     int      card_box_off;
+    /* The map and generation the phones' names were last offered from
+     * (app_whisper.c): rebuilt only when one changes. */
+    const Map *offer_map;
+    unsigned   offer_gen;
     int      card_top;
     int      card_token;
     int      card_lines;

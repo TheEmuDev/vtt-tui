@@ -11,24 +11,29 @@
 #include "app_priv.h"
 #include "prof.h"
 
-/* The names a phone is offered: every player creature's label the players
- * can see, once each, in the map's order. Kept in step after every tick;
- * the server sends it only when it changes. */
+/* The names a phone is offered: every player creature's label, once each,
+ * in the map's order -- hidden or in the dark too, since the players are
+ * all at the table whatever their creatures can see. Rebuilt only when the
+ * map has changed or another map is up; the server sends it only when the
+ * text differs. */
 static void sync_offer(App *a)
 {
+    const Map *m = a->map;
+    if (m == a->offer_map && m && m->gen == a->offer_gen) return;
+    a->offer_map = m;
+    a->offer_gen = m ? m->gen : 0;
     PROF_ZONE("names.sync");
     char   text[WIRE_TEXT_MAX];
     size_t len = 0;
-    const Map *m = a->map;
     for (int i = 0; m && i < m->tokens.n; i++) {
         const Token *t = &m->tokens.v[i];
-        if (t->kind != TOKEN_PLAYER || !t->label[0] || t->hidden) continue;
+        if (t->kind != TOKEN_PLAYER || !t->label[0]) continue;
         char name[NET_NAME_MAX];
         if (!net_name_clean(t->label, strlen(t->label), 0, name)) continue;
         int dup = 0;
         for (int j = 0; j < i && !dup; j++) {
             const Token *o = &m->tokens.v[j];
-            dup = o->kind == TOKEN_PLAYER && !o->hidden && !strcasecmp(o->label, t->label);
+            dup = o->kind == TOKEN_PLAYER && !strcasecmp(o->label, t->label);
         }
         size_t nl = strlen(name);
         if (dup || len + nl + 1 > sizeof text) continue;
@@ -43,10 +48,11 @@ void app_whisper_tick(App *a)
 {
     if (!net_active(&a->net)) return;
     sync_offer(a);
+    /* Said, not logged: a phone on a flaky network comes back often. */
     char name[NET_NAME_MAX], msg[96];
     while (net_take_arrival(&a->net, name, sizeof name)) {
         snprintf(msg, sizeof msg, "%s's phone is here", name);
-        app_note_gm(a, msg);
+        app_set_status_gm(a, msg);
     }
 }
 
@@ -78,7 +84,7 @@ static int whisper_name(const Net *n, const char *line, char *out, const char **
 void app_whisper_command(App *a, const char *rest)
 {
     Net *n = &a->net;
-    char name[NET_NAME_MAX], msg[200];
+    char name[NET_NAME_MAX], msg[WIRE_TEXT_MAX + 128];
     const char *text;
     if (!*rest) { app_set_status_gm(a, ":whisper NAME TEXT - to one player's phone; :players lists who is here"); return; }
     if (!whisper_name(n, rest, name, &text)) {
@@ -99,8 +105,9 @@ void app_whisper_command(App *a, const char *rest)
     size_t len = strlen(text);
     if (len > WIRE_TEXT_MAX) len = WIRE_TEXT_MAX;
     int got = net_whisper(n, name, text, len, 1, a->now_ms);
-    if (got) snprintf(msg, sizeof msg, "whispered to %s (%d phone%s): %.100s", name, got, got == 1 ? "" : "s", text);
-    else     snprintf(msg, sizeof msg, "%s's phone is not here - it gets this when it comes back: %.80s", name, text);
+    /* The whole text, for the session log; the status line shows what fits. */
+    if (got) snprintf(msg, sizeof msg, "whispered to %s (%d phone%s): %s", name, got, got == 1 ? "" : "s", text);
+    else     snprintf(msg, sizeof msg, "%s's phone is not here - it gets this when it comes back: %s", name, text);
     app_note_gm(a, msg);
 }
 
@@ -108,10 +115,10 @@ void app_whisper_command(App *a, const char *rest)
 void app_players_command(App *a)
 {
     Net *n = &a->net;
-    if (!net_active(n)) { app_set_status_gm(a, "no one can watch - :serve lets the phones join"); return; }
     char who[160], msg[240];
     net_who(n, who, sizeof who);
-    int off = snprintf(msg, sizeof msg, "%s", who[0] ? who : "no one is watching");
+    int off = snprintf(msg, sizeof msg, "%s", !net_active(n) ? "no one can watch - :serve lets the phones join"
+                                             : who[0] ? who : "no one is watching");
     for (int k = 0, first = 1; k < NET_KEPT_MAX && n->kept[k].len && off < (int)sizeof msg; k++, first = 0)
         off += snprintf(msg + off, sizeof msg - (size_t)off, "%s%s", first ? " - a whisper waits for " : ", ",
                         n->kept[k].name);

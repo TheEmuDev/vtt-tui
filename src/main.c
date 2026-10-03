@@ -392,6 +392,15 @@ static int run_headless(const Options *o)
                     app_tick(&a, bench_clock_ms);
                     bench_clock_ms += 1000;
                 }
+                /* Named phones: the app's tick runs too, so what it does for
+                 * them -- the names offered, the arrivals -- is measured. */
+                if (ncf && o->bench_names && !o->bench_pings) {
+                    struct pollfd fds[1 + NET_MAX_CLIENTS];
+                    int nf = net_pollfds(&a.net, fds, 1 + NET_MAX_CLIENTS);
+                    poll(fds, (nfds_t)nf, 0);
+                    net_service(&a.net, fds, nf, bench_clock_ms);
+                    app_tick(&a, bench_clock_ms);
+                }
                 prof_frame_begin();
                 app_frame(&a, NULL, 0);
                 prof_frame_end();
