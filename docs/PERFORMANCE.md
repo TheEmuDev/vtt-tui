@@ -726,9 +726,10 @@ and the plan they led to).
 **The page is not slow to decode.** 9 µs for a cursor step, 57 µs for a frame that redraws
 nearly everything. The copy loop and the push to the canvas are where a frame goes.
 
-**A cursor step pushes more than the whole canvas.** Five dirty rows -- the column letters,
-the three rows round the cursor, the status line -- span the screen top to bottom, and the
-page pushes their bounding box: 737,280 pixels to change about five rows' worth.
+**A cursor step pushes about five rows.** Its dirty rows -- the column letters, the three
+round the cursor, the status line -- span the screen top to bottom; until 2026-10-04 the
+page pushed their bounding box, 737,280 pixels, and now pushes each band of consecutive
+rows on its own, about 21,000 (docs/PAGESPEED.md).
 
 **Two lessons about measuring it.** Chrome's clock without cross-origin isolation moves in
 0.1 ms steps, so only totals over hundreds of frames mean anything there; and a hidden
@@ -768,8 +769,8 @@ a plain function with the stubs as parameters.
 | `--bench-clients N` | attaches N loopback watchers to a bench run, so a row can carry the remote view's cost |
 | `--bench-names` | those watchers say they are phones P1, P2...: rows for whispers and the names offered |
 | `--bench-record FILE` | saves the stream the first watcher is sent, for `tools/pagebench.js` to replay |
-| `tools/pagebench.sh` | the phone page's table above: records each scenario and replays it through the page in node; `PAGE=x.html` to A/B a page before embedding it; every replay ends with a framebuffer checksum, which a change meant to be only faster must leave alone |
-| `tools/pagebench.js PAGE STREAM` | one replay, its timings and the checksum (`WRAP=` the functions timed, `VIEW=`, `JSON=1`) |
+| `tools/pagebench.sh` | the phone page's table above: records each scenario, verifies it is drawn right, and replays it through the page in node; `PAGE=x.html` to A/B a page before embedding it; exits 1 on any failure |
+| `tools/pagebench.js PAGE STREAM` | one replay, its timings and a framebuffer checksum (glyph masks differ per glyph, so a wrong glyph shows); `VERIFY=1` models the canvas and checks the canvas holds the framebuffer and a full repaint changes nothing; `MODULE=plain` or `js` forces the other copy loops; `WRAP=`, `VIEW=`, `JSON=1` |
 | `tools/pageprobe.js` | pasted into a served page's console: totals for `feed`, `present`, `blitRow`, `tile`, `status` and `putImageData`, then `probe.report()` |
 | `tools/genmap.sh` | the fixture map generator `perf.sh` and `pagebench.sh` share |
 

@@ -1784,7 +1784,8 @@ extern const char   WEBPAGE[];
 extern const size_t WEBPAGE_LEN;
 
 /* tools/embed.sh's cut, in C: block comments out; on each line a // comment
- * that follows white space, with that space (never ws://), and spaces at
+ * that follows white space, with that space (never ws://), unless an odd
+ * number of some quote comes before it (it is in a string), and spaces at
  * the end; then every line left with nothing but white space. */
 static char *embed_cut(const char *html)
 {
@@ -1805,8 +1806,12 @@ static char *embed_cut(const char *html)
         char *nl = strchr(line, '\n');
         size_t len = nl ? (size_t)(nl - line) + 1 : strlen(line);
         size_t body = nl ? len - 1 : len;               /* the line without its newline */
-        for (size_t j = 1; j + 1 < body; j++)
-            if (line[j] == '/' && line[j + 1] == '/' && (line[j - 1] == ' ' || line[j - 1] == '\t')) { body = j; break; }
+        int q1 = 0, q2 = 0, q3 = 0;                     /* ' " ` before j */
+        for (size_t j = 0; j + 1 < body; j++) {
+            if (j && line[j] == '/' && line[j + 1] == '/' && (line[j - 1] == ' ' || line[j - 1] == '\t') &&
+                !(q1 & 1) && !(q2 & 1) && !(q3 & 1)) { body = j; break; }
+            q1 += line[j] == '\''; q2 += line[j] == '"'; q3 += line[j] == '`';
+        }
         while (body && (line[body - 1] == ' ' || line[body - 1] == '\t')) body--;
         int blank = 1;
         for (size_t j = 0; j < body; j++) if (!isspace((unsigned char)line[j])) blank = 0;
@@ -1953,6 +1958,39 @@ void test_page_feed(void)
     CHECK(strstr(got.data, "handout:Tomb\nHere lies \xc3\x89lan") != NULL);
     CHECK(strstr(got.data, "names:Aria\nBrin\nwhisper:The floor is warm\n") != NULL);
     CHECK_EQ(strcmp(got.data, want.data), 0);
+
+    CASE("the page draws what it decodes: piece by piece as a full repaint would, the canvas as the framebuffer, every copy loop alike");
+    {
+        /* The same stream, then a wide glyph and a change to the cell after
+         * it, which once drew a row one cell to the left. */
+        uint8_t tail[64];
+        size_t  tl = 0;
+        const uint16_t wide[6] = { 0x4E00, 0, 'A', 'B', 'C', 'D' };
+        tail[tl++] = 'R';
+        tail[tl++] = 0; tail[tl++] = 0; tail[tl++] = 0; tail[tl++] = 0; tail[tl++] = 6; tail[tl++] = 0;
+        tail[tl++] = 1; tail[tl++] = 0; tail[tl++] = 0;
+        for (int k = 0; k < 6; k++) { tail[tl++] = (uint8_t)wide[k]; tail[tl++] = (uint8_t)(wide[k] >> 8); }
+        tail[tl++] = 'E';
+        const uint8_t x[] = { 'R', 2, 0, 0, 0, 1, 0, 1, 0, 0, 'X', 0, 'E' };
+        memcpy(tail + tl, x, sizeof x);
+        tl += sizeof x;
+        char wpath[640];
+        snprintf(wpath, sizeof wpath, "%s/drawn.bin", sb.dir);
+        FILE *wf = fopen(wpath, "wb");
+        if (wf) { fwrite(stream.data, 1, stream.len, wf); fwrite(tail, 1, tl, wf); fclose(wf); }
+        char sums[3][16] = { "", "", "" };
+        static const char *const loops[3] = { "simd", "plain", "js" };
+        for (int m = 0; m < 3; m++) {
+            snprintf(cmd, sizeof cmd, "VERIFY=1 WRAP= MODULE=%s node tools/pagebench.js '%s' '%s' 2", loops[m], page, wpath);
+            FILE *vp = popen(cmd, "r");
+            char line[512] = "";
+            if (vp) { if (!fgets(line, sizeof line, vp)) line[0] = '\0'; CHECK_EQ(pclose(vp), 0); }
+            CHECK(strstr(line, "verified") != NULL);         /* else: VERIFY FAILED and why */
+            const char *fb = strstr(line, " fb ");
+            if (fb) sscanf(fb + 4, "%15s", sums[m]);
+        }
+        CHECK(sums[0][0] && !strcmp(sums[0], sums[1]) && !strcmp(sums[0], sums[2]));
+    }
 
     bb_free(&got);
     bb_free(&want);

@@ -7,12 +7,20 @@ cd "$(dirname "$0")/.."
 
 # Comments are the source's, not the phone's: every byte of the page goes to
 # every phone, and the budget (docs/REMOTE.md) is what is sent. Block comments
-# go, and a // comment after whitespace with the spaces before it -- never
-# ws:// or http://, which follow a quote or a colon. Lines left empty, and
-# spaces at a line's end, go too.
+# go, and a // comment after white space with the spaces before it -- never
+# ws:// or http://, which follow a quote or a colon, and never a // with an
+# odd number of any quote before it on its line, which is inside a string.
+# Lines left empty, and spaces at a line's end, go too. tests/test_net.c's
+# embed_cut does the same in C; keep the two alike.
 SENT='import re, sys
 s = re.sub(r"/\*.*?\*/", "", sys.stdin.read(), flags=re.S)
-s = re.sub(r"[ \t]+//[^\n]*", "", s)
+def cut(line):
+    for m in re.finditer(r"[ \t]+//", line):
+        before = line[:m.start()]
+        if all(before.count(q) % 2 == 0 for q in "\x27\x22\x60"):
+            return line[:m.start()]
+    return line
+s = "\n".join(cut(l) for l in s.split("\n"))
 s = re.sub(r"[ \t]+$", "", s, flags=re.M)
 out = "".join(l for l in s.splitlines(True) if l.strip())
 sys.stdout.write(out if len(sys.argv) < 2 else str(len(out.encode())))'

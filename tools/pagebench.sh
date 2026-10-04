@@ -12,6 +12,9 @@
 #   PAGE=page.html tools/pagebench.sh  replay through another page: an A/B of
 #                                      a change before it is embedded
 #
+# Each scenario is verified before it is timed (the canvas modeled, a full
+# repaint compared); a failure is said and the script exits 1.
+#
 # The columns: `decode` is feed() (records into the cell arrays), `present`
 # is the frame put together (`copy`, blitRow with its tiles, is most of it),
 # `px` the pixels a frame pushes to the canvas, which the browser then pays
@@ -51,11 +54,16 @@ BIG=$(genmap big 200 200 1 60)            # far more map than screen: a pan redr
 
 printf '| scenario             | frames |   decode |  present |     copy | px/frame |\n'
 printf '|----------------------|--------|----------|----------|----------|----------|\n'
+FAILED=0
 run() {
     _label=$1 _map=$2 _keys=$3
     printf '%b' "$_keys" > "$DIR/keys"
     "$BIN" "$_map" --bench "$DIR/keys" --bench-loops "$LOOPS" --size 120x40 \
-        --bench-record "$DIR/$_label.rec" > /dev/null 2>&1 || { echo "  $_label: bench FAILED" >&2; return; }
+        --bench-record "$DIR/$_label.rec" > /dev/null 2>&1 || { echo "  $_label: bench FAILED" >&2; FAILED=1; return 0; }
+    # Drawn right before timed: the canvas holds the framebuffer and a full
+    # repaint changes nothing (tools/pagebench.js, VERIFY=1).
+    VERIFY=1 WRAP= node tools/pagebench.js "$PAGE" "$DIR/$_label.rec" 2 > "$DIR/verify" ||
+        { echo "  $_label: $(sed 's/.*VERIFY FAILED/VERIFY FAILED/' "$DIR/verify")" >&2; FAILED=1; }
     JSON=1 node tools/pagebench.js "$PAGE" "$DIR/$_label.rec" "$REPLAY" | python3 -c '
 import json, sys
 d = json.load(sys.stdin)
@@ -68,3 +76,4 @@ run "cursor walk"    "$MOB"    ':play\rllllhhhh'
 run "cursor, walls"  "$WALLED" ':play\rjjjjkkkk'
 run "carry"          "$MOB"    ':play\rt\rllllhhhh\r'
 run "pan 200x200"    "$BIG"    ':play\r150l150h'
+exit "$FAILED"

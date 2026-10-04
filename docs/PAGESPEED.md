@@ -148,6 +148,34 @@ every scenario before and after, and with SIMD forced off):
 | carry | 79.7 | 60.8 | 662,723 | 165,367 |
 | pan 200×200 | 770.6 | 565.5 | 1,045,987 | 1,045,987 |
 
-In Chrome (`pageprobe.js`, the same map and window as before): a cursor step's present
-1,098 µs → 378 µs; the push 685 µs a frame (one box of 558,000 pixels) → about 140 µs
-(three bands of about 6,000); the status line 75 µs → 11 µs.
+In Chrome (`pageprobe.js`, the same map and window as a probe run just before the change --
+a different session from the 684 µs breakdown at the top, whose window was smaller): a
+cursor step's present 1,098 µs → 378 µs; the push 685 µs a frame (one box of 558,000
+pixels) → about 140 µs (three bands of about 6,000); the status line 75 µs → 11 µs.
+
+## As reviewed
+
+The review of c16b1fc and 6683f50 found, and these fixed:
+- **a run starting on a wide glyph's blank half was drawn one cell to the left** -- older
+  than bands, reachable when the cell after a CJK label changes. `blitRow` now starts at the
+  glyph. None of the recordings held a wide glyph, so the checksum never saw it;
+- **the checksum could not see a wrong glyph or a wrong push:** every glyph had the same mask
+  and pushes were only counted. `pagebench.js` now gives each glyph its own mask, and
+  `VERIFY=1` models the canvas (each push copies its rectangle), then checks the canvas
+  holds the framebuffer and that a full repaint changes nothing. `MODULE=plain`/`js` force
+  the other copy loops. `pagebench.sh` verifies every scenario before timing it and exits 1
+  on a failure (a failed bench used to exit 0);
+- **verifying found a second bug:** when the tile arena fills while a row is being listed,
+  the clear reused memory the row's earlier tiles still pointed at, and the row was drawn
+  wrong until the next frame. A row now lists itself again after a clear (once), and the
+  arena always holds two rows' tiles, so a row fits in an empty one;
+- `make test` runs it: `test_page_feed` replays its stream plus a wide glyph through all
+  three copy loops with `VERIFY=1` and requires the same checksum (it fails with the wide
+  glyph fix taken out);
+- `tools/embed.sh`'s `//` cut had no notion of strings: it now leaves a `//` with an odd
+  number of any quote before it on its line, in the Python and in the test's C alike;
+- PERFORMANCE.md's paragraph still described the bounding box; the Chrome "before" figures
+  here come from two sessions, now said; `pagebench.js`'s `connect()` removal never matched.
+
+Left: tests/page_feed.js still runs `feed()` under `with` (it checks decoding against the C
+decoder, not speed); pagebench.js is the harness for drawing. The page is 11.4 KB.

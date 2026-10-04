@@ -114,10 +114,13 @@ function tile(g,f,b,a,wide){
   t={off,wb:w*4};byc.set(key,t);
   return t;
 }
-function clearTiles(){tiles.fill(undefined);ntiles=0;tnext=tilesAt;dirtyAll=true}
+function clearTiles(){tiles.fill(undefined);ntiles=0;tnext=tilesAt;dirtyAll=true;tgen++}
+let tgen=0;
 
 /* ---- a row's dirty span into the framebuffer: list the tiles, one call */
-function blitRow(y,x0,x1){
+function blitRow(y,x0,x1,again){
+  if(x0>0&&gl[y*cols+x0]===0)x0--;                         // the blank half of a wide glyph: from the glyph
+  const g0=tgen;
   let n=0;
   for(let x=x0;x<=x1;x++){
     const i=y*cols+x,g=gl[i];
@@ -126,9 +129,13 @@ function blitRow(y,x0,x1){
     const t=tile(g,fg[i],bg[i],at[i],wide);
     ptrs[2*n]=t.off;ptrs[2*n+1]=t.wb;n++;
   }
-  /* x0 may be the blank half of a wide glyph; its tile is one cell back and
-   * was listed by the caller widening the span. Cells are laid down in
-   * order, so the destination is x0's, or one cell left of it. */
+  /* The arena filled and was cleared while this row was listed: the tiles
+   * listed before it are gone, so list the row again -- once, since the
+   * arena holds two rows' tiles and is empty now. */
+  if(tgen!==g0&&!again)return blitRow(y,x0,x1,1);
+  /* Cells are laid down in order from x0, which is never the blank half of
+   * a wide glyph: a span starting there was moved back to the glyph, whose
+   * tile covers both cells. */
   const start=(y*ch*cols+x0)*cw*4;
   if(wblit)wblit(start,ptrsAt,n,ch,cols*cw*4);
   else{let d=start>>2;for(let k=0;k<n;k++){const off=ptrs[2*k]>>2,w=ptrs[2*k+1]>>2;let o=d;for(let r=0;r<ch;r++,o+=cols*cw)px.set(tu32.subarray(off+r*w,off+(r+1)*w),o);d+=w}}
@@ -175,8 +182,9 @@ function layout(){
   cv.width=cols*cw;cv.height=rows*ch;
   cv.style.width=(cv.width/dpr)+'px';cv.style.height=(cv.height/dpr)+'px';
   /* One block of memory for everything: the framebuffer, the tile list for
-   * a row, and an arena of rendered tiles, sized for a few thousand. */
-  const fbBytes=cv.width*cv.height*4,arena=Math.min(4096*cw*ch*4,8<<20);
+   * a row, and an arena of rendered tiles, sized for a few thousand and never
+   * less than two rows' worth, so a row always fits after a clear. */
+  const fbBytes=cv.width*cv.height*4,arena=Math.max(Math.min(4096*cw*ch*4,8<<20),2*cols*cw*ch*4);
   ptrsAt=fbBytes;tilesAt=fbBytes+cols*8;tilesEnd=tilesAt+arena;
   const pages=Math.ceil(tilesEnd/65536)+1;
   let buf;
