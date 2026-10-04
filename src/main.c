@@ -40,6 +40,7 @@ typedef struct {
     const char *watch;              /* --watch host:port: be a mirror */
     int         bench_clients;      /* --bench-clients N: loopback watchers on a bench */
     int         bench_names;        /* --bench-names: they say they are P1, P2... as phones do */
+    const char *bench_record;       /* --bench-record FILE: the first watcher's stream, saved */
     int         serve;              /* --serve: open the remote view at startup */
     int         serve_port;
     int         serve_stay;         /* --stay-alive: and keep it past the map */
@@ -80,6 +81,7 @@ static void usage(void)
         "  --watch HOST:PORT  mirror a serving vtt in this terminal, read-only\n"
         "  --bench-clients N  attach N loopback watchers to a --bench run\n"
         "  --bench-names      those watchers are named phones, P1, P2...\n"
+        "  --bench-record FILE  save the stream the first watcher is sent (tools/pagebench.sh)\n"
         "  --bench-pings      and have each of them ping every frame\n"
         "  --bench-ctl FILE   run a control-channel request at the top of every --bench loop\n"
         "  --agent            open the control channel at startup (:agent on does it later)\n"
@@ -125,6 +127,7 @@ static int parse_args(Options *o, int argc, char **argv)
         else if (!strcmp(a, "--no-pings"))   o->serve_no_pings = 1;
         else if (!strcmp(a, "--bench-pings")) o->bench_pings = 1;
         else if (!strcmp(a, "--bench-names")) o->bench_names = 1;
+        else if (!strcmp(a, "--bench-record") && i + 1 < argc) o->bench_record = argv[++i];
         else if (!strcmp(a, "--agent"))      o->agent = 1;
         else if (!strcmp(a, "--bench-ctl") && i + 1 < argc) o->bench_ctl = argv[++i];
         else if (!strcmp(a, "--apply") && i + 1 < argc) o->apply = argv[++i];
@@ -314,10 +317,15 @@ static int run_headless(const Options *o)
          * a real client's kernel buffer would drain. */
         int cfd[NET_MAX_CLIENTS];
         int ncf = 0;
-        if (o->bench_clients > 0) {
+        /* The stream a phone is sent, byte for byte, to replay through the
+         * page's own code (tools/pagebench.sh): one watcher at least. */
+        FILE *recf = NULL;
+        if (o->bench_record && !(recf = fopen(o->bench_record, "wb"))) die("cannot write the --bench-record file");
+        int nclients = recf && o->bench_clients < 1 ? 1 : o->bench_clients;
+        if (nclients > 0) {
             char err[128];
             if (net_start(&a.net, 0, &r, err, sizeof err) == 0) {
-                for (int i = 0; i < o->bench_clients && i < NET_MAX_CLIENTS; i++) {
+                for (int i = 0; i < nclients && i < NET_MAX_CLIENTS; i++) {
                     int fd = socket(AF_INET, SOCK_STREAM, 0);
                     struct sockaddr_in sa;
                     memset(&sa, 0, sizeof sa);
@@ -408,13 +416,17 @@ static int run_headless(const Options *o)
                 if (ncf) {
                     prof_set_net((uint32_t)net_clients(&a.net), a.net.frame_bytes);
                     uint8_t sink[65536];
-                    for (int i = 0; i < ncf; i++)
-                        while (read(cfd[i], sink, sizeof sink) > 0) { }
+                    for (int i = 0; i < ncf; i++) {
+                        ssize_t got;
+                        while ((got = read(cfd[i], sink, sizeof sink)) > 0)
+                            if (i == 0 && recf) fwrite(sink, 1, (size_t)got, recf);
+                    }
                 }
             }
             a.running = 1;      /* a 'q' in the script must not end the bench */
         }
         for (int i = 0; i < ncf; i++) close(cfd[i]);
+        if (recf) fclose(recf);
         free(ctl_req);
         script_free(&sc);
         prof_report();

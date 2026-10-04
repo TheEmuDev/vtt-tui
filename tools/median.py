@@ -3,6 +3,7 @@
 
     tools/perf.sh > a.log; tools/perf.sh > b.log; tools/perf.sh > c.log
     tools/median.py a.log b.log c.log
+    (tools/pagebench.sh's single table works the same way)
 
 Any single run has one row spiking somewhere, and never the same row twice,
 so docs/PERFORMANCE.md publishes the median of three. Prints the two tables
@@ -22,8 +23,8 @@ def tables(path):
             cur = None
     if cur:
         out.append(cur)
-    if len(out) != 2:
-        sys.exit("%s: expected two tables, found %d" % (path, len(out)))
+    if len(out) not in (1, 2):
+        sys.exit("%s: expected one table or two, found %d" % (path, len(out)))
     return out
 
 
@@ -44,8 +45,32 @@ def fmt(v, width):
     return ("%.1fus" % v).rjust(width)
 
 
+def main_one(runs):
+    """One table (tools/pagebench.sh): each row by its first cell, every cell
+    that reads as a number the median of the runs, the rest the last run's."""
+    last = runs[-1][0]
+    print(last[0])
+    print(last[1])
+    idx = [{r[0].strip(): r for r in rows(run[0])[1:]} for run in runs]
+    for r in rows(last)[1:]:
+        have = [i[r[0].strip()] for i in idx if r[0].strip() in i]
+        cells = []
+        for c, cell in enumerate(r):
+            try:
+                vals = [us(h[c]) for h in have]
+            except ValueError:
+                cells.append(cell)
+                continue
+            v = statistics.median(vals)
+            text = ("%.1fus" % v) if cell.strip().endswith("us") else ("%d" % round(v))
+            cells.append(" " + text.rjust(len(cell) - 2) + " ")
+        print("|" + "|".join(cells) + "|")
+
+
 def main(paths):
     runs = [tables(p) for p in paths]
+    if len(runs[-1]) == 1:
+        return main_one(runs)
     last = runs[-1]
 
     print(last[0][0])

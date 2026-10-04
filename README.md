@@ -116,6 +116,7 @@ vtt [options] [map.vtt]
   --bench-loops N    how many times --bench replays it (default 50)
   --bench-clients N  attach N players' views to a --bench run
   --bench-names      those views are named phones, P1, P2... (for :whisper)
+  --bench-record FILE  save the stream the first view is sent (tools/pagebench.sh)
   --bench-pings      and have each of them ping every frame
   --bench-ctl FILE   run a control-channel request at the start of each --bench loop
   --trace PATH       write a Chrome Tracing profile on exit

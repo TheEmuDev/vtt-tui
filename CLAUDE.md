@@ -51,6 +51,8 @@ make perf       one perf run; publish the per-row MEDIAN of three quiet runs (to
 ./vtt map.vtt --agent; ./vtt --ctl 'status'   the control channel (docs/CONTROL.md); requests on stdin with no argument
 ./vtt new.vtt --apply plan.txt --new 40x30     the same requests headless, saved (docs/AGENTS.md is the agent's guide)
 tools/sight.sh  fog.sight per fog scenario (the zone table keeps only each zone's worst)
+tools/pagebench.sh   the phone page's own code per frame (node): --bench-record streams replayed through the served page; PAGE=x.html to A/B; median of three
+tools/pageprobe.js   paste into a served page's console, then probe.report(): native costs (putImageData, DOM) node cannot see
 tools/saves.sh  a save flushed and unflushed, three map sizes, on the real disk (PERFORMANCE.md's save table)
 VTT_FOGDIFF_OPS=36000 ./build/run-tests   the long run of the fog differential test
 make fuzz       libFuzzer on the map loader (clang), FUZZ_SECONDS=600 for longer

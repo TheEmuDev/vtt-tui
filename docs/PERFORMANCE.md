@@ -700,6 +700,43 @@ the region. Nothing of the channel is on the frame path: off it costs nothing, o
 idle one more descriptor in `poll`, and the GM's frame after a request is an ordinary
 frame (`agent, room + 12`'s frame row is the redraw of the changed squares).
 
+## The phone page
+
+What the page's own code costs a phone per frame, from `tools/pagebench.sh`: each scenario
+is played headless with `vtt --bench --bench-record`, which saves the stream a phone is
+sent, and the stream is replayed through the page as the binary serves it, in node, on a
+phone's screen (915×412 CSS pixels at 2.625, held sideways; `VIEW=` sets another). Median
+of three runs (`tools/median.py`), as above. Measured 2026-10-04.
+
+| scenario             | frames |   decode |  present |     copy | px/frame |
+|----------------------|--------|----------|----------|----------|----------|
+| cursor walk          |   1610 |    8.7us |   21.4us |   18.4us |   737280 |
+| cursor, walls        |   1610 |    7.7us |   41.7us |   38.4us |   324849 |
+| carry                |   2400 |    7.2us |   81.6us |   77.9us |   662723 |
+| pan 200x200          |    410 |   56.9us |  830.5us |  803.3us |  1045987 |
+
+`decode` is `feed()`, the records into the cell arrays; `present` puts the frame together,
+nearly all of it `copy` (`blitRow`: glyph tiles copied into the framebuffer by the
+WebAssembly loop); `px/frame` is the pixels a frame pushes to the canvas, which the
+browser then pays for natively and node cannot time. For that, `tools/pageprobe.js` in a
+real browser: on a cursor step over a busy 120×40 map in Chrome the push was 393 µs of a
+684 µs frame, and the status line's HTML 121 µs (docs/PAGESPEED.md has the measurements
+and the plan they led to).
+
+**The page is not slow to decode.** 9 µs for a cursor step, 57 µs for a frame that redraws
+nearly everything. The copy loop and the push to the canvas are where a frame goes.
+
+**A cursor step pushes more than the whole canvas.** Five dirty rows -- the column letters,
+the three rows round the cursor, the status line -- span the screen top to bottom, and the
+page pushes their bounding box: 737,280 pixels to change about five rows' worth.
+
+**Two lessons about measuring it.** Chrome's clock without cross-origin isolation moves in
+0.1 ms steps, so only totals over hundreds of frames mean anything there; and a hidden
+window gets no animation frames, so `pageprobe.js` presents each message at once. In node,
+running the page through `vm` or under `with` made every global name a slow lookup and
+timed the harness instead (decode read 550 µs a frame that way); `pagebench.js` runs it as
+a plain function with the stubs as parameters.
+
 ## Working rules
 
 1. **A new drawing path gets a scenario in `tools/perf.sh`.** A path with no row in
@@ -729,6 +766,12 @@ frame (`agent, room + 12`'s frame row is the redraw of the changed squares).
 | `make fuzz` | not a timing tool: libFuzzer on the map loader, the one untrusted input |
 | `tools/sight.sh [bin]` | `fog.sight` per fog scenario, which the zone table cannot show |
 | `--bench-clients N` | attaches N loopback watchers to a bench run, so a row can carry the remote view's cost |
+| `--bench-names` | those watchers say they are phones P1, P2...: rows for whispers and the names offered |
+| `--bench-record FILE` | saves the stream the first watcher is sent, for `tools/pagebench.js` to replay |
+| `tools/pagebench.sh` | the phone page's table above: records each scenario and replays it through the page in node; `PAGE=x.html` to A/B a page before embedding it; every replay ends with a framebuffer checksum, which a change meant to be only faster must leave alone |
+| `tools/pagebench.js PAGE STREAM` | one replay, its timings and the checksum (`WRAP=` the functions timed, `VIEW=`, `JSON=1`) |
+| `tools/pageprobe.js` | pasted into a served page's console: totals for `feed`, `present`, `blitRow`, `tile`, `status` and `putImageData`, then `probe.report()` |
+| `tools/genmap.sh` | the fixture map generator `perf.sh` and `pagebench.sh` share |
 
 The overlay and the trace share the zone table, so anything wrapped in `PROF_ZONE`
 appears in all three without further work. `-DVTT_PROF=0` compiles the instrumentation

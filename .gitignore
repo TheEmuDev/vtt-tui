@@ -6,3 +6,4 @@ vtt
 core
 *.core
 .perf.*
+.pagebench.*
