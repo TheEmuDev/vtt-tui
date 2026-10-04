@@ -113,3 +113,28 @@ is drawn by the same `VIEW_PLAYERS` path. Two new points:
   nothing while the GM's cursor walks away; party carrying a creature sends 125 bytes a
   frame for all four, against 1,457 under follow, because the table's view does not move.
   `camera.party` costs under 0.3 µs when it runs.
+
+## As reviewed
+
+The review of ec292fd found, and these fixed:
+- **hold with every floor shown** (`:floor all`) left the players on the party's floor,
+  not the one the GM was looking at: it now takes the floor under the GM's cursor;
+- **under `:player preview` the party was framed for a stale screen**: the GM's own draw,
+  which lays the view out, is not made then, so after a resize or the turn panel coming up
+  the party could be cut off. `editor_layout` (app_draw.c) lays it out before their camera
+  is worked out, in every frame;
+- **the pin hold made outlived it**: after `follow` the players stayed on the held floor.
+  `App.pcam_pinned` remembers that hold made it, and leaving hold lifts it; a `:player
+  floor` given meanwhile is the GM's own and stays;
+- **party with nobody on their floor** stayed wherever it last was: it shows the floor's
+  middle;
+- **a party that only just fit moved the camera at every step**, the swimming the margin
+  was there to stop. Party now needs two squares to spare each way beyond the margin, or
+  zooms out, and centers the margin's box in cells, so a fresh frame is always inside it: a
+  walk moves it every third step at most (tested);
+- the party test (player, not hidden, on the floor) was written three times: `in_party`.
+  The perf rows are named like the others (`4 watchers`).
+
+Tests added for each, and for a hidden creature, a big creature's footprint and the
+players' status line being blank. Left: `app_floor.c` is 470 lines, a third of it the camera;
+`app_camera.c` is its home if it grows again.

@@ -169,6 +169,65 @@ void test_camera(void)
         press(&a, "+");
     }
 
+    CASE("a hidden creature is not the party's: its square does not widen the view");
+    {
+        m->tokens.v[bram].x = 40; m->tokens.v[bram].hidden = 1; m->gen++;
+        free(players_text(&a, &r));
+        CHECK_EQ(a.pview.zoom, a.ed.view.zoom);
+        m->tokens.v[bram].hidden = 0; m->gen++;
+        free(players_text(&a, &r));
+        CHECK(a.pview.zoom < a.ed.view.zoom);
+        m->tokens.v[bram].x = 7; m->gen++;
+    }
+
+    CASE("a big creature's whole footprint is kept in view");
+    {
+        m->tokens.v[bram].size = 3; m->tokens.v[bram].x = 15; m->gen++;
+        CHECK(players_see(&a, &r, 3, 3, 17 + 2, 8 + 2));
+        m->tokens.v[bram].size = 1; m->tokens.v[bram].x = 7; m->gen++;
+    }
+
+    CASE("a party that only just fits still moves the camera every third step at most");
+    {
+        /* 18 apart: with its margin, 23 of the 24 squares at zoom 1 */
+        m->tokens.v[aria].x = 2; m->tokens.v[bram].x = 2 + 18; m->gen++;
+        free(players_text(&a, &r));
+        int moves = 0, steps = 30;
+        for (int s = 0; s < steps; s++) {
+            m->tokens.v[aria].x++; m->tokens.v[bram].x++; m->gen++;
+            int px = a.pview.cam_x;
+            free(players_text(&a, &r));
+            moves += a.pview.cam_x != px;
+        }
+        CHECK(moves <= steps / 3 + 1);
+        m->tokens.v[aria].x = 5; m->tokens.v[bram].x = 7; m->gen++;
+    }
+
+    CASE("their status line is blank, not only the message: it describes the GM's cursor");
+    {
+        a.ed.cx = 6; a.ed.cy = 6;                         /* on nothing: the square is named */
+        char *g = gm_text(&a, &r);
+        CHECK(strstr(g, "G7") != NULL);
+        free(g);
+        char *t = players_text(&a, &r);
+        CHECK(strstr(t, "G7") == NULL);
+        free(t);
+    }
+
+    CASE("under :player preview the frame is cut to the screen as it is now");
+    {
+        press(&a, ":player preview\r");
+        CHECK_EQ(a.preview, 1);
+        /* Fits at zoom 1 on the screen it was, not on the one it is. */
+        m->tokens.v[bram].x = 17; m->gen++;
+        rnd_resize(&r, 60, 30);
+        CHECK(players_see(&a, &r, 3, 3, 19, 8));
+        rnd_resize(&r, 100, 30);
+        press(&a, "q");
+        CHECK_EQ(a.preview, 0);
+        m->tokens.v[bram].x = 7; m->gen++;
+    }
+
     CASE("too far apart even for the farthest zoom: the one whose turn it is is framed");
     {
         m->tokens.v[bram].x = 58; m->tokens.v[bram].y = 18; m->gen++;
@@ -329,6 +388,34 @@ void test_camera_floors(void)
     press(&a, ":player camera party\r");
     CHECK(players_see(&a, &r, 3, 3, 4, 4));
     CHECK(a.pview.bounded && a.pview.bx1 == 29);
+
+    CASE("party on a floor with none of the party: the floor's middle, not where it last was");
+    press(&a, ":player floor Upper\r");
+    CHECK(players_see(&a, &r, 45, 4, 46, 5));
+
+    CASE("the pin a hold made goes when hold does; a pin of the GM's own stays");
+    press(&a, ":player floor auto\r");
+    press(&a, ":floor Upper\r");
+    press(&a, ":player camera hold\r");
+    CHECK_EQ(app_players_floor(&a), upper);
+    press(&a, ":player camera follow\r");
+    press(&a, ":floor Ground\r");
+    CHECK_EQ(app_players_floor(&a), ground);
+    press(&a, ":player floor Upper\r");
+    press(&a, ":player camera hold\r");
+    press(&a, ":player floor Upper\r");                 /* the GM pins it, under hold */
+    press(&a, ":player camera follow\r");
+    CHECK_EQ(app_players_floor(&a), upper);
+    press(&a, ":player floor auto\r");
+
+    CASE("hold with every floor shown: the floor under the GM's cursor, and what the GM sees of it");
+    press(&a, ":floor all\r");
+    CHECK_EQ(app_floor_shown(&a), -1);
+    a.ed.cx = 50; a.ed.cy = 5;
+    rnd_begin(&r); app_draw(&a);
+    press(&a, ":player camera hold\r");
+    CHECK_EQ(app_players_floor(&a), upper);
+    CHECK(players_see(&a, &r, 50, 5, 50, 5));
 
     app_free(&a);
     rnd_free(&r);

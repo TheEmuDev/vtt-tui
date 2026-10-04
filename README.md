@@ -985,13 +985,16 @@ their own. It is the same for every phone and for the terminal mirror on a TV.
 | `:player camera` | say which camera is on |
 
 With `party`, the view moves only when a creature comes within two squares of its edge, and
-then centers on the whole party. It uses your zoom, or zooms out until the party fits. If
+then centers on the whole party. It uses your zoom, or zooms out until the party fits with
+room to move. With no player creature on their floor, it shows the floor's middle. If
 they are too far apart to fit at all, it shows the creature whose turn it is. Your cursor
 shows on their screens when it is in their view.
 
 With `hold`, your cursor never shows on their screens. Typing `:player camera hold` again
 moves their view to what yours shows now: scout ahead, find the room, then show it. If your
-screen is on another floor, their screens go to that floor too, as with `:player floor`.
+screen is on another floor, their screens go to that floor too (with every floor shown, the
+floor under your cursor); leaving `hold` lets them follow the party's floor again, unless you
+pinned it yourself with `:player floor` meanwhile.
 Opening another map, or taking a link to one, puts a held camera back to `follow`.
 
 While the players have a camera of their own, their status line is left blank (it describes

@@ -152,6 +152,20 @@ static int ping_visible(const void *ctx, int tx, int ty)
 
 static void draw_editor_body(App *a);
 
+/* The turn-order panel takes its columns off the map view, and only when
+ * there is a fight to show and room to show it; the bars keep the whole
+ * width either way. Lays the editor's view out and says whether the panel
+ * is up, with the clocks' rows and whether the turns want it. */
+static int editor_layout(App *a, int *clocks, int *turns)
+{
+    const Map *m = a->map;
+    *clocks = a->screen == SCREEN_PLAY ? clock_panel_rows(m) : 0;
+    *turns  = a->screen == SCREEN_PLAY && turn_panel_wanted(m);
+    int panel = a->play.panel && a->rnd->w >= 80 && (*turns || *clocks);
+    ed_layout(&a->ed, a->map, a->rnd->w - (panel ? TURN_PANEL_W : 0), a->rnd->h);
+    return panel;
+}
+
 /* The players on a floor the GM is not showing, or with a camera of their
  * own (docs/CAMERA.md): their frame is drawn through it, swapped in for this
  * one draw, and says nothing on the status line -- it would describe the
@@ -159,6 +173,11 @@ static void draw_editor_body(App *a);
 static void draw_editor(App *a)
 {
     if (a->view != VIEW_PLAYERS || !app_players_own_camera(a)) { draw_editor_body(a); return; }
+    /* Their camera is cut to the GM's view as laid out this frame: under
+     * :player preview the GM's own draw, which would lay it out, is not
+     * made. */
+    int clocks, turns;
+    editor_layout(a, &clocks, &turns);
     GridView gm = a->ed.view;
     app_players_camera(a);
     a->ed.view = a->pview;
@@ -208,13 +227,7 @@ static void draw_editor_body(App *a)
     const Theme *th = a->th;
     Map         *m  = a->map;
 
-    /* The turn-order panel takes its columns off the map view, and only
-     * when there is a fight to show and room to show it; the bars keep the
-     * whole width either way. */
-    int clocks = a->screen == SCREEN_PLAY ? clock_panel_rows(m) : 0;
-    int turns  = a->screen == SCREEN_PLAY && turn_panel_wanted(m);
-    int panel  = a->play.panel && r->w >= 80 && (turns || clocks);
-    ed_layout(&a->ed, m, r->w - (panel ? TURN_PANEL_W : 0), r->h);
+    int clocks, turns, panel = editor_layout(a, &clocks, &turns);
 
     /* The fight rides in the title bar: it is true for the whole table, not
      * for whatever happens to be selected, so it does not belong on the

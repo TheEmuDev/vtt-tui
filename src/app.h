@@ -137,6 +137,7 @@ typedef struct {
      * party, or held where the GM left it. Party's framing is worked out
      * again only when what it was worked out from changes. */
     PlayersCamera pcam;
+    int      pcam_pinned;                     /* hold pinned their floor: undone when it ends */
     struct { const Map *map; unsigned gen; int floor, zoom; Rect view; } pcam_for;
 
     /* One log for the whole session: token moves in play mode undo through
