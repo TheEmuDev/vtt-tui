@@ -959,6 +959,11 @@ firewall, use a fixed port such as `:serve 7777` and allow that one), and that
 the network does not isolate wireless clients from each other (common on guest networks).
 The join code keeps out other devices on the network; the connection is not encrypted.
 
+A line in the bottom-left corner says when the page is connecting or has lost the
+connection, and is hidden otherwise. If a device seems slow, add `&stats` to its address
+(`...?k=482913&stats`): the line then shows the screen's size in cells, how long the last
+frame took to draw, and how many cells it changed.
+
 **Lifetime.** Closing the map stops the server and disconnects everyone, unless the server was
 started with `--stay-alive`, in which case it carries on into the next map opened. Opening
 another map with `:e` does not stop it.

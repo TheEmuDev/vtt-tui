@@ -1,7 +1,7 @@
 # The phone page's speed
 
-Where a frame goes on a phone, measured 2026-10-04, and the plan it led to. A plan awaiting
-sign-off. docs/REMOTE.md is the page's design; docs/PERFORMANCE.md, *The phone page*, keeps
+Where a frame goes on a phone, measured 2026-10-04, and the plan it led to. Signed off
+2026-10-04: 1 and 2 built, 4 shipped with both modules. docs/REMOTE.md is the page's design; docs/PERFORMANCE.md, *The phone page*, keeps
 the current numbers. The standing rule (CLAUDE.md): the page stays inside one round trip,
 and below that the effort goes into its JavaScript being close to optimal at run time.
 
@@ -120,3 +120,34 @@ it would leave less than 150 bytes of margin, **(c)**.
 3. If signed off, the SIMD module in `tools/blit_wasm.py` (the variants kept there, as
    `memory.copy` is, with their numbers), the fallback, the size checked.
 4. PERFORMANCE.md's phone table regenerated; the review (health-check questions included).
+
+## As built
+
+- **Bands** (`present`): consecutive dirty rows, as wide as the widest, one push each.
+- **The status line** (`status`): `textContent`, the connection words only, hidden once
+  frames arrive; the figures with `&stats` in the address, twice a second at most (README,
+  *Connecting a phone*).
+- **Both copy loops**, as the user chose: `WASM_SIMD` (16 bytes, a pixel row at a time) when
+  `WebAssembly.validate` accepts it, else `WASM` (8 bytes, tile by tile, as before).
+  `tools/blit_wasm.py` assembles both, writes `web/blit-simd.wasm` and `web/blit.wasm`, and
+  keeps the measured variants (`--variant NAME`). **If the page nears the one-round-trip
+  limit, this is the first place to revisit:** one module is about 300 bytes back (also on
+  CLAUDE.md's watch list).
+- **The bytes for it** came from `tools/embed.sh`: a `//` comment after white space, with
+  the spaces before it, and spaces at a line's end are no longer sent (never `ws://`,
+  which follows a quote). 12,246 bytes with the second module became 11,497; the source
+  keeps every comment. `test_page_feed` cuts the page the same way in C.
+
+Measured after (median of three, `tools/pagebench.sh`; the same framebuffer checksum in
+every scenario before and after, and with SIMD forced off):
+
+| scenario | copy before | copy after | px pushed before | after |
+|---|---|---|---|---|
+| cursor walk | 20.5 µs | 18.7 µs | 737,280 | 20,893 |
+| cursor, walls | 42.9 | 32.3 | 324,849 | 83,859 |
+| carry | 79.7 | 60.8 | 662,723 | 165,367 |
+| pan 200×200 | 770.6 | 565.5 | 1,045,987 | 1,045,987 |
+
+In Chrome (`pageprobe.js`, the same map and window as before): a cursor step's present
+1,098 µs → 378 µs; the push 685 µs a frame (one box of 558,000 pixels) → about 140 µs
+(three bands of about 6,000); the status line 75 µs → 11 µs.

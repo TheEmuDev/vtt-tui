@@ -1783,8 +1783,9 @@ void test_watch_target(void)
 extern const char   WEBPAGE[];
 extern const size_t WEBPAGE_LEN;
 
-/* tools/embed.sh's cut, in C: block comments out, then every line left
- * with nothing but white space. */
+/* tools/embed.sh's cut, in C: block comments out; on each line a // comment
+ * that follows white space, with that space (never ws://), and spaces at
+ * the end; then every line left with nothing but white space. */
 static char *embed_cut(const char *html)
 {
     size_t n = strlen(html);
@@ -1803,9 +1804,17 @@ static char *embed_cut(const char *html)
     for (char *line = nc; *line; ) {
         char *nl = strchr(line, '\n');
         size_t len = nl ? (size_t)(nl - line) + 1 : strlen(line);
+        size_t body = nl ? len - 1 : len;               /* the line without its newline */
+        for (size_t j = 1; j + 1 < body; j++)
+            if (line[j] == '/' && line[j + 1] == '/' && (line[j - 1] == ' ' || line[j - 1] == '\t')) { body = j; break; }
+        while (body && (line[body - 1] == ' ' || line[body - 1] == '\t')) body--;
         int blank = 1;
-        for (size_t j = 0; j < len; j++) if (!isspace((unsigned char)line[j])) blank = 0;
-        if (!blank) { memcpy(out + o, line, len); o += len; }
+        for (size_t j = 0; j < body; j++) if (!isspace((unsigned char)line[j])) blank = 0;
+        if (!blank) {
+            memcpy(out + o, line, body);
+            o += body;
+            if (nl) out[o++] = '\n';
+        }
         line += len;
     }
     out[o] = '\0';

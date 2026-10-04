@@ -5,6 +5,18 @@
 set -eu
 cd "$(dirname "$0")/.."
 
+# Comments are the source's, not the phone's: every byte of the page goes to
+# every phone, and the budget (docs/REMOTE.md) is what is sent. Block comments
+# go, and a // comment after whitespace with the spaces before it -- never
+# ws:// or http://, which follow a quote or a colon. Lines left empty, and
+# spaces at a line's end, go too.
+SENT='import re, sys
+s = re.sub(r"/\*.*?\*/", "", sys.stdin.read(), flags=re.S)
+s = re.sub(r"[ \t]+//[^\n]*", "", s)
+s = re.sub(r"[ \t]+$", "", s, flags=re.M)
+out = "".join(l for l in s.splitlines(True) if l.strip())
+sys.stdout.write(out if len(sys.argv) < 2 else str(len(out.encode())))'
+
 {
     echo '/* Generated from web/index.html by tools/embed.sh -- edit the HTML, not this. */'
     echo '#include <stddef.h>'
@@ -15,11 +27,7 @@ cd "$(dirname "$0")/.."
     echo '#pragma GCC diagnostic ignored "-Woverlength-strings"'
     echo
     echo 'const char WEBPAGE[] ='
-    # Block comments are the source's, not the phone's: every byte of the
-    # page goes to every phone, and the budget (docs/REMOTE.md) is what is
-    # sent. Lines a comment leaves empty go too. // comments stay: a naive
-    # cut would take ws:// with them.
-    python3 -c 'import re,sys; s=re.sub(r"/\*.*?\*/", "", sys.stdin.read(), flags=re.S); sys.stdout.write("".join(l for l in s.splitlines(True) if l.strip()))' < web/index.html |
+    python3 -c "$SENT" < web/index.html |
     sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/    "/' -e 's/$/\\n"/'
     echo '    ;'
     echo
@@ -27,5 +35,5 @@ cd "$(dirname "$0")/.."
 } > src/webpage.c
 
 printf 'src/webpage.c: %s bytes of page as sent (%s in web/index.html)\n' \
-    "$(python3 -c 'import re,sys; s=re.sub(r"/\*.*?\*/", "", sys.stdin.read(), flags=re.S); print(len("".join(l for l in s.splitlines(True) if l.strip()).encode()))' < web/index.html)" \
+    "$(python3 -c "$SENT" count < web/index.html)" \
     "$(wc -c < web/index.html)"

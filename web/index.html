@@ -10,7 +10,6 @@ html,body{margin:0;background:#0e0e12;color:#d8d8e0;height:100%;overflow:hidden;
 body{display:flex;align-items:center;justify-content:center}
 #c{display:block;image-rendering:pixelated;touch-action:pinch-zoom}
 #s{position:fixed;left:0;bottom:0;padding:2px 6px;background:rgba(14,14,18,.85);color:#60647a;font:11px monospace;pointer-events:none}
-#s b{color:#8ac8ff;font-weight:normal}
 #h,#hb,#w,#wb,#q,#nb{position:fixed;background:#f3ead6;color:#2a241a;font:17px/1.5 Georgia,serif;border:0;border-radius:6px;box-shadow:0 4px 30px #000}
 #h,#w,#q{left:50%;top:50%;transform:translate(-50%,-50%);width:min(34em,88vw);max-height:80vh;overflow:auto;box-sizing:border-box;padding:1em 1.3em;user-select:text}
 [hidden]{display:none!important}
@@ -47,9 +46,16 @@ let cw=8,ch=16,fpx=13,scale=1;                             // cell size in devic
 let img=null,px=null;                                      // framebuffer (ImageData, Uint32 view)
 /* The copy loop, in WebAssembly: tools/blit_wasm.py assembles it by hand.
  * w(dst, ptrs, n, rows, stride) copies n tiles into a row of the framebuffer,
- * each listed in ptrs as (byte offset, row bytes). Without it, the same in JS. */
+ * each listed in ptrs as (byte offset, row bytes). WASM_SIMD copies 16 bytes
+ * at a time, a pixel row at a time (27% faster redrawing a phone's screen,
+ * docs/PAGESPEED.md); WASM, 8 at a time, is for a browser without SIMD
+ * (Safari before 16.4). Without WebAssembly, the same in JS. Shipping both
+ * costs about 300 bytes: if the page nears the one-round-trip limit
+ * (docs/REMOTE.md), this is the first place to revisit. */
+const WASM_SIMD='AGFzbQEAAAABCQFgBX9/f39/AAIIAQFlAW0CAAEDAgEABwUBAXcAAAq9AQG6AQEHf0EAIQYCQANAIAYgA08NASAAIAYgBGxqIQlBACEFAkADQCAFIAJPDQEgASAFQQN0aiIKKAIEIQggCigCACAGIAhsaiEHQQAhCwJAA0AgC0EQaiAISw0BIAkgC2ogByALav0ABAD9CwQAIAtBEGohCwwACwsCQANAIAsgCE8NASAJIAtqIAcgC2opAwA3AwAgC0EIaiELDAALCyAJIAhqIQkgBUEBaiEFDAALCyAGQQFqIQYMAAsLCw==';
 const WASM='AGFzbQEAAAABCQFgBX9/f39/AAIIAQFlAW0CAAEDAgEABwUBAXcAAAqQAQGNAQEHfwJAA0AgBSACTw0BIAEgBUEDdGoiCigCACEHIAooAgQhCCAAIQlBACEGAkADQCAGIANPDQFBACELAkADQCALIAhPDQEgCSALaiAHIAtqKQMANwMAIAtBCGohCwwACwsgCSAEaiEJIAcgCGohByAGQQFqIQYMAAsLIAAgCGohACAFQQFqIQUMAAsLCw==';
-const wmod=typeof WebAssembly!=='undefined'?new WebAssembly.Module(Uint8Array.from(atob(WASM),c=>c.charCodeAt(0))):null;
+const b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+const wmod=typeof WebAssembly!=='undefined'?new WebAssembly.Module(WebAssembly.validate(b64(WASM_SIMD))?b64(WASM_SIMD):b64(WASM)):null;
 let mem=null,wblit=null,tilesAt=0,tilesEnd=0,tnext=0,ptrsAt=0,ptrs=null,tu32=null;
 let rd=null,rx0=null,rx1=null,dirtyAll=false;               // dirty span per row, in cells
 let ms=0,frames=0,ws=null,retry=null;
@@ -137,22 +143,18 @@ function present(){
   if(!img)return;
   const t0=performance.now();
   if(dirtyAll){for(let y=0;y<rows;y++){rd[y]=1;rx0[y]=0;rx1[y]=cols-1}dirtyAll=false}
-  /* Blit the dirty cells, then push pixels: a few rows go one by one, more
-   * than that go as one box, since each push is a native copy with a fixed
-   * cost on top. */
-  let cells=0,nrows=0,by0=rows,by1=-1,bx0=cols,bx1=-1;
-  for(let y=0;y<rows;y++){
-    if(!rd[y])continue;
-    const x0=rx0[y],x1=rx1[y];
-    blitRow(y,x0,x1);
-    cells+=x1-x0+1;nrows++;
-    if(y<by0)by0=y;if(y>by1)by1=y;if(x0<bx0)bx0=x0;if(x1>bx1)bx1=x1;
-  }
-  if(nrows>4)ctx.putImageData(img,0,0,bx0*cw,by0*ch,(bx1-bx0+1)*cw,(by1-by0+1)*ch);
-  for(let y=0;y<rows;y++){
-    if(!rd[y])continue;
-    if(nrows<=4)ctx.putImageData(img,0,0,rx0[y]*cw,y*ch,(rx1[y]-rx0[y]+1)*cw,ch);
-    rd[y]=0;rx0[y]=1e9;rx1[y]=-1;
+  /* Blit the dirty cells, then push pixels a band at a time: rows that are
+   * dirty together, as wide as the widest. One box round every dirty row
+   * would push most of the screen for a cursor step, whose rows run from
+   * the column letters to the status line (docs/PAGESPEED.md). */
+  let cells=0;
+  for(let y=0;y<rows;){
+    if(!rd[y]){y++;continue}
+    let y1=y,x0=rx0[y],x1=rx1[y];
+    while(y1+1<rows&&rd[y1+1]){y1++;if(rx0[y1]<x0)x0=rx0[y1];if(rx1[y1]>x1)x1=rx1[y1]}
+    for(let r=y;r<=y1;r++){blitRow(r,rx0[r],rx1[r]);cells+=rx1[r]-rx0[r]+1;rd[r]=0;rx0[r]=1e9;rx1[r]=-1}
+    ctx.putImageData(img,0,0,x0*cw,y*ch,(x1-x0+1)*cw,(y1-y+1)*ch);
+    y=y1+1;
   }
   ms=performance.now()-t0;frames++;last=cells;
   status();
@@ -261,8 +263,15 @@ E('wx').onclick=()=>{wd.hidden=true;wb.hidden=false};
 wb.onclick=()=>{wd.hidden=false;wb.hidden=true};
 
 /* ---- connection */
+/* The bottom line says what a player needs -- connecting, connected, gone --
+ * and only when it changes. The frame figures are a developer's: with
+ * &stats in the address, twice a second at most. */
+const stats=/[?&]stats/.test(location.search);let shown=0;
 function status(m){
-  st.innerHTML=m||('<b>'+cols+'×'+rows+'</b> '+ms.toFixed(2)+' ms · '+last+' cells · '+frames);
+  if(m){st.textContent=m;st.hidden=false;return}
+  if(!stats){st.hidden=true;return}
+  const t=performance.now();if(t-shown<500)return;shown=t;
+  st.hidden=false;st.textContent=cols+'×'+rows+' '+ms.toFixed(2)+' ms · '+last+' cells · '+frames;
 }
 function connect(){
   const k=new URLSearchParams(location.search).get('k')||'';
