@@ -152,20 +152,21 @@ static int ping_visible(const void *ctx, int tx, int ty)
 
 static void draw_editor_body(App *a);
 
-/* The players on a floor the GM is not showing: their frame is drawn
- * through their own camera, swapped in for this one draw, and says nothing
- * on the status line -- it would describe the GM's cursor on the GM's
- * floor. */
+/* The players on a floor the GM is not showing, or with a camera of their
+ * own (docs/CAMERA.md): their frame is drawn through it, swapped in for this
+ * one draw, and says nothing on the status line -- it would describe the
+ * GM's cursor, somewhere they are not looking. Held, it has no cursor. */
 static void draw_editor(App *a)
 {
-    if (a->view != VIEW_PLAYERS || !app_players_split(a)) { draw_editor_body(a); return; }
+    if (a->view != VIEW_PLAYERS || !app_players_own_camera(a)) { draw_editor_body(a); return; }
     GridView gm = a->ed.view;
     app_players_camera(a);
     a->ed.view = a->pview;
     a->psplit  = 1;
     a->ed.hold_camera = 1;
+    a->ed.hide_cursor = a->pcam == PCAM_HOLD;
     draw_editor_body(a);
-    a->ed.hold_camera = 0;
+    a->ed.hold_camera = a->ed.hide_cursor = 0;
     a->pview   = a->ed.view;
     a->ed.view = gm;
     a->psplit  = 0;
@@ -222,9 +223,13 @@ static void draw_editor_body(App *a)
     if (a->screen == SCREEN_PLAY) turn_status_view(m, a->view == VIEW_PLAYERS, fight, sizeof fight);
     snprintf(left, sizeof left, "%.63s%s%s%.120s", m->name, m->modified ? " [+]" : "",
              fight[0] ? "    " : "", fight);
-    /* A handout up is true for the whole table, so both views say it. */
-    ui_titlebar(r, th, left, a->screen == SCREEN_PLAY ? (a->handout_up ? "HANDOUT  PLAY" : "PLAY")
-                                                      : (a->handout_up ? "HANDOUT  BUILD" : "BUILD"));
+    /* A handout up is true for the whole table, so both views say it; the
+     * players' camera, when it is not the GM's, is said to the GM. */
+    char right[40];
+    snprintf(right, sizeof right, "%s%s%s", a->handout_up ? "HANDOUT  " : "",
+             a->view == VIEW_GM && a->pcam != PCAM_FOLLOW ? (a->pcam == PCAM_PARTY ? "CAM PARTY  " : "CAM HOLD  ") : "",
+             a->screen == SCREEN_PLAY ? "PLAY" : "BUILD");
+    ui_titlebar(r, th, left, right);
 
     int playing = (a->screen == SCREEN_PLAY);
 
@@ -504,7 +509,7 @@ int app_view_differs(const App *a)
         int cur = turn_acting(m);                 /* the panel shows the actor's */
         if (cur >= 0 && m->tokens.v[cur].ncounters) return 1;
         if (map_note_at(m, a->ed.cx, a->ed.cy)) return 1;
-        if (app_players_split(a)) return 1;       /* their floor is not the GM's */
+        if (app_players_own_camera(a)) return 1;  /* their camera is not the GM's */
         if (tokens_any_hidden(&m->tokens)) return 1;
         /* The GM's status line names a secret link under the cursor. */
         int li = link_at(m, a->ed.cx, a->ed.cy, NULL);

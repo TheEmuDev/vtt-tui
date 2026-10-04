@@ -880,8 +880,12 @@ static void cmd_player(App *a, const char *verb, const char *rest)
 {
     /* :player preview -- the players' view on the GM's own screen. */
     if (!strncmp(rest, "floor ", 6)) { app_players_pin(a, rest + 6); return; }
+    if (!strcmp(rest, "camera") || !strncmp(rest, "camera ", 7)) {
+        app_players_camera_command(a, rest[6] ? rest + 7 : "");
+        return;
+    }
     if (strcmp(rest, "preview") != 0) {
-        app_set_status(a, ":player preview shows what the players see; q returns   :player floor NAME|auto");
+        app_set_status(a, ":player preview shows what the players see; q returns   :player floor NAME|auto   :player camera follow|party|hold");
         return;
     }
     if (a->screen != SCREEN_PLAY) { app_set_status(a, "the players' view is play mode's - F2 first"); return; }

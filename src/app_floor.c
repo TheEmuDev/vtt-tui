@@ -217,6 +217,10 @@ void app_floor_reset(App *a)
     a->side_floor[0][0] = a->side_floor[1][0] = '\0';
     a->last_acting = -1;
     a->psplit = 0;
+    /* A held view is a place on the map put down; party and follow carry
+     * on to the next one. */
+    if (a->pcam == PCAM_HOLD) a->pcam = PCAM_FOLLOW;
+    a->pcam_for.map = NULL;
 }
 
 void app_floor_note_move(App *a, const Token *t)
@@ -268,32 +272,156 @@ int app_players_split(const App *a)
     return f != app_floor_shown(a);
 }
 
+int app_players_own_camera(const App *a)
+{
+    if (!a->map || a->screen != SCREEN_PLAY) return 0;
+    return a->pcam != PCAM_FOLLOW || app_players_split(a);
+}
+
+/* The squares every player creature the players can see on floor f takes,
+ * hidden ones left out; 0 when there are none. */
+static int party_box(const Map *m, int f, int *x0, int *y0, int *x1, int *y1)
+{
+    int n = 0;
+    for (int i = 0; i < m->tokens.n; i++) {
+        const Token *t = &m->tokens.v[i];
+        if (t->kind != TOKEN_PLAYER || t->hidden || !floor_holds(m, f, t->x, t->y)) continue;
+        int tx1 = t->x + t->size - 1, ty1 = t->y + t->size - 1;
+        if (!n++) { *x0 = t->x; *y0 = t->y; *x1 = tx1; *y1 = ty1; continue; }
+        *x0 = imin(*x0, t->x); *y0 = imin(*y0, t->y);
+        *x1 = imax(*x1, tx1);  *y1 = imax(*y1, ty1);
+    }
+    return n;
+}
+
+/* Squares round the party a party camera keeps on screen: one inside it
+ * moves the camera. */
+#define PARTY_MARGIN 2
+
+/* Party: the GM's zoom, or the closest out at which the party fits with its
+ * margin. The camera stays put until a creature comes inside the margin,
+ * then centers on them all: a TV that swims with every step is worse than
+ * one that jumps now and then. Too spread out even at the farthest zoom, it
+ * frames the creature whose turn it is, else the party's middle, kept the
+ * same way. */
+static void party_frame(App *a, int f)
+{
+    PROF_ZONE("camera.party");
+    const Map *m = a->map;
+    GridView  *g = &a->pview;
+    int x0, y0, x1, y1;
+    if (!party_box(m, f, &x0, &y0, &x1, &y1)) { g->zoom = a->ed.view.zoom; return; }
+
+    /* The box with its margin, cut to what can be shown: a creature at the
+     * floor's edge has no margin beyond it to keep. */
+    int bx0, by0, bx1, by1;
+    grid_bounds(g, m, &bx0, &by0, &bx1, &by1);
+    int mx0 = imax(x0 - PARTY_MARGIN, bx0), my0 = imax(y0 - PARTY_MARGIN, by0);
+    int mx1 = imin(x1 + PARTY_MARGIN, bx1), my1 = imin(y1 + PARTY_MARGIN, by1);
+    #define FITS(z) ((mx1 - mx0 + 1) * zoom_pw(z) + 1 <= g->view.w && (my1 - my0 + 1) * zoom_ph(z) + 1 <= g->view.h)
+    int z = a->ed.view.zoom;
+    while (z > 0 && !FITS(z)) z--;
+    int cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    if (!FITS(z)) {
+        /* The one square framed has the same margin, so this does not
+         * swim either. */
+        int acting = turn_acting(m);
+        const Token *t = acting >= 0 ? &m->tokens.v[acting] : NULL;
+        if (t && t->kind == TOKEN_PLAYER && !t->hidden && floor_holds(m, f, t->x, t->y)) {
+            cx = t->x + (t->size - 1) / 2;
+            cy = t->y + (t->size - 1) / 2;
+        }
+        mx0 = imax(cx - PARTY_MARGIN, bx0); my0 = imax(cy - PARTY_MARGIN, by0);
+        mx1 = imin(cx + PARTY_MARGIN, bx1); my1 = imin(cy + PARTY_MARGIN, by1);
+    }
+    #undef FITS
+    int pw = zoom_pw(z), ph = zoom_ph(z);
+    int inside = mx0 * pw >= g->cam_x && (mx1 + 1) * pw + 1 <= g->cam_x + g->view.w &&
+                 my0 * ph >= g->cam_y && (my1 + 1) * ph + 1 <= g->cam_y + g->view.h;
+    if (z != g->zoom || !inside) {
+        g->zoom = z;
+        grid_center_on(g, m, cx, cy);
+    }
+}
+
+/* On a floor of theirs: where the party stands, on average, else the
+ * floor's middle. */
+static void center_on_party(App *a, int f)
+{
+    const Map *m = a->map;
+    GridView  *g = &a->pview;
+    long sx = 0, sy = 0, n = 0;
+    for (int i = 0; i < m->tokens.n; i++) {
+        const Token *t = &m->tokens.v[i];
+        if (t->kind != TOKEN_PLAYER || t->hidden || !floor_holds(m, f, t->x, t->y)) continue;
+        sx += t->x; sy += t->y; n++;
+    }
+    if (n) grid_center_on(g, m, (int)(sx / n), (int)(sy / n));
+    else   grid_center_on(g, m, (g->bx0 + g->bx1) / 2, (g->by0 + g->by1) / 2);
+}
+
 void app_players_camera(App *a)
 {
     Map *m = a->map;
     int  f = floor_named(m, a->pfloor);
     GridView *g = &a->pview;
-    g->zoom = a->ed.view.zoom;
+    if (a->pcam == PCAM_FOLLOW) g->zoom = a->ed.view.zoom;    /* party picks its own; hold keeps it */
     g->view = a->ed.view.view;
     g->bounded = f >= 0;
     floor_box(m, f, &g->bx0, &g->by0, &g->bx1, &g->by1);
 
-    /* Centered on the party when the floor changes; held after that, so
-     * their screens do not swim with every step. */
-    if (strcmp(a->pview_floor, a->pfloor) != 0) {
-        str_lcpy(a->pview_floor, a->pfloor, sizeof a->pview_floor);
-        long sx = 0, sy = 0, n = 0;
-        for (int i = 0; i < m->tokens.n; i++) {
-            const Token *t = &m->tokens.v[i];
-            if (t->kind != TOKEN_PLAYER || t->hidden || !floor_holds(m, f, t->x, t->y)) continue;
-            sx += t->x; sy += t->y; n++;
+    if (a->pcam == PCAM_PARTY) {
+        /* Worked out again only when the map, their floor, the GM's zoom or
+         * the screen changed: nothing else moves the party. */
+        if (a->pcam_for.map != m || a->pcam_for.gen != m->gen || a->pcam_for.floor != f ||
+            a->pcam_for.zoom != a->ed.view.zoom || memcmp(&a->pcam_for.view, &g->view, sizeof g->view)) {
+            a->pcam_for.map  = m;
+            a->pcam_for.gen  = m->gen;
+            a->pcam_for.floor = f;
+            a->pcam_for.zoom = a->ed.view.zoom;
+            a->pcam_for.view = g->view;
+            party_frame(a, f);
         }
-        int cx, cy;
-        if (n) { cx = (int)(sx / n); cy = (int)(sy / n); }
-        else   { cx = (g->bx0 + g->bx1) / 2; cy = (g->by0 + g->by1) / 2; }
-        grid_center_on(g, m, cx, cy);
+        str_lcpy(a->pview_floor, a->pfloor, sizeof a->pview_floor);
+    } else if (strcmp(a->pview_floor, a->pfloor) != 0) {
+        /* Follow on a split floor, and hold: centered on the party when
+         * their floor changes, held after that, so their screens do not
+         * swim with every step. */
+        str_lcpy(a->pview_floor, a->pfloor, sizeof a->pview_floor);
+        center_on_party(a, f);
     }
     grid_clamp_camera(g, m);
+}
+
+/* :player camera follow|party|hold. Hold takes the GM's view as it is now
+ * -- given again, it shows the table wherever the GM has got to -- and
+ * the GM's floor with it, pinned as :player floor pins. */
+void app_players_camera_command(App *a, const char *rest)
+{
+    static const char *const NAME[] = { "follow", "party", "hold" };
+    Map *m = a->map;
+    int mode = -1;
+    for (int k = 0; k < 3; k++) if (!strcmp(rest, NAME[k])) mode = k;
+    if (mode < 0) {
+        char msg[128];
+        snprintf(msg, sizeof msg, "the players' camera is on %s - :player camera follow|party|hold", NAME[a->pcam]);
+        app_set_status_gm(a, msg);
+        return;
+    }
+    a->pcam = (PlayersCamera)mode;
+    a->pcam_for.map = NULL;
+    if (mode == PCAM_HOLD) {
+        int shown = app_floor_shown(a);
+        if (shown >= 0) {
+            str_lcpy(a->ppin, m->areas[shown].name, sizeof a->ppin);
+            str_lcpy(a->pfloor, m->areas[shown].name, sizeof a->pfloor);
+        }
+        a->pview = a->ed.view;
+        str_lcpy(a->pview_floor, a->pfloor, sizeof a->pview_floor);
+    }
+    app_set_status_gm(a, mode == PCAM_FOLLOW ? "the players' screens follow yours"
+                       : mode == PCAM_PARTY  ? "the players' screens frame the party - :player camera follow returns"
+                       :                       "the players' screens hold this view - :player camera hold again moves it here");
 }
 
 void app_floor_spotlight(App *a)

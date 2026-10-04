@@ -601,7 +601,7 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
 
     /* The lit row and column say where the cursor is; in the dark that is
      * where the GM is working, which is usually on something hidden. */
-    int no_cursor = cursor_dark || held_hidden;     /* the lit labels would say where it is */
+    int no_cursor = cursor_dark || held_hidden || e->hide_cursor;   /* the lit labels would say where it is */
     grid_draw_labels(r, m, &e->view, th, ed_gutter(e, m),
                      no_cursor ? -1 : e->cx, no_cursor ? -1 : e->cy);
 
@@ -617,7 +617,7 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
     /* The box, under the creatures it is picking out. Tinted the same way
      * build mode tints its visual selection, so the gesture reads as the same
      * gesture in both modes. */
-    if (p->visual)
+    if (p->visual && !e->hide_cursor)
         grid_draw_tile_region(r, &e->view, p->anchor_x, p->anchor_y,
                               e->cx, e->cy, th->sel_bg);
 
@@ -645,7 +645,7 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
     uint8_t csize = play_cursor_size(p, m);
     /* Carrying one the players cannot see, the cursor would walk its size
      * across their screen: they get none. */
-    int     cursor = !cursor_dark && !held_hidden;
+    int     cursor = !no_cursor;
     if (cursor) grid_draw_cursor_area(r, &e->view, m, e->cx, e->cy, csize, th->cursor_bg);
 
     /* Everything in the group is ringed, not just the primary: a formation

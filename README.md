@@ -939,6 +939,7 @@ fogged areas). While the GM is in build mode or a menu, the players' view keeps 
 | `:serve off` | stop serving and disconnect everyone |
 | `:mirror` | open a second terminal window showing the players' view |
 | `:player preview` | show the players' view on the GM's screen; `q` returns |
+| `:player camera follow\|party\|hold` | what the players' view looks at: [the camera](#the-players-view-serve-mirror) |
 | `vtt --watch ADDRESS` | show the players' view in a terminal on another machine; ADDRESS is the one `:serve` shows, join code included |
 
 **Connecting a phone or tablet.** The device needs a browser and the same Wi-Fi network as the
@@ -972,6 +973,30 @@ another map with `:e` does not stop it.
 line (`ping at C4`). Players ping by tapping a square on their device (at most one ping per
 second per device). The GM pings with `g p`: the cursor's squares, or the selection. Over fog,
 players see a ping only on squares they can see.
+
+**The camera.** The players' screens show what yours shows, unless you give them a camera of
+their own. It is the same for every phone and for the terminal mirror on a TV.
+
+| command | action |
+|---------|--------|
+| `:player camera follow` | the players' screens follow yours (the default) |
+| `:player camera party` | the players' screens keep every player creature they can see in view |
+| `:player camera hold` | the players' screens stay on what yours shows now, while you look elsewhere |
+| `:player camera` | say which camera is on |
+
+With `party`, the view moves only when a creature comes within two squares of its edge, and
+then centers on the whole party. It uses your zoom, or zooms out until the party fits. If
+they are too far apart to fit at all, it shows the creature whose turn it is. Your cursor
+shows on their screens when it is in their view.
+
+With `hold`, your cursor never shows on their screens. Typing `:player camera hold` again
+moves their view to what yours shows now: scout ahead, find the room, then show it. If your
+screen is on another floor, their screens go to that floor too, as with `:player floor`.
+Opening another map, or taking a link to one, puts a held camera back to `follow`.
+
+While the players have a camera of their own, their status line is left blank (it describes
+your cursor), taps from phones land on the square the player tapped, and your title bar says
+`CAM PARTY` or `CAM HOLD`.
 
 **Handouts.** A handout is a short text card on the players' devices: an inscription, a
 letter, a riddle. It appears over the map in a readable font, whatever the map's size on
@@ -1166,7 +1191,7 @@ use, and how `:dmg` marks HP. Available: `none`, `daggerheart`.
 | `:hidden` | list the [hidden creatures](#play-mode) |
 | `:fog ...` | [fog of war](#fog-of-war-fog) |
 | `:serve ...` | the [players' view](#the-players-view-serve-mirror); `:serve off` stops it |
-| `:player preview` | show the players' view on your screen; `:player floor NAME\|auto` pins their [floor](#floors) |
+| `:player preview` | show the players' view on your screen; `:player floor NAME\|auto` pins their [floor](#floors); `:player camera follow\|party\|hold` their camera |
 | `:mirror` | open a second terminal with the players' view |
 | `:agent on` | open the [control channel](#control-channel-agent-vtt---ctl) for an AI agent; `:agent off` closes it |
 | `:roll EXPR` | roll dice; `:roll NAME = EXPR` saves a named roll, `:rolls` lists them |

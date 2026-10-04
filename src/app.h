@@ -32,6 +32,8 @@ typedef enum {
  * prompt, no profiler overlay and no hint that a note exists. */
 typedef enum { VIEW_GM, VIEW_PLAYERS } View;
 
+typedef enum { PCAM_FOLLOW, PCAM_PARTY, PCAM_HOLD } PlayersCamera;
+
 typedef enum {
     MODAL_NONE,
     MODAL_PROMPT,
@@ -131,6 +133,11 @@ typedef struct {
     GridView pview;
     char     pview_floor[AREA_NAME_MAX];      /* the floor pview was centered for */
     int      psplit;                          /* the players' frame is being drawn through pview */
+    /* The players' camera (docs/CAMERA.md): the GM's (follow), framing the
+     * party, or held where the GM left it. Party's framing is worked out
+     * again only when what it was worked out from changes. */
+    PlayersCamera pcam;
+    struct { const Map *map; unsigned gen; int floor, zoom; Rect view; } pcam_for;
 
     /* One log for the whole session: token moves in play mode undo through
      * the same history as wall edits in build mode. */
@@ -227,13 +234,13 @@ typedef struct {
      * says otherwise; :card's view is scrolled to card_top, and names whose
      * card it shows (card_token), the last draw measuring card_lines. */
     int      card_box_off;
+    int      card_top;
+    int      card_token;
+    int      card_lines;
     /* The map and generation the phones' names were last offered from
      * (app_whisper.c): rebuilt only when one changes. */
     const Map *offer_map;
     unsigned   offer_gen;
-    int      card_top;
-    int      card_token;
-    int      card_lines;
 
     /* A prefix key waiting for the one that completes it -- i for placing, s
      * for markers, PENDING_IT for i t. 0 when nothing is pending. */
@@ -254,6 +261,9 @@ int  app_players_floor(App *a);
 /* The players are on a floor the GM is not showing: their frame is drawn
  * through its own camera. */
 int  app_players_split(const App *a);
+/* Their frame is drawn through their own camera, pview: on a split floor,
+ * or with :player camera party or hold. Pings and the frame ask this. */
+int  app_players_own_camera(const App *a);
 void app_key(App *a, Key k);
 /* Works fog's sight out again if anything on the map changed since last
  * time -- a creature moved, a door opened, a patch was painted, an undo.

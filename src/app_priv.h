@@ -179,6 +179,8 @@ void app_floor_note_move(App *a, const Token *t);
 void app_players_camera(App *a);
 void app_floor_spotlight(App *a);
 void app_players_pin(App *a, const char *rest);
+/* :player camera follow|party|hold (docs/CAMERA.md). */
+void app_players_camera_command(App *a, const char *rest);
 
 /* app_ctl.c: :agent on, :agent off, :agent to ask. */
 void app_agent_command(App *a, const char *rest);

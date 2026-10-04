@@ -43,6 +43,8 @@ int main(int argc, char **argv)
         { "floorview", test_floor_view },
         { "floorplayers", test_floor_players },
         { "floorcam", test_floor_big_camera },
+        { "camera", test_camera },
+        { "camerafloors", test_camera_floors },
         { "hidden", test_hidden },
         { "graymarker", test_gray_marker },
         { "roomlang", test_room_language },

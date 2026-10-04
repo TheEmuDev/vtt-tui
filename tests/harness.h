@@ -287,6 +287,8 @@ void test_floors(void);
 void test_floor_view(void);
 void test_floor_players(void);
 void test_floor_big_camera(void);
+void test_camera(void);
+void test_camera_floors(void);
 void test_room_language(void);
 void test_corridors(void);
 void test_corridor_edges(void);

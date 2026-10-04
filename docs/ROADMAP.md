@@ -101,7 +101,7 @@ says what happened. The Fear pool stays set aside (IDEAS.md).
     folder to the players' screens -- a creature, a drawn map, a letter's scan -- shown as
     the text card is, closable the same way; the terminal names it. The image travels as
     data over the existing connection, not as page code, so the page's size budget holds.
-21. **A camera for a TV.** `:player camera follow|party|hold`: the players' view follows
+21. **A camera for a TV.** *Built 2026-10-04 (docs/CAMERA.md).* `:player camera follow|party|hold`: the players' view follows
     the GM's screen (as now), frames every player creature, or holds still while the GM
     scouts elsewhere. The players' view already has its own camera for floors.
 22. **Export a map as SVG.** `vtt --svg crypt.vtt`: walls, doors, windows, terrain, labels
@@ -113,7 +113,7 @@ says what happened. The Fear pool stays set aside (IDEAS.md).
     text), which later per-player features can use too; the join step is the real work.
 
 Suggested order: 16 and 17 (built), then 6 and 9 together (built) (the card and what
-it holds), then 10 (built), 23 (built), 21, 12, 18, 8, 19, 22, 7, 11; 13, 14 and 15 when play asks for
+it holds), then 10 (built), 23 (built), 21 (built), 12, 18, 8, 19, 22, 7, 11; 13, 14 and 15 when play asks for
 them. 20 is parked (docs/IDEAS.md).
 
 **Housekeeping** (2026-09-27): the `:` command chain became a table, and `tests/run.c` was

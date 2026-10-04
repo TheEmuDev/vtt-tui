@@ -333,7 +333,7 @@ int app_ping_cell(App *a, uint32_t who, int sx, int sy)
     if (!a->map || a->screen != SCREEN_PLAY) return 0;
     /* Through the camera their frame was drawn with: their own, when they
      * are on a floor the GM is not showing. */
-    const GridView *g = app_players_split(a) ? &a->pview : &a->ed.view;
+    const GridView *g = app_players_own_camera(a) ? &a->pview : &a->ed.view;
     if (!rect_contains(g->view, sx, sy)) return 0;
     int tx, ty;
     if (!grid_screen_to_tile(g, a->map, sx, sy, &tx, &ty)) return 0;

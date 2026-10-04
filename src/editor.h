@@ -102,6 +102,9 @@ typedef struct {
      * layout keeps it where it is instead of scrolling to the GM's cursor,
      * which is on another floor. */
     int    hold_camera;
+    /* Set with it while the players' camera is held: the GM's cursor is
+     * the GM's own, scouting, and is not drawn on their frame. */
+    int    hide_cursor;
 
     TextPrompt cmd;            /* the `:` line */
     int    cmd_from_stamp;     /* it was opened over a stamp, and goes back to it */
