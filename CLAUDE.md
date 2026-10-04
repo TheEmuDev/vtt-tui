@@ -14,6 +14,11 @@ maintainer; this file is what survives a context reset, so keep it true.
   `PROF_ZONE`, a scenario in `tools/perf.sh`, and a regenerated
   `docs/PERFORMANCE.md`. Bytes written matter more than frame time. Cost follows
   the window, not the map: cull with `grid_visible_tiles` first.
+- **The phone page stays inside one round trip** (the user, 2026-10-04): under 12 KB as sent,
+  so it and its headers fit TCP's first flight (~14.4 KB) -- docs/REMOTE.md has the reason.
+  Every millisecond matters; never be complacent, performance slips away slowly. Below the
+  limit, do not spend effort shaving bytes (no minifying or compressing for its own sake):
+  spend it where it matters, on the page's JavaScript being close to optimal at run time.
 - **Push only when told** ("push it"). Commit freely; never push on your own.
 - **Model roles** (set 2026-09-26): **Opus 5.5** plans -- the plan goes to
   the user for sign-off -- and implements; a **Fable 5.1** subagent (Agent

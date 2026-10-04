@@ -12,7 +12,7 @@ measured against them.
 |---|---|
 | server, per frame per client | 2 µs, and zero bytes when nothing changed |
 | server memory | fixed at `:serve`: one 64 KB send buffer per client, eight clients, no heap after that |
-| the page | one request, under 12 KB as sent (tools/embed.sh drops its block comments), no fonts or scripts fetched, no framework |
+| the page | one request, under 12 KB as sent (tools/embed.sh drops its block comments), no fonts or scripts fetched, no framework. **Why 12 KB:** the page and its HTTP headers must arrive in TCP's first flight -- Linux sends 10 segments before it waits for an acknowledgement, about 14.4 KB on Wi-Fi -- so a load is one round trip. Past that every load costs another round trip (two at ~29 KB, three at ~58 KB). 12 KB keeps a margin for headers and segment size. The limit is hard: every millisecond matters, and performance slips away a little at a time. Below it, shaving bytes buys nothing; the effort goes into the JavaScript being close to optimal at run time (2026-10-04) |
 | client memory | one cell buffer plus one glyph atlas, both allocated once |
 | client, per keystroke frame | 0.5 ms on a mid-range phone; a full 200×50 frame in 5 ms |
 | latency added by our code | one write per frame per client, sent the moment the GM's frame is |
