@@ -1324,6 +1324,9 @@ changed J2:O6: 3 lines, one undo step
 
 `vtt map.vtt --apply plan.txt` runs the same requests against a map file without a live
 session and saves it; `--new WxH` creates an empty map first if the file does not exist.
+Don't use `--apply` on a map that is open in vtt: vtt doesn't notice the file changing,
+and your next `:w` writes over the plan's changes. Send the plan to the open map instead:
+`vtt --ctl < plan.txt` after `:agent on`.
 
 Each request is applied as a single undo step, and only if every line in it succeeds. The GM
 sees a summary on the status line and a highlight around the changed squares. Edits are

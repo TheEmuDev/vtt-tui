@@ -23,6 +23,22 @@ A plan and a live session speak the same language, the one below, and follow the
 **a request is all or nothing** (if any line fails, nothing changed, and the answer names
 the line and why), and **one request is one undo step** for the GM.
 
+**Which way.** If the GM has the map open in `vtt`, work live, even for a large change: run
+`vtt --ctl status` and, when it answers with that map, send your plan to `vtt --ctl`
+(it reads the same file on stdin, `vtt --ctl < plan.txt`). Never `--apply` to a file the
+GM has open. vtt does not notice the file changing under it, and the GM's next `:w` writes
+the map they have in memory over yours, silently. When `--ctl` exits 2, either nothing is
+open or the GM has not typed `:agent on`. Ask the GM which before you `--apply`.
+
+**Where the GM's maps are.** The GM's menu lists the maps in the directory vtt was started
+in and in `~/.local/share/vtt/maps` (`$XDG_DATA_HOME/vtt/maps` when that is set), and
+`:e crypt` opens `~/.local/share/vtt/maps/crypt.vtt`. A new map for the GM goes there unless
+they name a folder. `--apply` takes its path as given, so spell it out:
+`vtt ~/.local/share/vtt/maps/crypt.vtt --apply plan.txt --new 40x24`. A map that a link
+leads to must sit beside the map the link is on. The GM's stamps and characters are in
+`~/.local/share/vtt/stamps` and `characters`; read them with `stamps` and `characters`
+rather than opening the files.
+
 ## The request language
 
 One request is lines. Words are separated by spaces; `"..."` is one word (`\"` and `\\`
@@ -141,7 +157,7 @@ can take back, so each goes in a request of its own.
 
    `vtt crypt.vtt --apply plan.txt --new 40x24` makes the file (void to start) and exits 0,
    or 1 with the failing line on stderr and nothing saved (a file `--new` made is taken away
-   again). A map with an autosave newer than it is applied to as saved, with a line on
+   again), or 2 when the map cannot be read or written. A map with an autosave newer than it is applied to as saved, with a line on
    stderr saying so.
 2. **Read it back.** `vtt crypt.vtt --dump-map` and look: is every room where the
    description puts it, every door in a wall, every creature on the floor?
@@ -210,7 +226,15 @@ what you did, and `u` takes back each request whole.
 
 Exit status: 0 done; 1 an error or `busy:` (the reason on stderr); 2 no vtt is listening --
 ask the GM to type `:agent on`. `busy:` means the GM is part way through something (typing a
-command, drawing a wall, in play mode): wait, or ask, and send the same request again. The
+command, drawing a wall): wait, or ask, and send the same request again.
+
+**In play mode** (`status` says `edits not now: the GM is in play mode`), every edit waits
+until the GM goes back to build mode. Reads still work, so `dump`, `describe` and `marked`
+can follow the fight. Do not retry in a loop: tell the GM what you have ready and ask them
+to switch to build mode (`:build`) when they want it. Moving creatures, fog and the turn
+order during play stay the GM's.
+
+The
 channel never saves; saving is the GM's (`:w`). It never takes away the creature whose turn
 it is in a fight: the fight is the GM's.
 
