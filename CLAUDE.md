@@ -31,7 +31,8 @@ maintainer; this file is what survives a context reset, so keep it true.
   performance (a new path has a `PROF_ZONE` and a perf row; the window, not the map, sets
   the cost; stale PERFORMANCE.md numbers), test gaps (would a test fail if the behavior
   broke? error paths, the players' frame), and the docs (does the README tell a user how to
-  use it; CLAUDE.md, KEYS.md, the design doc in step). docs/HEALTH.md is the full list.
+  use it; CLAUDE.md, KEYS.md, the design doc in step). docs/HEALTH.md's *The questions* is
+  the full list.
 - **Rules-agnostic core.** Game-specific behavior lives behind the `Ruleset`
   table in `ruler.c` (bands, `action_roll`, `spotlight`, `countdown`, `damage`), documented under the README's
   *Rulesets* section with a subsection per game. Nothing else may know a game.

@@ -5,6 +5,54 @@ finding stays here until it is fixed (then its entry says by which commit) or co
 left (then it moves to CLAUDE.md's watch list with the point at which it stops being cheap
 to ignore).
 
+## The questions
+
+A full health check asks these of the whole code. Every review asks them too, of the change
+and the code it touches, alongside correctness. Check each answer by hand before it is
+written down.
+
+**Duplication**
+- Is the same logic written out more than once? Two copies are allowed. A third copy is
+  extracted into one function before it is written (the rule of three).
+- Does the change add a copy of something on CLAUDE.md's watch list? Then that item is due.
+
+**Organization**
+- Does the code live in the file that owns it? CLAUDE.md's file table answers this.
+- Has a file grown too big to read as one subject? Split it along a seam, as app_browser.c
+  and app_build.c came out of app.c.
+- Does every source file still have a row in CLAUDE.md's file table, and is that row true?
+
+**Performance**
+- Does every new drawing or keystroke path have a `PROF_ZONE`, a scenario in `tools/perf.sh`
+  that reaches it, and a row in a regenerated PERFORMANCE.md?
+- Does each perf row measure what its label says?
+- Does the window, not the map, set a drawing path's cost? Every draw culls with
+  `grid_visible_tiles` first. Anything else that grows with the map (load, save, sight,
+  route search) says so in its perf row.
+- Count bytes written as well as frame time: bytes matter more.
+- Are PERFORMANCE.md's numbers stale? Were they measured somewhere different from where
+  the cost really falls (for example tmpfs instead of the real disk)?
+- Is the phone page still under 12 KB as sent? Below the limit, effort goes to its run-time
+  JavaScript, never to shaving bytes.
+
+**Tests**
+- If the behavior broke, would a test fail?
+- Are the error paths tested: refusals, damaged files, a full buffer, a closed socket?
+- Is the players' frame tested? GM-only things must never reach it.
+- Is every new screen or dialog drawn in a test (a golden frame)?
+- Do the fuzzers' seeds (tests/fixtures, tests/fuzz-ctl, tests/fuzz-json) carry the newest
+  file-format record and channel line?
+- Is the suite clean: does it leave nothing in `/tmp`, test the binary it just built, and
+  avoid tests that pass without testing anything? Does
+  `make test CC=clang CFLAGS=-fno-sanitize-recover=all` still pass?
+
+**Docs**
+- Does the README tell a user how to use the feature, in plain instructional terms?
+- Are CLAUDE.md, docs/KEYS.md (and the `?` page from `src/keys.c`) and the feature's
+  design doc in step with the code?
+- Where would a user get stuck: something undocumented, unexplained or cut off?
+- Is each thing called by one name (creature, the players' view, wall mode)?
+
 ## 2026-09-28, at 17e31e3
 
 Four read-only audits in parallel -- duplication and organization, performance and
