@@ -64,7 +64,7 @@ before it was written down here. Nothing was changed by the check itself.
 
 ### 1. Disk flushes are the real cost of saving, and nothing measures them
 
-- `tools/perf.sh` works in `mktemp -d`, which is `/tmp`, which is tmpfs on this machine: an
+- `tools/perf.sh` works in `mktemp -d`, which is `/tmp`, which is tmpfs on this machine (the laptop): an
   `fsync` there is free. Maps live on the GM's own filesystem (btrfs under `/home` here).
 - Checked by hand: the same load, one edit and save (`--apply` on `crowd.vtt`) is **1 ms on
   tmpfs and 29 ms on btrfs**. The audit measured single `mapio_write` flushes of 45-390 ms

@@ -9,23 +9,41 @@ Any single run has one row spiking somewhere, and never the same row twice,
 so docs/PERFORMANCE.md publishes the median of three. Prints the two tables
 in the form that document carries them.
 """
+import re
 import statistics
 import sys
 
 
+def hardware(line):
+    """A Machine: line without what can change between runs on one machine:
+    the governor (a laptop's on unplugging), the kernel, the compiler, node."""
+    key = re.sub(r", \w+ governor", "", line)
+    key = re.sub(r", (Linux|Darwin|FreeBSD) \S+", "", key)
+    key = re.sub(r", (gcc|clang|cc unknown) [^,]*$", "", key)
+    return re.sub(r", node \S+", "", key)
+
+
 def machine(paths):
-    """Prints the runs' "Machine:" line (tools/machine.sh) above the tables; a
-    median of runs from different machines would mean nothing, so that stops."""
+    """Prints the runs' "Machine:" line (tools/machine.sh) above the tables.
+    Runs on different hardware stop it: their median would mean nothing. Runs
+    whose setting differs (governor, kernel, compiler) are warned about and the
+    last run's line is published."""
     seen = []
     for p in paths:
         lines = [l for l in open(p).read().split("\n") if l.startswith("Machine: ")]
         seen.append(lines[0] if lines else None)
-    if None in seen:
-        print("Machine: not recorded (a run without tools/machine.sh)")
-    elif len(set(seen)) > 1:
-        sys.exit("the runs are from different machines:\n  " + "\n  ".join(seen))
-    else:
-        print(seen[0])
+    have = [l for l in seen if l]
+    if not have:
+        print("Machine: not recorded (runs without tools/machine.sh)")
+        print()
+        return
+    if len({hardware(l) for l in have}) > 1:
+        sys.exit("the runs' Machine lines name different hardware:\n  " + "\n  ".join(have))
+    if len(set(have)) > 1:
+        sys.stderr.write("warning: the runs' settings differ (governor, kernel or compiler):\n  "
+                         + "\n  ".join(have) + "\n")
+    note = "" if len(have) == len(seen) else " (%d of %d runs recorded it)" % (len(have), len(seen))
+    print(have[-1] + note)
     print()
 
 

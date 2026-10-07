@@ -11,6 +11,6 @@ trap 'rm -rf "$DIR"' EXIT
 OBJS=$(ls build/*.o | grep -v '/main\.o$')
 # shellcheck disable=SC2086
 ${CC:-cc} -std=c11 -D_POSIX_C_SOURCE=200809L -O2 -Isrc -o "$DIR/saves" tools/saves.c $OBJS -lm
-tools/machine.sh "$DIR"
+"$(dirname "$0")/machine.sh" "$DIR"
 echo
 "$DIR/saves" "$DIR"

@@ -14,8 +14,9 @@ trap 'rm -rf "$DIR"' EXIT
 export XDG_DATA_HOME="$DIR/xdg"
 mkdir -p "$XDG_DATA_HOME"
 
-sed -n '/^genmap() {/,/^}/p' tools/perf.sh > "$DIR/fixtures.sh"
-sed -n '/^WARREN=/,/> "\$WARREN"/p' tools/perf.sh >> "$DIR/fixtures.sh"
+# genmap moved to tools/genmap.sh; the warren fixture is still written inline in perf.sh.
+. tools/genmap.sh
+sed -n '/^WARREN=/,/> "\$WARREN"/p' tools/perf.sh > "$DIR/fixtures.sh"
 # shellcheck disable=SC1091
 . "$DIR/fixtures.sh"
 MOB=$(genmap mob 40 25 0 24)
@@ -37,6 +38,8 @@ PY
         awk -v l="$_label" '{ printf "| %-22s | %7.1fus | %7.1fus | %5d |\n", l, $1, $2, $3 }'
 }
 
+"$(dirname "$0")/machine.sh" .
+echo
 echo '| scenario               | sight p50 | sight p99 | calls |'
 echo '|------------------------|-----------|-----------|-------|'
 row "fog sight"         "$MOB"    ':fog all 6\r:play\rf\rllllhhhh\r'

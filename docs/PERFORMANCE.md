@@ -15,7 +15,7 @@ Both use gcc 16.2.1 with `-O2`. Absolute numbers belong to the machine they were
 Only rows from the same machine compare, and the ratios between rows are the part that
 carries over. Every table here before 2026-10-07 is the **laptop's**. From then on, each
 table is published under the `Machine:` line that `tools/machine.sh` prints:
-- `perf.sh`, `saves.sh` and `pagebench.sh` print it above their tables;
+- `perf.sh`, `saves.sh`, `pagebench.sh` and `sight.sh` print it above their tables;
 - `median.py` keeps it, and stops when its runs came from different machines.
 
 A table regenerated on the other machine replaces the whole table, never single rows.
@@ -837,6 +837,7 @@ a plain function with the stubs as parameters.
 | | |
 |---|---|
 | `make perf` | regenerates every table on this page |
+| `tools/machine.sh [DIR]` | the `Machine:` line above every published table; DIR names the disk the run writes to |
 | `tools/median.py a b c` | the per-row median of several `make perf` outputs, which is what is published |
 | `make bench` | one scenario, quick |
 | `F12` | live overlay: per-zone p50/p99, a frame-time sparkline, cells and bytes |
