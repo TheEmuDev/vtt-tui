@@ -52,6 +52,8 @@ MOB=$(genmap mob 40 25 0 24)              # the perf crowd: 24 creatures, no wal
 WALLED=$(genmap walled 40 25 1 24)        # every edge walled: the most glyphs a row holds
 BIG=$(genmap big 200 200 1 60)            # far more map than screen: a pan redraws it all
 
+echo "$(tools/machine.sh "$DIR"), $(node --version 2>/dev/null | sed 's/^/node /')"
+echo
 printf '| scenario             | frames |   decode |  present |     copy | px/frame |\n'
 printf '|----------------------|--------|----------|----------|----------|----------|\n'
 FAILED=0

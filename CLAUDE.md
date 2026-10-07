@@ -17,9 +17,11 @@ maintainer; this file is what survives a context reset, so keep it true.
 - **No software waste; every plan says how close it gets to the speed of light** (the user,
   2026-10-07). Every change plan has a **Performance considerations** section. For each
   new or changed path it gives:
-  - the **speed-of-light estimate**: the least the work could cost on this machine, from the
-    bytes it must touch and the syscalls and disk flushes it can't avoid. Use the reference
-    figures in docs/PERFORMANCE.md (*Speed of light*);
+  - the **speed-of-light estimate**: the least the work could cost, from the bytes it must
+    touch and the syscalls and disk flushes it can't avoid. Use the reference figures in
+    docs/PERFORMANCE.md (*Speed of light*), and say which machine they're from. The user has
+    two, a laptop (i7-4510U) and a desktop (i7-8700K), and `tools/machine.sh` names the one
+    a table was run on;
   - the design's expected cost beside that estimate, and why any gap is accepted.
 
   Once the change is built, measure it against the estimate and record both in the design
@@ -67,6 +69,7 @@ tools/sight.sh  fog.sight per fog scenario (the zone table keeps only each zone'
 tools/pagebench.sh   the phone page's own code per frame (node): --bench-record streams replayed through the served page; PAGE=x.html to A/B; median of three
 tools/pageprobe.js   paste into a served page's console, then probe.report(): native costs (putImageData, DOM) node cannot see
 tools/saves.sh  a save flushed and unflushed, three map sizes, on the real disk (PERFORMANCE.md's save table)
+tools/machine.sh  the `Machine:` line every published table carries (perf.sh, saves.sh, pagebench.sh print it; median.py keeps it)
 VTT_FOGDIFF_OPS=36000 ./build/run-tests   the long run of the fog differential test
 make fuzz       libFuzzer on the map loader (clang), FUZZ_SECONDS=600 for longer
 make fuzz-ctl   libFuzzer on control-channel requests (tests/fuzz_ctl.c, corpus tests/fuzz-ctl)

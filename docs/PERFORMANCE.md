@@ -4,9 +4,21 @@ Every path that costs anything, measured. `make perf` regenerates the tables bel
 they are its output, not estimates, so keeping them true is a command rather than a
 promise.
 
-Recorded on an **Intel i7-4510U @ 2.00GHz**, gcc 16.2.1, `-O2`. Treat the absolute
-numbers as a baseline for *this* machine and the ratios between rows as the part that
-travels.
+**Which machine.** The user measures on two:
+
+| | CPU | disk |
+|---|---|---|
+| **laptop** | Intel Core i7-4510U @ 2.00GHz (2 cores, 4 threads) | btrfs on an SSD |
+| **desktop** | Intel Core i7-8700K @ 3.70GHz (6 cores, 12 threads, 4.7 GHz max), 16 GB RAM | btrfs on a Samsung SSD 860 EVO 1TB |
+
+Both use gcc 16.2.1 with `-O2`. Absolute numbers belong to the machine they were taken on.
+Only rows from the same machine compare, and the ratios between rows are the part that
+carries over. Every table here before 2026-10-07 is the **laptop's**. From then on, each
+table is published under the `Machine:` line that `tools/machine.sh` prints:
+- `perf.sh`, `saves.sh` and `pagebench.sh` print it above their tables;
+- `median.py` keeps it, and stops when its runs came from different machines.
+
+A table regenerated on the other machine replaces the whole table, never single rows.
 
 **Where the maps are.** `make perf` works in a directory inside the repo, ignored by git
 (`PERF_DIR` moves it), on the disk a GM's maps are on, because a save's cost is the flush to that disk:
@@ -42,8 +54,12 @@ Two properties matter more than any single figure:
 Every change plan estimates the least its work could cost: the bytes it must touch, and the
 syscalls and flushes it can't avoid, priced with the figures below. Once built, it is
 measured against that estimate. A gap with no explanation is waste. These are the reference
-figures for this machine, measured 2026-10-07 (best of many runs, a release build's `-O2`, the
-repo's btrfs disk). Measure again when the machine changes.
+figures, measured 2026-10-07 (best of many runs, `-O2`, the repo's disk) on:
+
+Machine: Intel Core i7-8700K @ 3.70GHz (6 cores, 12 threads, 4.7 GHz max, powersave governor), 16 GB RAM, Samsung SSD 860 EVO 1TB (btrfs), Linux 7.2.5-3-omarchy, gcc 16.2.1 -O2
+
+That is the **desktop**. The laptop's figures are still to be taken. Compare a row only with
+the speed of light of the machine it was measured on.
 
 | operation | cost | so |
 |---|---|---|
@@ -53,13 +69,13 @@ repo's btrfs disk). Measure again when the machine changes.
 | `stat` | 0.9 µs | |
 | Unix socket round trip | 3.1 µs | one control-channel exchange, before any work |
 | `write` 789 KB into the page cache | 0.16 ms | a 512×512 save with nothing but the bytes |
-| a save made durable: write, `fsync`, `rename` | 2.0 ms (4 KB), 2.2 ms (789 KB) | what a flushed save cannot go under; it varies with the disk's state |
+| a save made durable: write, `fsync`, `rename` | 2.0 ms (4 KB), 2.2 ms (789 KB) | what a flushed save cannot go under. The disk sets it: the laptop's `:w` table runs fifteen times this |
 | the same with the directory flushed too | 3.4-4.4 ms | |
 
 **Known gaps** (each to close, or to keep with its reason):
 
-- **The map writer builds its text one `fputc` at a time.** An unflushed 512×512 save is
-  3.17 ms against 0.16 ms for the bytes, and formatting 789 KB should cost well under a
+- **The map writer builds its text one `fputc` at a time.** On the desktop, an unflushed
+  512×512 save is 3.17 ms against 0.16 ms for the bytes, and formatting 789 KB should cost well under a
   millisecond. The autosave runs this on the main loop. Not yet planned.
 
 ## Frame times
@@ -578,7 +594,9 @@ Only a system crash or power cut within about half a minute of it can lose it --
 ext4 or xfs, leave just its start, which recovery refuses -- and the map's own file is
 never touched by it. `:w`, a trip and every other save still flush.
 `tools/saves.sh` prints this table (perf.sh cannot: a bench never writes an autosave);
-median of nine on btrfs:
+median of nine, on the **laptop** (btrfs on an SSD). The desktop's, 2026-10-07: 2.18 /
+2.83 / 5.45 ms flushed and 0.07 / 0.62 / 3.17 ms unflushed. Its disk flushes about fifteen
+times faster.
 
 | map | bytes | autosave (unflushed) | `:w` (flushed) |
 |---|---|---|---|

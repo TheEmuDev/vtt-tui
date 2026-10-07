@@ -269,6 +269,8 @@ for name, durs in by.items():
           % (name, durs[n // 2], durs[min(n - 1, int(n * 0.99))], durs[-1], n, full, label))
 SUMMARIZER
 
+tools/machine.sh "$DIR"
+echo
 echo '| scenario             | size   | frame p50 | frame p99 | cells | bytes |'
 echo '|----------------------|--------|-----------|-----------|-------|-------|'
 

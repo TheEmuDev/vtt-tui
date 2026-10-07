@@ -13,6 +13,22 @@ import statistics
 import sys
 
 
+def machine(paths):
+    """Prints the runs' "Machine:" line (tools/machine.sh) above the tables; a
+    median of runs from different machines would mean nothing, so that stops."""
+    seen = []
+    for p in paths:
+        lines = [l for l in open(p).read().split("\n") if l.startswith("Machine: ")]
+        seen.append(lines[0] if lines else None)
+    if None in seen:
+        print("Machine: not recorded (a run without tools/machine.sh)")
+    elif len(set(seen)) > 1:
+        sys.exit("the runs are from different machines:\n  " + "\n  ".join(seen))
+    else:
+        print(seen[0])
+    print()
+
+
 def tables(path):
     out, cur = [], None
     for line in open(path).read().split("\n"):
@@ -68,6 +84,7 @@ def main_one(runs):
 
 
 def main(paths):
+    machine(paths)
     runs = [tables(p) for p in paths]
     if len(runs[-1]) == 1:
         return main_one(runs)
