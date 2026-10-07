@@ -30,6 +30,9 @@ written down.
   `grid_visible_tiles` first. Anything else that grows with the map (load, save, sight,
   route search) says so in its perf row.
 - Count bytes written as well as frame time: bytes matter more.
+- Did the plan estimate the speed of light, and was the built path measured against it? Is
+  every gap explained? Does the cost follow the work that must be done (what changed, what
+  is on screen), or the size of the map?
 - Are PERFORMANCE.md's numbers stale? Were they measured somewhere different from where
   the cost really falls (for example tmpfs instead of the real disk)?
 - Is the phone page still under 12 KB as sent? Below the limit, effort goes to its run-time

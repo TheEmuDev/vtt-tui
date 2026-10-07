@@ -37,6 +37,31 @@ Two properties matter more than any single figure:
   `floor.pick`, `turn.status`, the panel, the cursor's size -- each a microsecond or two).
 - **Idle costs nothing.** `poll()` blocks until there is input; there is no frame loop.
 
+## Speed of light
+
+Every change plan estimates the least its work could cost: the bytes it must touch, and the
+syscalls and flushes it can't avoid, priced with the figures below. Once built, it is
+measured against that estimate. A gap with no explanation is waste. These are the reference
+figures for this machine, measured 2026-10-07 (best of many runs, a release build's `-O2`, the
+repo's btrfs disk). Measure again when the machine changes.
+
+| operation | cost | so |
+|---|---|---|
+| copy, in cache (1 MB) | 28 µs (37 GB/s) | a 512×512 map's four layers (1.05 MB: tiles, both boundary arrays, fog) copy in about 30 µs |
+| copy, from memory (256 MB) | 11.9 GB/s | a working set past the cache costs three times as much per byte |
+| copy + compare, in cache (1 MB) | 59 µs | comparing a whole map with a copy of it |
+| `stat` | 0.9 µs | |
+| Unix socket round trip | 3.1 µs | one control-channel exchange, before any work |
+| `write` 789 KB into the page cache | 0.16 ms | a 512×512 save with nothing but the bytes |
+| a save made durable: write, `fsync`, `rename` | 2.0 ms (4 KB), 2.2 ms (789 KB) | what a flushed save cannot go under; it varies with the disk's state |
+| the same with the directory flushed too | 3.4-4.4 ms | |
+
+**Known gaps** (each to close, or to keep with its reason):
+
+- **The map writer builds its text one `fputc` at a time.** An unflushed 512×512 save is
+  3.17 ms against 0.16 ms for the bytes, and formatting 789 KB should cost well under a
+  millisecond. The autosave runs this on the main loop. Not yet planned.
+
 ## Frame times
 
 What the app costs to use. Each scenario replays a keystroke script, a frame per key,
@@ -781,6 +806,11 @@ a plain function with the stubs as parameters.
 5. **When a measurement suggests a win, plan it rather than taking it silently.** Say
    what it costs now, what it would cost, and what the change buys — some of these paths
    are worth leaving slow and obvious.
+6. **Estimate the speed of light, then measure against it.** A plan's *Performance
+   considerations* gives each path's least possible cost (the figures under *Speed of
+   light*) beside the design's expected cost. The built path is measured against both. A
+   path should cost in proportion to the work that must be done (what changed, what is
+   on screen), never in proportion to the map.
 
 ## Tools
 

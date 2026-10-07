@@ -14,6 +14,18 @@ maintainer; this file is what survives a context reset, so keep it true.
   `PROF_ZONE`, a scenario in `tools/perf.sh`, and a regenerated
   `docs/PERFORMANCE.md`. Bytes written matter more than frame time. Cost follows
   the window, not the map: cull with `grid_visible_tiles` first.
+- **No software waste; every plan says how close it gets to the speed of light** (the user,
+  2026-10-07). Every change plan has a **Performance considerations** section. For each
+  new or changed path it gives:
+  - the **speed-of-light estimate**: the least the work could cost on this machine, from the
+    bytes it must touch and the syscalls and disk flushes it can't avoid. Use the reference
+    figures in docs/PERFORMANCE.md (*Speed of light*);
+  - the design's expected cost beside that estimate, and why any gap is accepted.
+
+  Once the change is built, measure it against the estimate and record both in the design
+  doc and PERFORMANCE.md. A gap with no explanation is waste: remove it, or write it down
+  as a finding. Cost follows the work that must be done (what changed, what is on screen),
+  never the size of what could have been touched. Reviews check this.
 - **The phone page stays inside one round trip** (the user, 2026-10-04): under 12 KB as sent,
   so it and its headers fit TCP's first flight (~14.4 KB) -- docs/REMOTE.md has the reason.
   Every millisecond matters; never be complacent, performance slips away slowly. Below the
