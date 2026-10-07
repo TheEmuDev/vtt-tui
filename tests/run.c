@@ -38,6 +38,7 @@ int main(int argc, char **argv)
         { "ctlscenes", test_ctl_scenes },
         { "areas", test_areas },
         { "links", test_links },
+        { "changeset", test_changeset },
         { "linkkeys", test_link_keys },
         { "floors", test_floors },
         { "floorview", test_floor_view },

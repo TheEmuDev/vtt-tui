@@ -5,6 +5,7 @@
 #include <string.h>
 #include <strings.h>
 
+#include "prof.h"
 #include "util.h"
 
 /* One row per kind, so the name, the saved character and the behavior cannot
@@ -123,6 +124,64 @@ void map_free(Map *m)
     for (int i = 0; i < m->nscenes; i++) tokens_free(&m->scenes[i].tokens);
     for (int i = 0; i < m->ncards; i++) free(m->cards[i].text);
     free(m);
+}
+
+/* Copies a token list into one whose array may be reused. */
+static void tokens_copy_into(TokenList *dst, const TokenList *src)
+{
+    Token   *v   = dst->v;
+    int      cap = dst->cap;
+    if (cap < src->n) {
+        cap = src->n;
+        v = xrealloc(v, (size_t)cap * sizeof *v);
+    }
+    if (src->n) memcpy(v, src->v, (size_t)src->n * sizeof *v);
+    *dst = *src;
+    dst->v   = v;
+    dst->cap = cap;
+}
+
+/* Copies n bytes into *dst, which holds *have of them: reused when the size
+ * is the same. */
+static void bytes_into(uint8_t **dst, size_t *have, const uint8_t *src, size_t n)
+{
+    if (*have != n) { free(*dst); *dst = xmalloc(n); *have = n; }
+    memcpy(*dst, src, n);
+}
+
+void map_copy_into(Map *dst, const Map *src)
+{
+    PROF_ZONE("map.copy");
+    size_t w = (size_t)src->w, h = (size_t)src->h;
+    size_t dw = (size_t)dst->w, dh = (size_t)dst->h;
+    size_t nt = dw * dh, nv = (dw + 1) * dh, nh = dw * (dh + 1), nf = dw * dh;
+    uint8_t *tiles = dst->tiles, *vedges = dst->vedges, *hedges = dst->hedges, *fog = dst->fog;
+    TokenList tokens = dst->tokens;
+    map_sight_drop(dst);
+    for (int i = 0; i < dst->nscenes; i++) tokens_free(&dst->scenes[i].tokens);
+    for (int i = 0; i < dst->ncards; i++) free(dst->cards[i].text);
+
+    *dst = *src;                                   /* every fixed-size part */
+    bytes_into(&tiles,  &nt, src->tiles,  w * h);
+    bytes_into(&vedges, &nv, src->vedges, (w + 1) * h);
+    bytes_into(&hedges, &nh, src->hedges, w * (h + 1));
+    bytes_into(&fog,    &nf, src->fog,    w * h);
+    dst->tiles = tiles; dst->vedges = vedges; dst->hedges = hedges; dst->fog = fog;
+    memset(&dst->sight, 0, sizeof dst->sight);
+    dst->tokens = tokens;
+    tokens_copy_into(&dst->tokens, &src->tokens);
+    for (int i = 0; i < src->nscenes; i++) {
+        memset(&dst->scenes[i].tokens, 0, sizeof dst->scenes[i].tokens);
+        tokens_copy_into(&dst->scenes[i].tokens, &src->scenes[i].tokens);
+    }
+    for (int i = 0; i < src->ncards; i++) dst->cards[i].text = src->cards[i].text ? xstrdup(src->cards[i].text) : NULL;
+}
+
+Map *map_copy(const Map *m)
+{
+    Map *c = xcalloc(1, sizeof *c);
+    map_copy_into(c, m);
+    return c;
 }
 
 int map_resize(Map *m, int w, int h)

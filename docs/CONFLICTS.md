@@ -11,6 +11,31 @@ recommendation below is the decision.*
 *This reverses one 2026-09-26 decision in docs/CONTROL.md: "free editing, undo as the
 safety net; no drafts to approve". Agents now propose and the GM approves.*
 
+## Progress
+
+*Updated 2026-10-07, end of the day.*
+
+- **Step 1: built and committed, Fable's review not yet run.** That review is the first
+  thing to do next session: `git show` the step 1 commit, then verify and fix what it
+  finds, before step 2. It covers:
+  - `map_copy`/`map_copy_into` (map.c) and `xstrdup` (util.c);
+  - `changeset.c/h` (the change set: diff, conflicts, accept whole or by box, the summary,
+    bounds, the preview swap);
+  - `tests/test_changeset.c` (the suite `changeset`, including a 60-round differential
+    check);
+  - `tools/proposals.c`/`.sh` (the timing table);
+  - PERFORMANCE.md's *Proposals* section, set against the speed of light.
+- **One file, not two.** `mapdiff.c` and `changeset.c` became one file, `changeset.c`.
+  The diff, the apply and the preview share one structure.
+- **Next, step 2:** the copy-on-write checkpoint (16×16 blocks, the hook in the five
+  writers, `fog_delete` through `map_fog_set`, reset on resize, change counters for
+  scenes, cards, clocks and rolls), with A/B rows for a 512×512 fill and `undo.step`
+  against the previous commit's binary.
+- **Then steps 3-9 in the order below.** Nothing in the app calls the change set yet:
+  `:ask`, `:review` and the requests come in steps 3-4.
+- **docs/AGENTS.md still tells agents never to `--apply` an open map.** That stays true
+  until step 6.
+
 ## How it feels to the GM
 
 1. **The GM asks.** The GM is in build mode. They draw a `v` box round the cellar and type
@@ -137,10 +162,10 @@ The change set is the one representation everything here uses:
   - **In proposal mode, nothing reaches the App:** no `finish_edits`, no
     `app_fog_sync`, no status line or ring, and none of the scene line's App side effects
     (`last_acting`, `play_focus`, `range_clear`, app_ctl.c:894-898).
-- **One producer.** Disk proposals use `mapdiff.c` too, so there is one way to make a
+- **One producer.** Disk proposals use `changeset.c` too, so there is one way to make a
   change set, not two.
 - **The file on disk changing.** A change set is the difference between the file as vtt
-  last read or wrote it (the **base**, kept as its bytes) and the file now: `mapdiff.c`
+  last read or wrote it (the **base**, kept as its bytes) and the file now: `changeset.c`
   compares two `Map`s.
 
 ### Jobs (`:ask`)
@@ -461,7 +486,7 @@ Entering a review redraws the changed cells in the window, once.
 - **README:** a section *Asking an agent* (`:ask`, `:ask!`, `:jobs`, `:review` and its
   keys, `:agent accept`, `:agent command`), outside changes and `:w!`, and bare `:e`.
 - **KEYS.md and `src/keys.c`:** the review mode and its bar.
-- **CLAUDE.md:** rows for `app_job.c` (jobs, review), `mapdiff.c` and `changeset.c`, and
+- **CLAUDE.md:** rows for `app_job.c` (jobs, review), `changeset.c` and `changeset.c`, and
   the checkpoint in map.c; the `ctl.c` and `mapio.c` rows.
 - **IDEAS.md:** decision 8's two.
 - **This page:** becomes the design record.
@@ -470,7 +495,7 @@ Entering a review redraws the changed cells in the window, once.
 
 Each step is a commit with its tests.
 
-1. `map_copy` and `mapdiff.c` (the change set: element kinds, keys, conflicts, applying as
+1. `map_copy` and `changeset.c` (the change set: element kinds, keys, conflicts, applying as
    values whole or by box, the summary), and the preview swap.
 2. The copy-on-write checkpoint, with its A/B rows.
 3. Jobs and the review mode: `:ask`, `:jobs`, `:review`, the three tints, and the thread.

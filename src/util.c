@@ -27,6 +27,14 @@ void *xmalloc(size_t n)
     return p;
 }
 
+char *xstrdup(const char *s)
+{
+    size_t n = strlen(s) + 1;
+    char  *p = xmalloc(n);
+    memcpy(p, s, n);
+    return p;
+}
+
 void *xcalloc(size_t n, size_t sz)
 {
     void *p = calloc(n ? n : 1, sz ? sz : 1);

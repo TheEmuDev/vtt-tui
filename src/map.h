@@ -286,6 +286,17 @@ typedef struct {
 Map *map_new(int w, int h, const char *name);
 void map_free(Map *m);
 
+/* A whole, independent copy: every array, the creatures, scenes' lists and
+ * cards' text. Sight's cache is left empty (it is derived, and rebuilt on
+ * demand). A proposal runs on one so the live map is never touched
+ * (docs/CONFLICTS.md). */
+Map *map_copy(const Map *m);
+/* The same into an existing map, reusing its buffers where they are big
+ * enough: a proposal's scratch map is copied into again and again, and fresh
+ * pages cost a fault each (a 512x512 copy is ~14x dearer cold than warm,
+ * docs/PERFORMANCE.md). `dst` keeps nothing of what it held. */
+void map_copy_into(Map *dst, const Map *src);
+
 /* Resizes in place, preserving the overlapping region. */
 int  map_resize(Map *m, int w, int h);
 
