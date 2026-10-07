@@ -68,6 +68,8 @@ the speed of light of the machine it was measured on.
 | copy + compare, in cache (1 MB) | 59 µs | comparing a whole map with a copy of it |
 | `stat` | 0.9 µs | |
 | Unix socket round trip | 3.1 µs | one control-channel exchange, before any work |
+| `write` to a pty, raw mode, reader draining | 1.0 µs (1 KB), 12.2 µs (16 KB) | the terminal's floor for a frame's bytes: about 0.75 ns a byte past the first KB, so bytes written are the frame's cost |
+| `write` to loopback TCP, `TCP_NODELAY` | 3.8 µs (1 KB), 4.4 µs (16 KB) | the phones' floor per push: the syscall, nearly flat in size up to 16 KB |
 | `write` 789 KB into the page cache | 0.16 ms | a 512×512 save with nothing but the bytes |
 | a save made durable: write, `fsync`, `rename` | 2.0 ms (4 KB), 2.2 ms (789 KB) | what a flushed save cannot go under. The disk sets it: the laptop's `:w` table runs fifteen times this |
 | the same with the directory flushed too | 3.4-4.4 ms | |
