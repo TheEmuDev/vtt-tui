@@ -60,7 +60,10 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
     log must call `cp_note`. CLAUDE.md says so. Today that is only `fog_delete`.
   - **`cs_check`'s gate now also watches `Map.cards_gen`.** Before, it missed a card the
     GM edited, because `card_set` touches nothing.
-- **Next: Fable's review of step 2, then step 3** (jobs and the review mode).
+- **Next: step 3**, jobs and the review mode: `:ask`, `:jobs`, `:review`, the three
+  tints, and a job's thread. It is the first step with a key path and a drawing path, so it
+  needs `PROF_ZONE`s, `tools/perf.sh` scenarios and golden frames. Before writing it,
+  re-read *What the screen shows* and decision 3 (the review keys).
 - **Then steps 3-9 in the order below.** Nothing in the app calls the change set yet:
   `:ask`, `:review` and the requests come in steps 3-4.
 - **docs/AGENTS.md still tells agents never to `--apply` an open map.** That stays true
