@@ -178,7 +178,9 @@ Bench scripts replay whole; no toggles — use loop-neutral pairs (`llllhhhh`,
 - Ideas consciously set aside live in `docs/IDEAS.md` with the reason (the Fear pool).
 - Distances print through `dist_fmt`; coordinates through `map_coord_name`; a
   creature in a message through `token_name` (label, else its side). Overlap is
-  `token_meets` / `tokens_at` / `tokens_overlapping`, never written out again.
+  `token_meets` / `tokens_at` / `tokens_overlapping`, never written out again. A label in
+  a list is `tokens_find_label`; the same creature in two lists (a scene, a copy) is
+  `token_same_key`.
 - `range_clear` resets the overlay; `range_off` switches it off and keeps the shape.
 - The `Cell` padding must stay zero (row memcmp in the renderer); tokens compare
   with `token_equal`, never `memcmp`.

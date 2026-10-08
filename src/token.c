@@ -44,6 +44,14 @@ int tokens_any_hidden(const TokenList *l)
     return 0;
 }
 
+int tokens_find_label(const TokenList *l, const char *label, int skip)
+{
+    if (!label[0]) return -1;
+    for (int i = 0; i < l->n; i++)
+        if (i != skip && !strcmp(l->v[i].label, label)) return i;
+    return -1;
+}
+
 int tokens_at(const TokenList *l, int x, int y)
 {
     /* Newest first: a token dropped on top of another is the one you grab. */

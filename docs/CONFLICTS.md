@@ -15,9 +15,19 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
 
 *Updated 2026-10-07, end of the day.*
 
-- **Step 1: built and committed, Fable's review not yet run.** That review is the first
-  thing to do next session: `git show` the step 1 commit, then verify and fix what it
-  finds, before step 2. It covers:
+- **Step 1: built, reviewed by Fable, and fixed (2026-10-08).** The review's fixes:
+  - an accept could leave two creatures holding the turn (a plan's turn now lands only
+    where nobody else has it);
+  - two creatures of one label paired out of order after a removal;
+  - a new link previewed with the agent's number, not the one the accept gives;
+  - the benchmark timed setup in the diff and only the first preview frame;
+  - a test that never added where it meant to, and the missing tests (far-edge
+    boundaries, a box's east and south sides, unlabeled moves, duplicate labels, the turn,
+    the small parts' conflicts);
+  - "is this label taken" and "is this the same creature" extracted to token.c/h
+    (`tokens_find_label`, `token_same_key`; scene.c uses the second).
+
+  What step 1 holds:
   - `map_copy`/`map_copy_into` (map.c) and `xstrdup` (util.c);
   - `changeset.c/h` (the change set: diff, conflicts, accept whole or by box, the summary,
     bounds, the preview swap);
@@ -31,6 +41,8 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
   writers, `fog_delete` through `map_fog_set`, reset on resize, change counters for
   scenes, cards, clocks and rolls), with A/B rows for a 512×512 fill and `undo.step`
   against the previous commit's binary.
+  - **The counters also close a hole in `cs_check`.** Its gate on `Map.gen` misses a card
+    the GM edits, because `card_set` touches nothing. The counters fix it.
 - **Then steps 3-9 in the order below.** Nothing in the app calls the change set yet:
   `:ask`, `:review` and the requests come in steps 3-4.
 - **docs/AGENTS.md still tells agents never to `--apply` an open map.** That stays true
@@ -351,6 +363,10 @@ feedback on stdout. With no vtt holding the map, `--apply` works as today.
 - **Proposals instead of edits.** An agent's change costs the GM a look and a key. That
   is the point, and `:ask!` and `accept auto` are the way out. AGENTS.md's live loop
   changes: propose, then wait for the verdict.
+- **An accept applies values, unchecked.** A proposed floor skips `floor_problem`, a link
+  skips `link_problem`, and an added creature can land on a square the GM has filled since.
+  The agent's plan was checked when it ran, against the map as it was then. The conflict
+  color marks every one of these squares, and `check` catches what's left.
 - **Values, not intent.** An accept puts back the squares as the agent left them. If the
   GM moved the Crypt meanwhile, the change lands where the Crypt was. The conflict color
   shows it, and `c` is the answer.
@@ -486,7 +502,7 @@ Entering a review redraws the changed cells in the window, once.
 - **README:** a section *Asking an agent* (`:ask`, `:ask!`, `:jobs`, `:review` and its
   keys, `:agent accept`, `:agent command`), outside changes and `:w!`, and bare `:e`.
 - **KEYS.md and `src/keys.c`:** the review mode and its bar.
-- **CLAUDE.md:** rows for `app_job.c` (jobs, review), `changeset.c` and `changeset.c`, and
+- **CLAUDE.md:** rows for `app_job.c` (jobs, review), `changeset.c`, and
   the checkpoint in map.c; the `ctl.c` and `mapio.c` rows.
 - **IDEAS.md:** decision 8's two.
 - **This page:** becomes the design record.

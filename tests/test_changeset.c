@@ -389,7 +389,7 @@ static void cs_differential(void)
             case 1: undo_set_vedge(&scratch, c, x, y, (uint8_t)((seed >> 20) % EDGE_COUNT)); break;
             case 2: undo_set_hedge(&scratch, c, x, y, (uint8_t)((seed >> 20) % EDGE_COUNT)); break;
             case 3: undo_set_fog(&scratch, c, x, y, (uint8_t)((seed >> 20) % 2)); break;
-            case 4: if (!tokens_at(&c->tokens, x, y)) {} else {
+            case 4: if (tokens_at(&c->tokens, x, y) < 0) {
                         char lab[16];
                         snprintf(lab, sizeof lab, "C%d", k + round * 100);
                         undo_add_token(&scratch, c, mk(TOKEN_ENEMY, x, y, 1, lab));
@@ -419,8 +419,198 @@ static void cs_differential(void)
     CHECK(ok_apply);
 }
 
+static void cs_edges_and_turns(void)
+{
+    CASE("boundaries on the map's far edges: diffed by log and in full, previewed back byte for byte, taken by a box's east and south sides");
+    Map *m = map_new(20, 10, "edges");
+    map_fill_tiles(m, 0, 0, 19, 9, TILE_FLOOR);
+    Map *c = map_copy(m);
+    Undo scratch, u;
+    undo_init(&scratch);
+    undo_init(&u);
+    undo_begin(&scratch);
+    undo_set_vedge(&scratch, c, 20, 9, EDGE_WALL);                /* x == w */
+    undo_set_hedge(&scratch, c, 19, 10, EDGE_WALL);               /* y == h */
+    undo_set_vedge(&scratch, c, 6, 2, EDGE_DOOR_CLOSED);          /* a box's east side, x1 + 1 */
+    undo_set_hedge(&scratch, c, 3, 5, EDGE_WINDOW);               /* its south side, y1 + 1 */
+    undo_end(&scratch);
+    ChangeSet cs, all;
+    cs_init(&cs);
+    cs_init(&all);
+    cs_diff(&cs, m, c, &scratch);
+    cs_diff(&all, m, c, NULL);
+    CHECK_EQ(cs.ncells, 4);
+    CHECK(cells_same(&cs, &all));
+    Map *snap = map_copy(m);
+    cs_show(&cs, m, 0, 0, m->w - 1, m->h - 1);
+    CHECK_EQ(map_vedge(m, 20, 9), EDGE_WALL);
+    CHECK_EQ(map_hedge(m, 19, 10), EDGE_WALL);
+    cs_unshow(&cs, m);
+    CHECK(map_same(m, snap));
+    CsBox box = { 2, 1, 5, 4 };
+    cs_apply(&cs, m, &u, &box, NULL, 0);
+    CHECK_EQ(map_vedge(m, 6, 2), EDGE_DOOR_CLOSED);
+    CHECK_EQ(map_hedge(m, 3, 5), EDGE_WINDOW);
+    CHECK_EQ(map_vedge(m, 20, 9), EDGE_NONE);                     /* outside */
+    cs_free(&cs);
+    cs_free(&all);
+    map_free(snap);
+    map_free(c);
+
+    CASE("an unlabeled creature that moved is one gone and one come, and lands where the plan put it");
+    tokens_add(&m->tokens, mk(TOKEN_ENEMY, 1, 1, 1, ""));
+    c = map_copy(m);
+    undo_clear(&scratch);
+    undo_begin(&scratch);
+    undo_move_token(&scratch, c, 0, 8, 8);
+    undo_end(&scratch);
+    cs_diff(&cs, m, c, &scratch);
+    CHECK_EQ(cs.ntoks, 2);
+    cs_apply(&cs, m, &u, NULL, NULL, 0);
+    CHECK(map_same(m, c));
+    CHECK_EQ(tokens_at(&m->tokens, 8, 8), 0);
+    cs_free(&cs);
+    map_free(c);
+    map_free(m);
+
+    CASE("two creatures of one label pair in their order: removing another leaves no change on them");
+    m = map_new(20, 10, "dups");
+    map_fill_tiles(m, 0, 0, 19, 9, TILE_FLOOR);
+    tokens_add(&m->tokens, mk(TOKEN_PLAYER, 0, 0, 1, "Aria"));
+    tokens_add(&m->tokens, mk(TOKEN_ENEMY, 2, 0, 1, "X"));
+    tokens_add(&m->tokens, mk(TOKEN_ENEMY, 4, 0, 1, "X"));
+    c = map_copy(m);
+    undo_clear(&scratch);
+    undo_begin(&scratch);
+    undo_del_token(&scratch, c, 0);
+    undo_end(&scratch);
+    cs_diff(&cs, m, c, &scratch);
+    CHECK_EQ(cs.ntoks, 1);
+    cs_free(&cs);
+    map_free(c);
+    map_free(m);
+
+    CASE("one creature holds the turn: a plan's turn lands only where nobody else has it");
+    m = map_new(20, 10, "turns");
+    map_fill_tiles(m, 0, 0, 19, 9, TILE_FLOOR);
+    Token aria = mk(TOKEN_PLAYER, 0, 0, 1, "Aria"), ogre = mk(TOKEN_ENEMY, 10, 5, 1, "Ogre"), bob = mk(TOKEN_PLAYER, 1, 0, 1, "Bob");
+    aria.turn = TURN_IN | TURN_ACTING;
+    ogre.turn = TURN_IN;
+    bob.turn  = TURN_IN;
+    tokens_add(&m->tokens, aria);
+    tokens_add(&m->tokens, ogre);
+    tokens_add(&m->tokens, bob);
+    c = map_copy(m);
+    undo_clear(&scratch);
+    undo_begin(&scratch);                                       /* the plan passes the turn to the Ogre */
+    Token a2 = c->tokens.v[0], o2 = c->tokens.v[1];
+    a2.turn = TURN_IN;
+    o2.turn = TURN_IN | TURN_ACTING;
+    undo_edit_token(&scratch, c, 0, a2);
+    undo_edit_token(&scratch, c, 1, o2);
+    undo_end(&scratch);
+    cs_diff(&cs, m, c, &scratch);
+    Token b2 = m->tokens.v[2], a3 = m->tokens.v[0];             /* the GM passes it to Bob meanwhile */
+    a3.turn = TURN_IN;
+    b2.turn = TURN_IN | TURN_ACTING;
+    undo_edit_token(&u, m, 0, a3);
+    undo_edit_token(&u, m, 2, b2);
+    cs_apply(&cs, m, &u, NULL, NULL, 0);
+    int acting = 0;
+    for (int i = 0; i < m->tokens.n; i++) acting += (m->tokens.v[i].turn & TURN_ACTING) != 0;
+    CHECK_EQ(acting, 1);
+    CHECK((m->tokens.v[2].turn & TURN_ACTING) != 0);           /* the GM's turn stands */
+    map_free(m);
+
+    CASE("a box holding the plan's new actor and not the old one leaves the old one acting");
+    m = map_new(20, 10, "turns");
+    map_fill_tiles(m, 0, 0, 19, 9, TILE_FLOOR);
+    tokens_add(&m->tokens, aria);
+    tokens_add(&m->tokens, ogre);
+    tokens_add(&m->tokens, bob);
+    CsBox obox = { 9, 4, 11, 6 };
+    cs_apply(&cs, m, &u, &obox, NULL, 0);
+    acting = 0;
+    for (int i = 0; i < m->tokens.n; i++) acting += (m->tokens.v[i].turn & TURN_ACTING) != 0;
+    CHECK_EQ(acting, 1);
+    CHECK((m->tokens.v[0].turn & TURN_ACTING) != 0);
+    cs_free(&cs);
+    map_free(c);
+    map_free(m);
+    undo_free(&scratch);
+    undo_free(&u);
+}
+
+static void cs_small_parts(void)
+{
+    Map *m = encounter();
+    NamedRoll r;
+    memset(&r, 0, sizeof r);
+    str_lcpy(r.name, "bite", sizeof r.name);
+    str_lcpy(r.expr, "1d6", sizeof r.expr);
+    m->rolls[0] = r;
+    card_set(m, "ghoul", "old text");
+    Map *c = map_copy(m);
+    Undo scratch, u;
+    undo_init(&scratch);
+    undo_init(&u);
+    undo_begin(&scratch);
+    undo_set_area(&scratch, c, "Hall", 1, 1, 12, 8);              /* grows */
+    str_lcpy(r.expr, "1d8", sizeof r.expr);
+    undo_set_roll(&scratch, c, 0, &r);
+    undo_set_round(&scratch, c, 3);
+    undo_end(&scratch);
+    card_set(c, "ghoul", "new text");
+    Link l;
+    memset(&l, 0, sizeof l);
+    l.num = 1; l.size = 1;
+    l.x[0] = 2; l.y[0] = 2; l.x[1] = 30; l.y[1] = 20;
+    undo_set_link(&scratch, c, &l);
+    ChangeSet cs;
+    cs_init(&cs);
+    cs_diff(&cs, m, c, &scratch);
+
+    CASE("the summary does not number a new link: its number is given at accept");
+    char sum[300];
+    cs_summary(&cs, NULL, sum, sizeof sum);
+    CHECK(strstr(sum, "a stairs link added") != NULL);
+    CHECK(strstr(sum, "link 1") == NULL);
+
+    CASE("the preview numbers a new link as the accept will, past one the GM made since");
+    Link g = l;
+    g.x[0] = 25; g.y[0] = 25; g.x[1] = 28; g.y[1] = 25;
+    map_fill_tiles(m, 0, 0, m->w - 1, m->h - 1, TILE_FLOOR);
+    link_put(m, &g);
+    cs_show(&cs, m, 0, 0, m->w - 1, m->h - 1);
+    CHECK_EQ(m->nlinks, 2);
+    int nums = m->nlinks == 2 ? m->links[0].num + m->links[1].num : 0;
+    CHECK_EQ(nums, 3);                                            /* 1 and 2, not 1 and 1 */
+    cs_unshow(&cs, m);
+    CHECK_EQ(m->nlinks, 1);
+
+    CASE("conflicts in the small parts: an area, a roll, a card and the round changed since");
+    CHECK_EQ(cs_check(&cs, m), 0);
+    map_area_set(m, "Hall", 1, 1, 9, 8);
+    CHECK_EQ(cs_check(&cs, m), 1);
+    str_lcpy(m->rolls[0].expr, "2d4", sizeof m->rolls[0].expr);
+    m->round = 1;
+    m->gen++;
+    CHECK_EQ(cs_check(&cs, m), 3);
+    card_set(m, "ghoul", "edited by the GM");
+    m->gen++;                       /* card_set touches nothing; step 2's counters will */
+    CHECK_EQ(cs_check(&cs, m), 4);
+
+    cs_free(&cs);
+    map_free(c);
+    map_free(m);
+    undo_free(&scratch);
+    undo_free(&u);
+}
+
 void test_changeset(void)
 {
+    cs_edges_and_turns();
+    cs_small_parts();
     cs_basics();
     cs_conflicts();
     cs_partial();

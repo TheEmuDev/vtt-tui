@@ -170,26 +170,20 @@ static void diff_cells_hint(ChangeSet *cs, const Map *a, const Map *b, const Und
 
 /* ------------------------------------------------------- the small parts */
 
-/* The creature in `l` that `t` names: by label, or for one with none by
- * side, square and size. `used` (may be NULL) skips those already paired. */
-static int token_match(const TokenList *l, const Token *t, const uint8_t *used)
+/* The creature in `l` that `t` names (token_same_key), the first in list
+ * order. With two creatures of one label (the channel refuses them, a loaded
+ * file may hold them) it is always the first: check, apply and preview all
+ * ask this, so they agree with each other. */
+static int token_match(const TokenList *l, const Token *t)
 {
-    for (int i = 0; i < l->n; i++) {
-        const Token *c = &l->v[i];
-        if (used && used[i]) continue;
-        if (t->label[0]) { if (!strcmp(c->label, t->label)) return i; }
-        else if (!c->label[0] && c->kind == t->kind && c->x == t->x && c->y == t->y && c->size == t->size)
-            return i;
-    }
+    for (int i = 0; i < l->n; i++)
+        if (token_same_key(&l->v[i], t)) return i;
     return -1;
 }
 
 static int label_taken(const TokenList *l, const char *label)
 {
-    if (!label[0]) return 0;
-    for (int i = 0; i < l->n; i++)
-        if (!strcmp(l->v[i].label, label)) return 1;
-    return 0;
+    return tokens_find_label(l, label, -1) >= 0;
 }
 
 static int area_equal(const Area *a, const Area *b)
@@ -226,7 +220,7 @@ static void *grow(void *arr, int n, int *cap, size_t sz)
 }
 #define GROW(arr, n, cap) ((arr) = grow((arr), (n), &(cap), sizeof *(arr)), &(arr)[(n)++])
 
-/* A creature's key, hashed: its label, or side, square and size. */
+/* A creature's key (token_same_key), hashed: its label, or side and square. */
 static uint32_t token_key(const Token *t)
 {
     uint32_t h = 2166136261u;
@@ -234,23 +228,18 @@ static uint32_t token_key(const Token *t)
         for (const char *p = t->label; *p; p++) h = (h ^ (uint8_t)*p) * 16777619u;
         return h;
     }
-    int v[4] = { t->kind, t->x, t->y, t->size };
-    for (int i = 0; i < 4; i++) h = (h ^ (uint32_t)v[i]) * 16777619u;
+    int v[3] = { t->kind, t->x, t->y };
+    for (int i = 0; i < 3; i++) h = (h ^ (uint32_t)v[i]) * 16777619u;
     return h ^ 1u;
-}
-
-static int token_same_key(const Token *a, const Token *b)
-{
-    if (a->label[0] || b->label[0]) return !strcmp(a->label, b->label);
-    return a->kind == b->kind && a->x == b->x && a->y == b->y && a->size == b->size;
 }
 
 /* Pairs the two lists by key. A copy keeps the list's order -- edits in
  * place, a removal shifts what follows, an add goes on the end -- so the
- * creature at the same index (less the removals so far) is tried first and
- * nearly always is the one: a walk down both lists in step. Only a miss
- * builds a hash of `b`, so the diff stays linear when the order has moved.
- * Asking token_match for each would be the square of the creatures. */
+ * creature at the same index, less the removals so far, is tried first and
+ * nearly always is the one: a walk down both lists in step, which also pairs
+ * two creatures of one label in their order. Only a miss builds a hash of
+ * `b`, so the diff stays linear when the order has moved. Asking token_match
+ * for each would be the square of the creatures. */
 static void diff_tokens(ChangeSet *cs, const Map *a, const Map *b)
 {
     const TokenList *bl = &b->tokens;
@@ -273,13 +262,13 @@ static void diff_tokens(ChangeSet *cs, const Map *a, const Map *b)
                     slot[h] = k;
                 }
             }
-            /* The first unused one in list order among those with the key,
-             * as token_match would pick. */
+            /* The first unused one in list order among those with the key. */
             for (uint32_t h = token_key(t) & (uint32_t)(cap - 1); slot[h] >= 0; h = (h + 1) & (uint32_t)(cap - 1)) {
                 int k = slot[h];
                 if (!used[k] && token_same_key(t, &bl->v[k]) && (j < 0 || k < j)) j = k;
             }
             if (j >= 0) shift = j - i;
+            else shift--;                         /* removed: the rest moved up one */
         }
         if (j >= 0) {
             used[j] = 1;
@@ -473,7 +462,7 @@ int cs_check(ChangeSet *cs, const Map *live)
     for (int i = 0; i < cs->ntoks; i++) {
         CsToken *c = &cs->toks[i];
         if (c->had) {
-            int j = token_match(&live->tokens, &c->before, NULL);
+            int j = token_match(&live->tokens, &c->before);
             c->conflict = (uint8_t)(j < 0 || !token_equal(&live->tokens.v[j], &c->before));
         } else
             c->conflict = (uint8_t)label_taken(&live->tokens, c->after.label);
@@ -572,6 +561,14 @@ static int ar_in(const CsBox *b, const CsArea *c)
 
 /* --------------------------------------------------------------- apply */
 
+/* The creature holding the turn, other than `skip`; -1 for none. */
+static int acting_other(const TokenList *l, int skip)
+{
+    for (int i = 0; i < l->n; i++)
+        if (i != skip && (l->v[i].turn & TURN_ACTING)) return i;
+    return -1;
+}
+
 static void note_left_out(char *out, size_t outsz, const char *what)
 {
     if (!out || !outsz) return;
@@ -611,29 +608,29 @@ int cs_apply(const ChangeSet *cs, Map *live, Undo *u, const CsBox *box, char *ou
     for (int i = 0; i < cs->ntoks; i++) {
         const CsToken *c = &cs->toks[i];
         if (!c->had || c->has || !tok_in(box, c)) continue;
-        int j = token_match(&live->tokens, &c->before, NULL);
+        int j = token_match(&live->tokens, &c->before);
         if (j < 0) continue;
         turn_before_remove(live, u, j);
         undo_del_token(u, live, j);
         n++;
     }
     turn_settle(live, u);
-    int acting = 0;
-    for (int i = 0; i < live->tokens.n; i++) acting |= (live->tokens.v[i].turn & TURN_ACTING) != 0;
     for (int i = 0; i < cs->ntoks; i++) {
         const CsToken *c = &cs->toks[i];
         if (!c->has || !tok_in(box, c)) continue;
-        int j = c->had ? token_match(&live->tokens, &c->before, NULL) : -1;
-        if (j >= 0) { undo_edit_token(u, live, j, c->after); n++; continue; }
-        if (label_taken(&live->tokens, c->after.label)) {
+        int j = c->had ? token_match(&live->tokens, &c->before) : -1;
+        if (j < 0 && label_taken(&live->tokens, c->after.label)) {
             snprintf(what, sizeof what, "\"%.40s\" (the map has one)", c->after.label);
             note_left_out(out, outsz, what);
             continue;
         }
+        /* One creature holds the turn (token.h). The plan's turn lands only
+         * where nobody else on the live map has it -- the GM may have passed
+         * it since, or a box may hold the plan's new actor and not the old. */
         Token t = c->after;
-        if (acting) t.turn &= (uint8_t)~TURN_ACTING;     /* one creature holds the turn */
-        acting |= (t.turn & TURN_ACTING) != 0;
-        undo_add_token(u, live, t);
+        if ((t.turn & TURN_ACTING) && acting_other(&live->tokens, j) >= 0) t.turn &= (uint8_t)~TURN_ACTING;
+        if (j >= 0) undo_edit_token(u, live, j, t);
+        else        undo_add_token(u, live, t);
         n++;
     }
 
@@ -783,7 +780,8 @@ void cs_summary(const ChangeSet *cs, const CsBox *box, char *out, size_t outsz)
     for (int i = 0; i < cs->nlinks; i++) {
         const CsLink *c = &cs->links[i];
         if (!lnk_in(box, c)) continue;
-        say(out, outsz, "link %d %s", c->has ? c->after.num : c->before.num, !c->had ? "added" : !c->has ? "removed" : "changed");
+        if (!c->had) say(out, outsz, "a %s link added", link_kind_name(c->after.kind));   /* numbered at accept */
+        else say(out, outsz, "link %d %s", c->before.num, !c->has ? "removed" : "changed");
     }
     Tally notes = { 0 };
     for (int i = 0; i < cs->nnotes; i++)
@@ -859,7 +857,7 @@ static void preview_build(ChangeSet *cs, const Map *live)
     l->n = live->tokens.n;
     for (int i = 0; i < cs->ntoks; i++) {
         const CsToken *c = &cs->toks[i];
-        int j = c->had ? token_match(l, &c->before, NULL) : -1;
+        int j = c->had ? token_match(l, &c->before) : -1;
         if (c->had && !c->has) { if (j >= 0) tokens_remove(l, j); continue; }
         if (j >= 0) { l->v[j] = c->after; continue; }
         if (!label_taken(l, c->after.label)) tokens_add(l, c->after);
@@ -876,8 +874,17 @@ static void preview_build(ChangeSet *cs, const Map *live)
             if (j >= 0) cs->pv.links[j] = cs->pv.links[--cs->pv.nlinks];
             continue;
         }
-        if (j >= 0) cs->pv.links[j] = c->after;
-        else if (cs->pv.nlinks < MAP_LINKS_MAX) cs->pv.links[cs->pv.nlinks++] = c->after;
+        if (j >= 0) { cs->pv.links[j] = c->after; continue; }
+        if (cs->pv.nlinks >= MAP_LINKS_MAX) continue;
+        /* A new link: the number the accept will give it (cs_apply). */
+        uint8_t used[LINK_NUM_MAX + 1] = { 0 };
+        for (int k = 0; k < cs->pv.nlinks; k++)
+            if (cs->pv.links[k].num <= LINK_NUM_MAX) used[cs->pv.links[k].num] = 1;
+        Link nl = c->after;
+        nl.num = 0;
+        for (int k = 1; k <= LINK_NUM_MAX && !nl.num; k++)
+            if (!used[k]) nl.num = (uint8_t)k;
+        if (nl.num) cs->pv.links[cs->pv.nlinks++] = nl;
     }
 
     memcpy(cs->pv.notes, live->notes, sizeof cs->pv.notes);
@@ -915,14 +922,18 @@ static void swap_bytes(void *a, void *b, size_t n)
     }
 }
 
+/* The used slots only: the whole fixed arrays are 9 KB a side, three copies
+ * each way, most of a frame's swap for a map with a few links and notes. */
 static void swap_small(ChangeSet *cs, Map *live)
 {
     TokenList t = live->tokens;
     live->tokens = cs->pv.tokens;
     cs->pv.tokens = t;
-    swap_bytes(live->links, cs->pv.links, sizeof cs->pv.links);
-    int n = live->nlinks; live->nlinks = cs->pv.nlinks; cs->pv.nlinks = n;
-    swap_bytes(live->notes, cs->pv.notes, sizeof cs->pv.notes);
+    int n = imax(live->nlinks, cs->pv.nlinks);
+    swap_bytes(live->links, cs->pv.links, (size_t)n * sizeof *live->links);
+    n = live->nlinks; live->nlinks = cs->pv.nlinks; cs->pv.nlinks = n;
+    n = imax(live->nnotes, cs->pv.nnotes);
+    swap_bytes(live->notes, cs->pv.notes, (size_t)n * sizeof *live->notes);
     n = live->nnotes; live->nnotes = cs->pv.nnotes; cs->pv.nnotes = n;
 }
 

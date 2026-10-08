@@ -161,6 +161,19 @@ static inline const char *token_name(const Token *t)
     return t->label[0] ? t->label : token_kind_name(t->kind);
 }
 
+/* Are these one creature, seen in two lists (a scene and the map, a map and
+ * its copy)? By label; one with none by side and square. Size is left out,
+ * so an unlabeled creature that grew is the same one, changed. */
+static inline int token_same_key(const Token *a, const Token *b)
+{
+    if (a->label[0] || b->label[0]) return !strcmp(a->label, b->label);
+    return a->kind == b->kind && a->x == b->x && a->y == b->y;
+}
+
+/* The index of a creature with exactly this label other than `skip` (-1 for
+ * none to skip), or -1. An empty label is nobody's. */
+int tokens_find_label(const TokenList *l, const char *label, int skip);
+
 /* A label without its copy number: "Goblin 2" is Goblin, "Goblin" and
  * "Room 101B" stay as they are. */
 void token_label_root(const char *label, char *out, size_t outsz);

@@ -331,11 +331,10 @@ static int label_ok(const Map *m, const char *label, int skip, char *err, size_t
         snprintf(err, errsz, "the label is over %d characters", TOKEN_LABEL_MAX - 1);
         return 0;
     }
-    for (int i = 0; i < m->tokens.n; i++)
-        if (i != skip && !strcmp(m->tokens.v[i].label, label)) {
-            snprintf(err, errsz, "there is already a creature called %.30s", label);
-            return 0;
-        }
+    if (tokens_find_label(&m->tokens, label, skip) >= 0) {
+        snprintf(err, errsz, "there is already a creature called %.30s", label);
+        return 0;
+    }
     return 1;
 }
 

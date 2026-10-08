@@ -1,7 +1,7 @@
 /* What a proposal costs before any of it is wired to a key (docs/CONFLICTS.md
  * step 1): the scratch copy, an agent's plan on it, the change set from its
  * log, the conflict check, the preview swapped in and out for one 80x24
- * frame's window, and the accept. Median of 51, in microseconds, for the
+ * frame's window (the first frame and each one after), and the accept. Median of 51, in microseconds, for the
  * small map and the largest, with the plan of five rooms and with a fill of
  * the whole map (the worst a preview can be). tools/proposals.sh builds and
  * runs it against the release objects. */
@@ -89,10 +89,15 @@ static void whole_fill(Map *c, Undo *u)
 
 static void row(const char *what, int w, int h, int creatures, void (*plan)(Map *, Undo *))
 {
-    double copy[RUNS], work[RUNS], diff[RUNS], full[RUNS], check[RUNS], show[RUNS], apply[RUNS];
-    Map *c = map_new(1, 1, "scratch");          /* kept, as the app keeps it: its pages stay */
+    double copy[RUNS], work[RUNS], diff[RUNS], full[RUNS], check[RUNS], first[RUNS], frame[RUNS], apply[RUNS];
+    /* The live map is copied from a base each run, into one kept map, so a
+     * row times the work and not fresh pages for the setup; the scratch map
+     * is kept as the app keeps it. */
+    Map *base = encounter(w, h, creatures);
+    Map *m = map_new(1, 1, "live");
+    Map *c = map_new(1, 1, "scratch");
     for (int k = 0; k < RUNS; k++) {
-        Map *m = encounter(w, h, creatures);
+        map_copy_into(m, base);
         Undo scratch, u;
         undo_init(&scratch);
         undo_init(&u);
@@ -120,11 +125,17 @@ static void row(const char *what, int w, int h, int creatures, void (*plan)(Map 
         cs_check(&cs, m);
         check[k] = now_us() - t0;
 
-        /* One frame of an 80x24 terminal: about 40 squares by 21. */
+        /* One frame of an 80x24 terminal, about 40 squares by 21: the first
+         * builds the preview's creatures, links and notes; every one after is
+         * the swap alone. */
         t0 = now_us();
         cs_show(&cs, m, 0, 0, 39, 20);
         cs_unshow(&cs, m);
-        show[k] = now_us() - t0;
+        first[k] = now_us() - t0;
+        t0 = now_us();
+        cs_show(&cs, m, 0, 0, 39, 20);
+        cs_unshow(&cs, m);
+        frame[k] = now_us() - t0;
 
         t0 = now_us();
         cs_apply(&cs, m, &u, NULL, NULL, 0);
@@ -132,20 +143,23 @@ static void row(const char *what, int w, int h, int creatures, void (*plan)(Map 
 
         cs_free(&cs);
         cs_free(&all);
-        map_free(m);
         undo_free(&scratch);
         undo_free(&u);
     }
     map_free(c);
-    printf("| %-22s | %dx%d, %d creatures | %7.1f | %7.1f | %7.1f | %7.1f | %7.1f | %7.1f | %7.1f |\n",
-           what, w, h, creatures, median(copy), median(work), median(diff), median(full),
-           median(check), median(show), median(apply));
+    map_free(m);
+    map_free(base);
+    char label[64];
+    snprintf(label, sizeof label, "%s, %dx%d, %d creatures", what, w, h, creatures);
+    printf("| %-41s | %7.1fus | %7.1fus | %7.1fus | %7.1fus | %7.1fus | %7.1fus | %7.1fus | %7.1fus |\n",
+           label, median(copy), median(work), median(diff), median(full),
+           median(check), median(first), median(frame), median(apply));
 }
 
 int main(void)
 {
-    printf("| plan                   | map                     |    copy |    plan | diff (log) | diff (all) |   check | preview |  accept |\n");
-    printf("|------------------------|-------------------------|---------|---------|---------|---------|---------|---------|---------|\n");
+    printf("| plan and map                              |      copy |      plan |      diff | diff (all) |     check | preview, first | preview, frame |    accept |\n");
+    printf("|-------------------------------------------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|\n");
     row("five rooms", 40, 25, 24, five_rooms);
     row("five rooms", 512, 512, 24, five_rooms);
     row("five rooms", 512, 512, 500, five_rooms);

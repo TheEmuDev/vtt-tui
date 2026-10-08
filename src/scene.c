@@ -131,12 +131,6 @@ static void who(const Token *t, char *buf, size_t sz)
     else             snprintf(buf, sz, "(%s)", token_kind_name(t->kind));
 }
 
-static int same_one(const Token *a, const Token *b)
-{
-    if (a->label[0] || b->label[0]) return !strcmp(a->label, b->label);
-    return a->kind == b->kind && a->x == b->x && a->y == b->y;
-}
-
 static void markers(const Token *t, char *buf, size_t sz)
 {
     int off = 0;
@@ -220,7 +214,7 @@ int scene_diff(FILE *out, const Map *m, int i)
         const Token *was = &sc->tokens.v[j];
         int k = -1;
         for (int c = 0; c < n && k < 0; c++)
-            if (!used[c] && in_scene(sc, &m->tokens.v[c]) && same_one(&m->tokens.v[c], was)) k = c;
+            if (!used[c] && in_scene(sc, &m->tokens.v[c]) && token_same_key(&m->tokens.v[c], was)) k = c;
         who(was, w, sizeof w);
         map_coord_name(was->x, was->y, at, sizeof at);
         if (k < 0) { fprintf(out, "gone %s at %s\n", w, at); lines++; continue; }

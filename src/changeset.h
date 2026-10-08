@@ -151,5 +151,7 @@ int  cs_bounds(const ChangeSet *cs, int *x0, int *y0, int *x1, int *y1);
  * anything but drawing (the rule stamp_show lives by). */
 void cs_show(ChangeSet *cs, Map *live, int x0, int y0, int x1, int y1);
 void cs_unshow(ChangeSet *cs, Map *live);
+/* While shown, the set holds the live map's own creature list: cs_free or
+ * cs_diff on it then would free the map's list. Unshow first. */
 
 #endif /* VTT_CHANGESET_H */

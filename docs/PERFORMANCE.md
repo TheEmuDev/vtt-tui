@@ -774,41 +774,48 @@ frame (`agent, room + 12`'s frame row is the redraw of the changed squares).
 
 ## Proposals
 
-An agent's change is a proposal the GM reviews (docs/CONFLICTS.md): the plan runs on a
-copy of the map, and the difference is a change set the GM previews, then accepts whole or
-by box. `tools/proposals.sh` times each piece apart from any key, in microseconds, median of
-51. *preview* is one 80×24 frame's window swapped in and out. The "fill" row is the worst a
-proposal can be: every square of the largest map.
+An agent's change is a proposal the GM reviews (docs/CONFLICTS.md). The plan runs on a copy
+of the map, and the difference is a change set the GM previews, then accepts whole or by
+box. `tools/proposals.sh` times each piece apart from any key, in microseconds: the median
+of 51 within a run, and the per-row median of three runs (`tools/median.py`).
+- *diff* reads the scratch log; *diff (all)* compares every square.
+- *preview, first* is one 80×24 frame's window (about 40×21 squares) swapped in and out,
+  including building the preview's creatures, links and notes. *preview, frame* is every
+  frame after that.
+- The "fill" row is the worst a proposal can be: every square of the largest map.
 
 Machine: Intel Core i7-8700K @ 3.70GHz (6 cores, 12 threads, 4.7 GHz max, powersave governor), 16 GB RAM, Samsung SSD 860 EVO 1TB (btrfs), Linux 7.2.5-3-omarchy, gcc 16.2.1 -O2
 
-| plan                   | map                     |    copy |    plan | diff (log) | diff (all) |   check | preview |  accept |
-|------------------------|-------------------------|---------|---------|---------|---------|---------|---------|---------|
-| five rooms             | 40x25, 24 creatures |     0.6 |     2.1 |     3.0 |     2.8 |     0.5 |     2.3 |     2.9 |
-| five rooms             | 512x512, 24 creatures |    31.2 |     2.3 |     9.8 |    39.7 |     0.5 |     3.7 |     5.4 |
-| five rooms             | 512x512, 500 creatures |    34.9 |     2.4 |    10.9 |    43.8 |     0.5 |     5.7 |     3.7 |
-| fill the whole map     | 512x512, 24 creatures |    41.8 |  3034.7 |  2139.0 |  2110.3 |   382.4 |     8.0 |  3103.7 |
+| plan and map                              |      copy |      plan |      diff | diff (all) |     check | preview, first | preview, frame |    accept |
+|-------------------------------------------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|
+| five rooms, 40x25, 24 creatures           |     0.6us |     2.2us |     3.1us |     3.1us |     0.5us |     1.4us |     1.1us |     3.1us |
+| five rooms, 512x512, 24 creatures         |    27.9us |     2.4us |     4.9us |    37.8us |     0.5us |     1.5us |     1.1us |     3.3us |
+| five rooms, 512x512, 500 creatures        |    31.6us |     2.4us |    11.6us |    44.3us |     0.5us |     4.2us |     1.1us |     3.4us |
+| fill the whole map, 512x512, 24 creatures |    49.8us |  3151.4us |  2395.6us |  2351.4us |   451.7us |     7.5us |     5.3us |  3485.7us |
 
 Against the speed of light (the desktop's figures above):
 
 | path | floor | measured, 512×512 | gap, and why it is kept |
 |---|---|---|---|
-| copy | 1.05 MB at 37 GB/s: 28 µs | 31-35 µs | none. It is a copy **into** the scratch map the app keeps, so its pages stay mapped. A fresh `map_copy` is 434 µs on a 512×512 map: 1 MB of new pages, each a fault on first touch |
-| diff from the log, five rooms | the 300 squares written, about 1 µs, plus the creatures | 10 µs | about 8 µs of fixed cost: indexing 1,089 blocks, and the table that drops a square written twice. On a small map it is 3 µs |
-| diff, 500 creatures | streaming 2 × 128 KB of creatures: about 7 µs | 11 µs over the 24-creature row | none. The lists are walked in step (a copy keeps the order) and hashed only on a miss. Pairing them by search was 89 µs |
+| copy | 1.05 MB at 37 GB/s: 28 µs | 28-32 µs | none. It is a copy **into** the scratch map the app keeps, so its pages stay mapped. A fresh `map_copy` of a 512×512 map is 434 µs: 1 MB of new pages, a fault each on first touch |
+| diff, five rooms | the 300 squares written, about 1 µs, plus the creatures | 4.9 µs; 3.1 on 40×25 | about 2 µs: the 300 reads are scattered across two 1 MB maps, and the cost follows the arrays' stride, not their blocks. An empty log on 512×512 is 0.8 µs, so indexing the 1,089 blocks is half a microsecond. The fallback for a big log is the full diff (*diff (all)*: one `memcmp` a row) |
+| diff, 500 creatures | streaming 2 × 128 KB of creatures: about 7 µs | 6.7 µs over the 24-creature row | none. The lists are walked in step (a copy keeps the order) and hashed only on a miss. Pairing them by search was 89 µs |
 | conflicts | one compare per element | 0.5 µs | none |
-| preview frame | the window's changed cells, swapped in and out | 2-6 µs | none. The first frame after a change builds the creature list once (5.7 µs at 500); each frame after it is the swap |
-| accept | the undo log's cost for the same writes | 3-5 µs | none. It is the plan's writes, recorded |
-| a fill of the whole map | 262k cells: writing 2 MB and reading 1 MB, about 0.2 ms | diff 2.1 ms, check 0.4 ms | about 1.9 ms: a cell is pushed one at a time and bucketed by block. The accept, which only records the same writes in the undo log, is 3.1 ms, so the diff is not what a fill costs. Kept |
+| preview frame | the window's changed cells, swapped in and out | 1.1 µs | none. Only the used slots of the link and note arrays are swapped. Swapping the whole fixed arrays (9 KB a side) made a frame 2 µs. The first frame after a change also builds the preview's lists (4.2 µs with 500 creatures) |
+| accept | the undo log's cost for the same writes | 3.3 µs | none. It is the plan's writes, recorded |
+| a fill of the whole map | 262k cells: writing 2 MB and reading 1 MB, about 0.2 ms | diff 2.4 ms, check 0.45 ms | about 2 ms: a cell is pushed one at a time and bucketed by block. The accept, which only records the same writes in the undo log, is 3.5 ms, so the diff is not what a fill costs. Kept |
 
-Three findings on the way, each fixed before the table was taken:
+Findings on the way, each fixed before the table was taken:
 - **The copy was paying for fresh pages.** It cost 434 µs, and keeping the scratch map
-  brought it to 31 µs.
+  brought it to 28 µs.
 - **Sorting the cells with `qsort` was the dearest step.** It made a diff of five rooms
   14 µs and a fill 16 ms. Bucketing by block, plus a hash that drops a square written
   twice, is linear.
 - **Reserving every list's worst case up front** (520 KB for 1,000 creatures) was an `mmap`
   and a `munmap` per diff. The lists double from 8 instead.
+- **The first version of this table mismeasured two columns.** It timed the diff with a
+  freshly allocated live map each run (9.8 µs, the setup's pages), and it timed the
+  preview's first frame only. Fable's review of the step found both.
 
 ## The phone page
 

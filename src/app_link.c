@@ -176,9 +176,7 @@ static void travel(App *a, int li)
         t.init = 0;
         /* A label is kept when nobody here has it -- a paste's numbering would
          * turn "Goblin 2" into Goblin -- and numbered only when it clashes. */
-        int clash = 0;
-        for (int j = 0; j < d->tokens.n && !clash; j++) clash = t.label[0] && !strcmp(d->tokens.v[j].label, t.label);
-        if (clash) tokens_unique_label(&d->tokens, party[k].label, t.label, sizeof t.label);
+        if (tokens_find_label(&d->tokens, t.label, -1) >= 0) tokens_unique_label(&d->tokens, party[k].label, t.label, sizeof t.label);
         int at = tokens_add(&d->tokens, t);
         if (first < 0) first = at;
         size_t wl = strlen(who);
