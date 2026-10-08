@@ -793,6 +793,12 @@ Machine: Intel Core i7-8700K @ 3.70GHz (6 cores, 12 threads, 4.7 GHz max, powers
 | five rooms, 512x512, 500 creatures        |    31.9us |     2.6us |    11.2us |    44.1us |     0.5us |     4.3us |     1.1us |     3.6us |
 | fill the whole map, 512x512, 24 creatures |    49.0us |  3242.0us |  2205.9us |  2113.8us |   442.2us |     7.2us |     5.2us |  4066.7us |
 
+**Rows that moved between publications.** The fill row's *accept* read 3.5 ms when step 1
+was published and 4.1 ms after step 2, with no change on that path. An A/B of the two
+commits found the later one no slower, so it is placement and noise. These tables are from
+default builds, where placement alone moves a tight loop 5-9% (*The checkpoint*, below).
+Treat a whole-map row's change under about 15% as noise unless an aligned A/B confirms it.
+
 Against the speed of light (the desktop's figures above):
 
 | path | floor | measured, 512×512 | gap, and why it is kept |
@@ -827,18 +833,24 @@ of every square through the log, *undo* takes it back, each with the checkpoint 
 
 | checkpoint and map                        |     start | fill, off |  fill, on | undo, off |  undo, on | read, a dozen | read, a fill |
 |-------------------------------------------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|
-| checkpoint, 40x25, 24 creatures           |     0.4us |     7.1us |     9.0us |     4.6us |     7.6us |     0.9us |     8.2us |
-| checkpoint, 512x512, 24 creatures         |     1.1us |  1812.8us |  2369.8us |  1183.7us |  2010.3us |     2.2us |  2810.5us |
-| checkpoint, 512x512, 500 creatures        |     4.5us |  1802.8us |  2348.5us |  1177.2us |  2006.1us |     7.9us |  2816.2us |
+| checkpoint, 40x25, 24 creatures           |     0.5us |     7.4us |     9.4us |     4.6us |     8.2us |     1.0us |     8.3us |
+| checkpoint, 512x512, 24 creatures         |     1.4us |  1855.2us |  2428.6us |  1231.2us |  2254.3us |     2.3us |  2494.2us |
+| checkpoint, 512x512, 500 creatures        |     5.2us |  1856.6us |  2432.8us |  1234.1us |  2253.7us |     8.0us |  2352.0us |
 
 | path | floor | measured, 512×512 | gap, and why it is kept |
 |---|---|---|---|
 | any edit, no checkpoint | as before | as before | none. The undo apply loop has no test per op, and the map's writers none at all; the recorders test one pointer, expected false. An A/B against the commit before (both rebuilt with `-falign-functions=64 -falign-loops=32`) measures no difference |
-| start | the small parts: 18 KB plus 256 bytes a creature, about 1 µs | 1.1 µs; 4.5 at 500 creatures | none |
-| recording, while one runs | a value byte and a bit a cell, under 0.5 ns | about 2 ns a cell (a whole-map fill 1.81 → 2.37 ms) | about 1.5 ns: the block index and the bit's read-modify-write in the recorder. Out of line it was 3 ns |
-| an undo step, while one runs | nothing for cells recorded since the start (recording noted them) | about 3 ns an op (1.18 → 2.01 ms for the whole map) | the walk over the batch's ops, though every cell in it is already noted. Skipping a batch recorded since the start would need the log to know about the checkpoint. It only shows when a whole-map fill is undone while an agent is connected. Kept |
-| reading a dozen edits | the twelve cells and the small parts | 2.2 µs; 7.9 at 500 creatures | none |
-| reading a fill | 262k cells: about 0.3 ms | 2.8 ms | the same pushing and bucketing as the full diff's, above: one cost, kept once |
+| start | the small parts: 18 KB plus 256 bytes a creature, about 1 µs | 1.4 µs; 5.2 at 500 creatures | none |
+| recording, while one runs | a value byte and a bit a cell, under 0.5 ns | about 2 ns a cell (a whole-map fill 1.86 → 2.43 ms) | about 1.5 ns: the block index and the bit's read-modify-write in the recorder. Out of line it was 3 ns |
+| an undo step, while one runs | nothing for cells recorded since the start (recording noted them) | about 4 ns an op (1.23 → 2.25 ms for the whole map) | the walk over the batch's ops, though every cell in it is already noted; each reads the live cell, which the review's fix needs (below) and `apply` reads next anyway. Skipping a batch recorded since the start would need the log to know about the checkpoint. It only shows when a whole-map fill is undone while an agent is connected. Kept |
+| reading a dozen edits | the twelve cells and the small parts | 2.3 µs; 8.0 at 500 creatures | none |
+| reading a fill | 262k cells: about 0.3 ms | 2.4 ms | the same pushing and bucketing as the full diff's, above: one cost, kept once |
+
+**The value noted is the live cell's, not the op's.** Fable's review of the step found the
+first version noting an undo's `after` (a redo's `before`). That is wrong once the log and the
+map disagree: `fog_delete` clears painting round the log, so after one made before the start,
+undoing the paint reported a change that never happened. Reading the live byte costs one load
+per op, which `apply` makes next anyway.
 
 **Code placement moves a tight loop by 5-9%.** The first A/B of this step showed
 `undo.step` 9% dearer with no checkpoint running. It held with the hook emptied, with

@@ -33,6 +33,7 @@ typedef struct Checkpoint {
     int      nsaved;
     Map      parts;            /* the small parts as they were; no arrays, no cards or scenes */
     unsigned cards_gen, scenes_gen;
+    int      fog_on, fog_soft_edge;
     int      resized, from_w, from_h;
 } Checkpoint;
 
@@ -42,7 +43,8 @@ void checkpoint_start(Map *m);
 void checkpoint_stop(Map *m);
 
 /* The changes since the start, as a change set (before: the checkpoint,
- * after: the map); the elements, 0 for none. */
+ * after: the map); the elements, 0 for none. Never between a preview's show
+ * and unshow (cs_show, stamp_show): it would read the preview as the map. */
 int  checkpoint_changes(const Map *m, ChangeSet *cs);
 
 /* A block's cell bits are cleared the first time one of its cells is noted. */
@@ -52,6 +54,7 @@ void checkpoint_open_block(Checkpoint *cp, int b);
  * number). Kept only for the first change since the start. Inline, because
  * while a checkpoint runs every recorded write comes through here: out of
  * line it cost 3 ns a cell, a byte and a bit should cost well under one. */
+_Static_assert(CS_BLOCK == 16, "checkpoint_note and the writers' test shift by 4");
 static inline void checkpoint_note(Map *m, int kind, int x, int y, uint8_t now)
 {
     Checkpoint *cp = m->cp;
@@ -70,11 +73,13 @@ static inline void cp_note(Map *m, int kind, int x, int y, uint8_t now)
 {
     if (__builtin_expect(m->cp_saved != NULL, 0)) checkpoint_note(m, kind, x, y, now);
 }
-/* The ops [lo, hi) of `u` about to be applied, forward or back. */
+/* The ops [lo, hi) of `u` about to be applied, forward or back: each cell's
+ * live value is noted before any of them is, so the direction does not
+ * matter. */
 void checkpoint_note_ops(Map *m, const Undo *u, int lo, int hi, int forward);
 
 /* map_resize's: the noted cells no longer line up, so the changes become
  * "resized" until the next start. */
-void checkpoint_resized(Map *m, int w, int h);
+void checkpoint_resized(Map *m);
 
 #endif /* VTT_CHECKPOINT_H */

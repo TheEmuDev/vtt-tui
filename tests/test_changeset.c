@@ -11,6 +11,7 @@
 #include "checkpoint.h"
 #include "fog.h"
 #include "scene.h"
+#include "stamp.h"
 #include "link.h"
 #include "map.h"
 #include "undo.h"
@@ -697,6 +698,39 @@ static void cs_checkpoint(void)
     undo_abort(&u, m);
     CHECK_EQ(checkpoint_changes(m, &a), 0);
 
+    CASE("painting deleted before the start, then undone: no change is reported, since the map and the log disagreed");
+    checkpoint_stop(m);
+    undo_clear(&u);
+    undo_begin(&u);
+    undo_set_fog(&u, m, 35, 25, 2);
+    undo_set_fog(&u, m, 36, 25, 2);
+    undo_end(&u);
+    str_lcpy(m->fog_patches[1].name, "Smoke", FOG_NAME_MAX);
+    fog_delete(m, 2);                                         /* round the log */
+    checkpoint_start(m);
+    undo_undo(&u, m);                                         /* paints over nothing: 0 -> 0 */
+    CHECK_EQ(checkpoint_changes(m, &a), 0);
+
+    CASE("one cell written twice in a batch before the start and undone after: its start value is the live one");
+    undo_clear(&u);
+    undo_begin(&u);
+    undo_set_tile(&u, m, 30, 22, TILE_WATER);
+    undo_set_tile(&u, m, 30, 22, TILE_ROUGH);
+    undo_end(&u);
+    checkpoint_start(m);
+    undo_undo(&u, m);
+    checkpoint_changes(m, &a);
+    CHECK_EQ(a.ncells, 1);
+    CHECK(a.ncells == 1 && a.cells[0].before == TILE_ROUGH && a.cells[0].after == TILE_VOID);
+
+    CASE("a fog setting changed is reported");
+    checkpoint_start(m);
+    m->fog_patches[0].memory = (uint8_t)!m->fog_patches[0].memory;
+    checkpoint_changes(m, &a);
+    cs_summary(&a, NULL, sum, sizeof sum);
+    CHECK(strstr(sum, "fog settings changed") != NULL);
+    m->fog_patches[0].memory = (uint8_t)!m->fog_patches[0].memory;
+
     CASE("starting again counts from now");
     undo_begin(&u);
     undo_set_tile(&u, m, 7, 7, TILE_BRUSH);
@@ -704,6 +738,18 @@ static void cs_checkpoint(void)
     CHECK(checkpoint_changes(m, &a) > 0);
     checkpoint_start(m);
     CHECK_EQ(checkpoint_changes(m, &a), 0);
+
+    CASE("a log older than a resize, undone with a checkpoint running, notes nothing off the map");
+    undo_clear(&u);
+    undo_begin(&u);
+    undo_set_tile(&u, m, 39, 29, TILE_WATER);
+    undo_end(&u);
+    Map *small = map_copy(m);
+    map_resize(small, 20, 10);
+    checkpoint_start(small);
+    undo_undo(&u, small);                                     /* ASan watches the store */
+    CHECK_EQ(checkpoint_changes(small, &a), 0);
+    map_free(small);
 
     CASE("a resize is reported, writes after it save nothing, and a new start fits the new size");
     map_resize(m, 50, 30);
@@ -741,7 +787,9 @@ static void cs_checkpoint_differential(void)
         undo_init(&u);
         undo_begin(&u);                                       /* a history from before the start */
         for (int x = 0; x < 10; x++) undo_set_tile(&u, m, x, 12, TILE_WOOD);
+        for (int x = 0; x < 10; x++) undo_set_fog(&u, m, x, 13, 1);
         undo_end(&u);
+        if (round % 2) fog_delete(m, 1);                      /* the log and the map now disagree */
         checkpoint_start(m);
         Map *base = map_copy(m);
         for (int k = 0; k < 60; k++) {
@@ -752,7 +800,7 @@ static void cs_checkpoint_differential(void)
             case 0: case 1: case 2: case 3:
                 undo_begin(&u);
                 for (int j = 0; j < 1 + (int)v; j++) {
-                    int xx = imin(x + j, 40), yy = imin(y, 30);
+                    int xx = imin(x + j / 2, 40), yy = imin(y, 30);      /* each cell twice */
                     switch ((r + j) % 4) {
                     case 0: undo_set_tile(&u, m, xx, yy, v % TILE_COUNT); break;
                     case 1: undo_set_vedge(&u, m, xx, yy, v % EDGE_COUNT); break;
@@ -782,8 +830,47 @@ static void cs_checkpoint_differential(void)
     CHECK(ok);
 }
 
+/* The writers that build on the log -- a change set's accept, a stamp --
+ * seen by a checkpoint like any edit. */
+static void cs_checkpoint_writers(void)
+{
+    CASE("an accept and a stamp, with a checkpoint running: the checkpoint's cells are the full diff's");
+    Map *m = encounter();
+    Map *c = map_copy(m);
+    Undo scratch, u;
+    undo_init(&scratch);
+    undo_init(&u);
+    agent_plan(c, &scratch);
+    ChangeSet cs;
+    cs_init(&cs);
+    cs_diff(&cs, m, c, &scratch);
+    checkpoint_start(m);
+    Map *base = map_copy(m);
+    cs_apply(&cs, m, &u, NULL, NULL, 0);
+    Map *st = stamp_copy(m, 7, 1, 10, 4);                     /* a corner of the room, nobody in it */
+    char err[80];
+    CHECK(st && stamp_place(m, &u, st, 25, 18, err, sizeof err) == 1);
+    ChangeSet a, b;
+    cs_init(&a);
+    cs_init(&b);
+    checkpoint_changes(m, &a);
+    cs_diff(&b, base, m, NULL);
+    CHECK(cells_same(&a, &b));
+    CHECK(a.ncells > 0);
+    cs_free(&a);
+    cs_free(&b);
+    cs_free(&cs);
+    map_free(st);
+    map_free(base);
+    map_free(c);
+    map_free(m);
+    undo_free(&scratch);
+    undo_free(&u);
+}
+
 void test_changeset(void)
 {
+    cs_checkpoint_writers();
     cs_checkpoint();
     cs_checkpoint_differential();
     cs_edges_and_turns();

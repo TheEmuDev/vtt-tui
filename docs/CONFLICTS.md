@@ -37,7 +37,18 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
   - PERFORMANCE.md's *Proposals* section, set against the speed of light.
 - **One file, not two.** `mapdiff.c` and `changeset.c` became one file, `changeset.c`.
   The diff, the apply and the preview share one structure.
-- **Step 2: built (2026-10-08), Fable's review not yet run.** The checkpoint is
+- **Step 2: built, reviewed by Fable, and fixed (2026-10-08).** The review's fixes:
+  - undo and redo now note the **live** cell, not the op's value. A fog patch deleted
+    before the start made the two disagree, and the old version reported a change that
+    never happened;
+  - a log older than a resize can't index past the checkpoint's buffers;
+  - a fog patch's settings (and the fog switch) are reported as "fog settings changed";
+  - the tests now cover a cell written twice in a batch, the change set's own accept and a
+    stamp with a checkpoint watching, and the pre-start case;
+  - `checkpoint_changes` has its own profiler zone (`checkpoint.read`), and must never run
+    between a preview's show and unshow (said in checkpoint.h).
+
+  What step 2 holds: The checkpoint is
   `checkpoint.c/h`, tests in test_changeset.c, and rows in `tools/proposals.sh`.
   - **Changed from the plan: the cell hook moved from the map's writers to the undo log.**
     An A/B first showed the writer hook costing `undo.step` 5-9% with no checkpoint

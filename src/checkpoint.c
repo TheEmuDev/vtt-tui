@@ -18,17 +18,35 @@ void checkpoint_open_block(Checkpoint *cp, int b)
     cp->nsaved++;
 }
 
+/* The value noted is the live cell's, read before the batch applies -- not
+ * the op's own before (or after, going back). The two agree only while the
+ * log and the map do: fog_delete clears painting round the log, so after one
+ * made before the start, undoing the paint would note a value the map no
+ * longer had. The live byte is the one apply is about to write anyway. */
 void checkpoint_note_ops(Map *m, const Undo *u, int lo, int hi, int forward)
 {
-    for (int k = 0; k < hi - lo; k++) {
-        const Op *o = &u->ops[forward ? lo + k : hi - 1 - k];   /* the order they apply in */
-        uint8_t now = forward ? o->before : o->after;
+    size_t w = (size_t)m->w;
+    (void)forward;          /* nothing is applied yet: every op reads the batch's start */
+    for (int k = lo; k < hi; k++) {
+        const Op *o = &u->ops[k];
+        if (o->x < 0 || o->y < 0 || o->x > m->w || o->y > m->h) continue;  /* a log older than a resize */
+        size_t x = (size_t)o->x, y = (size_t)o->y;
         switch (o->kind) {
-        case OP_TILE:  checkpoint_note(m, CS_TILE, o->x, o->y, now);  break;
-        case OP_VEDGE: checkpoint_note(m, CS_VEDGE, o->x, o->y, now); break;
-        case OP_HEDGE: checkpoint_note(m, CS_HEDGE, o->x, o->y, now); break;
-        case OP_FOG:   checkpoint_note(m, CS_FOG, o->x, o->y, (uint8_t)(now & FOG_ID)); break;
-        default:       break;
+        case OP_TILE:
+            if (o->x < m->w && o->y < m->h) checkpoint_note(m, CS_TILE, o->x, o->y, m->tiles[y * w + x]);
+            break;
+        case OP_VEDGE:
+            if (o->y < m->h) checkpoint_note(m, CS_VEDGE, o->x, o->y, m->vedges[y * (w + 1) + x]);
+            break;
+        case OP_HEDGE:
+            if (o->x < m->w) checkpoint_note(m, CS_HEDGE, o->x, o->y, m->hedges[y * w + x]);
+            break;
+        case OP_FOG:
+            if (o->x < m->w && o->y < m->h)
+                checkpoint_note(m, CS_FOG, o->x, o->y, (uint8_t)(m->fog[y * w + x] & FOG_ID));
+            break;
+        default:
+            break;
         }
     }
 }
@@ -43,8 +61,8 @@ static void size_for(Checkpoint *cp, int w, int h)
     free(cp->store);
     cp->w  = w;
     cp->h  = h;
-    cp->bw = (w + 1 + CS_BLOCK - 1) / CS_BLOCK;
-    cp->bh = (h + 1 + CS_BLOCK - 1) / CS_BLOCK;
+    cp->bw = cs_blocks(w);
+    cp->bh = cs_blocks(h);
     size_t nb = (size_t)cp->bw * (size_t)cp->bh;
     cp->saved = xcalloc(nb, 1);
     /* Not zeroed: a block's bits are cleared when it is first noted, and a
@@ -78,11 +96,12 @@ void checkpoint_start(Map *m)
     memcpy(p->fog_patches, m->fog_patches, sizeof p->fog_patches);
     p->round     = m->round;
     p->spotlight = m->spotlight;
+    cp->fog_on        = m->fog_on;
+    cp->fog_soft_edge = m->fog_soft_edge;
     cp->cards_gen  = m->cards_gen;
     cp->scenes_gen = m->scenes_gen;
 
     m->cp_saved = cp->saved;
-    m->cp_bw    = cp->bw;
 }
 
 void checkpoint_stop(Map *m)
@@ -97,11 +116,9 @@ void checkpoint_stop(Map *m)
     m->cp_saved = NULL;
 }
 
-void checkpoint_resized(Map *m, int w, int h)
+void checkpoint_resized(Map *m)
 {
     Checkpoint *cp = m->cp;
-    (void)w;
-    (void)h;
     if (!cp) return;
     if (!cp->resized) {
         cp->resized = 1;
@@ -119,7 +136,7 @@ static int clock_same(const Clock *a, const Clock *b)
 
 int checkpoint_changes(const Map *m, ChangeSet *cs)
 {
-    PROF_ZONE("mapdiff");
+    PROF_ZONE("checkpoint.read");
     const Checkpoint *cp = m->cp;
     cs_begin(cs, m->w, m->h);
     if (!cp) return 0;
@@ -158,5 +175,14 @@ int checkpoint_changes(const Map *m, ChangeSet *cs)
     cs->scenes_changed = m->scenes_gen != cp->scenes_gen;
     for (int i = 0; i < CLOCK_MAX; i++)
         if (!clock_same(&cp->parts.clocks[i], &m->clocks[i])) cs->clocks_changed = 1;
-    return n + cs->cards_changed + cs->scenes_changed + cs->clocks_changed + cs->resized;
+    /* A patch's settings (:fog ... reveal, memory, soft edge, disabled, deleted),
+     * not its painting: the painting is in the cells. */
+    for (int i = 0; i < FOG_PATCH_MAX; i++) {
+        const FogPatch *a = &cp->parts.fog_patches[i], *b = &m->fog_patches[i];
+        if (strcmp(a->name, b->name) || a->reveal != b->reveal || a->memory != b->memory ||
+            a->soft_edge != b->soft_edge || a->disabled != b->disabled || a->dead != b->dead)
+            cs->fog_changed = 1;
+    }
+    if (m->fog_on != cp->fog_on || m->fog_soft_edge != cp->fog_soft_edge) cs->fog_changed = 1;
+    return n + cs->cards_changed + cs->scenes_changed + cs->clocks_changed + cs->fog_changed + cs->resized;
 }

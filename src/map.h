@@ -287,7 +287,6 @@ typedef struct {
      * undo log's recorders test it inline (cp_note). */
     struct Checkpoint *cp;
     uint8_t  *cp_saved;
-    int       cp_bw;
     /* Bumped by every change to the cards and the scenes, which go round the
      * undo log and Map.gen: what a checkpoint compares them by. */
     unsigned  cards_gen, scenes_gen;

@@ -179,7 +179,7 @@ int map_resize(Map *m, int w, int h)
     if (w < MAP_MIN_DIM || h < MAP_MIN_DIM || w > MAP_MAX_DIM || h > MAP_MAX_DIM)
         return -1;
     if (w == m->w && h == m->h) return 0;
-    checkpoint_resized(m, w, h);
+    checkpoint_resized(m);
 
     uint8_t *tiles  = xcalloc((size_t)w * (size_t)h, 1);
     uint8_t *vedges = xcalloc((size_t)(w + 1) * (size_t)h, 1);

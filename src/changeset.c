@@ -404,8 +404,8 @@ void cs_begin(ChangeSet *cs, int w, int h)
     cs_free(cs);
     cs->w  = w;
     cs->h  = h;
-    cs->bw = (w + 1 + CS_BLOCK - 1) / CS_BLOCK;      /* + 1: the far boundary */
-    cs->bh = (h + 1 + CS_BLOCK - 1) / CS_BLOCK;
+    cs->bw = cs_blocks(w);
+    cs->bh = cs_blocks(h);
 }
 
 static int cs_count(const ChangeSet *cs)
@@ -817,6 +817,7 @@ void cs_summary(const ChangeSet *cs, const CsBox *box, char *out, size_t outsz)
         if (cs->cards_changed)  say(out, outsz, "cards changed");
         if (cs->scenes_changed) say(out, outsz, "scenes changed");
         if (cs->clocks_changed) say(out, outsz, "clocks changed");
+        if (cs->fog_changed)    say(out, outsz, "fog settings changed");
     }
     if (cs->resized) {
         char was[24];

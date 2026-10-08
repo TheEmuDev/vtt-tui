@@ -71,6 +71,9 @@ typedef struct {
 
 #define CS_BLOCK 16
 
+/* Blocks across a span of n squares, with room for its far boundary (n + 1). */
+static inline int cs_blocks(int n) { return (n + 1 + CS_BLOCK - 1) / CS_BLOCK; }
+
 typedef struct {
     int w, h;                       /* the map the set was made against */
 
@@ -90,7 +93,7 @@ typedef struct {
 
     /* What a checkpoint (checkpoint.h) can only say changed, not how: the
      * cards, the scenes, the clocks, and the map's size. Never applied. */
-    uint8_t  cards_changed, scenes_changed, clocks_changed, resized;
+    uint8_t  cards_changed, scenes_changed, clocks_changed, fog_changed, resized;
     int      old_w, old_h;
 
     /* The fog patches' names in the map the set came from: painting into a
@@ -137,7 +140,8 @@ static inline int cs_empty(const ChangeSet *cs)
 {
     return !cs->ncells && !cs->ntoks && !cs->nareas && !cs->nlinks && !cs->nnotes &&
            !cs->nrolls && !cs->ncards && !cs->round_changed && !cs->spot_changed &&
-           !cs->cards_changed && !cs->scenes_changed && !cs->clocks_changed && !cs->resized;
+           !cs->cards_changed && !cs->scenes_changed && !cs->clocks_changed && !cs->fog_changed &&
+           !cs->resized;
 }
 
 /* Marks every element whose live value is no longer its `before`; returns
