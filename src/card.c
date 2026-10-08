@@ -70,6 +70,7 @@ int card_set(Map *m, const char *name, const char *text)
     }
     free(m->cards[i].text);
     m->cards[i].text = card_clean(text);
+    m->cards_gen++;                 /* round the undo log and Map.gen: a checkpoint's way to see it */
     return i;
 }
 

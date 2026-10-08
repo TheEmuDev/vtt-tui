@@ -8,6 +8,9 @@
 
 #include "card.h"
 #include "changeset.h"
+#include "checkpoint.h"
+#include "fog.h"
+#include "scene.h"
 #include "link.h"
 #include "map.h"
 #include "undo.h"
@@ -596,8 +599,7 @@ static void cs_small_parts(void)
     m->round = 1;
     m->gen++;
     CHECK_EQ(cs_check(&cs, m), 3);
-    card_set(m, "ghoul", "edited by the GM");
-    m->gen++;                       /* card_set touches nothing; step 2's counters will */
+    card_set(m, "ghoul", "edited by the GM");           /* touches nothing: seen by cards_gen */
     CHECK_EQ(cs_check(&cs, m), 4);
 
     cs_free(&cs);
@@ -607,8 +609,183 @@ static void cs_small_parts(void)
     undo_free(&u);
 }
 
+static void cs_checkpoint(void)
+{
+    CASE("no checkpoint: an edit notes nothing");
+    Map *m = encounter();
+    Undo u;
+    undo_init(&u);
+    CHECK(m->cp == NULL && m->cp_saved == NULL);
+    undo_begin(&u);
+    undo_set_tile(&u, m, 0, 0, TILE_WATER);
+    undo_end(&u);
+    CHECK(m->cp == NULL);
+
+    CASE("a checkpoint sees every edit through the log, the far edges, fog painted and fog deleted, undo and redo, and only the blocks written");
+    for (int y = 1; y <= 3; y++)
+        for (int x = 30; x <= 32; x++) map_fog_set(m, x, y, 1);
+    checkpoint_start(m);
+    Map *base = map_copy(m);
+    CHECK(base->cp == NULL);                                  /* a copy never carries it */
+    undo_begin(&u);
+    undo_set_tile(&u, m, 5, 5, TILE_WATER);
+    undo_set_vedge(&u, m, m->w, 29, EDGE_WALL);               /* x == w */
+    undo_set_hedge(&u, m, 39, m->h, EDGE_WALL);               /* y == h */
+    undo_set_fog(&u, m, 20, 20, 1);
+    undo_end(&u);
+    undo_begin(&u);
+    for (int y = 16; y <= 18; y++)
+        for (int x = 0; x <= 3; x++) undo_set_tile(&u, m, x, y, TILE_ROUGH);
+    undo_end(&u);
+    undo_undo(&u, m);                                         /* back, and forward again */
+    undo_redo(&u, m);
+    fog_delete(m, 1);
+    Checkpoint *cp = m->cp;
+    CHECK(cp->nsaved >= 4 && cp->nsaved <= 8);                /* a handful, of 3x2 blocks */
+    ChangeSet a, b;
+    cs_init(&a);
+    cs_init(&b);
+    checkpoint_changes(m, &a);
+    cs_diff(&b, base, m, NULL);
+    CHECK(cells_same(&a, &b));
+    CHECK(a.ncells > 0);
+
+    CASE("the small parts and what only counts as changed: cards, scenes, clocks");
+    undo_move_token(&u, m, 0, 3, 3);
+    map_note_set(m, 6, 6, "the GM's note");
+    map_area_set(m, "Annex", 20, 20, 25, 25);
+    m->round = 4;
+    card_set(m, "ghoul", "a card");
+    char err[64];
+    scene_save(m, "Before", NULL, err, sizeof err);
+    str_lcpy(m->clocks[0].name, "Doom", sizeof m->clocks[0].name);
+    m->clocks[0].size = 6;
+    checkpoint_changes(m, &a);
+    char sum[400];
+    cs_summary(&a, NULL, sum, sizeof sum);
+    CHECK(strstr(sum, "Aria changed") != NULL);
+    CHECK(strstr(sum, "a note at G7") != NULL);
+    CHECK(strstr(sum, "area Annex added") != NULL);
+    CHECK(strstr(sum, "round 0 -> 4") != NULL);
+    CHECK(strstr(sum, "cards changed") != NULL);
+    CHECK(strstr(sum, "scenes changed") != NULL);
+    CHECK(strstr(sum, "clocks changed") != NULL);
+
+    CASE("sight's bits and the previews leave no change: LIT, SEEN and RIM are masked, a swap is no write");
+    checkpoint_start(m);
+    for (int i = 0; i < m->w * m->h; i++) m->fog[i] |= FOG_LIT | FOG_SEEN | FOG_RIM;
+    Map *c = map_copy(m);
+    Undo s2;
+    undo_init(&s2);
+    undo_begin(&s2);
+    for (int x = 0; x < 30; x++) undo_set_tile(&s2, c, x, 25, TILE_HAZARD);
+    undo_end(&s2);
+    ChangeSet pv;
+    cs_init(&pv);
+    cs_diff(&pv, m, c, &s2);
+    cs_show(&pv, m, 0, 0, m->w - 1, m->h - 1);
+    cs_unshow(&pv, m);
+    CHECK_EQ(checkpoint_changes(m, &a), 0);
+    CHECK_EQ(m->cp->nsaved, 0);
+    cs_free(&pv);
+    map_free(c);
+    undo_free(&s2);
+
+    CASE("a request rolled back leaves no change");
+    undo_begin(&u);
+    undo_set_tile(&u, m, 9, 9, TILE_HAZARD);
+    undo_abort(&u, m);
+    CHECK_EQ(checkpoint_changes(m, &a), 0);
+
+    CASE("starting again counts from now");
+    undo_begin(&u);
+    undo_set_tile(&u, m, 7, 7, TILE_BRUSH);
+    undo_end(&u);
+    CHECK(checkpoint_changes(m, &a) > 0);
+    checkpoint_start(m);
+    CHECK_EQ(checkpoint_changes(m, &a), 0);
+
+    CASE("a resize is reported, writes after it save nothing, and a new start fits the new size");
+    map_resize(m, 50, 30);
+    undo_clear(&u);                                           /* as the app does after a resize */
+    undo_begin(&u);
+    undo_set_tile(&u, m, 45, 5, TILE_WATER);
+    undo_end(&u);
+    checkpoint_changes(m, &a);
+    cs_summary(&a, NULL, sum, sizeof sum);
+    CHECK(strstr(sum, "resized from 40x30 to 50x30") != NULL);
+    checkpoint_start(m);
+    undo_begin(&u);
+    undo_set_tile(&u, m, 49, 29, TILE_WATER);
+    undo_end(&u);
+    CHECK_EQ(checkpoint_changes(m, &a), 1);
+
+    cs_free(&a);
+    cs_free(&b);
+    map_free(base);
+    map_free(m);                                              /* frees the checkpoint */
+    undo_free(&u);
+}
+
+/* Random edits through the log -- recorded, undone, redone, rolled back --
+ * and fog deleted: what the checkpoint says changed is what a full diff
+ * against a copy taken at the start says. */
+static void cs_checkpoint_differential(void)
+{
+    CASE("random edits, undos, redos and rollbacks: the checkpoint's cells are the full diff's");
+    unsigned seed = 777;
+    int ok = 1;
+    for (int round = 0; round < 40; round++) {
+        Map *m = encounter();
+        Undo u;
+        undo_init(&u);
+        undo_begin(&u);                                       /* a history from before the start */
+        for (int x = 0; x < 10; x++) undo_set_tile(&u, m, x, 12, TILE_WOOD);
+        undo_end(&u);
+        checkpoint_start(m);
+        Map *base = map_copy(m);
+        for (int k = 0; k < 60; k++) {
+            seed = seed * 1103515245u + 12345u;
+            int r = (int)((seed >> 16) % 8), x = (int)((seed >> 3) % 41), y = (int)((seed >> 9) % 31);
+            uint8_t v = (uint8_t)((seed >> 20) % 7);
+            switch (r) {
+            case 0: case 1: case 2: case 3:
+                undo_begin(&u);
+                for (int j = 0; j < 1 + (int)v; j++) {
+                    int xx = imin(x + j, 40), yy = imin(y, 30);
+                    switch ((r + j) % 4) {
+                    case 0: undo_set_tile(&u, m, xx, yy, v % TILE_COUNT); break;
+                    case 1: undo_set_vedge(&u, m, xx, yy, v % EDGE_COUNT); break;
+                    case 2: undo_set_hedge(&u, m, xx, yy, v % EDGE_COUNT); break;
+                    case 3: undo_set_fog(&u, m, xx, yy, (uint8_t)(v % 2)); break;
+                    }
+                }
+                if (v == 5) undo_abort(&u, m); else undo_end(&u);
+                break;
+            case 4: case 5: undo_undo(&u, m); break;
+            case 6: undo_redo(&u, m); break;
+            case 7: if (v == 0) fog_delete(m, 1); break;
+            }
+        }
+        ChangeSet a, b;
+        cs_init(&a);
+        cs_init(&b);
+        checkpoint_changes(m, &a);
+        cs_diff(&b, base, m, NULL);
+        if (!cells_same(&a, &b) || a.ntoks != b.ntoks) ok = 0;
+        cs_free(&a);
+        cs_free(&b);
+        map_free(base);
+        map_free(m);
+        undo_free(&u);
+    }
+    CHECK(ok);
+}
+
 void test_changeset(void)
 {
+    cs_checkpoint();
+    cs_checkpoint_differential();
     cs_edges_and_turns();
     cs_small_parts();
     cs_basics();

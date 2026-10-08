@@ -88,6 +88,8 @@ typedef struct {
 void   tokens_free(TokenList *l);
 int    tokens_add(TokenList *l, Token t);       /* returns the new index */
 void   tokens_remove(TokenList *l, int idx);
+/* `src` into `dst`, reusing dst's array when it is big enough. */
+void   tokens_copy(TokenList *dst, const TokenList *src);
 
 /* Index of the topmost token whose footprint covers the tile, or -1.
  * Searched newest-first so the most recently placed token wins. */

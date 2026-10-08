@@ -1223,11 +1223,12 @@ static int tokens_same(const TokenList *a, const TokenList *b)
     return 1;
 }
 
-static TokenList tokens_copy(const TokenList *l)
+/* A fresh copy, to compare against later. */
+static TokenList tokens_snap(const TokenList *l)
 {
     TokenList c;
     memset(&c, 0, sizeof c);
-    for (int i = 0; i < l->n; i++) tokens_add(&c, l->v[i]);
+    tokens_copy(&c, l);
     return c;
 }
 
@@ -1274,7 +1275,7 @@ void test_scenes(void)
     CHECK(m->scenes[0].round == m->round && m->round >= 1);
     CHECK_EQ(m->scenes[0].spotlight, SPOTLIGHT_GM);
     CHECK_EQ(scene_find(m, "BEFORE"), 0);
-    TokenList saved = tokens_copy(&m->tokens);
+    TokenList saved = tokens_snap(&m->tokens);
     int round0 = m->round;
 
     CASE("diff with nothing changed says nothing");
@@ -1320,7 +1321,7 @@ void test_scenes(void)
     }
 
     CASE("putting it back: every creature as saved, the round and spotlight; one undo step");
-    TokenList before = tokens_copy(&m->tokens);
+    TokenList before = tokens_snap(&m->tokens);
     int depth = u.depth;
     CHECK_EQ(scene_restore(m, &u, 0, err, sizeof err), 3);
     CHECK(tokens_same(&m->tokens, &saved));
@@ -1384,7 +1385,7 @@ void test_scenes(void)
     int ti = m2->tokens.n - 1;
     undo_move_token(&u, m2, ti, 8, 0);                     /* the troll leaves */
     undo_add_token(&u, m2, scene_token(4, 3, 1, TOKEN_PLAYER, "Cara"));   /* Cara stands in its old corner */
-    TokenList held = tokens_copy(&m2->tokens);
+    TokenList held = tokens_snap(&m2->tokens);
     unsigned g2 = m2->gen;
     CHECK(scene_restore(m2, &u, 1, err, sizeof err) < 0);
     CHECK(strstr(err, "Troll would come back onto Cara at E4") != NULL);

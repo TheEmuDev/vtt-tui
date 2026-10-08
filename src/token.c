@@ -44,6 +44,20 @@ int tokens_any_hidden(const TokenList *l)
     return 0;
 }
 
+void tokens_copy(TokenList *dst, const TokenList *src)
+{
+    Token *v   = dst->v;
+    int    cap = dst->cap;
+    if (cap < src->n) {
+        cap = src->n;
+        v = xrealloc(v, (size_t)cap * sizeof *v);
+    }
+    if (src->n) memcpy(v, src->v, (size_t)src->n * sizeof *v);
+    *dst = *src;
+    dst->v   = v;
+    dst->cap = cap;
+}
+
 int tokens_find_label(const TokenList *l, const char *label, int skip)
 {
     if (!label[0]) return -1;

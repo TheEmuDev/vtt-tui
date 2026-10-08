@@ -281,6 +281,16 @@ typedef struct {
     int    massive;                       /* :dmg plays the optional massive damage rule */
 
     TokenList tokens;
+
+    /* What changed since an agent last looked (checkpoint.h). NULL when no
+     * agent is listening; cp_saved is the checkpoint's own, kept here so the
+     * undo log's recorders test it inline (cp_note). */
+    struct Checkpoint *cp;
+    uint8_t  *cp_saved;
+    int       cp_bw;
+    /* Bumped by every change to the cards and the scenes, which go round the
+     * undo log and Map.gen: what a checkpoint compares them by. */
+    unsigned  cards_gen, scenes_gen;
 } Map;
 
 Map *map_new(int w, int h, const char *name);

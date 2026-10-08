@@ -66,7 +66,7 @@ static int cell_on_map(const Map *m, const CsCell *c)
     }
 }
 
-static void push_cell(ChangeSet *cs, int kind, int x, int y, uint8_t before, uint8_t after)
+void cs_push_cell(ChangeSet *cs, int kind, int x, int y, uint8_t before, uint8_t after)
 {
     if (cs->ncells == cs->cap_cells) {
         cs->cap_cells = cs->cap_cells ? cs->cap_cells * 2 : 256;
@@ -126,7 +126,7 @@ static void diff_cells_all(ChangeSet *cs, const Map *a, const Map *b)
             if (!memcmp(ra, rb, (size_t)w)) continue;    /* fog too: equal bytes, equal painting */
             for (int x = 0; x < w; x++) {
                 uint8_t va = (uint8_t)(ra[x] & mask), vb = (uint8_t)(rb[x] & mask);
-                if (va != vb) push_cell(cs, kind, x, y, va, vb);
+                if (va != vb) cs_push_cell(cs, kind, x, y, va, vb);
             }
         }
     }
@@ -163,7 +163,7 @@ static void diff_cells_hint(ChangeSet *cs, const Map *a, const Map *b, const Und
         for (h &= (uint32_t)(cap - 1); seen[h] && !dup; h = (h + 1) & (uint32_t)(cap - 1)) dup = seen[h] == key;
         if (dup) continue;
         seen[h] = key;
-        push_cell(cs, kind, o->x, o->y, va, vb);
+        cs_push_cell(cs, kind, o->x, o->y, va, vb);
     }
     free(seen);
 }
@@ -291,7 +291,7 @@ static void diff_tokens(ChangeSet *cs, const Map *a, const Map *b)
     free(used);
 }
 
-static void diff_small(ChangeSet *cs, const Map *a, const Map *b)
+static void diff_small(ChangeSet *cs, const Map *a, const Map *b, int cards)
 {
     int careas = 0, clinks = 0, cnotes = 0, crolls = 0, ccards = 0;
     for (int i = 0; i < a->nareas; i++) {
@@ -367,7 +367,7 @@ static void diff_small(ChangeSet *cs, const Map *a, const Map *b)
         c->after = *r;
     }
 
-    for (int i = 0; i < a->ncards; i++) {
+    for (int i = 0; cards && i < a->ncards; i++) {
         int j = card_find(b, a->cards[i].name);
         const char *was = a->cards[i].text ? a->cards[i].text : "";
         if (j >= 0 && !strcmp(was, b->cards[j].text ? b->cards[j].text : "")) continue;
@@ -377,7 +377,7 @@ static void diff_small(ChangeSet *cs, const Map *a, const Map *b)
         c->before = xstrdup(was);
         if (j >= 0) c->after = xstrdup(b->cards[j].text ? b->cards[j].text : "");
     }
-    for (int j = 0; j < b->ncards; j++) {
+    for (int j = 0; cards && j < b->ncards; j++) {
         if (card_find(a, b->cards[j].name) >= 0) continue;
         CsCard *c = GROW(cs->cards, cs->ncards, ccards);
         memset(c, 0, sizeof *c);
@@ -399,14 +399,33 @@ static void diff_small(ChangeSet *cs, const Map *a, const Map *b)
         if (!b->fog_patches[i].dead) str_lcpy(cs->fog_names[i], b->fog_patches[i].name, FOG_NAME_MAX);
 }
 
+void cs_begin(ChangeSet *cs, int w, int h)
+{
+    cs_free(cs);
+    cs->w  = w;
+    cs->h  = h;
+    cs->bw = (w + 1 + CS_BLOCK - 1) / CS_BLOCK;      /* + 1: the far boundary */
+    cs->bh = (h + 1 + CS_BLOCK - 1) / CS_BLOCK;
+}
+
+static int cs_count(const ChangeSet *cs)
+{
+    return cs->ncells + cs->ntoks + cs->nareas + cs->nlinks + cs->nnotes + cs->nrolls + cs->ncards +
+           cs->round_changed + cs->spot_changed;
+}
+
+int cs_finish(ChangeSet *cs, const Map *a, const Map *b, int cards)
+{
+    cells_index(cs);
+    diff_tokens(cs, a, b);
+    diff_small(cs, a, b, cards);
+    return cs_count(cs);
+}
+
 int cs_diff(ChangeSet *cs, const Map *a, const Map *b, const Undo *hint)
 {
     PROF_ZONE("mapdiff");
-    cs_free(cs);
-    cs->w  = a->w;
-    cs->h  = a->h;
-    cs->bw = (a->w + 1 + CS_BLOCK - 1) / CS_BLOCK;     /* + 1: the far boundary */
-    cs->bh = (a->h + 1 + CS_BLOCK - 1) / CS_BLOCK;
+    cs_begin(cs, a->w, a->h);
     if (a->w == b->w && a->h == b->h) {
         /* A log that wrote more than a quarter of the map's squares (a fill)
          * is slower to walk than the map: its dedupe table outgrows the
@@ -414,11 +433,7 @@ int cs_diff(ChangeSet *cs, const Map *a, const Map *b, const Undo *hint)
         if (hint && (size_t)hint->nops < (size_t)a->w * (size_t)a->h / 4) diff_cells_hint(cs, a, b, hint);
         else diff_cells_all(cs, a, b);
     }
-    cells_index(cs);
-    diff_tokens(cs, a, b);
-    diff_small(cs, a, b);
-    return cs->ncells + cs->ntoks + cs->nareas + cs->nlinks + cs->nnotes + cs->nrolls + cs->ncards +
-           cs->round_changed + cs->spot_changed;
+    return cs_finish(cs, a, b, 1);
 }
 
 /* ------------------------------------------------------------ conflicts */
@@ -432,7 +447,7 @@ static int fog_patch_gone(const ChangeSet *cs, const Map *live, int id)
 
 int cs_check(ChangeSet *cs, const Map *live)
 {
-    if (cs->checked && cs->checked_gen == live->gen) return cs->conflicts;
+    if (cs->checked && cs->checked_gen == live->gen && cs->checked_cards == live->cards_gen) return cs->conflicts;
     int n = 0;
     if (live->w == cs->w && live->h == cs->h) {
         /* The map the set was made for: every cell is on it, so the arrays
@@ -506,6 +521,7 @@ int cs_check(ChangeSet *cs, const Map *live)
     cs->conflicts   = n;
     cs->checked     = 1;
     cs->checked_gen = live->gen;
+    cs->checked_cards = live->cards_gen;
     return n;
 }
 
@@ -798,6 +814,14 @@ void cs_summary(const ChangeSet *cs, const CsBox *box, char *out, size_t outsz)
         for (int i = 0; i < cs->ncards; i++) say(out, outsz, "card %s", cs->cards[i].name);
         if (cs->round_changed) say(out, outsz, "round %d -> %d", cs->round_before, cs->round_after);
         if (cs->spot_changed) say(out, outsz, "spotlight to the %s", cs->spot_after ? "GM" : "players");
+        if (cs->cards_changed)  say(out, outsz, "cards changed");
+        if (cs->scenes_changed) say(out, outsz, "scenes changed");
+        if (cs->clocks_changed) say(out, outsz, "clocks changed");
+    }
+    if (cs->resized) {
+        char was[24];
+        snprintf(was, sizeof was, "%dx%d", cs->old_w, cs->old_h);
+        say(out, outsz, "the map resized from %s to %dx%d", was, cs->w, cs->h);
     }
     if (!out[0]) snprintf(out, outsz, "no changes");
 }

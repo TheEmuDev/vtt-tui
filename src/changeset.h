@@ -88,13 +88,19 @@ typedef struct {
     uint8_t  round_changed, spot_changed, round_conflict, spot_conflict;
     int      round_before, round_after, spot_before, spot_after;
 
+    /* What a checkpoint (checkpoint.h) can only say changed, not how: the
+     * cards, the scenes, the clocks, and the map's size. Never applied. */
+    uint8_t  cards_changed, scenes_changed, clocks_changed, resized;
+    int      old_w, old_h;
+
     /* The fog patches' names in the map the set came from: painting into a
      * patch the live map has since deleted, or reused, is a conflict. */
     char     fog_names[FOG_PATCH_MAX][FOG_NAME_MAX];
 
     int      conflicts;             /* from the last cs_check */
     int      checked;               /* cs_check has run since the set was made */
-    unsigned checked_gen;           /* the live Map.gen it ran for */
+    unsigned checked_gen;           /* the live Map.gen it ran for, */
+    unsigned checked_cards;         /* and Map.cards_gen: card_set touches nothing */
 
     /* The preview (cs_show): built once per live Map.gen, swapped in and out
      * around each draw. */
@@ -118,10 +124,20 @@ void cs_free(ChangeSet *cs);
  * whole. Returns the number of elements. */
 int  cs_diff(ChangeSet *cs, const Map *before, const Map *after, const Undo *hint);
 
+/* A set built from something other than two whole maps (a checkpoint's
+ * saved blocks): begin for a map of w x h, push each changed cell, then
+ * finish with the small parts of the maps before and after -- creatures,
+ * areas, links, notes, rolls, round, spotlight, and the cards only when
+ * `cards` is set. Returns the elements, as cs_diff does. */
+void cs_begin(ChangeSet *cs, int w, int h);
+void cs_push_cell(ChangeSet *cs, int kind, int x, int y, uint8_t before, uint8_t after);
+int  cs_finish(ChangeSet *cs, const Map *before, const Map *after, int cards);
+
 static inline int cs_empty(const ChangeSet *cs)
 {
     return !cs->ncells && !cs->ntoks && !cs->nareas && !cs->nlinks && !cs->nnotes &&
-           !cs->nrolls && !cs->ncards && !cs->round_changed && !cs->spot_changed;
+           !cs->nrolls && !cs->ncards && !cs->round_changed && !cs->spot_changed &&
+           !cs->cards_changed && !cs->scenes_changed && !cs->clocks_changed && !cs->resized;
 }
 
 /* Marks every element whose live value is no longer its `before`; returns

@@ -66,6 +66,7 @@ int scene_save(Map *m, const char *name, const int *box, char *err, size_t errsz
     }
     for (int k = 0; k < m->tokens.n; k++)
         if (in_scene(sc, &m->tokens.v[k])) tokens_add(&sc->tokens, m->tokens.v[k]);
+    m->scenes_gen++;
     map_touch(m);
     return i;
 }
@@ -77,6 +78,7 @@ void scene_remove(Map *m, int i)
     memmove(&m->scenes[i], &m->scenes[i + 1], (size_t)(m->nscenes - i - 1) * sizeof m->scenes[0]);
     m->nscenes--;
     memset(&m->scenes[m->nscenes], 0, sizeof m->scenes[0]);
+    m->scenes_gen++;
     map_touch(m);
 }
 

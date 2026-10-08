@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "checkpoint.h"
 #include "link.h"
 #include "prof.h"
 #include "util.h"
@@ -155,6 +156,7 @@ void undo_set_tile(Undo *u, Map *m, int x, int y, uint8_t kind)
     uint8_t before = map_tile(m, x, y);
     if (before == kind) return;
 
+    cp_note(m, CS_TILE, x, y, before);
     set_cell(u, OP_TILE, x, y, before, kind);
     map_set_tile(m, x, y, kind);
 }
@@ -165,6 +167,7 @@ void undo_set_vedge(Undo *u, Map *m, int x, int y, uint8_t kind)
     uint8_t before = map_vedge(m, x, y);
     if (before == kind) return;
 
+    cp_note(m, CS_VEDGE, x, y, before);
     set_cell(u, OP_VEDGE, x, y, before, kind);
     map_set_vedge(m, x, y, kind);
 }
@@ -175,6 +178,7 @@ void undo_set_hedge(Undo *u, Map *m, int x, int y, uint8_t kind)
     uint8_t before = map_hedge(m, x, y);
     if (before == kind) return;
 
+    cp_note(m, CS_HEDGE, x, y, before);
     set_cell(u, OP_HEDGE, x, y, before, kind);
     map_set_hedge(m, x, y, kind);
 }
@@ -277,6 +281,7 @@ void undo_set_fog(Undo *u, Map *m, int x, int y, uint8_t f)
     uint8_t was = (uint8_t)(now & ~derived);
     f = (uint8_t)(f & ~derived);
     if (was == f) { m->fog[(size_t)y * (size_t)m->w + (size_t)x] = (uint8_t)(f | (now & derived)); return; }
+    cp_note(m, CS_FOG, x, y, (uint8_t)(was & FOG_ID));
     Op *o = push(u);
     o->kind   = OP_FOG;
     o->x      = (int16_t)x;
@@ -622,6 +627,7 @@ int undo_undo(Undo *u, Map *m)
     int hi = batch_end(u, u->depth);
 
     /* Reverse order, so overlapping edits within one batch unwind correctly. */
+    if (m->cp_saved) checkpoint_note_ops(m, u, lo, hi, 0);
     for (int i = hi - 1; i >= lo; i--) apply(u, m, &u->ops[i], 0);
     return 1;
 }
@@ -665,6 +671,7 @@ int undo_redo(Undo *u, Map *m)
 
     int lo = u->marks[u->depth];
     int hi = batch_end(u, u->depth);
+    if (m->cp_saved) checkpoint_note_ops(m, u, lo, hi, 1);
     for (int i = lo; i < hi; i++) apply(u, m, &u->ops[i], 1);
 
     u->depth++;

@@ -13,7 +13,7 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
 
 ## Progress
 
-*Updated 2026-10-07, end of the day.*
+*Updated 2026-10-08.*
 
 - **Step 1: built, reviewed by Fable, and fixed (2026-10-08).** The review's fixes:
   - an accept could leave two creatures holding the turn (a plan's turn now lands only
@@ -37,12 +37,19 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
   - PERFORMANCE.md's *Proposals* section, set against the speed of light.
 - **One file, not two.** `mapdiff.c` and `changeset.c` became one file, `changeset.c`.
   The diff, the apply and the preview share one structure.
-- **Next, step 2:** the copy-on-write checkpoint (16×16 blocks, the hook in the five
-  writers, `fog_delete` through `map_fog_set`, reset on resize, change counters for
-  scenes, cards, clocks and rolls), with A/B rows for a 512×512 fill and `undo.step`
-  against the previous commit's binary.
-  - **The counters also close a hole in `cs_check`.** Its gate on `Map.gen` misses a card
-    the GM edits, because `card_set` touches nothing. The counters fix it.
+- **Step 2: built (2026-10-08), Fable's review not yet run.** The checkpoint is
+  `checkpoint.c/h`, tests in test_changeset.c, and rows in `tools/proposals.sh`.
+  - **Changed from the plan: the cell hook moved from the map's writers to the undo log.**
+    An A/B first showed the writer hook costing `undo.step` 5-9% with no checkpoint
+    running. That turned out to be code placement: it vanished with both binaries
+    rebuilt aligned (PERFORMANCE.md, *The checkpoint*). But the log design is better on
+    its own terms. The apply loop and the writers carry no test at all, and a cell's
+    value at the start comes from the op that changes it.
+  - **The cost of the change:** any writer of the live map's squares that goes round the
+    log must call `cp_note`. CLAUDE.md says so. Today that is only `fog_delete`.
+  - **`cs_check`'s gate now also watches `Map.cards_gen`.** Before, it missed a card the
+    GM edited, because `card_set` touches nothing.
+- **Next: Fable's review of step 2, then step 3** (jobs and the review mode).
 - **Then steps 3-9 in the order below.** Nothing in the app calls the change set yet:
   `:ask`, `:review` and the requests come in steps 3-4.
 - **docs/AGENTS.md still tells agents never to `--apply` an open map.** That stays true
@@ -247,13 +254,18 @@ job is open, the map is checkpointed copy-on-write. Once the map has been quiet 
 `the GM changed: walls in B2:F6, "Ghoul" moved C3 -> D5`. The checkpoint then moves on.
 With no agent waiting and no job open, there is no checkpoint and nothing runs.
 
-The checkpoint is the second draft's design:
-- 16×16 blocks, with a block's old contents saved on its first write;
-- a hook in `map_set_tile`/`vedge`/`hedge`, the fill and `map_fog_set`, with
-  `fog_delete` changed to go through them;
+The checkpoint (as built in step 2, `checkpoint.c`):
+- copy-on-write by **cell**, in 16×16 blocks;
+- a cell's value at the start taken **from the undo log**, not from the map:
+  - the recorders note each cell they write;
+  - undo and redo note a whole batch before applying it;
+  - so the map's writers carry no test. The plan had a hook in each writer; see
+    *Progress*;
+- `fog_delete`, the one writer round the log, notes for itself;
 - fog compared by painting only;
-- reset on `map_resize`;
-- change counters for scenes, cards, clocks and rolls.
+- a resize reported;
+- change counters for cards and scenes (`Map.cards_gen`, `scenes_gen`). Clocks and rolls
+  are copied with the small parts and compared.
 
 ### Other writers of the file
 

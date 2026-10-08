@@ -11,6 +11,7 @@
 #include <time.h>
 
 #include "changeset.h"
+#include "checkpoint.h"
 #include "map.h"
 #include "token.h"
 #include "undo.h"
@@ -156,6 +157,66 @@ static void row(const char *what, int w, int h, int creatures, void (*plan)(Map 
            median(check), median(first), median(frame), median(apply));
 }
 
+/* The checkpoint (step 2): starting one, and what it costs the edits made
+ * while it runs -- recording a fill of the whole map and an undo step, with
+ * it off and on -- and reading the changes after a dozen edits and after a
+ * fill. */
+static void checkpoint_row(int w, int h, int creatures)
+{
+    double start[RUNS], fill_off[RUNS], fill_on[RUNS], step_off[RUNS], step_on[RUNS], dozen[RUNS], all[RUNS];
+    Map *base = encounter(w, h, creatures);
+    Map *m = map_new(1, 1, "live");
+    for (int k = 0; k < RUNS; k++) {
+        for (int on = 0; on <= 1; on++) {
+            map_copy_into(m, base);
+            Undo u;
+            undo_init(&u);
+            if (on) {
+                double t0 = now_us();
+                checkpoint_start(m);
+                start[k] = now_us() - t0;
+                undo_begin(&u);                       /* a dozen edits, read back */
+                for (int i = 0; i < 12; i++) undo_set_tile(&u, m, 3 + i, 3, TILE_WATER);
+                undo_end(&u);
+                ChangeSet cs;
+                cs_init(&cs);
+                t0 = now_us();
+                checkpoint_changes(m, &cs);
+                dozen[k] = now_us() - t0;
+                cs_free(&cs);
+                checkpoint_start(m);
+            }
+            double t0 = now_us();
+            undo_begin(&u);
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++) undo_set_tile(&u, m, x, y, TILE_ROUGH);
+            undo_end(&u);
+            (on ? fill_on : fill_off)[k] = now_us() - t0;
+            t0 = now_us();
+            undo_undo(&u, m);
+            (on ? step_on : step_off)[k] = now_us() - t0;
+            if (on) {
+                undo_redo(&u, m);
+                ChangeSet cs;
+                cs_init(&cs);
+                t0 = now_us();
+                checkpoint_changes(m, &cs);
+                all[k] = now_us() - t0;
+                cs_free(&cs);
+                checkpoint_stop(m);
+            }
+            undo_free(&u);
+        }
+    }
+    map_free(m);
+    map_free(base);
+    char label[64];
+    snprintf(label, sizeof label, "checkpoint, %dx%d, %d creatures", w, h, creatures);
+    printf("| %-41s | %7.1fus | %7.1fus | %7.1fus | %7.1fus | %7.1fus | %7.1fus | %7.1fus |\n",
+           label, median(start), median(fill_off), median(fill_on), median(step_off), median(step_on),
+           median(dozen), median(all));
+}
+
 int main(void)
 {
     printf("| plan and map                              |      copy |      plan |      diff | diff (all) |     check | preview, first | preview, frame |    accept |\n");
@@ -164,5 +225,10 @@ int main(void)
     row("five rooms", 512, 512, 24, five_rooms);
     row("five rooms", 512, 512, 500, five_rooms);
     row("fill the whole map", 512, 512, 24, whole_fill);
+    printf("\n| checkpoint and map                        |     start | fill, off |  fill, on | undo, off |  undo, on | read, a dozen | read, a fill |\n");
+    printf("|-------------------------------------------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|\n");
+    checkpoint_row(40, 25, 24);
+    checkpoint_row(512, 512, 24);
+    checkpoint_row(512, 512, 500);
     return 0;
 }

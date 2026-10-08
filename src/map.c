@@ -5,6 +5,7 @@
 #include <string.h>
 #include <strings.h>
 
+#include "checkpoint.h"
 #include "prof.h"
 #include "util.h"
 
@@ -120,25 +121,11 @@ void map_free(Map *m)
     free(m->hedges);
     free(m->fog);
     map_sight_drop(m);
+    checkpoint_stop(m);
     tokens_free(&m->tokens);
     for (int i = 0; i < m->nscenes; i++) tokens_free(&m->scenes[i].tokens);
     for (int i = 0; i < m->ncards; i++) free(m->cards[i].text);
     free(m);
-}
-
-/* Copies a token list into one whose array may be reused. */
-static void tokens_copy_into(TokenList *dst, const TokenList *src)
-{
-    Token   *v   = dst->v;
-    int      cap = dst->cap;
-    if (cap < src->n) {
-        cap = src->n;
-        v = xrealloc(v, (size_t)cap * sizeof *v);
-    }
-    if (src->n) memcpy(v, src->v, (size_t)src->n * sizeof *v);
-    *dst = *src;
-    dst->v   = v;
-    dst->cap = cap;
 }
 
 /* Copies n bytes into *dst, which holds *have of them: reused when the size
@@ -152,6 +139,7 @@ static void bytes_into(uint8_t **dst, size_t *have, const uint8_t *src, size_t n
 void map_copy_into(Map *dst, const Map *src)
 {
     PROF_ZONE("map.copy");
+    checkpoint_stop(dst);                          /* a copy never has one; this one won't either */
     size_t w = (size_t)src->w, h = (size_t)src->h;
     size_t dw = (size_t)dst->w, dh = (size_t)dst->h;
     size_t nt = dw * dh, nv = (dw + 1) * dh, nh = dw * (dh + 1), nf = dw * dh;
@@ -162,6 +150,8 @@ void map_copy_into(Map *dst, const Map *src)
     for (int i = 0; i < dst->ncards; i++) free(dst->cards[i].text);
 
     *dst = *src;                                   /* every fixed-size part */
+    dst->cp = NULL;                                /* the live map's alone */
+    dst->cp_saved = NULL;
     bytes_into(&tiles,  &nt, src->tiles,  w * h);
     bytes_into(&vedges, &nv, src->vedges, (w + 1) * h);
     bytes_into(&hedges, &nh, src->hedges, w * (h + 1));
@@ -169,10 +159,10 @@ void map_copy_into(Map *dst, const Map *src)
     dst->tiles = tiles; dst->vedges = vedges; dst->hedges = hedges; dst->fog = fog;
     memset(&dst->sight, 0, sizeof dst->sight);
     dst->tokens = tokens;
-    tokens_copy_into(&dst->tokens, &src->tokens);
+    tokens_copy(&dst->tokens, &src->tokens);
     for (int i = 0; i < src->nscenes; i++) {
         memset(&dst->scenes[i].tokens, 0, sizeof dst->scenes[i].tokens);
-        tokens_copy_into(&dst->scenes[i].tokens, &src->scenes[i].tokens);
+        tokens_copy(&dst->scenes[i].tokens, &src->scenes[i].tokens);
     }
     for (int i = 0; i < src->ncards; i++) dst->cards[i].text = src->cards[i].text ? xstrdup(src->cards[i].text) : NULL;
 }
@@ -189,6 +179,7 @@ int map_resize(Map *m, int w, int h)
     if (w < MAP_MIN_DIM || h < MAP_MIN_DIM || w > MAP_MAX_DIM || h > MAP_MAX_DIM)
         return -1;
     if (w == m->w && h == m->h) return 0;
+    checkpoint_resized(m, w, h);
 
     uint8_t *tiles  = xcalloc((size_t)w * (size_t)h, 1);
     uint8_t *vedges = xcalloc((size_t)(w + 1) * (size_t)h, 1);
@@ -254,6 +245,7 @@ int map_resize(Map *m, int w, int h)
             tokens_free(&sc->tokens);
             memmove(sc, sc + 1, (size_t)(m->nscenes - k - 1) * sizeof *sc);
             m->nscenes--;
+            m->scenes_gen++;
             continue;
         }
         sc->x1 = (int16_t)imin(sc->x1, w - 1);

@@ -788,10 +788,10 @@ Machine: Intel Core i7-8700K @ 3.70GHz (6 cores, 12 threads, 4.7 GHz max, powers
 
 | plan and map                              |      copy |      plan |      diff | diff (all) |     check | preview, first | preview, frame |    accept |
 |-------------------------------------------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|
-| five rooms, 40x25, 24 creatures           |     0.6us |     2.2us |     3.1us |     3.1us |     0.5us |     1.4us |     1.1us |     3.1us |
-| five rooms, 512x512, 24 creatures         |    27.9us |     2.4us |     4.9us |    37.8us |     0.5us |     1.5us |     1.1us |     3.3us |
-| five rooms, 512x512, 500 creatures        |    31.6us |     2.4us |    11.6us |    44.3us |     0.5us |     4.2us |     1.1us |     3.4us |
-| fill the whole map, 512x512, 24 creatures |    49.8us |  3151.4us |  2395.6us |  2351.4us |   451.7us |     7.5us |     5.3us |  3485.7us |
+| five rooms, 40x25, 24 creatures           |     0.6us |     2.4us |     2.9us |     2.8us |     0.5us |     1.3us |     1.1us |     3.3us |
+| five rooms, 512x512, 24 creatures         |    28.1us |     2.5us |     4.7us |    38.1us |     0.5us |     1.5us |     1.1us |     3.5us |
+| five rooms, 512x512, 500 creatures        |    31.9us |     2.6us |    11.2us |    44.1us |     0.5us |     4.3us |     1.1us |     3.6us |
+| fill the whole map, 512x512, 24 creatures |    49.0us |  3242.0us |  2205.9us |  2113.8us |   442.2us |     7.2us |     5.2us |  4066.7us |
 
 Against the speed of light (the desktop's figures above):
 
@@ -816,6 +816,39 @@ Findings on the way, each fixed before the table was taken:
 - **The first version of this table mismeasured two columns.** It timed the diff with a
   freshly allocated live map each run (9.8 µs, the setup's pages), and it timed the
   preview's first frame only. Fable's review of the step found both.
+
+### The checkpoint
+
+What the map changed since an agent last looked (docs/CONFLICTS.md, step 2). It is
+copy-on-write by cell, and the cell's value at the start comes from the undo log's ops, so
+the map's writers carry no test. The same `tools/proposals.sh` run; *fill* records an edit
+of every square through the log, *undo* takes it back, each with the checkpoint off and on;
+*read* is the changes since the start.
+
+| checkpoint and map                        |     start | fill, off |  fill, on | undo, off |  undo, on | read, a dozen | read, a fill |
+|-------------------------------------------|-----------|-----------|-----------|-----------|-----------|-----------|-----------|
+| checkpoint, 40x25, 24 creatures           |     0.4us |     7.1us |     9.0us |     4.6us |     7.6us |     0.9us |     8.2us |
+| checkpoint, 512x512, 24 creatures         |     1.1us |  1812.8us |  2369.8us |  1183.7us |  2010.3us |     2.2us |  2810.5us |
+| checkpoint, 512x512, 500 creatures        |     4.5us |  1802.8us |  2348.5us |  1177.2us |  2006.1us |     7.9us |  2816.2us |
+
+| path | floor | measured, 512×512 | gap, and why it is kept |
+|---|---|---|---|
+| any edit, no checkpoint | as before | as before | none. The undo apply loop has no test per op, and the map's writers none at all; the recorders test one pointer, expected false. An A/B against the commit before (both rebuilt with `-falign-functions=64 -falign-loops=32`) measures no difference |
+| start | the small parts: 18 KB plus 256 bytes a creature, about 1 µs | 1.1 µs; 4.5 at 500 creatures | none |
+| recording, while one runs | a value byte and a bit a cell, under 0.5 ns | about 2 ns a cell (a whole-map fill 1.81 → 2.37 ms) | about 1.5 ns: the block index and the bit's read-modify-write in the recorder. Out of line it was 3 ns |
+| an undo step, while one runs | nothing for cells recorded since the start (recording noted them) | about 3 ns an op (1.18 → 2.01 ms for the whole map) | the walk over the batch's ops, though every cell in it is already noted. Skipping a batch recorded since the start would need the log to know about the checkpoint. It only shows when a whole-map fill is undone while an agent is connected. Kept |
+| reading a dozen edits | the twelve cells and the small parts | 2.2 µs; 7.9 at 500 creatures | none |
+| reading a fill | 262k cells: about 0.3 ms | 2.8 ms | the same pushing and bucketing as the full diff's, above: one cost, kept once |
+
+**Code placement moves a tight loop by 5-9%.** The first A/B of this step showed
+`undo.step` 9% dearer with no checkpoint running. It held with the hook emptied, with
+identical machine code for `map_set_tile` and `apply`, and with page-aligned allocations,
+and it vanished once both binaries were rebuilt with `-falign-functions=64
+-falign-loops=32`. Adding `checkpoint.o` early in the link order had moved the hot loops
+to addresses that happened to run slower. Two lessons for every A/B:
+- Rebuild both sides aligned before believing a gap under about 10% on a tight loop.
+- `make CFLAGS=...` does **not** rebuild, because the Makefile tracks only the
+  release/debug mode. Use `make -B`.
 
 ## The phone page
 

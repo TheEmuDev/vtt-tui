@@ -5,6 +5,7 @@
 #include <string.h>
 #include <strings.h>
 
+#include "checkpoint.h"
 #include "prof.h"
 #include "ruler.h"
 #include "util.h"
@@ -472,8 +473,10 @@ void fog_delete(Map *m, int id)
     if (p->x1 >= p->x0)
         for (int y = p->y0; y <= p->y1; y++)
             for (int x = p->x0; x <= p->x1; x++)
-                if ((fog_at(m, x, y) & FOG_ID) == (uint8_t)id)
+                if ((fog_at(m, x, y) & FOG_ID) == (uint8_t)id) {
+                    cp_note(m, CS_FOG, x, y, (uint8_t)id);   /* round the log: says so itself */
                     m->fog[(size_t)y * (size_t)m->w + (size_t)x] = 0;
+                }
     memset(p, 0, sizeof *p);
     p->x1   = -1;
     p->dead = 1;
