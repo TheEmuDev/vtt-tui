@@ -113,11 +113,12 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
   - **The review's perf scenario waits for step 4,** which can make a real proposal in a
     bench (`--bench-ctl`). The preview swap itself is in `tools/proposals.sh` (1.1 µs a
     frame).
-- **PERFORMANCE.md's two main tables were regenerated on the desktop** (median of three
-  quiet runs) with the new scenario. *The jobs' tints* has the finding.
-- **Next: Fable's review of step 3, then step 4.**
-- **Then steps 3-9 in the order below.** Nothing in the app calls the change set yet:
-  `:ask`, `:review` and the requests come in steps 3-4.
+- **PERFORMANCE.md's two main tables were regenerated on the desktop** after the review's
+  fixes (median of three quiet runs). *The jobs' tints* has the finding: 0.3 µs against a
+  floor of about 0.15.
+- **Next: step 4** (the channel's requests: `jobs`, `job N take/area/say/propose/drop`,
+  `propose`, `--ctl` edits as proposals). Step 3's review fixes are c1e2f5a.
+- **Then steps 5-9 in the order below.**
 - **docs/AGENTS.md still tells agents never to `--apply` an open map.** That stays true
   until step 6.
 
