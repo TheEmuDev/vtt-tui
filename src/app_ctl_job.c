@@ -111,8 +111,14 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
 
     if (!strcmp(verb, "dump") || !strcmp(verb, "check") || !strcmp(verb, "describe")) {
         /* The map as accepting the proposal would make it, now. */
-        if (!j->has_cs || cs_empty(&j->cs)) { snprintf(err, errsz, "#%d has no proposal", num); return -1; }
+        /* A ready one: an accepted set applied again would double what it
+         * adds. */
+        if (j->state != JOB_READY || !j->has_cs || cs_empty(&j->cs)) {
+            snprintf(err, errsz, "#%d has no proposal waiting", num);
+            return -1;
+        }
         Map *m = app_job_result(a, slot);
+        if (!m) { snprintf(err, errsz, "#%d was made before the map was resized - propose it again", num); return -1; }
         if (!strcmp(verb, "dump")) {
             int x0 = 0, y0 = 0, x1 = m->w - 1, y1 = m->h - 1;
             if (n > 4) { snprintf(err, errsz, "job N dump takes one region, like B2:K12"); return -1; }
@@ -172,10 +178,13 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
     if (!strcmp(verb, "drop")) {
         if (n != 3) { snprintf(err, errsz, "job N drop takes nothing after it"); return -1; }
         if (a->review == slot) app_review_leave(a);
-        if (j->from != JOB_FROM_GM) {                 /* nobody asked for it: it goes */
-            if (j->has_cs) cs_free(&j->cs);
-            memset(j, 0, sizeof *j);
-            snprintf(msg, sizeof msg, "#%d withdrawn by the agent", num);
+        if (j->from != JOB_FROM_GM) {
+            /* Nobody asked for it: scrapped, as the GM's d would. Kept, not
+             * destroyed (KEYS.md rule 9: only remove destroys), so :review N
+             * brings it back; a finished job makes room when the table fills. */
+            j->state = JOB_SCRAPPED;
+            app_job_thread_add(j, '-', "withdrawn by the agent");
+            snprintf(msg, sizeof msg, "#%d withdrawn by the agent - :review %d brings it back", num, num);
             fprintf(out, "#%d withdrawn\n", num);
         } else {
             if (j->has_cs) { cs_free(&j->cs); j->has_cs = 0; }

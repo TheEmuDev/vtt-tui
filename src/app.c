@@ -43,6 +43,14 @@ void app_init(App *a, Term *t, Renderer *r)
     rnd_set_clear(r, a->th->fg, a->th->bg);
 }
 
+void app_creatures_renumbered(App *a)
+{
+    play_focus(&a->play, -1);
+    a->play.visual = 0;
+    range_clear(&a->play.range);
+    a->last_acting = turn_acting(a->map);
+}
+
 void app_free(App *a)
 {
     map_free(a->map);

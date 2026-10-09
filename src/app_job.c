@@ -61,15 +61,18 @@ void app_jobs_clear(App *a)
 
 int app_job_new(App *a, int from, const char *text, const CsBox *box, int at_once)
 {
-    int num = job_free_num(a), slot = -1;
+    int slot = -1;
     for (int i = 0; i < JOB_MAX && slot < 0; i++)
         if (!a->jobs[i].used) slot = i;
     /* Full: the oldest finished job makes room, as a log would. */
     for (int i = 0; i < JOB_MAX && slot < 0; i++)
         if (a->jobs[i].state == JOB_ACCEPTED || a->jobs[i].state == JOB_SCRAPPED) slot = i;
-    if (slot < 0 || !num) return -1;
+    if (slot < 0) return -1;
+    if (a->review == slot) app_review_leave(a);
     Job *j = &a->jobs[slot];
-    job_clear(j);
+    job_clear(j);                      /* first: its number is free again */
+    int num = job_free_num(a);
+    if (!num) return -1;
     j->used    = 1;
     j->num     = num;
     j->from    = (uint8_t)from;
@@ -105,12 +108,8 @@ static void land(App *a, Job *j, const CsBox *box)
     if (n) {
         /* What the channel's edits did to the live App when they landed
          * straight: the overlay and the selection name creatures by index. */
-        if (creatures) {
-            range_clear(&a->play.range);
-            play_focus(&a->play, -1);
-            a->play.visual = 0;
-        }
-        a->last_acting = turn_acting(a->map);          /* an accept starts no turn */
+        if (creatures) app_creatures_renumbered(a);
+        else a->last_acting = turn_acting(a->map);     /* an accept starts no turn */
         app_fog_sync(a);
         a->dirty = 1;
         /* The agent's `undo` takes it back while nothing happens after. */
@@ -163,21 +162,30 @@ void app_job_set_proposal(App *a, int slot, ChangeSet *cs, const char *line)
     snprintf(msg, sizeof msg, "proposed: %s", j->summary);
     app_job_thread_add(j, '-', msg);
     if (line && line[0]) app_job_thread_add(j, 'A', line);
-    if (j->at_once && can_land(a)) { land(a, j, NULL); return; }
+    /* Never under the GM's eyes: a job being reviewed waits for enter. */
+    if (j->at_once && can_land(a) && a->review != slot) { land(a, j, NULL); return; }
     snprintf(msg, sizeof msg, "#%d ready: %.150s - :review %d%s%.60s", j->num, j->summary, j->num,
              line && line[0] ? " -- " : "", line ? line : "");
     app_note_gm(a, msg);
 }
 
-Map *app_job_result(App *a, int slot)
+Map *app_scratch_copy(App *a)
 {
-    Job *j = &a->jobs[slot];
-    if (!j->has_cs) return NULL;
     if (!a->ctl_scratch) a->ctl_scratch = map_new(1, 1, "scratch");
     map_copy_into(a->ctl_scratch, a->map);
     undo_clear(&a->ctl_sundo);
-    cs_apply(&j->cs, a->ctl_scratch, &a->ctl_sundo, NULL, NULL, 0);
     return a->ctl_scratch;
+}
+
+Map *app_job_result(App *a, int slot)
+{
+    Job *j = &a->jobs[slot];
+    /* A set made for another size of map would put its squares and
+     * creatures off this one: the review refuses to show it too. */
+    if (!j->has_cs || j->cs.w != a->map->w || j->cs.h != a->map->h) return NULL;
+    Map *m = app_scratch_copy(a);
+    cs_apply(&j->cs, m, &a->ctl_sundo, NULL, NULL, 0);
+    return m;
 }
 
 /* What waited to land at once, landed when the GM is back (after each key). */

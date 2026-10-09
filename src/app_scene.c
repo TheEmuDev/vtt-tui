@@ -21,11 +21,7 @@ void app_scene_restore(App *a, const char *name)
     if (a->play.grabbed) { app_set_status_gm(a, "put the creature down first - enter"); return; }
     int n = scene_restore(a->map, &a->undo, i, err, sizeof err);
     if (n < 0) { app_set_status_gm(a, err); return; }
-    /* The indices the selection, group and range held are gone. */
-    play_focus(&a->play, -1);
-    a->play.visual = 0;
-    range_clear(&a->play.range);
-    a->last_acting = turn_acting(a->map);   /* the index is a new creature's: no turn started */
+    app_creatures_renumbered(a);
     snprintf(msg, sizeof msg, "scene %.31s is back - %d creature%s, u takes it back",
              a->map->scenes[i].name, n, n == 1 ? "" : "s");
     app_note_gm(a, msg);

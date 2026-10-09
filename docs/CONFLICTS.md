@@ -116,9 +116,60 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
 - **PERFORMANCE.md's two main tables were regenerated on the desktop** after the review's
   fixes (median of three quiet runs). *The jobs' tints* has the finding: 0.3 µs against a
   floor of about 0.15.
-- **Next: step 4** (the channel's requests: `jobs`, `job N take/area/say/propose/drop`,
-  `propose`, `--ctl` edits as proposals). Step 3's review fixes are c1e2f5a.
-- **Then steps 5-9 in the order below.**
+- **Step 4: built (ced6c35, 2026-10-09), reviewed by Fable, and fixed.** The review's fixes:
+  - **`marked` after a request's edits named the wrong creature:** it read the scratch map
+    with the GM's live selection indices. `status` and `marked` now read the live map and
+    log (`live_swap`).
+  - **A ghost job:** `job 1 propose`, then `job 1 drop`, then edits made a proposal into a
+    freed slot. `job` and `jobs` lines now come before the `propose` line too.
+  - **An at-once proposal could land under the review of its own job.** It now waits for
+    the GM's `enter`.
+  - **`job N dump` on an accepted job applied it again** (an unlabeled creature twice), and
+    read a set made before a resize. Only a ready proposal, of the map's size, is read.
+  - **A new job evicting a finished one took the next number, not the freed one.**
+  - **KEYS.md rule 9:** `job N drop` destroyed an agent's own job; it now scraps it, kept
+    for `:review N`.
+  - **The rule of three:** "the creatures were renumbered" (selection, range, turn notice)
+    is `app_creatures_renumbered` (app.c), used by `:scene`, the channel's `scene` and
+    `land`. Smaller: `say_changed` and `app_scratch_copy` replace two copies each.
+  - Tests for each, plus the eviction, `status` mid-proposal and `propose` under `--apply`.
+
+  What step 4 holds:
+  - `app_ctl.c`: a request's edits run on the scratch map (`proposal_begin`/`end`,
+    `finish_proposal`), the `propose` and `job N propose` lines, `:agent accept
+    auto|review`;
+  - `app_ctl_job.c` (new): `jobs [json]`, `job N take|area|say|drop|dump|check|describe`;
+  - `land` (app_job.c) sets the agent's `undo` stamp, so `undo` takes back an accepted
+    change;
+  - the suite `jobsctl`; the `ctl`/`ctledit`/scenes tests run under `accept auto`
+    (decision 6); the fuzz corpus and harness; two perf rows.
+- **Changed from the plan in step 4:**
+  - **A proposal is never refused `busy:`.** One that should land at once waits and lands
+    at the GM's next key; only `undo`, `scene save` and `scene NAME remove` still answer
+    `busy:`.
+  - **`job N dump`/`describe`/`check` apply the set to the scratch map**, not the preview's
+    swap: the swap leaves out areas and rolls, which drawing does not need but `describe`
+    does.
+  - **`jobs` lists every job**, finished ones too, so the agent sees its verdicts (until
+    step 5's `wait`).
+  - **Under `accept auto` every proposal is at once**, the GM's `:ask` jobs included, fixed
+    when it arrives.
+  - **`--apply` with no GM edits the file itself** (`App.ctl_direct`), as before. Step 6
+    sends it to an open map.
+  - **`--bench-review`:** `--bench-ctl` lands at once (decision 6); this makes the bench's
+    requests wait for `:review`, for the review's perf rows.
+  - **Sixteen jobs:** a finished one makes room; with sixteen waiting, a proposal is
+    refused.
+- **Next: step 5** (events and `wait`).
+- **Then steps 6-9 in the order below.**
+- **Follow-up after step 6 (the user, 2026-10-09): a thin agent skill.** A user-level skill
+  (`~/.claude/skills/vtt/`, not the repo's `.claude/`: the agents that build maps run
+  wherever the GM starts them) that says when to use vtt, the opening move (`vtt --ctl
+  status`, then live or `--apply`), and the job loop, and points at the full guide rather
+  than copying it. With it, `vtt --agent-guide` prints docs/AGENTS.md from the binary (embedded
+  as the phone page is, with a test that the two agree), so the skill stays a dozen lines and
+  the guide always matches the installed vtt. After step 6 because steps 5 and 6 change the
+  loop it describes (`wait`, `--apply` to an open map).
 - **docs/AGENTS.md still tells agents never to `--apply` an open map.** That stays true
   until step 6.
 

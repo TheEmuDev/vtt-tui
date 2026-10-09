@@ -153,6 +153,11 @@ void app_stamp_yank(App *a);
 void app_stamp_lift(App *a);
 void app_stamp_key(App *a, Key k);
 
+/* app.c: the creatures were renumbered (a scene put back, a change set
+ * landed): the selection, group and range held indices that are gone, and
+ * whoever holds the turn now started no turn. */
+void app_creatures_renumbered(App *a);
+
 /* Jobs and the review (app_job.c). */
 void app_jobs_clear(App *a);
 int  app_job_new(App *a, int from, const char *text, const CsBox *box, int at_once);
@@ -221,8 +226,12 @@ void app_agent_command(App *a, const char *rest);
 int  app_ctl_region(const Map *m, const char *w, int *x0, int *y0, int *x1, int *y1,
                     char *err, size_t errsz);
 int  app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, size_t errsz);
+/* The scratch map (App.ctl_scratch) as a fresh copy of the live map, its log
+ * (ctl_sundo) cleared: a proposal is made in it, and a job's result read. */
+Map *app_scratch_copy(App *a);
 /* The map a job's proposal would make, accepted now: the scratch map, valid
- * until the next request. NULL when the job has none. */
+ * until the next request. NULL when the job has none, or one made for
+ * another size of map. */
 Map *app_job_result(App *a, int slot);
 
 /* app_play.c */

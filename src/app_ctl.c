@@ -111,10 +111,12 @@ const char *app_ctl_busy(const App *a)
 
 /* ----------------------------------------------------------------- reads */
 
-/* `own`: this request has edits in an open batch, which is not the GM's;
- * `m` and `u` are the live map and its log, set aside while a proposal runs. */
-static void do_status(App *a, FILE *out, int own, const Map *m, const Undo *u)
+/* `own`: this request has edits of its own so far. Asked of the live map
+ * and log (live_swap, mid-proposal). */
+static void do_status(App *a, FILE *out, int own)
 {
+    const Map  *m = a->map;
+    const Undo *u = &a->undo;
     if (m) {
         fprintf(out, "map %s  %dx%d\n", m->name, m->w, m->h);
         fprintf(out, "file %s%s\n", m->path[0] ? m->path : "(never saved)",
@@ -130,11 +132,7 @@ static void do_status(App *a, FILE *out, int own, const Map *m, const Undo *u)
     }
     fprintf(out, "undo %d back, %d forward%s\n", u->depth, u->nmarks - u->depth,
             !own ? "" : a->ctl_direct ? ", and this request's changes one more" : ", and this request's changes proposed");
-    /* Busy asked of the live log: a proposal's open batch is its own. */
-    Undo keep = a->undo;
-    a->undo = *u;
     const char *busy = app_ctl_busy(a);
-    a->undo = keep;
     if (a->ctl_direct || !m)
         fprintf(out, "edits %s%s\n", busy && !own ? "not now: " : "taken", busy && !own ? busy : "");
     else if (!a->ctl_auto) fputs("edits proposed, for the GM to review\n", out);
@@ -914,11 +912,8 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
         }
         else { x0 = 0; y0 = 0; x1 = m->w - 1; y1 = m->h - 1; }
         if (!ed->proposal) {
-            a->last_acting = turn_acting(m); /* the index is a new creature's: no turn started */
+            app_creatures_renumbered(a);
             ed->deleted = 1;                 /* the indices behind are new */
-            play_focus(&a->play, -1);
-            a->play.visual = 0;
-            range_clear(&a->play.range);
         }
     }
     else if (!strcmp(v, "token")) {
@@ -963,16 +958,37 @@ static int scene_is_edit(char w[][CTL_WORD_MAX], int n)
  * "Why not run it live and roll it back"). */
 static void proposal_begin(App *a, Edits *ed)
 {
-    if (!a->ctl_scratch) a->ctl_scratch = map_new(1, 1, "scratch");
-    map_copy_into(a->ctl_scratch, a->map);
+    app_scratch_copy(a);
     ed->proposal  = 1;
     ed->live      = a->map;
     ed->live_undo = a->undo;
-    undo_clear(&a->ctl_sundo);
     a->undo = a->ctl_sundo;
     a->map  = a->ctl_scratch;
     undo_begin(&a->undo);
     ed->ops0 = a->undo.stamp;
+}
+
+/* A read about the GM's side (status, marked) in the middle of a proposal:
+ * the live map and log in for its length, and out again (call it twice). */
+static void live_swap(App *a, Edits *ed)
+{
+    if (!ed->proposal) return;
+    Map *m = a->map;   a->map  = ed->live;      ed->live      = m;
+    Undo u = a->undo;  a->undo = ed->live_undo; ed->live_undo = u;
+}
+
+/* What a request that landed says, and the ring round it on the GM's screen. */
+static void say_changed(App *a, const Edits *ed, FILE *out)
+{
+    char area[2 * MAP_COORD_MAX + 2] = "";
+    if (ed->x1 >= ed->x0) map_region_name(ed->x0, ed->y0, ed->x1, ed->y1, area, sizeof area);
+    fprintf(out, "changed %s: %d line%s, one undo step\n", area, ed->lines, ed->lines == 1 ? "" : "s");
+    if (ed->x1 < ed->x0) return;
+    Ping *r = &a->agent_ring;
+    r->who = PING_GM;
+    r->x0 = ed->x0; r->y0 = ed->y0; r->x1 = ed->x1; r->y1 = ed->y1;
+    r->until_ms = a->now_ms + PING_SHOW_MS;
+    if (!r->until_ms) r->until_ms = 1;
 }
 
 /* The live map back, the scratch log kept beside it for the diff. */
@@ -1011,18 +1027,7 @@ static int finish_proposal(App *a, Edits *ed, FILE *out, char *err, size_t errsz
     }
     Job *j = &a->jobs[slot];
     fprintf(out, "proposal #%d: %s\n", j->num, j->summary);
-    if (j->state == JOB_ACCEPTED) {
-        char area[2 * MAP_COORD_MAX + 2] = "";
-        if (ed->x1 >= ed->x0) map_region_name(ed->x0, ed->y0, ed->x1, ed->y1, area, sizeof area);
-        fprintf(out, "changed %s: %d line%s, one undo step\n", area, ed->lines, ed->lines == 1 ? "" : "s");
-        if (ed->x1 >= ed->x0) {
-            Ping *r = &a->agent_ring;
-            r->who = PING_GM;
-            r->x0 = ed->x0; r->y0 = ed->y0; r->x1 = ed->x1; r->y1 = ed->y1;
-            r->until_ms = a->now_ms + PING_SHOW_MS;
-            if (!r->until_ms) r->until_ms = 1;
-        }
-    }
+    if (j->state == JOB_ACCEPTED) say_changed(a, ed, out);
     else if (j->at_once) fprintf(out, "lands when the GM is back: %s\n", app_ctl_busy(a));
     else fprintf(out, "waiting for the GM's review - :review %d\n", j->num);
     return 0;
@@ -1113,7 +1118,7 @@ static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FIL
     if (!strcmp(v, "job") || !strcmp(v, "jobs")) {
         /* The scratch map holds this request's edits: a job's own result
          * would be made in it. */
-        if (ed->lines) { snprintf(err, errsz, "%s comes before the request's edits", v); return -1; }
+        if (ed->lines || ed->header) { snprintf(err, errsz, "%s comes before the request's propose line and edits", v); return -1; }
         return app_ctl_job(a, w, n, out, err, errsz);
     }
 
@@ -1164,7 +1169,9 @@ static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FIL
 
     if (!strcmp(v, "status")) {
         if (n > 1) { snprintf(err, errsz, "status takes nothing after it"); return -1; }
-        do_status(a, out, ed->lines > 0, ed->proposal ? ed->live : m, ed->proposal ? &ed->live_undo : &a->undo);
+        live_swap(a, ed);
+        do_status(a, out, ed->lines > 0);
+        live_swap(a, ed);
         return 0;
     }
     if (!strcmp(v, "dump")) {
@@ -1286,7 +1293,9 @@ static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FIL
     if (!strcmp(v, "marked")) {
         int j = want_json(w, n, 1, err, errsz);
         if (j < 0) return -1;
+        live_swap(a, ed);                    /* what the GM points at is on the GM's map */
         app_ctl_marked(a, out, j);
+        live_swap(a, ed);
         return 0;
     }
     if (!strcmp(v, "check")) {
@@ -1330,8 +1339,6 @@ static void finish_edits(App *a, Edits *ed, FILE *out)
 {
     int changed = a->undo.stamp != ed->ops0;     /* a stamp a recorded op */
     undo_end(&a->undo);
-    char area[2 * MAP_COORD_MAX + 2] = "";
-    if (ed->x1 >= ed->x0) map_region_name(ed->x0, ed->y0, ed->x1, ed->y1, area, sizeof area);
     if (!changed) {
         fprintf(out, "no change: the map already looked like that\n");
         return;
@@ -1339,19 +1346,11 @@ static void finish_edits(App *a, Edits *ed, FILE *out)
     a->ctl_stamp    = a->undo.stamp;
     a->ctl_gen      = a->map->gen;
     a->ctl_undoable = 1;
-    fprintf(out, "changed %s: %d line%s, one undo step\n", area, ed->lines, ed->lines == 1 ? "" : "s");
-
+    say_changed(a, ed, out);
     char msg[160];
     if (ed->lines == 1) snprintf(msg, sizeof msg, "agent: %s - u takes it back", ed->first);
     else snprintf(msg, sizeof msg, "agent: %s and %d more - u takes them back", ed->first, ed->lines - 1);
     app_note_gm(a, msg);
-    if (ed->x1 >= ed->x0) {
-        Ping *r = &a->agent_ring;
-        r->who = PING_GM;
-        r->x0 = ed->x0; r->y0 = ed->y0; r->x1 = ed->x1; r->y1 = ed->y1;
-        r->until_ms = a->now_ms + PING_SHOW_MS;
-        if (!r->until_ms) r->until_ms = 1;
-    }
 }
 
 char *app_ctl_exec(App *a, const char *req, size_t *len)
@@ -1481,6 +1480,7 @@ void app_agent_command(App *a, const char *rest)
     }
     char err[CTL_PATH_MAX + 64];
     if (ctl_start(c, err, sizeof err) < 0) { app_set_status_gm(a, err); return; }
-    snprintf(msg, sizeof msg, "agent channel on - vtt --ctl talks to this map; u undoes what it does");
+    snprintf(msg, sizeof msg, "agent channel on - vtt --ctl talks to this map; its changes %s",
+             a->ctl_auto ? "land at once, u takes each back" : "wait for :review");
     app_note_gm(a, msg);
 }

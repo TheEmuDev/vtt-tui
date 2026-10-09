@@ -232,7 +232,8 @@ feedback. Nothing you send changes the GM's map until then, unless the GM has ty
    means propose again with `job N propose`; the new proposal replaces the old. A part
    accepted by box leaves the rest `ready`. `jobs` also counts a ready proposal's
    **conflicts**: squares the GM changed since you looked, which accepting would overwrite.
-6. `job N drop` gives a job back: the GM's waits as asked; one of your own goes away.
+6. `job N drop` gives a job back: the GM's waits as asked; one of your own is withdrawn
+   (the GM can still bring it back with `:review N`).
 7. When the GM says "here", "this room" or "that one", ask `vtt --ctl marked` and work from
    the squares it names. `marked` says which area the cursor is in.
 8. Put down the GM's stamps (`vtt --ctl stamps`) for anything they have one for, rather than
@@ -244,8 +245,9 @@ feedback. Nothing you send changes the GM's map until then, unless the GM has ty
     Never repair a change by undoing the GM's own work.
 
 Each request is still all or nothing, and each accepted proposal is one undo step. A request
-may read before its edits (`jobs`, `job N ...` lines come first) and after them: a read
-after an edit sees your proposal, not the GM's map.
+may read before its edits (`jobs` and `job N ...` lines come first, before `propose`) and
+after them: `dump`, `describe` and `check` after an edit see your proposal; `status` and
+`marked` always describe the GM's side.
 
 Exit status: 0 done; 1 an error or `busy:` (the reason on stderr); 2 no vtt is listening --
 ask the GM to type `:agent on`. Proposals are never refused for the GM being busy: under

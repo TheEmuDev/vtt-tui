@@ -14,7 +14,7 @@ the agent's; this page is why it is the way it is.
 |---|---|
 | transport | a Unix socket and a one-shot client, `vtt --ctl`. Never the network: `:serve`'s port is on the Wi-Fi. An MCP server could wrap `vtt --ctl` later without touching vtt. |
 | on | off until `:agent on` (or `--agent` at start); `:agent off` closes it |
-| where edits land | build mode only, so nothing an agent does reaches the players' phones in play. Reads work anywhere a map is open. |
+| where edits land | build mode only, so nothing an agent does reaches the players' phones in play. Proposals come in anywhere (play mode too) and wait; they land in build mode. Reads work anywhere a map is open. |
 | freedom | ~~free editing, undo as the safety net; no drafts to approve~~ **Reversed 2026-10-07** (docs/CONFLICTS.md, built 2026-10-09): an agent's edits are a **proposal** the GM reviews and accepts, whole or by box; `:agent accept auto` lands each at once |
 | a request | one undo batch, all or nothing: a line that fails rolls the whole request back and says which line and why |
 | fog | `fog paint` only; making and setting patches stays `:fog`'s |
@@ -95,7 +95,7 @@ GM accepts it, or at once under `:agent accept auto`):
 | `job N area REGION` | where the agent will work, tinted on the GM's screen |
 | `job N say "..."` | a line for the GM's status line and the job's thread |
 | `propose ["..."]`, `job N propose ["..."]` | first in a request: its edits are an idea of the agent's own (a new job), or job N's answer. Edits with neither are an idea of the agent's own |
-| `job N drop` | give it back: the GM's job waits as asked, the agent's own goes |
+| `job N drop` | give it back: the GM's job waits as asked; the agent's own is scrapped, kept for the GM's `:review N` (KEYS.md rule 9: only `remove` destroys, and that is the GM's `:ask N remove`) |
 | `job N dump [REGION]`, `job N describe [json]`, `job N check [json]` | the map as accepting job N's proposal would make it now |
 
 A proposal is never refused for the GM being busy. One that lands at once waits, as ready,
@@ -161,7 +161,15 @@ never move.
     With sixteen waiting, a proposal is refused.
   - `job N dump`/`describe`/`check` read the scratch map with the change set applied, not
     the review's swap: the swap leaves areas and rolls out, since drawing does not need
-    them.
+    them. Only a ready proposal, made for the map's present size.
+  - Reads about the GM's side (`status`, `marked`) after a request's edits read the live
+    map and log, not the scratch: the GM's selection holds live indices.
+  - `job` and `jobs` lines go before a request's `propose` line and edits, so the job a
+    proposal answers cannot be dropped from under it.
+  - **At once is fixed when a proposal arrives:** one that came in under `accept auto`
+    while the GM was busy still lands at the next key if the GM switches to `accept
+    review` meanwhile. A proposal for the job the GM is reviewing never lands by itself;
+    the GM's `enter` takes it.
 
 ## Build order
 

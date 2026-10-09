@@ -362,7 +362,7 @@ void test_jobs_ctl(void)
     CHECK(t && strstr(t, "error: line 2: propose comes once, before the request's edits"));
     free(t);
     t = ctl_ask(&a, "tile A1 water\njobs");
-    CHECK(t && strstr(t, "error: line 2: jobs comes before the request's edits"));
+    CHECK(t && strstr(t, "error: line 2: jobs comes before the request's propose line and edits"));
     free(t);
     CHECK_EQ(map_tile(m, 0, 0), TILE_FLOOR);          /* all or nothing, as ever */
 
@@ -481,6 +481,9 @@ void test_jobs_ctl(void)
     t = ctl_ask(&a, "job 2 drop");
     CHECK(t && !strcmp(t, "ok\n#2 withdrawn\n"));
     free(t);
+    CHECK(s2 >= 0 && a.jobs[s2].state == JOB_SCRAPPED && a.jobs[s2].has_cs);   /* kept: rule 9 */
+    CHECK(strstr(a.status, "#2 withdrawn by the agent - :review 2 brings it back") != NULL);
+    press(&a, ":ask 2 remove\r");                       /* the GM's way to destroy it */
     CHECK_EQ(job_slot(&a, 2), -1);
     t = ctl_ask(&a, "tile H8 water\n");                  /* no header: the same */
     CHECK(t && !strncmp(t, "ok\nproposal #2: ", 16));
@@ -537,6 +540,80 @@ void test_jobs_ctl(void)
     CHECK(t && strstr(t, "error: 16 changes are waiting for the GM"));
     free(t);
     CHECK_EQ(map_tile(m, 0, 10), TILE_FLOOR);
+
+    CASE("a full table makes room by a finished job, never a waiting one");
+    {
+        int fin = job_slot(&a, 5);
+        CHECK(fin >= 0);
+        if (fin >= 0) a.jobs[fin].state = JOB_SCRAPPED;
+        t = ctl_ask(&a, "tile A11 water\n");
+        CHECK(t && !strncmp(t, "ok\nproposal #5: ", 16));
+        free(t);
+        int ready = 0;
+        for (int k = 0; k < JOB_MAX; k++) ready += a.jobs[k].used && a.jobs[k].state == JOB_READY;
+        CHECK_EQ(ready, JOB_MAX);
+        app_jobs_clear(&a);
+    }
+
+    CASE("reads about the GM's side mid-proposal read the live map: marked, status");
+    a.ctl_auto = 1;
+    t = ctl_ask(&a, "token add enemy B9 \"Imp\"\ntoken add enemy D9 \"Orc\"\n");
+    free(t);
+    a.ctl_auto = 0;
+    app_jobs_clear(&a);
+    app_key(&a, (Key){ KEY_F2, 0, 0 });
+    a.play.ngroup = 1;
+    a.play.group[0] = a.play.sel = tokens_find_label(&m->tokens, "Imp", -1);
+    char *plain = ctl_ask(&a, "marked");
+    t = ctl_ask(&a, "token del Imp\nmarked");
+    CHECK(plain && t && strstr(plain, "selected Imp B9\n"));
+    CHECK(t && !strncmp(t, plain, strlen(plain)));      /* the same, then the proposal */
+    CHECK(t && strstr(t, "Orc") == NULL);
+    free(t);
+    free(plain);
+    app_jobs_clear(&a);
+    app_key(&a, (Key){ KEY_F1, 0, 0 });
+    char want[64];
+    snprintf(want, sizeof want, "undo %d back, ", a.undo.depth);
+    t = ctl_ask(&a, "tile A12 water\nstatus");
+    CHECK(t && strstr(t, want) && strstr(t, "and this request's changes proposed"));
+    free(t);
+    app_jobs_clear(&a);
+
+    CASE("job lines after a propose line are refused: the job it names cannot go from under it");
+    press(&a, ":ask a well\r");
+    t = ctl_ask(&a, "job 1 propose\njob 1 drop\ntile H9 water");
+    CHECK(t && strstr(t, "error: line 2: job comes before the request's propose line and edits"));
+    free(t);
+
+    CASE("a proposal for the job under review never lands under the GM's eyes, even at once");
+    t = ctl_ask(&a, "job 1 propose\ntile H9 water");
+    free(t);
+    press(&a, ":review 1\r");
+    CHECK_EQ(a.ed.mode, ED_REVIEW);
+    a.ctl_auto = 1;
+    t = ctl_ask(&a, "job 1 propose\ntile H9 hazard");
+    CHECK(t && strstr(t, "\nlands when the GM is back"));
+    free(t);
+    CHECK_EQ(map_tile(m, 7, 8), TILE_FLOOR);
+    CHECK_EQ(a.ed.mode, ED_REVIEW);
+    press(&a, "j");                                    /* a key: still under review */
+    CHECK_EQ(map_tile(m, 7, 8), TILE_FLOOR);
+    press(&a, "\r");                                   /* the GM's enter lands it */
+    CHECK_EQ(map_tile(m, 7, 8), TILE_HAZARD);
+    a.ctl_auto = 0;
+
+    CASE("job N dump reads only a ready proposal: an accepted one applied again would double it");
+    t = ctl_ask(&a, "job 1 dump");
+    CHECK(t && strstr(t, "#1 has no proposal waiting"));
+    free(t);
+
+    CASE("with no GM (--apply), propose is refused: the plan is the file's");
+    a.ctl_direct = 1;
+    t = ctl_ask(&a, "propose\ntile A1 water");
+    CHECK(t && strstr(t, "there is no GM to propose to"));
+    free(t);
+    a.ctl_direct = 0;
 
 out:
     app_free(&a);
