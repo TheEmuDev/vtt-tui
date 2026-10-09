@@ -83,8 +83,9 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
   - **The review's perf scenario waits for step 4,** which can make a real proposal in a
     bench (`--bench-ctl`). The preview swap itself is in `tools/proposals.sh` (1.1 µs a
     frame).
-- **Next:** commit, regenerate PERFORMANCE.md's tables (median of three quiet runs), then
-  Fable's review of step 3, then step 4.
+- **PERFORMANCE.md's two main tables were regenerated on the desktop** (median of three
+  quiet runs) with the new scenario. *The jobs' tints* has the finding.
+- **Next: Fable's review of step 3, then step 4.**
 - **Then steps 3-9 in the order below.** Nothing in the app calls the change set yet:
   `:ask`, `:review` and the requests come in steps 3-4.
 - **docs/AGENTS.md still tells agents never to `--apply` an open map.** That stays true
