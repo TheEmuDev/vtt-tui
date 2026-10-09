@@ -60,10 +60,31 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
     log must call `cp_note`. CLAUDE.md says so. Today that is only `fog_delete`.
   - **`cs_check`'s gate now also watches `Map.cards_gen`.** Before, it missed a card the
     GM edited, because `card_set` touches nothing.
-- **Next: step 3**, jobs and the review mode: `:ask`, `:jobs`, `:review`, the three
-  tints, and a job's thread. It is the first step with a key path and a drawing path, so it
-  needs `PROF_ZONE`s, `tools/perf.sh` scenarios and golden frames. Before writing it,
-  re-read *What the screen shows* and decision 3 (the review keys).
+- **Step 3: built (2026-10-08), Fable's review not yet run.** It covers:
+  - `job.h`, `app_job.c`: `:ask`, `:ask!`, `:ask N remove`, `:jobs [N]`, `:review [N]`;
+  - the `ED_REVIEW` mode and its keys, with partial accept through `cs_drop`;
+  - the three tints and the `#N` labels;
+  - `Editor.overlay`, a hook `ed_draw` and `play_draw` call between the ground and the
+    marks;
+  - the suite `jobs`, and the perf scenario `build, a job's tint`.
+- **Changed from the plan in step 3:**
+  - **The review's bar** holds accept, scrap, feedback, box, back and `? keys`. Every bar
+    ends with `?`, so `n`/`N` are on the `?` page only.
+  - **`:jobs` lists the jobs on the status line, and `:jobs N` shows a job's history** in
+    a message box. The box holds 192 characters, so a long history is cut.
+  - **No golden frame.** The tests read each square's color from the drawn frame
+    instead, which is a stronger check than a text dump.
+- **Not in step 3, so nobody is surprised:**
+  - **No agent can answer yet.** The requests (`job N take`, `propose`, ...) are step 4.
+    Until then a job waits as asked, and only the tests hand one a proposal, through
+    `app_job_set_proposal`.
+  - **The README's user section waits for step 4.** The `?` page already lists `:ask` and
+    `:review`.
+  - **The review's perf scenario waits for step 4,** which can make a real proposal in a
+    bench (`--bench-ctl`). The preview swap itself is in `tools/proposals.sh` (1.1 µs a
+    frame).
+- **Next:** commit, regenerate PERFORMANCE.md's tables (median of three quiet runs), then
+  Fable's review of step 3, then step 4.
 - **Then steps 3-9 in the order below.** Nothing in the app calls the change set yet:
   `:ask`, `:review` and the requests come in steps 3-4.
 - **docs/AGENTS.md still tells agents never to `--apply` an open map.** That stays true
@@ -315,8 +336,8 @@ feedback on stdout. With no vtt holding the map, `--apply` works as today.
   the map's own marks, the way a range overlay is, plus a `#N` label at the region's top
   left corner. They are all GM-only: `app_view_differs` counts open jobs and proposals,
   so none of it reaches the phones.
-- **The review is a mode of build mode** with its own key bar (six hints: accept, scrap,
-  feedback, box, next, back). It is the GM's alone, like the rest of build mode. Build
+- **The review is a mode of build mode** with its own key bar: accept, scrap, feedback,
+  box, back, and `? keys`, which every bar ends with. `n`/`N` are on the `?` page. It is the GM's alone, like the rest of build mode. Build
   mode is never sent to the phones (`app_remote_live` is play mode only), which is a
   stronger reason than B's that a preview never reaches them. The tints are drawn in play
   mode too, and that is why `app_view_differs` counts open jobs.

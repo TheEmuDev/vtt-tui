@@ -253,8 +253,16 @@ static void draw_editor_body(App *a)
     int stamping = !playing && a->ed.mode == ED_STAMP && a->stamp;
     if (stamping) { PROF_ZONE("stamp.show"); stamp_show(m, a->stamp, a->ed.cx, a->ed.cy, &sv); }
 
+    /* The jobs' tints, and a review's change drawn in place: checked first,
+     * since nothing may read the map between the swap in and out. */
+    app_jobs_prepare(a);
+    int reviewing = !playing && app_review_show(a);
+
     if (playing) play_draw(r, m, &a->ed, &a->play, th, a->ascii, a->view == VIEW_PLAYERS);
     else         ed_draw(r, m, &a->ed, th, a->ascii);
+
+    if (reviewing) app_review_unshow(a);
+    app_jobs_labels(a);
 
     if (stamping) {
         stamp_unshow(m, &sv);
@@ -378,6 +386,9 @@ static void draw_editor_body(App *a)
     }
     case ED_STAMP:
         ui_keybar(r, th, keys_map(KEYS_STAMP));
+        break;
+    case ED_REVIEW:
+        ui_keybar(r, th, keys_map(KEYS_REVIEW));
         break;
     case ED_COMMAND:
         break;
@@ -511,6 +522,7 @@ int app_view_differs(const App *a)
     if (a->screen == SCREEN_PLAY && a->map && fog_any(a->map)) return 1;
     if (prof_overlay_visible()) return 1;
     if (a->agent_ring.until_ms) return 1;       /* the GM's alone */
+    if (app_jobs_shown(a)) return 1;            /* the jobs' tints, likewise */
     if (app_card_shown(a) >= 0) return 1;       /* the card box is the GM's */
     if (a->screen == SCREEN_PLAY && a->map) {
         const Map  *m  = a->map;

@@ -39,6 +39,7 @@ int main(int argc, char **argv)
         { "areas", test_areas },
         { "links", test_links },
         { "changeset", test_changeset },
+        { "jobs", test_jobs },
         { "linkkeys", test_link_keys },
         { "floors", test_floors },
         { "floorview", test_floor_view },

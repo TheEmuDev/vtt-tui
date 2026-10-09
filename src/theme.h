@@ -42,6 +42,12 @@ typedef struct {
     uint32_t trail;       /* the mark on the tile a held token set out from */
     uint32_t trail_bg;    /* ground a held token has walked over */
     uint32_t ping_bg;     /* a ping's ring: "look here", on every screen */
+    /* Jobs (app_job.c), the GM's alone: where an agent is working, a change
+     * waiting for review, and the squares it would overwrite. Apart from the
+     * ping's amber and the range's teal by hue and value. */
+    uint32_t job_work_bg;
+    uint32_t job_ready_bg;
+    uint32_t job_conflict_bg;
 
     /* Boundary kinds. Secret is only ever used in build mode; in play a
      * secret door is drawn exactly as a wall. */

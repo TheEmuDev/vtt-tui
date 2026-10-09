@@ -14,6 +14,7 @@ typedef enum {
     ED_VISUAL,     /* rectangular tile selection */
     ED_COMMAND,    /* the `:` line */
     ED_STAMP,      /* a stamp on the cursor, to be placed */
+    ED_REVIEW,     /* an agent's change drawn in place, to accept or not (app_job.c) */
 } EdMode;
 
 #define ED_SCROLLOFF 2
@@ -108,6 +109,12 @@ typedef struct {
 
     TextPrompt cmd;            /* the `:` line */
     int    cmd_from_stamp;     /* it was opened over a stamp, and goes back to it */
+    int    cmd_from_review;    /* over a review, likewise */
+
+    /* Drawn over the ground and under the map's marks, the cursor and the
+     * creatures (the jobs' tints, app_job.c); NULL for nothing. */
+    void (*overlay)(void *ctx, Renderer *r, const Map *m, const GridView *g);
+    void  *overlay_ctx;
     int    cmd_from_visual;    /* it was opened over a v box, which :area names */
 } Editor;
 

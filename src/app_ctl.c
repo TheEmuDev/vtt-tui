@@ -93,6 +93,7 @@ const char *app_ctl_mode_name(EdMode m)
     case ED_VISUAL:  return "visual";
     case ED_COMMAND: return "command line";
     case ED_STAMP:   return "stamp";
+    case ED_REVIEW:  return "review";
     }
     return "?";
 }

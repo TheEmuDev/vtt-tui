@@ -31,6 +31,7 @@ void app_init(App *a, Term *t, Renderer *r)
     a->dirty   = 1;
     a->pending_token = -1;
     a->last_acting   = -1;
+    a->review        = -1;
     undo_init(&a->undo);
     slog_init(&a->slog);
     net_init(&a->net);
@@ -194,6 +195,7 @@ void app_travel_to(App *a, Map *m)
     a->autosave_gen = a->seen_gen = m->gen;
     a->npings = a->npinged = 0;
     a->agent_ring.until_ms = 0;
+    app_jobs_clear(a);              /* jobs are the map's */
     a->dirty = 1;
 }
 
@@ -705,6 +707,9 @@ static void prompt_accept(App *a)
         app_note_gm(a, out);
         return;
     }
+    case PROMPT_JOB_FEEDBACK:
+        app_job_feedback(a, text);
+        return;
     case PROMPT_NOTE: {
         /* The text itself stays off the status line and out of the log: the
          * line is in the frame the players see, and the log is for what
@@ -934,6 +939,7 @@ KeyMapId app_keymap_id(const App *a)
         if (a->ed.mode == ED_WALL)   return KEYS_WALL;
         if (a->ed.mode == ED_VISUAL) return KEYS_VISUAL;
         if (a->ed.mode == ED_STAMP)  return KEYS_STAMP;
+        if (a->ed.mode == ED_REVIEW) return KEYS_REVIEW;
         return KEYS_BUILD;
     default:             return KEYS_PLAY;
     }
@@ -1157,6 +1163,7 @@ void app_close_map(App *a)
     a->map = NULL;
     a->npings = a->npinged = 0;
     a->agent_ring.until_ms = 0;
+    app_jobs_clear(a);
     undo_clear(&a->undo);
     a->screen = SCREEN_MENU;
 }
@@ -1329,6 +1336,7 @@ void app_key(App *a, Key k)
     if (a->map && a->screen == SCREEN_PLAY) range_set_aim(&a->play.range, a->ed.cx, a->ed.cy);
     app_floor_sync(a);
     app_fog_sync(a);
+    app_jobs_land_waiting(a);       /* :ask! results that came while landing could not */
 }
 
 static void app_key_dispatch(App *a, Key k)

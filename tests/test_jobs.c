@@ -1,0 +1,246 @@
+/* Jobs and the review (docs/CONFLICTS.md, step 3): :ask over a box, the
+ * tints, a proposal handed in, :review with the change drawn in place, accept
+ * whole or by box, scrap, feedback, :ask!, and none of it on the phones. */
+#include "harness.h"
+
+#include <stdlib.h>
+#include <string.h>
+
+#include "app_priv.h"
+#include "changeset.h"
+#include "grid.h"
+#include "undo.h"
+
+/* The square's background in the frame just drawn. */
+static uint32_t square_bg(App *a, Renderer *r, int x, int y)
+{
+    int sx, sy;
+    grid_tile_interior(&a->ed.view, x, y, &sx, &sy);
+    const Cell *c = rnd_at(r, sx, sy);
+    return c ? c->bg : 0;
+}
+
+static void draw(App *a, Renderer *r)
+{
+    rnd_begin(r);
+    app_draw(a);
+}
+
+/* What an agent would propose for job `slot`: water over x0..x1 on row y. */
+static void propose_water(App *a, int slot, int x0, int x1, int y, const char *line)
+{
+    Map *c = map_copy(a->map);
+    Undo u;
+    undo_init(&u);
+    undo_begin(&u);
+    for (int x = x0; x <= x1; x++) undo_set_tile(&u, c, x, y, TILE_WATER);
+    undo_end(&u);
+    ChangeSet cs;
+    cs_init(&cs);
+    cs_diff(&cs, a->map, c, &u);
+    app_job_set_proposal(a, slot, &cs, line);
+    map_free(c);
+    undo_free(&u);
+}
+
+static int job_slot(App *a, int num)
+{
+    for (int i = 0; i < JOB_MAX; i++)
+        if (a->jobs[i].used && a->jobs[i].num == num) return i;
+    return -1;
+}
+
+void test_jobs(void)
+{
+    Sandbox sb = sandbox_enter("jobs");
+    Renderer r;
+    App a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK(ctl_blank_map(&a, sb.dir, 20, 12));
+    if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    Map *m = a.map;
+    const Theme *th = a.th;
+
+    CASE(":ask over a v box: job #1, asked, tinted in the working color, labeled, the GM's alone");
+    a.ed.cx = 2; a.ed.cy = 2;
+    press(&a, "v3l2j:ask a flooded crypt\r");
+    int s1 = job_slot(&a, 1);
+    CHECK(s1 >= 0);
+    if (s1 < 0) goto out;
+    CHECK_EQ(a.jobs[s1].state, JOB_ASKED);
+    CHECK(a.jobs[s1].has_box && a.jobs[s1].box.x0 == 2 && a.jobs[s1].box.x1 == 5 && a.jobs[s1].box.y1 == 4);
+    CHECK(strstr(a.status, "#1 asked in C3:F5") != NULL);
+    CHECK(a.status_gm);
+    draw(&a, &r);
+    CHECK_EQ(square_bg(&a, &r, 4, 3), th->job_work_bg);
+    CHECK(square_bg(&a, &r, 8, 8) != th->job_work_bg);
+    CHECK(app_view_differs(&a));
+
+    CASE("in play mode the tint is the GM's: the players' frame has none of it");
+    Key f2 = { KEY_F2, 0, 0 }, f1 = { KEY_F1, 0, 0 };
+    app_key(&a, f2);
+    draw(&a, &r);
+    CHECK_EQ(square_bg(&a, &r, 4, 3), th->job_work_bg);
+    rnd_begin(&r);
+    app_draw_view(&a, VIEW_PLAYERS);
+    CHECK(square_bg(&a, &r, 4, 3) != th->job_work_bg);
+    CASE(":ask works in play mode too, without a box; :review there is refused with a hint");
+    press(&a, ":ask goblins in the hall\r");
+    int s2 = job_slot(&a, 2);
+    CHECK(s2 >= 0 && !a.jobs[s2].has_box);
+    press(&a, ":review\r");
+    CHECK(strstr(a.status, "build mode's") != NULL);
+    app_key(&a, f1);
+
+    CASE(":ask N remove takes it away; :ask N off says so, and the lowest free number is used again");
+    press(&a, ":ask 2 off\r");
+    CHECK(strstr(a.status, ":ask 2 remove") != NULL);
+    press(&a, ":ask 2 remove\r");
+    CHECK_EQ(job_slot(&a, 2), -1);
+    press(&a, ":jobs\r");
+    CHECK(strstr(a.status, "#1 asked C3:F5 a flooded crypt") != NULL);
+
+    CASE("a proposal comes in: ready, said on the status line, its squares tinted ready");
+    propose_water(&a, s1, 3, 5, 3, "a pool, two ghouls to follow");
+    CHECK_EQ(a.jobs[s1].state, JOB_READY);
+    CHECK(strstr(a.status, "#1 ready: ground in D4:F4") != NULL);
+    CHECK(strstr(a.status, ":review 1") != NULL);
+    CHECK(strstr(a.status, "two ghouls") != NULL);
+    draw(&a, &r);
+    CHECK_EQ(square_bg(&a, &r, 4, 3), th->job_ready_bg);
+    CHECK_EQ(map_tile(m, 4, 3), TILE_FLOOR);                    /* nothing landed */
+
+    CASE(":review draws the change in place without touching the map; red where the GM changed it since");
+    undo_begin(&a.undo);
+    undo_set_tile(&a.undo, m, 5, 3, TILE_HAZARD);              /* the GM, after the agent looked */
+    undo_end(&a.undo);
+    unsigned gen = m->gen;
+    int depth = a.undo.depth;
+    press(&a, ":review\r");
+    CHECK_EQ(a.ed.mode, ED_REVIEW);
+    CHECK(strstr(a.status, "in red") != NULL);
+    draw(&a, &r);
+    CHECK_EQ(m->gen, gen);
+    CHECK_EQ(map_tile(m, 4, 3), TILE_FLOOR);
+    CHECK_EQ(square_bg(&a, &r, 5, 3), th->job_conflict_bg);
+    CHECK_EQ(square_bg(&a, &r, 4, 3), th->job_ready_bg);
+    {
+        int sx, sy;
+        grid_tile_interior(&a.ed.view, 4, 3, &sx, &sy);
+        CHECK_EQ(rnd_at(&r, sx, sy)->fg, th->terrain_fg[TILE_WATER]);   /* the preview's water */
+    }
+
+    CASE("u in review undoes the GM's own step and stays in review; the conflict goes");
+    press(&a, "u");
+    CHECK_EQ(a.ed.mode, ED_REVIEW);
+    CHECK_EQ(map_tile(m, 5, 3), TILE_FLOOR);
+    draw(&a, &r);
+    CHECK_EQ(square_bg(&a, &r, 5, 3), th->job_ready_bg);
+    depth = a.undo.depth;
+
+    CASE("a box accepts only its part, as one undo step; the rest stays waiting");
+    a.ed.cx = 3; a.ed.cy = 3;
+    press(&a, "vl\r");
+    CHECK_EQ(map_tile(m, 3, 3), TILE_WATER);
+    CHECK_EQ(map_tile(m, 4, 3), TILE_WATER);
+    CHECK_EQ(map_tile(m, 5, 3), TILE_FLOOR);
+    CHECK_EQ(a.undo.depth, depth + 1);
+    CHECK_EQ(a.jobs[s1].state, JOB_READY);
+    CHECK_EQ(a.jobs[s1].cs.ncells, 1);
+    CHECK_EQ(a.ed.mode, ED_REVIEW);
+
+    CASE("esc drops the box first, then leaves; the change stays waiting");
+    press(&a, "v\x1b");
+    CHECK_EQ(a.ed.mode, ED_REVIEW);
+    CHECK_EQ(a.rv_box, 0);
+    press(&a, "\x1b");
+    CHECK_EQ(a.ed.mode, ED_NORMAL);
+    CHECK(strstr(a.status, "#1 stays ready") != NULL);
+
+    CASE("enter accepts the rest; u takes it back");
+    press(&a, ":review 1\r\r");
+    CHECK_EQ(map_tile(m, 5, 3), TILE_WATER);
+    CHECK_EQ(a.jobs[s1].state, JOB_ACCEPTED);
+    CHECK_EQ(a.ed.mode, ED_NORMAL);
+    press(&a, "u");
+    CHECK_EQ(map_tile(m, 5, 3), TILE_FLOOR);
+    CHECK(!app_jobs_shown(&a));
+
+    CASE("scrap: the change goes, :review N brings it back");
+    press(&a, ":ask a bridge\r");
+    int s3 = job_slot(&a, 2);
+    CHECK(s3 >= 0);
+    if (s3 < 0) goto out;
+    propose_water(&a, s3, 10, 12, 8, "");
+    press(&a, ":review 2\rd");
+    CHECK_EQ(a.jobs[s3].state, JOB_SCRAPPED);
+    CHECK_EQ(a.ed.mode, ED_NORMAL);
+    CHECK_EQ(map_tile(m, 11, 8), TILE_FLOOR);
+    press(&a, ":review 2\r");
+    CHECK_EQ(a.ed.mode, ED_REVIEW);
+    CHECK_EQ(a.jobs[s3].state, JOB_READY);
+
+    CASE("feedback: the line goes in the job's history, the change goes, the job is the agent's again");
+    press(&a, "cmake it stone, not water\r");
+    CHECK_EQ(a.jobs[s3].state, JOB_WORKING);
+    CHECK(!a.jobs[s3].has_cs);
+    CHECK_EQ(a.ed.mode, ED_NORMAL);
+    int found = 0;
+    for (int t = 0; t < a.jobs[s3].nthread; t++)
+        found |= a.jobs[s3].thread[t].who == 'G' && !strcmp(a.jobs[s3].thread[t].text, "make it stone, not water");
+    CHECK(found);
+    press(&a, ":jobs 2\r");
+    CHECK_EQ(a.modal, MODAL_MESSAGE);
+    CHECK(strstr(a.modal_body, "you: make it stone, not water") != NULL);
+    press(&a, "\x1b");
+
+    CASE("n and N move between the changes waiting");
+    propose_water(&a, s3, 10, 12, 8, "");
+    press(&a, ":ask a well\r");
+    int s4 = job_slot(&a, 3);
+    CHECK(s4 >= 0);
+    if (s4 < 0) goto out;
+    propose_water(&a, s4, 14, 15, 10, "");
+    press(&a, ":review 2\r");
+    CHECK_EQ(a.review, s3);
+    press(&a, "n");
+    CHECK_EQ(a.review, s4);
+    press(&a, "N");
+    CHECK_EQ(a.review, s3);
+    press(&a, "\x1b");
+
+    CASE(":ask! lands as soon as it comes; in play mode it waits, and lands back in build mode");
+    press(&a, ":ask! a door\r");
+    int s5 = job_slot(&a, 4);
+    CHECK(s5 >= 0 && a.jobs[s5].at_once);
+    if (s5 < 0) goto out;
+    propose_water(&a, s5, 1, 1, 10, "");
+    CHECK_EQ(a.jobs[s5].state, JOB_ACCEPTED);
+    CHECK_EQ(map_tile(m, 1, 10), TILE_WATER);
+    press(&a, ":ask! a second door\r");
+    int s6 = job_slot(&a, 4);
+    if (s6 < 0) s6 = job_slot(&a, 5);
+    CHECK(s6 >= 0);
+    if (s6 < 0) goto out;
+    app_key(&a, f2);
+    propose_water(&a, s6, 2, 2, 10, "");
+    CHECK_EQ(a.jobs[s6].state, JOB_READY);
+    CHECK_EQ(map_tile(m, 2, 10), TILE_FLOOR);
+    app_key(&a, f1);
+    CHECK_EQ(a.jobs[s6].state, JOB_ACCEPTED);
+    CHECK_EQ(map_tile(m, 2, 10), TILE_WATER);
+
+    CASE("closing the map closes its jobs");
+    app_close_map(&a);
+    CHECK(!app_jobs_shown(&a));
+    int left = 0;
+    for (int i = 0; i < JOB_MAX; i++) left += a.jobs[i].used;
+    CHECK_EQ(left, 0);
+
+out:
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}

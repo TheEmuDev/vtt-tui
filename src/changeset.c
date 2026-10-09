@@ -721,6 +721,32 @@ int cs_apply(const ChangeSet *cs, Map *live, Undo *u, const CsBox *box, char *ou
     return n;
 }
 
+void cs_drop(ChangeSet *cs, const CsBox *box)
+{
+    int n = 0;
+    for (int i = 0; i < cs->ncells; i++)
+        if (!cell_in(box, &cs->cells[i])) cs->cells[n++] = cs->cells[i];
+    cs->ncells = n;
+    free(cs->block_start);                 /* rebucketed: the blocks' runs moved */
+    cells_index(cs);
+#define KEEP(arr, cnt, test) do { int k_ = 0;                                  \
+        for (int i_ = 0; i_ < (cnt); i_++) if (!(test)(box, &(arr)[i_])) (arr)[k_++] = (arr)[i_]; \
+        (cnt) = k_; } while (0)
+    KEEP(cs->toks, cs->ntoks, tok_in);
+    KEEP(cs->links, cs->nlinks, lnk_in);
+    KEEP(cs->areas, cs->nareas, ar_in);
+#undef KEEP
+    int k = 0;
+    for (int i = 0; i < cs->nnotes; i++)
+        if (!sq_in(box, cs->notes[i].x, cs->notes[i].y)) cs->notes[k++] = cs->notes[i];
+    cs->nnotes = k;
+    /* The preview and the conflicts were for the whole set. */
+    free(cs->pv.saved);
+    cs->pv.saved = NULL;
+    cs->pv.valid = 0;
+    cs->checked  = 0;
+}
+
 /* ------------------------------------------------------------- summary */
 
 typedef struct {

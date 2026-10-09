@@ -5,6 +5,7 @@
 #include "ctl.h"
 #include "editor.h"
 #include "input.h"
+#include "job.h"
 #include "map.h"
 #include "mapio.h"
 #include "net.h"
@@ -70,6 +71,7 @@ typedef enum {
     PROMPT_TOKEN_SEARCH,
     PROMPT_NOTE,
     PROMPT_COUNTERS,
+    PROMPT_JOB_FEEDBACK,
 } PromptWhat;
 
 /* A ping: a ring round a block of squares, until a moment passes. */
@@ -182,6 +184,12 @@ typedef struct {
     /* The undo log's stamp just after the channel's last edit, and whether
      * that edit is still there to take back: the agent's `undo` works only
      * while the log is exactly as the edit left it. */
+    /* Jobs (docs/CONFLICTS.md, app_job.c): asked of agents or offered by
+     * them, kept with the map. `review` is the one ED_REVIEW shows, and the
+     * review's own box (v) is held here, not in the editor's visual mode. */
+    Job      jobs[JOB_MAX];
+    int      review;
+    int      rv_box, rv_ax, rv_ay;
     unsigned ctl_stamp;
     unsigned ctl_gen;           /* Map.gen then, for changes outside the log */
     int      ctl_undoable;

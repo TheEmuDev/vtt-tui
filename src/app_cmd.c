@@ -934,6 +934,10 @@ static void cmd_floor(App *a, const char *verb, const char *rest)
     app_floor_command(a, verb, rest);
 }
 
+static void cmd_ask(App *a, const char *verb, const char *rest)    { app_ask_command(a, verb, rest); }
+static void cmd_jobs(App *a, const char *verb, const char *rest)   { app_jobs_command(a, rest); }
+static void cmd_review(App *a, const char *verb, const char *rest) { app_review_command(a, rest); }
+
 static void cmd_area(App *a, const char *verb, const char *rest)
 {
     area_command(a, verb, rest);
@@ -1086,6 +1090,9 @@ static const struct {
     { "wq", "x", cmd_wq },
     { "q", "quit", cmd_q },
     { "q!", NULL, cmd_q_bang },
+    { "ask", "ask!", cmd_ask },
+    { "jobs", NULL, cmd_jobs },
+    { "review", NULL, cmd_review },
     { "e", "edit", cmd_e },
     { "play", NULL, cmd_play },
     { "build", NULL, cmd_build },
@@ -1183,12 +1190,13 @@ void app_command_key(App *a, Key k)
     int r = ui_prompt_key(&a->ed.cmd, k);
     if (r == 0) return;
 
-    int back = a->ed.cmd_from_stamp;
-    a->ed.cmd_from_stamp = 0;
+    int back = a->ed.cmd_from_stamp, review = a->ed.cmd_from_review;
+    a->ed.cmd_from_stamp = a->ed.cmd_from_review = 0;
     a->ed.mode = ED_NORMAL;
     if (r == 1) app_exec_command(a, a->ed.cmd.buf);
     else        app_set_status(a, "");
     a->ed.cmd_from_visual = 0;
     if (back && a->stamp && a->map && a->screen == SCREEN_EDITOR && a->ed.mode == ED_NORMAL)
         a->ed.mode = ED_STAMP;
+    if (review) app_review_resume(a);
 }

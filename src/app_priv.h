@@ -152,6 +152,23 @@ void app_scene_restore(App *a, const char *name);
 void app_stamp_yank(App *a);
 void app_stamp_lift(App *a);
 void app_stamp_key(App *a, Key k);
+
+/* Jobs and the review (app_job.c). */
+void app_jobs_clear(App *a);
+int  app_job_new(App *a, int from, const char *text, const CsBox *box, int at_once);
+void app_job_set_proposal(App *a, int slot, ChangeSet *cs, const char *line);
+void app_jobs_land_waiting(App *a);
+void app_review_key(App *a, Key k);
+void app_review_resume(App *a);
+void app_job_feedback(App *a, const char *text);
+void app_ask_command(App *a, const char *verb, const char *rest);
+void app_jobs_command(App *a, const char *rest);
+void app_review_command(App *a, const char *rest);
+int  app_jobs_shown(const App *a);
+void app_jobs_prepare(App *a);
+int  app_review_show(App *a);
+void app_review_unshow(App *a);
+void app_jobs_labels(App *a);
 void app_stamp_command(App *a, const char *rest);
 
 /* app_link.c: g l in build mode (its first end, then its second), g o's

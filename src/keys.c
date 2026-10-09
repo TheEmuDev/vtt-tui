@@ -196,6 +196,8 @@ static const KeyDoc BUILD[] = {
     KEY("m",      "measure (the ruler)"),
     KEY(":roll 2d6+3", "roll dice    :log keeps a record of the session"),
     KEY(":agent on", "let an AI agent read and edit this map (vtt --ctl); u takes back each change"),
+    KEY(":ask a crypt here", "ask an agent for a change in the v box   :ask! lands it at once   :jobs lists them"),
+    KEY(":review", "look at a change an agent proposed, drawn in place, and accept it or not"),
     KEY(":",      "command line -- :w :q :resize :scale :metric ..."),
     KEY("F2",     "play mode    F1 back here    F12 profiler"),
     KEY("q",      "leave the map"),
@@ -221,6 +223,20 @@ static const KeyDoc STAMP[] = {
     { "p  enter", "put it down here; one u takes it back", "p", "place" },
     { "esc",      "put it away without placing",       NULL, "cancel" },
     KEY(":stamp save Table", "keep what you copied as a stamp   :stamp Table -f places it at once"),
+    { "?",        "this page",                         NULL, "keys" },
+};
+
+static const KeyDoc REVIEW[] = {
+    GROUP("Reviewing an agent's change"),
+    { "enter",    "accept it, or the part in the box; one u takes it back", NULL, "accept" },
+    { "d",        "scrap it (:review N brings it back)", NULL, "scrap" },
+    { "c",        "send it back to the agent with a line of what to do instead", NULL, "feedback" },
+    { "v",        "box a part to accept alone; move to its far corner", NULL, "box" },
+    { "esc",      "drop the box, then leave the review; the change stays waiting", NULL, "back" },
+    KEY("n  N",   "the next / previous change waiting"),
+    KEY("h j k l", "move; red squares would overwrite what changed since the agent looked"),
+    KEY("u",      "undo your own last step, as anywhere    ctrl-r redo"),
+    KEY(":jobs 3", "job 3's history    :jobs lists them all"),
     { "?",        "this page",                         NULL, "keys" },
 };
 
@@ -287,6 +303,7 @@ static const KeyMap MAPS[KEYS_COUNT] = {
     MAP(KEYS_BUILD,        "Build mode",          BUILD),
     MAP(KEYS_VISUAL,       "Build mode, visual",  VISUAL),
     MAP(KEYS_STAMP,        "Build mode, stamp",   STAMP),
+    MAP(KEYS_REVIEW,       "Build mode, review",  REVIEW),
     MAP(KEYS_WALL,         "Build mode, tracing", WALL),
     MAP(KEYS_RULER,        "Ruler",               RULER),
     MAP(KEYS_BROWSER,      "Open a map",          BROWSER),

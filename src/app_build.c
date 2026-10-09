@@ -134,6 +134,7 @@ void app_editor_key(App *a, Key k)
 
     if (e->mode == ED_COMMAND) { app_command_key(a, k); return; }
     if (e->mode == ED_STAMP)   { app_stamp_key(a, k); return; }
+    if (e->mode == ED_REVIEW)  { app_review_key(a, k); return; }
     if (app_ruler_key(a, k))       { return; }
     if (e->mode == ED_WALL)    { app_wall_key(a, k); return; }
 

@@ -285,6 +285,9 @@ run "build, circle brush"  "$OPEN"   80x24  'Vlllljjjjhhhhkkkk'
 run "build, 3x3 brush"     "$OPEN"   80x24  '3bxfllxfllxfjjLLKK'
 run "build, fill+undo 200"  "$BIG"    80x24  'v199l199jxu\x12u199h199k'
 run "build, fill history"   "$BIG"    80x24  'v199l199jx199h199kv199l199jf199h199k'
+# A job asked over a box filling the window, its tint drawn under every
+# frame's moves, then taken away so the loop starts clean (docs/CONFLICTS.md).
+run "build, a job's tint"   "$BIG"    80x24  'v39l19j:ask flood it\rllllhhhh:ask 1 remove\r'
 run "ruler, three legs"    "$WALLED" 80x24  'mlll\rjjj\rll'
 run "play, 24 tokens"      "$MOB"    80x24  ':play\rjjllkkhh'
 run "play, 24 tokens"      "$MOB"    200x50 ':play\rjjllkkhh'

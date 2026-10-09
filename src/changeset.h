@@ -157,6 +157,11 @@ typedef struct { int x0, y0, x1, y1; } CsBox;
  * what was left out. Returns the elements applied. */
 int  cs_apply(const ChangeSet *cs, Map *live, Undo *u, const CsBox *box, char *out, size_t outsz);
 
+/* Takes out of the set the elements a box holds -- what cs_apply with that box
+ * just landed -- so the rest can be reviewed on its own. Rolls, cards and the
+ * fight are no square's and stay. Never while shown. */
+void cs_drop(ChangeSet *cs, const CsBox *box);
+
 /* One line: "2 creatures added (Ghoul, Ghoul 2), walls in B2:F6, area Crypt".
  * With a box, only what it holds. */
 void cs_summary(const ChangeSet *cs, const CsBox *box, char *out, size_t outsz);

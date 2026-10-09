@@ -364,6 +364,7 @@ const char *ed_mode_name(EdMode m)
     case ED_VISUAL:  return "VISUAL";
     case ED_COMMAND: return "COMMAND";
     case ED_STAMP:   return "STAMP";
+    case ED_REVIEW:  return "REVIEW";
     case ED_NORMAL:
     default:         return "NORMAL";
     }
@@ -425,6 +426,7 @@ void ed_draw(Renderer *r, const Map *m, const Editor *e, const Theme *th, int as
     grid_draw(r, m, &e->view, th, ascii, 1, FOGV_BUILD);   /* build mode sees secrets */
     grid_draw_links(r, m, &e->view, th, ascii, 1, FOGV_BUILD);
     draw_note_marks(r, m, &e->view, th, ascii);
+    if (e->overlay) e->overlay(e->overlay_ctx, r, m, &e->view);
 
     /* g l's first end, ringed until the second is chosen. */
     if (e->link_on)

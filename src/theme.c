@@ -40,6 +40,9 @@ const Theme THEME_DARK = {
     /* Amber, apart from the cursor's blue, the box's violet, the range's
      * and the trail's greens: a ping is none of those. */
     .ping_bg   = RGB(0x6A, 0x4E, 0x12),
+    .job_work_bg     = RGB(0x2E, 0x2A, 0x5C),
+    .job_ready_bg    = RGB(0x1C, 0x4C, 0x28),
+    .job_conflict_bg = RGB(0x6E, 0x1C, 0x22),
 
     .edge_door   = RGB(0xD0, 0x9A, 0x50),
     .edge_window = RGB(0x78, 0xC0, 0xD8),

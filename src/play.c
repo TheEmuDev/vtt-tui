@@ -613,6 +613,7 @@ void play_draw(Renderer *r, const Map *m, const Editor *e, const Play *p,
 
     /* Under everything else, so tokens standing in it stay readable. */
     if (!range_hidden) range_draw(r, m, &e->view, &p->range, th);
+    if (e->overlay && !players) e->overlay(e->overlay_ctx, r, m, &e->view);
 
     /* The box, under the creatures it is picking out. Tinted the same way
      * build mode tints its visual selection, so the gesture reads as the same

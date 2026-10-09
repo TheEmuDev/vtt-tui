@@ -283,6 +283,7 @@ void test_gray_marker(void);
 void test_areas(void);
 void test_links(void);
 void test_changeset(void);
+void test_jobs(void);
 void test_link_keys(void);
 void test_floors(void);
 void test_floor_view(void);
