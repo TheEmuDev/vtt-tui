@@ -97,87 +97,89 @@ Machine: Intel Core i7-8700K @ 3.70GHz (6 cores, 12 threads, 4.7 GHz max, powers
 
 | scenario             | size   | frame p50 | frame p99 | cells | bytes |
 |----------------------|--------|-----------|-----------|-------|-------|
-| build, open          | 80x24  |    23.2us |    28.5us |    10 |   207 |
-| build, every edge    | 80x24  |    23.1us |    51.7us |    10 |   207 |
-| build, 200x200       | 80x24  |    23.1us |    27.6us |    12 |   209 |
-| build, 200x200       | 200x50 |    92.7us |   196.3us |    12 |   212 |
-| build, mostly void   | 200x50 |    77.5us |   159.5us |    20 |   267 |
-| build, noted squares | 80x24  |    23.4us |    45.9us |    88 |   524 |
-| build, tracing       | 80x24  |    23.0us |    57.7us |     2 |   140 |
-| build, circle brush  | 80x24  |    23.6us |    39.2us |    28 |   292 |
-| build, 3x3 brush     | 80x24  |    20.2us |    25.7us |    18 |   128 |
-| build, fill+undo 200 | 80x24  |    21.0us |    86.8us |   303 |  3398 |
-| build, fill history  | 80x24  |    21.5us |    81.6us |   335 |  4145 |
-| build, a job's tint  | 80x24  |    22.3us |    44.6us |    49 |   301 |
-| ruler, three legs    | 80x24  |    20.4us |    41.7us |    11 |    40 |
-| play, 24 tokens      | 80x24  |    22.8us |    43.6us |    19 |   298 |
-| play, 24 tokens      | 200x50 |    82.5us |   167.4us |    36 |   315 |
-| play, carrying       | 80x24  |    20.0us |    37.4us |    33 |   205 |
-| play, carry 200x200  | 80x24  |    19.8us |    46.3us |    22 |   136 |
-| play, 24 on 200x200  | 80x24  |    21.9us |    43.3us |    21 |   304 |
-| play, 500 on 200x200 | 80x24  |    28.2us |    59.0us |    20 |   299 |
-| play, 3x3 cursor     | 80x24  |    25.1us |    28.4us |    37 |   606 |
-| play, choosing       | 80x24  |    20.5us |    41.0us |    12 |    95 |
-| play, group box      | 80x24  |    19.1us |    48.7us |    18 |   133 |
-| play, group carry    | 80x24  |    19.4us |    42.2us |    22 |   131 |
-| play, range bands    | 80x24  |    26.0us |    51.2us |   129 |   657 |
-| play, range radius   | 80x24  |    44.4us |    69.8us |   169 |   958 |
-| play, range cone     | 80x24  |    26.2us |    62.1us |    60 |   654 |
-| play, range line     | 80x24  |    25.4us |    60.5us |    55 |   620 |
-| play, range square   | 80x24  |    25.5us |    61.5us |    63 |   669 |
-| play, turn order     | 80x24  |    25.6us |    72.2us |    49 |   488 |
-| play, fight cycling  | 80x24  |    48.1us |   123.0us |   317 |  4596 |
-| play, spotlight      | 80x24  |    21.7us |    43.3us |    37 |   245 |
-| play, named roll     | 80x24  |    20.5us |    41.0us |    17 |   165 |
-| play, fog            | 80x24  |    23.5us |    29.0us |    24 |   265 |
-| play, fog all dark, 4 watch | 80x24  |    43.1us |    72.4us |    24 |   265 |
-| play, fog by hand    | 80x24  |    23.1us |    39.4us |    35 |   231 |
-| play, fog range, 4 watchers | 80x24  |    74.7us |   147.3us |    77 |   541 |
-| play, fog sight      | 80x24  |    22.8us |    49.2us |    58 |   565 |
-| play, fog lantern    | 80x24  |    21.9us |    37.2us |    43 |   438 |
-| play, fog warren     | 80x24  |    23.5us |    52.4us |    72 |   826 |
-| play, fog warren 12  | 80x24  |    23.0us |    52.9us |    69 |   803 |
-| play, fog warren, party | 80x24  |    24.4us |    56.0us |   118 |  1673 |
-| play, fog door       | 80x24  |    20.5us |    25.2us |    28 |   215 |
-| play, fog full rebuild | 80x24  |    21.0us |    24.9us |    21 |   180 |
-| play, fog reveal 12  | 80x24  |    23.7us |    56.4us |    55 |   544 |
-| play, fog sight, 4 watchers | 80x24  |    48.2us |   126.4us |    58 |   565 |
-| play, fog soft edge, 4 watchers | 80x24  |    46.6us |   158.1us |    42 |   420 |
-| build, stamp 20x20   | 80x24  |    16.9us |    39.5us |   146 |  1696 |
-| build, fog paint     | 80x24  |    22.3us |    25.8us |    24 |   219 |
-| build, 64 links      | 80x24  |    27.1us |    55.9us |    35 |   274 |
-| play, 64 links       | 80x24  |    27.9us |    58.6us |    47 |   348 |
-| play, link there+back | 80x24  |    25.5us |    62.4us |    78 |   637 |
-| build, one floor     | 80x24  |    22.9us |    40.8us |    12 |   176 |
-| play, other floor, 4 watchers | 80x24  |    42.3us |    83.1us |    18 |   238 |
-| play, floor steps    | 80x24  |    22.4us |    44.6us |    40 |   290 |
-| play, counters       | 80x24  |    22.2us |    50.1us |    54 |   402 |
-| play, clocks         | 80x24  |    21.3us |    43.7us |    15 |   162 |
-| play, 1 watcher      | 80x24  |    31.9us |    49.2us |    19 |   298 |
-| play, 4 watchers     | 80x24  |    40.6us |    49.7us |    19 |   298 |
-| play, 4 watchers, differing | 80x24  |    55.0us |   120.0us |    58 |   530 |
-| play, hidden, 4 watchers | 80x24  |    57.4us |    98.5us |    19 |   298 |
-| play, camera party, 4 watchers | 80x24  |    46.2us |    93.4us |    49 |   463 |
-| play, camera hold, 4 watchers | 80x24  |    42.0us |    48.9us |    16 |   212 |
-| play, whisper, 4 named | 80x24  |    41.4us |    59.9us |    13 |   147 |
-| play, pings, 4 watchers | 80x24  |    49.6us |    83.4us |    98 |   978 |
-| play, fog pings, 4 watchers | 80x24  |    64.0us |    78.8us |    72 |   696 |
-| play, GM ping        | 80x24  |    23.2us |    46.3us |    35 |   345 |
-| play, carry, 4 watch | 80x24  |    38.0us |    73.5us |    33 |   205 |
-| play, logging        | 80x24  |    19.8us |    40.1us |    31 |   198 |
-| play, rolling        | 80x24  |    20.4us |    24.8us |    23 |   191 |
-| play, group effect   | 80x24  |    27.4us |    31.8us |    44 |   476 |
-| play, card box       | 80x24  |    33.3us |    59.2us |    56 |   620 |
-| play, damage         | 80x24  |    33.9us |    66.1us |    33 |   198 |
-| play, 500 characters | 80x24  |    30.4us |    77.0us |   110 |   628 |
-| play, scene of 500   | 80x24  |    29.5us |    65.6us |    22 |   182 |
-| play, map trip there+back | 80x24  |    23.0us |    65.6us |    45 |   306 |
-| play, handout typed, 4 watch | 80x24  |    41.5us |    80.4us |    12 |   142 |
-| agent, room + 12     | 80x24  |    53.2us |    57.5us |    53 |   154 |
-| agent, plan of rooms | 80x24  |    42.2us |    60.3us |    55 |   156 |
-| agent, dump 512x512  | 80x24  |    23.5us |  7880.0us |     7 |   138 |
-| help page            | 80x24  |    37.1us |    81.6us |   542 |  2601 |
-| profiler overlay     | 80x24  |    29.9us |   134.2us |   173 |  1021 |
+| build, open          | 80x24  |    22.7us |    25.3us |    10 |   207 |
+| build, every edge    | 80x24  |    22.9us |    25.3us |    10 |   207 |
+| build, 200x200       | 80x24  |    22.6us |    26.1us |    12 |   209 |
+| build, 200x200       | 200x50 |    88.8us |   141.1us |    12 |   212 |
+| build, mostly void   | 200x50 |    73.9us |   111.8us |    20 |   267 |
+| build, noted squares | 80x24  |    22.4us |    53.5us |    88 |   524 |
+| build, tracing       | 80x24  |    22.1us |    24.9us |     2 |   140 |
+| build, circle brush  | 80x24  |    22.5us |    38.2us |    28 |   292 |
+| build, 3x3 brush     | 80x24  |    19.2us |    32.0us |    18 |   128 |
+| build, fill+undo 200 | 80x24  |    20.1us |    85.1us |   303 |  3398 |
+| build, fill history  | 80x24  |    20.6us |    79.7us |   335 |  4145 |
+| build, a job's tint  | 80x24  |    21.8us |    35.7us |    49 |   301 |
+| ruler, three legs    | 80x24  |    19.6us |    22.2us |    11 |    40 |
+| play, 24 tokens      | 80x24  |    22.0us |    26.3us |    19 |   298 |
+| play, 24 tokens      | 200x50 |    79.3us |   138.1us |    36 |   315 |
+| play, carrying       | 80x24  |    19.4us |    25.3us |    33 |   205 |
+| play, carry 200x200  | 80x24  |    18.9us |    36.4us |    22 |   136 |
+| play, 24 on 200x200  | 80x24  |    21.0us |    23.9us |    21 |   304 |
+| play, 500 on 200x200 | 80x24  |    27.2us |    30.2us |    20 |   299 |
+| play, 3x3 cursor     | 80x24  |    24.1us |    46.4us |    37 |   606 |
+| play, choosing       | 80x24  |    19.5us |    22.6us |    12 |    95 |
+| play, group box      | 80x24  |    18.3us |    31.2us |    18 |   133 |
+| play, group carry    | 80x24  |    18.0us |    28.2us |    22 |   131 |
+| play, range bands    | 80x24  |    24.8us |    47.9us |   129 |   657 |
+| play, range radius   | 80x24  |    42.7us |    60.2us |   169 |   958 |
+| play, range cone     | 80x24  |    24.9us |    58.0us |    60 |   654 |
+| play, range line     | 80x24  |    24.3us |    57.3us |    55 |   620 |
+| play, range square   | 80x24  |    24.3us |    57.6us |    63 |   669 |
+| play, turn order     | 80x24  |    24.5us |    37.1us |    49 |   488 |
+| play, fight cycling  | 80x24  |    31.9us |    53.5us |   317 |  4596 |
+| play, spotlight      | 80x24  |    20.8us |    36.8us |    37 |   245 |
+| play, named roll     | 80x24  |    19.7us |    24.2us |    16 |   164 |
+| play, fog            | 80x24  |    22.6us |    43.7us |    24 |   265 |
+| play, fog all dark, 4 watch | 80x24  |    42.4us |    47.3us |    24 |   265 |
+| play, fog by hand    | 80x24  |    22.7us |    27.1us |    35 |   231 |
+| play, fog range, 4 watchers | 80x24  |    72.7us |   129.0us |    77 |   541 |
+| play, fog sight      | 80x24  |    21.9us |    47.3us |    58 |   565 |
+| play, fog lantern    | 80x24  |    20.9us |    49.3us |    43 |   438 |
+| play, fog warren     | 80x24  |    22.5us |    51.6us |    72 |   826 |
+| play, fog warren 12  | 80x24  |    22.5us |    51.6us |    69 |   803 |
+| play, fog warren, party | 80x24  |    23.3us |    55.7us |   118 |  1673 |
+| play, fog door       | 80x24  |    19.7us |    32.8us |    28 |   215 |
+| play, fog full rebuild | 80x24  |    20.2us |    29.6us |    21 |   180 |
+| play, fog reveal 12  | 80x24  |    21.8us |    48.2us |    55 |   544 |
+| play, fog sight, 4 watchers | 80x24  |    45.7us |   120.7us |    58 |   565 |
+| play, fog soft edge, 4 watchers | 80x24  |    44.6us |   106.3us |    42 |   420 |
+| build, stamp 20x20   | 80x24  |    16.6us |    38.4us |   146 |  1696 |
+| build, fog paint     | 80x24  |    21.5us |    42.2us |    24 |   219 |
+| build, 64 links      | 80x24  |    26.5us |    39.6us |    35 |   274 |
+| play, 64 links       | 80x24  |    26.6us |    41.7us |    47 |   348 |
+| play, link there+back | 80x24  |    24.9us |    45.7us |    78 |   637 |
+| build, one floor     | 80x24  |    21.8us |    49.6us |    12 |   176 |
+| play, other floor, 4 watchers | 80x24  |    40.2us |    71.7us |    18 |   238 |
+| play, floor steps    | 80x24  |    22.4us |    34.9us |    40 |   290 |
+| play, counters       | 80x24  |    21.3us |    49.1us |    54 |   402 |
+| play, clocks         | 80x24  |    20.9us |    35.2us |    15 |   162 |
+| play, 1 watcher      | 80x24  |    30.3us |    44.2us |    19 |   298 |
+| play, 4 watchers     | 80x24  |    39.5us |    46.6us |    19 |   298 |
+| play, 4 watchers, differing | 80x24  |    53.5us |   113.7us |    58 |   530 |
+| play, hidden, 4 watchers | 80x24  |    55.9us |    89.0us |    19 |   298 |
+| play, camera party, 4 watchers | 80x24  |    45.1us |    92.8us |    49 |   463 |
+| play, camera hold, 4 watchers | 80x24  |    40.2us |    73.8us |    16 |   212 |
+| play, whisper, 4 named | 80x24  |    39.8us |    71.0us |    13 |   147 |
+| play, pings, 4 watchers | 80x24  |    47.7us |   105.2us |    98 |   978 |
+| play, fog pings, 4 watchers | 80x24  |    62.5us |    70.6us |    72 |   696 |
+| play, GM ping        | 80x24  |    22.3us |    50.2us |    35 |   345 |
+| play, carry, 4 watch | 80x24  |    37.5us |    48.6us |    33 |   205 |
+| play, logging        | 80x24  |    18.9us |    31.4us |    31 |   198 |
+| play, rolling        | 80x24  |    19.5us |    25.8us |    23 |   191 |
+| play, group effect   | 80x24  |    26.3us |    55.6us |    44 |   476 |
+| play, card box       | 80x24  |    31.9us |    59.2us |    56 |   620 |
+| play, damage         | 80x24  |    32.4us |    54.8us |    33 |   198 |
+| play, 500 characters | 80x24  |    29.1us |    47.3us |   110 |   628 |
+| play, scene of 500   | 80x24  |    28.3us |    60.7us |    22 |   182 |
+| play, map trip there+back | 80x24  |    22.7us |    35.0us |    45 |   306 |
+| play, handout typed, 4 watch | 80x24  |    39.7us |    73.5us |    12 |   142 |
+| agent, room + 12     | 80x24  |    94.7us |    99.7us |    55 |   157 |
+| agent, plan of rooms | 80x24  |    67.4us |    71.9us |    55 |   157 |
+| agent, dump 512x512  | 80x24  |    22.3us |  5060.0us |     7 |   138 |
+| agent, proposal, review | 80x24  |    16.0us |    68.6us |    26 |   264 |
+| agent, proposal, accept | 80x24  |    15.4us |    68.6us |    40 |   241 |
+| help page            | 80x24  |    37.0us |    54.5us |   542 |  2601 |
+| profiler overlay     | 80x24  |    29.8us |   128.7us |   173 |  1021 |
 
 > The machine's own baseline drifts: one recording of this table sat ~10% above its
 > neighbors on every row, and none of it was the code -- the previous binary run
@@ -202,67 +204,73 @@ Machine: Intel Core i7-8700K @ 3.70GHz (6 cores, 12 threads, 4.7 GHz max, powers
 
 | path             | p50     | p99     | worst   | calls | heaviest scenario      |
 |------------------|---------|---------|---------|-------|------------------------|
-| app.draw         |  83.9us | 184.8us | 263.8us |  3200 | build, 200x200 200x50  |
-| camera.party     |   0.1us |   0.3us |   3.0us | 1925+ | play, camera party, 4 watchers 80x24 |
-| card.draw        |   8.6us |  17.1us |  51.3us |  5994 | play, card box 80x24   |
-| character.place  |   0.8us |   2.9us |  14.0us |  262+ | play, 500 characters 80x24 |
-| clock.draw       |   1.3us |   3.0us | 128.3us | 15067+ | play, clocks 80x24     |
-| counter.step     |   0.3us |   3.5us |  46.6us |  3200 | play, counters 80x24   |
-| ctl              | 4958.8us | 9579.5us | 11556.1us |   400 | agent, dump 512x512 80x24 |
-| dmg.apply        |  13.6us |  52.1us |  63.0us |   400 | play, damage 80x24     |
-| editor.draw      |  79.1us | 172.3us | 249.9us |  3200 | build, 200x200 200x50  |
-| floor.pick       |   0.7us |   1.6us |  25.8us | 24000 | play, scene of 500 80x24 |
-| floor.switch     |   0.0us |   0.2us |   0.4us |  1599 | play, floor steps 80x24 |
-| fog.blank        |   0.5us |   1.1us |  13.9us | 2548+ | play, fog sight, 4 watchers 80x24 |
-| fog.paint        |   0.2us |   2.9us |  54.7us |  1600 | build, fog paint 80x24 |
-| fog.reveal       |   3.1us |   6.9us |  19.0us |  335+ | play, fog range, 4 watchers 80x24 |
-| fog.sight        |  15.5us | 174.0us | 303.7us |  3599 | play, fog reveal 12 80x24 |
-| fog.sight.build  |  17.1us | 120.3us | 249.0us |  3601 | play, fog warren 12 80x24 |
-| fog.sight.rim    |   8.2us |  16.2us |  49.6us |  1201 | play, fog door 80x24   |
-| fog.sight.union  |   8.6us | 168.0us | 279.8us |  3599 | play, fog reveal 12 80x24 |
-| grid.draw        |  73.7us | 155.1us | 243.6us |  3200 | build, 200x200 200x50  |
-| grid.labels      |   5.3us |  18.7us |  43.6us |  3200 | build, mostly void 200x50 |
-| group.box        |   0.1us |   0.3us |   0.3us |  383+ | play, fog warren, party 80x24 |
-| group.move       |   0.3us |   3.4us |  45.2us | 1532+ | play, fog warren, party 80x24 |
-| handout.send     |  14.0us |  80.8us | 125.2us |  282+ | play, handout typed, 4 watch 80x24 |
-| input.key        |   0.2us | 4726.8us | 13538.5us | 5251+ | play, 500 characters 80x24 |
-| job.highlight    |   0.3us |   0.6us |  25.2us |  8800 | build, a job's tint 80x24 |
-| link.marks       |   3.9us |  10.5us |  44.1us |  5600 | play, 64 links 80x24   |
-| link.trip.map    | 4284.8us | 10551.6us | 13756.6us |   800 | play, map trip there+back 80x24 |
-| log.write        |   3.2us |  37.4us |  68.1us |   253 | play, logging 80x24    |
-| mapio.fsync      | 1997.4us | 5130.5us | 9900.5us |  1600 | play, map trip there+back 80x24 |
-| mapio.load       | 3262.1us | 3262.1us | 3262.1us |     1 | agent, dump 512x512 80x24 |
-| mapio.write      | 2116.1us | 5235.2us | 10228.8us |  1600 | play, map trip there+back 80x24 |
-| move.label       |   0.6us |   1.6us |  23.9us |  9995 | play, carry 200x200 80x24 |
-| names.sync       |   9.4us |   9.4us |   9.4us |     1 | play, pings, 4 watchers 80x24 |
-| net.accept       |   7.0us |   7.1us |   7.1us |    4+ | play, fog sight, 4 watchers 80x24 |
-| net.cmd          |   0.0us |   0.1us |   3.3us | 28036+ | play, fog pings, 4 watchers 80x24 |
-| net.frame        |  12.2us |  31.6us | 250.3us |  5595 | play, hidden, 4 watchers 80x24 |
-| net.names        |   0.7us |   0.7us |   0.7us |     1 | play, pings, 4 watchers 80x24 |
-| net.players_frame |  34.7us |  76.5us | 185.6us | 8035+ | play, fog range, 4 watchers 80x24 |
-| net.whisper      |   5.7us |  46.6us | 132.3us |  244+ | play, whisper, 4 named 80x24 |
-| note.marks       |   0.0us |   0.1us |   2.6us |  7997 | build, noted squares 80x24 |
-| panel.draw       |   6.6us |  17.9us |  34.7us |  5595 | play, fight cycling 80x24 |
-| picker           |  18.1us | 328.7us | 973.0us | 2099+ | play, 500 characters 80x24 |
-| picker.draw      |   9.3us |  19.9us |  40.7us | 2623+ | play, 500 characters 80x24 |
-| picker.open      | 4566.5us | 9957.2us | 11461.1us |  263+ | play, 500 characters 80x24 |
-| ping.draw        |   0.5us |   1.1us |  17.9us | 9438+ | play, fog pings, 4 watchers 80x24 |
-| play.draw        |  62.5us | 129.7us | 262.6us |  5595 | play, 24 tokens 200x50 |
-| play.link        |   0.3us |   1.4us |   7.5us |   800 | play, link there+back 80x24 |
-| prof.overlay     |   8.4us | 115.1us | 295.1us |  1000 | profiler overlay 80x24 |
-| range.draw       |  18.3us |  36.8us |  74.7us |  3995 | play, range radius 80x24 |
-| range.status     |   5.2us |  11.7us |  41.4us | 6695+ | play, fog range, 4 watchers 80x24 |
-| ruler.draw       |   0.6us |   1.7us |  18.9us |  4400 | ruler, three legs 80x24 |
-| scene.restore    |  26.9us | 146.4us | 219.1us |   400 | play, scene of 500 80x24 |
-| scene.save       |   9.6us |  62.1us | 191.3us |   400 | play, scene of 500 80x24 |
-| stamp.place      |   2.6us |   6.0us |   8.5us |   400 | build, stamp 20x20 80x24 |
-| stamp.show       |   3.6us |   7.6us |  14.5us |   400 | build, stamp 20x20 80x24 |
-| trail.draw       |   0.1us |   0.3us |  16.9us |  9995 | play, carry 200x200 80x24 |
-| trail.path       |   3.2us |  16.9us |  78.5us |  6231 | play, carry 200x200 80x24 |
-| turn.advance     |   0.6us |   7.9us |  32.0us |   800 | play, turn order 80x24 |
-| turn.status      |   0.7us |   1.4us |  23.9us | 11995 | play, scene of 500 80x24 |
-| undo.step        | 180.8us | 581.2us | 692.3us |  1200 | build, fill+undo 200 80x24 |
-| undo.trim        | 3089.1us | 4261.9us | 4261.9us |    97 | build, fill history 80x24 |
+| app.draw         |  81.0us | 133.0us | 167.8us |  3200 | build, 200x200 200x50  |
+| camera.party     |   0.1us |   0.2us |   0.3us | 1925+ | play, camera party, 4 watchers 80x24 |
+| card.draw        |   8.2us |  10.8us |  63.7us |  5994 | play, card box 80x24   |
+| character.place  |   0.6us |   0.8us |   1.0us |  262+ | play, 500 characters 80x24 |
+| clock.draw       |   1.2us |   1.3us |  24.8us | 15067+ | play, clocks 80x24     |
+| counter.step     |   0.2us |   2.3us |  16.6us |  3200 | play, counters 80x24   |
+| ctl              | 4862.4us | 5160.2us | 5593.2us |   400 | agent, dump 512x512 80x24 |
+| dmg.apply        |  13.1us |  27.9us |  39.8us |   400 | play, damage 80x24     |
+| editor.draw      |  76.2us | 127.3us | 160.2us |  3200 | build, 200x200 200x50  |
+| floor.pick       |   0.1us |   1.2us |   1.2us | 24000 | play, scene of 500 80x24 |
+| floor.switch     |   0.1us |   0.1us |   0.2us |    1+ | play, other floor, 4 watchers 80x24 |
+| fog.blank        |   0.4us |   0.9us |  13.9us | 2548+ | play, fog sight, 4 watchers 80x24 |
+| fog.paint        |   0.2us |   1.9us |  36.0us |  1600 | build, fog paint 80x24 |
+| fog.reveal       |   3.0us |   3.1us |  18.3us |  335+ | play, fog range, 4 watchers 80x24 |
+| fog.sight        |  14.8us | 165.8us | 216.5us |  3599 | play, fog reveal 12 80x24 |
+| fog.sight.build  |  16.3us | 114.2us | 161.1us |  3601 | play, fog warren 12 80x24 |
+| fog.sight.rim    |   4.4us |  14.5us |  29.6us |  3601 | play, fog warren 12 80x24 |
+| fog.sight.union  |   8.2us | 160.2us | 210.8us |  3599 | play, fog reveal 12 80x24 |
+| grid.draw        |  71.1us | 121.7us | 155.1us |  3200 | build, 200x200 200x50  |
+| grid.labels      |   5.0us |   7.0us |  28.0us |  3200 | build, mostly void 200x50 |
+| group.box        |   0.1us |   0.2us |   0.2us |  383+ | play, fog warren, party 80x24 |
+| group.move       |   0.3us |   2.3us |  40.1us | 1532+ | play, fog warren, party 80x24 |
+| handout.send     |  12.9us |  26.2us |  38.9us |  282+ | play, handout typed, 4 watch 80x24 |
+| input.key        |   0.2us | 4504.8us | 16516.5us |  5600 | play, map trip there+back 80x24 |
+| job.accept       |  12.4us |  30.0us |  33.2us |   400 | agent, room + 12 80x24 |
+| job.highlight    |   0.3us |   0.4us |  18.0us |  8800 | build, a job's tint 80x24 |
+| job.preview      |   0.6us |   0.8us |   3.2us |   400 | agent, proposal, accept 80x24 |
+| job.propose      |  37.1us |  71.0us |  74.8us |   400 | agent, room + 12 80x24 |
+| job.review       |  11.0us |  26.2us |  31.5us |   400 | agent, proposal, accept 80x24 |
+| link.marks       |   3.9us |   8.8us |  41.5us |  5600 | play, 64 links 80x24   |
+| link.trip.map    | 4274.8us | 7383.5us | 16516.0us |   800 | play, map trip there+back 80x24 |
+| log.write        |   3.0us |   6.8us |  11.8us |   253 | play, logging 80x24    |
+| map.copy         |  18.3us |  38.9us | 547.4us |   400 | agent, proposal, accept 80x24 |
+| mapdiff          |  13.7us |  30.7us |  42.6us |   400 | agent, proposal, accept 80x24 |
+| mapio.fsync      | 2018.4us | 2410.2us | 8317.5us |  1600 | play, map trip there+back 80x24 |
+| mapio.load       | 3206.2us | 3206.2us | 3206.2us |     1 | agent, dump 512x512 80x24 |
+| mapio.write      | 2111.1us | 2502.6us | 8410.5us |  1600 | play, map trip there+back 80x24 |
+| move.label       |   0.0us |   1.0us |  20.4us |  8790 | play, carry, 4 watch 80x24 |
+| names.sync       |   3.0us |   3.0us |   3.0us |     1 | play, pings, 4 watchers 80x24 |
+| net.accept       |   5.0us |   7.1us |   7.1us |     4 | play, carry, 4 watch 80x24 |
+| net.cmd          |   0.0us |   0.1us |   3.2us | 28036+ | play, fog pings, 4 watchers 80x24 |
+| net.frame        |  11.5us |  21.1us |  56.1us |  5595 | play, pings, 4 watchers 80x24 |
+| net.names        |   0.1us |   0.1us |   0.1us |     1 | play, pings, 4 watchers 80x24 |
+| net.players_frame |  33.7us |  61.0us | 111.0us | 8035+ | play, fog range, 4 watchers 80x24 |
+| net.whisper      |   4.9us |   8.3us |  17.8us |  244+ | play, whisper, 4 named 80x24 |
+| note.marks       |   0.0us |   0.1us |   0.1us |  7997 | build, noted squares 80x24 |
+| panel.draw       |   6.3us |   8.4us |  29.5us |  3995 | play, turn order 80x24 |
+| picker           |  17.2us | 303.0us | 382.5us | 2099+ | play, 500 characters 80x24 |
+| picker.draw      |   9.0us |  12.1us |  29.8us | 2623+ | play, 500 characters 80x24 |
+| picker.open      | 4351.7us | 4878.1us | 5329.9us |  263+ | play, 500 characters 80x24 |
+| ping.draw        |   0.5us |   0.7us |  19.4us | 9438+ | play, fog pings, 4 watchers 80x24 |
+| play.draw        |  60.0us |  92.1us | 148.0us |  5595 | play, 24 tokens 200x50 |
+| play.link        |   0.3us |   0.6us |   7.4us |   800 | play, link there+back 80x24 |
+| prof.overlay     |   8.3us |  95.4us | 134.8us |  1000 | profiler overlay 80x24 |
+| range.draw       |  17.4us |  29.4us |  65.0us |  3995 | play, range radius 80x24 |
+| range.status     |   5.0us |   8.4us |  29.4us | 6695+ | play, fog range, 4 watchers 80x24 |
+| ruler.draw       |   0.5us |   0.7us |  21.0us |  4400 | ruler, three legs 80x24 |
+| scene.restore    |  25.6us |  45.5us | 125.6us |   400 | play, scene of 500 80x24 |
+| scene.save       |   9.2us |  27.4us |  62.0us |   400 | play, scene of 500 80x24 |
+| stamp.place      |   2.5us |   5.8us |  16.0us |   400 | build, stamp 20x20 80x24 |
+| stamp.show       |   3.5us |   5.5us |  21.0us |   400 | build, stamp 20x20 80x24 |
+| trail.draw       |   0.1us |   0.2us |   2.5us |  9995 | play, carry 200x200 80x24 |
+| trail.path       |   3.1us |  12.9us |  78.9us |  6231 | play, carry 200x200 80x24 |
+| turn.advance     |   0.6us |   4.5us |  26.9us |   800 | play, turn order 80x24 |
+| turn.status      |   0.7us |   0.8us |  18.9us | 11995 | play, scene of 500 80x24 |
+| undo.step        | 172.7us | 227.2us | 515.4us |  1200 | build, fill+undo 200 80x24 |
+| undo.trim        | 2398.7us | 2830.0us | 2830.0us |    97 | build, fill history 80x24 |
 
 ### Reading it
 
@@ -780,7 +788,9 @@ the whole 512×512 map writes about a megabyte of text and takes about 8ms; it i
 one-off read an agent asks for, not a keystroke, and `dump B2:K12` makes it the size of
 the region. Nothing of the channel is on the frame path: off it costs nothing, on and
 idle one more descriptor in `poll`, and the GM's frame after a request is an ordinary
-frame (`agent, room + 12`'s frame row is the redraw of the changed squares).
+frame (`agent, room + 12`'s frame row is the redraw of the changed squares). Since step 4 of
+docs/CONFLICTS.md these rows run under `:agent accept auto`, so each request is a proposal
+made and accepted at once: *Proposals from the channel*, below, has what that costs.
 
 ## Proposals
 
@@ -894,6 +904,32 @@ map's marks.
   that changed. The scenario, which puts a tint up and takes it down every loop, averages
   301 bytes a frame.
 - **The worst call, 25 µs,** is one frame of 8,800. It is the first draw after `:ask`, cold.
+
+### Proposals from the channel
+
+A request's edits run on a copy of the map and become a proposal (docs/CONFLICTS.md, step
+4). The rows `agent, proposal, review` and `agent, proposal, accept` run the plan of rooms
+(five rooms, five corridors, four creatures: about 650 cells) on the largest map, 512×512,
+then review and scrap it, or accept it and undo. Median of three, the desktop, 2026-10-09:
+
+| piece | measured p50 | speed of light | gap, and why |
+|---|---|---|---|
+| the copy (`map.copy`, 512×512) | 18.3 µs | about 22 µs (786 KB at 28 µs/MB) | none: at the floor |
+| the diff (`mapdiff`, ~650 cells) | 13.7 µs | about 1.5 µs (two reads a cell) | about 17-20 ns a cell, the rate *Proposals* above measured (block sort, the dedupe hash); accepted there |
+| the summary and the `#N` corner | about 4.5 µs inside `job.propose` | well under 1 µs | each walks the set's cells once: two walks where one would do. A finding, not fixed: a proposal comes seconds apart |
+| a review frame (`job.preview`) | 0.6 µs | the cells in the window, swapped twice | none |
+| the accept (`job.accept`) | 12.4 µs | applying the cells through the log | none: one undo op a cell |
+
+**The whole request.** The plan of rooms costs about 25 µs a request more as a proposal
+accepted at once (`agent, plan of rooms`: 42 µs a frame before, 67 µs now), and the 40×40
+room with a dozen creatures about 41 µs more (53 to 95 µs; 1,760 cells, so its diff and
+accept are the larger). That is the price of one road in (decision 6): every change is made
+on the copy, compared, then applied, where it was once applied straight. Running a request
+straight onto the map when it would land at once anyway would save it, at the cost of a
+second road that no review ever sees; at under 0.1 ms a request, it stays.
+
+**Nothing on the frame path.** With a proposal waiting, a frame costs its tint (*The jobs'
+tints*); in review, the swap above. The rows' frames are 15-16 µs at p50.
 
 ## The phone page
 
