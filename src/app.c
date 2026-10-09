@@ -33,6 +33,7 @@ void app_init(App *a, Term *t, Renderer *r)
     a->last_acting   = -1;
     a->review        = -1;
     undo_init(&a->undo);
+    undo_init(&a->ctl_sundo);
     slog_init(&a->slog);
     net_init(&a->net);
     ctl_init(&a->ctl);
@@ -49,6 +50,10 @@ void app_free(App *a)
     free(a->entries);
     a->entries = NULL;
     undo_free(&a->undo);
+    app_jobs_clear(a);
+    map_free(a->ctl_scratch);
+    a->ctl_scratch = NULL;
+    undo_free(&a->ctl_sundo);
     slog_close(&a->slog);
     net_stop(&a->net);
     ctl_stop(&a->ctl);

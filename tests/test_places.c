@@ -403,6 +403,7 @@ void test_link_keys(void)
     rnd_init(&r);
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
+    a.ctl_auto = 1;                       /* edits land at once (decision 6) */
     CHECK_EQ(app_open_map(&a, path), 0);
     Key f1 = { KEY_F1, 0, 0 }, f2 = { KEY_F2, 0, 0 };
     app_key(&a, f1);
@@ -826,6 +827,7 @@ void test_floor_view(void)
     rnd_init(&r);
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
+    a.ctl_auto = 1;                       /* edits land at once (decision 6) */
     CHECK_EQ(app_open_map(&a, path), 0);
     Key f1 = { KEY_F1, 0, 0 }, f2 = { KEY_F2, 0, 0 };
     app_key(&a, f1);
@@ -1276,6 +1278,7 @@ void test_map_links(void)
     rnd_init(&r);
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
+    a.ctl_auto = 1;                       /* edits land at once (decision 6) */
     snprintf(path, sizeof path, "%s/town.vtt", sb.dir);
     CHECK_EQ(app_open_map(&a, path), 0);
     Map *t = a.map;

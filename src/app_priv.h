@@ -161,6 +161,11 @@ void app_jobs_land_waiting(App *a);
 void app_review_key(App *a, Key k);
 void app_review_resume(App *a);
 void app_review_leave(App *a);
+/* For the channel's job requests (app_ctl_job.c). */
+int  app_job_find(const App *a, int num);
+void app_job_thread_add(Job *j, char who, const char *text);
+const char *app_job_state_name(int state);
+const char *app_job_from_name(int from);
 
 /* The v box a : command was typed over (build mode), into x0..y1, and back to
  * normal mode; 0 when there was none. :area, :scene save and :ask read it. */
@@ -204,8 +209,21 @@ void app_players_pin(App *a, const char *rest);
 /* :player camera follow|party|hold (docs/CAMERA.md). */
 void app_players_camera_command(App *a, const char *rest);
 
-/* app_ctl.c: :agent on, :agent off, :agent to ask. */
+/* app_ctl.c: :agent on, :agent off, :agent accept auto|review, :agent to ask. */
 void app_agent_command(App *a, const char *rest);
+
+/* The channel's words (app_ctl.c splits a line into them), and what its
+ * other files share: a region by name (an area's name, or B2:K12), refused
+ * off the map; the requests about jobs (app_ctl_job.c): 0 done, -1 with why
+ * in err, 1 not one of them. */
+#define CTL_WORDS    12
+#define CTL_WORD_MAX 256
+int  app_ctl_region(const Map *m, const char *w, int *x0, int *y0, int *x1, int *y1,
+                    char *err, size_t errsz);
+int  app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, size_t errsz);
+/* The map a job's proposal would make, accepted now: the scratch map, valid
+ * until the next request. NULL when the job has none. */
+Map *app_job_result(App *a, int slot);
 
 /* app_play.c */
 void app_play_key(App *a, Key k);

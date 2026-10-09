@@ -16,12 +16,12 @@ fog.
 | way | when | how |
 |---|---|---|
 | **a plan** | a new map from a description, or a batch of changes to a map file | write requests to a file, `vtt map.vtt --apply plan.txt [--new 40x30]` |
-| **live** | the GM has the map open and has typed `:agent on` | `vtt --ctl` with requests on stdin; the GM sees each change land |
+| **live** | the GM has the map open and has typed `:agent on` | `vtt --ctl` with requests on stdin; each change is a proposal the GM reviews |
 | **by hand** | only when neither works: the file format itself | [Writing the file by hand](#writing-the-file-by-hand) |
 
 A plan and a live session speak the same language, the one below, and follow the same rules:
 **a request is all or nothing** (if any line fails, nothing changed, and the answer names
-the line and why), and **one request is one undo step** for the GM.
+the line and why), and **one request is one undo step** for the GM, once accepted.
 
 **Which way.** If the GM has the map open in `vtt`, work live, even for a large change: run
 `vtt --ctl status` and, when it answers with that map, send your plan to `vtt --ctl`
@@ -197,46 +197,68 @@ can take back, so each goes in a request of its own.
 ## Working live with the GM
 
 The GM has the map open in `vtt` and has typed `:agent on`. Send requests with `vtt --ctl`
-(requests on stdin, or one as an argument); the GM watches them land, the status line says
-what you did, and `u` takes back each request whole.
+(requests on stdin, or one as an argument). **Your edits are proposals:** they run on a copy
+of the map and wait, tinted on the GM's screen, until the GM reviews them (`:review`) and
+accepts them (whole, or the part in a box), scraps them, or sends them back with a line of
+feedback. Nothing you send changes the GM's map until then, unless the GM has typed
+`:agent accept auto`; then each proposal lands at once, one `u` for the GM.
 
-1. `vtt --ctl status` first: which map, and `edits taken` or `not now:` and why (the GM is
-   in play mode, or in the middle of something).
-2. Read before writing: `vtt --ctl 'dump'` (or a region), `vtt --ctl 'describe'`.
-3. When the GM says "here", "this room" or "that one", ask `vtt --ctl marked` and work from
-   the squares it names. `marked` says which area the cursor is in.
-4. Send each change the GM asked for as **one request**, so it is one `u`:
+1. `vtt --ctl status` first: which map, and how edits are taken (`edits proposed, for the GM
+   to review`, or `edits land at once`).
+2. `vtt --ctl jobs` lists what the GM has asked for (`:ask` over a box), each with its
+   number, its box, and its thread: the GM's words, yours, and what came of each proposal.
+   `jobs json` is the same as JSON.
+3. **Answering a job:**
 
    ```
+   vtt --ctl 'job 3 take'                       # yours: the GM sees "#3 taken"
+   vtt --ctl 'job 3 area B2:K12'                # where you will work, tinted for the GM
+   vtt --ctl 'job 3 say "two ghouls, a flooded floor"'   # a line on the GM's status line
    vtt --ctl <<'EOF'
-   room Vault 6x4 east of Crypt gap 2
-   corridor Crypt Vault
-   token add enemy Vault "Wight"
+   job 3 propose "the crypt, flooded"
+   room Crypt B2:K12
+   tile C3:J10 water
+   token add enemy D4 "Ghoul"
    EOF
    ```
-5. Read back what you did (`dump` the region, `check`) and tell the GM in squares and names.
-6. Put down the GM's stamps (`vtt --ctl stamps`) for anything they have one for, rather than
+   The answer is `proposal #3: ` and what it changes, then `waiting for the GM's review`.
+   Without a job (an idea of your own), start the request with `propose "what it is"`, or
+   send the edits alone: either makes a new job of yours.
+4. **Read your proposal back before the GM looks:** `job 3 dump [REGION]`, `job 3 describe`
+   and `job 3 check` read the map as accepting it would make it. Plain `dump` reads the GM's
+   map as it is.
+5. **The verdict.** Ask `jobs` again: the job is `ready` (waiting), `accepted`, `scrapped`, or
+   back to `working` with the GM's feedback as the last `gm:` line of its thread. Feedback
+   means propose again with `job N propose`; the new proposal replaces the old. A part
+   accepted by box leaves the rest `ready`. `jobs` also counts a ready proposal's
+   **conflicts**: squares the GM changed since you looked, which accepting would overwrite.
+6. `job N drop` gives a job back: the GM's waits as asked; one of your own goes away.
+7. When the GM says "here", "this room" or "that one", ask `vtt --ctl marked` and work from
+   the squares it names. `marked` says which area the cursor is in.
+8. Put down the GM's stamps (`vtt --ctl stamps`) for anything they have one for, rather than
    drawing it square by square, and their characters (`vtt --ctl characters`) rather than
    bare creatures.
-7. Suggestions the GM has not agreed to go on the map as notes (`note F7 "secret door?"`);
-   the players never see them.
-8. If the GM does not like a change and nothing has happened since, `vtt --ctl undo` (on its
-   own) takes it back; otherwise ask them to press `u`. Never repair a change by undoing
-   the GM's own work.
+9. Suggestions go on the map as notes (`note F7 "secret door?"`); the players never see them.
+10. If the GM does not like a change you made that was accepted, and nothing has happened
+    since, `vtt --ctl undo` (on its own) takes it back; otherwise ask them to press `u`.
+    Never repair a change by undoing the GM's own work.
+
+Each request is still all or nothing, and each accepted proposal is one undo step. A request
+may read before its edits (`jobs`, `job N ...` lines come first) and after them: a read
+after an edit sees your proposal, not the GM's map.
 
 Exit status: 0 done; 1 an error or `busy:` (the reason on stderr); 2 no vtt is listening --
-ask the GM to type `:agent on`. `busy:` means the GM is part way through something (typing a
-command, drawing a wall): wait, or ask, and send the same request again.
+ask the GM to type `:agent on`. Proposals are never refused for the GM being busy: under
+`accept auto` one waits and lands at the GM's next key. Only `undo`, `scene save` and `scene
+NAME remove` still answer `busy:` when the GM is part way through something.
 
-**In play mode** (`status` says `edits not now: the GM is in play mode`), every edit waits
-until the GM goes back to build mode. Reads still work, so `dump`, `describe` and `marked`
-can follow the fight. Do not retry in a loop: tell the GM what you have ready and ask them
-to switch to build mode (`:build`) when they want it. Moving creatures, fog and the turn
-order during play stay the GM's.
+**In play mode,** proposals still come in and wait; the GM reviews in build mode. Reads still
+work, so `dump`, `describe` and `marked` can follow the fight. Do not send the same proposal
+in a loop: one is enough, and `jobs` tells you what became of it. Moving creatures, fog and
+the turn order during play stay the GM's.
 
-The
-channel never saves; saving is the GM's (`:w`). It never takes away the creature whose turn
-it is in a fight: the fight is the GM's.
+The channel never saves; saving is the GM's (`:w`). It never takes away the creature whose
+turn it is in a fight: the fight is the GM's.
 
 ## Checking a map
 

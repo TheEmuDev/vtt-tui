@@ -533,6 +533,7 @@ void test_card_templates(void)
         rnd_init(&r);
         rnd_resize(&r, 80, 24);
         app_init(&a, NULL, &r);
+        a.ctl_auto = 1;                       /* edits land at once (decision 6) */
         char path[640];
         snprintf(path, sizeof path, "%s/d.vtt", sb.dir);
         CHECK_EQ(mapio_save(d, path, err, sizeof err), 0);

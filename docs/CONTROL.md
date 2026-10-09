@@ -15,7 +15,7 @@ the agent's; this page is why it is the way it is.
 | transport | a Unix socket and a one-shot client, `vtt --ctl`. Never the network: `:serve`'s port is on the Wi-Fi. An MCP server could wrap `vtt --ctl` later without touching vtt. |
 | on | off until `:agent on` (or `--agent` at start); `:agent off` closes it |
 | where edits land | build mode only, so nothing an agent does reaches the players' phones in play. Reads work anywhere a map is open. |
-| freedom | free editing, undo as the safety net; no drafts to approve |
+| freedom | ~~free editing, undo as the safety net; no drafts to approve~~ **Reversed 2026-10-07** (docs/CONFLICTS.md, built 2026-10-09): an agent's edits are a **proposal** the GM reviews and accepts, whole or by box; `:agent accept auto` lands each at once |
 | a request | one undo batch, all or nothing: a line that fails rolls the whole request back and says which line and why |
 | fog | `fog paint` only; making and setting patches stays `:fog`'s |
 | not here | saving, opening, closing maps (the files stay the GM's); a room-level description language; MCP; undoing part of an agent's batch (IDEAS.md) |
@@ -63,7 +63,8 @@ as `--describe` names them. Lines run in order, so a read sees the edits before 
 | `floors` | the floors and which the GM is looking at (added with floors) |
 | `marked [json]` | what the GM is pointing at: the cursor, a `v` box (rect or circle), wall mode's corner and anchor, the selected creatures and a selection box, the ruler's ends, the GM's last `g p` and each phone's last ping with their age, and the floor on the GM's screen (`floor`). A ping stays on record after its ring fades. |
 
-**Edits** (build mode, nothing half-done on the GM's side):
+**Edits** (each request's edits are one proposal, run on a copy of the map; it lands when the
+GM accepts it, or at once under `:agent accept auto`):
 
 | line | does |
 |---|---|
@@ -83,17 +84,31 @@ as `--describe` names them. Lines run in order, so a read sees the edits before 
 | `link A B [KIND] [size N] [oneway] [secret]`, `link N ... \| remove` | a link between two places, or a change to link N (added with links); docs/AGENTS.md has the details |
 | `floor NAME LEVEL`, `floor NAME off` | mark a named area a floor, or unmark it (added with floors) |
 | `scene NAME`; `scene save NAME [REGION]`, `scene NAME remove` | put a scene back (an edit, one step with the request); save or remove one, each alone in its request since neither is in the undo log (added with scenes) |
-| `undo` | takes back the agent's last request, only while nothing came after it; alone in its request, since it cannot roll back with other lines |
+| `undo` | takes back the agent's last accepted change, only while nothing came after it; alone in its request, since it cannot roll back with other lines |
 
-Edits are refused, with `busy:` and the reason, when a prompt or dialog is open, the `:`
-line is being typed, a key prefix is waiting, a wall stroke is open (wall mode's pen keeps
-an undo batch open across keys, and a request must never land inside the GM's batch), or
-the screen is not build mode. The check is made at a request's first edit; after it the
-open batch is the request's own.
+**Jobs** (docs/CONFLICTS.md; `job` and `jobs` lines come before a request's edits):
 
-**The GM sees it happen.** The status line says what the request did (`agent: room B2:K12,
-3 changes - u takes it back`), the session log records it, and a ring marks the changed
-area for a moment. The GM's cursor and camera never move.
+| line | does |
+|---|---|
+| `jobs [json]` | every job: number, state (asked, working, ready, accepted, scrapped), who it is from, the GM's text and box, the agent's area, the thread, and a ready proposal's summary and conflicts |
+| `job N take` | the job is the agent's (working); the GM sees `#N taken` |
+| `job N area REGION` | where the agent will work, tinted on the GM's screen |
+| `job N say "..."` | a line for the GM's status line and the job's thread |
+| `propose ["..."]`, `job N propose ["..."]` | first in a request: its edits are an idea of the agent's own (a new job), or job N's answer. Edits with neither are an idea of the agent's own |
+| `job N drop` | give it back: the GM's job waits as asked, the agent's own goes |
+| `job N dump [REGION]`, `job N describe [json]`, `job N check [json]` | the map as accepting job N's proposal would make it now |
+
+A proposal is never refused for the GM being busy. One that lands at once waits, as ready,
+while a prompt or dialog is open, the `:` line is being typed, a key prefix is waiting, a
+wall stroke is open (wall mode's pen keeps an undo batch open across keys, and a change must
+never land inside the GM's batch), or the screen is not build mode; it lands at the GM's next
+key after that. `undo`, `scene save` and `scene NAME remove`, which act on the live map, are
+still refused with `busy:` and the reason.
+
+**The GM sees it happen.** A proposal tints its squares and says `#N ready: ...` on the
+status line. One that lands at once says `#N accepted: ... - u takes it back`, the session
+log records it, and a ring marks the changed area for a moment. The GM's cursor and camera
+never move.
 
 ## As built: what the plan did not say
 
@@ -129,6 +144,24 @@ area for a moment. The GM's cursor and camera never move.
 - **Measured** (docs/PERFORMANCE.md): a 40x40 room with a dozen creatures is tens of
   microseconds (`ctl` zone); a `dump` of a 512x512 map is about 10 ms, once, when asked.
 - `make fuzz-ctl` runs requests under libFuzzer against a fixture; each input is undone.
+- **Proposals (2026-10-09, docs/CONFLICTS.md step 4).**
+  - A request's first edit copies the live map into a kept scratch map
+    (`map_copy_into`) and swaps it, with a scratch log, in for the App's own; the request
+    then runs as before, and the change set is the difference where the scratch log
+    wrote. The live map, its log (the GM's redo tail too), `modified` and `Map.gen` never
+    move for a proposal.
+  - Lines after an edit read the scratch map: a request that ends in `dump` reads back its
+    own proposal.
+  - The App's side of a creature removed or a scene put back (the range overlay, the
+    selection, the turn notice) happens when the change lands (`land` in app_job.c), not
+    when the plan runs.
+  - `--apply`, with no GM, edits the map itself as before (`App.ctl_direct`); the
+    `propose` line is refused there. `--bench-ctl` and the fuzzer run under accept auto.
+  - Sixteen jobs at most; a finished one (accepted or scrapped) makes room for a new one.
+    With sixteen waiting, a proposal is refused.
+  - `job N dump`/`describe`/`check` read the scratch map with the change set applied, not
+    the review's swap: the swap leaves areas and rolls out, since drawing does not need
+    them.
 
 ## Build order
 

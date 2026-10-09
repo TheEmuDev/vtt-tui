@@ -1,6 +1,7 @@
 /* Tests: the control channel, the room language, corridors, --apply. */
 
 #include "harness.h"
+#include "app_priv.h"
 
 void test_ctl(void)
 {
@@ -9,6 +10,7 @@ void test_ctl(void)
     rnd_init(&r);
     rnd_resize(&r, 80, 24);
     app_init(&a, NULL, &r);
+    a.ctl_auto = 1;                       /* edits land at once (decision 6) */
 
     CASE("with no map open, status answers and everything else says why not");
     char *t = ctl_ask(&a, "status\n");
@@ -23,14 +25,19 @@ void test_ctl(void)
     CHECK(a.map != NULL);
     if (!a.map) { app_free(&a); rnd_free(&r); return; }
 
-    CASE("status: the map, its file, the screen, undo, and edits taken in build mode");
+    CASE("status: the map, its file, the screen, undo, and how edits are taken");
     t = ctl_ask(&a, "status");
     CHECK(strncmp(t, "ok\nmap Two Rooms  16x9\n", 23) == 0);
     CHECK(strstr(t, "file tests/fixtures/two-rooms.vtt\n") != NULL);
     CHECK(strstr(t, "screen build, normal mode\n") != NULL);
     CHECK(strstr(t, "undo 0 back, 0 forward\n") != NULL);
-    CHECK(strstr(t, "edits taken\n") != NULL);
+    CHECK(strstr(t, "edits land at once (:agent accept auto)\n") != NULL);
     free(t);
+    a.ctl_auto = 0;
+    t = ctl_ask(&a, "status");
+    CHECK(strstr(t, "edits proposed, for the GM to review\n") != NULL);
+    free(t);
+    a.ctl_auto = 1;
 
     CASE("dump, describe and check are the map tools' own reports");
     {
@@ -132,7 +139,7 @@ void test_ctl(void)
         free(t);
     }
 
-    CASE("edits are refused, with the reason, whenever the GM is part way through something");
+    CASE("edits wait, with the reason, whenever the GM is part way through something, and land at the next key");
     CHECK(app_ctl_busy(&a) == NULL);
     press(&a, ":");
     CHECK(app_ctl_busy(&a) != NULL && strstr(app_ctl_busy(&a), ": command"));
@@ -146,36 +153,44 @@ void test_ctl(void)
     CHECK_EQ(a.modal, MODAL_PROMPT);
     CHECK(app_ctl_busy(&a) != NULL && strstr(app_ctl_busy(&a), "prompt"));
     t = ctl_ask(&a, "tile A1 water");
-    CHECK(t && !strncmp(t, "busy: the GM is answering a prompt", 34));
+    CHECK(t && !strncmp(t, "ok\nproposal #", 13) && strstr(t, "\nlands when the GM is back: the GM is answering a prompt\n"));
     free(t);
+    CHECK(map_tile(a.map, 0, 0) != TILE_WATER);              /* not yet */
     t = ctl_ask(&a, "status");                               /* a read is answered */
     CHECK(t && !strncmp(t, "ok\n", 3));
+    CHECK(t && strstr(t, "edits proposed, landing when the GM is back: the GM is answering a prompt\n"));
     free(t);
     press(&a, "\x1b");
     CHECK(app_ctl_busy(&a) == NULL);
+    CHECK_EQ(map_tile(a.map, 0, 0), TILE_WATER);             /* the GM is back */
     a.modal = MODAL_PICKER;                                  /* a list to choose from */
-    t = ctl_ask(&a, "tile A1 water");
-    CHECK(t && !strncmp(t, "busy: the GM is choosing from a list", 36));
+    t = ctl_ask(&a, "tile A1 hazard");
+    CHECK(t && strstr(t, "\nlands when the GM is back: the GM is choosing from a list\n"));
     free(t);
-    a.modal = MODAL_NONE;
+    CHECK_EQ(map_tile(a.map, 0, 0), TILE_WATER);
     a.modal = MODAL_MESSAGE;                                 /* a message on the screen */
-    t = ctl_ask(&a, "tile A1 water");
-    CHECK(t && !strncmp(t, "busy: a question is open", 24));
+    t = ctl_ask(&a, "tile A2 hazard");
+    CHECK(t && strstr(t, "\nlands when the GM is back: a question is open on the GM's screen\n"));
     free(t);
     a.modal = MODAL_NONE;
+    press(&a, "\x1b");
+    CHECK_EQ(map_tile(a.map, 0, 0), TILE_HAZARD);            /* both, in turn */
+    CHECK_EQ(map_tile(a.map, 0, 1), TILE_HAZARD);
     press(&a, "w l");                                        /* the pen down, a wall laid */
     t = ctl_ask(&a, "tile A1 water");
-    CHECK(t && !strncmp(t, "busy: the GM is laying wall", 27));
+    CHECK(t && strstr(t, "\nlands when the GM is back: the GM is laying wall\n"));
     free(t);
+    CHECK_EQ(map_tile(a.map, 0, 0), TILE_HAZARD);            /* never into a stroke */
     press(&a, " \x1b");
     CHECK(app_ctl_busy(&a) == NULL);
+    CHECK_EQ(map_tile(a.map, 0, 0), TILE_WATER);
     Key f2 = { KEY_F2, 0, 0 };
     app_key(&a, f2);
     CHECK_EQ(a.screen, SCREEN_PLAY);
     CHECK(app_ctl_busy(&a) != NULL && strstr(app_ctl_busy(&a), "play mode"));
     t = ctl_ask(&a, "status");
     CHECK(strstr(t, "screen play\n") != NULL);
-    CHECK(strstr(t, "edits not now: the GM is in play mode") != NULL);
+    CHECK(strstr(t, "edits proposed, landing when the GM is back: the GM is in play mode") != NULL);
     free(t);
 
     CASE(":agent with the channel off says so; on and off from the command line");
@@ -244,6 +259,7 @@ void test_ctl_marked(void)
     rnd_init(&r);
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
+    a.ctl_auto = 1;                       /* edits land at once (decision 6) */
     app_open_map(&a, "tests/fixtures/two-rooms.vtt");
     CHECK(a.map != NULL);
     if (!a.map) { app_free(&a); rnd_free(&r); return; }
@@ -394,6 +410,7 @@ void test_ctl_edits(void)
     rnd_init(&r);
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
+    a.ctl_auto = 1;                       /* edits land at once (decision 6) */
     CHECK(ctl_blank_map(&a, sb.dir, 12, 8));
     if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
     Map *m = a.map;
@@ -402,7 +419,8 @@ void test_ctl_edits(void)
     CASE("room: floor, walls round it, one undo step; the GM is told and shown where");
     int depth = a.undo.depth;
     t = ctl_ask(&a, "room B2:D4\n");
-    CHECK_EQ(strcmp(t, "ok\nchanged B2:D4: 1 line, one undo step\n"), 0);
+    CHECK(!strncmp(t, "ok\nproposal #1: ", 16));
+    CHECK(strstr(t, "\nchanged B2:D4: 1 line, one undo step\n") != NULL);
     free(t);
     CHECK_EQ(a.undo.depth, depth + 1);
     CHECK_EQ(map_vedge(m, 1, 1), EDGE_WALL);
@@ -410,7 +428,7 @@ void test_ctl_edits(void)
     CHECK_EQ(map_vedge(m, 2, 2), EDGE_NONE);         /* inside is left alone */
     CHECK_EQ(map_hedge(m, 1, 1), EDGE_WALL);
     CHECK_EQ(map_hedge(m, 3, 4), EDGE_WALL);
-    CHECK_EQ(strcmp(a.status, "agent: room B2:D4 - u takes it back"), 0);
+    CHECK(!strncmp(a.status, "#1 accepted: ", 13) && strstr(a.status, " - u takes it back"));
     CHECK_EQ(a.status_gm, 1);
     CHECK(a.agent_ring.until_ms != 0);
     CHECK(a.agent_ring.x0 == 1 && a.agent_ring.y0 == 1 && a.agent_ring.x1 == 3 && a.agent_ring.y1 == 3);
@@ -429,7 +447,7 @@ void test_ctl_edits(void)
                     "token add enemy J5 \"Ghoul\"\n"
                     "token add player G5 size 2 \"Aria\"\n"
                     "note K2 \"secret door here?\"\n");
-    CHECK(strncmp(t, "ok\nchanged E2:K7: 7 lines, one undo step\n", 42) == 0);
+    CHECK(strstr(t, "\nchanged E2:K7: 7 lines, one undo step\n") != NULL);
     free(t);
     CHECK_EQ(a.undo.depth, depth + 1);
     CHECK_EQ(map_tile(m, 7, 3), TILE_WATER);
@@ -437,7 +455,7 @@ void test_ctl_edits(void)
     CHECK_EQ(map_hedge(m, 6, 6), EDGE_WINDOW);
     CHECK_EQ(m->tokens.n, 2);
     CHECK(map_note_at(m, 10, 1) && !strcmp(map_note_at(m, 10, 1), "secret door here?"));
-    CHECK(strstr(a.status, "agent: room F2:K6 and 6 more - u takes them back") != NULL);
+    CHECK(strstr(a.status, "accepted: ") && strstr(a.status, "2 creatures") && strstr(a.status, "u takes it back"));
     press(&a, "u");
     after = ctl_snapshot(m);
     CHECK_EQ(strcmp(before, after), 0);
@@ -591,8 +609,8 @@ void test_ctl_edits(void)
 
     CASE("a read after an edit in the same request sees it, and does not take the request's batch for the GM's");
     t = ctl_ask(&a, "tile E7 water\nstatus\ndump E7\n");
-    CHECK(strstr(t, "edits taken\n") != NULL);
-    CHECK(strstr(t, "and this request's changes one more") != NULL);
+    CHECK(strstr(t, "edits land at once") != NULL);
+    CHECK(strstr(t, "and this request's changes proposed") != NULL);
     CHECK(strstr(t, "7  ~") != NULL);
     free(t);
 
@@ -680,17 +698,23 @@ void test_ctl_edits(void)
     press(&a, "u");
     CHECK_EQ(a.undo.depth, d0);
 
-    CASE("busy: edits wait while the GM is part way through something; reads do not");
+    CASE("under review, edits are proposals: the map, its log (the redo tail too), modified and Map.gen stay");
+    t = ctl_ask(&a, "tile H8 water\n");                  /* landed, then undone: a redo tail */
+    free(t);
+    press(&a, "u");
+    a.ctl_auto = 0;
     before = ctl_snapshot(m);
-    press(&a, ":");
+    int      nmarks0 = a.undo.nmarks, udepth = a.undo.depth, modified = m->modified;
+    unsigned stamp = a.undo.stamp, gen = m->gen;
+    press(&a, ":");                                  /* typing a : command */
     t = ctl_ask(&a, "status\ntile B2 hazard\n");
-    CHECK_EQ(strcmp(t, "busy: the GM is typing a : command\n"), 0);
+    CHECK(t && !strncmp(t, "ok\n", 3) && strstr(t, "\nwaiting for the GM's review - :review "));
     free(t);
     press(&a, "\x1b");
     Key f2 = { KEY_F2, 0, 0 };
     app_key(&a, f2);
-    t = ctl_ask(&a, "tile B2 hazard\n");
-    CHECK_EQ(strcmp(t, "busy: the GM is in play mode - edits are build mode's\n"), 0);
+    t = ctl_ask(&a, "tile B3 hazard\n");             /* play mode */
+    CHECK(t && strstr(t, "\nwaiting for the GM's review"));
     free(t);
     t = ctl_ask(&a, "dump B2\n");
     CHECK(strncmp(t, "ok\n", 3) == 0);
@@ -701,16 +725,29 @@ void test_ctl_edits(void)
     press(&a, "w");                                  /* wall mode ... */
     a.ed.pen = 1;
     undo_stroke(&a.undo);                            /* ... with a stroke open */
-    t = ctl_ask(&a, "tile B2 hazard\n");
-    CHECK_EQ(strcmp(t, "busy: the GM is laying wall\n"), 0);
+    t = ctl_ask(&a, "tile B4 hazard\ntoken add enemy C3 \"Imp\"\n");
+    CHECK(t && strstr(t, "\nwaiting for the GM's review"));
     free(t);
     undo_stroke_end(&a.undo);
     a.ed.pen = 0;
     press(&a, "\x1b");
     after = ctl_snapshot(m);
     CHECK_EQ(strcmp(before, after), 0);
+    CHECK_EQ(a.undo.nmarks, nmarks0);
+    CHECK_EQ(a.undo.depth, udepth);
+    CHECK_EQ(a.undo.stamp, stamp);
+    CHECK_EQ(m->gen, gen);
+    CHECK_EQ(m->modified, modified);
+    CHECK_EQ(m->tokens.n, 0);
+    int ready = 0;
+    for (int i = 0; i < JOB_MAX; i++) ready += a.jobs[i].used && a.jobs[i].state == JOB_READY;
+    CHECK_EQ(ready, 3);
+    press(&a, "\x12");                              /* ctrl-r: the tail is still there */
+    CHECK_EQ(map_tile(m, 7, 7), TILE_WATER);
     free(after);
     free(before);
+    app_jobs_clear(&a);
+    a.ctl_auto = 1;
 
     app_free(&a);
     rnd_free(&r);
@@ -727,6 +764,7 @@ void test_ctl_cap(void)
     rnd_init(&r);
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
+    a.ctl_auto = 1;                       /* edits land at once (decision 6) */
     CHECK(ctl_blank_map(&a, sb.dir, MAP_MAX_DIM, MAP_MAX_DIM));
 
     CASE("a request may change twice the largest map's squares and no more");
@@ -758,6 +796,7 @@ void test_room_language(void)
     rnd_init(&r);
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
+    a.ctl_auto = 1;                       /* edits land at once (decision 6) */
     char path[700];
     snprintf(path, sizeof path, "%s/void.vtt", sb.dir);
     {
@@ -921,6 +960,7 @@ void test_corridors(void)
     rnd_init(&r);
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
+    a.ctl_auto = 1;                       /* edits land at once (decision 6) */
     char path[700];
     snprintf(path, sizeof path, "%s/void.vtt", sb.dir);
     {
@@ -1029,6 +1069,7 @@ void test_corridor_edges(void)
     rnd_init(&r);
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
+    a.ctl_auto = 1;                       /* edits land at once (decision 6) */
     char path[700];
     snprintf(path, sizeof path, "%s/void.vtt", sb.dir);
     {
@@ -1071,7 +1112,7 @@ void test_corridor_edges(void)
     CHECK_EQ(strcmp(snap, snap2), 0);
     free(snap); free(snap2);
     t = ctl_ask(&a, "corridor Na Nb\n");
-    CHECK(strstr(t, "ok\nchanged ") != NULL);
+    CHECK(strstr(t, "\nchanged ") != NULL);
     free(t);
 
     CASE("an area holding both rooms whole is no obstacle, and the rooms keep their own names");
@@ -1464,6 +1505,7 @@ void test_ctl_characters(void)
     rnd_init(&r);
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
+    a.ctl_auto = 1;                       /* edits land at once (decision 6) */
     CHECK(ctl_blank_map(&a, sb.dir, 12, 8));
     if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
     Map *m = a.map;
@@ -1561,6 +1603,7 @@ void test_ctl_scenes(void)
     rnd_init(&r);
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
+    a.ctl_auto = 1;                       /* edits land at once (decision 6) */
     CHECK(ctl_blank_map(&a, sb.dir, 12, 8));
     if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
     Map *m = a.map;
@@ -1631,7 +1674,7 @@ void test_ctl_scenes(void)
     CHECK(t && strstr(t, "scene diff NAME") != NULL);
     free(t);
 
-    CASE("in play mode: reads work, saving and putting back are refused as edits are");
+    CASE("in play mode: reads work, saving is refused, putting back waits as any edit does");
     app_key(&a, (Key){ KEY_F2, 0, 0 });
     t = ctl_ask(&a, "scene diff Start");
     CHECK(t && strncmp(t, "ok", 2) == 0);
@@ -1640,7 +1683,7 @@ void test_ctl_scenes(void)
     CHECK(t && strncmp(t, "busy:", 5) == 0);
     free(t);
     t = ctl_ask(&a, "scene Start");
-    CHECK(t && strncmp(t, "busy:", 5) == 0);
+    CHECK(t && strncmp(t, "ok\n", 3) == 0 && (strstr(t, "\nlands when the GM is back: the GM is in play mode") || strstr(t, "no change")));
     free(t);
 
     app_free(&a);

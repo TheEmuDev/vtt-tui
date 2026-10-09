@@ -193,6 +193,14 @@ typedef struct {
     unsigned ctl_stamp;
     unsigned ctl_gen;           /* Map.gen then, for changes outside the log */
     int      ctl_undoable;
+    /* A request's edits run on a copy of the map, never the live one, and
+     * become a proposal (docs/CONFLICTS.md); the copy and its log are kept
+     * for their buffers. `ctl_auto` (:agent accept auto) lands each one at
+     * once; `ctl_direct` (--apply with no GM) edits the map itself. */
+    Map     *ctl_scratch;
+    Undo     ctl_sundo;
+    int      ctl_auto;
+    int      ctl_direct;
 
     TextPrompt prompt;
     PromptWhat prompt_what;

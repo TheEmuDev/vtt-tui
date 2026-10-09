@@ -1,0 +1,3 @@
+job 1 propose "walls"
+room B2:E5 "Crypt"
+door Crypt east

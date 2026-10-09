@@ -1,0 +1,9 @@
+jobs
+jobs json
+job 1 take
+job 1 area B2:D4
+job 1 say "on it"
+job 1 dump
+job 1 check json
+job 1 describe
+job 1 drop

@@ -1026,6 +1026,7 @@ void test_stamp_keys(void)
     rnd_init(&r);
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
+    a.ctl_auto = 1;                       /* edits land at once (decision 6) */
     CHECK(ctl_blank_map(&a, sb.dir, 12, 8));
     if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
     Map *m = a.map;
@@ -1153,7 +1154,7 @@ void test_stamp_keys(void)
     free(t);
     depth = a.undo.depth;
     t = ctl_ask(&a, "stamp Pool J2 rotate 90\nstamp Pool A8 mirror\n");
-    CHECK(strncmp(t, "ok\nchanged", 10) == 0);
+    CHECK(strncmp(t, "ok\n", 3) == 0 && strstr(t, "\nchanged "));
     free(t);
     CHECK_EQ(a.undo.depth, depth + 1);
     CHECK_EQ(map_tile(m, 9, 1), TILE_WATER);          /* turned: the water on top */

@@ -1,0 +1,4 @@
+propose "a pool and a ghoul"
+room B2:D4
+tile C3 water
+token add enemy C3 "Ghoul"

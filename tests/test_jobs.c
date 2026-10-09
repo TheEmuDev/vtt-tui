@@ -331,3 +331,215 @@ out:
     rnd_free(&r);
     sandbox_leave(&sb);
 }
+
+/* The channel's side of a job (step 4): jobs, job N take/area/say/propose/
+ * drop/dump/check/describe, propose, the agent's undo of an accepted change,
+ * and :agent accept auto|review. */
+void test_jobs_ctl(void)
+{
+    Sandbox sb = sandbox_enter("jobsctl");
+    Renderer r;
+    App a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK(ctl_blank_map(&a, sb.dir, 20, 12));
+    if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    Map *m = a.map;
+    char *t;
+
+    CASE("jobs with none; the job requests' errors");
+    t = ctl_ask(&a, "jobs");
+    CHECK(t && !strcmp(t, "ok\nno jobs\n"));
+    free(t);
+    t = ctl_ask(&a, "job 4 take");
+    CHECK(t && strstr(t, "error: line 1: no job #4 - jobs lists them"));
+    free(t);
+    t = ctl_ask(&a, "propose");
+    CHECK(t && !strcmp(t, "error: propose wants edit lines after it\n"));
+    free(t);
+    t = ctl_ask(&a, "tile A1 water\npropose");
+    CHECK(t && strstr(t, "error: line 2: propose comes once, before the request's edits"));
+    free(t);
+    t = ctl_ask(&a, "tile A1 water\njobs");
+    CHECK(t && strstr(t, "error: line 2: jobs comes before the request's edits"));
+    free(t);
+    CHECK_EQ(map_tile(m, 0, 0), TILE_FLOOR);          /* all or nothing, as ever */
+
+    CASE(":ask, then the agent takes it, says where, says a line: the GM sees each");
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "v3l3j:ask a crypt\r");
+    t = ctl_ask(&a, "jobs");
+    CHECK(t && strstr(t, "ok\n#1 asked in B2:E5, asked by the GM: a crypt\n  gm: a crypt\n"));
+    free(t);
+    t = ctl_ask(&a, "jobs json");
+    CHECK(t && strstr(t, "ok\n[{\"num\":1,\"state\":\"asked\",\"from\":\"gm\",") == t);
+    CHECK(t && strstr(t, "\"box\":\"B2:E5\",\"area\":null,\"thread\":[{\"who\":\"gm\",\"text\":\"a crypt\"}]"));
+    CHECK(t && json_valid(t + 3));
+    free(t);
+    t = ctl_ask(&a, "job 1 take");
+    CHECK(t && strstr(t, "ok\n#1 working in B2:E5"));
+    free(t);
+    CHECK(strstr(a.status, "#1 taken by an agent") != NULL);
+    CHECK(a.status_gm);
+    t = ctl_ask(&a, "job 1 area C3:D4");
+    CHECK(t && !strcmp(t, "ok\n#1 area C3:D4\n"));
+    free(t);
+    CHECK(strstr(a.status, "#1: the agent is working in C3:D4") != NULL);
+    t = ctl_ask(&a, "job 1 area Z99");
+    CHECK(t && !strncmp(t, "error: line 1: ", 15));
+    free(t);
+    t = ctl_ask(&a, "job 1 say \"two ghouls coming\"");
+    CHECK(t && !strcmp(t, "ok\n"));
+    free(t);
+    CHECK(strstr(a.status, "#1, the agent: two ghouls coming") != NULL);
+
+    CASE("job N propose: run on a copy, so the map, its log, gen and modified wait for the GM");
+    unsigned gen = m->gen, stamp = a.undo.stamp;
+    int modified = m->modified, depth = a.undo.depth;
+    t = ctl_ask(&a, "job 1 propose \"the crypt, walled\"\nroom B2:E5\ntile C4 water\ntoken add enemy C3 \"Ghoul\"\n");
+    CHECK(t && !strncmp(t, "ok\nproposal #1: ", 16));
+    CHECK(t && strstr(t, "\nwaiting for the GM's review - :review 1\n"));
+    free(t);
+    CHECK_EQ(m->gen, gen);
+    CHECK_EQ(a.undo.stamp, stamp);
+    CHECK_EQ(a.undo.depth, depth);
+    CHECK_EQ(m->modified, modified);
+    CHECK_EQ(map_tile(m, 2, 3), TILE_FLOOR);
+    CHECK_EQ(map_vedge(m, 1, 1), EDGE_NONE);
+    CHECK_EQ(m->tokens.n, 0);
+    int s1 = job_slot(&a, 1);
+    CHECK(s1 >= 0);
+    if (s1 < 0) goto out;
+    CHECK_EQ(a.jobs[s1].state, JOB_READY);
+    CHECK(strstr(a.status, "#1 ready: ") && strstr(a.status, "the crypt, walled"));
+    t = ctl_ask(&a, "jobs");
+    CHECK(t && strstr(t, "  agent: the crypt, walled\n") && strstr(t, "  proposal: "));
+    CHECK(t && !strstr(t, "conflict"));
+    free(t);
+    t = ctl_ask(&a, "job 1 area C3");
+    CHECK(t && strstr(t, "has a proposal waiting"));
+    free(t);
+
+    CASE("job N dump, check, describe: the map as accepting it would make it; the live map untouched");
+    t = ctl_ask(&a, "job 1 dump B2:E5");
+    CHECK(t && !strncmp(t, "ok\n", 3) && strstr(t, "~") != NULL);   /* the water */
+    free(t);
+    t = ctl_ask(&a, "job 1 describe json");
+    CHECK(t && !strncmp(t, "ok\n", 3) && json_valid(t + 3) && strstr(t, "Ghoul"));
+    free(t);
+    t = ctl_ask(&a, "job 1 check");
+    CHECK(t && !strncmp(t, "ok\n", 3));
+    free(t);
+    t = ctl_ask(&a, "job 1 dump Q1:Z99");
+    CHECK(t && !strncmp(t, "error: ", 7));
+    free(t);
+    CHECK_EQ(map_tile(m, 2, 3), TILE_FLOOR);
+    CHECK_EQ(m->tokens.n, 0);
+    CHECK_EQ(m->gen, gen);
+
+    CASE("a GM's edit inside the proposal since is a conflict, counted for the agent");
+    undo_begin(&a.undo);
+    undo_set_tile(&a.undo, m, 2, 3, TILE_HAZARD);         /* the GM's, where the water goes */
+    undo_end(&a.undo);
+    t = ctl_ask(&a, "jobs");
+    CHECK(t && strstr(t, "conflict"));
+    free(t);
+    press(&a, "u");
+
+    CASE("the GM accepts in review; the agent's undo takes it back while nothing happened since");
+    press(&a, ":review 1\r");
+    CHECK_EQ(a.ed.mode, ED_REVIEW);
+    press(&a, "\r");
+    CHECK_EQ(a.jobs[s1].state, JOB_ACCEPTED);
+    CHECK_EQ(map_tile(m, 2, 3), TILE_WATER);
+    CHECK_EQ(m->tokens.n, 1);
+    t = ctl_ask(&a, "job 1 take");
+    CHECK(t && strstr(t, "#1 was accepted"));
+    free(t);
+    t = ctl_ask(&a, "job 1 propose\ntile A1 water");
+    CHECK(t && strstr(t, "#1 was accepted - propose alone offers a new change"));
+    free(t);
+    t = ctl_ask(&a, "undo");
+    CHECK(t && !strcmp(t, "ok\ntook back the last change\n"));
+    free(t);
+    CHECK_EQ(map_tile(m, 2, 3), TILE_FLOOR);
+    CHECK_EQ(m->tokens.n, 0);
+    press(&a, "\x12");                                   /* the GM's ctrl-r */
+    CHECK_EQ(map_tile(m, 2, 3), TILE_WATER);
+    t = ctl_ask(&a, "undo");                              /* once is all */
+    CHECK(t && strstr(t, "there is no change of the agent's to take back"));
+    free(t);
+
+    CASE("propose: an agent's own idea is a job of its own; job N drop withdraws it");
+    t = ctl_ask(&a, "propose \"a pool\"\ntile H8 water\n");
+    CHECK(t && !strncmp(t, "ok\nproposal #2: ", 16));
+    free(t);
+    int s2 = job_slot(&a, 2);
+    CHECK(s2 >= 0 && a.jobs[s2].from == JOB_FROM_AGENT && a.jobs[s2].state == JOB_READY);
+    CHECK(s2 >= 0 && !strcmp(a.jobs[s2].text, "a pool"));
+    t = ctl_ask(&a, "job 2 drop");
+    CHECK(t && !strcmp(t, "ok\n#2 withdrawn\n"));
+    free(t);
+    CHECK_EQ(job_slot(&a, 2), -1);
+    t = ctl_ask(&a, "tile H8 water\n");                  /* no header: the same */
+    CHECK(t && !strncmp(t, "ok\nproposal #2: ", 16));
+    free(t);
+    t = ctl_ask(&a, "tile H8 floor\n");                   /* nothing to change */
+    CHECK(t && !strcmp(t, "ok\nno change: the map already looked like that\n"));
+    free(t);
+
+    CASE("job N drop on the GM's job gives it back as asked, its proposal gone");
+    press(&a, ":ask a door\r");
+    int s3 = job_slot(&a, 3);
+    CHECK(s3 >= 0);
+    if (s3 < 0) goto out;
+    t = ctl_ask(&a, "job 3 propose\nedge B2|C2 door\n");
+    free(t);
+    CHECK_EQ(a.jobs[s3].state, JOB_READY);
+    t = ctl_ask(&a, "job 3 drop");
+    CHECK(t && !strcmp(t, "ok\n#3 given back, as asked\n"));
+    free(t);
+    CHECK(a.jobs[s3].state == JOB_ASKED && !a.jobs[s3].has_cs);
+    t = ctl_ask(&a, "job 3 dump");
+    CHECK(t && strstr(t, "#3 has no proposal"));
+    free(t);
+
+    CASE(":agent accept auto: a proposal lands at once, one undo step, the agent's to take back");
+    press(&a, ":agent accept auto\r");
+    CHECK_EQ(a.ctl_auto, 1);
+    CHECK(strstr(a.status, "land at once") != NULL);
+    depth = a.undo.depth;
+    t = ctl_ask(&a, "job 3 propose\nedge B2|C2 door\n");
+    CHECK(t && strstr(t, "\nchanged ") && strstr(t, "one undo step"));
+    free(t);
+    CHECK_EQ(a.jobs[s3].state, JOB_ACCEPTED);
+    CHECK_EQ(a.undo.depth, depth + 1);
+    t = ctl_ask(&a, "undo");
+    CHECK(t && !strncmp(t, "ok\ntook back", 12));
+    free(t);
+    CHECK_EQ(a.undo.depth, depth);
+    press(&a, ":agent accept review\r");
+    CHECK_EQ(a.ctl_auto, 0);
+    press(&a, ":agent accept maybe\r");
+    CHECK(strstr(a.status, ":agent accept auto lands") != NULL);
+
+    CASE("a full table of waiting changes refuses the next, and changes nothing");
+    app_jobs_clear(&a);
+    for (int k = 0; k < JOB_MAX; k++) {
+        char req[64];
+        snprintf(req, sizeof req, "tile %c10 water\n", 'A' + k);
+        t = ctl_ask(&a, req);
+        CHECK(t && !strncmp(t, "ok\nproposal #", 13));
+        free(t);
+    }
+    t = ctl_ask(&a, "tile A11 water\n");
+    CHECK(t && strstr(t, "error: 16 changes are waiting for the GM"));
+    free(t);
+    CHECK_EQ(map_tile(m, 0, 10), TILE_FLOOR);
+
+out:
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}

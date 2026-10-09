@@ -1208,6 +1208,48 @@ with `--apply`, or live in the GM's session through the control channel.
 [docs/AGENTS.md](docs/AGENTS.md) is the complete guide for an agent, including the request
 language.
 
+### Asking an agent
+
+With the control channel on (`:agent on`), an agent's changes come to you as **proposals**:
+nothing lands on your map until you accept it.
+
+1. **Ask.** In build mode, draw a `v` box round the place you mean and type `:ask` and what
+   you want, such as `:ask make this a flooded crypt with two ghouls`. The box is tinted
+   with a `#3` label: job 3. Keep working, inside the box too. `:ask` works without a box,
+   and in play mode.
+2. **The agent works.** When it takes the job the status line says `#3 taken by an agent`,
+   and it may tint the squares it will work in. A line it sends shows on the status line.
+3. **It is ready.** The tint changes color and the status line says `#3 ready: ...
+   - :review 3`.
+4. **Review.** `:review 3` (or `:review` for the oldest) draws the change in place on your
+   map. Squares in red would overwrite something that changed since the agent looked,
+   usually your own edits. Then:
+
+   | key | does |
+   |---|---|
+   | `enter` | accept it, as one undo step |
+   | `v`, move, `enter` | accept only what lies wholly inside the box; the rest stays ready |
+   | `d` | scrap it (`:review 3` brings it back until the map closes) |
+   | `c` | send it back with a line of what to do instead |
+   | `n` / `N` | the next or the previous ready change |
+   | `u`, `ctrl-r` | undo and redo as anywhere; the review stays open |
+   | `esc` | drop the box, then leave; the change stays ready |
+
+An agent may also propose a change you did not ask for; it comes the same way, ready for
+`:review`.
+
+| command | does |
+|---|---|
+| `:ask TEXT` | ask for a change, over the `v` box if there is one |
+| `:ask! TEXT` | the same, accepted at once when it arrives (still one undo step) |
+| `:jobs`, `:jobs N` | list the jobs; one job's history (your words, the agent's, each proposal) |
+| `:review [N]` | review a ready change |
+| `:ask N remove` | take a job away |
+| `:agent accept auto` | every change an agent sends lands at once, one undo step each; `:agent accept review` goes back to reviewing |
+
+A change waiting to land at once never lands while you are typing, answering a prompt,
+drawing a wall or in play mode: it lands at your next key once you are back.
+
 ## Map tools (`--dump-map`, `--check`, `--describe`)
 
 These print a report about a map file and exit, without changing it.
@@ -1304,13 +1346,14 @@ reached only by a link as reachable (a one-way link only in its direction).
 
 ## Control channel (`:agent`, `vtt --ctl`)
 
-The control channel lets an agent or script read and edit the map open in a running vtt.
+The control channel lets an agent or script read the map open in a running vtt and propose
+changes to it (see *Asking an agent*).
 `:agent on` opens it (or `--agent` at startup) and `:agent off` closes it. It listens on a
 Unix socket in `$XDG_RUNTIME_DIR/vtt/` that only the same user can access.
 
 `vtt --ctl REQUEST` sends a request and prints the answer; with no request it reads one from
-stdin. It exits 0 on success, 1 on an error or when the GM is busy (the reason is printed on
-stderr), and 2 when no vtt is listening. With several vtts listening, `--ctl-pid N` chooses
+stdin. It exits 0 on success, 1 on an error (the reason is printed on stderr), and 2 when no
+vtt is listening. With several vtts listening, `--ctl-pid N` chooses
 one.
 
 ```
@@ -1319,7 +1362,8 @@ room Crypt K2:O6
 door Crypt west
 token add enemy Crypt "Ghoul"
 EOF
-changed J2:O6: 3 lines, one undo step
+proposal #1: ground in K2:O6, walls and doors in K2:P7, Ghoul added, area Crypt added
+waiting for the GM's review - :review 1
 ```
 
 `vtt map.vtt --apply plan.txt` runs the same requests against a map file without a live
@@ -1328,11 +1372,12 @@ Don't use `--apply` on a map that is open in vtt: vtt doesn't notice the file ch
 and your next `:w` writes over the plan's changes. Send the plan to the open map instead:
 `vtt --ctl < plan.txt` after `:agent on`.
 
-Each request is applied as a single undo step, and only if every line in it succeeds. The GM
-sees a summary on the status line and a highlight around the changed squares. Edits are
-accepted only in build mode, and not while the GM is in the middle of an action such as
-typing a command or drawing a wall. The full request language is in
-[docs/AGENTS.md](docs/AGENTS.md).
+A request's edits become one proposal, made only if every line in it succeeds, and land as a
+single undo step when accepted. Under `:agent accept auto` a request lands at once, with a
+summary on the status line and a highlight around the changed squares; if you are in play
+mode or in the middle of something (typing a command, drawing a wall), it lands at your next
+key once you are back. `vtt --ctl undo` takes back an agent's last accepted change while
+nothing has happened since. The full request language is in [docs/AGENTS.md](docs/AGENTS.md).
 
 ## File format
 

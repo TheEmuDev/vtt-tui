@@ -197,6 +197,8 @@ echo 'dump' > "$DIR/dump.ctl"
 # (one two wide), creatures by room, on a void canvas.
 VOIDMAP="$DIR/void.vtt"
 printf 'VTT 2\nname Void\nsize 100 60\nzoom 1\n' > "$VOIDMAP"
+VOID512="$DIR/void512.vtt"
+printf 'VTT 2\nname Void\nsize 512 512\nzoom 1\n' > "$VOID512"
 cat > "$DIR/plan.ctl" <<'PLAN'
 room A B2 10x8
 room B 10x8 east of A gap 6
@@ -356,6 +358,11 @@ run "play, handout typed, 4 watch" "$MOB"  80x24  ':play\r:handout say The door 
 run "agent, room + 12"     "$VOIDY"  80x24  'u' "--bench-ctl $DIR/room.ctl"
 run "agent, plan of rooms" "$VOIDMAP" 80x24  'u' "--bench-ctl $DIR/plan.ctl"
 run "agent, dump 512x512"  "$HUGE"   80x24  'lh' "--bench-ctl $DIR/dump.ctl"
+# A proposal (docs/CONFLICTS.md, step 4): the plan of rooms on a copy of the
+# largest map, then reviewed and scrapped, or accepted and undone. Each loop's
+# request is a new job; finished ones make room for the next.
+run "agent, proposal, review" "$VOID512" 80x24 ':review\rllllhhhhd' "--bench-ctl $DIR/plan.ctl --bench-review"
+run "agent, proposal, accept" "$VOID512" 80x24 ':review\r\ru'      "--bench-ctl $DIR/plan.ctl --bench-review"
 run "help page"            "$WALLED" 80x24  '?jjjj'
 run "profiler overlay"     "$WALLED" 80x24  '\e[24~jjll'
 

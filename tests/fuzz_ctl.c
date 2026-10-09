@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include "app.h"
+#include "app_priv.h"
 #include "render.h"
 #include "scene.h"
 #include "stamp.h"
@@ -29,6 +30,9 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
         rnd_resize(&rnd, 80, 24);
         app_init(&app, NULL, &rnd);
         if (app_open_map(&app, "tests/fixtures/kinds.vtt") != 0 || !app.map) abort();
+        app.ctl_auto = 1;           /* else every input leaves a job, and 16 fill the table */
+        CsBox box = { 1, 1, 4, 4 };
+        app_job_new(&app, JOB_FROM_GM, "a crypt", &box, 0);
         /* Stamps from a folder of the fuzzer's own, never the user's, with
          * one in it to put down. */
         setenv("XDG_DATA_HOME", "/tmp/vtt-fuzz-ctl-data", 1);
@@ -53,6 +57,10 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     while (undo_undo(&app.undo, app.map)) { }
     undo_clear(&app.undo);
     app.ctl_undoable = 0;
+    app_jobs_clear(&app);
+    /* A job asked by the GM, so `job 1 ...` reaches past "no job #1". */
+    CsBox box = { 1, 1, 4, 4 };
+    app_job_new(&app, JOB_FROM_GM, "a crypt", &box, 0);
     /* Saving a scene is no edit, so the log does not take it back. */
     while (app.map->nscenes > 0) scene_remove(app.map, app.map->nscenes - 1);
     return 0;

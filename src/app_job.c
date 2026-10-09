@@ -16,12 +16,18 @@ static const char *const STATE_NAME[] = { "asked", "working", "ready", "accepted
 
 /* ------------------------------------------------------------- the list */
 
+static const char *const FROM_NAME[] = { "gm", "agent", "apply", "disk" };
+
 static int job_index(const App *a, int num)
 {
     for (int i = 0; i < JOB_MAX; i++)
         if (a->jobs[i].used && a->jobs[i].num == num) return i;
     return -1;
 }
+
+int app_job_find(const App *a, int num) { return job_index(a, num); }
+const char *app_job_state_name(int state) { return STATE_NAME[state]; }
+const char *app_job_from_name(int from) { return FROM_NAME[from]; }
 
 static int job_free_num(const App *a)
 {
@@ -36,7 +42,7 @@ static void job_clear(Job *j)
     memset(j, 0, sizeof *j);
 }
 
-static void thread_add(Job *j, char who, const char *text)
+void app_job_thread_add(Job *j, char who, const char *text)
 {
     if (j->nthread == JOB_THREAD_MAX) {                    /* oldest goes */
         memmove(&j->thread[0], &j->thread[1], (JOB_THREAD_MAX - 1) * sizeof j->thread[0]);
@@ -71,7 +77,7 @@ int app_job_new(App *a, int from, const char *text, const CsBox *box, int at_onc
     j->at_once = (uint8_t)(at_once != 0);
     str_lcpy(j->text, text, sizeof j->text);
     if (box) { j->has_box = 1; j->box = *box; }
-    if (text[0]) thread_add(j, from == JOB_FROM_GM ? 'G' : 'A', text);
+    if (text[0]) app_job_thread_add(j, from == JOB_FROM_GM ? 'G' : 'A', text);
     return slot;
 }
 
@@ -94,7 +100,26 @@ static void land(App *a, Job *j, const CsBox *box)
 {
     char left[160], msg[256], what[200];
     cs_summary(&j->cs, box, what, sizeof what);
+    int creatures = j->cs.ntoks > 0;
     int n = cs_apply(&j->cs, a->map, &a->undo, box, left, sizeof left);
+    if (n) {
+        /* What the channel's edits did to the live App when they landed
+         * straight: the overlay and the selection name creatures by index. */
+        if (creatures) {
+            range_clear(&a->play.range);
+            play_focus(&a->play, -1);
+            a->play.visual = 0;
+        }
+        a->last_acting = turn_acting(a->map);          /* an accept starts no turn */
+        app_fog_sync(a);
+        a->dirty = 1;
+        /* The agent's `undo` takes it back while nothing happens after. */
+        if (j->from != JOB_FROM_DISK) {
+            a->ctl_stamp    = a->undo.stamp;
+            a->ctl_gen      = a->map->gen;
+            a->ctl_undoable = 1;
+        }
+    }
     if (box) {
         char where[2 * MAP_COORD_MAX + 2];
         box_name(box, where, sizeof where);
@@ -102,7 +127,7 @@ static void land(App *a, Job *j, const CsBox *box)
         cs_summary(&j->cs, NULL, j->summary, sizeof j->summary);
         corner_from_set(j);
         snprintf(msg, sizeof msg, "accepted the part in %s: %s", where, what);
-        thread_add(j, '-', msg);
+        app_job_thread_add(j, '-', msg);
         if (cs_empty(&j->cs)) j->state = JOB_ACCEPTED;
         if (!n) snprintf(msg, sizeof msg, "#%d: nothing of it is in %s - the box takes what lies wholly inside", j->num, where);
         else snprintf(msg, sizeof msg, "#%d: accepted %s (%d)%s%.120s - u takes it back%s", j->num, where, n,
@@ -110,7 +135,7 @@ static void land(App *a, Job *j, const CsBox *box)
     } else {
         j->state = JOB_ACCEPTED;
         snprintf(msg, sizeof msg, "accepted: %s", what);
-        thread_add(j, '-', msg);
+        app_job_thread_add(j, '-', msg);
         snprintf(msg, sizeof msg, "#%d accepted: %.120s%s%.80s - u takes it back", j->num, what,
                  left[0] ? "; " : "", left);
     }
@@ -136,12 +161,23 @@ void app_job_set_proposal(App *a, int slot, ChangeSet *cs, const char *line)
     corner_from_set(j);
     char msg[256];
     snprintf(msg, sizeof msg, "proposed: %s", j->summary);
-    thread_add(j, '-', msg);
-    if (line && line[0]) thread_add(j, 'A', line);
+    app_job_thread_add(j, '-', msg);
+    if (line && line[0]) app_job_thread_add(j, 'A', line);
     if (j->at_once && can_land(a)) { land(a, j, NULL); return; }
     snprintf(msg, sizeof msg, "#%d ready: %.150s - :review %d%s%.60s", j->num, j->summary, j->num,
              line && line[0] ? " -- " : "", line ? line : "");
     app_note_gm(a, msg);
+}
+
+Map *app_job_result(App *a, int slot)
+{
+    Job *j = &a->jobs[slot];
+    if (!j->has_cs) return NULL;
+    if (!a->ctl_scratch) a->ctl_scratch = map_new(1, 1, "scratch");
+    map_copy_into(a->ctl_scratch, a->map);
+    undo_clear(&a->ctl_sundo);
+    cs_apply(&j->cs, a->ctl_scratch, &a->ctl_sundo, NULL, NULL, 0);
+    return a->ctl_scratch;
 }
 
 /* What waited to land at once, landed when the GM is back (after each key). */
@@ -268,7 +304,7 @@ void app_review_key(App *a, Key k)
         break;
     case 'd':
         j->state = JOB_SCRAPPED;
-        thread_add(j, '-', "scrapped");
+        app_job_thread_add(j, '-', "scrapped");
         snprintf(msg, sizeof msg, "#%d scrapped - :review %d brings it back", j->num, j->num);
         app_note_gm(a, msg);
         review_next_or_close(a);
@@ -306,7 +342,7 @@ void app_job_feedback(App *a, const char *text)
     if (a->review < 0) return;
     Job *j = &a->jobs[a->review];
     if (!text[0]) { review_status(a); return; }
-    thread_add(j, 'G', text);
+    app_job_thread_add(j, 'G', text);
     if (j->has_cs) { cs_free(&j->cs); j->has_cs = 0; }
     j->state = JOB_WORKING;
     j->summary[0] = '\0';
@@ -400,7 +436,7 @@ void app_review_command(App *a, const char *rest)
          * here. (A part accepted by box left the set; undone, it is gone.) */
         if ((j->state == JOB_SCRAPPED || j->state == JOB_ACCEPTED) && j->has_cs && !cs_empty(&j->cs)) {
             j->state = JOB_READY;
-            thread_add(j, '-', "brought back");
+            app_job_thread_add(j, '-', "brought back");
         }
         if (j->state != JOB_READY) {
             snprintf(msg, sizeof msg, "#%d is %s, with nothing to review", j->num, STATE_NAME[j->state]);

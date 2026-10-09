@@ -54,6 +54,7 @@ typedef struct {
     const char *ctl_req;            /* NULL: the request is on stdin */
     long        ctl_pid;            /* --ctl-pid N: which vtt; 0 the only one */
     const char *bench_ctl;          /* --bench-ctl FILE: a request run each bench loop */
+    int         bench_review;       /* --bench-review: its changes wait for review, not accept auto */
     const char *apply;              /* --apply FILE: run a request against the map, save it */
     const char *import_adv;         /* --import-adversaries FILE: SRD adversaries as characters */
     int         force;              /* --force: the import replaces templates already there */
@@ -84,6 +85,8 @@ static void usage(void)
         "  --bench-record FILE  save the stream the first watcher is sent (tools/pagebench.sh)\n"
         "  --bench-pings      and have each of them ping every frame\n"
         "  --bench-ctl FILE   run a control-channel request at the top of every --bench loop\n"
+        "                     (its changes land at once, as under :agent accept auto)\n"
+        "  --bench-review     ... unless this is given: then they wait for :review\n"
         "  --agent            open the control channel at startup (:agent on does it later)\n"
         "  --ctl [REQUEST]    send a request to the vtt taking them, print the answer\n"
         "                     (no REQUEST, or -: read it from stdin; docs/CONTROL.md)\n"
@@ -130,6 +133,7 @@ static int parse_args(Options *o, int argc, char **argv)
         else if (!strcmp(a, "--bench-record") && i + 1 < argc) o->bench_record = argv[++i];
         else if (!strcmp(a, "--agent"))      o->agent = 1;
         else if (!strcmp(a, "--bench-ctl") && i + 1 < argc) o->bench_ctl = argv[++i];
+        else if (!strcmp(a, "--bench-review")) o->bench_review = 1;
         else if (!strcmp(a, "--apply") && i + 1 < argc) o->apply = argv[++i];
         else if (!strcmp(a, "--import-adversaries") && i + 1 < argc) o->import_adv = argv[++i];
         else if (!strcmp(a, "--force"))      o->force = 1;
@@ -359,6 +363,7 @@ static int run_headless(const Options *o)
             int big = 0;
             ctl_req = file_read(o->bench_ctl, CTL_REQ_CAP, &ctl_len, &big);
             if (!ctl_req) die(big ? "%s is over 64 KB" : "cannot read %s", o->bench_ctl);
+            a.ctl_auto = !o->bench_review;
         }
 
         uint64_t bench_clock_ms = 1000;
@@ -682,6 +687,7 @@ static int run_apply(const Options *o)
             a.modal = MODAL_NONE;
             fprintf(stderr, "vtt: %s has an autosave newer than it; applying to the file as saved\n", o->map_path);
         }
+        a.ctl_direct = 1;                   /* no GM: the plan is the file's */
         char *ans = app_ctl_exec(&a, req, &len);
         if (!ans) fputs("vtt: out of memory\n", stderr);
         else {

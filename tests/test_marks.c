@@ -494,6 +494,7 @@ void test_hidden(void)
     rnd_init(&r);
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
+    a.ctl_auto = 1;                       /* edits land at once (decision 6) */
     CHECK_EQ(app_open_map(&a, path), 0);
     Key f2 = { KEY_F2, 0, 0 };
     app_key(&a, f2);

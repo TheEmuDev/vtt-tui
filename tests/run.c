@@ -40,6 +40,7 @@ int main(int argc, char **argv)
         { "links", test_links },
         { "changeset", test_changeset },
         { "jobs", test_jobs },
+        { "jobsctl", test_jobs_ctl },
         { "linkkeys", test_link_keys },
         { "floors", test_floors },
         { "floorview", test_floor_view },
