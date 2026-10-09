@@ -52,6 +52,8 @@ typedef struct {
     JobLine  thread[JOB_THREAD_MAX];
     int      nthread;
     char     summary[200];         /* the change set's, when ready */
+    int      cx, cy;               /* where its #N goes, kept when the set is set or cut:
+                                      cs_bounds walks the whole set, a frame must not */
     int      has_cs;
     ChangeSet cs;
 } Job;

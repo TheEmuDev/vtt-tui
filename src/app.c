@@ -1388,7 +1388,7 @@ static void app_key_dispatch(App *a, Key k)
         a->ed.count = 0;
         /* Something anchored on this floor would stretch onto the next. */
         if (a->ed.mode == ED_VISUAL || a->play.visual || (a->ed.mode == ED_WALL && a->ed.has_anchor) ||
-            a->ruler.active) {
+            a->ruler.active || (a->ed.mode == ED_REVIEW && a->rv_box)) {
             app_set_status(a, "esc first - the box or the ruler would stretch onto the other floor");
             return;
         }
@@ -1404,6 +1404,7 @@ static void app_key_dispatch(App *a, Key k)
          * step, and the next run is another. */
         undo_stroke_end(&a->undo);
         a->ed.pen   = a->ed.erase = 0;
+        app_review_leave(a);                 /* a review is build mode's */
         a->ed.mode  = ED_NORMAL;
         /* Neither a half-typed prefix nor a half-typed count means anything
          * on the other side; play movement reads the count, so a stray one

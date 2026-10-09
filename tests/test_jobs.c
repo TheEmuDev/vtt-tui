@@ -232,6 +232,93 @@ void test_jobs(void)
     CHECK_EQ(a.jobs[s6].state, JOB_ACCEPTED);
     CHECK_EQ(map_tile(m, 2, 10), TILE_WATER);
 
+    CASE("every way out of a review leaves none behind: F2, :play, removing the job reviewed");
+    press(&a, ":ask a lake\r");
+    int s7 = job_slot(&a, 5);
+    if (s7 < 0) s7 = job_slot(&a, 4);
+    CHECK(s7 >= 0);
+    if (s7 < 0) goto out;
+    propose_water(&a, s7, 6, 8, 6, "");
+    press(&a, ":review\r");
+    CHECK_EQ(a.ed.mode, ED_REVIEW);
+    app_key(&a, f2);
+    CHECK_EQ(a.review, -1);
+    CHECK(a.ed.mode != ED_REVIEW);
+    app_key(&a, f1);
+    press(&a, ":review\r:play\r");
+    CHECK_EQ(a.review, -1);
+    app_key(&a, f1);
+    char rm[32];
+    snprintf(rm, sizeof rm, ":review %d\r", a.jobs[s7].num);       /* by number: #2 and #3 still wait */
+    press(&a, rm);
+    CHECK_EQ(a.review, s7);
+    snprintf(rm, sizeof rm, ":ask %d remove\r", a.jobs[s7].num);
+    press(&a, rm);
+    CHECK_EQ(a.review, -1);
+    CHECK_EQ(a.ed.mode, ED_NORMAL);
+
+    CASE("a : command over a review goes back to it; esc on the feedback prompt keeps it");
+    press(&a, ":ask a moat\r");
+    int s8 = -1;
+    for (int i = 0; i < JOB_MAX; i++)
+        if (a.jobs[i].used && !strcmp(a.jobs[i].text, "a moat")) s8 = i;
+    CHECK(s8 >= 0);
+    if (s8 < 0) goto out;
+    propose_water(&a, s8, 6, 8, 7, "");
+    char rv[32];
+    snprintf(rv, sizeof rv, ":review %d\r", a.jobs[s8].num);
+    press(&a, rv);
+    CHECK_EQ(a.review, s8);
+    press(&a, ":jobs\r");
+    CHECK_EQ(a.ed.mode, ED_REVIEW);
+    press(&a, "c\x1b");
+    CHECK_EQ(a.ed.mode, ED_REVIEW);
+    CHECK_EQ(a.jobs[s8].state, JOB_READY);
+
+    CASE("a count is for moving: 3 then v leaves none behind; [ with a review box is refused");
+    press(&a, "3v");
+    CHECK_EQ(a.ed.count, 0);
+    press(&a, "[");
+    CHECK(strstr(a.status, "esc first") != NULL);
+    press(&a, "\x1b");
+    CHECK_EQ(a.rv_box, 0);
+
+    CASE("the label says #N in the corner of what the change touches");
+    draw(&a, &r);
+    {
+        int sx, sy;
+        grid_tile_interior(&a.ed.view, 6, 7, &sx, &sy);
+        char want[8];
+        snprintf(want, sizeof want, "#%d", a.jobs[s8].num);
+        CHECK_EQ(rnd_at(&r, sx, sy)->ch, (uint32_t)'#');
+        CHECK_EQ(rnd_at(&r, sx + 1, sy)->ch, (uint32_t)want[1]);
+    }
+
+    CASE("a proposal for another job while one is reviewed: the review stays, the other waits");
+    press(&a, ":ask a ford\r");
+    int s9 = -1;
+    for (int i = 0; i < JOB_MAX; i++)
+        if (a.jobs[i].used && !strcmp(a.jobs[i].text, "a ford")) s9 = i;
+    CHECK(s9 >= 0);
+    if (s9 < 0) goto out;
+    press(&a, rv);                                          /* s8 again */
+    int under = a.review;
+    propose_water(&a, s9, 6, 8, 9, "");
+    CHECK_EQ(a.review, under);
+    CHECK_EQ(a.ed.mode, ED_REVIEW);
+    CHECK_EQ(a.jobs[s9].state, JOB_READY);
+
+    CASE("accepted, then u: :review N brings the change back");
+    press(&a, "\r");
+    CHECK_EQ(a.jobs[s8].state, JOB_ACCEPTED);
+    press(&a, "\x1b");                                     /* apart: esc and a letter at once is Alt */
+    press(&a, "u");
+    CHECK_EQ(map_tile(m, 7, 7), TILE_FLOOR);
+    press(&a, rv);
+    CHECK_EQ(a.ed.mode, ED_REVIEW);
+    CHECK_EQ(a.jobs[s8].state, JOB_READY);
+    press(&a, "\x1b");
+
     CASE("closing the map closes its jobs");
     app_close_map(&a);
     CHECK(!app_jobs_shown(&a));

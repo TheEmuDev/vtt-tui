@@ -75,6 +75,7 @@ static const KeyDoc PLAY[] = {
     KEY(":player preview", "see the players' frame on your own screen; q returns"),
     KEY(":player camera party", "the players' screens frame the party; hold keeps what yours shows now; follow"),
     KEY(":whisper Aria TEXT", "a card on Aria's phone alone; kept if it is asleep   :players lists the phones"),
+    KEY(":ask more goblins", "ask an agent for a change, to review in build mode   :jobs lists them"),
 
     GROUP("Status markers"),
     KEY("s a",    "add a marker: a color and a word"),

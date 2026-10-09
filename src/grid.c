@@ -572,6 +572,23 @@ void grid_draw_tile_cursor(Renderer *r, const GridView *g, int tx, int ty, uint3
     }
 }
 
+void grid_tint_tiles(Renderer *r, const GridView *g, int x0, int y0, int x1, int y1, uint32_t bg)
+{
+    int pw = zoom_pw(g->zoom), ph = zoom_ph(g->zoom);
+    int iw = ZOOM[g->zoom].iw, ih = ZOOM[g->zoom].ih;
+    int ox = g->view.x - g->cam_x + 1, oy = g->view.y - g->cam_y + 1;   /* square 0,0's interior */
+    for (int ty = y0; ty <= y1; ty++)
+        for (int iy = 0; iy < ih; iy++) {
+            int y = oy + ty * ph + iy;
+            if (y < r->clip_y0 || y >= r->clip_y1) continue;
+            Cell *row = &r->back[(size_t)y * (size_t)r->w];
+            for (int tx = x0; tx <= x1; tx++) {
+                int xa = imax(ox + tx * pw, r->clip_x0), xb = imin(ox + tx * pw + iw, r->clip_x1);
+                for (int x = xa; x < xb; x++) row[x].bg = bg;
+            }
+        }
+}
+
 void grid_draw_tile_region(Renderer *r, const GridView *g, int x0, int y0,
                            int x1, int y1, uint32_t bg)
 {

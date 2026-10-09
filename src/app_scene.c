@@ -35,12 +35,7 @@ void app_scene_restore(App *a, const char *name)
  * mode's selection box. */
 static int drawn_box(App *a, int box[4])
 {
-    if (a->screen == SCREEN_EDITOR && a->ed.cmd_from_visual) {
-        EdShape sh = ed_shape(a->ed.shape, a->ed.anchor_x, a->ed.anchor_y, a->ed.cx, a->ed.cy, 0);
-        box[0] = sh.x0; box[1] = sh.y0; box[2] = sh.x1; box[3] = sh.y1;
-        a->ed.mode = ED_NORMAL;
-        return 1;
-    }
+    if (app_cmd_vbox(a, &box[0], &box[1], &box[2], &box[3])) return 1;
     if (a->screen == SCREEN_PLAY && a->play.visual) {
         box[0] = a->play.anchor_x; box[1] = a->play.anchor_y;
         box[2] = a->ed.cx;         box[3] = a->ed.cy;

@@ -995,20 +995,13 @@ void cs_show(ChangeSet *cs, Map *live, int x0, int y0, int x1, int y1)
     if (!cs->pv.valid || cs->pv.gen != live->gen) preview_build(cs, live);
     if (!cs->pv.saved && cs->ncells) cs->pv.saved = xmalloc((size_t)cs->ncells);
     cs->pv.x0 = x0; cs->pv.y0 = y0; cs->pv.x1 = x1; cs->pv.y1 = y1;
-    if (cs->ncells && live->w == cs->w && live->h == cs->h) {
-        int bx0 = imax(x0, 0) / CS_BLOCK, by0 = imax(y0, 0) / CS_BLOCK;
-        int bx1 = imin((x1 + 1) / CS_BLOCK, cs->bw - 1), by1 = imin((y1 + 1) / CS_BLOCK, cs->bh - 1);
-        for (int by = by0; by <= by1; by++)
-            for (int bx = bx0; bx <= bx1; bx++) {
-                int b = by * cs->bw + bx;
-                for (int i = cs->block_start[b]; i < cs->block_start[b + 1]; i++) {
-                    const CsCell *c = &cs->cells[i];
-                    uint8_t *p = cell_byte(live, c->kind, c->x, c->y);
-                    cs->pv.saved[i] = *p;
-                    *p = c->kind == CS_FOG ? (uint8_t)((*p & ~FOG_ID) | c->after) : c->after;
-                }
-            }
-    }
+    if (cs->ncells && live->w == cs->w && live->h == cs->h)
+        CS_FOR_CELLS_IN(cs, x0, y0, x1, y1, i) {
+            const CsCell *c = &cs->cells[i];
+            uint8_t *p = cell_byte(live, c->kind, c->x, c->y);
+            cs->pv.saved[i] = *p;
+            *p = c->kind == CS_FOG ? (uint8_t)((*p & ~FOG_ID) | c->after) : c->after;
+        }
     swap_small(cs, live);
     cs->pv.shown = 1;
 }
@@ -1017,17 +1010,10 @@ void cs_unshow(ChangeSet *cs, Map *live)
 {
     if (!cs->pv.shown) return;
     swap_small(cs, live);
-    if (cs->ncells && live->w == cs->w && live->h == cs->h) {
-        int bx0 = imax(cs->pv.x0, 0) / CS_BLOCK, by0 = imax(cs->pv.y0, 0) / CS_BLOCK;
-        int bx1 = imin((cs->pv.x1 + 1) / CS_BLOCK, cs->bw - 1), by1 = imin((cs->pv.y1 + 1) / CS_BLOCK, cs->bh - 1);
-        for (int by = by0; by <= by1; by++)
-            for (int bx = bx0; bx <= bx1; bx++) {
-                int b = by * cs->bw + bx;
-                for (int i = cs->block_start[b]; i < cs->block_start[b + 1]; i++) {
-                    const CsCell *c = &cs->cells[i];
-                    *cell_byte(live, c->kind, c->x, c->y) = cs->pv.saved[i];
-                }
-            }
-    }
+    if (cs->ncells && live->w == cs->w && live->h == cs->h)
+        CS_FOR_CELLS_IN(cs, cs->pv.x0, cs->pv.y0, cs->pv.x1, cs->pv.y1, i) {
+            const CsCell *c = &cs->cells[i];
+            *cell_byte(live, c->kind, c->x, c->y) = cs->pv.saved[i];
+        }
     cs->pv.shown = 0;
 }

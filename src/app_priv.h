@@ -160,6 +160,11 @@ void app_job_set_proposal(App *a, int slot, ChangeSet *cs, const char *line);
 void app_jobs_land_waiting(App *a);
 void app_review_key(App *a, Key k);
 void app_review_resume(App *a);
+void app_review_leave(App *a);
+
+/* The v box a : command was typed over (build mode), into x0..y1, and back to
+ * normal mode; 0 when there was none. :area, :scene save and :ask read it. */
+int  app_cmd_vbox(App *a, int *x0, int *y0, int *x1, int *y1);
 void app_job_feedback(App *a, const char *text);
 void app_ask_command(App *a, const char *verb, const char *rest);
 void app_jobs_command(App *a, const char *rest);

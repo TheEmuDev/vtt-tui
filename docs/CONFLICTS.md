@@ -60,7 +60,30 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
     log must call `cp_note`. CLAUDE.md says so. Today that is only `fog_delete`.
   - **`cs_check`'s gate now also watches `Map.cards_gen`.** Before, it missed a card the
     GM edited, because `card_set` touches nothing.
-- **Step 3: built (2026-10-08), Fable's review not yet run.** It covers:
+- **Step 3: built, reviewed by Fable, and fixed (2026-10-08).** The review's fixes:
+  - **The tint's perf scenario wasn't loop-neutral.** After the third loop its box was one
+    square, so the published 0.1 µs (below its own floor) was wrong. Made neutral and
+    re-measured, the tint was 0.9 µs. A new `grid_tint_tiles` tints a row of cells at a
+    time instead of looking up each cell, and brings it to 0.3 µs against a floor of about
+    0.15.
+  - **`App.review` went stale** when a review was left by F1/F2, `:play` or `:stamp`, which
+    could stop an `:ask!` job in that slot from ever landing. There is now one way out,
+    `app_review_leave`.
+  - **The `#N` label walked the whole change set every frame** (`cs_bounds`). Its corner is
+    now kept on the job.
+  - **Two rule-of-three extractions:** `app_cmd_vbox` (the `v` box a `:` came from, used by
+    `:area`, `:scene save` and `:ask`), and `CS_FOR_CELLS_IN` (the walk over the blocks
+    meeting the window, used by the preview's swap and the tints).
+  - **`:review N` brings back an accepted job too,** when `u` has taken it back and its set
+    is still held.
+  - **Smaller fixes:** a count is cleared by any review key that isn't a move; `[`/`]` are
+    refused while a review box is open; an empty boxed accept says so; `:ask` is on the
+    play-mode `?` page.
+  - **Tests for every way out of a review,** and for `:` and `esc` on the feedback prompt,
+    a proposal arriving during another review, accept-then-undo-then-`:review`, the label,
+    the count, and `cs_drop` on every kind of element.
+
+  What step 3 holds:
   - `job.h`, `app_job.c`: `:ask`, `:ask!`, `:ask N remove`, `:jobs [N]`, `:review [N]`;
   - the `ED_REVIEW` mode and its keys, with partial accept through `cs_drop`;
   - the three tints and the `#N` labels;
@@ -74,6 +97,13 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
     a message box. The box holds 192 characters, so a long history is cut.
   - **No golden frame.** The tests read each square's color from the drawn frame
     instead, which is a stronger check than a text dump.
+- **Two behaviors to know about:**
+  - **An `:ask!` result can land while the GM reviews another job.** "At once" means as
+    soon as the GM's screen allows it, and a review doesn't hold it back. The status line
+    then switches from the review's line to the accept's.
+  - **A part accepted by box, then undone with `u`, is gone from the proposal.** `cs_drop`
+    took it out when it landed. A whole accept undone keeps its set, and `:review N` brings
+    it back.
 - **Not in step 3, so nobody is surprised:**
   - **No agent can answer yet.** The requests (`job N take`, `propose`, ...) are step 4.
     Until then a job waits as asked, and only the tests hand one a proposal, through

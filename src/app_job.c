@@ -50,9 +50,7 @@ static void thread_add(Job *j, char who, const char *text)
 void app_jobs_clear(App *a)
 {
     for (int i = 0; i < JOB_MAX; i++) job_clear(&a->jobs[i]);
-    a->review = -1;
-    a->rv_box = 0;
-    if (a->ed.mode == ED_REVIEW) a->ed.mode = ED_NORMAL;
+    app_review_leave(a);
 }
 
 int app_job_new(App *a, int from, const char *text, const CsBox *box, int at_once)
@@ -84,6 +82,13 @@ static void box_name(const CsBox *b, char *buf, size_t sz)
     map_region_name(b->x0, b->y0, b->x1, b->y1, buf, sz);
 }
 
+/* Where #N goes for a change set: the corner of what it touches, found once. */
+static void corner_from_set(Job *j)
+{
+    int x1, y1;
+    if (!cs_bounds(&j->cs, &j->cx, &j->cy, &x1, &y1)) j->cx = j->cy = -1;
+}
+
 /* Accepts job j's change set, or the part `box` holds, as one undo step. */
 static void land(App *a, Job *j, const CsBox *box)
 {
@@ -95,11 +100,13 @@ static void land(App *a, Job *j, const CsBox *box)
         box_name(box, where, sizeof where);
         cs_drop(&j->cs, box);
         cs_summary(&j->cs, NULL, j->summary, sizeof j->summary);
+        corner_from_set(j);
         snprintf(msg, sizeof msg, "accepted the part in %s: %s", where, what);
         thread_add(j, '-', msg);
         if (cs_empty(&j->cs)) j->state = JOB_ACCEPTED;
-        snprintf(msg, sizeof msg, "#%d: accepted %s (%d)%s%.120s - u takes it back%s", j->num, where, n,
-                 left[0] ? "; " : "", left, j->state == JOB_READY ? "; the rest waits" : "");
+        if (!n) snprintf(msg, sizeof msg, "#%d: nothing of it is in %s - the box takes what lies wholly inside", j->num, where);
+        else snprintf(msg, sizeof msg, "#%d: accepted %s (%d)%s%.120s - u takes it back%s", j->num, where, n,
+                      left[0] ? "; " : "", left, j->state == JOB_READY ? "; the rest waits" : "");
     } else {
         j->state = JOB_ACCEPTED;
         snprintf(msg, sizeof msg, "accepted: %s", what);
@@ -126,6 +133,7 @@ void app_job_set_proposal(App *a, int slot, ChangeSet *cs, const char *line)
     j->has_cs = 1;
     j->state  = JOB_READY;
     cs_summary(&j->cs, NULL, j->summary, sizeof j->summary);
+    corner_from_set(j);
     char msg[256];
     snprintf(msg, sizeof msg, "proposed: %s", j->summary);
     thread_add(j, '-', msg);
@@ -175,11 +183,18 @@ static void review_open(App *a, int slot)
     review_status(a);
 }
 
+/* The one way out of a review, by any road: F1/F2, :play, :stamp, a job
+ * taken away. ED_REVIEW holds exactly when `review` names a job. */
+void app_review_leave(App *a)
+{
+    if (a->ed.mode == ED_REVIEW) a->ed.mode = ED_NORMAL;
+    a->rv_box = 0;
+    a->review = -1;
+}
+
 static void review_close(App *a, const char *why)
 {
-    a->ed.mode = ED_NORMAL;
-    a->rv_box  = 0;
-    a->review  = -1;
+    app_review_leave(a);
     app_set_status_gm(a, why);
 }
 
@@ -188,7 +203,7 @@ static void review_next_or_close(App *a)
 {
     int next = ready_after(a, a->review, 1);
     if (next >= 0 && next != a->review) review_open(a, next);
-    else { a->ed.mode = ED_NORMAL; a->rv_box = 0; a->review = -1; }
+    else app_review_leave(a);
 }
 
 static CsBox rv_box_now(const App *a)
@@ -217,6 +232,7 @@ void app_review_key(App *a, Key k)
         return;
     }
     if (k.kind == KEY_ENTER) {
+        e->count = 0;
         CsBox b = rv_box_now(a);
         land(a, j, a->rv_box ? &b : NULL);
         a->rv_box = 0;
@@ -237,6 +253,7 @@ void app_review_key(App *a, Key k)
     if (k.ch == '0' && e->count)    { e->count *= 10; return; }
 
     char msg[200];
+    if (k.ch > 127 || !strchr("hjkl", (int)k.ch)) e->count = 0;   /* a count is for moving */
     switch (k.ch) {
     case 'h': ed_move(e, m, -1,  0, take_count(e)); break;
     case 'l': ed_move(e, m,  1,  0, take_count(e)); break;
@@ -328,12 +345,7 @@ void app_ask_command(App *a, const char *verb, const char *rest)
     }
 
     CsBox box, *bp = NULL;
-    if (a->screen == SCREEN_EDITOR && a->ed.cmd_from_visual) {
-        EdShape sh = ed_shape(a->ed.shape, a->ed.anchor_x, a->ed.anchor_y, a->ed.cx, a->ed.cy, 0);
-        box = (CsBox){ sh.x0, sh.y0, sh.x1, sh.y1 };
-        bp = &box;
-        a->ed.mode = ED_NORMAL;
-    }
+    if (app_cmd_vbox(a, &box.x0, &box.y0, &box.x1, &box.y1)) bp = &box;
     int at_once = verb[strlen(verb) - 1] == '!';
     int slot = app_job_new(a, JOB_FROM_GM, rest, bp, at_once);
     if (slot < 0) { snprintf(msg, sizeof msg, "%d jobs are open - :jobs, :ask N remove", JOB_MAX); app_set_status_gm(a, msg); return; }
@@ -384,7 +396,12 @@ void app_review_command(App *a, const char *rest)
         slot = job_index(a, atoi(rest));
         if (slot < 0) { snprintf(msg, sizeof msg, "no job #%.10s", rest); app_set_status_gm(a, msg); return; }
         Job *j = &a->jobs[slot];
-        if (j->state == JOB_SCRAPPED && j->has_cs) { j->state = JOB_READY; thread_add(j, '-', "brought back"); }
+        /* Scrapped, or accepted and then taken back with u: its set is still
+         * here. (A part accepted by box left the set; undone, it is gone.) */
+        if ((j->state == JOB_SCRAPPED || j->state == JOB_ACCEPTED) && j->has_cs && !cs_empty(&j->cs)) {
+            j->state = JOB_READY;
+            thread_add(j, '-', "brought back");
+        }
         if (j->state != JOB_READY) {
             snprintf(msg, sizeof msg, "#%d is %s, with nothing to review", j->num, STATE_NAME[j->state]);
             app_set_status_gm(a, msg);
@@ -403,6 +420,8 @@ void app_review_resume(App *a)
     if (a->review >= 0 && a->jobs[a->review].used && a->jobs[a->review].state == JOB_READY &&
         a->screen == SCREEN_EDITOR && a->ed.mode == ED_NORMAL)
         a->ed.mode = ED_REVIEW;
+    else if (a->ed.mode != ED_REVIEW)               /* the command went elsewhere: :play, :stamp */
+        app_review_leave(a);
 }
 
 /* ------------------------------------------------------------ drawing */
@@ -423,8 +442,7 @@ int app_jobs_shown(const App *a)
 static void tint_box(Renderer *r, const GridView *g, const CsBox *b, int vx0, int vy0, int vx1, int vy1, uint32_t bg)
 {
     int x0 = imax(b->x0, vx0), y0 = imax(b->y0, vy0), x1 = imin(b->x1, vx1), y1 = imin(b->y1, vy1);
-    for (int y = y0; y <= y1; y++)
-        for (int x = x0; x <= x1; x++) grid_draw_tile_cursor(r, g, x, y, bg);
+    if (x0 <= x1 && y0 <= y1) grid_tint_tiles(r, g, x0, y0, x1, y1, bg);
 }
 
 static void tint_sq(Renderer *r, const GridView *g, int x, int y, int vx0, int vy0, int vx1, int vy1, uint32_t bg)
@@ -440,20 +458,12 @@ static void tint_set(Renderer *r, const GridView *g, const ChangeSet *cs, const 
 {
     for (int pass = 0; pass < 2; pass++) {                /* conflicts last: they win */
         uint32_t bg = pass ? th->job_conflict_bg : th->job_ready_bg;
-        if (cs->ncells && cs->block_start) {
-            int bx0 = imax(vx0, 0) / CS_BLOCK, by0 = imax(vy0, 0) / CS_BLOCK;
-            int bx1 = imin((vx1 + 1) / CS_BLOCK, cs->bw - 1), by1 = imin((vy1 + 1) / CS_BLOCK, cs->bh - 1);
-            for (int by = by0; by <= by1; by++)
-                for (int bx = bx0; bx <= bx1; bx++) {
-                    int b = by * cs->bw + bx;
-                    for (int i = cs->block_start[b]; i < cs->block_start[b + 1]; i++) {
-                        const CsCell *c = &cs->cells[i];
-                        if (c->conflict != pass) continue;
-                        int x = imin(c->x, cs->w - 1), y = imin(c->y, cs->h - 1);
-                        tint_sq(r, g, x, y, vx0, vy0, vx1, vy1, bg);
-                    }
-                }
-        }
+        if (cs->ncells && cs->block_start)
+            CS_FOR_CELLS_IN(cs, vx0, vy0, vx1, vy1, i) {
+                const CsCell *c = &cs->cells[i];
+                if (c->conflict != pass) continue;
+                tint_sq(r, g, imin(c->x, cs->w - 1), imin(c->y, cs->h - 1), vx0, vy0, vx1, vy1, bg);
+            }
         for (int i = 0; i < cs->ntoks; i++) {
             const CsToken *c = &cs->toks[i];
             if (c->conflict != pass) continue;
@@ -508,8 +518,9 @@ static int job_corner(const Job *j, int *x, int *y)
         *x = b->x0; *y = b->y0;
         return 1;
     }
-    int x1, y1;
-    return j->state == JOB_READY && j->has_cs && cs_bounds(&j->cs, x, y, &x1, &y1);
+    if (j->state != JOB_READY || !j->has_cs || j->cx < 0) return 0;
+    *x = j->cx; *y = j->cy;
+    return 1;
 }
 
 /* Before the GM's draw: every waiting change checked against the map as it

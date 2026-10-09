@@ -71,6 +71,18 @@ typedef struct {
 
 #define CS_BLOCK 16
 
+/* Every cell index `i` of the set's blocks meeting the window x0..x1, y0..y1
+ * (squares; a block's far boundary is in the window when its square is): the
+ * one walk the preview's swap and the jobs' tints make, so their cost
+ * follows the screen. Needs imin/imax (util.h). */
+#define CS_FOR_CELLS_IN(cs, x0, y0, x1, y1, i)                                              \
+    for (int by_ = imax((y0), 0) / CS_BLOCK, by1_ = imin(((y1) + 1) / CS_BLOCK, (cs)->bh - 1); \
+         by_ <= by1_; by_++)                                                                 \
+        for (int bx_ = imax((x0), 0) / CS_BLOCK, bx1_ = imin(((x1) + 1) / CS_BLOCK, (cs)->bw - 1); \
+             bx_ <= bx1_; bx_++)                                                             \
+            for (int i = (cs)->block_start[by_ * (cs)->bw + bx_];                            \
+                 i < (cs)->block_start[by_ * (cs)->bw + bx_ + 1]; i++)
+
 /* Blocks across a span of n squares, with room for its far boundary (n + 1). */
 static inline int cs_blocks(int n) { return (n + 1 + CS_BLOCK - 1) / CS_BLOCK; }
 

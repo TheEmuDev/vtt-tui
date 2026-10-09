@@ -87,6 +87,10 @@ void grid_blank_fog(Renderer *r, const Map *m, const GridView *g);
 
 /* Highlights the tile the cursor is on. */
 void grid_draw_tile_cursor(Renderer *r, const GridView *g, int tx, int ty, uint32_t bg);
+/* The same tint over a box of squares (x0..x1, y0..y1, already cut to what is
+ * on screen), a row of cells at a time: one clip per row, not a lookup per
+ * cell. A job's box covering the window was 0.9 us through the one above. */
+void grid_tint_tiles(Renderer *r, const GridView *g, int x0, int y0, int x1, int y1, uint32_t bg);
 
 /* Tints a size x size block of tiles, boundaries between them included, so a
  * multi-tile cursor reads as one square. Clipped to the map. */

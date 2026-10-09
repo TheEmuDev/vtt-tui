@@ -601,6 +601,15 @@ static void fog_command(App *a, const char *rest)
 
 /* --------------------------------------------------------- command line */
 
+int app_cmd_vbox(App *a, int *x0, int *y0, int *x1, int *y1)
+{
+    if (a->screen != SCREEN_EDITOR || !a->ed.cmd_from_visual) return 0;
+    EdShape sh = ed_shape(a->ed.shape, a->ed.anchor_x, a->ed.anchor_y, a->ed.cx, a->ed.cy, 0);
+    *x0 = sh.x0; *y0 = sh.y0; *x1 = sh.x1; *y1 = sh.y1;
+    a->ed.mode = ED_NORMAL;
+    return 1;
+}
+
 /* :areas lists the named areas; :area NAME names the v box (build mode),
  * or jumps to the area of that name; :area NAME remove takes the name off. */
 static void area_command(App *a, const char *verb, const char *rest)
@@ -641,19 +650,17 @@ static void area_command(App *a, const char *verb, const char *rest)
         app_note_gm(a, msg);
         return;
     }
-    if (a->screen == SCREEN_EDITOR && a->ed.cmd_from_visual) {
-        EdShape sh = ed_shape(a->ed.shape, a->ed.anchor_x, a->ed.anchor_y, a->ed.cx, a->ed.cy, 0);
-        const char *fwhy = floor_problem_box(m, ai, sh.x0, sh.y0, sh.x1, sh.y1);
+    int bx0, by0, bx1, by1;
+    if (app_cmd_vbox(a, &bx0, &by0, &bx1, &by1)) {
+        const char *fwhy = floor_problem_box(m, ai, bx0, by0, bx1, by1);
         if (fwhy) {
             snprintf(msg, sizeof msg, "%.40s is a floor, and %s", m->areas[ai].name, fwhy);
-            a->ed.mode = ED_NORMAL;
             app_set_status_gm(a, msg);
             return;
         }
         undo_begin(&a->undo);
-        int ok = undo_set_area(&a->undo, m, name, sh.x0, sh.y0, sh.x1, sh.y1);
+        int ok = undo_set_area(&a->undo, m, name, bx0, by0, bx1, by1);
         undo_end(&a->undo);
-        a->ed.mode = ED_NORMAL;
         if (!ok) { snprintf(msg, sizeof msg, "a map holds %d named areas", MAP_AREAS_MAX); app_set_status_gm(a, msg); return; }
         ai = map_area_find(m, name);
         map_coord_name(m->areas[ai].x0, m->areas[ai].y0, b0, sizeof b0);

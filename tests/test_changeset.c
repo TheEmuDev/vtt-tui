@@ -324,6 +324,41 @@ static void cs_partial(void)
     undo_free(&u);
 }
 
+static void cs_drop_parts(void)
+{
+    CASE("cs_drop takes out what a box holds, of every kind -- creatures, notes, links, areas -- and keeps the rest");
+    Map *m = encounter();
+    Map *c = map_copy(m);
+    Undo scratch;
+    undo_init(&scratch);
+    agent_plan(c, &scratch);
+    ChangeSet cs;
+    cs_init(&cs);
+    cs_diff(&cs, m, c, &scratch);
+    int toks = cs.ntoks, notes = cs.nnotes, links = cs.nlinks, areas = cs.nareas;
+    CsBox box = { 12, 1, 16, 8 };                         /* the ghoul, the drain's note at P7, the west half */
+    cs_drop(&cs, &box);
+    CHECK(cs.ntoks < toks);                               /* the ghoul went */
+    CHECK_EQ(cs.nnotes, notes - 1);                       /* P7 is inside the box */
+    CHECK_EQ(cs.nlinks, links);                           /* one end outside */
+    CHECK_EQ(cs.nareas, areas);                           /* reaches past the box */
+    CHECK(cs.round_changed);                              /* no square's: stays */
+    int inside = 0;
+    for (int i = 0; i < cs.ncells; i++)
+        inside |= cs.cells[i].kind == CS_TILE && cs.cells[i].x >= 12 && cs.cells[i].x <= 16 &&
+                  cs.cells[i].y >= 1 && cs.cells[i].y <= 8;
+    CHECK(!inside);
+    Map *snap = map_copy(m);
+    cs_show(&cs, m, 0, 0, m->w - 1, m->h - 1);            /* the cut set still swaps cleanly */
+    cs_unshow(&cs, m);
+    CHECK(map_same(m, snap));
+    cs_free(&cs);
+    map_free(snap);
+    map_free(c);
+    map_free(m);
+    undo_free(&scratch);
+}
+
 static void cs_preview(void)
 {
     CASE("the preview shows the change and puts every byte back: no gen, no undo, no modified");
@@ -870,6 +905,7 @@ static void cs_checkpoint_writers(void)
 
 void test_changeset(void)
 {
+    cs_drop_parts();
     cs_checkpoint_writers();
     cs_checkpoint();
     cs_checkpoint_differential();
