@@ -516,6 +516,7 @@ static int run_interactive(const Options *o)
         /* The agent a GM always uses, without typing it each session. */
         const char *cmd = getenv("VTT_AGENT_COMMAND");
         if (cmd && cmd[0] && strlen(cmd) < sizeof a.agent_cmd) str_lcpy(a.agent_cmd, cmd, sizeof a.agent_cmd);
+        else if (cmd && cmd[0]) app_set_status_gm(&a, "VTT_AGENT_COMMAND is over 255 characters - not set; put it in a script");
     }
 
     /* Paint once before blocking so the first frame is up immediately. */

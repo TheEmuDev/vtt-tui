@@ -300,7 +300,28 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
   key against one `stat` (0.9); an outside change is 5.4-5.8 ms on the largest map, once,
   when the keys are quiet -- two parses of the file, where the loader's 3.4 ns a byte is
   the gap.
-- **Step 8: built (2026-10-10); Fable's review is next.** What it holds:
+- **Step 8: built (d5ed619, 2026-10-10), reviewed by Fable, and fixed.** Each finding was a
+  failing test first:
+  - **The command was started for jobs the GM never asked for:** feedback on an agent's own
+    idea or an `--apply` started it too, a second agent on a job that had its maker. Only
+    `:ask`'s jobs start it now.
+  - **The channel came on without a word** when the GM had typed `:agent off`; the line that
+    says the command was started now says the channel is on for it, and where the command's
+    output goes.
+  - **The agent inherited `SIGPIPE` ignored,** so a pipeline in the command got write errors
+    instead of ending; and a command that exited without reading its stdin could end a
+    headless vtt. Both ways fixed.
+  - **The prompt's lines did not run as printed:** a vtt path with a space, and a heredoc
+    whose `EOF` was indented. Quoted, at the margin, and run by hand against a live vtt
+    started from "dir with space".
+  - **`:agent command off` threw the command away** (KEYS.md rule 9): it is kept, and `on`
+    brings it back.
+  - A fork or pipe that fails is said; `who` is named in one place (`app_job_who_name`).
+  - Left, and on the list (HEALTH.md rows 37-41): the `:` line cuts a long command without
+    saying; three places start a process, each with its own care; nothing bounds how many
+    agents run; a command that cannot run is seen only in the log.
+
+  What it holds:
   - `app_agent.c` (new): `:agent command CMD` (and `VTT_AGENT_COMMAND`), started for each
     `:ask` and each job sent back, the job and how to answer it on its stdin;
   - the suite `agentcmd`: a script as the agent, which takes the job and proposes through

@@ -8,6 +8,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,6 +17,18 @@
 
 #include "app_priv.h"
 #include "prof.h"
+
+/* A word for a shell, whatever is in it: in single quotes, each of its own
+ * written as '\''. The prompt's lines are run as printed. */
+static void sh_quote(FILE *out, const char *s)
+{
+    fputc('\'', out);
+    for (; *s; s++) {
+        if (*s == '\'') fputs("'\\''", out);
+        else fputc(*s, out);
+    }
+    fputc('\'', out);
+}
 
 /* What the command reads: the job, where, the thread, and the few requests
  * it needs. Whole in itself: the command may know nothing of vtt. */
@@ -35,22 +48,32 @@ void app_agent_prompt(const App *a, const Job *j, FILE *out)
     if (j->nthread > 1) {
         fputs("\nThe job so far (the last gm: line is what to do now):\n", out);
         for (int t = 0; t < j->nthread; t++)
-            fprintf(out, "  %s: %s\n", j->thread[t].who == 'G' ? "gm" : j->thread[t].who == 'A' ? "agent" : "-",
-                    j->thread[t].text);
+            fprintf(out, "  %s: %s\n", app_job_who_name(j->thread[t].who), j->thread[t].text);
     }
-    fprintf(out, "\nTalk to vtt with one request a call (or several lines on stdin):\n"
-                 "  %s --ctl-pid %ld --ctl 'job %d take'            say the job is yours\n"
-                 "  %s --ctl-pid %ld --ctl 'dump%s%s'               the map as text (also: describe, check, marked)\n"
-                 "  %s --ctl-pid %ld --ctl 'job %d area %s'         where you will work, shown to the GM\n"
-                 "  %s --ctl-pid %ld --ctl <<'EOF'\n"
-                 "  job %d propose \"one line for the GM\"\n"
-                 "  room Crypt B2:K12\n"
-                 "  tile C3:J10 water\n"
-                 "  token add enemy D4 \"Ghoul\"\n"
-                 "  EOF\n"
-                 "  %s --ctl-pid %ld --ctl 'job %d dump'            read your proposal back\n\n",
-            vtt, pid, j->num, vtt, pid, where[0] ? " " : "", where, vtt, pid, j->num, where[0] ? where : "B2:K12",
-            vtt, pid, j->num, vtt, pid, j->num);
+
+    /* Each line runs as printed: the path quoted, nothing indented that a
+     * shell would mind (a heredoc's end is at the margin). */
+    char call[64];
+    snprintf(call, sizeof call, " --ctl-pid %ld --ctl", pid);
+    fputs("\nTalk to vtt with one request a call:\n\n", out);
+    sh_quote(out, vtt); fprintf(out, "%s 'job %d take'\n", call, j->num);
+    fputs("    the job is yours. If it answers \"no job #", out);
+    fprintf(out, "%d\", the GM withdrew it or closed the map: stop.\n", j->num);
+    sh_quote(out, vtt); fprintf(out, "%s 'dump%s%s'\n", call, where[0] ? " " : "", where);
+    fputs("    the map as text. Also: 'describe' (rooms and what is in them), 'check', 'marked' (what the GM points at).\n", out);
+    if (where[0]) {
+        sh_quote(out, vtt); fprintf(out, "%s 'job %d area %s'\n", call, j->num, where);
+        fputs("    where you will work, shown to the GM (any region, like B2:F6).\n", out);
+    }
+    sh_quote(out, vtt); fprintf(out, "%s <<'EOF'\n", call);
+    fprintf(out, "job %d propose \"one line for the GM\"\n"
+                 "tile C3 water\n"
+                 "token add enemy D4 \"Ghoul\"\n"
+                 "EOF\n", j->num);
+    fputs("    several lines on stdin are one request, and its edits are your proposal. These two edit lines are\n"
+          "    only the shape: write your own, for the squares of this job.\n", out);
+    sh_quote(out, vtt); fprintf(out, "%s 'job %d dump'\n", call, j->num);
+    fputs("    your proposal read back, as the map would be with it.\n\n", out);
     fputs("A request is all or nothing: if a line fails, nothing changed and the answer names the line and why.\n"
           "The lines that change a map: room, tile, wall, edge, door, corridor, area, token add|move|del|set, note,\n"
           "fog paint, stamp, link, floor, scene. docs/AGENTS.md in vtt's source has all of them.\n"
@@ -59,10 +82,14 @@ void app_agent_prompt(const App *a, const Job *j, FILE *out)
 
 int app_agent_start(App *a, const Job *j)
 {
-    if (!a->agent_cmd[0]) return 0;
+    /* For what the GM asked for, and nothing else (decision 1b: "for each
+     * :ask"): an agent's own idea, an --apply or the file's change has its
+     * maker already, and a second agent on its job would only collide. */
+    if (!a->agent_cmd[0] || a->agent_cmd_off || j->from != JOB_FROM_GM) return 0;
     PROF_ZONE("agent.spawn");
-    char msg[AGENT_CMD_MAX + 96], err[CTL_PATH_MAX + 64];
-    /* The command answers over the channel: on, for it. */
+    char msg[AGENT_CMD_MAX + 160], err[CTL_PATH_MAX + 64];
+    int  turned_on = 0;
+    /* The command answers over the channel: on, for it -- and said. */
     if (!a->agent_on) {
         if (ctl_start(&a->ctl, err, sizeof err) < 0) {
             snprintf(msg, sizeof msg, "#%d: the agent was not started - %.150s", j->num, err);
@@ -70,24 +97,32 @@ int app_agent_start(App *a, const Job *j)
             return -1;
         }
         a->agent_on = 1;
+        turned_on = 1;
     }
 
     char  *prompt = NULL;
     size_t plen = 0;
     FILE  *pf = open_memstream(&prompt, &plen);
-    if (!pf) return -1;
-    app_agent_prompt(a, j, pf);
-    fclose(pf);
-
-    int in[2];
-    if (pipe(in) < 0) { free(prompt); return -1; }
+    int    in[2] = { -1, -1 };
+    if (pf) { app_agent_prompt(a, j, pf); fclose(pf); }
+    if (!pf || !prompt || pipe(in) < 0) {
+        snprintf(msg, sizeof msg, "#%d: the agent was not started - %.100s", j->num, strerror(errno));
+        app_note_gm(a, msg);
+        free(prompt);
+        return -1;
+    }
     char job[16], pidv[24];
     snprintf(job, sizeof job, "%d", j->num);
     snprintf(pidv, sizeof pidv, "%ld", (long)getpid());
 
     fflush(NULL);                       /* nothing of ours buffered goes out twice */
     pid_t pid = fork();
-    if (pid < 0) { close(in[0]); close(in[1]); free(prompt); return -1; }
+    if (pid < 0) {
+        snprintf(msg, sizeof msg, "#%d: the agent was not started - %.100s", j->num, strerror(errno));
+        app_note_gm(a, msg);
+        close(in[0]); close(in[1]); free(prompt);
+        return -1;
+    }
     if (pid == 0) {
         /* Twice, so the agent is nobody's child (no zombie to reap) and our
          * terminal is not its controlling one. */
@@ -99,6 +134,7 @@ int app_agent_start(App *a, const Job *j)
         if (out < 0) out = open("/dev/null", O_WRONLY);
         if (out >= 0) { dup2(out, 1); dup2(out, 2); }
         for (int fd = 3; fd < 256; fd++) close(fd);        /* the terminal, the sockets, the log */
+        signal(SIGPIPE, SIG_DFL);       /* ignored here (term.c): a pipeline in the command must end quietly */
         setenv("VTT_JOB", job, 1);
         setenv("VTT_PID", pidv, 1);
         if (app_self_path) setenv("VTT", app_self_path, 1);
@@ -108,17 +144,24 @@ int app_agent_start(App *a, const Job *j)
     close(in[0]);
     while (waitpid(pid, NULL, 0) < 0 && errno == EINTR) { }
     /* The prompt is a few KB: it fits the pipe, so this never waits on the
-     * agent reading it. */
+     * agent reading it. A command that exits without reading it must not
+     * take vtt with it: SIGPIPE is ignored for the write. */
+    void (*pipe_was)(int) = signal(SIGPIPE, SIG_IGN);
     for (size_t off = 0; off < plen; ) {
         ssize_t w = write(in[1], prompt + off, plen - off);
         if (w > 0) off += (size_t)w;
         else if (w < 0 && errno == EINTR) continue;
         else break;
     }
+    signal(SIGPIPE, pipe_was);
     close(in[1]);
     free(prompt);
-    snprintf(msg, sizeof msg, "#%d: started %.200s", j->num, a->agent_cmd);
-    slog_write(&a->slog, msg);
+    /* On the GM's line: what was started, where its output is (a command
+     * that cannot run says so only there), and the channel if it came on. */
+    snprintf(msg, sizeof msg, "#%d asked - started %.150s%s%s", j->num, a->agent_cmd,
+             slog_on(&a->slog) ? "" : " (:log on shows what it prints)",
+             turned_on ? " - agent channel on for it" : "");
+    app_note_gm(a, msg);
     return 1;
 }
 
@@ -127,15 +170,27 @@ void app_agent_command_cmd(App *a, const char *rest)
     char msg[AGENT_CMD_MAX + 96];
     while (*rest == ' ') rest++;
     if (!*rest) {
-        if (a->agent_cmd[0]) snprintf(msg, sizeof msg, "each :ask starts: %s - :agent command off stops that", a->agent_cmd);
+        if (a->agent_cmd[0] && !a->agent_cmd_off)
+            snprintf(msg, sizeof msg, "each :ask starts: %s - :agent command off stops that", a->agent_cmd);
+        else if (a->agent_cmd[0])
+            snprintf(msg, sizeof msg, "the agent command is off (:agent command on): %s", a->agent_cmd);
         else snprintf(msg, sizeof msg, ":agent command CMD starts CMD for each :ask (the job on its stdin); none is set");
         app_set_status_gm(a, msg);
         return;
     }
-    if (!strcmp(rest, "off")) {                              /* KEYS.md rule 9 */
-        if (!a->agent_cmd[0]) { app_set_status_gm(a, "no agent command is set"); return; }
-        a->agent_cmd[0] = '\0';
-        app_note_gm(a, "agent command off - :ask waits for an agent that comes for work");
+    /* off and on: the command is kept, and on brings it back as it was
+     * (KEYS.md rule 9). */
+    if (!strcmp(rest, "off")) {
+        if (!a->agent_cmd[0] || a->agent_cmd_off) { app_set_status_gm(a, "no agent command is set"); return; }
+        a->agent_cmd_off = 1;
+        app_note_gm(a, "agent command off - :ask waits for an agent that comes for work; :agent command on brings it back");
+        return;
+    }
+    if (!strcmp(rest, "on")) {
+        if (!a->agent_cmd[0]) { app_set_status_gm(a, "no agent command to switch on - :agent command CMD sets one"); return; }
+        a->agent_cmd_off = 0;
+        snprintf(msg, sizeof msg, "each :ask now starts: %s", a->agent_cmd);
+        app_note_gm(a, msg);
         return;
     }
     if (strlen(rest) >= sizeof a->agent_cmd) {
@@ -144,6 +199,7 @@ void app_agent_command_cmd(App *a, const char *rest)
         return;
     }
     str_lcpy(a->agent_cmd, rest, sizeof a->agent_cmd);
+    a->agent_cmd_off = 0;
     snprintf(msg, sizeof msg, "each :ask now starts: %s", a->agent_cmd);
     app_note_gm(a, msg);
 }

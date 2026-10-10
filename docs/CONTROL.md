@@ -182,7 +182,13 @@ never move.
     there is no zombie and no `SIGCHLD` to handle, and it has no terminal. Its descriptors
     past 2 are closed. Output goes to the session log's file when one is on, else nowhere.
   - **It switches the channel on** when it starts a job with the channel off: the command
-    cannot answer otherwise. Setting the command alone does not.
+    cannot answer otherwise. Setting the command alone does not. The GM's line says so
+    ("agent channel on for it"); `:agent command off` does not switch it back.
+  - **`off` keeps the command** and `on` brings it back (KEYS.md rule 9).
+  - The agent gets `SIGPIPE` back at its default (vtt ignores it), and vtt ignores it for
+    the write of the prompt: a command that exits without reading must not end vtt.
+  - The prompt's lines are run as printed: the path in single quotes, the heredoc's end at
+    the margin, the GM's own box where a region is wanted.
   - Not kept across sessions; `VTT_AGENT_COMMAND` sets it at startup.
 - **`--apply` to an open map (2026-10-09, docs/CONFLICTS.md step 6).**
   - `ctl_apply_open` (ctl.c) asks each socket `holds DEV INO`; the holder gets the plan

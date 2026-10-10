@@ -256,6 +256,7 @@ typedef struct {
     /* :agent command (app_agent.c): what vtt starts for each :ask and each
      * job sent back, the job on its stdin. Empty: none. */
     char     agent_cmd[AGENT_CMD_MAX];
+    int      agent_cmd_off;     /* :agent command off: kept, not started */
 
     TextPrompt prompt;
     PromptWhat prompt_what;

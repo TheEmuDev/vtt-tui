@@ -28,6 +28,7 @@ static int job_index(const App *a, int num)
 int app_job_find(const App *a, int num) { return job_index(a, num); }
 const char *app_job_state_name(int state) { return STATE_NAME[state]; }
 const char *app_job_from_name(int from) { return FROM_NAME[from]; }
+const char *app_job_who_name(char who) { return who == 'G' ? "gm" : who == 'A' ? "agent" : "-"; }
 
 static int job_free_num(const App *a)
 {

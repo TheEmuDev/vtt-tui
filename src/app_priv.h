@@ -203,6 +203,8 @@ int  app_job_find(const App *a, int num);
 void app_job_thread_add(Job *j, char who, const char *text);
 const char *app_job_state_name(int state);
 const char *app_job_from_name(int from);
+/* A thread line's speaker as the channel and a started agent read it. */
+const char *app_job_who_name(char who);
 
 /* The v box a : command was typed over (build mode), into x0..y1, and back to
  * normal mode; 0 when there was none. :area, :scene save and :ask read it. */

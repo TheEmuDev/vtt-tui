@@ -4,6 +4,7 @@
 #include "harness.h"
 
 #include <errno.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -868,7 +869,7 @@ void test_agent_command(void)
     CHECK(file_has(out, "Where: B2:E5 (the box the GM drew)\n"));
     CHECK(file_has(out, "Map: Blank, 20x12 squares"));
     char line[900];
-    snprintf(line, sizeof line, "%s --ctl-pid %ld --ctl 'job 1 take'", self, (long)getpid());
+    snprintf(line, sizeof line, "'%s' --ctl-pid %ld --ctl 'job 1 take'\n", self, (long)getpid());
     CHECK(file_has(out, line));
     CHECK(file_has(out, "job 1 propose \"one line for the GM\"\n"));
 
@@ -906,7 +907,8 @@ void test_agent_command(void)
         app_agent_prompt(&a, &j, f);
         fclose(f);
         CHECK(strstr(body, "Where: the GM drew no box") != NULL);
-        CHECK(strstr(body, "--ctl 'dump'") != NULL && strstr(body, "'job 7 area B2:K12'") != NULL);
+        CHECK(strstr(body, "--ctl 'dump'\n") != NULL);
+        CHECK(strstr(body, "job 7 area") == NULL);          /* no box of the GM's to name */
     }
     pump_until_file(&a, out, "\x01never");                  /* let the second run finish */
     press(&a, ":agent command off\r");
@@ -921,6 +923,81 @@ void test_agent_command(void)
         free(after);
     }
 
+    CASE("REVIEW 1: only a job the GM asked for starts it: feedback on an agent's own idea does not");
+    {
+        char runs_file[720], c2[900];
+        snprintf(runs_file, sizeof runs_file, "%s/runs.out", sb.dir);
+        snprintf(c2, sizeof c2, ":agent command cat > /dev/null; echo run-$VTT_JOB >> %s\r", runs_file);
+        press(&a, c2);
+        app_jobs_clear(&a);
+        char *t = ctl_ask(&a, "propose \"my own idea\"\ntile A2 water\n");
+        free(t);
+        CHECK(a.jobs[0].used && a.jobs[0].from == JOB_FROM_AGENT);
+        press(&a, ":review\rc");
+        press(&a, "rougher\r");
+        CHECK_EQ(a.jobs[0].state, JOB_WORKING);
+        pump_until_file(&a, runs_file, "run-");
+        CHECK(!file_has(runs_file, "run-"));               /* nothing was started */
+        app_jobs_clear(&a);
+
+        CASE("REVIEW 4: the channel coming on for the command is said on the GM's line, once");
+        press(&a, ":agent off\r");
+        CHECK_EQ(a.agent_on, 0);
+        press(&a, ":ask a well\r");
+        CHECK_EQ(a.agent_on, 1);
+        CHECK(strstr(a.status, "agent channel on") != NULL && a.status_gm);
+        CHECK(strstr(a.status, "started") != NULL);
+        CHECK(pump_until_file(&a, runs_file, "run-1"));
+        press(&a, ":ask another\r");
+        CHECK(strstr(a.status, "agent channel on") == NULL);
+        CHECK(pump_until_file(&a, runs_file, "run-2"));
+        app_jobs_clear(&a);
+
+        CASE("REVIEW 5: the command does not inherit SIGPIPE ignored (a pipeline in it must die quietly)");
+        char sig_file[720];
+        snprintf(sig_file, sizeof sig_file, "%s/sig.out", sb.dir);
+        snprintf(c2, sizeof c2, ":agent command cat > /dev/null; grep SigIgn /proc/self/status > %s; echo end >> %s\r", sig_file, sig_file);
+        press(&a, c2);
+        void (*was)(int) = signal(SIGPIPE, SIG_IGN);       /* as the terminal sets it */
+        press(&a, ":ask a wall\r");
+        CHECK(pump_until_file(&a, sig_file, "end"));
+        signal(SIGPIPE, was);
+        {
+            char *st = slurp(sig_file);
+            unsigned long long ign = st ? strtoull(st + 7, NULL, 16) : ~0ull;
+            CHECK((ign & (1ull << (SIGPIPE - 1))) == 0);
+            free(st);
+        }
+        app_jobs_clear(&a);
+
+        CASE("REVIEW 8: off switches it off and on brings it back as it was (KEYS.md rule 9)");
+        press(&a, ":agent command off\r");
+        press(&a, ":ask nothing\r");
+        CHECK(strstr(a.status, "started") == NULL);
+        press(&a, ":agent command on\r");
+        CHECK(strstr(a.status, "each :ask now starts: cat > /dev/null; grep SigIgn") != NULL);
+        press(&a, ":agent command off\r");
+        app_jobs_clear(&a);
+    }
+
+    CASE("REVIEW 6: the prompt's lines run as printed: the path quoted, the heredoc's end at the margin");
+    {
+        const char *keep = app_self_path;
+        app_self_path = "/opt/my games/it's vtt";
+        char body[4096] = "";
+        FILE *f = fmemopen(body, sizeof body - 1, "w");
+        Job j;
+        memset(&j, 0, sizeof j);
+        j.used = 1; j.num = 7;
+        str_lcpy(j.text, "more goblins", sizeof j.text);
+        app_agent_prompt(&a, &j, f);
+        fclose(f);
+        CHECK(strstr(body, "'/opt/my games/it'\\''s vtt' --ctl-pid") != NULL);
+        CHECK(strstr(body, "\nEOF\n") != NULL && strstr(body, "  EOF\n") == NULL);
+        CHECK(strstr(body, "no job #7") != NULL);            /* what to do when it is gone */
+        app_self_path = keep;
+    }
+
     CASE("a command too long for its field is refused, and none is set");
     {
         /* Past what the : line takes, so asked of the command's own check
@@ -928,9 +1005,11 @@ void test_agent_command(void)
         char big[400];
         memset(big, 'x', 300);
         big[300] = '\0';
+        char had[AGENT_CMD_MAX];
+        str_lcpy(had, a.agent_cmd, sizeof had);
         app_agent_command_cmd(&a, big);
         CHECK(strstr(a.status, "put it in a script") != NULL);
-        CHECK_EQ(a.agent_cmd[0], '\0');
+        CHECK(!strcmp(a.agent_cmd, had));                   /* what was there is left */
     }
 
     app_self_path = self_was;

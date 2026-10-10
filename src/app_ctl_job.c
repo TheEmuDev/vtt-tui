@@ -16,10 +16,6 @@ static void box_name(const CsBox *b, char *buf, size_t sz)
     map_region_name(b->x0, b->y0, b->x1, b->y1, buf, sz);
 }
 
-static const char *who_name(char who)
-{
-    return who == 'G' ? "gm" : who == 'A' ? "agent" : "-";
-}
 
 /* One job as text: its line, its thread, its proposal. */
 static void job_text(App *a, Job *j, FILE *out)
@@ -31,7 +27,7 @@ static void job_text(App *a, Job *j, FILE *out)
     fprintf(out, "#%d %s%s, %s%s%s%s\n", j->num, app_job_state_name(j->state), where, FROM[j->from],
             j->at_once ? ", to land at once" : "", j->text[0] ? ": " : "", j->text);
     for (int t = 0; t < j->nthread; t++)
-        fprintf(out, "  %s: %s\n", who_name(j->thread[t].who), j->thread[t].text);
+        fprintf(out, "  %s: %s\n", app_job_who_name(j->thread[t].who), j->thread[t].text);
     if (j->has_cs && j->state == JOB_READY) {
         int c = cs_check(&j->cs, a->map);
         fprintf(out, "  proposal: %s", j->summary);
@@ -63,7 +59,7 @@ static void job_json(App *a, Job *j, Json *js)
     json_open(js, '[');
     for (int t = 0; t < j->nthread; t++) {
         json_open(js, '{');
-        json_kstr(js, "who", who_name(j->thread[t].who));
+        json_kstr(js, "who", app_job_who_name(j->thread[t].who));
         json_kstr(js, "text", j->thread[t].text);
         json_close(js, '}');
     }
