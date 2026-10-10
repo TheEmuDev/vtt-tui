@@ -81,7 +81,7 @@ review and the next. The rules (the user, 2026-10-09):
 | 7 | step 5 | The plan says the event reads `the GM changed: ...` (CONFLICTS.md:455); the code and AGENTS.md say `map changed: ...`. Progress does not list the difference. | docs | Overlooked. | the plan's line is corrected, or Progress lists it under "changed from the plan" | 2026-10-09 |
 | 8 | step 5; first raised by the review of the plan's third draft | `ctl.wait`, the zone round answering held waits, has no perf row: the bench has no socket to hold a wait on. | performance | Stood in for by a manual check against a live vtt (1 ms from key to answer, no CPU while held), written out in CONFLICTS.md *Progress*. | the bench gains a client that holds a wait, or a test times the flush | 2026-10-09 |
 | 9 | step 5 | The main loop (`main.c`) has no test. Its bug in step 5 (keys handled in the drain never reached the flush) was found only by driving a live vtt. | test gap | The loop needs a terminal; every test calls `app_key`/`app_tick` directly. | the loop's body becomes a function a test can call with a fake terminal | 2026-10-09 |
-| 10 | step 6 (f306906) | Two vtts holding one file: the proposal goes to the first found, and stderr says how many others. The others' GMs are not told. No test covers it. | behavior, test gap | Step 7 makes it rare ("opening a map another vtt has open asks first"); the warning was the cheap part. | step 7 lands; a test with two listening apps on one file checks the warning | 2026-10-09 |
+| 10 | step 6 (f306906); step 7's review: opening now asks first, so it is rarer | Two vtts holding one file: the proposal goes to the first found, and stderr says how many others. The others' GMs are not told. No test covers it. | behavior, test gap | Step 7 makes it rare ("opening a map another vtt has open asks first"); the warning was the cheap part. | step 7 lands; a test with two listening apps on one file checks the warning | 2026-10-09 |
 | 11 | step 6 | No test that `vtt --ctl` picks the one vtt with `agent on` when two are listening. | test gap | Needs two apps listening in one test. | a `ctllive` case with a second `Ctl` | 2026-10-09 |
 | 12 | step 6 | No test for `--apply --wait` when the vtt quits before a verdict (it should exit 2). | test gap | Not written. | a `ctllive` case stops the channel while a forked `--wait` is held | 2026-10-09 |
 | 13 | step 6 | `holds` is tested with no map open, not with a map never saved (an empty path). | test gap | Not written; the code checks `m->path[0]`. | one line in `events` or `ctllive` after clearing `path` | 2026-10-09 |
@@ -102,6 +102,30 @@ review and the next. The rules (the user, 2026-10-09):
 | 28 | step 3 (6337c26) | No test that an at-once result lands while the GM reviews **another** job, with the review left open and the status line changed (the behavior CONFLICTS.md:101-103 describes). | test gap | Not written; the same-job case was (step 4). | a `jobs` case | 2026-10-09 |
 | 29 | step 3 | No test presses `u` after an accept by box: that the map reverts and the proposal keeps only the rest (CONFLICTS.md:104-106). | test gap | Not written. | a `u` after the boxed accept in test_jobs.c:143 | 2026-10-09 |
 | 30 | step 3 | The players' frame is checked for the tint of an asked job, not of a ready one. | test gap | The same drawing path; the reviewer called it acceptable. | the check is repeated after a proposal | 2026-10-09 |
+| 31 | step 7 (28e5563) | `:w NAME` onto a file that already exists and is not this map's writes over it without asking. | data safety | Older than step 7, which guards only the map's own file. | saving onto an existing other file asks first (a confirm, or `:w! NAME`) | 2026-10-10 |
+| 32 | step 7 | After a crash, recovery is offered only when the autosave is newer than the map's file. If someone else writes the file after the crash, the autosave is the older one and the GM's unsaved work is never offered back. | data safety | Older than step 7; found while reading who writes the file. | recovery is offered whenever an autosave is there, saying which is newer | 2026-10-10 |
+| 33 | step 7 | A trip through a link saves the map it arrives at (`app_link.c:194`) and opens it without asking the other vtts whether one has it open; only `app_open_map` asks. | data safety | The plan's words cover opening a map, and a trip is not `app_open_map`. | the trip asks `ctl_who_holds` for the destination, and refuses or asks | 2026-10-10 |
+| 34 | step 7 | The new dialog (`MODAL_CONFIRM_HELD`, two wordings) is never drawn in a test; the health questions want a golden frame for every dialog. | test gap | Its text is checked in a child process, which cannot hand a frame back. | a golden frame of each wording, the modal set by hand | 2026-10-10 |
+| 35 | step 7 | Every map opened waits two seconds for each vtt that is stopped or in an editor, with the main loop held, before asking the GM. | performance | The wait is how silence is told from "no"; README says so. | the ask goes out without blocking, and the map opens when the answers are in | 2026-10-10 |
+| 36 | step 7 | The outside-change table printed by `tools/proposals.c` has the same narrow separator as row 24. | cosmetic | With row 24. | with row 24 | 2026-10-10 |
+
+### A second opinion on this list (Fable, 2026-10-10)
+
+The reviewer of step 7 was asked to check every row against the code and rank it. All were
+still true. Its ranking, to work from:
+
+- **Do now:** B11 (a card does not save and load to the same bytes; root cause found: `card_clean`
+  (`card.c:31-40`) drops leading newlines only from the raw text, so a first line holding
+  only control characters or spaces is cleaned to nothing and its newline kept; the loader's
+  `card_take` never keeps a leading blank line. Fix: in the newline branch, drop a blank
+  line while the output is still empty; then the input joins the fixtures). Row 10's missing
+  test (two vtts holding one file).
+- **Worth doing:** 3, 4, 6, 7, 9, 11, 12, 14, 16, 19, 20, 21, 25, 28, 29, B5, B6, and the new
+  31-33.
+- **Leave** (with the reason in each row): 1, 2, 5, 8, 13, 15, 18, 22, 23, 24, 26, 27, 30, B1-B4,
+  B7-B10. On the three kept on purpose it agreed: 5 ("at once" is a property of how the
+  proposal was made), 15 (same user, and a plan must be told why it failed), and 14 is worth
+  making the same on both roads.
 
 ### Found while building, not by a review
 

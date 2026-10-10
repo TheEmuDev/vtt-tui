@@ -114,9 +114,10 @@ int  ctl_apply_open(const char *map_path, const char *plan_name, const char *pla
 int  ctl_verdict_in(const char *ans, int num, unsigned *seq, char *line, size_t sz);
 
 /* The pid of another running vtt that has this file open, or 0: asked before
- * a map is opened, so a GM is told it is open twice. A vtt that does not
- * answer in two seconds is passed over. */
-long ctl_who_holds(const char *map_path);
+ * a map is opened, so a GM is told it is open twice. *silent is a vtt that
+ * was there and did not answer in two seconds (stopped, its GM in an
+ * editor), or 0: it may have the map open, and the GM is told that too. */
+long ctl_who_holds(const char *map_path, long *silent);
 
 /* `vtt --ctl`: sends `req` (NULL reads stdin) to the vtt of `pid` (0: the
  * only one running), prints the answer. Returns the exit status. */

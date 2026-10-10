@@ -1102,15 +1102,19 @@ map as one undo step (red squares are ones you have changed too, which taking it
 overwrite), a `v` box takes part of it, and `d` leaves it out.
 
 Until you have reviewed it, `:w` refuses, because it would write over what the other writer
-did; so does a trip through a link to another map, which saves this one. `:w!` saves yours
-over it anyway. `:e` alone throws away what you have and reads the file again.
+did; so does a trip through a link to another map, which saves this one. That holds while
+any part of it still waits: after taking a part by box, `d` on the rest (or `:w!`) frees the
+save. `:w!` saves yours over it anyway. `:e` alone throws away what you have and reads the
+file again.
 
 Two changes cannot be offered this way, and vtt says so instead: the file is no longer a
 map it can read, or it (or your map) has been resized. Then `:e` takes the file's and `:w!`
 writes yours.
 
 Opening a map that another vtt already has open asks first. If you open it in both, what
-either one saves comes to the other as a change to review.
+either one saves comes to the other as a change to review. A vtt that is suspended (or
+whose GM is in an editor writing a card) cannot say what it has open: vtt waits two seconds
+for it, then asks you whether to open the map anyway.
 
 ## Rulesets
 

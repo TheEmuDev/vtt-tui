@@ -497,6 +497,61 @@ static char *ask(const char *dir, long pid, const char *req, size_t len, size_t 
     return ans;
 }
 
+/* Asks every vtt in the directory one question (never this process, which
+ * is not answering itself): `each` gets its answer, or NULL when a vtt is
+ * there and silent. A socket with nobody behind it is passed over. The one
+ * loop behind `--ctl`'s choice of vtt, `--apply`'s search for the map's
+ * holder, and the question before a map is opened. */
+typedef void (*AskEach)(void *ctx, long pid, const char *ans);
+
+static void ask_each(const char *dir, const char *req, size_t len, AskEach each, void *ctx)
+{
+    long pids[CTL_LIST_MAX], self = (long)getpid();
+    int  n = find_live(dir, pids, CTL_LIST_MAX);
+    for (int i = 0; i < n; i++) {
+        if (pids[i] == self) continue;
+        size_t al;
+        int    gone;
+        char  *ans = ask(dir, pids[i], req, len, &al, CTL_FIND_MS, &gone);
+        if (ans || !gone) each(ctx, pids[i], ans);
+        free(ans);
+    }
+}
+
+/* Who has a file open: the first vtt that says so, how many more do, and one
+ * that is there and did not say no -- stopped, or its GM in an editor --
+ * which may hold it. */
+typedef struct { long pid, silent; int others; } Holders;
+
+static void holder_each(void *ctx, long pid, const char *ans)
+{
+    Holders *h = ctx;
+    if (ans && !strcmp(ans, "ok\nholds\n")) { if (!h->pid) h->pid = pid; else h->others++; }
+    else if (!(ans && !strcmp(ans, "ok\nno\n"))) h->silent = pid;
+}
+
+static void find_holders(const char *dir, const struct stat *st, Holders *h)
+{
+    char req[96];
+    int  len = snprintf(req, sizeof req, "holds %llu %llu\n", (unsigned long long)st->st_dev, (unsigned long long)st->st_ino);
+    memset(h, 0, sizeof *h);
+    ask_each(dir, req, (size_t)len, holder_each, h);
+}
+
+/* `--ctl`'s: the vtts whose channel is on, each with its map's line. */
+typedef struct { long on[CTL_LIST_MAX]; char lines[CTL_LIST_MAX][160]; int n; } ChannelsOn;
+
+static void on_each(void *ctx, long pid, const char *ans)
+{
+    ChannelsOn *c = ctx;
+    if (!ans) { fprintf(stderr, "vtt: the vtt with pid %ld is not answering - passed over\n", pid); return; }
+    if (!strstr(ans, "\nagent on\n") || c->n == CTL_LIST_MAX) return;
+    const char *nl = strchr(ans, '\n');                /* the line after "ok" is the map's */
+    size_t k = strcspn(nl + 1, "\n");
+    snprintf(c->lines[c->n], sizeof c->lines[c->n], "%.*s", (int)(k < 150 ? k : 150), nl + 1);
+    c->on[c->n++] = pid;
+}
+
 int ctl_client_main(const char *req, long pid)
 {
     char dir[CTL_PATH_MAX], err[CTL_PATH_MAX + 64];
@@ -509,33 +564,19 @@ int ctl_client_main(const char *req, long pid)
     if (!pid) {
         /* Every interactive vtt listens (for --apply); --ctl talks to the
          * one whose GM typed :agent on. Each says which it is in status. */
-        long pids[CTL_LIST_MAX], on[CTL_LIST_MAX];
-        char lines[CTL_LIST_MAX][160];
-        int  n = find_live(dir, pids, CTL_LIST_MAX), non = 0;
-        for (int i = 0; i < n; i++) {
-            size_t len;
-            int    gone;
-            char  *ans = ask(dir, pids[i], "status\n", 7, &len, CTL_FIND_MS, &gone);
-            if (!ans && !gone) fprintf(stderr, "vtt: the vtt with pid %ld is not answering - passed over\n", pids[i]);
-            if (ans && strstr(ans, "\nagent on\n")) {
-                /* The line after "ok" is the map's. */
-                const char *nl = strchr(ans, '\n');
-                size_t k = strcspn(nl + 1, "\n");
-                snprintf(lines[non], sizeof lines[non], "%.*s", (int)(k < 150 ? k : 150), nl + 1);
-                on[non++] = pids[i];
-            }
-            free(ans);
-        }
-        if (non == 0) {
+        ChannelsOn c;
+        c.n = 0;
+        ask_each(dir, "status\n", 7, on_each, &c);
+        if (c.n == 0) {
             fputs("vtt: no vtt is taking requests - type :agent on in the one you mean\n", stderr);
             return 2;
         }
-        if (non > 1) {
+        if (c.n > 1) {
             fputs("vtt: more than one vtt is taking requests; pick one with --ctl-pid:\n", stderr);
-            for (int i = 0; i < non; i++) fprintf(stderr, "  --ctl-pid %-8ld %s\n", on[i], lines[i]);
+            for (int i = 0; i < c.n; i++) fprintf(stderr, "  --ctl-pid %-8ld %s\n", c.on[i], c.lines[i]);
             return 2;
         }
-        pid = on[0];
+        pid = c.on[0];
     }
 
     char path[CTL_PATH_MAX];
@@ -620,18 +661,10 @@ int ctl_apply_open(const char *map_path, const char *plan_name, const char *plan
      * started in a directory of its own. Every one is asked: a vtt that is
      * there and does not say no may hold it, and then the file is left
      * alone -- writing it under an open map is what this is here to stop. */
-    char holds[96];
-    int  hl = snprintf(holds, sizeof holds, "holds %llu %llu\n", (unsigned long long)st.st_dev, (unsigned long long)st.st_ino);
-    long pids[CTL_LIST_MAX], pid = 0, silent = 0;
-    int  n = find_live(dir, pids, CTL_LIST_MAX), others = 0;
-    for (int i = 0; i < n; i++) {
-        size_t al;
-        int    gone;
-        char  *ans = ask(dir, pids[i], holds, (size_t)hl, &al, CTL_FIND_MS, &gone);
-        if (ans && !strcmp(ans, "ok\nholds\n")) { if (!pid) pid = pids[i]; else others++; }
-        else if (!gone && !(ans && !strcmp(ans, "ok\nno\n"))) silent = pids[i];
-        free(ans);
-    }
+    Holders h;
+    find_holders(dir, &st, &h);
+    long pid = h.pid, silent = h.silent;
+    int  others = h.others;
     if (!pid && silent) {
         fprintf(stderr, "vtt: the vtt with pid %ld did not say whether it has %s open (stopped, or its GM is in an "
                         "editor) - nothing done; try again\n", silent, map_path);
@@ -709,23 +742,16 @@ int ctl_apply_open(const char *map_path, const char *plan_name, const char *plan
     }
 }
 
-long ctl_who_holds(const char *map_path)
+long ctl_who_holds(const char *map_path, long *silent)
 {
-    char dir[CTL_PATH_MAX], err[CTL_PATH_MAX + 64], holds[96];
+    char dir[CTL_PATH_MAX], err[CTL_PATH_MAX + 64];
     struct stat st;
+    *silent = 0;
     if (stat(map_path, &st) < 0 || ctl_dir(dir, sizeof dir) < 0 || access(dir, F_OK) != 0 ||
         dir_ours(dir, err, sizeof err) < 0)
         return 0;
-    int  hl = snprintf(holds, sizeof holds, "holds %llu %llu\n", (unsigned long long)st.st_dev, (unsigned long long)st.st_ino);
-    long pids[CTL_LIST_MAX], self = (long)getpid(), found = 0;
-    int  n = find_live(dir, pids, CTL_LIST_MAX);
-    for (int i = 0; i < n && !found; i++) {
-        if (pids[i] == self) continue;          /* this vtt is not answering itself */
-        size_t al;
-        int    gone;
-        char  *ans = ask(dir, pids[i], holds, (size_t)hl, &al, CTL_FIND_MS, &gone);
-        if (ans && !strcmp(ans, "ok\nholds\n")) found = pids[i];
-        free(ans);
-    }
-    return found;
+    Holders h;
+    find_holders(dir, &st, &h);
+    *silent = h.silent;
+    return h.pid;
 }

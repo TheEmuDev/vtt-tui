@@ -342,7 +342,7 @@ static int write_map(const Map *m, const char *path, int autosave, char **keep, 
         ssize_t w = write(fd, text + off, text_len - off);
         if (w > 0) off += (size_t)w;
         else if (w < 0 && errno == EINTR) continue;
-        else ok = 0;
+        else { if (w == 0) errno = EIO; ok = 0; }
     }
     if (ok && !autosave) {
         PROF_ZONE("mapio.fsync");
@@ -950,14 +950,8 @@ Map *mapio_load_base(const char *path, char *err, size_t errsz)
 
 Map *mapio_load_mem(const char *bytes, size_t len, char *err, size_t errsz)
 {
-    /* fmemopen wants a buffer it may write a NUL to: ours is read only. */
-    char *copy = malloc(len + 1);
-    if (!copy) { snprintf(err, errsz, "out of memory"); return NULL; }
-    memcpy(copy, bytes, len);
-    copy[len] = '\0';
-    Map *m = load_bytes("", copy, len, err, errsz, NULL, NULL);
-    free(copy);
-    return m;
+    /* Read only: fmemopen in "r" writes nothing, which the base depends on. */
+    return load_bytes("", (char *)(uintptr_t)bytes, len, err, errsz, NULL, NULL);
 }
 
 static Map *load_text(FILE *f, const char *path, char *err, size_t errsz, MapioDiag sink, void *ctx)

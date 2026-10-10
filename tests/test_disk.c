@@ -280,6 +280,138 @@ void test_disk(void)
     CHECK(access(path, F_OK) == 0);
     CHECK(mapio_disk_stat(path, &id) == 0 && mapio_disk_same(&id, &m->disk));
 
+    CASE("REVIEW 1: deleted, then another program puts a different map there: a change to review, not written over");
+    unlink(path);
+    key_then_quiet(&a, &now);                               /* a look finds it gone */
+    {
+        char err[MAPIO_ERR_MAX];
+        Map *o = map_copy(m);
+        map_set_tile(o, 6, 6, TILE_HAZARD);
+        mapio_write(o, path, err, sizeof err);              /* theirs, where ours was */
+        map_free(o);
+    }
+    key_then_quiet(&a, &now);
+    CHECK(disk_job(&a) >= 0);
+    press(&a, ":w\r");
+    CHECK(strstr(a.status, "not saved - the file changed on disk") != NULL);
+    {
+        char err[MAPIO_ERR_MAX];
+        Map *o = mapio_load(path, err, sizeof err);
+        CHECK(o && map_tile(o, 6, 6) == TILE_HAZARD);       /* theirs is still there */
+        map_free(o);
+    }
+    press(&a, ":w!\r");
+    app_jobs_clear(&a);
+
+    CASE("REVIEW 2: the file's job is the file's: an agent's job that took its number is left alone");
+    outside_edit(path, 1, 5, TILE_BRUSH);
+    key_then_quiet(&a, &now);
+    dj = disk_job(&a);
+    CHECK(dj >= 0);
+    if (dj >= 0) {
+        char rm[32];
+        int num = a.jobs[dj].num;
+        snprintf(rm, sizeof rm, ":ask %d remove\r", num);
+        a.disk_checked_ms = a.now_ms;                       /* no look between: the same second */
+        press(&a, rm);
+        char *t = ctl_ask(&a, "tile A12 water\n");          /* an agent's, taking the number */
+        free(t);
+        int aj = -1;
+        for (int i = 0; i < JOB_MAX; i++) if (a.jobs[i].used && a.jobs[i].num == num) aj = i;
+        CHECK(aj >= 0 && a.jobs[aj].from == JOB_FROM_AGENT);
+        press(&a, ":w!\r");
+        CHECK(aj >= 0 && a.jobs[aj].state == JOB_READY);    /* not scrapped as the file's */
+    }
+    app_jobs_clear(&a);
+    key_then_quiet(&a, &now);
+
+    CASE("REVIEW 4: a change noticed, then the file deleted: nothing to review, and :w puts the map back");
+    outside_edit(path, 2, 5, TILE_BRUSH);
+    now += 2000;
+    app_tick(&a, now);
+    press(&a, "l");
+    CHECK_EQ(a.disk_state, DISK_NOTICED);
+    unlink(path);
+    now += AUTOSAVE_QUIET_MS;
+    app_tick(&a, now);
+    CHECK_EQ(a.disk_state, DISK_NONE);
+    press(&a, ":w\r");
+    CHECK(strstr(a.status, "wrote ") != NULL);
+    {
+        FILE *f = fopen(path, "w");                         /* stuck, then gone */
+        fputs("garbage\n", f);
+        fclose(f);
+    }
+    key_then_quiet(&a, &now);
+    CHECK_EQ(a.disk_state, DISK_STUCK);
+    unlink(path);
+    key_then_quiet(&a, &now);
+    CHECK_EQ(a.disk_state, DISK_NONE);
+    press(&a, ":w\r");
+    CHECK(strstr(a.status, "wrote ") != NULL);
+
+    CASE("REVIEW 5: saved under another name: the file's change is left behind, and its thread says that");
+    outside_edit(path, 3, 5, TILE_BRUSH);
+    key_then_quiet(&a, &now);
+    dj = disk_job(&a);
+    CHECK(dj >= 0);
+    {
+        char other[720];
+        snprintf(other, sizeof other, ":w %s/other.vtt\r", sb.dir);
+        press(&a, other);
+        CHECK(strstr(a.status, "wrote ") != NULL);
+        CHECK(dj >= 0 && a.jobs[dj].state == JOB_SCRAPPED);
+        CHECK(dj >= 0 && strstr(a.jobs[dj].thread[a.jobs[dj].nthread - 1].text, "written over") == NULL);
+        snprintf(other, sizeof other, ":w %s\r", path);     /* and back to the first file */
+        press(&a, other);
+    }
+    app_jobs_clear(&a);
+    key_then_quiet(&a, &now);
+    if (a.disk_state != DISK_NONE) { press(&a, ":w!\r"); app_jobs_clear(&a); }
+
+    CASE("REVIEW 6: a scrapped change brought back with :review N stands in :w's way again");
+    outside_edit(path, 4, 5, TILE_BRUSH);
+    key_then_quiet(&a, &now);
+    dj = disk_job(&a);
+    CHECK(dj >= 0);
+    if (dj >= 0) {
+        char rv[32];
+        press(&a, ":review\rd");
+        key_then_quiet(&a, &now);                           /* adopted: the file is the base */
+        snprintf(rv, sizeof rv, ":review %d\r", a.jobs[dj].num);
+        press(&a, rv);
+        CHECK_EQ(a.jobs[dj].state, JOB_READY);
+        press(&a, "\x1b");
+        press(&a, ":w\r");
+        CHECK(strstr(a.status, "not saved - ") != NULL);
+        press(&a, ":w!\r");
+    }
+    app_jobs_clear(&a);
+
+    CASE("pinned: :wq is refused too and the map stays open; a part accepted by box leaves :w refused; two changes are one job");
+    outside_edit(path, 5, 1, TILE_BRUSH);
+    key_then_quiet(&a, &now);
+    outside_edit(path, 6, 1, TILE_BRUSH);
+    key_then_quiet(&a, &now);
+    int njobs = 0;
+    for (int i = 0; i < JOB_MAX; i++) njobs += a.jobs[i].used && a.jobs[i].from == JOB_FROM_DISK;
+    CHECK_EQ(njobs, 1);
+    dj = disk_job(&a);
+    CHECK(dj >= 0 && a.jobs[dj].cs.ncells == 2);
+    press(&a, ":wq\r");
+    CHECK(a.map != NULL && a.screen == SCREEN_EDITOR);
+    CHECK(strstr(a.status, "not saved - ") != NULL);
+    a.ed.cx = 5; a.ed.cy = 1;
+    press(&a, ":review\rv\r");                             /* the box is F2 alone */
+    CHECK_EQ(map_tile(a.map, 5, 1), TILE_BRUSH);
+    CHECK_EQ(map_tile(a.map, 6, 1), TILE_FLOOR);
+    press(&a, "\x1b");
+    press(&a, ":w\r");
+    CHECK(strstr(a.status, "not saved - ") != NULL);        /* the rest still waits */
+    press(&a, ":w!\r");
+    app_jobs_clear(&a);
+    m = a.map;
+
     CASE("a map another vtt has open: asked first; y opens it here too, n leaves it");
     {
         /* The other vtt is this process, listening and pumped; the one that
@@ -320,6 +452,25 @@ void test_disk(void)
             }
             CHECK(done && WIFEXITED(st) && WEXITSTATUS(st) == (yes ? 8 : 7));
         }
+
+        CASE("REVIEW 3: a vtt that is there and does not answer may have the map: asked about too, never silently opened");
+        fflush(stdout);
+        pid_t pid = fork();                                /* b listens and nobody services it */
+        if (pid == 0) {
+            App c;
+            Renderer rc;
+            rnd_init(&rc);
+            rnd_resize(&rc, 80, 24);
+            app_init(&c, NULL, &rc);
+            c.ask_holders = 1;
+            app_open_map(&c, path);
+            int asked = c.modal == MODAL_CONFIRM_HELD && !c.map && strstr(c.modal_body, "did not say whether it has") != NULL;
+            press(&c, "y");
+            _exit(asked && c.map ? 9 : 1);
+        }
+        int st = 0;
+        waitpid(pid, &st, 0);
+        CHECK(WIFEXITED(st) && WEXITSTATUS(st) == 9);
         app_free(&b);
         rnd_free(&rb);
     }

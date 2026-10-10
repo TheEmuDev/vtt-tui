@@ -244,7 +244,35 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
   - Checked against a live vtt as well as the tests: a plan proposed, accepted with
     `--wait` (exit 0, the file's bytes unchanged), and a second file applied headless
     beside it.
-- **Step 7: built (2026-10-10); Fable's review is next.** What it holds:
+- **Step 7: built (28e5563, 2026-10-10), reviewed by Fable, and fixed.** Each finding was
+  first made a failing test, then fixed:
+  - **A file deleted, then put back by another program, was written over silently** (a `git
+    checkout` away and back): the look at a missing file forgot the file's identity and never
+    looked again. The identity is kept; a file put back is a change to review.
+  - **The file's job was found by its number alone,** and numbers are used again: after `:ask N
+    remove`, an agent's proposal taking N was scrapped by `:w!` as "written over". It is
+    found by number and by being the file's (`disk_slot`).
+  - **A vtt that is there and does not answer** (stopped, its GM in an editor) was taken for
+    "nobody has it" when a map was opened: step 6's mistake the other way round. The GM is
+    asked about it too.
+  - **A change noticed, or a file that could not be read, then deleted,** left `:w` refused
+    for a file that was not there.
+  - **`:w NAME` to another file** scrapped the file's change with the words "written over by
+    :w!"; it says it was left behind.
+  - **A scrapped change brought back with `:review N`** no longer stood in `:w`'s way; it
+    does again.
+  - "Ask every vtt" was written three times (`--ctl`, `--apply`, opening a map): one loop,
+    `ask_each`. `mapio_load_mem` copied the base for no reason. A short `write` reported
+    "Success".
+  - Pinned by tests: `:wq` refused with the map left open; a part accepted by box leaves
+    `:w` refused; two changes before a review are one job.
+  - **Not fixed, and on the list** (HEALTH.md, *Left open by reviews*, rows 31-36): saving
+    onto another existing file never asks; an outside write after a crash hides the
+    recovery; a trip saves the map it arrives at without asking who has it; the new dialog
+    has no golden frame; a stopped vtt costs every open two seconds.
+  - `:ask N remove` on the file's job is a scrap: the file as it is becomes the base.
+
+  What it holds:
   - `Map.disk` and `Map.base` (mapio.c): the open map's file as vtt last read or wrote it,
     its identity and its bytes, kept by `mapio_load_base` and `mapio_save`;
   - `app_disk.c` (new): one `stat` on a key at most once a second; once the keys are quiet

@@ -25,6 +25,16 @@ void app_disk_reset(App *a)
     a->disk_why[0] = '\0';
 }
 
+/* The file's own job, while it waits: found by its number and by being the
+ * file's. Numbers are used again, and a job removed leaves its number to
+ * the next one made, which may be an agent's. -1 for none. */
+static int disk_slot(const App *a)
+{
+    int slot = a->disk_job ? app_job_find(a, a->disk_job) : -1;
+    if (slot < 0 || a->jobs[slot].from != JOB_FROM_DISK || a->jobs[slot].state != JOB_READY) return -1;
+    return slot;
+}
+
 /* The file as it is now is the base from here: reviewed, scrapped, or
  * written over. */
 static void adopt(App *a)
@@ -56,6 +66,13 @@ static void disk_read(App *a)
     PROF_ZONE("disk.reload");
     Map *m = a->map;
     char err[MAPIO_ERR_MAX];
+    /* Gone since it was noticed: nobody's work is there to review or to
+     * write over. Its identity is kept, so a file put back is seen. */
+    MapDisk cur;
+    if (mapio_disk_stat(m->path, &cur) < 0) {
+        if (a->disk_state != DISK_PROPOSED) app_disk_reset(a);
+        return;
+    }
     Map *now  = mapio_load_base(m->path, err, sizeof err);
     Map *base = now && m->base ? mapio_load_mem(m->base, m->base_len, err, sizeof err) : NULL;
     if (now) a->disk_seen = now->disk;
@@ -79,9 +96,8 @@ static void disk_read(App *a)
             now->base = NULL;
             adopt(a);
         } else {
-            int slot = a->disk_job ? app_job_find(a, a->disk_job) : -1;
-            if (slot < 0 || a->jobs[slot].state != JOB_READY)
-                slot = app_job_new(a, JOB_FROM_DISK, "changed by another program", NULL, 0);
+            int slot = disk_slot(a);
+            if (slot < 0) slot = app_job_new(a, JOB_FROM_DISK, "changed by another program", NULL, 0);
             if (slot < 0) {
                 cs_free(&cs);
                 stuck(a, "the file changed on disk, and there is no room for another change to review");
@@ -107,17 +123,26 @@ void app_disk_check(App *a, int now_too)
     Map *m = a->map;
     if (!m || !m->path[0] || !m->disk.known) return;
     /* A change reviewed, scrapped or sent away: the file is the base now. */
-    if (a->disk_state == DISK_PROPOSED) {
-        int slot = app_job_find(a, a->disk_job);
-        if (slot < 0 || a->jobs[slot].state != JOB_READY) adopt(a);
-    }
+    if (a->disk_state == DISK_PROPOSED && disk_slot(a) < 0) adopt(a);
+    /* ... and one scrapped, then brought back with :review N, waits again:
+     * a save would write over what it holds. */
+    if (a->disk_state == DISK_NONE)
+        for (int i = 0; i < JOB_MAX; i++)
+            if (a->jobs[i].used && a->jobs[i].from == JOB_FROM_DISK && a->jobs[i].state == JOB_READY) {
+                a->disk_state = DISK_PROPOSED;
+                a->disk_job   = a->jobs[i].num;
+                a->disk_seen  = m->disk;
+            }
     {
         PROF_ZONE("disk.check");
         MapDisk cur;
         if (mapio_disk_stat(m->path, &cur) < 0) {
             /* Gone: nobody's work is there to write over, and :w puts the
-             * map back. */
-            if (a->disk_state == DISK_NONE) m->disk.known = 0;
+             * map back. What was noticed or could not be read went with
+             * it. The identity is kept: a file put back by someone else
+             * (git checkout away and back) is not the one this map knew. */
+            if (a->disk_state == DISK_NOTICED || a->disk_state == DISK_STUCK) app_disk_reset(a);
+            a->disk_reread = 0;
             return;
         }
         const MapDisk *last = a->disk_state == DISK_NONE ? &m->disk : &a->disk_seen;
@@ -167,17 +192,17 @@ const char *app_disk_blocks(const App *a)
     return why;
 }
 
-void app_disk_overwritten(App *a)
+void app_disk_saved(App *a, int over)
 {
-    /* :w! wrote the GM's map over whatever was there: the proposal is of a
-     * file that no longer is. mapio_save has made the base the GM's. */
-    if (a->disk_state == DISK_PROPOSED) {
-        int slot = app_job_find(a, a->disk_job);
-        if (slot >= 0 && a->jobs[slot].state == JOB_READY) {
-            if (a->review == slot) app_review_leave(a);
-            a->jobs[slot].state = JOB_SCRAPPED;
-            app_job_thread_add(&a->jobs[slot], '-', "written over by :w!");
-        }
+    /* The map is saved: mapio_save has made the base the GM's. A change
+     * that waited is of a file that no longer matters -- written over
+     * (:w!), or left behind when the map was saved as another file. */
+    int slot = a->disk_state == DISK_PROPOSED ? disk_slot(a) : -1;
+    if (slot >= 0) {
+        if (a->review == slot) app_review_leave(a);
+        a->jobs[slot].state = JOB_SCRAPPED;
+        app_job_thread_add(&a->jobs[slot], '-', over ? "written over by :w!"
+                                                     : "left behind: the map was saved as another file");
     }
     app_disk_reset(a);
     a->disk_reread = 0;

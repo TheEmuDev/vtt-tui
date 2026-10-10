@@ -275,6 +275,10 @@ feedback. Nothing you send changes the GM's map until then, unless the GM has ty
    by box leaves the rest `ready`; feedback means propose again with `job N propose`, and
    the new proposal replaces the old.
 
+   A job you never took can show up accepted: a change that came from the map's **file**
+   (another program wrote it, and the GM reviewed it) is a job too, and `jobs` says `the file
+   on disk`. No `map changed` follows an accept.
+
    An event's text is cut at 240 characters; `jobs` has a job's whole text. The GM undoing
    an accepted change with `u` comes as `map changed`, not as a job event.
 

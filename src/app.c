@@ -150,15 +150,22 @@ int app_open_map(App *a, const char *path)
     /* Open in another vtt already: say so first. Both may have it; what
      * either saves then comes to the other as a change to review. */
     if (a->ask_holders && !a->open_anyway) {
-        long pid = ctl_who_holds(path);
-        if (pid) {
+        long silent = 0, pid = ctl_who_holds(path, &silent);
+        if (pid || silent) {
             const char *base = strrchr(path, '/');
             str_lcpy(a->pending_file, path, sizeof a->pending_file);
             a->modal = MODAL_CONFIRM_HELD;
-            str_lcpy(a->modal_title, "Open in another vtt", sizeof a->modal_title);
-            snprintf(a->modal_body, sizeof a->modal_body,
-                     "%.60s is open in another vtt (pid %ld). Open it here too? What either one saves "
-                     "comes to the other as a change to review.", base ? base + 1 : path, pid);
+            str_lcpy(a->modal_title, pid ? "Open in another vtt" : "Another vtt is not answering", sizeof a->modal_title);
+            if (pid)
+                snprintf(a->modal_body, sizeof a->modal_body,
+                         "%.60s is open in another vtt (pid %ld). Open it here too? What either one saves "
+                         "comes to the other as a change to review.", base ? base + 1 : path, pid);
+            else
+                /* Silence is not a no (as for --apply): stopped, or its GM
+                 * is in an editor, it may have this map. */
+                snprintf(a->modal_body, sizeof a->modal_body,
+                         "A vtt (pid %ld) did not say whether it has %.50s open: it is stopped, or its GM is "
+                         "in an editor. Open it here anyway?", silent, base ? base + 1 : path);
             return -1;
         }
     }
@@ -548,7 +555,7 @@ int app_save_map(App *a, const char *path)
     a->autosave_gen = a->map->gen;
     /* Written over, or the map is another file's now: a change waiting from
      * the old one is of a file that no longer matters. */
-    app_disk_overwritten(a);
+    app_disk_saved(a, own);
 
     char msg[192];
     snprintf(msg, sizeof msg, "wrote %.170s", path);

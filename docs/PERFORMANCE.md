@@ -986,7 +986,9 @@ times the pieces (the desktop, 2026-10-10, median of 51):
 | the compare of two whole maps | 29-35 µs | 59 µs a MB estimated | none |
 
 No timer: a vtt nobody is typing in never looks. The read waits for 1.5 s without a key
-(`app_disk_due` feeds `poll`), so the 5 ms never lands under a keystroke.
+(`app_disk_due` feeds `poll`), so the 5 ms does not land under an ordinary keystroke. It
+does under `:w` and `g o` when the file has just changed: they look, and read, before they
+write.
 
 **`--apply` finding the map's holder** (step 6; the desktop, 300 runs a figure, the median of
 five): a failing plan on a file nobody has open takes 1.06 ms with no vtt running and 1.17 ms
