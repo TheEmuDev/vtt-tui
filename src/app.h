@@ -75,6 +75,13 @@ typedef enum {
 } PromptWhat;
 
 /* A ping: a ring round a block of squares, until a moment passes. */
+#define EVENT_MAX      32
+#define EVENT_TEXT_MAX 240
+typedef struct {
+    unsigned seq;
+    char     text[EVENT_TEXT_MAX];
+} AgentEvent;
+
 #define PING_SHOW_MS 2000
 #define PING_GM      0u                     /* phones are 1 and up */
 #define PING_MAX     (NET_MAX_CLIENTS + 1)
@@ -197,6 +204,21 @@ typedef struct {
      * become a proposal (docs/CONFLICTS.md); the copy and its log are kept
      * for their buffers. `ctl_auto` (:agent accept auto) lands each one at
      * once; `ctl_direct` (--apply with no GM) edits the map itself. */
+    /* Events for agents (app_event.c, docs/CONFLICTS.md): a numbered ring
+     * `wait` reads -- a job asked, accepted, scrapped, sent back; the map
+     * changed, closed. The newest is `event_seq`, kept at seq % EVENT_MAX.
+     * `cp_gen` is Map.gen when the map's checkpoint was started;
+     * `agent_seen_ms` the last `wait`, which keeps the checkpoint running
+     * between an agent's waits. `ctl_can_hold` is set round a request the
+     * socket can hold (app_tick); a `wait` with nothing to say then sets
+     * `ctl_held` and what it waits for, instead of answering. */
+    AgentEvent events[EVENT_MAX];
+    unsigned event_seq;
+    unsigned cp_gen;
+    uint64_t agent_seen_ms;
+    int      ctl_can_hold, ctl_held;
+    unsigned ctl_hold_seq;
+    int      ctl_hold_ms;
     Map     *ctl_scratch;
     Undo     ctl_sundo;
     int      ctl_auto;
@@ -343,6 +365,14 @@ int  app_open_map(App *a, const char *path);
 #define AUTOSAVE_QUIET_MS 1500
 void app_tick(App *a, uint64_t now_ms);
 int  app_autosave_due(const App *a, uint64_t now_ms);
+
+/* Events for agents (app_event.c). After a key and in every tick: keeps the
+ * map's checkpoint running while an agent listens, makes the map-changed
+ * event once the map has been quiet, and answers the held waits that have
+ * something to hear, or have waited their time. app_events_due is the
+ * milliseconds until a flush has something to do, -1 for nothing owed. */
+void app_events_flush(App *a, uint64_t now_ms);
+int  app_events_due(const App *a, uint64_t now_ms);
 
 /* Pings. app_ping rings the block x0..x1, y0..y1 for `who` and says so on
  * the status line; app_ping_cell is a phone's tap, a screen cell of the

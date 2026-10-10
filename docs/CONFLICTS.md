@@ -160,8 +160,32 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
     requests wait for `:review`, for the review's perf rows.
   - **Sixteen jobs:** a finished one makes room; with sixteen waiting, a proposal is
     refused.
-- **Next: step 5** (events and `wait`).
-- **Then steps 6-9 in the order below.**
+- **Step 5: built (2026-10-09); Fable's review is next.** What it holds:
+  - `app_event.c` (new): the ring of 32 numbered events, `wait [SEQ] [for SECONDS]`'s
+    answer, the map-changed event from the checkpoint once the map is quiet 1.5 s, and
+    `app_events_flush`, which answers held waits;
+  - `ctl.c`: the `CTL_WAITING` state (four more slots, outside the sweep, polled for its
+    hang-up only, its own deadline in `ctl_due`), and the client's timeout read from the
+    request;
+  - events at each turn of a job (asked, accepted whole or in part, scrapped, feedback,
+    removed, brought back) and when the map closes or the GM travels;
+  - the suite `events`, the held wait over a socket in `ctllive`, a perf row, a fuzz line.
+- **Changed from the plan in step 5:**
+  - **The checkpoint also runs for ten minutes after an agent's last `wait`,** not only
+    while one is held or a job is open. An agent's loop is wait, act, wait again, and the
+    GM's changes in the gap between two waits would otherwise be lost.
+  - **`wait` with no number hears only what happens from now.** `wait 0` is everything
+    kept.
+  - **A wait behind the ring is told** (`lost A-B`), so the agent knows to read again.
+  - **An accept and the agent's own `undo` are not "map changed".** The GM's changes so
+    far are told first, as their own event, and the checkpoint starts again after.
+  - **Found by driving a live vtt, not by the tests:** keys read in the main loop's drain
+    never reached the flush after the keys, so a verdict waited for the next wake. The
+    flush now runs every turn of the loop. No test covers main's loop; the check is
+    written down here: `vtt --ctl 'wait for 30'` held, `:ask` typed, the answer in 1 ms,
+    and no CPU used in 3 s with a wait held, before and after an edit.
+- **Next: step 6** (`--apply` to an open map, and `--wait`).
+- **Then steps 7-9 in the order below.**
 - **Follow-up after step 6 (the user, 2026-10-09): a thin agent skill.** A user-level skill
   (`~/.claude/skills/vtt/`, not the repo's `.claude/`: the agents that build maps run
   wherever the GM starts them) that says when to use vtt, the opening move (`vtt --ctl

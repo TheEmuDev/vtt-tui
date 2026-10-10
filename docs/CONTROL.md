@@ -33,8 +33,9 @@ the agent's; this page is why it is the way it is.
 - **Finding the vtt.** With one running, `vtt --ctl` finds it; with several, it names
   them with their maps and `--ctl-pid N` picks one. A socket nobody answers on is a
   crashed vtt's and is removed.
-- **Bounded.** A request is at most 64 KB and four connections are held at once; one
-  that has not finished its request, or not taken its answer, in ten seconds is dropped.
+- **Bounded.** A request is at most 64 KB and four connections are held at once, with four
+  more for agents holding a `wait`; one that has not finished its request, or not taken its
+  answer, in ten seconds is dropped (a held `wait` has its own time, which it names).
   An answer is written without blocking, so a stuck caller never stalls the GM's
   screen. Off, it costs nothing; on and idle, one more descriptor in `poll`.
 - **Where it lives.** `ctl.c` owns the socket and the client; `app_ctl.c` reads a
@@ -97,6 +98,7 @@ GM accepts it, or at once under `:agent accept auto`):
 | `propose ["..."]`, `job N propose ["..."]` | first in a request: its edits are an idea of the agent's own (a new job), or job N's answer. Edits with neither are an idea of the agent's own |
 | `job N drop` | give it back: the GM's job waits as asked; the agent's own is scrapped, kept for the GM's `:review N` (KEYS.md rule 9: only `remove` destroys, and that is the GM's `:ask N remove`) |
 | `job N dump [REGION]`, `job N describe [json]`, `job N check [json]` | the map as accepting job N's proposal would make it now |
+| `wait [SEQ] [for SECONDS]` | a long poll, alone in its request: `seq N` and every event after SEQ (unsaid: after now), held until there is one or SECONDS pass (60 unsaid, 600 at most). Works with no map open. docs/AGENTS.md lists the events |
 
 A proposal is never refused for the GM being busy. One that lands at once waits, as ready,
 while a prompt or dialog is open, the `:` line is being typed, a key prefix is waiting, a
@@ -166,6 +168,29 @@ never move.
     map and log, not the scratch: the GM's selection holds live indices.
   - `job` and `jobs` lines go before a request's `propose` line and edits, so the job a
     proposal answers cannot be dropped from under it.
+- **Events and `wait` (2026-10-09, docs/CONFLICTS.md step 5).**
+  - `App.events` is a ring of the last 32, numbered from 1 for the life of the vtt
+    (`app_event.c`). A `wait` behind the ring is told what it lost.
+  - **A held `wait`** is a fourth connection state, `CTL_WAITING`: outside the ten-second
+    sweep, outside the cap of four (four more may wait), polled for nothing but its hang-up
+    (`POLLHUP`; `POLLIN` would be ready for ever, the caller having shut its writing side),
+    and counted by `ctl_due` only for its own deadline, so an idle vtt with a waiter still
+    sleeps in `poll`.
+  - **`app_ctl_exec` has a third outcome, held:** `App.ctl_can_hold` is set round a request
+    that came over the socket; a `wait` with nothing to say sets `App.ctl_held`, and
+    `app_tick` holds the connection (`ctl_hold`). Called any other way (`--apply`, the
+    bench, the fuzzer, the tests), `wait` answers at once.
+  - **Waiters are answered after the key that made the event:** the main loop calls
+    `app_events_flush` after the keys, as well as in `app_tick`. Otherwise an accept would
+    reach the agent at the GM's next keystroke.
+  - **The client waits as long as its request says** (`held_ms` in ctl.c reads `wait ... for
+    N`), plus the fifteen seconds any request gets.
+  - **The map-changed event** is the map's checkpoint (checkpoint.c) read once the map has
+    been quiet 1.5 s, the autosave's rule (`app_events_due` feeds `poll`), then started
+    again. The checkpoint runs only while an agent listens: a `wait` held, a job open, or a
+    `wait` in the last ten minutes (so it survives the gap between an agent's waits). An
+    accept and the agent's `undo` are not map changes to the agent: the GM's changes so far
+    are told first (`app_events_map_flush`), and the checkpoint starts again after.
   - **At once is fixed when a proposal arrives:** one that came in under `accept auto`
     while the GM was busy still lands at the next key if the GM switches to `accept
     review` meanwhile. A proposal for the job the GM is reviewing never lands by itself;

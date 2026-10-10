@@ -193,6 +193,7 @@ void app_travel_to(App *a, Map *m)
     a->handout_title[0] = a->handout_body[0] = '\0';
     net_clear_kept(&a->net);             /* whispers waiting were the encounter's too */
     drop_autosave(a);
+    app_event(a, "map closed: %s - the GM went to %s, and its jobs went with it", a->map->name, m->name);
     map_free(a->map);
     a->map = m;
     undo_clear(&a->undo);
@@ -389,7 +390,21 @@ void app_tick(App *a, uint64_t now_ms)
         size_t      len;
         int         i;
         while ((i = ctl_next(&a->ctl, &req, &len)) >= 0) {
+            a->ctl_can_hold = 1;                 /* there is a socket to hold a wait on */
+            a->ctl_held = 0;
             char *ans = app_ctl_exec(a, req, &len);
+            a->ctl_can_hold = 0;
+            if (a->ctl_held && ctl_hold(&a->ctl, i, a->ctl_hold_seq, now_ms + (uint64_t)a->ctl_hold_ms) == 0) {
+                free(ans);
+                continue;
+            }
+            if (a->ctl_held) {
+                static const char full[] = "error: as many agents as there is room for are waiting already\n";
+                free(ans);
+                ans = malloc(sizeof full);
+                if (ans) memcpy(ans, full, sizeof full);
+                len = sizeof full - 1;
+            }
             ctl_answer(&a->ctl, i, ans, ans ? len : 0);     /* none: out of memory, just close */
         }
     }
@@ -401,11 +416,12 @@ void app_tick(App *a, uint64_t now_ms)
         a->agent_ring.until_ms = 0;
         a->dirty = 1;
     }
-    if (!a->map) return;
-    if (a->map->gen != a->seen_gen) {
+    if (a->map && a->map->gen != a->seen_gen) {
         a->seen_gen  = a->map->gen;
         a->change_ms = now_ms;
     }
+    app_events_flush(a, now_ms);
+    if (!a->map) return;
     if (app_autosave_due(a, now_ms) == 0) app_autosave(a);
 }
 
@@ -1172,6 +1188,8 @@ void app_close_map(App *a)
     drop_autosave(a);
     close_server_with_map(a);
     slog_close(&a->slog);
+    /* Jobs are their map's: an agent is told, not left to time out. */
+    if (a->map) app_event(a, "map closed: %s - its jobs went with it", a->map->name);
     map_free(a->map);
     a->map = NULL;
     a->npings = a->npinged = 0;

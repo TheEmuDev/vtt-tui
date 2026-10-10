@@ -158,6 +158,18 @@ void app_stamp_key(App *a, Key k);
  * whoever holds the turn now started no turn. */
 void app_creatures_renumbered(App *a);
 
+/* Events for agents (app_event.c). */
+void app_event(App *a, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
+int  app_events_after(const App *a, unsigned after);
+/* "seq N", then every event after `after`, one a line. */
+void app_events_write(const App *a, FILE *out, unsigned after);
+/* app_events_flush and app_events_due are the main loop's too: app.h. */
+/* Round a change that is not the GM's (an accept, the agent's undo): the
+ * GM's changes so far become their event first, and the checkpoint starts
+ * again after, so the change is not told twice. */
+void app_events_map_flush(App *a);
+void app_events_map_restart(App *a);
+
 /* Jobs and the review (app_job.c). */
 void app_jobs_clear(App *a);
 int  app_job_new(App *a, int from, const char *text, const CsBox *box, int at_once);

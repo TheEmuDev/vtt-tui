@@ -620,3 +620,146 @@ out:
     rnd_free(&r);
     sandbox_leave(&sb);
 }
+
+/* Events and wait (step 5), without a socket: here `wait` is answered at
+ * once, as --apply, the bench and the fuzzer get it. The held wait is
+ * test_ctl_live's. */
+void test_events(void)
+{
+    Sandbox sb = sandbox_enter("events");
+    Renderer r;
+    App a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    char *t;
+
+    CASE("with no map, wait still answers; nothing has happened");
+    t = ctl_ask(&a, "wait");
+    CHECK(t && !strcmp(t, "ok\nseq 0\n"));
+    free(t);
+
+    CHECK(ctl_blank_map(&a, sb.dir, 20, 12));
+    if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    Map *m = a.map;
+
+    CASE("wait's words: a number, for SECONDS, alone in its request");
+    t = ctl_ask(&a, "wait soon");
+    CHECK(t && strstr(t, "is not an event's number"));
+    free(t);
+    t = ctl_ask(&a, "wait 0 for 601");
+    CHECK(t && strstr(t, "at most 600 seconds"));
+    free(t);
+    t = ctl_ask(&a, "wait\nstatus");
+    CHECK(t && !strcmp(t, "error: wait goes in a request of its own\n"));
+    free(t);
+
+    CASE("each turn of a job is an event, numbered in order: asked, accepted in part, scrapped, feedback, removed");
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "v3l3j:ask a crypt\r");
+    t = ctl_ask(&a, "wait 0");
+    CHECK(t && !strcmp(t, "ok\nseq 1\n1 job 1 asked in B2:E5: a crypt\n"));
+    free(t);
+    t = ctl_ask(&a, "wait");                               /* from now: nothing yet */
+    CHECK(t && !strcmp(t, "ok\nseq 1\n"));
+    free(t);
+    t = ctl_ask(&a, "job 1 propose\ntile B2:C2 water\n");
+    free(t);
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, ":review 1\rv\r");                           /* the box is B2 alone */
+    CHECK_EQ(map_tile(m, 1, 1), TILE_WATER);
+    t = ctl_ask(&a, "wait 1");
+    CHECK(t && strstr(t, "ok\nseq 2\n2 job 1 accepted in part, B2: ground in B2 - the rest waits\n") == t);
+    free(t);
+    press(&a, "c");
+    press(&a, "deeper\r");
+    t = ctl_ask(&a, "wait 2");
+    CHECK(t && !strcmp(t, "ok\nseq 3\n3 job 1 feedback: deeper\n"));
+    free(t);
+    t = ctl_ask(&a, "job 1 propose\ntile C2 hazard\n");
+    free(t);
+    press(&a, ":review 1\rd");
+    press(&a, ":review 1\r");                              /* back, then whole */
+    press(&a, "\r");
+    press(&a, ":ask 1 remove\r");
+    t = ctl_ask(&a, "wait 3");
+    CHECK(t && strstr(t, "4 job 1 scrapped\n5 job 1 brought back for review\n6 job 1 accepted: ground in C2\n"
+                         "7 job 1 removed by the GM\n"));
+    free(t);
+
+    CASE("no agent listening: no checkpoint runs");
+    a.agent_seen_ms = 0;
+    app_tick(&a, 1000);
+    CHECK(m->cp == NULL);
+
+    CASE("the map changed: one event once it has been quiet 1.5 s, and the checkpoint moves on");
+    t = ctl_ask(&a, "wait");                               /* an agent is listening */
+    free(t);
+    app_tick(&a, 2000);
+    CHECK(m->cp != NULL);
+    unsigned seq0 = a.event_seq;
+    undo_begin(&a.undo);
+    undo_set_tile(&a.undo, m, 9, 9, TILE_ROUGH);
+    undo_end(&a.undo);
+    app_tick(&a, 3000);                                    /* seen */
+    CHECK_EQ(app_events_due(&a, 3000), AUTOSAVE_QUIET_MS);
+    app_tick(&a, 3000 + AUTOSAVE_QUIET_MS - 1);
+    CHECK_EQ(a.event_seq, seq0);
+    app_tick(&a, 3000 + AUTOSAVE_QUIET_MS);
+    CHECK_EQ(a.event_seq, seq0 + 1);
+    CHECK_EQ(app_events_due(&a, 9000), -1);                /* nothing owed: the loop sleeps */
+    char want[96];
+    snprintf(want, sizeof want, "%u map changed: ground in J10\n", seq0 + 1);
+    t = ctl_ask(&a, "wait 0");
+    CHECK(t && strstr(t, want));
+    free(t);
+    app_tick(&a, 20000);                                   /* told once */
+    CHECK_EQ(a.event_seq, seq0 + 1);
+
+    CASE("undone again before it is quiet: nothing changed, no event");
+    undo_begin(&a.undo);
+    undo_set_tile(&a.undo, m, 10, 9, TILE_ROUGH);
+    undo_end(&a.undo);
+    app_tick(&a, 21000);
+    press(&a, "u");
+    app_tick(&a, 22000);
+    app_tick(&a, 30000);
+    CHECK_EQ(a.event_seq, seq0 + 1);
+
+    CASE("an accept is its own event, not also a map change; the GM's edit before it is told apart, first");
+    a.ctl_auto = 1;
+    undo_begin(&a.undo);
+    undo_set_tile(&a.undo, m, 11, 9, TILE_ROUGH);          /* the GM's, not yet quiet */
+    undo_end(&a.undo);
+    t = ctl_ask(&a, "tile A12 water\n");                   /* lands at once */
+    free(t);
+    a.ctl_auto = 0;
+    app_tick(&a, 31000);
+    app_tick(&a, 40000);
+    char two[160];
+    snprintf(two, sizeof two, "%u map changed: ground in L10\n%u job 1 accepted: ground in A12\n", seq0 + 2, seq0 + 3);
+    t = ctl_ask(&a, "wait 0");
+    CHECK(t && strstr(t, two));
+    CHECK_EQ(a.event_seq, seq0 + 3);
+    free(t);
+
+    CASE("more events than the ring keeps: the gap is said");
+    for (int k = 0; k < EVENT_MAX + 5; k++) app_event(&a, "test %d", k);
+    t = ctl_ask(&a, "wait 0");
+    snprintf(want, sizeof want, "lost 1-%u: ", a.event_seq - EVENT_MAX);
+    CHECK(t && strstr(t, want) && strstr(t, " test 4\n") == NULL && strstr(t, " test 36\n"));
+    free(t);
+
+    CASE("closing the map is an event; wait hears it with no map open");
+    seq0 = a.event_seq;
+    press(&a, ":ask a well\r");
+    app_close_map(&a);
+    snprintf(want, sizeof want, "wait %u", seq0);
+    t = ctl_ask(&a, want);
+    CHECK(t && strstr(t, " job 2 asked: a well\n") && strstr(t, " map closed: Blank - its jobs went with it\n"));
+    free(t);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}

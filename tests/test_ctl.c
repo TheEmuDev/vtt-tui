@@ -213,13 +213,21 @@ void test_ctl(void)
 static void ctl_pump(App *a, int (*until)(void *), void *ctx)
 {
     for (int spin = 0; spin < 400 && !(until && until(ctx)); spin++) {
-        struct pollfd fds[1 + CTL_MAX_CONN];
-        int n = ctl_pollfds(&a->ctl, fds, 1 + CTL_MAX_CONN);
+        struct pollfd fds[1 + CTL_SLOTS];
+        int n = ctl_pollfds(&a->ctl, fds, 1 + CTL_SLOTS);
         poll(fds, (nfds_t)n, 5);
         uint64_t now = prof_now_ns() / 1000000u;
         ctl_service(&a->ctl, fds, n, now);
         app_tick(a, now);
     }
+}
+
+/* For ctl_pump: stop once this many waits are held. */
+typedef struct { App *a; int n; } WaitersAre;
+static int waiters_are(void *ctx)
+{
+    WaitersAre *w = ctx;
+    return ctl_waiters(&w->a->ctl) == w->n;
 }
 
 static int ctl_raw_connect(const char *path)
@@ -1297,8 +1305,8 @@ void test_ctl_live(void)
         size_t total = 0;
         int    got_ok = 0, spins = 0;
         while (spins++ < 400) {
-            struct pollfd fds[1 + CTL_MAX_CONN];
-            int n = ctl_pollfds(&a.ctl, fds, 1 + CTL_MAX_CONN);
+            struct pollfd fds[1 + CTL_SLOTS];
+            int n = ctl_pollfds(&a.ctl, fds, 1 + CTL_SLOTS);
             poll(fds, (nfds_t)n, 5);
             uint64_t now = prof_now_ns() / 1000000u;
             ctl_service(&a.ctl, fds, n, now);
@@ -1329,8 +1337,8 @@ void test_ctl_live(void)
         for (int spin = 0; spin < 400 && off < CTL_REQ_CAP + 100; spin++) {
             ssize_t k = write(rd.fd, big + off, CTL_REQ_CAP + 100 - off);
             if (k > 0) off += (size_t)k;
-            struct pollfd fds[1 + CTL_MAX_CONN];
-            int n = ctl_pollfds(&a.ctl, fds, 1 + CTL_MAX_CONN);
+            struct pollfd fds[1 + CTL_SLOTS];
+            int n = ctl_pollfds(&a.ctl, fds, 1 + CTL_SLOTS);
             poll(fds, (nfds_t)n, 5);
             ctl_service(&a.ctl, fds, n, prof_now_ns() / 1000000u);
         }
@@ -1349,8 +1357,8 @@ void test_ctl_live(void)
         int fd[CTL_MAX_CONN + 1];
         for (int i = 0; i <= CTL_MAX_CONN; i++) fd[i] = ctl_raw_connect(a.ctl.path);
         uint32_t dropped = a.ctl.dropped;
-        struct pollfd fds[1 + CTL_MAX_CONN];
-        int n = ctl_pollfds(&a.ctl, fds, 1 + CTL_MAX_CONN);
+        struct pollfd fds[1 + CTL_SLOTS];
+        int n = ctl_pollfds(&a.ctl, fds, 1 + CTL_SLOTS);
         poll(fds, (nfds_t)n, 5);
         uint64_t now = prof_now_ns() / 1000000u;
         ctl_service(&a.ctl, fds, n, now);
@@ -1441,6 +1449,88 @@ void test_ctl_live(void)
         CHECK(access(want, F_OK) == 0);            /* and removed nothing */
         chmod(dir, 0700);
     }
+
+    CASE("wait: held with nothing to hear, outside the ten-second deadline, and the loop does not spin on it");
+    {
+        CtlReader rd = { ctl_raw_connect(a.ctl.path), "", 0, 0 };
+        CHECK(write(rd.fd, "wait for 600\n", 13) == 13);
+        shutdown(rd.fd, SHUT_WR);
+        ctl_pump(&a, waiters_are, &(WaitersAre){ &a, 1 });
+        for (int k = 0; k < 20; k++) {                     /* twenty turns of the loop */
+            struct pollfd pf[1 + CTL_SLOTS];
+            int pn = ctl_pollfds(&a.ctl, pf, 1 + CTL_SLOTS);
+            poll(pf, (nfds_t)pn, 2);
+            ctl_service(&a.ctl, pf, pn, prof_now_ns() / 1000000u);
+            app_tick(&a, prof_now_ns() / 1000000u);
+        }
+        CHECK_EQ(ctl_read_some(&rd), 0);                   /* held: no answer */
+        CHECK_EQ(ctl_waiters(&a.ctl), 1);
+        uint64_t now = prof_now_ns() / 1000000u;
+        CHECK(ctl_due(&a.ctl, now) > 500000);              /* its own deadline, not 0 */
+        struct pollfd fds[1 + CTL_SLOTS];
+        memset(fds, 0, sizeof fds);
+        fds[0].fd = a.ctl.listen_fd;
+        ctl_service(&a.ctl, fds, 1, now + 2 * CTL_TIMEOUT_MS);   /* the sweep leaves it */
+        CHECK_EQ(ctl_waiters(&a.ctl), 1);
+
+        CASE("a verdict reaches the waiter after the key, with no further key or wake");
+        app_key(&a, (Key){ KEY_F1, 0, 0 });
+        press(&a, ":ask a well\r");
+        app_events_flush(&a, prof_now_ns() / 1000000u);    /* what main does after keys */
+        for (int k = 0; k < 50 && !ctl_read_some(&rd); k++) poll(NULL, 0, 2);
+        CHECK_EQ(rd.done, 1);
+        CHECK(strncmp(rd.buf, "ok\nseq 1\n1 job 1 asked: a well\n", 31) == 0);
+        close(rd.fd);
+        CHECK_EQ(ctl_waiters(&a.ctl), 0);
+    }
+
+    CASE("wait SEQ answers at once when something has happened since; its time runs out with only seq");
+    {
+        CtlReader rd = { ctl_raw_connect(a.ctl.path), "", 0, 0 };
+        CHECK(write(rd.fd, "wait 0\n", 7) == 7);
+        shutdown(rd.fd, SHUT_WR);
+        ctl_pump(&a, ctl_read_some, &rd);
+        CHECK(rd.done && strstr(rd.buf, "1 job 1 asked: a well\n"));
+        close(rd.fd);
+        CtlReader r2 = { ctl_raw_connect(a.ctl.path), "", 0, 0 };
+        CHECK(write(r2.fd, "wait 1 for 1\n", 13) == 13);
+        shutdown(r2.fd, SHUT_WR);
+        ctl_pump(&a, ctl_read_some, &r2);                  /* two seconds: its one is up */
+        CHECK(r2.done && !strcmp(r2.buf, "ok\nseq 1\n"));
+        close(r2.fd);
+    }
+
+    CASE("a waiter that hangs up frees its place; four wait while four more are served; a fifth is told");
+    {
+        int w[CTL_MAX_WAIT + 1];
+        for (int i = 0; i < CTL_MAX_WAIT; i++) {
+            w[i] = ctl_raw_connect(a.ctl.path);
+            CHECK(write(w[i], "wait for 600\n", 13) == 13);
+            shutdown(w[i], SHUT_WR);
+        }
+        ctl_pump(&a, waiters_are, &(WaitersAre){ &a, CTL_MAX_WAIT });
+        CHECK_EQ(ctl_waiters(&a.ctl), CTL_MAX_WAIT);
+        CtlReader rd = { ctl_raw_connect(a.ctl.path), "", 0, 0 };   /* a request beside them */
+        CHECK(write(rd.fd, "status\n", 7) == 7);
+        shutdown(rd.fd, SHUT_WR);
+        ctl_pump(&a, ctl_read_some, &rd);
+        CHECK(rd.done && !strncmp(rd.buf, "ok\nmap ", 7));
+        close(rd.fd);
+        CtlReader r5 = { ctl_raw_connect(a.ctl.path), "", 0, 0 };   /* a fifth waiter */
+        CHECK(write(r5.fd, "wait for 600\n", 13) == 13);
+        shutdown(r5.fd, SHUT_WR);
+        ctl_pump(&a, ctl_read_some, &r5);
+        CHECK(r5.done && !strncmp(r5.buf, "error: as many agents", 21));
+        close(r5.fd);
+        close(w[0]);                                       /* one hangs up */
+        ctl_pump(&a, waiters_are, &(WaitersAre){ &a, CTL_MAX_WAIT - 1 });
+        CHECK_EQ(ctl_waiters(&a.ctl), CTL_MAX_WAIT - 1);
+        for (int i = 1; i < CTL_MAX_WAIT; i++) close(w[i]);
+        ctl_pump(&a, waiters_are, &(WaitersAre){ &a, 0 });
+        CHECK_EQ(ctl_waiters(&a.ctl), 0);
+        CHECK_EQ(a.ctl.nc, 0);
+    }
+    app_jobs_clear(&a);
 
     CASE(":agent off closes it and removes the socket; --ctl then finds nobody (exit 2)");
     press(&a, ":agent off\r");

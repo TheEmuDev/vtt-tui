@@ -11,15 +11,21 @@
  * without blocking, and the connection closed. What a request says is
  * app_ctl.c's business; this file only moves bytes. docs/CONTROL.md. */
 
-#define CTL_MAX_CONN   4
+#define CTL_MAX_CONN   4            /* requests being read or answered */
+#define CTL_MAX_WAIT   4            /* and `wait`s held beside them, so a waiting
+                                       agent never locks a request out */
+#define CTL_SLOTS      (CTL_MAX_CONN + CTL_MAX_WAIT)
 #define CTL_REQ_CAP    (64 * 1024)
 #define CTL_TIMEOUT_MS 10000
 #define CTL_PATH_MAX   108          /* sun_path */
+#define CTL_WAIT_DEFAULT_S 60       /* `wait` with no time named */
+#define CTL_WAIT_MAX_S     600
 
 typedef enum {
     CTL_READING = 0,    /* the request is still coming */
     CTL_READY,          /* read to the end, waiting for the app */
     CTL_WRITING,        /* the answer is going out */
+    CTL_WAITING,        /* a `wait` held until an event or its own deadline */
 } CtlState;
 
 typedef struct {
@@ -31,12 +37,14 @@ typedef struct {
     char     *out;              /* the answer, owned; sent from out_off */
     size_t    out_len, out_off;
     uint64_t  since_ms;         /* connected; the deadline runs from here */
+    unsigned  wait_seq;         /* WAITING: events after this one answer it, */
+    uint64_t  wait_until_ms;    /* or this moment does */
 } CtlConn;
 
 typedef struct {
     int      listen_fd;
     char     path[CTL_PATH_MAX];
-    CtlConn  c[CTL_MAX_CONN];
+    CtlConn  c[CTL_SLOTS];
     int      nc;
     uint32_t requests;          /* answered, over the channel's life */
     uint32_t dropped;           /* too big, too slow, or refused for want of a slot */
@@ -70,6 +78,15 @@ int  ctl_next(Ctl *c, const char **req, size_t *len);
 /* The answer to connection i, taken over (malloc'd; freed here). The
  * connection closes once it is written. */
 void ctl_answer(Ctl *c, int i, char *out, size_t len);
+
+/* Holds connection i's request (a `wait`) instead of answering it: until
+ * ctl_answer, or the caller hanging up. 0, or -1 when CTL_MAX_WAIT are held
+ * already (the caller answers it then). A held connection is outside the
+ * ten-second deadline, and ctl_due counts only its own. */
+int  ctl_hold(Ctl *c, int i, unsigned seq, uint64_t until_ms);
+int  ctl_waiters(const Ctl *c);
+/* 1 when connection i (0..nc-1) is a held wait, with what it waits for. */
+int  ctl_waiter(const Ctl *c, int i, unsigned *seq, uint64_t *until_ms);
 
 /* `vtt --ctl`: sends `req` (NULL reads stdin) to the vtt of `pid` (0: the
  * only one running), prints the answer. Returns the exit status. */

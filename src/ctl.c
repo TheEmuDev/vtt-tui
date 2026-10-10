@@ -64,7 +64,7 @@ void ctl_init(Ctl *c)
 {
     memset(c, 0, sizeof *c);
     c->listen_fd = -1;
-    for (int i = 0; i < CTL_MAX_CONN; i++) c->c[i].fd = -1;
+    for (int i = 0; i < CTL_SLOTS; i++) c->c[i].fd = -1;
 }
 
 int ctl_start(Ctl *c, char *err, size_t errsz)
@@ -108,7 +108,7 @@ int ctl_start(Ctl *c, char *err, size_t errsz)
     mode_t old = umask(077);
     int rc = bind(fd, (struct sockaddr *)&sa, sizeof sa);
     umask(old);
-    if (rc < 0 || listen(fd, CTL_MAX_CONN) < 0 || rename(tmp, path) < 0) {
+    if (rc < 0 || listen(fd, CTL_SLOTS) < 0 || rename(tmp, path) < 0) {
         snprintf(err, errsz, "cannot listen at %s: %s", path, strerror(errno));
         close(fd);
         unlink(tmp);
@@ -154,7 +154,10 @@ int ctl_pollfds(Ctl *c, struct pollfd *fds, int max)
     for (int i = 0; i < c->nc && n < max; i++) {
         const CtlConn *k = &c->c[i];
         fds[n].fd = k->fd;
-        /* A READY connection is waiting on the app, not on its socket. */
+        /* A READY connection is waiting on the app, not on its socket; a
+         * WAITING one on an event, and only its hang-up (POLLHUP, which
+         * poll reports unasked) is news: its caller shut its writing side
+         * long ago, so POLLIN would be ready for ever. */
         fds[n].events = k->state == CTL_READING ? POLLIN : k->state == CTL_WRITING ? POLLOUT : 0;
         fds[n].revents = 0;
         n++;
@@ -237,13 +240,17 @@ void ctl_service(Ctl *c, const struct pollfd *fds, int count, uint64_t now_ms)
         else if (k->state == CTL_WRITING && (fds[f].revents & (POLLOUT | POLLHUP | POLLERR))) {
             if (conn_write(c, i) < 0) continue;
         }
+        else if (k->state == CTL_WAITING && (fds[f].revents & (POLLHUP | POLLERR))) {
+            conn_close(c, i);                  /* the waiter went away */
+            continue;
+        }
     }
 
     if (fds[0].revents & POLLIN) {
         for (;;) {
             int fd = accept(c->listen_fd, NULL, NULL);
             if (fd < 0) break;
-            if (c->nc == CTL_MAX_CONN || fd_nonblock_cloexec(fd) < 0) {
+            if (c->nc - ctl_waiters(c) == CTL_MAX_CONN || fd_nonblock_cloexec(fd) < 0) {
                 close(fd);
                 c->dropped++;
                 continue;
@@ -258,9 +265,10 @@ void ctl_service(Ctl *c, const struct pollfd *fds, int count, uint64_t now_ms)
         }
     }
 
-    /* Too slow to ask, or to take the answer. A READY one is the app's. */
+    /* Too slow to ask, or to take the answer. A READY one is the app's, and
+     * a WAITING one has its own deadline, which the app keeps. */
     for (int i = c->nc - 1; i >= 0; i--) {
-        if (c->c[i].state == CTL_READY) continue;
+        if (c->c[i].state == CTL_READY || c->c[i].state == CTL_WAITING) continue;
         if (now_ms - c->c[i].since_ms >= CTL_TIMEOUT_MS) {
             c->dropped++;
             conn_close(c, i);
@@ -273,7 +281,8 @@ int ctl_due(const Ctl *c, uint64_t now_ms)
     int due = -1;
     for (int i = 0; i < c->nc; i++) {
         if (c->c[i].state == CTL_READY) return 0;
-        uint64_t end = c->c[i].since_ms + CTL_TIMEOUT_MS;
+        uint64_t end = c->c[i].state == CTL_WAITING ? c->c[i].wait_until_ms
+                                                    : c->c[i].since_ms + CTL_TIMEOUT_MS;
         int left = end > now_ms ? (int)(end - now_ms) : 0;
         if (due < 0 || left < due) due = left;
     }
@@ -304,6 +313,32 @@ void ctl_answer(Ctl *c, int i, char *out, size_t len)
     (void)conn_write(c, i);
 }
 
+int ctl_waiters(const Ctl *c)
+{
+    int n = 0;
+    for (int i = 0; i < c->nc; i++) n += c->c[i].state == CTL_WAITING;
+    return n;
+}
+
+int ctl_hold(Ctl *c, int i, unsigned seq, uint64_t until_ms)
+{
+    if (ctl_waiters(c) == CTL_MAX_WAIT) return -1;
+    CtlConn *k = &c->c[i];
+    k->state         = CTL_WAITING;
+    k->wait_seq      = seq;
+    k->wait_until_ms = until_ms;
+    c->requests++;
+    return 0;
+}
+
+int ctl_waiter(const Ctl *c, int i, unsigned *seq, uint64_t *until_ms)
+{
+    if (i < 0 || i >= c->nc || c->c[i].state != CTL_WAITING) return 0;
+    *seq      = c->c[i].wait_seq;
+    *until_ms = c->c[i].wait_until_ms;
+    return 1;
+}
+
 /* ---------------------------------------------------------------- client */
 
 /* Connects to the socket at path: the fd, -1 when nobody is there (a
@@ -323,8 +358,24 @@ static int ctl_connect(const char *path)
     return e == ENOENT ? -1 : -2;
 }
 
-/* Sends req on fd and reads the whole answer. NULL on failure. */
-static char *exchange(int fd, const char *req, size_t len, size_t *out_len)
+/* How long the server may hold this request, in ms: a `wait` names its own
+ * time (`wait [SEQ] for SECONDS`, a minute unsaid, ten at most); anything
+ * else is answered at once. */
+static int held_ms(const char *req)
+{
+    while (*req == ' ' || *req == '\t' || *req == '\n' || *req == '\r') req++;
+    if (strncmp(req, "wait", 4) != 0 || (req[4] && !strchr(" \t\r\n", req[4]))) return 0;
+    size_t      line = strcspn(req, "\n");
+    const char *f = strstr(req, " for ");
+    long        s = f && (size_t)(f - req) < line ? strtol(f + 5, NULL, 10) : CTL_WAIT_DEFAULT_S;
+    if (s < 0) s = 0;
+    if (s > CTL_WAIT_MAX_S) s = CTL_WAIT_MAX_S;
+    return (int)(s * 1000);
+}
+
+/* Sends req on fd and reads the whole answer, waiting `wait_ms` between
+ * reads. NULL on failure. */
+static char *exchange(int fd, const char *req, size_t len, size_t *out_len, int wait_ms)
 {
     size_t off = 0;
     while (off < len) {
@@ -340,7 +391,7 @@ static char *exchange(int fd, const char *req, size_t len, size_t *out_len)
     if (!buf) return NULL;
     for (;;) {
         struct pollfd p = { fd, POLLIN, 0 };
-        int pr = poll(&p, 1, CTL_TIMEOUT_MS + 5000);
+        int pr = poll(&p, 1, wait_ms);
         if (pr < 0 && errno == EINTR) continue;
         if (pr <= 0) { free(buf); return NULL; }
         if (n + 4096 > cap) {
@@ -432,7 +483,7 @@ int ctl_client_main(const char *req, long pid)
                 int fd = ctl_connect(path);
                 if (fd >= 0) {
                     size_t len;
-                    char  *ans = exchange(fd, "status\n", 7, &len);
+                    char  *ans = exchange(fd, "status\n", 7, &len, CTL_TIMEOUT_MS + 5000);
                     close(fd);
                     /* The line after "ok" is the map's. */
                     const char *nl = ans ? strchr(ans, '\n') : NULL;
@@ -467,7 +518,7 @@ int ctl_client_main(const char *req, long pid)
     else len = strlen(req);
 
     size_t alen;
-    char  *ans = exchange(fd, req, len, &alen);
+    char  *ans = exchange(fd, req, len, &alen, held_ms(req) + CTL_TIMEOUT_MS + 5000);
     close(fd);
     free(mine);
     if (!ans) { fputs("vtt: no answer from the vtt\n", stderr); return 2; }

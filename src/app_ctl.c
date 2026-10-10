@@ -941,6 +941,7 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
 static const char *lonely(char w[][CTL_WORD_MAX], int n)
 {
     if (n >= 1 && !strcmp(w[0], "undo")) return "undo";
+    if (n >= 1 && !strcmp(w[0], "wait")) return "wait";
     if (n >= 2 && !strcmp(w[0], "scene") && !strcmp(w[1], "save")) return "scene save";
     if (n == 3 && !strcmp(w[0], "scene") && !strcmp(w[2], "remove")) return "scene NAME remove";
     return NULL;
@@ -1118,7 +1119,7 @@ static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FIL
     if (!strcmp(v, "job") || !strcmp(v, "jobs")) {
         /* The scratch map holds this request's edits: a job's own result
          * would be made in it. */
-        if (ed->lines || ed->header) { snprintf(err, errsz, "%s comes before the request's propose line and edits", v); return -1; }
+        if (ed->lines || ed->header) { snprintf(err, errsz, "%.4s comes before the request's propose line and edits", v); return -1; }
         return app_ctl_job(a, w, n, out, err, errsz);
     }
 
@@ -1157,7 +1158,9 @@ static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FIL
         }
         const char *busy = app_ctl_busy(a);
         if (busy) { str_lcpy(err, busy, errsz); return -2; }
+        app_events_map_flush(a);             /* the GM's changes so far are their own event */
         undo_undo(&a->undo, m);
+        app_events_map_restart(a);           /* the agent's own doing is no news to it */
         range_history_changed(&a->play.range, m);
         a->ctl_undoable = 0;
         app_fog_sync(a);
@@ -1167,6 +1170,33 @@ static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FIL
         return 0;
     }
 
+    if (!strcmp(v, "wait")) {
+        /* wait [SEQ] [for SECONDS]: every event after SEQ (unsaid: from
+         * now), held until there is one or the time is up. */
+        unsigned seq = a->event_seq;
+        int      secs = CTL_WAIT_DEFAULT_S, at = 1, k;
+        if (at < n && strcmp(w[at], "for") != 0) {
+            if (!word_int(w[at], 0, 0x7fffffff, &k)) { snprintf(err, errsz, "wait [SEQ] [for SECONDS]: %.20s is not an event's number", w[at]); return -1; }
+            seq = (unsigned)k;
+            at++;
+        }
+        if (at < n) {
+            if (at + 2 != n || strcmp(w[at], "for") != 0 || !word_int(w[at + 1], 0, CTL_WAIT_MAX_S, &secs)) {
+                snprintf(err, errsz, "wait [SEQ] [for SECONDS], at most %d seconds", CTL_WAIT_MAX_S);
+                return -1;
+            }
+        }
+        a->agent_seen_ms = a->now_ms ? a->now_ms : 1;
+        /* Held only where there is a socket to hold it on (app_tick):
+         * --apply, the bench and the fuzzer are answered at once. */
+        if (app_events_after(a, seq) || !a->ctl_can_hold || secs == 0) app_events_write(a, out, seq);
+        else {
+            a->ctl_held     = 1;
+            a->ctl_hold_seq = seq;
+            a->ctl_hold_ms  = secs * 1000;
+        }
+        return 0;
+    }
     if (!strcmp(v, "status")) {
         if (n > 1) { snprintf(err, errsz, "status takes nothing after it"); return -1; }
         live_swap(a, ed);
@@ -1397,7 +1427,9 @@ char *app_ctl_exec(App *a, const char *req, size_t *len)
         p = end ? end + 1 : p + ll;
 
         if (n == 0 || (n > 0 && w[0][0] == '#')) continue;
-        if (n > 0 && !a->map && strcmp(w[0], "status") != 0) snprintf(err, sizeof err, "no map is open");
+        /* With no map: status, and wait -- the map closing is an event. */
+        if (n > 0 && !a->map && strcmp(w[0], "status") != 0 && strcmp(w[0], "wait") != 0)
+            snprintf(err, sizeof err, "no map is open");
         int rc = err[0] ? -1 : run_line(a, line, w, n, out, &ed, err, sizeof err);
         if (rc == 0) continue;
         if (rc == -2) snprintf(verdict, sizeof verdict, "busy: %s", err);

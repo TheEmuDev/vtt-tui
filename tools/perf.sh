@@ -363,6 +363,10 @@ run "agent, dump 512x512"  "$HUGE"   80x24  'lh' "--bench-ctl $DIR/dump.ctl"
 # request is a new job; finished ones make room for the next.
 run "agent, proposal, review" "$VOID512" 80x24 ':review\rllllhhhhd' "--bench-ctl $DIR/plan.ctl --bench-review"
 run "agent, proposal, accept" "$VOID512" 80x24 ':review\r\ru'      "--bench-ctl $DIR/plan.ctl --bench-review"
+# The map-changed event (step 5): an agent listening (its `wait`), a dozen of
+# the GM's edits on the largest map, then the map quiet: one event a loop.
+echo 'wait for 0' > "$DIR/wait.ctl"
+run "agent, map changed event" "$HUGE" 80x24 'xlxlxlxlxlxlfhfhfhfhfhfh' "--bench-ctl $DIR/wait.ctl"
 run "help page"            "$WALLED" 80x24  '?jjjj'
 run "profiler overlay"     "$WALLED" 80x24  '\e[24~jjll'
 

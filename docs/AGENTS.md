@@ -227,11 +227,39 @@ feedback. Nothing you send changes the GM's map until then, unless the GM has ty
 4. **Read your proposal back before the GM looks:** `job 3 dump [REGION]`, `job 3 describe`
    and `job 3 check` read the map as accepting it would make it. Plain `dump` reads the GM's
    map as it is.
-5. **The verdict.** Ask `jobs` again: the job is `ready` (waiting), `accepted`, `scrapped`, or
-   back to `working` with the GM's feedback as the last `gm:` line of its thread. Feedback
-   means propose again with `job N propose`; the new proposal replaces the old. A part
-   accepted by box leaves the rest `ready`. `jobs` also counts a ready proposal's
-   **conflicts**: squares the GM changed since you looked, which accepting would overwrite.
+5. **The verdict: `wait`.** `vtt --ctl 'wait 41'` blocks until something has happened after
+   event 41, then prints `seq N` and each event since, one a line with its number:
+
+   ```
+   seq 44
+   42 job 3 feedback: no water in the east half
+   43 map changed: walls and doors in F2:F9
+   44 job 5 asked in M3:Q8: a guard room
+   ```
+   Pass the `seq` it gave you to the next `wait`, so nothing is missed between two waits.
+   `wait` alone hears only what happens from now; `wait 0` everything still kept (the last
+   32); `wait 41 for 300` waits up to 300 seconds (60 unsaid, 600 at most) and then answers
+   with `seq` alone. A `lost A-B` line means more happened than is kept: read `jobs` and the
+   map again. The events:
+
+   | event | means |
+   |---|---|
+   | `job N asked [in REGION][, to land at once]: TEXT` | the GM asked for a change: take it |
+   | `job N accepted: ...` | it landed, as one undo step |
+   | `job N accepted in part, REGION: ... [- the rest waits]` | the part in the GM's box landed |
+   | `job N scrapped` | the GM threw the proposal away |
+   | `job N feedback: TEXT` | the job is yours again, with what to do instead: `job N propose` |
+   | `job N brought back for review`, `job N removed by the GM` | |
+   | `map changed: ...` | the GM changed the map (told once it has been quiet 1.5 s): what you read may be stale |
+   | `map closed: NAME ...` | the map, and every job on it, is gone |
+
+   `jobs` shows the same state at any time, and counts a ready proposal's **conflicts**:
+   squares the GM changed since you looked, which accepting would overwrite. A part accepted
+   by box leaves the rest `ready`; feedback means propose again with `job N propose`, and
+   the new proposal replaces the old.
+
+   So an agent that serves a GM is a loop: `wait`, act on what came back (`take` a job that
+   was asked, `propose`, answer feedback), `wait` again from the last `seq`.
 6. `job N drop` gives a job back: the GM's waits as asked; one of your own is withdrawn
    (the GM can still bring it back with `:review N`).
 7. When the GM says "here", "this room" or "that one", ask `vtt --ctl marked` and work from
@@ -256,7 +284,7 @@ NAME remove` still answer `busy:` when the GM is part way through something.
 
 **In play mode,** proposals still come in and wait; the GM reviews in build mode. Reads still
 work, so `dump`, `describe` and `marked` can follow the fight. Do not send the same proposal
-in a loop: one is enough, and `jobs` tells you what became of it. Moving creatures, fog and
+in a loop: one is enough, and `wait` tells you what became of it. Moving creatures, fog and
 the turn order during play stay the GM's.
 
 The channel never saves; saving is the GM's (`:w`). It never takes away the creature whose

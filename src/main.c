@@ -428,6 +428,16 @@ static int run_headless(const Options *o)
                     }
                 }
             }
+            /* With a request each loop, the tick runs too, on a clock that
+             * lets the map go quiet: what it owes an agent for the loop's
+             * edits (the map-changed event) is measured. */
+            if (ctl_req) {
+                prof_frame_begin();
+                app_tick(&a, bench_clock_ms);
+                bench_clock_ms += 2 * AUTOSAVE_QUIET_MS;
+                app_tick(&a, bench_clock_ms);
+                prof_frame_end();
+            }
             a.running = 1;      /* a 'q' in the script must not end the bench */
         }
         for (int i = 0; i < ncf; i++) close(cfd[i]);
@@ -500,7 +510,7 @@ static int run_interactive(const Options *o)
 
     /* stdin, the signal pipe, then whatever the remote view is listening
      * on: its entries are rebuilt every time round, since clients come and go. */
-    struct pollfd fds[2 + 1 + NET_MAX_CLIENTS + 1 + CTL_MAX_CONN];
+    struct pollfd fds[2 + 1 + NET_MAX_CLIENTS + 1 + CTL_SLOTS];
     fds[0].fd = t.in_fd;
     fds[0].events = POLLIN;
     fds[1].fd = term_signal_fd(&t);
@@ -521,8 +531,11 @@ static int run_interactive(const Options *o)
         /* And when a ping's ring is due to come down. */
         int pd = app_ping_due(&a, prof_now_ns() / 1000000u);
         if (pd >= 0 && (timeout < 0 || pd < timeout)) timeout = pd;
+        /* And when the map's changes are due to be told to an agent. */
+        int ed = app_events_due(&a, prof_now_ns() / 1000000u);
+        if (ed >= 0 && (timeout < 0 || ed < timeout)) timeout = ed;
         /* And for an agent's connection that has gone quiet. */
-        int nctl = ctl_pollfds(&a.ctl, fds + 2 + nnet, 1 + CTL_MAX_CONN);
+        int nctl = ctl_pollfds(&a.ctl, fds + 2 + nnet, 1 + CTL_SLOTS);
         int cd = ctl_due(&a.ctl, prof_now_ns() / 1000000u);
         if (cd >= 0 && (timeout < 0 || cd < timeout)) timeout = cd;
 
@@ -591,6 +604,10 @@ static int run_interactive(const Options *o)
             if (input_timeout(&p, &k)) { app_key(&a, k); handled = 1; }
         }
         (void)handled;
+        /* A waiting agent hears of a key's verdict now, not at the next
+         * wake: with nothing else due, poll would sleep on it for ever.
+         * Every turn, since keys are handled in the drain above too. */
+        app_events_flush(&a, prof_now_ns() / 1000000u);
 
         if (a.dirty) {
             prof_frame_begin();
