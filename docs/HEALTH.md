@@ -56,6 +56,95 @@ written down.
 - Where would a user get stuck: something undocumented, unexplained or cut off?
 - Is each thing called by one name (creature, the players' view, wall mode)?
 
+## Left open by reviews
+
+Every finding a review made that was **not fixed**: left on purpose, put off, or answered
+with a note instead of a change. One row each, so nothing a reviewer said is lost between a
+review and the next. The rules (the user, 2026-10-09):
+
+- A finding ends one of three ways: **fixed** (it is not here), **disproved** by a check that
+  was run (it is under *Disproved*, with the check), or **left** (a row here, with why and
+  what would close it). Never dropped without one of the three.
+- A row leaves this table only when it is fixed; then it moves to *Closed*, with the commit.
+- "Checked" is the date the row was last compared with the code and found still true.
+
+### Open
+
+| # | review | item | kind | why it was left | closes when | checked |
+|---|---|---|---|---|---|---|
+| 1 | step 4 (ced6c35) | The proposal code (`propose` parsing, `proposal_begin`/`end`, `finish_proposal`, about 120 lines) sits in `app_ctl.c`, 1,564 lines, though `app_ctl_job.c` (204) now exists for jobs. | organization | It shares `app_ctl.c`'s `Edits` struct, which is private to that file; moving it means exporting the struct or splitting it. Skipped at the time with no reason written down. | `Edits` is exported or split and the three functions move; or `app_ctl.c` is next reorganized | 2026-10-09 |
+| 2 | step 4 | `box_name` (a `CsBox` to "B2:F6") is defined twice: `app_job.c:89`, `app_ctl_job.c:14`. | duplication | Two copies, within the rule of three. | a third caller appears: it becomes one function in `app_priv.h` | 2026-10-09 |
+| 3 | step 4 | `jobs json` is checked for validity only with one asked job (test_jobs.c:375). Nothing checks it with a ready proposal, a thread of several lines, or a conflict count above 0. | test gap | Not written. | a `jobsctl` case runs `json_valid` on `jobs json` after a proposal and a conflicting GM edit | 2026-10-09 |
+| 4 | step 4 | No test for `job N say` with the wrong number of words, or `:agent accept` with no word after it. | test gap | Not written. | two error-path cases in `jobsctl` | 2026-10-09 |
+| 5 | step 4 | A proposal that came in under `:agent accept auto` while the GM was busy still lands at the next key after the GM types `:agent accept review`. | behavior | Kept: "at once" is decided when a proposal arrives, and is documented so in CONTROL.md. Arguable; the reviewer said so too. | the user decides it should follow the setting at landing time | 2026-10-09 |
+| 6 | step 5 (93e9a1c) | The "map closed" event when the GM travels through a link to another map (`app.c:196`) has no test. Closing a map is tested; traveling is not. | test gap | Needs two map files and a party to travel; skipped as "hard". | a case in `events` (or test_places.c's trip tests) checks the event after `g o` | 2026-10-09 |
+| 7 | step 5 | The plan says the event reads `the GM changed: ...` (CONFLICTS.md:455); the code and AGENTS.md say `map changed: ...`. Progress does not list the difference. | docs | Overlooked. | the plan's line is corrected, or Progress lists it under "changed from the plan" | 2026-10-09 |
+| 8 | step 5; first raised by the review of the plan's third draft | `ctl.wait`, the zone round answering held waits, has no perf row: the bench has no socket to hold a wait on. | performance | Stood in for by a manual check against a live vtt (1 ms from key to answer, no CPU while held), written out in CONFLICTS.md *Progress*. | the bench gains a client that holds a wait, or a test times the flush | 2026-10-09 |
+| 9 | step 5 | The main loop (`main.c`) has no test. Its bug in step 5 (keys handled in the drain never reached the flush) was found only by driving a live vtt. | test gap | The loop needs a terminal; every test calls `app_key`/`app_tick` directly. | the loop's body becomes a function a test can call with a fake terminal | 2026-10-09 |
+| 10 | step 6 (f306906) | Two vtts holding one file: the proposal goes to the first found, and stderr says how many others. The others' GMs are not told. No test covers it. | behavior, test gap | Step 7 makes it rare ("opening a map another vtt has open asks first"); the warning was the cheap part. | step 7 lands; a test with two listening apps on one file checks the warning | 2026-10-09 |
+| 11 | step 6 | No test that `vtt --ctl` picks the one vtt with `agent on` when two are listening. | test gap | Needs two apps listening in one test. | a `ctllive` case with a second `Ctl` | 2026-10-09 |
+| 12 | step 6 | No test for `--apply --wait` when the vtt quits before a verdict (it should exit 2). | test gap | Not written. | a `ctllive` case stops the channel while a forked `--wait` is held | 2026-10-09 |
+| 13 | step 6 | `holds` is tested with no map open, not with a map never saved (an empty path). | test gap | Not written; the code checks `m->path[0]`. | one line in `events` or `ctllive` after clearing `path` | 2026-10-09 |
+| 14 | step 6; first raised by the review of the plan's second draft | A plan of about 60-64 KB is taken by `--apply` on a file but refused when a vtt has the map open: the added `propose apply "NAME"` line pushes the request over the 64 KB cap. | behavior | Documented in AGENTS.md ("at most 64 KB less a line") instead of fixed. | `--apply` reads at most the cap less the header, so both roads take the same plans; or the server allows the header on top | 2026-10-09 |
+| 15 | step 6 | With the channel off, a caller still learns the map's name, size and file (`status`), and what a plan's own lines say back: that a creature, area or scene it names is not there, a square is off the map, and a proposal's summary. | security boundary | Same user only (a `0700` directory), and decision 5 accepts proposals with the channel off, which cannot be checked without saying why they fail. The README now says what is given out. | the user wants off to mean silent: errors to an off channel become "refused" with no reason | 2026-10-09 |
+| 16 | step 6 | The words the `--apply` client matches in events (`job N accepted`, `scrapped`, `feedback:`) are written twice: where `app_job.c` emits them and in `ctl_verdict_in`. A changed wording breaks `--wait` silently. | duplication | A test pins `ctl_verdict_in` to today's wording, and the `events` suite pins the emitters; nothing ties the two. | the event words become shared constants, or one test feeds real emitted events to `ctl_verdict_in` | 2026-10-09 |
+| 17 | commit 1edbc8e (speed-of-light docs, 2026-10-07) | The map writer builds its text one `fputc` at a time (8 call sites in `mapio.c`): about 3 ms of a 3.17 ms unflushed save of a 512×512 map, which the autosave runs on the main loop. The reviewer gave the fix: build each row in a buffer and write it once. | performance | Written down as a known gap (PERFORMANCE.md, *Speed of light*: "Not yet planned"); step 7's "keeping the base" wants the writer to build its text in memory anyway. | the writer builds rows in a buffer (step 7 is the natural place), and `tools/saves.sh` is re-run | 2026-10-09 |
+| 18 | commit 98c9ec2 (the `Machine:` line, 2026-10-07) | The header table's laptop row has no RAM or top frequency, and the speed-of-light figures exist only for the desktop. | docs | Only the user can run `tools/machine.sh` and the measurements on the laptop. | they are run there and pasted in | 2026-10-09 |
+| 19 | step 1 (fdadbce) | The plan still promises `"link 3, now 5" in the summary` (CONFLICTS.md:355). The code went the other way: a new link is summarized without a number (`changeset.c:825`, pinned by test_changeset.c:612), and Progress mentions only the preview. | docs | The fix chose not to number it; the plan's sentence was not corrected. | CONFLICTS.md:355 is corrected, or Progress lists it under "changed from the plan" | 2026-10-09 |
+| 20 | step 1 | No test for what `cs_apply` reports as left out when the map's notes, areas or rolls are full ("no room", `changeset.c:659-710`). | test gap | Not written. | a case fills each list, accepts, and checks the report and that nothing was half applied | 2026-10-09 |
+| 21 | step 1 (and step 4) | No test shows a preview after the live map was resized (the guard at `changeset.c:998`), nor `job N dump` refusing a proposal made before a `:resize`. | test gap | Not written. | a case resizes the live map, then `cs_show`/`cs_unshow` leaves every byte, and `job N dump` says to propose again | 2026-10-09 |
+| 22 | step 1 | No test that an accept of nothing (a box holding none of it) records no undo step, nor of its message ("nothing of it is in"). | test gap | Holds today by the reviewer's probe; not pinned. | a case checks the undo depth and the status text | 2026-10-09 |
+| 23 | step 1 | Conflicts in the small parts are tested for an area's box, a roll, a card and the round, not for the spotlight or an area renamed only by case. | test gap | Not written. | two lines in that case | 2026-10-09 |
+| 24 | step 1 | The Proposals table's separator row is narrower than three of its headers (printed by `tools/proposals.c`). | cosmetic | Renders correctly; only the source looks ragged. | the format string is widened | 2026-10-09 |
+| 25 | step 1 | `grow` (`changeset.c:215`) is a general doubling helper, beside hand-written copies in json.c, maptools.c, store.c and mapio.c. | duplication | It predates the change; the reviewer called it optional. | it moves to util.c/h and the copies use it | 2026-10-09 |
+| 26 | step 1 | `map_copy_into(dst, src)` with `dst == src` would free its own scenes and cards first. Nothing calls it that way, and nothing says not to. | robustness | No caller does it. | an early return, an assert, or a line in map.h | 2026-10-09 |
+| 27 | step 2 (043ca4f) | A checkpoint test accepts between 4 and 8 saved blocks where the squares it writes fix the number (test_changeset.c:680). | test gap | Called harmless by the reviewer. | it checks the exact count | 2026-10-09 |
+| 28 | step 3 (6337c26) | No test that an at-once result lands while the GM reviews **another** job, with the review left open and the status line changed (the behavior CONFLICTS.md:101-103 describes). | test gap | Not written; the same-job case was (step 4). | a `jobs` case | 2026-10-09 |
+| 29 | step 3 | No test presses `u` after an accept by box: that the map reverts and the proposal keeps only the rest (CONFLICTS.md:104-106). | test gap | Not written. | a `u` after the boxed accept in test_jobs.c:143 | 2026-10-09 |
+| 30 | step 3 | The players' frame is checked for the tint of an asked job, not of a ready one. | test gap | The same drawing path; the reviewer called it acceptable. | the check is repeated after a proposal | 2026-10-09 |
+
+### Found while building, not by a review
+
+| # | where | item | why it was left | closes when | checked |
+|---|---|---|---|---|---|
+| B1 | step 4, PERFORMANCE.md *Proposals from the channel* | Making a proposal walks the change set's cells twice more than it must: once for the summary line (3.3 µs) and once for the `#N` label's corner (1.2 µs), for about 650 cells. | A proposal comes seconds apart; recorded as a finding. | `cs_summary` returns the bounds it already computes, and `corner_from_set` uses them | 2026-10-09 |
+| B2 | steps 1 and 4, PERFORMANCE.md *Proposals* | The diff costs about 17 ns a changed cell against a floor near 2 (a block sort and a dedupe hash). | Accepted when step 1 was measured. | a proposal's diff shows up in a profile that matters | 2026-10-09 |
+| B3 | step 4 | A request that lands at once costs about 25-41 µs more than editing straight (copy, diff, accept). | The price of one road in (decision 6). | the user wants at-once requests to skip the copy, at the cost of a second road | 2026-10-09 |
+| B4 | step 6, PERFORMANCE.md | Finding which vtt holds a map costs about 0.1 ms a running vtt, not the 3 µs estimated: it wakes a sleeping process. | The wake is the cost; the redundant probe is already gone. | nothing known would | 2026-10-09 |
+| B5 | the audit of earlier reviews, 2026-10-09 | CONFLICTS.md:719 still says "the checkpoint in map.c"; it is checkpoint.c. | Stale since step 2. | the line is corrected (step 9's doc pass) | 2026-10-09 |
+| B6 | the audit | PERFORMANCE.md's Proposals floor table quotes 4.9 µs, 3.1 µs, 2.4 ms and 3.5 ms where the table above it now has 4.7, 2.9, 2.2 ms and 4.07 ms. | The upper table was re-measured; the prose under it was not. | the floor table is rewritten from the current rows | 2026-10-09 |
+| B7 | the audit | `checkpoint_note_ops` takes a `forward` argument it no longer uses (`checkpoint.c:29`). | Dead since step 2's fix. | the parameter goes, with its two callers | 2026-10-09 |
+| B8 | the audit | docs/KEYS.md does not mention the review mode. | The plan puts it in step 9's doc pass. | step 9 | 2026-10-09 |
+
+### Disproved
+
+None. (One finding was first set aside unchecked and was right: step 6's "the tests reach the
+user's real socket directory". It is fixed, 3535bb8, and is why the rules above exist.)
+
+### Closed
+
+Rows move here when fixed, with the commit.
+
+### Where the rows came from
+
+Ten reviews, 2026-10-07 to 2026-10-09. The first seven predate this section: on 2026-10-09
+their reports were read back from the session's record and every item checked against the
+code as it stood (137 items: 117 fixed, 4 overtaken when the plan dropped "accept saves", 16
+open, none disproved). Steps 4-6 were entered from their reports as they came.
+
+| review | of | items open here |
+|---|---|---|
+| 2026-10-07 | the questions added to this page | none |
+| 2026-10-07 | commit 1edbc8e and the plan's second draft | 14, 17 |
+| 2026-10-07 | commit 98c9ec2, the `Machine:` line | 18 |
+| 2026-10-07 | the plan's third draft | 8 |
+| 2026-10-08 | step 1 | 19-26 |
+| 2026-10-08 | step 2 | 27 |
+| 2026-10-08 | step 3 | 28-30 |
+| 2026-10-09 | step 4 | 1-5 |
+| 2026-10-09 | step 5 | 6-9 |
+| 2026-10-09 | step 6 | 10-16 |
+
 ## 2026-09-28, at 17e31e3
 
 Four read-only audits in parallel -- duplication and organization, performance and
