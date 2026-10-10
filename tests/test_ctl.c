@@ -1160,6 +1160,9 @@ void test_corridor_edges(void)
 void test_apply(void)
 {
     Sandbox sb = sandbox_enter("apply");
+    /* The `vtt --apply` this runs looks for a vtt holding its map: in the
+     * sandbox, never among the user's own. */
+    CHECK(getenv("XDG_RUNTIME_DIR") && !strcmp(getenv("XDG_RUNTIME_DIR"), sb.dir));
     CHECK_EQ(sb.ok, 1);
     if (!sb.ok) return;
     char vtt[] = "./vtt";
@@ -1267,10 +1270,9 @@ void test_ctl_live(void)
     Sandbox sb = sandbox_enter("ctl");
     CHECK_EQ(sb.ok, 1);
     if (!sb.ok) return;
-    char saved_rt[1024] = "";
-    const char *rt = getenv("XDG_RUNTIME_DIR");
-    if (rt) str_lcpy(saved_rt, rt, sizeof saved_rt);
-    setenv("XDG_RUNTIME_DIR", sb.dir, 1);
+    /* The sandbox is the runtime directory (sandbox_enter): no socket here
+     * is the user's. */
+    CHECK(getenv("XDG_RUNTIME_DIR") && !strcmp(getenv("XDG_RUNTIME_DIR"), sb.dir));
 
     Renderer r;
     App      a;
@@ -1769,8 +1771,6 @@ void test_ctl_live(void)
     app_free(&a);
     rnd_free(&r);
     rmdir(dir);
-    if (saved_rt[0]) setenv("XDG_RUNTIME_DIR", saved_rt, 1);
-    else             unsetenv("XDG_RUNTIME_DIR");
     sandbox_leave(&sb);
     rmdir(sb.dir);
 }

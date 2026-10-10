@@ -90,6 +90,8 @@ typedef struct {
     char datadir[1100];
     char cwd[1024];
     char saved_xdg[1024];
+    char saved_rt[1024];            /* XDG_RUNTIME_DIR as it was */
+    int  had_rt;
     int  ok;
 } Sandbox;
 

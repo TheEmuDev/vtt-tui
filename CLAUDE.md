@@ -156,6 +156,9 @@ Bench scripts replay whole; no toggles — use loop-neutral pairs (`llllhhhh`,
 - A new suite: a `void test_x(void)` in the file for its area (make it non-static and
   declare it in `harness.h`), then a row in `run.c`'s table. A helper another file needs
   moves its prototype to `harness.h` and loses `static`.
+- `sandbox_enter` sets `XDG_DATA_HOME` and `XDG_RUNTIME_DIR` to the sandbox: a test that runs
+  `./vtt` or opens the channel outside one reaches the user's own files and running vtts.
+  To check: `XDG_RUNTIME_DIR=/some/canary build/run-tests` must leave the canary untouched.
 - App tests: `Sandbox sb = sandbox_enter("name")`, `write_map_file(sb.dir, "fight.vtt")`
   (a **2×2 empty map** — place tokens with `ipAria\r` after setting `a.ed.cx/cy`),
   `app_open_map`, `Key f2 = {KEY_F2,0,0}` for play mode, `sandbox_leave(&sb)`.

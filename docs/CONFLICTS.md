@@ -214,9 +214,12 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
     it does give out. `--wait`'s exit 2 is in the tables.
   - Tests: the verdict reader (job 1 is not job 12), every refused word with the channel
     off, `holds` with no map.
-  - Not taken: the review thought the tests talk to the user's real socket directory.
-    `test_ctl_live` sets `XDG_RUNTIME_DIR` to its sandbox, and no other suite opens a
-    socket.
+  - **The tests reached the user's real socket directory** (first dismissed, then checked
+    at the user's asking, 2026-10-09). `test_ctl_live` set `XDG_RUNTIME_DIR` to its sandbox,
+    but `test_apply` runs the real `vtt --apply`, which since this step asks every vtt in
+    that directory: with a silent socket there two of its checks failed, and a run woke
+    every vtt the user had open. `sandbox_enter` now sets `XDG_RUNTIME_DIR` for every
+    suite. Checked with a canary directory: the whole suite makes no connection to it.
 
   What it holds:
   - `ctl_apply_open` (ctl.c): `--apply` asks each running vtt `holds DEV INO`; the holder

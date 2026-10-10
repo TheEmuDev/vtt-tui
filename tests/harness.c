@@ -169,6 +169,16 @@ Sandbox sandbox_enter(const char *tag)
     if (old) str_lcpy(s.saved_xdg, old, sizeof s.saved_xdg);
     setenv("XDG_DATA_HOME", s.datadir, 1);
 
+    /* The control channel's sockets too: every `vtt` a test runs looks
+     * there for a vtt that has its map open (--apply), and a test's own
+     * sockets go there. Never the user's: their running vtts would be
+     * woken and asked by the suite, and one of theirs stopped would fail
+     * it. The sandbox itself (0700 from mkdtemp, a short path) is it. */
+    const char *rt = getenv("XDG_RUNTIME_DIR");
+    s.had_rt = rt != NULL;
+    if (rt) str_lcpy(s.saved_rt, rt, sizeof s.saved_rt);
+    setenv("XDG_RUNTIME_DIR", s.dir, 1);
+
     s.ok = 1;
     return s;
 }
@@ -203,6 +213,8 @@ void sandbox_leave(Sandbox *s)
     if (chdir(s->cwd) != 0) { }
     if (s->saved_xdg[0]) setenv("XDG_DATA_HOME", s->saved_xdg, 1);
     else                 unsetenv("XDG_DATA_HOME");
+    if (s->had_rt) setenv("XDG_RUNTIME_DIR", s->saved_rt, 1);
+    else           unsetenv("XDG_RUNTIME_DIR");
     if (!strncmp(s->dir, "/tmp/vtt-", 9)) remove_tree(s->dir);
     s->ok = 0;
 }
