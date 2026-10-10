@@ -32,3 +32,28 @@ The bar and the `?` page are both generated from the tables in `src/keys.c`.
    `remove` after the name it removes (`:clock Dragon remove`, `:roll attack remove`, `:link 3 remove`), the
    channel's `token del` for a creature, and `:turns end` to end a fight.
    An old spelling says what replaced it rather than doing something else.
+
+## The review, read against the rules
+
+`:review` is a mode of build mode for looking at a change someone else proposed
+(docs/CONFLICTS.md); its table in `src/keys.c` is `REVIEW`. Its keys were chosen by the
+rules above, and one of them bends a rule on purpose:
+
+| key | does | rule |
+|---|---|---|
+| `enter` | accepts the change, or the part in the box | 7: `enter` commits |
+| `esc` | drops the box, then leaves the review; the change stays waiting | 7: one layer at a time |
+| `d` | scraps it; `:review N` brings it back | 1: vim's delete. Nothing is destroyed, so it is not a `remove` (9) |
+| `v` | boxes a part to accept alone | 1, 2: the same selection as anywhere |
+| `n` `N` | the next and the previous change waiting | 1, 4 |
+| `u` | undoes the GM's own last step, as anywhere | 1, 2 |
+| `c` | sends it back to the agent with a line of what to do instead | 1, and it **strains 2** |
+
+`c` is vim's "change", and here it asks for one, in the GM's words. In play mode `c` changes a
+creature's label. Both change the thing under the hand, but not the same thing, which rule 2
+asks for. It was accepted (the user, 2026-10-07) over `:review say TEXT` with no key, because
+sending a change back is the commonest answer after accepting it. A second key that strains
+rule 2 the same way should not lean on this one: it needs its own case.
+
+The bar holds accept, scrap, feedback, box, back and `? keys` (rule 8); `n`/`N`, `u` and
+`:jobs` are on the `?` page.

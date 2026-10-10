@@ -368,6 +368,17 @@ run "agent, proposal, accept" "$VOID512" 80x24 ':review\r\ru'      "--bench-ctl 
 # the GM's edits on the largest map, then the map quiet: one event a loop.
 echo 'wait for 0' > "$DIR/wait.ctl"
 run "agent, map changed event" "$HUGE" 80x24 'xlxlxlxlxlxlfhfhfhfhfhfh' "--bench-ctl $DIR/wait.ctl"
+# Another program writes the open map's file (step 7): the plan of rooms
+# applied to a copy of the largest map, written over the map's own file every
+# loop. The first key notices; the read, the proposal and its tint follow once
+# the keys are quiet. Both files are vtt's own writing, every row whole (the
+# void map above is a header alone), so both parses are the largest map's.
+OUTMAP="$DIR/outside.vtt"; OUTNEW="$DIR/outside-new.vtt"
+cp "$VOID512" "$OUTMAP"; cp "$VOID512" "$OUTNEW"
+echo 'room Z B2 4x4' > "$DIR/one.ctl"
+XDG_RUNTIME_DIR="$DIR/rt" "$BIN" "$OUTMAP" --apply "$DIR/one.ctl" > /dev/null
+XDG_RUNTIME_DIR="$DIR/rt" "$BIN" "$OUTNEW" --apply "$DIR/plan.ctl" > /dev/null
+run "build, outside change 512x512" "$OUTMAP" 80x24 'llhh' "--bench-outside $OUTNEW"
 run "help page"            "$WALLED" 80x24  '?jjjj'
 run "profiler overlay"     "$WALLED" 80x24  '\e[24~jjll'
 

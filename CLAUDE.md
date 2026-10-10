@@ -86,6 +86,7 @@ tools/embed.sh  after editing web/index.html; tools/blit_wasm.py after editing t
 ./vtt map --bench keys --bench-clients 4   the frame with four watchers attached
 ./vtt map.vtt --script keys --dump-frame --size 100x30     render one frame as text
 ./vtt map.vtt --bench keys --bench-loops 400 --trace t.json  headless timing + Chrome trace
+./vtt map --bench keys --bench-outside new.vtt   new.vtt written over the map's file each loop, as another program would (the map is written on: use a copy)
 ./vtt map --bench keys --bench-ctl req [--bench-review]   a request each loop, landing at once (or waiting for :review); the tick runs after each loop on a clock that lets the map go quiet
 ```
 
@@ -243,9 +244,9 @@ The 2026-09-28 check's open items are there, in a proposed order.
   300 bytes, for 6-27% on frames that redraw the screen (docs/PAGESPEED.md). If the page
   nears the one-round-trip limit (12 KB as sent; 11.4 KB on 2026-10-04), drop the 8-byte
   one first -- the user's call when it was shipped.
-- **`picker.open` reads every file** (about 7 µs each on the desktop since `file_read`
-  reads a file in one piece, 2026-10-10; 12 before): 3.6 ms for 500 templates, about
-  10 ms near 1,400. Cache details by mtime when someone's library gets there.
+- **`picker.open` reads every file** (about 6.5 µs each on the desktop since `file_read`
+  reads a file in one piece, 2026-10-10; 9 before): 3.2 ms for 500 templates, about
+  10 ms near 1,500. Cache details by mtime when someone's library gets there.
 
 ## Docs to keep in step
 

@@ -4,6 +4,26 @@ Things worth building that were consciously not built, with the reason, so
 the reason can be re-examined rather than the idea re-invented. Add to the
 top; move an entry to the README when it ships.
 
+## Merging an outside change into unsaved work
+
+*Set aside 2026-10-07, in the plan for proposals* (docs/CONFLICTS.md, decision 8). When
+another program writes the open map's file while the GM has unsaved edits, vtt could merge
+the two by itself, three ways: the file as vtt last knew it, the file now, the map in
+memory. Why not: what the other program changed arrives as a proposal the GM sees drawn
+on the map and accepts whole or by box, with the squares both sides touched marked. That
+is the merge, with the GM deciding each overlap. A merge nobody looks at would have to
+guess those. Worth another look only if outside changes become so frequent that reviewing
+each is a chore.
+
+## Reloading a changed file by itself
+
+*Set aside 2026-10-07* (the same decision). Vim's `autoread`: when the file changes and the
+GM has no unsaved edits, load it without asking. Why not: with the review in place it is
+not needed. The proposal costs one `enter`, and bare `:e` reloads outright. (Added when this
+was written down, 2026-10-10: it would also change the map on the players' screens with
+nobody having chosen it.) It could become a setting for a GM who runs an agent on the file
+and trusts it; `:agent accept auto` is the same trust for the channel.
+
 ## Picture handouts
 
 *Parked 2026-10-03, after a full plan* (docs/PICTURES.md, roadmap item 20).
@@ -39,6 +59,11 @@ and creatures together. The GM may want to keep the room and lose one door. That
 the batch split by line (each line its own sub-batch, `U` or a count stepping through
 them) or a list of the request's lines to pick from. All or nothing is enough until an
 agent's requests grow large enough that redoing one by hand is a chore.
+
+*2026-10-10:* mostly answered before the fact. A request is now a proposal, and `:review`
+accepts the part inside a `v` box (docs/CONFLICTS.md), so the GM keeps the room and never
+takes the door. What is still set aside is splitting a change **after** it was accepted,
+and every change under `:agent accept auto`.
 
 ## Moves from a player's phone
 

@@ -1,7 +1,12 @@
 # One map, many editors: the GM decides
 
-*Plan, 2026-10-07, third draft with Fable's review folded in. Signed off 2026-10-07: every
-recommendation below is the decision.*
+*The design record. Planned 2026-10-07 (third draft, with Fable's review folded in; signed
+off that day: every recommendation below is the decision) and built in nine steps,
+2026-10-08 to 2026-10-10. The plan's text stands as it was signed off; *Progress* says what
+each step built and where it left the plan, and *As measured* sets every estimate beside
+what was measured. Where the two disagree, the code and* Progress *are right. For how to
+use any of it: the README (*Asking an agent*, *When something else changes the file*),
+docs/AGENTS.md and docs/CONTROL.md.*
 - *The first draft refused `--apply` on an open map.*
 - *The second sent it straight into the open map.*
 - *This one follows the user's direction: the GM whose vtt owns the map has the highest
@@ -13,7 +18,7 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
 
 ## Progress
 
-*Updated 2026-10-08.*
+*All nine steps built; last updated 2026-10-10.*
 
 - **Step 1: built, reviewed by Fable, and fixed (2026-10-08).** The review's fixes:
   - an accept could leave two creatures holding the turn (a plan's turn now lands only
@@ -341,7 +346,19 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
     channel that is off.
   - Measured: 0.33-0.37 ms on the `:ask` key (PERFORMANCE.md). Checked against a live vtt:
     the command from the environment, its output in the log, the job ready, no zombie.
-- **Next: step 9** (the docs' last pass, the remaining perf rows, the final review).
+- **Step 9: the docs' last pass and the last perf row (2026-10-10).**
+  - docs/KEYS.md says how the review's keys read against the rules, and where `c` strains
+    rule 2; docs/IDEAS.md has decision 8's two (merging an outside change by itself,
+    reloading by itself), and its older entry on undoing part of a request says what the
+    review's box now answers.
+  - This page is the design record: *As measured* (under *Performance considerations*) sets
+    every estimate beside its measurement; three lines the build had left stale are
+    corrected (the event's wording, the new link's summary, checkpoint.c).
+  - `--bench-outside FILE` and the row `build, outside change 512x512`: another program
+    rewriting the open map's file every loop, so `disk.reload` is measured as the app meets
+    it (5.0 ms at p50), not only by the tool.
+  - PERFORMANCE.md's tables regenerated with that row, and the prose figures under
+    *Proposals* and *The checkpoint* brought in line with them (HEALTH.md B6).
 - **Follow-up after step 6 (the user, 2026-10-09): a thin agent skill.** A user-level skill
   (`~/.claude/skills/vtt/`, not the repo's `.claude/`: the agents that build maps run
   wherever the GM starts them) that says when to use vtt, the opening move (`vtt --ctl
@@ -448,7 +465,7 @@ The change set is the one representation everything here uses:
 |---|---|
 | highlight | the squares it touches, kept in 16×16 blocks so a frame draws only the visible ones |
 | summary | `2 ghouls added, walls in B2:F6`, for the status line and the agent |
-| conflicts | elements whose current value is no longer the change set's **before**: the squares an accept would overwrite. Two special cases. A creature the change adds is a conflict if one with its label has appeared meanwhile, and accept never makes a duplicate label. A **new** link takes the lowest free number at accept, not the number it was drawn with ("link 3, now 5" in the summary), so it never overwrites a link the GM made |
+| conflicts | elements whose current value is no longer the change set's **before**: the squares an accept would overwrite. Two special cases. A creature the change adds is a conflict if one with its label has appeared meanwhile, and accept never makes a duplicate label. A **new** link takes the lowest free number at accept, not the number it was drawn with (as built, the summary names a new link without a number), so it never overwrites a link the GM made |
 | preview | the **after** values swapped in for one draw of the grid and swapped back (B): the map is never changed. The status line describes the real map, not the preview |
 | accept | applied as values in one undo batch, so what the GM previewed is what lands, inside the highlight. `u` takes it back |
 | partial accept | the same, for the elements **wholly** inside a box (A): a 2-3 square creature, both ends of a link, an area's whole box. The summary says what stayed out |
@@ -548,7 +565,7 @@ What the socket code needs for it (ctl.c, main.c):
 **The map changed**, so an agent knows what moved under it. When an agent is waiting or a
 job is open, the map is checkpointed copy-on-write. Once the map has been quiet for 1.5 s
 (the autosave's rule), its change set against the checkpoint becomes one event:
-`the GM changed: walls in B2:F6, "Ghoul" moved C3 -> D5`. The checkpoint then moves on.
+`map changed: walls in B2:F6, "Ghoul" moved C3 -> D5`. The checkpoint then moves on.
 With no agent waiting and no job open, there is no checkpoint and nothing runs.
 
 The checkpoint (as built in step 2, `checkpoint.c`):
@@ -745,6 +762,36 @@ Entering a review redraws the changed cells in the window, once.
 - `tools/saves.sh` runs before and after, since keeping the base touches the save.
 - Each row is published beside its speed-of-light figure.
 
+### As measured
+
+Every estimate above beside what was measured once it was built: the desktop (i7-8700K),
+the median of three runs, 2026-10-10. docs/PERFORMANCE.md has the tables these come from
+(*Proposals* and the sections under it) and the reasoning for each gap.
+
+| path | estimated | measured | the gap |
+|---|---|---|---|
+| making a proposal, five rooms on 512×512 | the copy, up to 30 µs, + the plan + the diff | copy 18-28 µs, diff 4.7 µs; a request that lands at once costs 25-41 µs more than editing straight did | the copy is at its floor. The diff is about 17 ns a changed cell against a floor near 2 (HEALTH.md B2), and the summary and the `#N` corner walk the cells twice more than needed (B1): both accepted, a proposal comes seconds apart. Copy-on-write was not needed |
+| the highlight | the visible cells inside it | 0.3 µs a frame for a box filling the window (floor about 0.15) | the walk over the set's blocks and the conflict pass |
+| the preview swap | the window's changed squares twice, + the creature list (4 µs at 500) | 0.6-1.3 µs a frame; the first frame after a change 4.5 µs with 500 creatures | none: the lists are built once a change, not once a frame |
+| conflicts | one compare per element | 0.5 µs for five rooms | none |
+| accept | applying the elements kept | 3.3 µs for five rooms, 11 µs for the plan of rooms (650 cells) | none: one undo op a cell |
+| the map-changed event | the changed blocks + the small parts, about 1 µs | 1.6 µs for a dozen edits | the small parts are compared whole |
+| `wait`, held | nothing when idle | no CPU in 3 s; a verdict reaches the waiter 1 ms after the key, the client's start-up included | none. No bench row: the bench has no socket to hold a wait on (HEALTH.md row 8) |
+| the file check | one `stat`, 0.9 µs | 0.8 µs | none |
+| an outside change, 512×512 | two parses, about 8.4 ms by the laptop's loader, + the compare | 5.0-6.1 ms; the compare 42-54 µs | the two parses are all of it. The loader runs at 3.4 ns a byte (B10) |
+| keeping the base | a copy of the bytes, 25 µs for 789 KB | nothing added: the file is read whole into the buffer that is kept, and a save keeps the text it wrote. A load went from 3.0-3.2 ms to 2.6-2.8 | none. (Step 7 first claimed this from a cold load against a warm one; the A/B on one file showed that build 5% slower, and `file_read` was fixed, 0df7624) |
+| `--apply` finding the holder | 3 µs per running vtt | about 0.1 ms per running vtt | **the estimate was wrong:** it took the round trip between two running processes, and this one wakes a vtt asleep in `poll` (B4). A tenth of what starting `vtt --apply` costs |
+| `:agent command` on `:ask` | not estimated in the plan; a process started, some tens of µs | 0.36 ms | forking twice, so the agent is nobody's child. On a key that hands work to a program taking seconds |
+
+**Where the promised rows are.** `tools/perf.sh`: `agent, proposal, review`, `agent,
+proposal, accept`, `build, a job's tint`, `agent, map changed event`, `build, :ask starts an
+agent`, `build, outside change 512x512`. `tools/proposals.sh`: the pieces apart from any
+key, the checkpoint's A/B columns (off and on), and the outside change's parts. Two the
+plan named were not made rows of their own: a highlight and a review with the change
+**off** the window. Both are culled by block before any square is read; the preview's
+cull has a test (test_changeset.c), the tint's has none (HEALTH.md row 43), and no figure is
+published for either.
+
 ## Tests
 
 - **test_jobs (new suite).**
@@ -812,7 +859,7 @@ Entering a review redraws the changed cells in the window, once.
   keys, `:agent accept`, `:agent command`), outside changes and `:w!`, and bare `:e`.
 - **KEYS.md and `src/keys.c`:** the review mode and its bar.
 - **CLAUDE.md:** rows for `app_job.c` (jobs, review), `changeset.c`, and
-  the checkpoint in map.c; the `ctl.c` and `mapio.c` rows.
+  the checkpoint (checkpoint.c); the `ctl.c` and `mapio.c` rows.
 - **IDEAS.md:** decision 8's two.
 - **This page:** becomes the design record.
 

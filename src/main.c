@@ -55,6 +55,7 @@ typedef struct {
     long        ctl_pid;            /* --ctl-pid N: which vtt; 0 the only one */
     const char *bench_ctl;          /* --bench-ctl FILE: a request run each bench loop */
     int         bench_review;       /* --bench-review: its changes wait for review, not accept auto */
+    const char *bench_outside;      /* --bench-outside FILE: written over the map's file each bench loop */
     const char *apply;              /* --apply FILE: run a request against the map, save it */
     int         apply_wait;         /* --wait SECONDS: for the GM's verdict, when the map is open in a vtt; -1 unsaid */
     const char *import_adv;         /* --import-adversaries FILE: SRD adversaries as characters */
@@ -88,6 +89,7 @@ static void usage(void)
         "  --bench-ctl FILE   run a control-channel request at the top of every --bench loop\n"
         "                     (its changes land at once, as under :agent accept auto)\n"
         "  --bench-review     ... unless this is given: then they wait for :review\n"
+        "  --bench-outside FILE  write FILE over the map's own file every --bench loop, as another program would\n"
         "  --agent            open the control channel at startup (:agent on does it later)\n"
         "  --ctl [REQUEST]    send a request to the vtt taking them, print the answer\n"
         "                     (no REQUEST, or -: read it from stdin; docs/CONTROL.md)\n"
@@ -140,6 +142,7 @@ static int parse_args(Options *o, int argc, char **argv)
         else if (!strcmp(a, "--agent"))      o->agent = 1;
         else if (!strcmp(a, "--bench-ctl") && i + 1 < argc) o->bench_ctl = argv[++i];
         else if (!strcmp(a, "--bench-review")) o->bench_review = 1;
+        else if (!strcmp(a, "--bench-outside") && i + 1 < argc) o->bench_outside = argv[++i];
         else if (!strcmp(a, "--apply") && i + 1 < argc) o->apply = argv[++i];
         else if (!strcmp(a, "--wait") && i + 1 < argc) {
             o->apply_wait = atoi(argv[++i]);
@@ -376,8 +379,23 @@ static int run_headless(const Options *o)
             a.ctl_auto = !o->bench_review;
         }
 
+        /* Another program writing the map's file (docs/CONFLICTS.md, step
+         * 7): the same bytes each loop, which is a new file by its time. */
+        char  *out_bytes = NULL;
+        size_t out_len = 0;
+        if (o->bench_outside) {
+            int big = 0;
+            out_bytes = file_read(o->bench_outside, (size_t)64 << 20, &out_len, &big);
+            if (!out_bytes) die("cannot read %s", o->bench_outside);
+        }
+
         uint64_t bench_clock_ms = 1000;
         for (int loop = 0; loop < o->bench_loops && a.running; loop++) {
+            if (out_bytes) {
+                int fd = open(o->map_path, O_WRONLY | O_TRUNC);
+                if (fd < 0 || write(fd, out_bytes, out_len) != (ssize_t)out_len) die("--bench-outside: cannot write %s", o->map_path);
+                close(fd);
+            }
             if (ctl_req) {
                 prof_frame_begin();
                 /* The tick runs too, in the request's frame, on a clock that
@@ -445,7 +463,18 @@ static int run_headless(const Options *o)
                 }
             }
             a.running = 1;      /* a 'q' in the script must not end the bench */
+            if (out_bytes) {
+                /* The loop's first key saw the file had changed; the keys
+                 * are quiet now, so the tick reads it: a frame of its own. */
+                prof_frame_begin();
+                bench_clock_ms += 2 * AUTOSAVE_QUIET_MS;
+                app_tick(&a, bench_clock_ms);
+                app_frame(&a, NULL, 0);
+                prof_frame_end();
+                prof_set_counters(r.cells_changed, r.bytes_written);
+            }
         }
+        free(out_bytes);
         for (int i = 0; i < ncf; i++) close(cfd[i]);
         if (recf) fclose(recf);
         free(ctl_req);
