@@ -42,6 +42,7 @@ int main(int argc, char **argv)
         { "jobs", test_jobs },
         { "jobsctl", test_jobs_ctl },
         { "events", test_events },
+        { "agentcmd", test_agent_command },
         { "disk", test_disk },
         { "linkkeys", test_link_keys },
         { "floors", test_floors },

@@ -288,6 +288,7 @@ void test_changeset(void);
 void test_jobs(void);
 void test_jobs_ctl(void);
 void test_events(void);
+void test_agent_command(void);
 void test_disk(void);
 void test_link_keys(void);
 void test_floors(void);

@@ -1264,6 +1264,16 @@ nothing lands on your map until you accept it.
 An agent may also propose a change you did not ask for; it comes the same way, ready for
 `:review`.
 
+**Having vtt start the agent.** `:agent command CMD` names a command that vtt starts for each
+`:ask`, and again each time you send a job back with `c`. For example `:agent command claude
+-p`, or a script of your own. The command gets the job on its standard input: what you
+asked, the box, the job's history, and the few `vtt --ctl` lines it needs to read the map
+and propose. It runs in the background; its output goes to the session log when `:log` is on.
+Setting a command switches the channel on when the first job starts. `:agent command` alone
+shows it, `:agent command off` clears it, and the `VTT_AGENT_COMMAND` environment variable
+sets it at startup. The command also finds `$VTT` (this vtt's own path), `$VTT_PID` and
+`$VTT_JOB` in its environment.
+
 | command | does |
 |---|---|
 | `:ask TEXT` | ask for a change, over the `v` box if there is one |
@@ -1271,6 +1281,7 @@ An agent may also propose a change you did not ask for; it comes the same way, r
 | `:jobs`, `:jobs N` | list the jobs; one job's history (your words, the agent's, each proposal) |
 | `:review [N]` | review a ready change |
 | `:ask N remove` | take a job away |
+| `:agent command CMD` | start CMD for each `:ask` and each job sent back; `:agent command off` clears it |
 | `:agent accept auto` | every change an agent sends lands at once, one undo step each; `:agent accept review` goes back to reviewing |
 
 A change waiting to land at once never lands while you are typing, answering a prompt,

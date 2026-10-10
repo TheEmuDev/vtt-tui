@@ -173,6 +173,17 @@ never move.
     map and log, not the scratch: the GM's selection holds live indices.
   - `job` and `jobs` lines go before a request's `propose` line and edits, so the job a
     proposal answers cannot be dropped from under it.
+- **`:agent command` (2026-10-10, docs/CONFLICTS.md step 8, decision 1b).**
+  - `app_agent.c`: `app_agent_start` runs `/bin/sh -c CMD` for a job the GM asked for
+    (`:ask`) and for one sent back (`c`), never for an agent's own job, an `--apply` or a
+    change from the file. The job is on its stdin (`app_agent_prompt`: self-contained, with
+    the path and pid written in), and `VTT`, `VTT_PID`, `VTT_JOB` in its environment.
+  - **Detached by forking twice** (as `:mirror` does): the agent is nobody's child, so
+    there is no zombie and no `SIGCHLD` to handle, and it has no terminal. Its descriptors
+    past 2 are closed. Output goes to the session log's file when one is on, else nowhere.
+  - **It switches the channel on** when it starts a job with the channel off: the command
+    cannot answer otherwise. Setting the command alone does not.
+  - Not kept across sessions; `VTT_AGENT_COMMAND` sets it at startup.
 - **`--apply` to an open map (2026-10-09, docs/CONFLICTS.md step 6).**
   - `ctl_apply_open` (ctl.c) asks each socket `holds DEV INO`; the holder gets the plan
     behind a `propose apply "NAME"` line. No holder: the file is the plan's, as before.

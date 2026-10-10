@@ -197,6 +197,7 @@ static const KeyDoc BUILD[] = {
     KEY("m",      "measure (the ruler)"),
     KEY(":roll 2d6+3", "roll dice    :log keeps a record of the session"),
     KEY(":agent on", "let an AI agent read this map and propose changes (vtt --ctl), to :review"),
+    KEY(":agent command CMD", "start CMD for each :ask, the job on its stdin (claude -p, a script)   :agent command off"),
     KEY(":agent accept auto", "an agent's changes land at once, u takes each back   :agent accept review"),
     KEY(":ask a crypt here", "ask an agent for a change in the v box   :ask! lands it at once   :jobs lists them"),
     KEY(":review", "look at a change an agent proposed, drawn in place, and accept it or not"),

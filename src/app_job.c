@@ -368,6 +368,7 @@ void app_job_feedback(App *a, const char *text)
     app_event(a, "job %d feedback: %s", j->num, text);
     snprintf(msg, sizeof msg, "#%d back to the agent: %.150s", j->num, text);
     app_note_gm(a, msg);
+    app_agent_start(a, j);                   /* :agent command: with the thread, feedback last */
     review_next_or_close(a);
 }
 
@@ -410,6 +411,7 @@ void app_ask_command(App *a, const char *verb, const char *rest)
     app_event(a, "job %d asked%s%s: %s", a->jobs[slot].num, where, at_once ? ", to land at once" : "", rest);
     snprintf(msg, sizeof msg, "#%d asked%s%s: %.150s", a->jobs[slot].num, where, at_once ? ", to land at once" : "", rest);
     app_note_gm(a, msg);
+    app_agent_start(a, &a->jobs[slot]);      /* :agent command: someone to do it */
 }
 
 /* :jobs lists them on the status line; :jobs N shows one's history. */

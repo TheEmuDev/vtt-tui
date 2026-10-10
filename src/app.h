@@ -83,6 +83,7 @@ typedef enum {
     DISK_STUCK,         /* it changed in a way no proposal can say (unreadable, resized) */
 } DiskState;
 
+#define AGENT_CMD_MAX 256
 #define EVENT_MAX      32
 #define EVENT_TEXT_MAX 240
 typedef struct {
@@ -252,6 +253,9 @@ typedef struct {
      * nothing lands at once. Requests not from the socket (the tests, the
      * bench) are not asked. */
     int      agent_on;
+    /* :agent command (app_agent.c): what vtt starts for each :ask and each
+     * job sent back, the job on its stdin. Empty: none. */
+    char     agent_cmd[AGENT_CMD_MAX];
 
     TextPrompt prompt;
     PromptWhat prompt_what;

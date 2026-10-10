@@ -513,6 +513,9 @@ static int run_interactive(const Options *o)
          * find it open and writes the file. */
         if (ctl_start(&a.ctl, err, sizeof err) < 0) app_set_status_gm(&a, err);
         else a.agent_on = o->agent;
+        /* The agent a GM always uses, without typing it each session. */
+        const char *cmd = getenv("VTT_AGENT_COMMAND");
+        if (cmd && cmd[0] && strlen(cmd) < sizeof a.agent_cmd) str_lcpy(a.agent_cmd, cmd, sizeof a.agent_cmd);
     }
 
     /* Paint once before blocking so the first frame is up immediately. */

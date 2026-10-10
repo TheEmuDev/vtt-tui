@@ -212,6 +212,13 @@ can take back, so each goes in a request of its own.
 
 ## Working live with the GM
 
+**If vtt started you** (`:agent command`): your standard input is one job -- what the GM
+asked, the box they drew, the job's history with any feedback last -- and the `vtt --ctl`
+lines to use, with this vtt's path and pid filled in. `$VTT`, `$VTT_PID` and `$VTT_JOB` hold
+the same. Take the job, read the map, propose once, read your proposal back, and exit; you
+are started again if the GM sends it back. You need no `wait` loop: one run is one attempt.
+What you print goes to the GM's session log.
+
 The GM has the map open in `vtt` and has typed `:agent on`. Send requests with `vtt --ctl`
 (requests on stdin, or one as an argument). **Your edits are proposals:** they run on a copy
 of the map and wait, tinted on the GM's screen, until the GM reviews them (`:review`) and

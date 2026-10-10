@@ -990,6 +990,13 @@ No timer: a vtt nobody is typing in never looks. The read waits for 1.5 s withou
 does under `:w` and `g o` when the file has just changed: they look, and read, before they
 write.
 
+**`:ask` starting an agent** (`:agent command`, step 8; the desktop): `agent.spawn` is
+0.33 ms on a 40×25 map and 0.37 ms on 512×512, once an `:ask`. The floor is one process
+started, some tens of microseconds with `posix_spawn`; this forks twice and waits for the
+first child, so the agent is nobody's child and leaves no zombie -- the other way to that is
+`SIGCHLD` ignored, which would break the `waitpid` the card editor and `:mirror` rely on. It
+is on a key the GM presses to hand work to a program that will take seconds.
+
 **`--apply` finding the map's holder** (step 6; the desktop, 300 runs a figure, the median of
 five): a failing plan on a file nobody has open takes 1.06 ms with no vtt running and 1.17 ms
 with one, so asking a running vtt costs about 0.1 ms. The plan's estimate was 3 µs, the

@@ -3,6 +3,7 @@
  * whole or by box, scrap, feedback, :ask!, and none of it on the phones. */
 #include "harness.h"
 
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -781,6 +782,158 @@ void test_events(void)
     CHECK(t && strstr(t, " job 2 asked: a well\n") && strstr(t, " map closed: Blank - its jobs went with it\n"));
     free(t);
 
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
+/* :agent command (step 8): the command started for each :ask and each job
+ * sent back, the job on its stdin, answering over the channel. */
+static int file_has(const char *path, const char *needle)
+{
+    char *t = slurp(path);
+    int has = t && strstr(t, needle) != NULL;
+    free(t);
+    return has;
+}
+
+/* Turns of the loop, as main makes them, until `path` holds `needle` or two
+ * seconds pass. */
+static int pump_until_file(App *a, const char *path, const char *needle)
+{
+    for (int spin = 0; spin < 400; spin++) {
+        if (file_has(path, needle)) return 1;
+        struct pollfd fds[1 + CTL_SLOTS];
+        int n = ctl_pollfds(&a->ctl, fds, 1 + CTL_SLOTS);
+        poll(fds, (nfds_t)n, 5);
+        uint64_t now = prof_now_ns() / 1000000u;
+        ctl_service(&a->ctl, fds, n, now);
+        app_tick(a, now);
+    }
+    return file_has(path, needle);
+}
+
+void test_agent_command(void)
+{
+    Sandbox sb = sandbox_enter("agentcmd");
+    Renderer r;
+    App a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK(ctl_blank_map(&a, sb.dir, 20, 12));
+    if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    const char *self_was = app_self_path;
+    char self[700];
+    snprintf(self, sizeof self, "%s/vtt", sb.cwd);
+    app_self_path = self;
+
+    char out[700], script[700], cmd[800];
+    snprintf(out, sizeof out, "%s/agent.out", sb.dir);
+    snprintf(script, sizeof script, "%s/agent.sh", sb.dir);
+    {
+        /* An agent in four lines: keep what it was told, take the job,
+         * propose, and say it is done. */
+        FILE *f = fopen(script, "w");
+        fprintf(f, "cat >> '%s'\n"
+                   "\"$VTT\" --ctl-pid \"$VTT_PID\" --ctl \"job $VTT_JOB take\" > /dev/null\n"
+                   "printf 'job %%s propose \"from the script\"\\ntile A1 water\\n' \"$VTT_JOB\" | \"$VTT\" --ctl-pid \"$VTT_PID\" --ctl > /dev/null\n"
+                   "echo \"done job=$VTT_JOB pid=$VTT_PID\" >> '%s'\n", out, out);
+        fclose(f);
+    }
+    snprintf(cmd, sizeof cmd, ":agent command sh %s\r", script);
+
+    CASE(":agent command with none set says so; off with none set too");
+    press(&a, ":agent command\r");
+    CHECK(strstr(a.status, "none is set") != NULL && a.status_gm);
+    press(&a, ":agent command off\r");
+    CHECK(strstr(a.status, "no agent command is set") != NULL);
+    press(&a, ":ask nothing starts\r");
+    CHECK_EQ(a.agent_on, 0);                               /* no command: nothing started, nothing opened */
+    app_jobs_clear(&a);
+
+    CASE("set: each :ask starts it, the job and how to answer on its stdin; the channel comes on for it");
+    press(&a, cmd);
+    CHECK(strstr(a.status, "each :ask now starts: sh ") != NULL);
+    press(&a, ":agent command\r");
+    CHECK(strstr(a.status, "each :ask starts: sh ") != NULL);
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "v3l3j:ask a flooded crypt\r");
+    CHECK_EQ(a.agent_on, 1);
+    CHECK_EQ(ctl_active(&a.ctl), 1);
+    char want[64];
+    snprintf(want, sizeof want, "done job=1 pid=%ld", (long)getpid());
+    CHECK(pump_until_file(&a, out, want));
+    CHECK(file_has(out, "Job #1: a flooded crypt\n"));
+    CHECK(file_has(out, "Where: B2:E5 (the box the GM drew)\n"));
+    CHECK(file_has(out, "Map: Blank, 20x12 squares"));
+    char line[900];
+    snprintf(line, sizeof line, "%s --ctl-pid %ld --ctl 'job 1 take'", self, (long)getpid());
+    CHECK(file_has(out, line));
+    CHECK(file_has(out, "job 1 propose \"one line for the GM\"\n"));
+
+    CASE("the started agent answered like any other: the job is ready, with its line");
+    CHECK_EQ(a.jobs[0].state, JOB_READY);
+    CHECK(a.jobs[0].has_cs && a.jobs[0].cs.ncells == 1);
+    CHECK(strstr(a.status, "#1 ready: ") && strstr(a.status, "from the script"));
+    CHECK_EQ(map_tile(a.map, 0, 0), TILE_FLOOR);           /* a proposal, as ever */
+
+    CASE("nobody's child: the command leaves no zombie behind");
+    errno = 0;
+    CHECK(waitpid(-1, NULL, WNOHANG) == -1 && errno == ECHILD);
+
+    CASE("sent back with feedback: started again, the thread on its stdin with the feedback last");
+    press(&a, ":review 1\rc");
+    press(&a, "not there - the east half\r");
+    CHECK(pump_until_file(&a, out, "  gm: not there - the east half\n"));
+    CHECK(file_has(out, "The job so far (the last gm: line is what to do now):\n  gm: a flooded crypt\n"));
+    {
+        char *t = slurp(out);
+        int runs = 0;
+        for (const char *p = t; p && (p = strstr(p, "You are an agent for the GM")) != NULL; p++) runs++;
+        CHECK_EQ(runs, 2);
+        free(t);
+    }
+
+    CASE("a job with no box says so; :agent command off: the next :ask starts nothing");
+    {
+        char body[4096] = "";
+        FILE *f = fmemopen(body, sizeof body - 1, "w");
+        Job j;
+        memset(&j, 0, sizeof j);
+        j.used = 1; j.num = 7;
+        str_lcpy(j.text, "more goblins", sizeof j.text);
+        app_agent_prompt(&a, &j, f);
+        fclose(f);
+        CHECK(strstr(body, "Where: the GM drew no box") != NULL);
+        CHECK(strstr(body, "--ctl 'dump'") != NULL && strstr(body, "'job 7 area B2:K12'") != NULL);
+    }
+    pump_until_file(&a, out, "\x01never");                  /* let the second run finish */
+    press(&a, ":agent command off\r");
+    CHECK(strstr(a.status, "agent command off") != NULL);
+    {
+        char *before = slurp(out);
+        press(&a, ":ask and another\r");
+        pump_until_file(&a, out, "Job #2");
+        char *after = slurp(out);
+        CHECK(before && after && !strcmp(before, after));
+        free(before);
+        free(after);
+    }
+
+    CASE("a command too long for its field is refused, and none is set");
+    {
+        /* Past what the : line takes, so asked of the command's own check
+         * (VTT_AGENT_COMMAND and a longer : line would reach it). */
+        char big[400];
+        memset(big, 'x', 300);
+        big[300] = '\0';
+        app_agent_command_cmd(&a, big);
+        CHECK(strstr(a.status, "put it in a script") != NULL);
+        CHECK_EQ(a.agent_cmd[0], '\0');
+    }
+
+    app_self_path = self_was;
     app_free(&a);
     rnd_free(&r);
     sandbox_leave(&sb);

@@ -1540,6 +1540,10 @@ void app_agent_command(App *a, const char *rest)
                                    : "an agent's changes wait for :review");
         return;
     }
+    if (!strncmp(rest, "command", 7) && (!rest[7] || rest[7] == ' ')) {
+        app_agent_command_cmd(a, rest + 7);
+        return;
+    }
     if (!strcmp(rest, "off")) {
         if (!a->agent_on) { app_set_status_gm(a, "the agent channel is already off"); return; }
         /* The socket stays: --apply must still find this map open, and its
@@ -1549,7 +1553,7 @@ void app_agent_command(App *a, const char *rest)
         app_note_gm(a, "agent channel off - a proposal (--apply to this map) still comes for :review");
         return;
     }
-    if (strcmp(rest, "on") != 0) { app_set_status_gm(a, ":agent on, :agent off, :agent accept auto|review, or :agent to ask"); return; }
+    if (strcmp(rest, "on") != 0) { app_set_status_gm(a, ":agent on, :agent off, :agent accept auto|review, :agent command CMD, or :agent to ask"); return; }
     if (a->agent_on) {
         snprintf(msg, sizeof msg, "the agent channel is already on at %s", c->path);
         app_set_status_gm(a, msg);

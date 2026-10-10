@@ -300,8 +300,23 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
   key against one `stat` (0.9); an outside change is 5.4-5.8 ms on the largest map, once,
   when the keys are quiet -- two parses of the file, where the loader's 3.4 ns a byte is
   the gap.
-- **Next: step 8** (`:agent command`).
-- **Then step 9.**
+- **Step 8: built (2026-10-10); Fable's review is next.** What it holds:
+  - `app_agent.c` (new): `:agent command CMD` (and `VTT_AGENT_COMMAND`), started for each
+    `:ask` and each job sent back, the job and how to answer it on its stdin;
+  - the suite `agentcmd`: a script as the agent, which takes the job and proposes through
+    the real binary; no zombie; started again on feedback.
+- **Changed from the plan in step 8:**
+  - **The prompt is whole in itself.** The plan said "the job and its thread on stdin"; a
+    command that has never heard of vtt also gets the handful of `--ctl` lines, with this
+    vtt's path and pid written in.
+  - **Started again on feedback,** not only on `:ask`: a run is one attempt, and the
+    command needs no `wait` loop.
+  - **Its output goes to the session log only when one is on;** otherwise it is discarded.
+  - **It switches the channel on** at the first job, since the command cannot answer over a
+    channel that is off.
+  - Measured: 0.33-0.37 ms on the `:ask` key (PERFORMANCE.md). Checked against a live vtt:
+    the command from the environment, its output in the log, the job ready, no zombie.
+- **Next: step 9** (the docs' last pass, the remaining perf rows, the final review).
 - **Follow-up after step 6 (the user, 2026-10-09): a thin agent skill.** A user-level skill
   (`~/.claude/skills/vtt/`, not the repo's `.claude/`: the agents that build maps run
   wherever the GM starts them) that says when to use vtt, the opening move (`vtt --ctl

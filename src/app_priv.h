@@ -183,6 +183,13 @@ void app_disk_tick(App *a, uint64_t now_ms);
 const char *app_disk_blocks(const App *a);
 void app_disk_saved(App *a, int over);
 
+/* :agent command (app_agent.c): the command started for a job the GM asks
+ * for or sends back (1 started, 0 none set, -1 could not), what it reads on
+ * stdin, and the `:agent command ...` words. */
+int  app_agent_start(App *a, const Job *j);
+void app_agent_prompt(const App *a, const Job *j, FILE *out);
+void app_agent_command_cmd(App *a, const char *rest);
+
 /* Jobs and the review (app_job.c). */
 void app_jobs_clear(App *a);
 int  app_job_new(App *a, int from, const char *text, const CsBox *box, int at_once);
