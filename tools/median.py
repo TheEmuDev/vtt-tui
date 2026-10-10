@@ -57,8 +57,8 @@ def tables(path):
             cur = None
     if cur:
         out.append(cur)
-    if len(out) not in (1, 2):
-        sys.exit("%s: expected one table or two, found %d" % (path, len(out)))
+    if not out:
+        sys.exit("%s: no table found" % path)
     return out
 
 
@@ -96,7 +96,10 @@ def main_one(runs):
                 cells.append(cell)
                 continue
             v = statistics.median(vals)
-            text = ("%.1fus" % v) if cell.strip().endswith("us") else ("%d" % round(v))
+            # As many decimals as the cell was printed with (a stat is 0.77us).
+            shown = cell.strip()[:-2] if cell.strip().endswith("us") else ""
+            places = len(shown.split(".")[1]) if "." in shown else 1
+            text = ("%.*fus" % (places, v)) if cell.strip().endswith("us") else ("%d" % round(v))
             cells.append(" " + text.rjust(len(cell) - 2) + " ")
         print("|" + "|".join(cells) + "|")
 
@@ -104,8 +107,15 @@ def main_one(runs):
 def main(paths):
     machine(paths)
     runs = [tables(p) for p in paths]
-    if len(runs[-1]) == 1:
-        return main_one(runs)
+    # perf.sh's pair (frames, then zones) is merged below; anything else --
+    # pagebench.sh's one table, proposals.sh's three -- is each table on its
+    # own, a row by its first cell.
+    if len(runs[-1]) != 2 or "scenario" not in runs[-1][0][0]:
+        for t in range(len(runs[-1])):
+            if t:
+                print()
+            main_one([[run[t]] for run in runs if len(run) > t])
+        return
     last = runs[-1]
 
     print(last[0][0])

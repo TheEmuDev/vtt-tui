@@ -243,8 +243,9 @@ The 2026-09-28 check's open items are there, in a proposed order.
   300 bytes, for 6-27% on frames that redraw the screen (docs/PAGESPEED.md). If the page
   nears the one-round-trip limit (12 KB as sent; 11.4 KB on 2026-10-04), drop the 8-byte
   one first -- the user's call when it was shipped.
-- **`picker.open` reads every file** (about 12 µs each): 5 ms for 500 templates,
-  16 ms near 1,400. Cache details by mtime when someone's library gets there.
+- **`picker.open` reads every file** (about 7 µs each on the desktop since `file_read`
+  reads a file in one piece, 2026-10-10; 12 before): 3.6 ms for 500 templates, about
+  10 ms near 1,400. Cache details by mtime when someone's library gets there.
 
 ## Docs to keep in step
 
