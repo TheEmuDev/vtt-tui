@@ -1574,9 +1574,18 @@ void test_ctl_live(void)
         char *t = sock_ask(&a, "dump\n");
         CHECK(t && !strcmp(t, "error: line 1: the agent channel is off - only proposals, status and wait are taken (:agent on)\n"));
         free(t);
-        t = sock_ask(&a, "jobs\n");
-        CHECK(t && !strncmp(t, "error: line 1: the agent channel is off", 39));
+        static const char *const REFUSED[] = { "jobs\n", "marked\n", "describe\n", "undo\n", "job 1 take\n",
+                                               "scene save Now\n", "scene Start remove\n", "scene diff Start\n",
+                                               "tile A1 water\ndump A1\n" };
+        for (size_t k = 0; k < sizeof REFUSED / sizeof *REFUSED; k++) {
+            t = sock_ask(&a, REFUSED[k]);
+            CHECK(t && strstr(t, ": the agent channel is off"));
+            free(t);
+        }
+        t = sock_ask(&a, "scene Nope\n");                  /* putting one back is a proposal */
+        CHECK(t && strstr(t, "no scene called Nope"));
         free(t);
+        CHECK_EQ(a.jobs[0].used, 0);
         t = sock_ask(&a, "status\n");
         CHECK(t && !strncmp(t, "ok\n", 3) && strstr(t, "\nagent off - proposals, status and wait only\n"));
         free(t);
@@ -1688,6 +1697,49 @@ void test_ctl_live(void)
     }
     ctl_stop(&a.ctl);                                  /* the cases below want nobody listening */
     CHECK(access(want, F_OK) != 0);
+
+    CASE("a vtt that is there and does not answer may have the map open: --apply does nothing (exit 2)");
+    {
+        /* A stopped vtt, or one whose GM is in $EDITOR: the connect is
+         * taken by the backlog and nobody ever answers. */
+        char stub[700];
+        snprintf(stub, sizeof stub, "%s/4242.sock", dir);
+        int lfd = socket(AF_UNIX, SOCK_STREAM, 0);
+        struct sockaddr_un ssa;
+        memset(&ssa, 0, sizeof ssa);
+        ssa.sun_family = AF_UNIX;
+        str_lcpy(ssa.sun_path, stub, sizeof ssa.sun_path);
+        CHECK(bind(lfd, (struct sockaddr *)&ssa, sizeof ssa) == 0 && listen(lfd, 4) == 0);
+        fflush(stdout);
+        pid_t pid = fork();
+        if (pid == 0) {
+            int e = open("/dev/null", O_WRONLY);
+            dup2(e, 2);
+            _exit(ctl_apply_open("tests/fixtures/kinds.vtt", "plan.txt", "tile B2 hazard\n", 15, -1) & 0xff);
+        }
+        int stc = 0;
+        waitpid(pid, &stc, 0);
+        CHECK(WIFEXITED(stc) && WEXITSTATUS(stc) == 2);    /* not 255: "nobody holds it, write the file" */
+        close(lfd);
+        unlink(stub);
+    }
+
+    CASE("--wait reads a verdict for its own job only: job 1 is not job 12, feedback is not a scrap");
+    {
+        unsigned seq = 0;
+        char line[200];
+        CHECK_EQ(ctl_verdict_in("ok\nseq 9\n8 job 12 accepted: ground in B2\n9 map changed: ground in C3\n", 1, &seq, line, sizeof line), -1);
+        CHECK_EQ(seq, 9u);
+        CHECK_EQ(ctl_verdict_in("ok\nseq 9\n8 job 12 accepted: ground in B2\n", 12, &seq, line, sizeof line), 0);
+        CHECK(!strcmp(line, "job 12 accepted: ground in B2"));
+        CHECK_EQ(ctl_verdict_in("ok\nseq 3\n3 job 1 accepted in part, B2: ground in B2 - the rest waits\n", 1, &seq, line, sizeof line), 0);
+        CHECK_EQ(ctl_verdict_in("ok\nseq 3\n3 job 1 feedback: like job 1 scrapped, but better\n", 1, &seq, line, sizeof line), 5);
+        CHECK(!strcmp(line, "like job 1 scrapped, but better"));
+        CHECK_EQ(ctl_verdict_in("ok\nseq 3\n3 job 1 scrapped\n", 1, &seq, line, sizeof line), 4);
+        CHECK_EQ(ctl_verdict_in("ok\nseq 3\n3 job 1 removed by the GM\n", 1, &seq, line, sizeof line), 4);
+        CHECK_EQ(ctl_verdict_in("ok\nseq 3\n3 map closed: Blank - its jobs went with it\n", 1, &seq, line, sizeof line), 4);
+        CHECK_EQ(ctl_verdict_in("ok\nseq 3\n", 1, &seq, line, sizeof line), -1);
+    }
 
     CASE("a socket file nobody answers on is a crashed vtt's, and --ctl removes it");
     {

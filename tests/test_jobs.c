@@ -634,6 +634,11 @@ void test_events(void)
     app_init(&a, NULL, &r);
     char *t;
 
+    CASE("with no map, holds answers no");
+    t = ctl_ask(&a, "holds 1 2");
+    CHECK(t && !strcmp(t, "ok\nno\n"));
+    free(t);
+
     CASE("with no map, wait still answers; nothing has happened");
     t = ctl_ask(&a, "wait");
     CHECK(t && !strcmp(t, "ok\nseq 0\n"));

@@ -9,7 +9,10 @@
  * one request a connection. The client writes its request and shuts its
  * side; the request is handed to the app whole, the answer queued, written
  * without blocking, and the connection closed. What a request says is
- * app_ctl.c's business; this file only moves bytes. docs/CONTROL.md. */
+ * app_ctl.c's business: the server side here only moves bytes. The clients
+ * (`vtt --ctl`, `vtt MAP --apply`) know the few words they must: `agent
+ * on` in status, `holds`, a proposal's number, a job's verdict in the
+ * events. docs/CONTROL.md. */
 
 #define CTL_MAX_CONN   4            /* requests being read or answered */
 #define CTL_MAX_WAIT   4            /* and `wait`s held beside them, so a waiting
@@ -104,6 +107,11 @@ int  ctl_held_ms(const char *req);
  * it waits that long for the GM's verdict: 0 accepted, 3 none in time, 4
  * scrapped, 5 sent back (the feedback on stdout). */
 int  ctl_apply_open(const char *map_path, const char *plan_name, const char *plan, size_t len, int wait_s);
+/* --wait's reading of an events answer (app_event.c's text) for job `num`:
+ * 0 accepted, whole or in part, 4 scrapped, removed or the map closed, 5
+ * sent back (the line, or the feedback, into `line`); -1 nothing of it
+ * yet. *seq is the answer's "seq N". */
+int  ctl_verdict_in(const char *ans, int num, unsigned *seq, char *line, size_t sz);
 
 /* `vtt --ctl`: sends `req` (NULL reads stdin) to the vtt of `pid` (0: the
  * only one running), prints the answer. Returns the exit status. */

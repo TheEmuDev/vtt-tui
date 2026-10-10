@@ -33,11 +33,12 @@ the file and saved, as always. So `--apply` is safe on a map the GM has open, wi
 |---|---|---|
 | 0 | accepted, whole or in part (or run on the file, with no vtt holding it) | `job N accepted: ..., not saved` -- saving is the GM's |
 | 1 | the plan failed: nothing proposed, nothing saved | |
+| 2 | nothing done: the file could not be read, or a running vtt did not say whether it has the map open (stopped, or its GM is in an editor) -- try again; or the vtt quit before a verdict | |
 | 3 | no verdict in that time; the proposal still waits | `no verdict in N seconds ...` |
 | 4 | scrapped, or the job or the map went away | the event |
 | 5 | sent back | the GM's feedback, one line |
 
-A plan for `--apply` has no `propose` line of its own. To do more than propose (read the map
+A plan for `--apply` has no `propose` line of its own, and is at most 64 KB less a line. To do more than propose (read the map
 as it is in memory, answer the GM's jobs, hear events), the GM types `:agent on` and you
 use `vtt --ctl`; it exits 2 when no vtt has its channel on.
 

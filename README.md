@@ -1196,7 +1196,7 @@ use, and how `:dmg` marks HP. Available: `none`, `daggerheart`.
 | `:serve ...` | the [players' view](#the-players-view-serve-mirror); `:serve off` stops it |
 | `:player preview` | show the players' view on your screen; `:player floor NAME\|auto` pins their [floor](#floors); `:player camera follow\|party\|hold` their camera |
 | `:mirror` | open a second terminal with the players' view |
-| `:agent on` | open the [control channel](#control-channel-agent-vtt---ctl) for an AI agent; `:agent off` closes it |
+| `:agent on` | open the [control channel](#control-channel-agent-vtt---ctl) for an AI agent; `:agent off` switches it off (proposals from `--apply` still come) |
 | `:roll EXPR` | roll dice; `:roll NAME = EXPR` saves a named roll, `:rolls` lists them |
 | `:log` | start / stop the [session log](#session-log-log) |
 | `:play` `:build` | switch mode |
@@ -1348,10 +1348,12 @@ reached only by a link as reachable (a one-way link only in its direction).
 
 The control channel lets an agent or script read the map open in a running vtt and propose
 changes to it (see *Asking an agent*).
-`:agent on` opens it (or `--agent` at startup) and `:agent off` closes it. It listens on a
-Unix socket in `$XDG_RUNTIME_DIR/vtt/` that only the same user can access. With the channel
-off the socket still takes proposals (an `--apply` to the open map), which change nothing
-until you accept them; it gives out nothing about the map.
+`:agent on` switches it on (or `--agent` at startup) and `:agent off` switches it off. vtt
+listens on a Unix socket in `$XDG_RUNTIME_DIR/vtt/` that only the same user can access. With
+the channel off the socket still takes proposals (an `--apply` to the open map), which change
+nothing until you accept them. It then answers no request that reads the map; a caller
+still learns the map's name and file, and what a plan's own lines say back about the squares
+and names they use (that a creature or an area it names is not there, for instance).
 
 `vtt --ctl REQUEST` sends a request and prints the answer; with no request it reads one from
 stdin. It exits 0 on success, 1 on an error (the reason is printed on stderr), and 2 when no
@@ -1373,7 +1375,9 @@ session and saves it; `--new WxH` creates an empty map first if the file does no
 If the map is open in a running vtt, the plan goes there instead, as a proposal for you to
 `:review`, and the file is not touched. This works with the channel off too. `--wait
 SECONDS` then waits for your verdict: it exits 0 when you accept, 3 when the time runs out,
-4 when you scrap it, and 5 when you send it back, with your line of feedback on stdout.
+4 when you scrap it, and 5 when you send it back, with your line of feedback on stdout. If a
+running vtt does not answer whether it has the map open (it is stopped, or you are in your
+editor writing a card), `--apply` does nothing and exits 2; run it again.
 
 A request's edits become one proposal, made only if every line in it succeeds, and land as a
 single undo step when accepted. Under `:agent accept auto` a request lands at once, with a

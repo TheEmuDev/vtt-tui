@@ -92,6 +92,11 @@ int ctl_start(Ctl *c, char *err, size_t errsz)
     struct sockaddr_un sa;
     memset(&sa, 0, sizeof sa);
     sa.sun_family = AF_UNIX;
+    if (strlen(path) + 4 >= sizeof sa.sun_path) {      /* ".new" is as long as ".sock" less one */
+        snprintf(err, errsz, "the socket path is too long: %.60s...", path);
+        close(fd);
+        return -1;
+    }
     str_lcpy(sa.sun_path, path, sizeof sa.sun_path);
     /* Bound and listening under a name --ctl does not look at, then moved
      * into place: a client finding it between bind and listen would be
@@ -309,7 +314,7 @@ void ctl_answer(Ctl *c, int i, char *out, size_t len)
     k->out = out;
     k->out_len = len;
     k->out_off = 0;
-    if (k->state == CTL_READY && k->in_len) c->requests++;    /* not a --ctl liveness probe */
+    if (k->state == CTL_READY && k->in_len) c->requests++;    /* not an empty connection */
     /* A wait held for minutes is long past the deadline it connected
      * under: taking its answer gets ten seconds from now. */
     if (k->state == CTL_WAITING) k->since_ms = c->now_ms;
@@ -469,15 +474,26 @@ static int find_live(const char *dir, long *pids, int max)
     return n;
 }
 
-/* One request to the vtt of `pid`, the whole answer (malloc'd), or NULL. */
-static char *ask(const char *dir, long pid, const char *req, size_t len, size_t *alen)
+/* Finding which vtt to talk to asks each a question it answers between
+ * keystrokes; one that does not in this long is stopped, or its GM is in
+ * $EDITOR. The request itself keeps the longer wait. */
+#define CTL_FIND_MS 2000
+
+/* One request to the vtt of `pid`: the whole answer (malloc'd), or NULL with
+ * *gone set when nobody is at the socket (a vtt that has quit) and clear
+ * when one is there and did not answer -- which is not the same thing to
+ * --apply: a silent vtt may have the map open. */
+static char *ask(const char *dir, long pid, const char *req, size_t len, size_t *alen, int wait_ms, int *gone)
 {
     char path[CTL_PATH_MAX];
+    *gone = 1;
     if (sock_path(path, sizeof path, dir, pid) < 0) return NULL;
     int fd = ctl_connect(path);
     if (fd < 0) return NULL;
-    char *ans = exchange(fd, req, len, alen, ctl_held_ms(req) + CTL_TIMEOUT_MS + 5000);
+    *gone = 0;
+    char *ans = exchange(fd, req, len, alen, wait_ms);
     close(fd);
+    if (ans && !*alen) { free(ans); ans = NULL; }
     return ans;
 }
 
@@ -498,7 +514,9 @@ int ctl_client_main(const char *req, long pid)
         int  n = find_live(dir, pids, CTL_LIST_MAX), non = 0;
         for (int i = 0; i < n; i++) {
             size_t len;
-            char  *ans = ask(dir, pids[i], "status\n", 7, &len);
+            int    gone;
+            char  *ans = ask(dir, pids[i], "status\n", 7, &len, CTL_FIND_MS, &gone);
+            if (!ans && !gone) fprintf(stderr, "vtt: the vtt with pid %ld is not answering - passed over\n", pids[i]);
             if (ans && strstr(ans, "\nagent on\n")) {
                 /* The line after "ok" is the map's. */
                 const char *nl = strchr(ans, '\n');
@@ -560,7 +578,7 @@ int ctl_client_main(const char *req, long pid)
 /* The lines of an events answer that are about job `num`: 0 accepted (the
  * line into *line), 4 scrapped or gone, 5 sent back with feedback (its text
  * into *line), -1 none of them yet. *seq is the answer's "seq N". */
-static int verdict_in(const char *ans, int num, unsigned *seq, char *line, size_t sz)
+int ctl_verdict_in(const char *ans, int num, unsigned *seq, char *line, size_t sz)
 {
     char acc[32], scr[32], fb[32], rm[48];
     snprintf(acc, sizeof acc, " job %d accepted", num);
@@ -589,28 +607,46 @@ int ctl_apply_open(const char *map_path, const char *plan_name, const char *plan
 {
     char dir[CTL_PATH_MAX], err[CTL_PATH_MAX + 64];
     struct stat st;
-    if (stat(map_path, &st) < 0 || ctl_dir(dir, sizeof dir) < 0 || access(dir, F_OK) != 0 ||
-        dir_ours(dir, err, sizeof err) < 0)
-        return -1;
+    /* No file, or no directory of sockets: no vtt has it open. */
+    if (stat(map_path, &st) < 0 || ctl_dir(dir, sizeof dir) < 0 || access(dir, F_OK) != 0) return -1;
+    /* A directory that is not ours alone: whatever answers in it is not to
+     * be believed, and silence there is not a "no". */
+    if (dir_ours(dir, err, sizeof err) < 0) {
+        fprintf(stderr, "vtt: %s - cannot tell whether a vtt has %s open; nothing done\n", err, map_path);
+        return 2;
+    }
 
     /* Which vtt has this file open, if any: by identity, since each was
-     * started in a directory of its own. */
+     * started in a directory of its own. Every one is asked: a vtt that is
+     * there and does not say no may hold it, and then the file is left
+     * alone -- writing it under an open map is what this is here to stop. */
     char holds[96];
     int  hl = snprintf(holds, sizeof holds, "holds %llu %llu\n", (unsigned long long)st.st_dev, (unsigned long long)st.st_ino);
-    long pids[CTL_LIST_MAX], pid = 0;
-    int  n = find_live(dir, pids, CTL_LIST_MAX);
-    for (int i = 0; i < n && !pid; i++) {
+    long pids[CTL_LIST_MAX], pid = 0, silent = 0;
+    int  n = find_live(dir, pids, CTL_LIST_MAX), others = 0;
+    for (int i = 0; i < n; i++) {
         size_t al;
-        char  *ans = ask(dir, pids[i], holds, (size_t)hl, &al);
-        if (ans && !strcmp(ans, "ok\nholds\n")) pid = pids[i];
+        int    gone;
+        char  *ans = ask(dir, pids[i], holds, (size_t)hl, &al, CTL_FIND_MS, &gone);
+        if (ans && !strcmp(ans, "ok\nholds\n")) { if (!pid) pid = pids[i]; else others++; }
+        else if (!gone && !(ans && !strcmp(ans, "ok\nno\n"))) silent = pids[i];
         free(ans);
     }
+    if (!pid && silent) {
+        fprintf(stderr, "vtt: the vtt with pid %ld did not say whether it has %s open (stopped, or its GM is in an "
+                        "editor) - nothing done; try again\n", silent, map_path);
+        return 2;
+    }
     if (!pid) return -1;
+    if (others)
+        fprintf(stderr, "vtt: %d more vtt%s %s open too - the proposal goes to pid %ld only\n", others,
+                others == 1 ? " has" : "s have", map_path, pid);
+    int gone;
 
     /* Where its events stand, before the proposal: the verdict comes after. */
     unsigned seq = 0;
     size_t   al;
-    char    *ans = wait_s >= 0 ? ask(dir, pid, "wait for 0\n", 11, &al) : NULL;
+    char    *ans = wait_s >= 0 ? ask(dir, pid, "wait for 0\n", 11, &al, CTL_FIND_MS, &gone) : NULL;
     if (ans && !strncmp(ans, "ok\nseq ", 7)) seq = (unsigned)strtoul(ans + 7, NULL, 10);
     free(ans);
 
@@ -626,9 +662,9 @@ int ctl_apply_open(const char *map_path, const char *plan_name, const char *plan
     req[k++] = '"';
     req[k++] = '\n';
     memcpy(req + k, plan, len);
-    ans = ask(dir, pid, req, k + len, &al);
+    ans = ask(dir, pid, req, k + len, &al, CTL_TIMEOUT_MS + 5000, &gone);
     free(req);
-    if (!ans || !al) { free(ans); fputs("vtt: no answer from the vtt that has the map open\n", stderr); return 2; }
+    if (!ans) { fputs("vtt: no answer from the vtt that has the map open\n", stderr); return 2; }
 
     size_t first = strcspn(ans, "\n");
     int    ok = first == 2 && !strncmp(ans, "ok", 2);
@@ -656,11 +692,11 @@ int ctl_apply_open(const char *map_path, const char *plan_name, const char *plan
         if (left < 0) left = 0;
         char wreq[64];
         int  wl = snprintf(wreq, sizeof wreq, "wait %u for %ld\n", seq, left > CTL_WAIT_MAX_S ? CTL_WAIT_MAX_S : left);
-        ans = ask(dir, pid, wreq, (size_t)wl, &al);
-        if (!ans || !al) { free(ans); fputs("vtt: the vtt closed before a verdict\n", stderr); return 2; }
+        ans = ask(dir, pid, wreq, (size_t)wl, &al, ctl_held_ms(wreq) + CTL_TIMEOUT_MS + 5000, &gone);
+        if (!ans) { fputs("vtt: the vtt closed before a verdict\n", stderr); return 2; }
         char line[300] = "";
         unsigned was = seq;
-        int v = verdict_in(ans, num, &seq, line, sizeof line);
+        int v = ctl_verdict_in(ans, num, &seq, line, sizeof line);
         free(ans);
         if (seq < was) seq = 0;             /* a reset: hear everything kept */
         if (v == 0) { printf("%s, not saved\n", line); return 0; }

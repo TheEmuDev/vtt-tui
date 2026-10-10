@@ -30,14 +30,17 @@ the agent's; this page is why it is the way it is.
   answer's first line is `ok`, `error: ...` or `busy: ...`; the rest is what the request
   printed. `vtt --ctl` prints the answer and exits 0 on `ok`, 1 otherwise, 2 when there
   is no vtt to talk to.
-- **Finding the vtt.** With one running, `vtt --ctl` finds it; with several, it names
-  them with their maps and `--ctl-pid N` picks one. A socket nobody answers on is a
-  crashed vtt's and is removed.
+- **Finding the vtt.** Every interactive vtt listens; `vtt --ctl` asks each `status` and
+  takes the one that says `agent on`. With several on, it names them with their maps and
+  `--ctl-pid N` picks one. A socket nobody answers on is a crashed vtt's and is removed; a
+  vtt that is there and silent for two seconds (stopped, its GM in `$EDITOR`) is passed
+  over by `--ctl`, and makes `--apply` do nothing: it may have the map open.
 - **Bounded.** A request is at most 64 KB and four connections are held at once, with four
   more for agents holding a `wait`; one that has not finished its request, or not taken its
   answer, in ten seconds is dropped (a held `wait` has its own time, which it names).
   An answer is written without blocking, so a stuck caller never stalls the GM's
-  screen. Off, it costs nothing; on and idle, one more descriptor in `poll`.
+  screen. Idle, on or off, it costs one more descriptor in `poll` (the socket listens
+  whenever vtt runs interactively since step 6).
 - **Where it lives.** `ctl.c` owns the socket and the client; `app_ctl.c` reads a
   request and runs it against the App. main's loop hands finished requests over.
 
@@ -180,6 +183,14 @@ never move.
     `wait` stays, and hears of jobs but not of the map (no checkpoint runs).
   - **`vtt --ctl` picks the vtt whose channel is on:** every vtt listens now, so it asks
     each `status` and takes the one that says `agent on`.
+  - **Silence is not "no".** A vtt that connects and does not answer `holds` in two seconds
+    (`CTL_FIND_MS`) may hold the file, so `--apply` exits 2 without touching it; so does a
+    socket directory that is not this user's alone. Only a refused connect (nobody there)
+    or `no` from every vtt sends the plan to the file. More than one holder: the first is
+    sent the proposal and stderr says how many others there are.
+  - **What off still gives out** (same user only): the map's name, size and file in
+    `status`; whether a file is the open one; job events; and what a plan's own lines say
+    back (a creature, area or scene it names is not there; a region's summary).
   - **No liveness probe.** Finding the sockets used to connect to each and close; that
     woke every vtt twice an ask. A stale socket is removed when its connect is refused.
 - **Events and `wait` (2026-10-09, docs/CONFLICTS.md step 5).**

@@ -508,7 +508,9 @@ static int run_interactive(const Options *o)
      * when the channel was asked for. */
     {
         char err[CTL_PATH_MAX + 64];
-        if (ctl_start(&a.ctl, err, sizeof err) < 0) { if (o->agent) app_set_status_gm(&a, err); }
+        /* Said either way: with no socket, an --apply to this map cannot
+         * find it open and writes the file. */
+        if (ctl_start(&a.ctl, err, sizeof err) < 0) app_set_status_gm(&a, err);
         else a.agent_on = o->agent;
     }
 

@@ -201,7 +201,24 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
     and no CPU used in 3 s with a wait held, before and after an edit.
 - **Step 5 measured** (PERFORMANCE.md, *Events and `wait`*): a held wait costs no CPU; the
   map-changed read is 1.6 µs after a dozen edits on the largest map, against about 1 µs.
-- **Step 6: built (2026-10-09); Fable's review is next.** What it holds:
+- **Step 6: built (f306906, 2026-10-09), reviewed by Fable, and fixed.** The review's fixes:
+  - **A vtt that could not answer was taken for "nobody has it open", and `--apply` wrote
+    the file** under an open map: a stopped vtt, or one whose GM was in `$EDITOR` (`s k`).
+    The very overwrite this step is for. Silence is now not a "no": `--apply` exits 2 and
+    leaves the file. Tested with a socket that never answers.
+  - **A silent vtt cost every `--ctl` and `--apply` 15 s.** Finding the vtt waits 2 s.
+  - **Two vtts holding one file:** the first gets the proposal and stderr says so.
+  - **A socket directory that is not ours** made `--apply` write the file silently; it
+    refuses. A socket path too long for `sun_path` is an error at startup, always shown.
+  - **The README said the channel, off, "gives out nothing about the map".** It says what
+    it does give out. `--wait`'s exit 2 is in the tables.
+  - Tests: the verdict reader (job 1 is not job 12), every refused word with the channel
+    off, `holds` with no map.
+  - Not taken: the review thought the tests talk to the user's real socket directory.
+    `test_ctl_live` sets `XDG_RUNTIME_DIR` to its sandbox, and no other suite opens a
+    socket.
+
+  What it holds:
   - `ctl_apply_open` (ctl.c): `--apply` asks each running vtt `holds DEV INO`; the holder
     takes the plan as a proposal from `--apply NAME` (`propose apply`), and the file is not
     touched. `--wait SECONDS` reads the verdict from the vtt's events: exit 0 accepted, 4
