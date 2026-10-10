@@ -80,7 +80,7 @@ int app_job_new(App *a, int from, const char *text, const CsBox *box, int at_onc
     j->at_once = (uint8_t)(at_once != 0);
     str_lcpy(j->text, text, sizeof j->text);
     if (box) { j->has_box = 1; j->box = *box; }
-    if (text[0]) app_job_thread_add(j, from == JOB_FROM_GM ? 'G' : 'A', text);
+    if (text[0]) app_job_thread_add(j, from == JOB_FROM_GM ? 'G' : from == JOB_FROM_DISK ? '-' : 'A', text);
     return slot;
 }
 
@@ -324,6 +324,10 @@ void app_review_key(App *a, Key k)
         review_next_or_close(a);
         break;
     case 'c':
+        if (j->from == JOB_FROM_DISK) {
+            app_set_status_gm(a, "a file cannot be asked for something else - enter takes it, d leaves it out");
+            break;
+        }
         a->prompt_what = PROMPT_JOB_FEEDBACK;
         a->modal = MODAL_PROMPT;
         snprintf(msg, sizeof msg, "What should #%d do instead?", j->num);

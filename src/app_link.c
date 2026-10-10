@@ -109,6 +109,10 @@ static void travel(App *a, int li)
 #define REFUSE(...) do { snprintf(why, sizeof why, __VA_ARGS__); app_set_status_gm(a, why); return; } while (0)
     if (!link_map_path(m, l.to_map, path, sizeof path))
         REFUSE("save this map first (:w NAME) - %.30s is found beside it", l.to_map);
+    /* The trip saves this map: not over a change to its file nobody has
+     * looked at. */
+    app_disk_check(a, 1);
+    if (app_disk_blocks(a)) REFUSE("%.150s first - nobody went", app_disk_blocks(a));
     struct stat sh, st;
     if (stat(m->path, &sh) == 0 && stat(path, &st) == 0 && sh.st_dev == st.st_dev && sh.st_ino == st.st_ino)
         REFUSE("%s leads to this map", name);
@@ -130,7 +134,7 @@ static void travel(App *a, int li)
         return;
     }
 
-    Map *d = mapio_load(path, err, sizeof err);
+    Map *d = mapio_load_base(path, err, sizeof err);
     if (!d) REFUSE("%s leads to %.30s, which is not beside this map", name, l.to_map);
     char autosave[MAP_PATH_MAX + 16];
     mapio_autosave_path(d, autosave, sizeof autosave);

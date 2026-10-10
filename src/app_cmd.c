@@ -691,7 +691,9 @@ static void cmd_w(App *a, const char *verb, const char *rest)
     if (rest[0]) mapio_resolve_path(rest, path, sizeof path);
     else if (m->path[0]) str_lcpy(path, m->path, sizeof path);
     else mapio_resolve_path(m->name, path, sizeof path);
+    a->save_force = verb[strlen(verb) - 1] == '!';
     app_save_map(a, path);
+    a->save_force = 0;
 }
 
 static void cmd_wq(App *a, const char *verb, const char *rest)
@@ -716,9 +718,14 @@ static void cmd_q_bang(App *a, const char *verb, const char *rest)
 
 static void cmd_e(App *a, const char *verb, const char *rest)
 {
-    if (!rest[0]) { app_set_status(a, ":e needs a file name"); return; }
     char path[MAP_PATH_MAX];
-    mapio_resolve_path(rest, path, sizeof path);
+    /* Alone, it opens this map's file again: what is on the disk, in place
+     * of what is here (asking first when there is unsaved work). */
+    if (!rest[0]) {
+        if (!a->map->path[0]) { app_set_status(a, ":e alone reads this map's file again, and it has none - :e NAME opens one"); return; }
+        str_lcpy(path, a->map->path, sizeof path);
+    }
+    else mapio_resolve_path(rest, path, sizeof path);
     app_leave_map_for(a, path);
 }
 
@@ -1094,6 +1101,7 @@ static const struct {
     CmdFn      *fn;
 } COMMANDS[] = {
     { "w", "write", cmd_w },
+    { "w!", NULL, cmd_w },
     { "wq", "x", cmd_wq },
     { "q", "quit", cmd_q },
     { "q!", NULL, cmd_q_bang },

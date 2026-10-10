@@ -30,6 +30,17 @@ int  mapio_autosave_newer(const char *path, const char *autosave, long *when);
 
 /* Returns NULL on failure with a human-readable reason in err. */
 Map *mapio_load(const char *path, char *err, size_t errsz);
+/* The same, for the map the app opens: the file's bytes stay with the map
+ * as its base (Map.base) and its identity as Map.disk, so a later change to
+ * the file by someone else can be noticed and told apart from the GM's own
+ * (docs/CONFLICTS.md). mapio_save keeps both in step. */
+Map *mapio_load_base(const char *path, char *err, size_t errsz);
+/* A map from a file's text held in memory (a base); its path is empty. */
+Map *mapio_load_mem(const char *bytes, size_t len, char *err, size_t errsz);
+/* A file's identity now (-1 when it cannot be stat'ed; `known` then 0), and
+ * whether two identities are the same file unwritten. */
+int  mapio_disk_stat(const char *path, MapDisk *d);
+int  mapio_disk_same(const MapDisk *a, const MapDisk *b);
 
 /* The same load, telling `sink` about everything it forgives: the loader
  * reads a damaged map as best it can and says nothing, which is right for

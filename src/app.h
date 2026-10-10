@@ -44,6 +44,7 @@ typedef enum {
     MODAL_CONFIRM_DELETE,
     MODAL_CLEAR_STATUS,   /* which of a token's markers to take off */
     MODAL_CONFIRM_RECOVER,   /* an autosave newer than the map: take it? */
+    MODAL_CONFIRM_HELD,      /* another vtt has this map open: open it here too? */
     MODAL_PICKER,            /* a list filtered as the GM types: App.picker */
     MODAL_CARD,              /* :card -- a creature's card whole, scrolled by card_top */
 } ModalKind;
@@ -75,6 +76,13 @@ typedef enum {
 } PromptWhat;
 
 /* A ping: a ring round a block of squares, until a moment passes. */
+typedef enum {
+    DISK_NONE,          /* the file is as vtt left it */
+    DISK_NOTICED,       /* it changed; not read yet */
+    DISK_PROPOSED,      /* its change waits for :review, as job `disk_job` */
+    DISK_STUCK,         /* it changed in a way no proposal can say (unreadable, resized) */
+} DiskState;
+
 #define EVENT_MAX      32
 #define EVENT_TEXT_MAX 240
 typedef struct {
@@ -204,6 +212,21 @@ typedef struct {
      * become a proposal (docs/CONFLICTS.md); the copy and its log are kept
      * for their buffers. `ctl_auto` (:agent accept auto) lands each one at
      * once; `ctl_direct` (--apply with no GM) edits the map itself. */
+    /* Another writer of the map's file (app_disk.c): whether the file has
+     * changed since vtt last read or wrote it (Map.disk), the change's
+     * proposal (`disk_job`), and the file's bytes and identity as last seen,
+     * which become the map's base once the change is reviewed. */
+    int      save_force;        /* :w! -- over a change on disk nobody has reviewed */
+    int      ask_holders;       /* interactive: opening a map asks the other vtts first */
+    int      open_anyway;       /* ... and the GM said yes */
+    int      disk_state;        /* DiskState */
+    int      disk_reread;       /* the file moved again: read it when the keys go quiet */
+    int      disk_job;
+    MapDisk  disk_seen;
+    char    *disk_new;
+    size_t   disk_new_len;
+    char     disk_why[160];     /* DISK_STUCK: what cannot be made a proposal */
+    uint64_t disk_checked_ms, disk_key_ms;
     /* Events for agents (app_event.c, docs/CONFLICTS.md): a numbered ring
      * `wait` reads -- a job asked, accepted, scrapped, sent back; the map
      * changed, closed. The newest is `event_seq`, kept at seq % EVENT_MAX.
@@ -379,6 +402,10 @@ int  app_autosave_due(const App *a, uint64_t now_ms);
  * milliseconds until a flush has something to do, -1 for nothing owed. */
 void app_events_flush(App *a, uint64_t now_ms);
 int  app_events_due(const App *a, uint64_t now_ms);
+
+/* Another writer of the file (app_disk.c): app_disk_due is the milliseconds
+ * until a changed file is read (once the keys are quiet), -1 for none. */
+int  app_disk_due(const App *a, uint64_t now_ms);
 
 /* Pings. app_ping rings the block x0..x1, y0..y1 for `who` and says so on
  * the status line; app_ping_cell is a phone's tap, a screen cell of the

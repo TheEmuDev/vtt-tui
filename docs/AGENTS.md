@@ -38,6 +38,10 @@ the file and saved, as always. So `--apply` is safe on a map the GM has open, wi
 | 4 | scrapped, or the job or the map went away | the event |
 | 5 | sent back | the GM's feedback, one line |
 
+Writing the map's file yourself (by hand, below) while a vtt has it open is safe too: vtt
+notices, and offers what you changed to its GM as a change to review. Until the GM has
+looked, their `:w` is refused rather than written over yours.
+
 A plan for `--apply` has no `propose` line of its own, and is at most 64 KB less a line. To do more than propose (read the map
 as it is in memory, answer the GM's jobs, hear events), the GM types `:agent on` and you
 use `vtt --ctl`; it exits 2 when no vtt has its channel on.

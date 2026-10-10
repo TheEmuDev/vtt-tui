@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -65,20 +66,32 @@ static const char FOG_HELD_CHARS[FOG_PATCH_MAX + 1] = "123456789!\"#$%&";
 
 /* ------------------------------------------------------------------ save */
 
-static void put_tile_row(FILE *f, const uint8_t *row, int n)
+/* A row of the map is built whole and written once: a character a call
+ * was about 3 ms of a 512x512 save, nearly all of it (docs/PERFORMANCE.md). */
+/* ... and a square's character comes from a table: map.c's functions are a
+ * call a square from here. */
+typedef struct { char tile[256], vedge[256], hedge[256]; } FileChars;
+
+static void file_chars(FileChars *fc)
 {
-    for (int i = 0; i < n; i++) fputc(tile_file_char(row[i]), f);
-    fputc('\n', f);
+    for (int k = 0; k < 256; k++) {
+        fc->tile[k]  = tile_file_char((uint8_t)k);
+        fc->vedge[k] = k == EDGE_WALL ? '|' : edge_file_char((uint8_t)k);
+        fc->hedge[k] = k == EDGE_WALL ? '-' : edge_file_char((uint8_t)k);
+    }
+}
+
+static void put_row(FILE *f, const uint8_t *row, int n, const char *chars)
+{
+    char line[MAP_MAX_DIM + 3];                    /* a boundary more than squares */
+    for (int i = 0; i < n; i++) line[i] = chars[row[i]];
+    line[n] = '\n';
+    fwrite(line, 1, (size_t)n + 1, f);
 }
 
 /* Horizontal walls keep their historical '-' so a map still reads as a map in
- * a text editor; every other kind writes the same character either way. */
-static void put_edge_row(FILE *f, const uint8_t *row, int n, char wall_char)
-{
-    for (int i = 0; i < n; i++)
-        fputc(row[i] == EDGE_WALL ? wall_char : edge_file_char(row[i]), f);
-    fputc('\n', f);
-}
+ * a text editor (FileChars.hedge); every other kind writes the same character
+ * either way. */
 
 /* Creatures, each followed by the lines that hang on it. The map's and each
  * scene's are written the same way. */
@@ -139,13 +152,46 @@ static void put_card(FILE *f, const Card *c)
     fputs("endcard\n", f);
 }
 
-static int write_map(const Map *m, const char *path, int autosave, char *err, size_t errsz)
+static void disk_from_stat(MapDisk *d, const struct stat *st)
+{
+    d->dev      = (uint64_t)st->st_dev;
+    d->ino      = (uint64_t)st->st_ino;
+    d->size     = (int64_t)st->st_size;
+    d->mtime_s  = (int64_t)st->st_mtim.tv_sec;
+    d->mtime_ns = (int64_t)st->st_mtim.tv_nsec;
+    d->known    = 1;
+}
+
+int mapio_disk_stat(const char *path, MapDisk *d)
+{
+    struct stat st;
+    memset(d, 0, sizeof *d);
+    if (stat(path, &st) < 0) return -1;
+    disk_from_stat(d, &st);
+    return 0;
+}
+
+int mapio_disk_same(const MapDisk *a, const MapDisk *b)
+{
+    return a->known == b->known && a->dev == b->dev && a->ino == b->ino && a->size == b->size &&
+           a->mtime_s == b->mtime_s && a->mtime_ns == b->mtime_ns;
+}
+
+/* The map as its file's text, in memory, then written in one piece: the
+ * text is what the app keeps as the file's base (`keep`, with the identity
+ * of the file it became), and one write is the least a save can cost. */
+static int write_map(const Map *m, const char *path, int autosave, char **keep, size_t *keep_len,
+                     MapDisk *disk, char *err, size_t errsz)
 {
     PROF_ZONE("mapio.write");
     char tmp[MAP_PATH_MAX + 8];
     snprintf(tmp, sizeof tmp, "%s.tmp", path);
 
-    FILE *f = fopen(tmp, "w");
+    FileChars fc;
+    file_chars(&fc);
+    char  *text = NULL;
+    size_t text_len = 0;
+    FILE  *f = open_memstream(&text, &text_len);
     if (!f) {
         snprintf(err, errsz, "cannot write %s: %s", tmp, strerror(errno));
         return -1;
@@ -187,15 +233,15 @@ static int write_map(const Map *m, const char *path, int autosave, char *err, si
 
     fputs("tiles\n", f);
     for (int y = 0; y < m->h; y++)
-        put_tile_row(f, m->tiles + (size_t)y * (size_t)m->w, m->w);
+        put_row(f, m->tiles + (size_t)y * (size_t)m->w, m->w, fc.tile);
 
     fputs("vedges\n", f);
     for (int y = 0; y < m->h; y++)
-        put_edge_row(f, m->vedges + (size_t)y * (size_t)(m->w + 1), m->w + 1, '|');
+        put_row(f, m->vedges + (size_t)y * (size_t)(m->w + 1), m->w + 1, fc.vedge);
 
     fputs("hedges\n", f);
     for (int y = 0; y <= m->h; y++)
-        put_edge_row(f, m->hedges + (size_t)y * (size_t)m->w, m->w, '-');
+        put_row(f, m->hedges + (size_t)y * (size_t)m->w, m->w, fc.hedge);
 
     put_tokens(f, &m->tokens);
     if (m->round > 0) fprintf(f, "round %d\n", m->round);
@@ -258,6 +304,7 @@ static int write_map(const Map *m, const char *path, int autosave, char *err, si
         }
         fputs("fog\n", f);
         for (int y = 0; y < m->h; y++) {
+            char line[MAP_MAX_DIM + 2];
             for (int x = 0; x < m->w; x++) {
                 uint8_t fb = m->fog[(size_t)y * (size_t)m->w + (size_t)x];
                 int     id = fb & FOG_ID;
@@ -268,9 +315,10 @@ static int write_map(const Map *m, const char *path, int autosave, char *err, si
                     else if (fb & FOG_SEEN) c = (char)('a' + id - 1);
                     else                    c = (char)('A' + id - 1);
                 }
-                fputc(c, f);
+                line[x] = c;
             }
-            fputc('\n', f);
+            line[m->w] = '\n';
+            fwrite(line, 1, (size_t)m->w + 1, f);
         }
     }
 
@@ -278,41 +326,74 @@ static int write_map(const Map *m, const char *path, int autosave, char *err, si
      * cut anywhere; its last line says it is whole. */
     if (autosave) fputs("end\n", f);
 
-    int ok = (fflush(f) == 0);
+    if (fclose(f) != 0 || !text) {
+        free(text);
+        snprintf(err, errsz, "write failed: %s", strerror(errno));
+        return -1;
+    }
+    int fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (fd < 0) {
+        snprintf(err, errsz, "cannot write %s: %s", tmp, strerror(errno));
+        free(text);
+        return -1;
+    }
+    int ok = 1;
+    for (size_t off = 0; ok && off < text_len; ) {
+        ssize_t w = write(fd, text + off, text_len - off);
+        if (w > 0) off += (size_t)w;
+        else if (w < 0 && errno == EINTR) continue;
+        else ok = 0;
+    }
     if (ok && !autosave) {
         PROF_ZONE("mapio.fsync");
-        ok = (fsync(fileno(f)) == 0) || errno == EINVAL;   /* pipes are fine */
+        ok = (fsync(fd) == 0) || errno == EINVAL;          /* pipes are fine */
     }
-    if (fclose(f) != 0) ok = 0;
+    /* The file's identity as it will be at `path`: a rename keeps it. */
+    struct stat st;
+    if (ok && disk && fstat(fd, &st) == 0) disk_from_stat(disk, &st);
+    if (close(fd) != 0) ok = 0;
 
     if (!ok) {
         snprintf(err, errsz, "write failed: %s", strerror(errno));
         unlink(tmp);
+        free(text);
         return -1;
     }
     if (rename(tmp, path) != 0) {
         snprintf(err, errsz, "cannot replace %s: %s", path, strerror(errno));
         unlink(tmp);
+        free(text);
         return -1;
     }
+    if (keep) { *keep = text; *keep_len = text_len; }
+    else free(text);
     return 0;
 }
 
 int mapio_write(const Map *m, const char *path, char *err, size_t errsz)
 {
-    return write_map(m, path, 0, err, errsz);
+    return write_map(m, path, 0, NULL, NULL, NULL, err, errsz);
 }
 
 int mapio_write_unflushed(const Map *m, const char *path, char *err, size_t errsz)
 {
-    return write_map(m, path, 1, err, errsz);
+    return write_map(m, path, 1, NULL, NULL, NULL, err, errsz);
 }
 
 int mapio_save(Map *m, const char *path, char *err, size_t errsz)
 {
-    if (mapio_write(m, path, err, errsz) != 0) return -1;
+    char   *text;
+    size_t  len;
+    MapDisk id;
+    memset(&id, 0, sizeof id);
+    if (write_map(m, path, 0, &text, &len, &id, err, errsz) != 0) return -1;
     str_lcpy(m->path, path, sizeof m->path);
     m->modified = 0;
+    /* What is on the disk now is what was just written: the base. */
+    free(m->base);
+    m->base     = text;
+    m->base_len = len;
+    m->disk     = id;
     return 0;
 }
 
@@ -812,14 +893,76 @@ static void card_close(Loader *ld, Map *m, CardRead *cr, const char *cut)
     cr->n = 0;
 }
 
-Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, void *ctx)
+static Map *load_text(FILE *f, const char *path, char *err, size_t errsz, MapioDiag sink, void *ctx);
+
+/* A map file is read whole, then parsed from memory: the bytes are what the
+ * app keeps as the open map's base, and one read is the least a load can
+ * cost. No map's file is near the cap. */
+#define MAPIO_FILE_CAP ((size_t)64 << 20)
+
+static Map *load_bytes(const char *path, char *bytes, size_t len, char *err, size_t errsz,
+                       MapioDiag sink, void *ctx)
 {
-    PROF_ZONE("mapio.load");
-    FILE *f = fopen(path, "r");
+    FILE *f = len ? fmemopen(bytes, len, "r") : NULL;
     if (!f) {
-        snprintf(err, errsz, "cannot open %s: %s", path, strerror(errno));
+        snprintf(err, errsz, "%s is not a vtt map", path[0] ? path : "that");
         return NULL;
     }
+    return load_text(f, path, err, errsz, sink, ctx);       /* closes f */
+}
+
+Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, void *ctx)
+{
+    size_t len = 0;
+    int    big = 0;
+    char  *bytes = file_read(path, MAPIO_FILE_CAP, &len, &big);
+    if (!bytes) {
+        if (big) snprintf(err, errsz, "%s is too big to be a map", path);
+        else     snprintf(err, errsz, "cannot open %s: %s", path, strerror(errno));
+        return NULL;
+    }
+    Map *m = load_bytes(path, bytes, len, err, errsz, sink, ctx);
+    free(bytes);
+    return m;
+}
+
+Map *mapio_load_base(const char *path, char *err, size_t errsz)
+{
+    /* The identity first: a write between the two shows at the next look,
+     * as a change with nothing in it, where the other order would hide one. */
+    MapDisk id;
+    mapio_disk_stat(path, &id);
+    size_t len = 0;
+    int    big = 0;
+    char  *bytes = file_read(path, MAPIO_FILE_CAP, &len, &big);
+    if (!bytes) {
+        if (big) snprintf(err, errsz, "%s is too big to be a map", path);
+        else     snprintf(err, errsz, "cannot open %s: %s", path, strerror(errno));
+        return NULL;
+    }
+    Map *m = load_bytes(path, bytes, len, err, errsz, NULL, NULL);
+    if (!m) { free(bytes); return NULL; }
+    m->base     = bytes;
+    m->base_len = len;
+    m->disk     = id;
+    return m;
+}
+
+Map *mapio_load_mem(const char *bytes, size_t len, char *err, size_t errsz)
+{
+    /* fmemopen wants a buffer it may write a NUL to: ours is read only. */
+    char *copy = malloc(len + 1);
+    if (!copy) { snprintf(err, errsz, "out of memory"); return NULL; }
+    memcpy(copy, bytes, len);
+    copy[len] = '\0';
+    Map *m = load_bytes("", copy, len, err, errsz, NULL, NULL);
+    free(copy);
+    return m;
+}
+
+static Map *load_text(FILE *f, const char *path, char *err, size_t errsz, MapioDiag sink, void *ctx)
+{
+    PROF_ZONE("mapio.load");
     Loader  L  = { f, 0, sink, ctx };
     Loader *ld = &L;
 

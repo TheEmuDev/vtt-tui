@@ -244,8 +244,36 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
   - Checked against a live vtt as well as the tests: a plan proposed, accepted with
     `--wait` (exit 0, the file's bytes unchanged), and a second file applied headless
     beside it.
-- **Next: step 7** (other writers of the file).
-- **Then steps 8-9 in the order below.**
+- **Step 7: built (2026-10-10); Fable's review is next.** What it holds:
+  - `Map.disk` and `Map.base` (mapio.c): the open map's file as vtt last read or wrote it,
+    its identity and its bytes, kept by `mapio_load_base` and `mapio_save`;
+  - `app_disk.c` (new): one `stat` on a key at most once a second; once the keys are quiet
+    the file is read, and what it changed against the base is a proposal from "the file on
+    disk"; accepted, scrapped or written over, the file as seen becomes the base;
+  - `:w` and a trip refuse while that change is unreviewed; `:w!` writes over it; bare `:e`
+    reads the file again;
+  - opening a map another vtt has open asks first (`ctl_who_holds`, `MODAL_CONFIRM_HELD`);
+  - the suite `disk`, a trip case in test_places.c, and an outside-change table in
+    `tools/proposals.sh`.
+- **Changed from the plan in step 7:**
+  - **Two kinds of outside change are said, not proposed** (`DISK_STUCK`): a file that is
+    no longer a map, and a file or a live map resized, since a change set is between two
+    maps of one size. `:e` or `:w!` answers them.
+  - **A file deleted behind the app is nothing to review:** `:w` puts the map back.
+  - **The writer was rebuilt here, not later.** Keeping the base "from the writer's buffer"
+    needed the text in memory, so the `fputc` gap (HEALTH.md row 17) was closed with it:
+    the largest unflushed save went from 3.26 to 1.18 ms.
+  - **Every load now reads the file whole** and parses from memory, capped at 64 MB; the
+    base costs no second read. `mapio.load` on the largest map went from 3.2 to 2.7 ms.
+  - **Feedback (`c`) is refused on a change from the file:** there is nobody to send it to.
+  - **`:w NAME` to another file is never refused,** and a change waiting from the old file
+    is scrapped: the map is the new file's.
+- **Step 7 measured** (PERFORMANCE.md, *Other writers of the file*): the look is 0.77 µs a
+  key against one `stat` (0.9); an outside change is 5.4-5.8 ms on the largest map, once,
+  when the keys are quiet -- two parses of the file, where the loader's 3.4 ns a byte is
+  the gap.
+- **Next: step 8** (`:agent command`).
+- **Then step 9.**
 - **Follow-up after step 6 (the user, 2026-10-09): a thin agent skill.** A user-level skill
   (`~/.claude/skills/vtt/`, not the repo's `.claude/`: the agents that build maps run
   wherever the GM starts them) that says when to use vtt, the opening move (`vtt --ctl

@@ -58,6 +58,7 @@ void app_free(App *a)
     free(a->entries);
     a->entries = NULL;
     undo_free(&a->undo);
+    app_disk_reset(a);
     app_jobs_clear(a);
     map_free(a->ctl_scratch);
     a->ctl_scratch = NULL;
@@ -146,12 +147,29 @@ static void offer_recovery(App *a);
 
 int app_open_map(App *a, const char *path)
 {
+    /* Open in another vtt already: say so first. Both may have it; what
+     * either saves then comes to the other as a change to review. */
+    if (a->ask_holders && !a->open_anyway) {
+        long pid = ctl_who_holds(path);
+        if (pid) {
+            const char *base = strrchr(path, '/');
+            str_lcpy(a->pending_file, path, sizeof a->pending_file);
+            a->modal = MODAL_CONFIRM_HELD;
+            str_lcpy(a->modal_title, "Open in another vtt", sizeof a->modal_title);
+            snprintf(a->modal_body, sizeof a->modal_body,
+                     "%.60s is open in another vtt (pid %ld). Open it here too? What either one saves "
+                     "comes to the other as a change to review.", base ? base + 1 : path, pid);
+            return -1;
+        }
+    }
     char err[MAPIO_ERR_MAX] = { 0 };
-    Map *m = mapio_load(path, err, sizeof err);
+    /* With its file's bytes and identity: someone else may write it. */
+    Map *m = mapio_load_base(path, err, sizeof err);
     if (!m) {
         app_show_message(a, "Cannot open map", err);
         return -1;
     }
+    app_disk_reset(a);
 
     slog_close(&a->slog);
     map_free(a->map);
@@ -194,6 +212,7 @@ void app_travel_to(App *a, Map *m)
     net_clear_kept(&a->net);             /* whispers waiting were the encounter's too */
     drop_autosave(a);
     app_event(a, "map closed: %s - the GM went to %s, and its jobs went with it", a->map->name, m->name);
+    app_disk_reset(a);
     map_free(a->map);
     a->map = m;
     undo_clear(&a->undo);
@@ -271,6 +290,11 @@ static void recover_autosave(App *a)
     /* It stands in for the map, under the map's own path, and counts as
      * unsaved: the file on disk is still the older one until :w. */
     str_lcpy(m->path, a->map->path, sizeof m->path);
+    /* ... and the file's base and identity are the file's still. */
+    m->base = a->map->base;
+    m->base_len = a->map->base_len;
+    m->disk = a->map->disk;
+    a->map->base = NULL;
     map_free(a->map);
     a->map = m;
     undo_clear(&a->undo);
@@ -420,6 +444,7 @@ void app_tick(App *a, uint64_t now_ms)
     }
     app_events_flush(a, now_ms);
     if (!a->map) return;
+    app_disk_tick(a, now_ms);
     if (app_autosave_due(a, now_ms) == 0) app_autosave(a);
 }
 
@@ -487,6 +512,20 @@ int app_save_map(App *a, const char *path)
 {
     if (!a->map) return -1;
 
+    /* Over the map's own file: not while someone else's change to it has
+     * not been looked at. Looked for now, not at the last key. */
+    int own = a->map->path[0] && !strcmp(path, a->map->path);
+    if (own && !a->save_force) {
+        app_disk_check(a, 1);
+        const char *why = app_disk_blocks(a);
+        if (why) {
+            char msg[260];
+            snprintf(msg, sizeof msg, "not saved - %s; :w! writes yours over it", why);
+            app_set_status_gm(a, msg);
+            return -1;
+        }
+    }
+
     /* Create the map directory on demand rather than making the user do it. */
     char dir[MAP_PATH_MAX];
     str_lcpy(dir, path, sizeof dir);
@@ -507,6 +546,9 @@ int app_save_map(App *a, const char *path)
     }
     unlink(autosave);
     a->autosave_gen = a->map->gen;
+    /* Written over, or the map is another file's now: a change waiting from
+     * the old one is of a file that no longer matters. */
+    app_disk_overwritten(a);
 
     char msg[192];
     snprintf(msg, sizeof msg, "wrote %.170s", path);
@@ -1102,6 +1144,23 @@ static int modal_key(App *a, Key k)
         return 1;
     }
 
+    case MODAL_CONFIRM_HELD: {
+        if (k.kind == KEY_CHAR && (k.ch == 'y' || k.ch == 'Y')) {
+            char next[MAP_PATH_MAX];
+            str_lcpy(next, a->pending_file, sizeof next);
+            a->pending_file[0] = '\0';
+            a->modal = MODAL_NONE;
+            a->open_anyway = 1;
+            app_open_map(a, next);                /* may put up the recovery question */
+            a->open_anyway = 0;
+        } else if (k.kind == KEY_ESC || (k.kind == KEY_CHAR && (k.ch == 'n' || k.ch == 'N'))) {
+            a->modal = MODAL_NONE;
+            a->pending_file[0] = '\0';
+            app_set_status(a, "not opened - it is open in another vtt");
+        }
+        return 1;
+    }
+
     case MODAL_CONFIRM_RECOVER: {
         if (k.kind == KEY_CHAR && (k.ch == 'y' || k.ch == 'Y')) {
             a->modal = MODAL_NONE;
@@ -1188,6 +1247,7 @@ void app_close_map(App *a)
     slog_close(&a->slog);
     /* Jobs are their map's: an agent is told, not left to time out. */
     if (a->map) app_event(a, "map closed: %s - its jobs went with it", a->map->name);
+    app_disk_reset(a);
     map_free(a->map);
     a->map = NULL;
     a->npings = a->npinged = 0;
@@ -1366,6 +1426,7 @@ void app_key(App *a, Key k)
     app_floor_sync(a);
     app_fog_sync(a);
     app_jobs_land_waiting(a);       /* :ask! results that came while landing could not */
+    app_disk_key(a);                /* has someone else written the file? */
 }
 
 static void app_key_dispatch(App *a, Key k)

@@ -121,6 +121,7 @@ void map_free(Map *m)
     free(m->hedges);
     free(m->fog);
     map_sight_drop(m);
+    free(m->base);
     checkpoint_stop(m);
     tokens_free(&m->tokens);
     for (int i = 0; i < m->nscenes; i++) tokens_free(&m->scenes[i].tokens);
@@ -140,6 +141,7 @@ void map_copy_into(Map *dst, const Map *src)
 {
     PROF_ZONE("map.copy");
     checkpoint_stop(dst);                          /* a copy never has one; this one won't either */
+    free(dst->base);                               /* nor the file's bytes: a copy is no file's */
     size_t w = (size_t)src->w, h = (size_t)src->h;
     size_t dw = (size_t)dst->w, dh = (size_t)dst->h;
     size_t nt = dw * dh, nv = (dw + 1) * dh, nh = dw * (dh + 1), nf = dw * dh;
@@ -152,6 +154,9 @@ void map_copy_into(Map *dst, const Map *src)
     *dst = *src;                                   /* every fixed-size part */
     dst->cp = NULL;                                /* the live map's alone */
     dst->cp_saved = NULL;
+    dst->base = NULL;
+    dst->base_len = 0;
+    memset(&dst->disk, 0, sizeof dst->disk);
     bytes_into(&tiles,  &nt, src->tiles,  w * h);
     bytes_into(&vedges, &nv, src->vedges, (w + 1) * h);
     bytes_into(&hedges, &nh, src->hedges, w * (h + 1));

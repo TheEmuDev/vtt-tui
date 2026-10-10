@@ -200,6 +200,7 @@ static const KeyDoc BUILD[] = {
     KEY(":agent accept auto", "an agent's changes land at once, u takes each back   :agent accept review"),
     KEY(":ask a crypt here", "ask an agent for a change in the v box   :ask! lands it at once   :jobs lists them"),
     KEY(":review", "look at a change an agent proposed, drawn in place, and accept it or not"),
+    KEY(":w!", "save over a change someone else made to the file   :e alone reads the file again"),
     KEY(":",      "command line -- :w :q :resize :scale :metric ..."),
     KEY("F2",     "play mode    F1 back here    F12 profiler"),
     KEY("q",      "leave the map"),

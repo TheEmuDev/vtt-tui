@@ -6,11 +6,13 @@
  * the whole map (the worst a preview can be). tools/proposals.sh builds and
  * runs it against the release objects. */
 #include <stdio.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
 #include "changeset.h"
+#include "mapio.h"
 #include "checkpoint.h"
 #include "map.h"
 #include "token.h"
@@ -217,6 +219,53 @@ static void checkpoint_row(int w, int h, int creatures)
            median(dozen), median(all));
 }
 
+/* An outside change (step 7): the open map's file written by someone else.
+ * The stat a key costs; then, once a change: the file read and parsed, the
+ * base parsed from memory, and the two maps compared whole. */
+static void disk_row(int w, int h, int creatures)
+{
+    double stat_t[RUNS], file_t[RUNS], base_t[RUNS], diff_t[RUNS];
+    char path[] = "/tmp/vtt-proposals-XXXXXX", err[MAPIO_ERR_MAX];
+    int fd = mkstemp(path);
+    if (fd < 0) return;
+    close(fd);
+    Map *m = encounter(w, h, creatures);
+    mapio_save(m, path, err, sizeof err);                  /* m has its base now */
+    Map *theirs = mapio_load(path, err, sizeof err);
+    map_set_tile(theirs, 3, 3, TILE_WATER);
+    mapio_write(theirs, path, err, sizeof err);
+    map_free(theirs);
+    for (int k = 0; k < RUNS; k++) {
+        MapDisk id;
+        double t0 = now_us();
+        for (int i = 0; i < 100; i++) mapio_disk_stat(path, &id);
+        stat_t[k] = (now_us() - t0) / 100;
+
+        t0 = now_us();
+        Map *now = mapio_load_base(path, err, sizeof err);
+        file_t[k] = now_us() - t0;
+
+        t0 = now_us();
+        Map *base = mapio_load_mem(m->base, m->base_len, err, sizeof err);
+        base_t[k] = now_us() - t0;
+
+        ChangeSet cs;
+        cs_init(&cs);
+        t0 = now_us();
+        cs_diff(&cs, base, now, NULL);
+        diff_t[k] = now_us() - t0;
+        cs_free(&cs);
+        map_free(now);
+        map_free(base);
+    }
+    char what[64];
+    snprintf(what, sizeof what, "%dx%d, %d creatures, %zu KB", w, h, creatures, m->base_len / 1024);
+    double f = median(file_t), b = median(base_t), d = median(diff_t);
+    printf("| %-41s | %7.2fus | %7.1fus | %7.1fus | %7.1fus | %7.1fus |\n", what, median(stat_t), f, b, d, f + b + d);
+    map_free(m);
+    unlink(path);
+}
+
 int main(void)
 {
     printf("| plan and map                              |      copy |      plan |      diff | diff (all) |     check | preview, first | preview, frame |    accept |\n");
@@ -230,5 +279,10 @@ int main(void)
     checkpoint_row(40, 25, 24);
     checkpoint_row(512, 512, 24);
     checkpoint_row(512, 512, 500);
+    printf("\n| an outside change to the file             | stat, a key | read + parse the file | parse the base | compare | all, once a change |\n");
+    printf("|-------------------------------------------|-----------|-----------|-----------|-----------|-----------|\n");
+    disk_row(40, 25, 24);
+    disk_row(512, 512, 24);
+    disk_row(512, 512, 500);
     return 0;
 }

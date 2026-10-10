@@ -170,6 +170,18 @@ void app_events_write(const App *a, FILE *out, unsigned after);
 void app_events_map_flush(App *a);
 void app_events_map_restart(App *a);
 
+/* Another writer of the open map's file (app_disk.c). app_disk_key is the
+ * stat a key may cost, at most once a second; app_disk_check the same
+ * unasked, and with `now_too` it reads a changed file at once (before a
+ * save, a trip). app_disk_blocks is why a save would write over a change
+ * nobody has looked at, or NULL. app_disk_overwritten: :w! did. */
+void app_disk_reset(App *a);
+void app_disk_key(App *a);
+void app_disk_check(App *a, int now_too);
+void app_disk_tick(App *a, uint64_t now_ms);
+const char *app_disk_blocks(const App *a);
+void app_disk_overwritten(App *a);
+
 /* Jobs and the review (app_job.c). */
 void app_jobs_clear(App *a);
 int  app_job_new(App *a, int from, const char *text, const CsBox *box, int at_once);

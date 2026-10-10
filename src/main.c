@@ -475,6 +475,7 @@ static int run_interactive(const Options *o)
     app_init(&a, &t, &r);
     a.ascii = o->ascii;
     a.autosave_on = 1;              /* interactive only: a bench would litter */
+    a.ask_holders = 1;              /* a GM is here to be asked */
     if (o->map_path) app_open_map(&a, o->map_path);
 
     InputParser p;
@@ -547,6 +548,9 @@ static int run_interactive(const Options *o)
         /* And when the map's changes are due to be told to an agent. */
         int ed = app_events_due(&a, prof_now_ns() / 1000000u);
         if (ed >= 0 && (timeout < 0 || ed < timeout)) timeout = ed;
+        /* And when a file someone else wrote is due to be read. */
+        int dd = app_disk_due(&a, prof_now_ns() / 1000000u);
+        if (dd >= 0 && (timeout < 0 || dd < timeout)) timeout = dd;
         /* And for an agent's connection that has gone quiet. */
         int nctl = ctl_pollfds(&a.ctl, fds + 2 + nnet, 1 + CTL_SLOTS);
         int cd = ctl_due(&a.ctl, prof_now_ns() / 1000000u);

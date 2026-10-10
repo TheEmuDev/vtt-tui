@@ -242,6 +242,14 @@ typedef struct {
  *
  * The +1 in each array is what makes the far edge of the last row/column
  * representable without special-casing. */
+/* A file's identity as stat gives it: a different one at the same path,
+ * or the same one written again, is told by any field moving. */
+typedef struct {
+    uint64_t dev, ino;
+    int64_t  size, mtime_s, mtime_ns;
+    int      known;                 /* 0: never read or written by this vtt */
+} MapDisk;
+
 typedef struct {
     int      w, h;
     uint8_t *tiles;
@@ -287,6 +295,15 @@ typedef struct {
      * undo log's recorders test it inline (cp_note). */
     struct Checkpoint *cp;
     uint8_t  *cp_saved;
+
+    /* The map's file as vtt last read or wrote it (docs/CONFLICTS.md, "Other
+     * writers of the file"): `disk` is its identity then, so one stat says
+     * whether someone else has written it since, and `base` its bytes, so
+     * what they changed can be told from what the GM changed. Kept only for
+     * the map the app has open (mapio_load_base, mapio_save); never copied. */
+    MapDisk   disk;
+    char     *base;
+    size_t    base_len;
     /* Bumped by every change to the cards and the scenes, which go round the
      * undo log and Map.gen: what a checkpoint compares them by. */
     unsigned  cards_gen, scenes_gen;

@@ -708,3 +708,24 @@ int ctl_apply_open(const char *map_path, const char *plan_name, const char *plan
         }
     }
 }
+
+long ctl_who_holds(const char *map_path)
+{
+    char dir[CTL_PATH_MAX], err[CTL_PATH_MAX + 64], holds[96];
+    struct stat st;
+    if (stat(map_path, &st) < 0 || ctl_dir(dir, sizeof dir) < 0 || access(dir, F_OK) != 0 ||
+        dir_ours(dir, err, sizeof err) < 0)
+        return 0;
+    int  hl = snprintf(holds, sizeof holds, "holds %llu %llu\n", (unsigned long long)st.st_dev, (unsigned long long)st.st_ino);
+    long pids[CTL_LIST_MAX], self = (long)getpid(), found = 0;
+    int  n = find_live(dir, pids, CTL_LIST_MAX);
+    for (int i = 0; i < n && !found; i++) {
+        if (pids[i] == self) continue;          /* this vtt is not answering itself */
+        size_t al;
+        int    gone;
+        char  *ans = ask(dir, pids[i], holds, (size_t)hl, &al, CTL_FIND_MS, &gone);
+        if (ans && !strcmp(ans, "ok\nholds\n")) found = pids[i];
+        free(ans);
+    }
+    return found;
+}

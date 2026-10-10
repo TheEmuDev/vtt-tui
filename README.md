@@ -1092,6 +1092,26 @@ copy the power cut left incomplete is not recovered: vtt says so and keeps it as
 
 `y` loads the recovered map (still unsaved: `:w` keeps it); `n` deletes the copy.
 
+### When something else changes the file
+
+If another program writes the map's file while you have it open (another vtt, a text editor,
+`git checkout`), vtt notices at your next key and says `the file changed on disk`. When
+you pause, it reads the file and offers what changed as a change to review, like an agent's:
+the squares are tinted, and `:review` draws the change in place. `enter` takes it into your
+map as one undo step (red squares are ones you have changed too, which taking it would
+overwrite), a `v` box takes part of it, and `d` leaves it out.
+
+Until you have reviewed it, `:w` refuses, because it would write over what the other writer
+did; so does a trip through a link to another map, which saves this one. `:w!` saves yours
+over it anyway. `:e` alone throws away what you have and reads the file again.
+
+Two changes cannot be offered this way, and vtt says so instead: the file is no longer a
+map it can read, or it (or your map) has been resized. Then `:e` takes the file's and `:w!`
+writes yours.
+
+Opening a map that another vtt already has open asks first. If you open it in both, what
+either one saves comes to the other as a change to review.
+
 ## Rulesets
 
 A map can name a ruleset with `:ruleset NAME`. This adds game-specific readouts; it never
@@ -1168,9 +1188,11 @@ use, and how `:dmg` marks HP. Available: `none`, `daggerheart`.
 | command | action |
 |---------|--------|
 | `:w [name]` | save |
+| `:w!` | save over a change someone else made to the file that you have not reviewed |
 | `:wq` `:x` | save and close |
 | `:q` `:q!` | close / close without saving |
 | `:e NAME` | open another map (asks if there are unsaved changes) |
+| `:e` | read this map's file again, in place of what is here (asks if there are unsaved changes) |
 | `:name TEXT` | rename the map |
 | `:resize WxH` | resize the map (clears the undo history) |
 | `:zoom N` | set the zoom level, 0-3 |

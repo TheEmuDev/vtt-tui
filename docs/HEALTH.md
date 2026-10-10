@@ -88,7 +88,7 @@ review and the next. The rules (the user, 2026-10-09):
 | 14 | step 6; first raised by the review of the plan's second draft | A plan of about 60-64 KB is taken by `--apply` on a file but refused when a vtt has the map open: the added `propose apply "NAME"` line pushes the request over the 64 KB cap. | behavior | Documented in AGENTS.md ("at most 64 KB less a line") instead of fixed. | `--apply` reads at most the cap less the header, so both roads take the same plans; or the server allows the header on top | 2026-10-09 |
 | 15 | step 6 | With the channel off, a caller still learns the map's name, size and file (`status`), and what a plan's own lines say back: that a creature, area or scene it names is not there, a square is off the map, and a proposal's summary. | security boundary | Same user only (a `0700` directory), and decision 5 accepts proposals with the channel off, which cannot be checked without saying why they fail. The README now says what is given out. | the user wants off to mean silent: errors to an off channel become "refused" with no reason | 2026-10-09 |
 | 16 | step 6 | The words the `--apply` client matches in events (`job N accepted`, `scrapped`, `feedback:`) are written twice: where `app_job.c` emits them and in `ctl_verdict_in`. A changed wording breaks `--wait` silently. | duplication | A test pins `ctl_verdict_in` to today's wording, and the `events` suite pins the emitters; nothing ties the two. | the event words become shared constants, or one test feeds real emitted events to `ctl_verdict_in` | 2026-10-09 |
-| 17 | commit 1edbc8e (speed-of-light docs, 2026-10-07) | The map writer builds its text one `fputc` at a time (8 call sites in `mapio.c`): about 3 ms of a 3.17 ms unflushed save of a 512×512 map, which the autosave runs on the main loop. The reviewer gave the fix: build each row in a buffer and write it once. | performance | Written down as a known gap (PERFORMANCE.md, *Speed of light*: "Not yet planned"); step 7's "keeping the base" wants the writer to build its text in memory anyway. | the writer builds rows in a buffer (step 7 is the natural place), and `tools/saves.sh` is re-run | 2026-10-09 |
+| ~~17~~ | *closed, below* | | | | | |
 | 18 | commit 98c9ec2 (the `Machine:` line, 2026-10-07) | The header table's laptop row has no RAM or top frequency, and the speed-of-light figures exist only for the desktop. | docs | Only the user can run `tools/machine.sh` and the measurements on the laptop. | they are run there and pasted in | 2026-10-09 |
 | 19 | step 1 (fdadbce) | The plan still promises `"link 3, now 5" in the summary` (CONFLICTS.md:355). The code went the other way: a new link is summarized without a number (`changeset.c:825`, pinned by test_changeset.c:612), and Progress mentions only the preview. | docs | The fix chose not to number it; the plan's sentence was not corrected. | CONFLICTS.md:355 is corrected, or Progress lists it under "changed from the plan" | 2026-10-09 |
 | 20 | step 1 | No test for what `cs_apply` reports as left out when the map's notes, areas or rolls are full ("no room", `changeset.c:659-710`). | test gap | Not written. | a case fills each list, accepts, and checks the report and that nothing was half applied | 2026-10-09 |
@@ -115,6 +115,9 @@ review and the next. The rules (the user, 2026-10-09):
 | B6 | the audit | PERFORMANCE.md's Proposals floor table quotes 4.9 µs, 3.1 µs, 2.4 ms and 3.5 ms where the table above it now has 4.7, 2.9, 2.2 ms and 4.07 ms. | The upper table was re-measured; the prose under it was not. | the floor table is rewritten from the current rows | 2026-10-09 |
 | B7 | the audit | `checkpoint_note_ops` takes a `forward` argument it no longer uses (`checkpoint.c:29`). | Dead since step 2's fix. | the parameter goes, with its two callers | 2026-10-09 |
 | B8 | the audit | docs/KEYS.md does not mention the review mode. | The plan puts it in step 9's doc pass. | step 9 | 2026-10-09 |
+| B9 | step 7, PERFORMANCE.md *Known gaps* | The map writer is 1.18 ms for the largest map against about 0.5: the text grows in a memory stream (a reallocation and a copy each doubling) and each row is a locked `fwrite`. | Left after the larger gap closed. | the writer sizes one buffer from the map and fills it | 2026-10-10 |
+| B10 | step 7, PERFORMANCE.md *Known gaps* | The loader finds a square's kind by searching a table a character (`tile_from_file_char`, `edge_from_file_char`) and reads a line at a time: 3.4 ns a byte, 2.7 ms for the largest map. An outside change pays it twice. | It predates the step; measured here because step 7 leans on it. | a 256-entry table each way, and the rows parsed in place | 2026-10-10 |
+| B11 | step 7: `make fuzz` (the loader), 2026-10-10 | **A bug, not from step 7** (the commit before it fails the same input): a card whose text starts with a line holding only a control character saves with two leading blank lines (`\| ` and `\|`), and loading that file drops them, so the map saved, loaded and saved again is not the same bytes. The fuzzer's round-trip check aborts on it. The input is kept: `tests/fuzz-found/card-leading-blank.vtt`. | Outside step 7 (cards, card.c's cleaning and the loader's `card_take`); found while fuzzing the loader this step changed. To be fixed with the review items. | the card's text is normalized the same way when it is read as when it is set (leading blank lines dropped after control characters are cleaned), the input joins the fixtures, and `make fuzz` passes on it | 2026-10-10 |
 
 ### Disproved
 
@@ -124,6 +127,10 @@ user's real socket directory". It is fixed, 3535bb8, and is why the rules above 
 ### Closed
 
 Rows move here when fixed, with the commit.
+
+| # | item | closed by |
+|---|---|---|
+| 17 | The map writer built its text one `fputc` at a time. | step 7 (2026-10-10): rows built whole from a table, the file written once; 3.26 ms to 1.18 ms unflushed on 512×512. What is left of the gap is B9. |
 
 ### Where the rows came from
 

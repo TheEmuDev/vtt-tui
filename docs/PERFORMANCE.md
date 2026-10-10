@@ -80,9 +80,19 @@ the speed of light of the machine it was measured on.
 
 **Known gaps** (each to close, or to keep with its reason):
 
-- **The map writer builds its text one `fputc` at a time.** On the desktop, an unflushed
-  512×512 save is 3.17 ms against 0.16 ms for the bytes, and formatting 789 KB should cost well under a
-  millisecond. The autosave runs this on the main loop. Not yet planned.
+- **The map writer built its text one `fputc` at a time: fixed 2026-10-10** (step 7 of
+  docs/CONFLICTS.md, which needed the file's text in memory anyway). A row is built whole
+  from a table of characters and the file is written once: an unflushed 512×512 save went
+  from 3.26 ms to 1.18 ms on the desktop, a flushed one from 5.70 to 3.33.
+- **What is left of it:** 1.18 ms against about 0.5 (0.16 for the bytes, about 0.3 to turn
+  786,000 squares into characters). The rest is the text growing in a memory stream
+  (`open_memstream`: a reallocation and a copy each doubling) and a locked `fwrite` a row.
+  Sizing one buffer from the map and filling it would close most of it. Not yet planned
+  (docs/HEALTH.md, *Left open by reviews*, B9).
+- **The loader turns a file character into a square by searching a table** (`tile_from_file_char`,
+  `edge_from_file_char`: a loop a character), and reads a line at a time: 2.7 ms for a
+  787 KB map, about 3.4 ns a byte, where a table lookup would be near 1. It is what an
+  outside change costs twice (below). Not yet planned (HEALTH.md, B10).
 
 ## Frame times
 
@@ -617,9 +627,11 @@ Only a system crash or power cut within about half a minute of it can lose it --
 ext4 or xfs, leave just its start, which recovery refuses -- and the map's own file is
 never touched by it. `:w`, a trip and every other save still flush.
 `tools/saves.sh` prints this table (perf.sh cannot: a bench never writes an autosave);
-median of nine, on the **laptop** (btrfs on an SSD). The desktop's, 2026-10-07: 2.18 /
-2.83 / 5.45 ms flushed and 0.07 / 0.62 / 3.17 ms unflushed. Its disk flushes about fifteen
-times faster.
+median of nine, on the **laptop** (btrfs on an SSD), before the writer was changed
+(2026-10-10: rows built whole, one write). The desktop's, median of three runs after it:
+2.08 / 2.45 / 3.33 ms flushed and 0.06 / 0.32 / 1.18 ms unflushed (before: 1.97 / 2.76 /
+5.70 and 0.07 / 0.63 / 3.26). Its disk flushes about fifteen times faster. The laptop's
+table is to be taken again.
 
 | map | bytes | autosave (unflushed) | `:w` (flushed) |
 |---|---|---|---|
@@ -952,6 +964,29 @@ quiet: its frame (23.5 µs) is `build, open`'s, so the checkpoint running under 
 does not show on the frame. `ctl.wait`, the zone round answering waiters, has no row: the
 bench has no socket to hold one on; the live check above stands in for it, and is written
 out in docs/CONFLICTS.md's *Progress*.
+
+### Other writers of the file
+
+vtt keeps the open map's file as it last read or wrote it, looks at the file on a key, and
+makes someone else's change a proposal (docs/CONFLICTS.md, step 7). `tools/proposals.sh`
+times the pieces (the desktop, 2026-10-10, median of 51):
+
+| map | stat, a key | read + parse the file | parse the base | compare | all, once a change |
+|---|---|---|---|---|---|
+| 40×25, 24 creatures, 3 KB | 0.75 µs | 27 µs | 22 µs | 1.2 µs | 51 µs |
+| 512×512, 24 creatures, 771 KB | 0.77 µs | 2.69 ms | 2.65 ms | 29 µs | 5.38 ms |
+| 512×512, 500 creatures, 787 KB | 0.78 µs | 2.89 ms | 2.85 ms | 35 µs | 5.77 ms |
+
+| path | measured | speed of light | gap, and why |
+|---|---|---|---|
+| the look, on a key, at most once a second | 0.77 µs | one `stat`: 0.9 µs | none |
+| keeping the base at a load | nothing added: the file is read whole into the buffer that is kept, and parsed from it. `mapio.load` on 512×512 went from 3.2-3.3 ms to 2.7 | a copy of the bytes, 25 µs for 789 KB | none; under it, since the copy is the read |
+| keeping the base at a save | nothing added: the text written is the buffer kept | the same | none |
+| an outside change, once, when the keys are quiet | 5.4-5.8 ms on the largest map | the plan put it at two parses (about 8.4 ms by the laptop's loader) plus the compare | the two parses are all of it, and the loader's 3.4 ns a byte is the gap (*Known gaps*). Parsing the base again, where a parsed copy could be kept, is the plan's choice: a megabyte held all session to save 2.7 ms a change |
+| the compare of two whole maps | 29-35 µs | 59 µs a MB estimated | none |
+
+No timer: a vtt nobody is typing in never looks. The read waits for 1.5 s without a key
+(`app_disk_due` feeds `poll`), so the 5 ms never lands under a keystroke.
 
 **`--apply` finding the map's holder** (step 6; the desktop, 300 runs a figure, the median of
 five): a failing plan on a file nobody has open takes 1.06 ms with no vtt running and 1.17 ms

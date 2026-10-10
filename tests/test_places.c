@@ -1389,6 +1389,24 @@ void test_map_links(void)
     CHECK(!strcmp(a.map->name, "town"));
     CHECK(strstr(a.status, "unsaved work from a crash") != NULL);
     unlink(apath);
+    {
+        /* This map's own file written by someone else: the trip would save
+         * over it, so nobody goes until the change is looked at. */
+        char tpath[700];
+        str_lcpy(tpath, a.map->path, sizeof tpath);
+        Map *other = mapio_load(tpath, err, sizeof err);
+        CHECK(other != NULL);
+        map_set_tile(other, 0, 0, TILE_WATER);
+        CHECK(mapio_write(other, tpath, err, sizeof err) == 0);
+        map_free(other);
+        press(&a, "go");
+        CHECK(!strcmp(a.map->name, "town"));
+        CHECK(strstr(a.status, "the file changed on disk") != NULL && strstr(a.status, "nobody went") != NULL);
+        Map *still = mapio_load(tpath, err, sizeof err);
+        CHECK(still && map_tile(still, 0, 0) == TILE_WATER);   /* theirs, not written over */
+        map_free(still);
+        press(&a, ":w!\r");                                /* the GM's over it: the trip is free again */
+    }
     Map *full = mapio_load(cpath, err, sizeof err);
     for (int y = 2; y <= 5; y++)
         for (int x = 2; x <= 5; x++) {
