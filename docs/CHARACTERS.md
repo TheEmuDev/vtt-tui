@@ -1,5 +1,9 @@
 # Character templates
 
+> **Status: built 2026-09-27.** A design record: the plan as it was signed off, so "today" and
+> "now" in it mean before the feature existed. What is true now is the README (*Characters*)
+> and the files' rows in docs/CODEMAP.md.
+
 A creature saved once -- its label, size, counters, note and the named rolls it uses --
 and placed again by name, on any map. Stamps for creatures: fight prep without the typing.
 Signed off 2026-09-27. The README is the user's reference; this page is why it is the way

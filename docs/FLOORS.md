@@ -1,5 +1,9 @@
 # Floors
 
+> **Status: built 2026-09-27.** A design record: the plan as it was signed off, so "today" and
+> "now" in it mean before the feature existed. What is true now is the README (*Floors*) and
+> the files' rows in docs/CODEMAP.md. *As built* below says where the code left the plan.
+
 Signed off 2026-09-27. A **floor** is a named area marked with a **level** (an elevation:
 -1 a basement, 0 the ground, 1 upstairs; gaps and negatives allowed). The screen can show
 one floor at a time; `[` `]` step down and up through them in level order; a creature

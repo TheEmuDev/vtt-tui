@@ -1,5 +1,9 @@
 # Scenes
 
+> **Status: built 2026-09-27.** A design record: the plan as it was signed off, so "today" and
+> "now" in it mean before the feature existed. What is true now is the README (*Scenes*) and
+> the files' rows in docs/CODEMAP.md.
+
 The creatures and the fight, saved under a name on the map and put back: reset an
 encounter, stage "before" and "after the ambush", give an agent a point to compare against.
 Signed off 2026-09-27. The README is the user's reference; this page is why it is the way

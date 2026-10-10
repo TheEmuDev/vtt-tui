@@ -1582,21 +1582,9 @@ has measurements for every path; `make perf` regenerates them.
 | | |
 |---|---|
 | [docs/AGENTS.md](docs/AGENTS.md) | for AI agents: building and editing maps |
-| [docs/KEYS.md](docs/KEYS.md) | the rules for choosing key bindings |
-| [docs/CHARACTERS.md](docs/CHARACTERS.md) | character templates and the picker |
-| [docs/CARDS.md](docs/CARDS.md) | cards, and importing the SRD's adversaries |
-| [docs/SCENES.md](docs/SCENES.md) | scenes: saving and restoring an encounter |
-| [docs/HANDOUTS.md](docs/HANDOUTS.md) | handouts on the players' screens |
-| [docs/WHISPER.md](docs/WHISPER.md) | phones' names and whispers to one player |
-| [docs/MAPLINKS.md](docs/MAPLINKS.md) | links between map files |
-| [docs/CONTROL.md](docs/CONTROL.md) | the control channel's design |
-| [docs/REMOTE.md](docs/REMOTE.md) | the players' view: server, page and watcher |
-| [docs/FLOORS.md](docs/FLOORS.md) | floors: the view, the players' floor, and room for stacked layers |
-| [docs/FOG.md](docs/FOG.md) | fog of war and sight |
-| [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | performance measurements |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | features decided on, in the order they will be built |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | features decided on: to build, parked, built |
 | [docs/IDEAS.md](docs/IDEAS.md) | features considered and not built |
-| [docs/HEALTH.md](docs/HEALTH.md) | project health checks: what each found, and what is still open |
+| [docs/README.md](docs/README.md) | every other page -- the design of each feature, performance, project health -- with who it is for and whether it is current |
 
 ## License
 

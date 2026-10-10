@@ -1,5 +1,10 @@
 # Handouts
 
+> **Status: built 2026-09-27.** A design record: the plan as it was signed off, so "today" and
+> "now" in it mean before the feature existed. What is true now is the README (*The players'
+> view*) and the files' rows in docs/CODEMAP.md. *As built* below says where the code left the
+> plan.
+
 A short text card pushed to the players' screens -- an inscription, a letter, a riddle --
 and taken down again. Signed off 2026-09-27. The README (*The players' view*) is the user's
 reference; this page is why it is the way it is.

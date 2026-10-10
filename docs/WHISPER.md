@@ -1,5 +1,10 @@
 # Whispers
 
+> **Status: built 2026-10-03.** A design record: the plan as it was signed off, so "today" and
+> "now" in it mean before the feature existed. What is true now is the README (*The players'
+> view*) and the files' rows in docs/CODEMAP.md. *As built* below says where the code left the
+> plan.
+
 `:whisper Aria You notice the floor is warm here`: a handout to one phone only. Roadmap
 item 23. Signed off 2026-10-03 with the recommendations.
 

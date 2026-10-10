@@ -1,5 +1,10 @@
 # A camera for the TV
 
+> **Status: built 2026-10-04.** A design record: the plan as it was signed off, so "today" and
+> "now" in it mean before the feature existed. What is true now is the README (*The players'
+> view*) and the files' rows in docs/CODEMAP.md. *As built* below says where the code left the
+> plan.
+
 `:player camera follow|party|hold`: what the players' frame looks at. Roadmap item 21.
 Signed off 2026-10-04 with the recommendations; built the same day.
 

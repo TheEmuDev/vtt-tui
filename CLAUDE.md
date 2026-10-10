@@ -17,7 +17,8 @@ prohibitions only, under 150 lines. Reference lives where it is read on demand.
 | reviewing | docs/HEALTH.md: *The questions*, *Left open by reviews* |
 | the channel, agents, proposals | docs/CONTROL.md, docs/AGENTS.md, docs/CONFLICTS.md |
 | a big doc (PERFORMANCE.md, README.md, CONFLICTS.md, FOG.md) | by section: `grep -n '^#' FILE`, then the lines needed |
-| resuming work | memory first, then the plan's *Progress* section -- it is the source of truth |
+| which doc is current, which is a design record | docs/README.md, the index; a design record's Status line says where the truth is now |
+| resuming work | memory first, then the plan's *Progress* section: what is built and what is owed (CONFLICTS.md's build log is *Progress, step by step*) |
 
 ## Standing rules (the user's, not defaults)
 
@@ -57,8 +58,9 @@ prohibitions only, under 150 lines. Reference lives where it is read on demand.
 - **A feature is not done** until README.md (keys tables, feature sections, *Rulesets*,
   *File format*; for a user: plain, instructional, no history or design argument),
   PERFORMANCE.md (tables + a paragraph per finding), `src/keys.c` (the `?` page),
-  docs/CODEMAP.md's rows and the design doc agree with the code. HEALTH.md records each
-  health check; an item fixed says so there, by commit. Ideas set aside: docs/IDEAS.md.
+  docs/CODEMAP.md's rows and the design doc agree with the code; its ROADMAP.md item moves
+  to *Built*; a new design doc has a Status line and a row in docs/README.md. HEALTH.md
+  records each health check; an item fixed says so there, by commit. Ideas: docs/IDEAS.md.
 
 ## Commands
 
@@ -123,8 +125,7 @@ The map, the log, the file
   every caller checks.
 
 Code
-- `Cell` padding stays zero (the renderer memcmps rows). Tokens compare with `token_equal`,
-  never `memcmp`.
+- `Cell` padding stays zero (the renderer memcmps rows). Tokens: `token_equal`, never `memcmp`.
 - Print through the one helper: `dist_fmt`, `map_coord_name`, `token_name`. Overlap is
   `token_meets`/`tokens_at`/`tokens_overlapping`; a label in a list `tokens_find_label`; the
   same creature in two lists `token_same_key`. Never written out again.
@@ -141,8 +142,7 @@ Code
 - Never `pkill -f <pattern>` from a command whose own line contains the pattern (it kills
   the shell, exit 144), and never kill `vtt` by name: the user may have one open. Record PIDs.
 - `grep` is aliased oddly here: use `awk`, or plain `grep -n` in a subshell.
-- Scratch files go in the session scratchpad, never the repo. In a key script `ESC` +
-  letter means Alt.
+- Scratch files go in the session scratchpad, never the repo. In a key script `ESC`+letter is Alt.
 - A test or script that runs `./vtt` or opens the channel must sit in a sandbox
   (`sandbox_enter`: its own `XDG_DATA_HOME`/`XDG_RUNTIME_DIR`), or it reaches the user's
   files and running vtts.

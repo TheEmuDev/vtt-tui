@@ -1,5 +1,9 @@
 # Cards
 
+> **Status: built 2026-09-29.** A design record: the plan as it was signed off, so "today" and
+> "now" in it mean before the feature existed. What is true now is the README (*Cards*) and
+> the files' rows in docs/CODEMAP.md. *As built* below says where the code left the plan.
+
 A creature's card: its stat block and whatever else the GM writes, shown beside the map
 while it is selected, never to the players. Character templates carry theirs, and the SRD's
 adversaries can be imported as templates with cards. Roadmap items 6 and 9, signed off

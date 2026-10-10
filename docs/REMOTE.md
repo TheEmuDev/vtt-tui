@@ -1,5 +1,11 @@
 # Remote view: design and budgets
 
+> **Status: phase one built; of phase two the players' frame (2026-09-23) and pings
+> (2026-09-24) are built, and moves from a player's device are set aside (docs/IDEAS.md).** A
+> design record: the plan each phase was built to. What is true now is the README (*The
+> players' view*) and the files' rows in docs/CODEMAP.md; the budgets here are still the
+> limits. *Phase two* marks each part.
+
 Players watch the GM's map from their own devices -- a browser on a phone or
 tablet, or a second terminal on a TV. The GM's `vtt` serves; everything else is
 a client of the same stream. This is the plan phase one was built to; the
@@ -110,7 +116,7 @@ still needs no toolchain.
 3. The page.
 4. README, `?` rows, PERFORMANCE.md.
 
-## Phase two: a plan, awaiting sign-off
+## Phase two
 
 Phase one sends the GM's frame. Phase two lets the phones send something back.
 Three steps, each shippable alone, in this order. The first is planned in full

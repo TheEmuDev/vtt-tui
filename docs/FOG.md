@@ -1,5 +1,11 @@
 # Fog of war, counters, and the players' frame: a plan
 
+> **Status: built 2026-09-23 and 2026-09-24, all three parts.** A design record: the plan as
+> it was signed off, so "today" and "now" in it mean before any of the three existed. What is
+> true now is the README (*Fog of war*, *The players' view*) and the files' rows in
+> docs/CODEMAP.md. *Order* at the end marks each part as it was built and what was decided in
+> the building.
+
 Three of the features asked for on 2026-09-20 turn out to be one design.
 Fog of war needs the players to see less than the GM. Counters on creatures
 (an ogre's hit points) are the GM's business, not the table's. And the
@@ -7,7 +13,7 @@ remote view today sends the players the GM's frame, byte for byte. The
 piece all three want is a **players' frame**: a second rendering of play
 mode, drawn for the phones, with the fog opaque and the GM's numbers left
 out. This document describes the three, with the decisions and what each costs;
-*Order* at the end says which lands first. Nothing here is built.
+*Order* at the end says which lands first. (Written before any of it was built.)
 
 ## What requests 4 and 5 changed
 

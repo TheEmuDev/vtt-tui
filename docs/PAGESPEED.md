@@ -1,5 +1,11 @@
 # The phone page's speed
 
+> **Status: measured and built 2026-10-04 (steps 1 and 2 built, 4 shipped with both
+> modules).** A measurement and the plan it led to, as signed off: its numbers are that day's.
+> What is true now is docs/PERFORMANCE.md (*The phone page*), which keeps the current numbers
+> and the files' rows in docs/CODEMAP.md. *As built* and *As reviewed* below say where the
+> code left the plan.
+
 Where a frame goes on a phone, measured 2026-10-04, and the plan it led to. Signed off
 2026-10-04: 1 and 2 built, 4 shipped with both modules. docs/REMOTE.md is the page's design; docs/PERFORMANCE.md, *The phone page*, keeps
 the current numbers. The standing rule (CLAUDE.md): the page stays inside one round trip,

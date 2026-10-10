@@ -1,5 +1,9 @@
 # Damage
 
+> **Status: built 2026-10-02.** A design record: the plan as it was signed off, so "today" and
+> "now" in it mean before the feature existed. What is true now is the README (*Damage*) and
+> the files' rows in docs/CODEMAP.md. *As built* below says where the code left the plan.
+
 `:dmg 11` marks a creature's HP by its card's thresholds and says why. Roadmap item 10.
 Signed off 2026-10-02 with the recommendations (list Minions only, massive damage saved with
 the map, the group effect included). The README is the user's reference; this page is why it

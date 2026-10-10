@@ -1,5 +1,9 @@
 # Links between map files
 
+> **Status: built 2026-09-27.** A design record: the plan as it was signed off, so "today" and
+> "now" in it mean before the feature existed. What is true now is the README (*Links*) and
+> the files' rows in docs/CODEMAP.md. *As built* below says what the review changed.
+
 A link whose other end is in another map file -- the town gate to the dungeon, a portal to
 another plane. `g o` on its end takes the party there, and vtt, the phones and the session
 go with them. Signed off 2026-09-27. The README (*Links to another map*) is the user's

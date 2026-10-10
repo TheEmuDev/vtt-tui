@@ -79,7 +79,7 @@ review and the next. The rules (the user, 2026-10-09):
 | 5 | step 4 | A proposal that came in under `:agent accept auto` while the GM was busy still lands at the next key after the GM types `:agent accept review`. | behavior | Kept: "at once" is decided when a proposal arrives, and is documented so in CONTROL.md. Arguable; the reviewer said so too. | the user decides it should follow the setting at landing time | 2026-10-09 |
 | 6 | step 5 (93e9a1c) | The "map closed" event when the GM travels through a link to another map (`app.c:196`) has no test. Closing a map is tested; traveling is not. | test gap | Needs two map files and a party to travel; skipped as "hard". | a case in `events` (or test_places.c's trip tests) checks the event after `g o` | 2026-10-10: the final review found the sibling path, `:e`, untested and broken (fixed, suite `diskwhole`); the trip is still untested |
 | ~~7~~ | *closed, below* | | | | | |
-| 8 | step 5; first raised by the review of the plan's third draft | `ctl.wait`, the zone round answering held waits, has no perf row: the bench has no socket to hold a wait on. | performance | Stood in for by a manual check against a live vtt (1 ms from key to answer, no CPU while held), written out in CONFLICTS.md *Progress*. | the bench gains a client that holds a wait, or a test times the flush | 2026-10-09 |
+| 8 | step 5; first raised by the review of the plan's third draft | `ctl.wait`, the zone round answering held waits, has no perf row: the bench has no socket to hold a wait on. | performance | Stood in for by a manual check against a live vtt (1 ms from key to answer, no CPU while held), written out in CONFLICTS.md *Progress, step by step*. | the bench gains a client that holds a wait, or a test times the flush | 2026-10-09 |
 | 9 | step 5 | The main loop (`main.c`) has no test. Its bug in step 5 (keys handled in the drain never reached the flush) was found only by driving a live vtt. | test gap | The loop needs a terminal; every test calls `app_key`/`app_tick` directly. | the loop's body becomes a function a test can call with a fake terminal | 2026-10-09 |
 | 10 | step 6 (f306906); step 7's review: opening now asks first, so it is rarer | Two vtts holding one file: the proposal goes to the first found, and stderr says how many others. The others' GMs are not told. No test covers it. | behavior, test gap | Step 7 makes it rare ("opening a map another vtt has open asks first"); the warning was the cheap part. | step 7 lands; a test with two listening apps on one file checks the warning | 2026-10-09 |
 | 11 | step 6 | No test that `vtt --ctl` picks the one vtt with `agent on` when two are listening. | test gap | Needs two apps listening in one test. | a `ctllive` case with a second `Ctl` | 2026-10-09 |
@@ -117,6 +117,7 @@ review and the next. The rules (the user, 2026-10-09):
 | 43 | step 9's doc pass (2026-10-10) | The plan promised perf rows for a highlight and a review with the change off the window. Neither exists, and no test shows a job's tint drawing nothing when its box is off screen (the preview's cull is tested, test_changeset.c:391). | test gap, performance | The cull is by block before any square is read, the same code path as the measured rows with fewer blocks. | a `jobs` case scrolls the window off a job's box and checks no cell is tinted; a perf row only if the tint's walk ever shows | 2026-10-10 |
 | 44 | the final review (2026-10-10) | The plan says change sets are "capped together at the undo log's limit". Nothing bounds a change set's memory: 8 bytes a changed cell, so a proposal of every square of a 512×512 map is about 6 MB, and 16 of them about 100 MB. | robustness | Only a deliberate fill of the largest map sixteen times gets there; the request cap (64 KB, `CTL_OPS_MAX` ops) bounds what one request can write. | a cap on cells across all waiting jobs, with the refusal an agent is told | 2026-10-10 |
 | 45 | the CLAUDE.md split's review (2026-10-10) | `:dmg massive` with no argument answers with plain `app_set_status` (`app_damage.c:107`: "massive damage on - twice Severe marks 4 HP ..."), though the file's row in docs/CODEMAP.md says every message about the rule is GM-only and only the usage hint is plain. Read in the source; not drawn in a players' frame. | correctness, docs | Found while moving docs; no code was in that change. It gives away a table rule, not a creature's numbers. | the line becomes `app_set_status_gm` with a players'-frame test, or the row says the rule's state is plain | 2026-10-10 |
+| ~~46~~ | *closed, below* | | | | | |
 
 ### A second opinion on this list (Fable, 2026-10-10)
 
@@ -164,6 +165,7 @@ Rows move here when fixed, with the commit.
 
 | # | item | closed by |
 |---|---|---|
+| 46 | CLAUDE.md did not know the docs' new shape: no *Read on demand* row for docs/README.md, *Progress* called the source of truth, and "A feature is not done" silent on the roadmap's *Built* table, the Status line and the index row. | the docs index's commit (2026-10-10), on the user's word: the three lines are in CLAUDE.md. |
 | 17 | The map writer built its text one `fputc` at a time. | step 7 (2026-10-10): rows built whole from a table, the file written once; 3.26 ms to 1.18 ms unflushed on 512×512. What is left of the gap is B9. |
 | 7 | The plan said the event reads `the GM changed: ...`; the code and AGENTS.md say `map changed: ...`. | step 9 (2026-10-10): the plan's line corrected. |
 | 19 | The plan promised `"link 3, now 5"` in a summary; a new link is summarized without a number. | step 9: the plan's line says what was built. |
@@ -174,7 +176,7 @@ Rows move here when fixed, with the commit.
 
 ### Where the rows came from
 
-Thirteen reviews, 2026-10-07 to 2026-10-10. The first seven predate this section: on 2026-10-09
+Fifteen reviews, 2026-10-07 to 2026-10-10. The first seven predate this section: on 2026-10-09
 their reports were read back from the session's record and every item checked against the
 code as it stood (137 items: 117 fixed, 4 overtaken when the plan dropped "accept saves", 16
 open, none disproved). Steps 4-6 were entered from their reports as they came.
@@ -194,6 +196,8 @@ open, none disproved). Steps 4-6 were entered from their reports as they came.
 | 2026-10-10 | step 7 | 31-36 |
 | 2026-10-10 | step 8 | 37-42 |
 | 2026-10-10 | step 9 and the whole feature (two high, two medium, four low: all fixed but the memory cap) | 43, 44, B12 |
+| 2026-10-10 | the CLAUDE.md split (b9ae6bc) | 45 |
+| 2026-10-10 | the docs index and the status lines | none (46, closed) |
 
 ## 2026-09-28, at 17e31e3
 

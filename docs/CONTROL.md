@@ -1,5 +1,11 @@
 # The control channel: an agent in the GM's live session
 
+> **Status: built 2026-09-26; one decision reversed 2026-10-07 (agents now propose and the GM
+> approves: docs/CONFLICTS.md).** A design record: the plan as it was signed off, so "today"
+> and "now" in it mean before the feature existed. What is true now is the README (*Control
+> channel*) and docs/AGENTS.md and the files' rows in docs/CODEMAP.md. *As built* below says
+> where the code left the plan.
+
 An AI agent (or any script) talking to a running `vtt`: reading the map the GM
 has open, asking what the GM is pointing at, and editing it, every change one
 undo batch the GM takes back with `u`. The map tools (`--dump-map`, `--check`,

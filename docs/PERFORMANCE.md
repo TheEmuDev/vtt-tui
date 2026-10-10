@@ -975,7 +975,7 @@ The desktop, median of three; the live checks 2026-10-09, the rows 2026-10-10.
 quiet: its frame (23.7 µs) is `build, open`'s (23.0), so the checkpoint running under the GM's edits
 does not show on the frame. `ctl.wait`, the zone round answering waiters, has no row: the
 bench has no socket to hold one on; the live check above stands in for it, and is written
-out in docs/CONFLICTS.md's *Progress*.
+out in docs/CONFLICTS.md's *Progress, step by step*.
 
 ### Other writers of the file
 
