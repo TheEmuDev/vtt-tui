@@ -2,7 +2,7 @@
 
 What each project health check found, dated, with the evidence and what was decided. A
 finding stays here until it is fixed (then its entry says by which commit) or consciously
-left (then it moves to CLAUDE.md's watch list with the point at which it stops being cheap
+left (then it moves to docs/CODEMAP.md's watch list with the point at which it stops being cheap
 to ignore).
 
 ## The questions
@@ -14,13 +14,13 @@ written down.
 **Duplication**
 - Is the same logic written out more than once? Two copies are allowed. A third copy is
   extracted into one function before it is written (the rule of three).
-- Does the change add a copy of something on CLAUDE.md's watch list? Then that item is due.
+- Does the change add a copy of something on docs/CODEMAP.md's watch list? Then that item is due.
 
 **Organization**
-- Does the code live in the file that owns it? CLAUDE.md's file table answers this.
+- Does the code live in the file that owns it? docs/CODEMAP.md's file table answers this.
 - Has a file grown too big to read as one subject? Split it along a seam, as app_browser.c
   and app_build.c came out of app.c.
-- Does every source file still have a row in CLAUDE.md's file table, and is that row true?
+- Does every source file still have a row in docs/CODEMAP.md's file table, and is that row true?
 
 **Performance**
 - Does every new drawing or keystroke path have a `PROF_ZONE`, a scenario in `tools/perf.sh`
@@ -51,7 +51,7 @@ written down.
 
 **Docs**
 - Does the README tell a user how to use the feature, in plain instructional terms?
-- Are CLAUDE.md, docs/KEYS.md (and the `?` page from `src/keys.c`) and the feature's
+- Are CLAUDE.md, docs/CODEMAP.md, docs/KEYS.md (and the `?` page from `src/keys.c`) and the feature's
   design doc in step with the code?
 - Where would a user get stuck: something undocumented, unexplained or cut off?
 - Is each thing called by one name (creature, the players' view, wall mode)?
@@ -116,6 +116,7 @@ review and the next. The rules (the user, 2026-10-09):
 | 42 | step 8's review, older than it | A vtt ended by SIGTERM leaves its socket file behind (`on_fatal` does not stop the channel); the next client's refused connect removes it. | robustness | Harmless: stale sockets are removed on sight. | `on_fatal` unlinks the socket | 2026-10-10 |
 | 43 | step 9's doc pass (2026-10-10) | The plan promised perf rows for a highlight and a review with the change off the window. Neither exists, and no test shows a job's tint drawing nothing when its box is off screen (the preview's cull is tested, test_changeset.c:391). | test gap, performance | The cull is by block before any square is read, the same code path as the measured rows with fewer blocks. | a `jobs` case scrolls the window off a job's box and checks no cell is tinted; a perf row only if the tint's walk ever shows | 2026-10-10 |
 | 44 | the final review (2026-10-10) | The plan says change sets are "capped together at the undo log's limit". Nothing bounds a change set's memory: 8 bytes a changed cell, so a proposal of every square of a 512×512 map is about 6 MB, and 16 of them about 100 MB. | robustness | Only a deliberate fill of the largest map sixteen times gets there; the request cap (64 KB, `CTL_OPS_MAX` ops) bounds what one request can write. | a cap on cells across all waiting jobs, with the refusal an agent is told | 2026-10-10 |
+| 45 | the CLAUDE.md split's review (2026-10-10) | `:dmg massive` with no argument answers with plain `app_set_status` (`app_damage.c:107`: "massive damage on - twice Severe marks 4 HP ..."), though the file's row in docs/CODEMAP.md says every message about the rule is GM-only and only the usage hint is plain. Read in the source; not drawn in a players' frame. | correctness, docs | Found while moving docs; no code was in that change. It gives away a table rule, not a creature's numbers. | the line becomes `app_set_status_gm` with a players'-frame test, or the row says the rule's state is plain | 2026-10-10 |
 
 ### A second opinion on this list (Fable, 2026-10-10)
 

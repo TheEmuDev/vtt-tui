@@ -58,7 +58,7 @@ decodes no image formats and links nothing to do it.
   `"net.picture_send"` round each chunk written; a perf row putting a picture up with four
   watchers.
 - README (the players' view's handout section, the folder, the TV note), docs/HANDOUTS.md
-  pointing here, CLAUDE.md, ROADMAP.md.
+  pointing here, docs/CODEMAP.md, ROADMAP.md.
 
 ## Build order
 

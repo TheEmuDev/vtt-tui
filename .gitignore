@@ -7,3 +7,4 @@ core
 *.core
 .perf.*
 .pagebench.*
+!.claude/settings.json

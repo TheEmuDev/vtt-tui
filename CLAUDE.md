@@ -1,258 +1,149 @@
-# vtt — working notes for Claude
+# vtt -- the baseline for Claude
 
-A rules-agnostic virtual tabletop for the terminal, in C11 with no dependencies
-beyond libc, POSIX and `-lm`. Tested with Daggerheart. The user is the sole
-maintainer; this file is what survives a context reset, so keep it true.
+A rules-agnostic virtual tabletop for the terminal: C11, nothing beyond libc, POSIX and
+`-lm`. Tested with Daggerheart. The user is the sole maintainer. This file is loaded into
+every session and is what survives a context reset, so keep it true: rules and
+prohibitions only, under 150 lines. Reference lives where it is read on demand.
+
+## Read on demand
+
+| when | read |
+|---|---|
+| before touching a source file | its row in docs/CODEMAP.md: `grep -n 'fog\.c' docs/CODEMAP.md` -- what the file owns and the invariants kept there. Never the whole file (42 KB) |
+| a command not listed below; a convention's reason; the watch list | docs/CODEMAP.md, by heading |
+| writing or running tests | tests/CLAUDE.md (loads itself under tests/) |
+| binding a key | docs/KEYS.md, the nine rules (the ninth: `off` switches off, `remove` destroys) |
+| a plan's performance section | docs/PERFORMANCE.md, *Speed of light* |
+| reviewing | docs/HEALTH.md: *The questions*, *Left open by reviews* |
+| the channel, agents, proposals | docs/CONTROL.md, docs/AGENTS.md, docs/CONFLICTS.md |
+| a big doc (PERFORMANCE.md, README.md, CONFLICTS.md, FOG.md) | by section: `grep -n '^#' FILE`, then the lines needed |
+| resuming work | memory first, then the plan's *Progress* section -- it is the source of truth |
 
 ## Standing rules (the user's, not defaults)
 
-- **Plan before refactors.** Anything that reshapes a shared struct, changes a
-  shared signature or touches several subsystems gets a written plan with the
-  engineering decisions, their tradeoffs and the instrumentation, and waits for
-  explicit sign-off. Small additive work goes straight to code.
-- **Performance discipline.** Every new drawing or keystroke path gets a
-  `PROF_ZONE`, a scenario in `tools/perf.sh`, and a regenerated
-  `docs/PERFORMANCE.md`. Bytes written matter more than frame time. Cost follows
-  the window, not the map: cull with `grid_visible_tiles` first.
-- **No software waste; every plan says how close it gets to the speed of light** (the user,
-  2026-10-07). Every change plan has a **Performance considerations** section. For each
-  new or changed path it gives:
-  - the **speed-of-light estimate**: the least the work could cost, from the bytes it must
-    touch and the syscalls and disk flushes it can't avoid. Use the reference figures in
-    docs/PERFORMANCE.md (*Speed of light*), and say which machine they're from. The user has
-    two, a laptop (i7-4510U) and a desktop (i7-8700K), and `tools/machine.sh` names the one
-    a table was run on;
-  - the design's expected cost beside that estimate, and why any gap is accepted.
-
-  Once the change is built, measure it against the estimate and record both in the design
-  doc and PERFORMANCE.md. A gap with no explanation is waste: remove it, or write it down
-  as a finding. Cost follows the work that must be done (what changed, what is on screen),
-  never the size of what could have been touched. Reviews check this.
-- **The phone page stays inside one round trip** (the user, 2026-10-04): under 12 KB as sent,
-  so it and its headers fit TCP's first flight (~14.4 KB) -- docs/REMOTE.md has the reason.
-  Every millisecond matters; never be complacent, performance slips away slowly. Below the
-  limit, do not spend effort shaving bytes (no minifying or compressing for its own sake):
-  spend it where it matters, on the page's JavaScript being close to optimal at run time.
-- **Push only when told** ("push it"). Commit freely; never push on your own.
-- **Model roles** (set 2026-09-26): **Opus 5.5** plans -- the plan goes to
-  the user for sign-off -- and implements; a **Fable 5.1** subagent (Agent
-  `model: "fable"`) reviews every finished change before it is reported
-  done -- verify its findings and fix what holds up. **Never dismiss a finding
-  without validating it first** (the user, 2026-10-09): reproduce it or disprove it with
-  a check that was actually run, and say which; "X already handles it" from memory is not
-  a check. Ask the reviewer (SendMessage to its agent) for its reproduction when a
-  finding is unclear. **Every finding not fixed is written down** in docs/HEALTH.md,
-  *Left open by reviews* (the user, 2026-10-09): one row with why it was left and what
-  would close it; a disproved one goes under *Disproved* with the check. The report to the
-  user names the rows added. The user will name different models when that changes.
-- **Every review includes the health check's questions** (the user, 2026-09-29), for the
-  change and what it touches, beside correctness: duplication (the rule of three -- a
-  third copy is extracted), organization (the right file, a file grown too big),
-  performance (a new path has a `PROF_ZONE` and a perf row; the window, not the map, sets
-  the cost; stale PERFORMANCE.md numbers), test gaps (would a test fail if the behavior
-  broke? error paths, the players' frame), and the docs (does the README tell a user how to
-  use it; CLAUDE.md, KEYS.md, the design doc in step). docs/HEALTH.md's *The questions* is
-  the full list.
-- **Rules-agnostic core.** Game-specific behavior lives behind the `Ruleset`
-  table in `ruler.c` (bands, `action_roll`, `spotlight`, `countdown`, `damage`), documented under the README's
-  *Rulesets* section with a subsection per game. Nothing else may know a game.
-- **Keys follow the nine rules** in docs/KEYS.md (the ninth: `off` switches off, `remove` destroys). Read
-  them before binding anything. The `?` page and the bar both come from
-  `src/keys.c`; the bar holds six hints; no duplicate key strings per map.
+- **Plan before refactors.** Anything that reshapes a shared struct, changes a shared
+  signature or touches several subsystems gets a written plan -- the engineering decisions,
+  their tradeoffs, the instrumentation -- and waits for explicit sign-off. Small additive
+  work goes straight to code.
+- **No software waste** (2026-10-07). Every plan has a **Performance considerations**
+  section giving, per new or changed path, the **speed-of-light estimate** (the least the
+  work could cost: bytes it must touch, syscalls and flushes it cannot avoid; reference
+  figures in PERFORMANCE.md, naming the machine), the design's expected cost beside it, and
+  why any gap is accepted. Once built, measure against the estimate and record both in the
+  design doc and PERFORMANCE.md. An unexplained gap is waste: remove it or write it down as
+  a finding. Cost follows the work that must be done (what changed, what is on screen),
+  never the size of what could have been touched.
+- **Performance discipline.** Every new drawing or keystroke path gets a `PROF_ZONE`, a
+  scenario in `tools/perf.sh` and a regenerated PERFORMANCE.md. Bytes written matter more
+  than frame time. Cost follows the window, not the map: cull with `grid_visible_tiles`.
+- **The phone page stays inside one round trip** (2026-10-04): under 12 KB as sent
+  (docs/REMOTE.md). Below the limit spend nothing on shaving bytes; spend it on the page's
+  JavaScript being near optimal at run time. Never be complacent: performance slips slowly.
+- **Push only when told** ("push it"). Commit freely.
+- **Model roles** (2026-09-26): **Opus 5.5** plans (the plan goes to the user for sign-off)
+  and implements. A **Fable 5.1** subagent (Agent `model: "fable"`) reviews every finished
+  change before it is reported done; verify its findings and fix what holds up. The user
+  will name different models when that changes. Brief every subagent: stop only PIDs it
+  started, never kill by name.
+- **Every review includes the health check's questions** (2026-09-29) beside correctness,
+  for the change and what it touches: duplication, organization, performance, test gaps,
+  the docs. HEALTH.md's *The questions* is the full list.
+- **Never dismiss a finding without validating it** (2026-10-09): reproduce it or disprove
+  it with a check that was actually run, and say which; "X already handles it" from memory
+  is not a check. Ask the reviewer (SendMessage) for its reproduction when unclear.
+- **Every finding not fixed is written down** in HEALTH.md, *Left open by reviews*: one row
+  with why and what would close it; a disproved one under *Disproved* with the check. The
+  report to the user names the rows added.
+- **A feature is not done** until README.md (keys tables, feature sections, *Rulesets*,
+  *File format*; for a user: plain, instructional, no history or design argument),
+  PERFORMANCE.md (tables + a paragraph per finding), `src/keys.c` (the `?` page),
+  docs/CODEMAP.md's rows and the design doc agree with the code. HEALTH.md records each
+  health check; an item fixed says so there, by commit. Ideas set aside: docs/IDEAS.md.
 
 ## Commands
 
 ```
-make            release build (-O2), profiler compiled in
-make test       ASan+UBSan build, unit + golden-frame tests (VTT_UPDATE_GOLDEN=1 regenerates; VTT_REQUIRE_NODE=1 fails rather than skips the page decoder test)
-make perf       one perf run; publish the per-row MEDIAN of three quiet runs (tools/median.py a b c)
-./vtt map.vtt --dump-map [--region B2:K12]      the whole map as text in the file's alphabet
-./vtt map.vtt --describe [--json]    rooms (rooms_build: every door splits), doors, contents
-./vtt map.vtt --check [--json]       lint: exit 0/1/2; codes in README; tests/fixtures/broken.vtt has one of each
-./vtt map.vtt --agent; ./vtt --ctl 'status'   the control channel (docs/CONTROL.md); requests on stdin with no argument
-./vtt new.vtt --apply plan.txt --new 40x30     the same requests headless, saved (docs/AGENTS.md is the agent's guide); a proposal instead when a running vtt has the map open (--wait N for the verdict)
-tools/sight.sh  fog.sight per fog scenario (the zone table keeps only each zone's worst)
-tools/pagebench.sh   the phone page's own code per frame (node): --bench-record streams replayed through the served page; PAGE=x.html to A/B; median of three
-tools/pageprobe.js   paste into a served page's console, then probe.report(): native costs (putImageData, DOM) node cannot see
-tools/saves.sh  a save flushed and unflushed, three map sizes, on the real disk (PERFORMANCE.md's save table)
-tools/proposals.sh  the proposal, checkpoint and outside-change tables (copy, diff, conflicts, preview, accept; stat, parse, compare) against the release objects
-tools/machine.sh  the `Machine:` line every published table carries (perf.sh, saves.sh, pagebench.sh print it; median.py keeps it)
-VTT_FOGDIFF_OPS=36000 ./build/run-tests   the long run of the fog differential test
-make fuzz       libFuzzer on the map loader (clang), FUZZ_SECONDS=600 for longer
-make fuzz-ctl   libFuzzer on control-channel requests (tests/fuzz_ctl.c, corpus tests/fuzz-ctl)
-make fuzz-json  libFuzzer on the JSON reader (tests/fuzz_json.c, corpus tests/fuzz-json)
-tools/embed.sh  after editing web/index.html; tools/blit_wasm.py after editing the blitter
-./vtt map.vtt --serve 7777      serve; a raw client: printf 'VTT1\n' | nc 127.0.0.1 7777
-./vtt map --bench keys --bench-clients 4   the frame with four watchers attached
-./vtt map.vtt --script keys --dump-frame --size 100x30     render one frame as text
-./vtt map.vtt --bench keys --bench-loops 400 --trace t.json  headless timing + Chrome trace
-./vtt map --bench keys --bench-outside new.vtt   new.vtt written over the map's file each loop, as another program would (the map is written on: use a copy)
-./vtt map --bench keys --bench-ctl req [--bench-review]   a request each loop, landing at once (or waiting for :review); the tick runs after each loop on a clock that lets the map go quiet
+make                 release build (-O2), profiler compiled in
+make test            ASan+UBSan build, unit + golden-frame tests
+build/run-tests NAME...   only the suites named (tests/run.c's table)
+make perf            one run; publish the per-row MEDIAN of three quiet runs (tools/median.py a b c)
+make fuzz | fuzz-ctl | fuzz-json    libFuzzer (clang): map loader, channel requests, JSON; FUZZ_SECONDS=600
+tools/embed.sh       after editing web/index.html (-> src/webpage.c); tools/blit_wasm.py after the blitter
+tools/machine.sh     the `Machine:` line every published table carries
+./vtt map.vtt --check [--json] | --describe [--json] | --dump-map [--region B2:K12]
+./vtt map.vtt --script keys --dump-frame --size 100x30      one frame as text
+./vtt map.vtt --bench keys --bench-loops 400 --trace t.json headless timing + Chrome trace
+./vtt new.vtt --apply plan.txt --new 40x30                  channel requests headless, saved
 ```
 
-Perf runs want the machine to themselves: editing a file during a run lifted rows
-by a fifth. When a row moves, A/B the previous commit's binary through the same
-scenario before believing it (`git worktree add /tmp/prev HEAD~1 && make -C /tmp/prev`). A gap under
-about 10% on a tight loop can be code placement alone: rebuild **both** with `make -B
-CFLAGS="-falign-functions=64 -falign-loops=32"` (plain `make CFLAGS=...` does not rebuild)
-and A/B again before believing it (docs/PERFORMANCE.md, *The checkpoint*).
-Bench scripts replay whole; no toggles — use loop-neutral pairs (`llllhhhh`,
-`8a8A`) or absolute keys (`3b`, `2R`, `6r`).
+- Perf wants the machine to itself (editing a file mid-run lifted rows by a fifth). Two
+  machines, laptop i7-4510U and desktop i7-8700K: compare only within one. When a row moves,
+  A/B the previous commit's binary (`git worktree add /tmp/prev HEAD~1 && make -C /tmp/prev`).
+  A gap under ~10% on a tight loop can be code placement alone: rebuild **both** with
+  `make -B CFLAGS="-falign-functions=64 -falign-loops=32"` first (PERFORMANCE.md, *The checkpoint*).
+- Bench scripts replay whole, so no toggles: loop-neutral pairs (`llllhhhh`, `8a8A`) or
+  absolute keys (`3b`, `2R`, `6r`).
+- `tools/pagebench.sh`, `sight.sh`, `saves.sh`, `proposals.sh`, other `--bench-*` flags: CODEMAP.
 
-## Where things are
+## Prohibitions and invariants
 
-| file | owns |
-|---|---|
-| `app_draw.c` | the frame: every screen, modals, the bars, `app_draw_view`, `app_view_differs` (the privacy boundary), `app_frame`, ping and agent-ring drawing (`ping_visible`) |
-| `app.c` | lifecycle, screens, prompts (`prompt_accept`), modals' keys, `app_key` dispatch, `app_note` (status + session log) vs `app_set_status` (status only); pings (`App.pings`, `app_ping`/`app_ping_cell`, drained and expired in `app_tick`, `app_ping_due` feeds the poll timeout, drawn after `play_draw` with `grid_draw_tile_ring`, only round visible squares in the players' frame over fog); `App.pinged` keeps each source's last ping after its ring comes down (`until_ms` there is when it was made) for the channel's `marked`, cleared with the map |
-| `app_browser.c` | the menu and the map browser (`app_menu_key`, `app_browser_key`), and the file operations they and the prompts ask for: rename, duplicate, delete (each with the `.autosave`/`.autosave.damaged` copy), `app_refresh_entries` |
-| `app_build.c` | build mode's keys: `app_editor_key` (normal mode) and wall (trace) mode's |
-| `app_play.c` | play-mode keys (`app_play_key`), prefix families `i`/`s`, `retired_key` hints; `s n` notes (build mode has the same key in `app.c`) |
-| `app_cmd.c` | every `:` command: the `COMMANDS` table (name, second name, `cmd_*` handler taking the verb and the rest of the line); a word not in it may be a square to jump to |
-| `app_priv.h` | what the app_*.c files share; `count_digit`, `take_count` (silence=1), `take_count_raw` (silence=0) |
-| `play.c/h` | play state, route search (`trail.path`), groups, the range overlay (`RangeGeom`, shapes) |
-| `turn.c/h` | turn order and spotlight: state is `Token.turn`/`Token.init` + `Map.round`/`Map.spotlight`, never a list; `turn_walk` also drives `t`/`f`/`e`; draws the side panel |
-| `editor.c` | build mode: brush, visual box/circle, wall trace |
-| `undo.c/h` | flat op log, batches, `OP_ROUND`; tokens in a side array; capped at four fills of the largest map. `OP_NOTE` (`undo_set_note`) carries a square note's text before/after in two token slots' `.note`. `undo_abort` rolls back and forgets the open batch. `Undo.stamp` moves on every record/undo/redo/clear. Batches nest (`Undo.nest`): only the outermost `undo_end` closes, so any helper may open its own inside an operation. Wall mode's pen-down run is a **stroke** (`undo_stroke` each step, `undo_stroke_end` when the pen lifts or the tool changes); an `undo_begin` mid-stroke ends the stroke first. Between keys `undo_balanced` must hold -- the tests' `press()` checks it after every key |
-| `mapio.c` | **the open map's file is kept** (step 7): `mapio_load_base` reads the file whole and leaves its bytes as `Map.base` and its identity (`MapDisk`: dev, ino, size, mtime) as `Map.disk`; `mapio_save` keeps both in step (the writer builds the text with `open_memstream`, rows whole from `FileChars`, one `write`, `fstat` before the rename); `mapio_load_mem` parses a base; `mapio_disk_stat`/`_same`. Every load reads the file whole (`MAPIO_FILE_CAP` 64 MB) and parses from memory (`fmemopen`); plain `mapio_load` keeps nothing. `map_copy_into` never copies a base. File format; the writer picks the lowest version that says everything: 3, 4 with a fight, 5 with clocks, named rolls or notes, 6 with counters or fog, 7 with areas, 8 with links, 9 with floors, 10 with hidden creatures, 11 with scenes, 12 with links to other maps, 13 with cards (a `scene "Name" [box]` ... `endscene` block; the loader swaps the scene's `TokenList` in for the map's while it reads one, so every creature parser serves both; W025). The loader forgives damage silently; `mapio_load_diag` reports each forgiveness (stable codes, 1-based line) to a sink without changing what loads -- every new silent-drop site must call `diag()` |
-| `clock.c/h` | clocks: fixed slots on the map (`Map.clocks`), `down` per clock, `OP_CLOCK` for ticks only and it carries the slot's `gen` so a reused slot ignores old ops; `:clock`/`:tick` in `app_cmd.c`; drawn under the turn panel |
-| `counter.c/h` | counters on creatures: `Token.counters[4]`, `counter_apply` parses the `s v` prompt, `<`/`>` step `Play.counter` (`app_current_counter` falls back to the ruleset's first, `Ruleset.counters`); GM-only via `play_status(gm)`, `turn_draw_panel(counter)` and `app_note_gm`/`app_set_status_gm` (`App.status_gm`) -- every message about a creature's numbers, refusals included, uses one of those two |
-| `fog.c/h` | fog of war: `Map.fog` byte per tile (patch id + SEEN/LIT/RIM/HELD), `Map.fog_patches[15]`; `fog_ground_hidden`/`fog_creature_hidden` are the questions every view asks of ground; of a creature it is `fog_token_unseen` (fog, or `Token.hidden`), never `fog_token_hidden` alone; `map_fog_set` is the only writer (grows the patch extent); deleted patches are tombstoned (`dead`) because undo can put their number back. Sight: `fog_recompute` works LIT/RIM (and SEEN under memory) out from player creatures via `sight_blocked` + `dist_tiles`, caching each creature's own light in `Map.sight` (`SightEntry.vis`: NO/YES/ASK, ASK settled lazily); a keystroke proven to be only moves (gen moved by k, exactly k creatures elsewhere, nothing else sight reads changed -- see the comment at `map_touch`) relights only around the movers, anything else rebuilds all. `app_fog_sync` runs it after each `app_key` when `Map.gen` != `Map.sight.gen`, and on open/recover. `fogdiff` in tests checks every bit against a brute force after random ops; `fog_sight_counts` says which path ran. Every line-of-sight question -- fog, ruler, range -- goes through `sight_walk` (ruler.h), one inline loop with an opacity callback. LIT/RIM are never undo-recorded (`undo_set_fog` strips them) and never saved. Drawn by `grid_draw(..., FogView)`; the players' frame skips hidden ground, walls between hidden tiles (`g_fog_blank`), hidden creatures, the cursor in the dark, and masks names via `turn_status_view`. Soft edge: `fog_rim_shown` (RIM + the patch's or map's `soft_edge`); `seg_fog` in grid.c dims boundaries at the rim (doors become walls, no grid lines); `fog_token_silhouette` + `grid_draw_token_silhouette` draw a hidden creature on the rim as a `Theme.dim` square with `?`; turn.c `side_style` grays `?` rows |
-| `maptools.c` | headless map tools behind `--dump-map` (and `--check`, `--describe`): read a `Map`, write text, change nothing; `run_tool` in main.c dispatches before any terminal or profiler |
-| `ctl.c/h` | the control channel's socket: `$XDG_RUNTIME_DIR/vtt/<pid>.sock` in a `0700` dir it refuses if not ours alone, 4 connections, one request each (read to EOF, 64 KB cap), answered without blocking, 10 s deadline (`ctl_due` feeds poll); `CTL_WAITING` is a held `wait` (`ctl_hold`, `ctl_waiter`, `ctl_waiters`): 4 more slots (`CTL_SLOTS`), outside the sweep, polled only for hang-up, its own deadline in `ctl_due`; the client's `held_ms` reads how long a `wait` may take; `ctl_client_main` is `vtt --ctl` (checks the dir is ours alone too -- `/tmp/vtt-<uid>` could be anyone's; asks each socket `status` and takes the one that says `agent on`; a refused connect removes a stale socket); `ctl_apply_open` is `--apply` to a map a running vtt holds (`holds DEV INO` to each, then `propose apply "NAME"` + the plan; `--wait` reads events through `ctl_verdict_in`; exits 0/1/2/3/4/5; **a vtt that is there and silent for `CTL_FIND_MS` is not a "no"**: `--apply` then exits 2 and leaves the file). The server binds `<pid>.new` and renames into place after listen; a request over the cap is drained to EOF before the answer, or the close resets it. The server side moves bytes only; the clients know the few words they must |
-| `card.c/h`, `app_card.c` | cards (docs/CARDS.md): `Map.cards` (64, name + heap text, `card_set`/`card_find`/`card_of`/`card_clean`/`card_first_line`), `Token.card` names one; file v13 `card`/`\|`/`+`/`endcard`, `tokencard`, W028. The box (`app_card_shown`, `draw_card_box` in app_draw.c; `ui_card_draw` wraps, `**bold**`) is GM-only and in `app_view_differs`; `:card` is `MODAL_CARD`; `s k` is `app_card_edit` -- `$VISUAL`/`$EDITOR` through `term_suspend`/`term_resume`, SIGINT ignored meanwhile, `Ruleset.card_skeleton` for a new one. Not in the undo log |
-| `app_whisper.c`, names in `net.c` | whispers (docs/WHISPER.md): `NetClient.name` from `n=` on `/ws` or a raw hello's `VTT1<code> NAME` (`net_name_clean`); `'W'`/`'N'` records (`wire_text`); `net_whisper` (kept per name when none is here, `Net.kept`, packed oldest first), `net_set_offer` (player labels, browsers only), `Net.seen`, `net_take_arrival`, `net_who`; all but arrivals survive `net_stop`. `app_whisper.c`: `:whisper` (longest seen name), `:players`, `app_whisper_tick` from `app_tick`. The watcher sink takes neither record. `send_text` is the one loop for 'H'/'W'/'N' (counts only what went), `stream_client` the one test of who gets the stream. Kept whispers close with the map (`net_clear_kept`); arrivals go to the status line, not the log; the offer is every player creature's label (hidden or in the dark too: the players are at the table), rebuilt on `Map.gen` change. Every message about a phone or a whisper is GM-only; usage hints are plain |
-| `app_damage.c` | `:dmg` (docs/DAMAGE.md): HP marked by `Ruleset.damage` (`DamageRule` and the SRD's table in `ruler.c`; NULL takes damage off as is) from the card (`card_value`, `card_feature`); a `g e` burst hits all `range_caught` catches as one undo batch; Minion extras listed (same side, up, nearest by `token_gap_units`), never marked; `app_horde_note` titles the card box. `Map.massive` is the `rule massive` header line (no version bump; W029). Every message about a creature or the rule is `app_note_gm`/`app_set_status_gm`; only the usage hint is plain. The counter is `DamageRule.hp` (`hp_of`); `card_value` reads the SRD's `**Label:** v \|` form and `4/None` (no Severe) |
-| `import.c/h`, `json.c/h` | the JSON writer (the map tools' and the channel's) and reader; `--import-adversaries FILE`: the SRD's adversary JSON as character templates with cards (fields as strings or numbers; `--force` replaces). `json_parse` is the reader (a tree, `\u`, BOM, depth 64; `make fuzz-json`) beside the writer |
-| `store.c/h` | the folders of saved things under the data directory: `store_dir(SUB)` (maps, stamps, characters, handouts), `store_name_ok` (the one file-name rule), `store_path`, `store_list`/`store_list_all` (sorted NAME.ext listings) |
-| `stamp.c/h` | stamps: a stamp is a small `Map` (no fog); `stamp_copy` (creatures wholly inside, made fresh), `stamp_turned`/`stamp_mirrored` (one `transform` over tiles, both edge arrays, tokens, notes), `stamp_place` (checked first, then one nesting batch; void and EDGE_NONE are see-through), files in `$XDG_DATA_HOME/vtt/stamps/NAME.vtt`, and the preview `stamp_show`/`stamp_unshow`: swapped straight into the arrays for one draw and back (no touch, no gen, no TokenList.shape) |
-| `app_stamp.c` | build mode's `y`, `p`, `ED_STAMP` keys (`r`/`R` turn, `\|` mirror, `p`/enter place, esc), `:stamp`; `App.stamp` is the one in hand, kept across maps; the preview is drawn in app_draw.c round `ed_draw` |
-| `character.c/h`, `app_character.c` | character templates (docs/CHARACTERS.md): a template is a map file in `$XDG_DATA_HOME/vtt/characters` holding one creature at its corner (the size square) and the rolls saved with it; `character_save` keeps it fresh (counters full, no markers/turn/hidden, label without its copy number via `token_label_root`), `character_load` refuses anything but one creature, `character_place` (checked with `play_can_place`, one nesting batch, labels numbered like pastes, missing rolls added through `OP_ROLL` = `undo_set_roll`, so `u` and the channel's rollback take them back). `app_character.c`: `:character`, the `i t p`/`i t e` prefix (`App.pending == PENDING_IT`), and the picker's glue in app_picker.c for all four lists -- characters, stamps, scenes, handouts (`app_pick_open`, `MODAL_PICKER`, `App.picker`/`pick_what`/`pick_kind`); choosing a character calls `app_character_place`; `:stamp` with no name opens the stamp picker. The picker itself is `UiPicker` in ui.c (ranked filter, tab fills and cycles without narrowing); it is a modal, so the players' frame never has it. Channel: `token add ... from NAME [hidden]`, `characters` |
-| `scene.c/h`, `app_scene.c` | scenes (docs/SCENES.md): `Map.scenes[16]` (`Scene` in map.h: name, optional box, round, spotlight, its own `TokenList`, freed by `map_free`, trimmed by `map_resize`); `scene_save` (not undoable, like named rolls), `scene_remove`, `scene_restore` (checked first, then one nesting batch: removes every creature or those meeting the box, adds the scene's; a whole scene sets round/spotlight, a boxed one keeps an outside actor's turn), `scene_diff` (by label, unlabeled by side+square). `app_scene.c`: `:scene`/`:scenes`, `app_scene_restore` clears selection, group, range; every message `app_note_gm`. `:scene` alone is the picker (`PICK_SCENE`). Channel: `scene NAME` is an edit; `scene save`/`scene NAME remove` are `lonely` (alone in a request, like `undo`); `scene diff`, `scenes` are reads |
-| `app_ctl.c` | what a request says (docs/CONTROL.md): `app_ctl_exec` splits lines into words and runs them, verdict line (`ok`/`error: line N: ...`) first; **a request's edits are a proposal** (docs/CONFLICTS.md): `proposal_begin` copies the live map into `App.ctl_scratch` and swaps it and `App.ctl_sundo` in for `a->map`/`a->undo` at the first edit, `proposal_end` swaps back, `finish_proposal` diffs (`cs_diff` with the scratch log) into a job (`propose`/`job N propose` header lines name which) through `app_job_set_proposal`; anything an edit does to the live App (range, selection, `last_acting`) is guarded by `!ed->proposal` and done by `land` instead; `App.agent_on` is `:agent on` -- **the socket listens whenever vtt is interactive** (main.c), and with the channel off a request over it (`ctl_can_hold`) may only be `off_takes`: status, holds, wait, proposals, never at once; `App.ctl_auto` (`:agent accept auto`) lands at once, `App.ctl_direct` (`--apply` only) edits the map itself as before; `app_ctl_busy` is why a change can't land now (incl. `undo.open`: a wall stroke), and why `undo`/`scene save` are refused; edits (`edit_line`, `token_line`) open one batch at the first edit line, nest helpers' batches in it (`room`/`wall` use `ed_wall_shape`); `token del` refuses the creature holding the turn -- the fight is the GM's, `undo_abort` on any error, cap `CTL_OPS_MAX` ops; `finish_edits` sets `App.ctl_stamp`/`ctl_gen`/`ctl_undoable` (the agent's `undo`, alone in its request: `undo_alone`), the GM-only status and `App.agent_ring`; `marked` (`gather_marked` once, then text or JSON); `:agent`. The room language: `room_box` (every room form, relative placement), `area`, `door` by side, `corridor` (`straight`/`bent` plan legs and end faces, `corridor_clear` refuses ground and other areas, `dig` walls every face out and puts the kind on the ends), `spot` (an area name where a creature goes: nearest free square to its middle), area names accepted by `region`. `--apply` in main.c runs `app_ctl_exec` headless and saves. `app_tick` hands it each request `ctl_next` has ready |
-| `app_event.c` | events for agents and `wait` (docs/CONFLICTS.md step 5): `App.events[32]` ring numbered by `event_seq` (`app_event`), `app_events_write` ("seq N" + every event after one), `app_events_flush` (in `app_tick` and after the keys in main's loop: starts/stops the map's checkpoint by whether an agent listens -- a held wait, an open job, a `wait` in the last ten minutes -- makes `map changed: ...` from `checkpoint_changes` once the map is quiet `AUTOSAVE_QUIET_MS`, answers held waits with news or out of time), `app_events_due` (poll's timeout), `app_events_map_flush`/`_restart` round a change that is not the GM's (`land`, the agent's `undo`). Job events are emitted in app_job.c, map closed in app.c. **A new thing an agent should hear of calls `app_event`** |
-| `app_agent.c` | `:agent command CMD` (docs/CONFLICTS.md step 8): `App.agent_cmd` (also `VTT_AGENT_COMMAND` at startup); `app_agent_start(a, job)` from `:ask` and from feedback -- `/bin/sh -c CMD`, forked twice (nobody's child: no zombie), the prompt (`app_agent_prompt`) down a pipe to its stdin, `VTT`/`VTT_PID`/`VTT_JOB` set, output to the session log's file or /dev/null; switches the channel on if it is off (and says so). **Only for `JOB_FROM_GM`.** `:agent command`, `... off`/`on` (`agent_cmd_off`: kept, not started). The prompt's lines must run as printed (`sh_quote`; a test checks) |
-| `app_disk.c` | other writers of the open map's file (docs/CONFLICTS.md step 7): `App.disk_state` (`DISK_NONE/NOTICED/PROPOSED/STUCK`); `app_disk_key` (from `app_key`: one `stat` at most once a second of `App.now_ms`, never on a stopped clock), `app_disk_check(a, now_too)` (the same unasked; `now_too` reads at once -- before a save and a trip), `app_disk_tick`/`app_disk_due` (the read, `disk_read`, once the keys are quiet `AUTOSAVE_QUIET_MS`: `mapio_load_base` the file, `mapio_load_mem` the base, `cs_diff` whole, a job `JOB_FROM_DISK` through `app_job_set_proposal`; an empty diff just adopts), `adopt` (the file as last seen becomes `Map.base`/`Map.disk` once the job is no longer READY), `app_disk_blocks` (why `:w` and a trip refuse), `app_disk_saved` (after any save: `:w!` scraps the proposal, saved as another file leaves it behind); the file's job is found by `disk_slot` (its number and `JOB_FROM_DISK`). Unreadable or resized is `DISK_STUCK`: said, never proposed. `c` (feedback) is refused on a disk job, and so is every agent request that would change it or an `--apply`'s (`app_job_gm_only`): only the GM decides those. `DISK_STUCK` for want of a job slot (`disk_full`) reads again once one is free |
-| `app_ctl_marked.c` | the channel's `marked` read (the cursor, a `v` box, wall mode's corner, the ruler, pings), gathered once into `Marked` and written as text or JSON |
-| `changeset.c/h` | a proposal (docs/CONFLICTS.md): `ChangeSet` -- every element one map would change to become another, with before and after: cells (tile, both edges, fog painting) bucketed in 16×16 blocks, creatures by label (unlabeled by side, square and size), areas, links (a new one takes a free number at accept), notes, rolls, cards (not undoable), round and spotlight. `cs_diff` (with the scratch log as a hint, only the squares it wrote), `cs_check` (conflicts: live value no longer `before`, gated on `Map.gen`), `cs_apply` (whole or a `CsBox`, one nesting batch, never a duplicate label), `cs_summary`, `cs_bounds`, `cs_show`/`cs_unshow` (the preview: written straight into the arrays and back, no touch, like `stamp_show`). Plans run on `map_copy_into` a kept scratch map (`map.c`); tests in test_changeset.c, timings in `tools/proposals.sh` |
-| `checkpoint.c/h` | what the map changed since an agent last looked (docs/CONFLICTS.md): `checkpoint_start` copies the small parts (creatures, areas, links, notes, rolls, clocks, round, spotlight, fog patches) and clears a byte a 16×16 block; a cell's value at the start is noted on its first change, **from the undo log**: the recorders `cp_note` each cell (`before`), `undo_undo`/`undo_redo` `checkpoint_note_ops` the batch (`before` forward, `after` back); the map's writers carry no test. The one writer round the log, `fog_delete`, notes for itself -- **any new writer of the live map's squares round the log must call `cp_note`**. `checkpoint_changes` gives a `ChangeSet` (cards and scenes by `Map.cards_gen`/`scenes_gen`, clocks compared, a resize reported). `Map.cp`/`cp_saved`; freed by `map_free`, never copied by `map_copy_into` |
-| `app_ctl_job.c` | the channel's job requests: `jobs [json]`, `job N take/area/say/drop/dump/check/describe` (`app_ctl_job`); `dump`/`check`/`describe` read `app_job_result` (the scratch map with the set applied, valid until the next request). `job`/`jobs` lines must come before a request's edits (the scratch map would be overwritten). `app_ctl_region` is app_ctl.c's `region` for it |
-| `job.h`, `app_job.c` | jobs and the review (docs/CONFLICTS.md): `App.jobs[16]` (`Job`: the number after the last given, `App.job_last`, never one just freed; the GM's text, the `v` box, the agent's declared area, state asked/working/ready/accepted/scrapped, a thread of up to 8 lines, the `ChangeSet`), `App.review` + `rv_box`; `:ask`/`:ask!` (over the `v` box via `cmd_from_visual`), `:ask N remove`, `:jobs [N]`, `:review [N]` (build mode); `ED_REVIEW` keys (`app_review_key`: enter accepts whole or the box's part via `cs_drop`, `d` scrap, `c` feedback = `PROMPT_JOB_FEEDBACK`, `v` box, `n`/`N`, `u`, esc one layer at a time; `cmd_from_review` returns after `:`); **`app_job_set_proposal` is the seam** a proposal comes in through (app_ctl.c's `finish_proposal`; the tests call it too); `land` (enter, at once, `:ask!`) also clears the range/selection when creatures changed, syncs fog, and sets `ctl_stamp`/`ctl_gen`/`ctl_undoable` so the agent's `undo` can take it back; `:ask!` lands at once or after the next key (`app_jobs_land_waiting` in `app_key`, gated by `app_ctl_busy`). Drawing: `app_jobs_prepare` (cs_check every ready job, sets `Editor.overlay`, never inside a preview's swap), `app_review_show`/`unshow` round the grid's draw, tints through `Editor.overlay` (called by `ed_draw` and, never for the players, `play_draw`) culled to the blocks meeting the window, `#N` labels after. `app_jobs_shown` is in `app_view_differs`. Every message `app_note_gm`/`app_set_status_gm` |
-| `corridor.c/h` | the room language's `corridor A B`: `corridor_plan` (straight when the rooms share enough rows or columns, else one bend, across first then down first; through void and no other named area) and `corridor_dig` (through the undo log). Needs only the map and the log, not the app |
-| areas (`map.c`) | `Map.areas[64]`: a name on a box, nothing drawn; `map_area_set/find/at/remove`, names never squares (`map_area_name_ok`); `OP_AREA` (`undo_set_area`/`undo_remove_area`, two token slots); file version 7; `:area`/`:areas` in app_cmd.c (GM-only messages; `Editor.cmd_from_visual` lets `:area` see the v box); `describe`/`dump`/`marked` use them |
-| `link.c/h`, `app_link.c` | links: `Map.links[64]` (the `Link` type is in map.h), kept in number order, a number kept for life (`link_free_num`); each end a 1-3 square block; `link_problem` is the one test of where a link may go when one is made; the loader holds a link only to `link_misplaced` (shape, map edge, overlaps -- `W023` drops one) because ground can leave from under an end later, which stays and `check` reports (`W150`); `link_trip` plans g o (everyone meeting the near end, one shift, all or nothing); `OP_LINK` carries the whole `Link` in a token slot's `.note`; file version 8. `app_link.c`: build `g l` (`Editor.link_on`, first end then second; the brush is the size), play `g o` is `link_here` in app_play.c (the cursor's square or the creature under the cursor, never the selection; puts a carried creature down first); `app_view_differs` counts a secret link under the cursor (the GM's status line names it), `:link`/`:links` (GM-only messages; a trip over a secret link too). Drawn by `grid_draw_links` (reveal = build only). Stamps carry links wholly inside; `rooms_build` reach follows links (one-way only onward); channel `link`/`links` in app_ctl.c (`link_spot` puts an end in a room) |
-| links to other maps (`link.c`, `app_link.c`) | docs/MAPLINKS.md: `Link.to_map`/`to_place` ("" for an ordinary link); one end here, the second kept equal to the first so a loop over two ends is harmless, `link_ends` where it matters (overlap, drawing, describe). `Link` is over 64 bytes now: undo packs it into a token slot's `.note` and `.label`. `link_map_path` (the file beside this one), `link_map_check` (reads it: the place an area or a square on ground; `:link to`, the channel's `link A to MAP PLACE`, `--check` W151), `link_land` (formation offsets, the nearest fit inside the area or by the square). `g o` on one is `travel` in app_link.c: checked whole (the map saved before, not this map, no pending autosave there, room), the party removed and this map saved, then `app_travel_to` (app.c) swaps maps keeping the server, the log and the play settings; arrivals lose their turn place; a handout comes down |
-| `floor.c/h`, `app_floor.c` | floors (docs/FLOORS.md): an area with `Area.floor` + `Area.level`; **every floor question goes through floor.c** (`floor_at`, `floor_order`/`floor_step`, `floor_problem`, `floor_box`, `floor_pick` -- the one tie-breaker: stay, most, last moved, lowest) so stacked layers can replace the storage later. `map_area_at` skips floors. File version 9 (`floor "Name" LEVEL`, W024), W160 overlap. The view: `Editor.floor` (by name) -> `GridView.bounded/bx0..by1`; `grid_bounds`, `grid_clip_push` (every map draw goes through it), camera/visible/tap all bounded; `app_floor_sync` after every key and before the GM's draw follows the cursor onto another floor; `app_floor_show` keeps the cursor's place in the box; `[` `]` global in app.c. Players: `app_players_floor` (pin, acting player, GM's turn stays, else `floor_pick`), `App.pview` their own camera when `app_players_own_camera` (a split floor, or `:player camera party|hold`, docs/CAMERA.md: `App.pcam`, party's framing cached in `App.pcam_for`, hold hides the cursor via `Editor.hide_cursor`, hold becomes follow in `app_floor_reset`; drawn in app_draw.c's `draw_editor` swap, status line blank, taps via pview; tests in test_camera.c), `app_floor_note_move` feeds the tie-breaker; `app_floor_spotlight` on a spotlight flip |
-| handouts (`app_handout.c`) | docs/HANDOUTS.md: `App.handout_title/body/up` (kept for `:handout on`), files `$XDG_DATA_HOME/vtt/handouts/NAME.txt` (UTF-8 checked with `utf8_valid`, 2 KB), `:handout NAME|say TEXT|off|on`, the picker (`PICK_HANDOUT`, `store_list_all`). The server holds its own copy (`Net.handout`, kept across `net_stop`) and sends a `'H'` record (wire.h) on change and after a joiner's FULL; the page draws an HTML card, the watcher and `:player preview` draw `ui_handout_draw`. The title bar says HANDOUT in both views; `app_view_differs` is true under preview while one is up, so the card is never copied into the phones' frame. Since 2026-09-27 `app_frame` switches `Net.rnd` to the players' renderer from the first frame (blank at `net_start`) -- before, a phone joining first was sent the GM's screen; `Net.joined` asks for a redraw |
-| `keys.c` | key tables for the bar and the `?` page |
-| autosave (`app.c`) | `map_touch` bumps `Map.gen`; `app_tick`/`app_autosave_due` in main's loop write `path.autosave` after 1.5 s quiet, unflushed (`mapio_write_unflushed`: the fsync is the whole cost on a real disk; every other save flushes; it ends with an `end` line, `autosave_whole` requires it, a copy without it is renamed `.autosave.damaged`) (a failed write still counts as attempted, or the loop spins); `offer_recovery` on open; dropped by save, `:q!`, discard, quit-with-y, delete; renamed with the map; `autosave_on` is set only in the interactive loop |
-| `dice.c`, `slog.c` | `:roll` (xoshiro, duality), the session log; named rolls are `Map.rolls`, expanded in `app_cmd.c` |
-| `wire.c/h` | the remote view's frame format: runs of cells, palette indices; encoder and incremental decoder shared by server, watcher and tests |
-| `net.c/h` | the server: listener, up to 8 clients with fixed buffers, HTTP + WebSocket (SHA-1/base64), raw watcher hello, broadcast from `Net.players`'s observer (the renderer given to `net_start` until `net_players_renderer` is first asked for). `Net.stay` (`:serve --stay-alive`) is the only thing that keeps it alive past `app_close_map`. Upstream: `net_msg` reads `P col row` (a WebSocket text/binary frame, or a line after a watcher's hello), one a second per client (`NetClient.next_ping_ms`), into a fixed per-client inbox drained by `net_take_pings`; bad payloads are counted (`bad_msgs`) and ignored, bad framing closes. "Keep-alive" (`NET_KEEPALIVE_MS`) is a WebSocket ping (op 9) to a browser silent that long (`NetClient.probed_ms`; the pong, like any bytes, stamps `last_rx_ms` in `client_read`) and a 'Z' record (`WireSink.keepalive`) to a watcher whose line is quiet; `NET_IDLE_MS` drops silent browsers (`idle_dropped`) and unfinished requests or hellos, never a greeted watcher. `client_flush` returns -1 when it closed the client: a close shifts the next client into the slot, so every caller checks. "Ping" is a tap |
-| `watch.c` | `vtt --watch host:port`, the read-only terminal mirror; `:mirror` spawns it in `$TERMINAL` |
-| `web/index.html` → `src/webpage.c` | the phone page; edit the HTML, run `tools/embed.sh` (it drops block comments and trailing `//` comments after white space: the 12 KB budget is what is sent; `test_page_feed` cuts it the same way in C). Its copy loops are `tools/blit_wasm.py`, hand-assembled wasm pasted in as base64 (`WASM_SIMD`, and `WASM` where SIMD will not compile). Pushes go a band of dirty rows at a time; the status line is hidden unless the connection changes or `&stats` is in the address. Measure with `tools/pagebench.sh` (verifies each scenario, checksum must not move; `VERIFY=1 MODULE=plain|js` by hand) and `tools/pageprobe.js`; `test_page_feed` runs the drawing check for all three copy loops |
-| `map.c/h` | the `Map`: tiles, both edge arrays, tokens, areas, scenes, links, clocks, rolls, fog; `map_touch` (bumps `Map.gen`), `map_coord_name` ("C3"), `map_region_name` ("C3" or "B2:F6"), areas' functions |
-| `ui.c/h` | the widgets every screen draws with: the key bar and `?` page (`ui_keypage`, a wide key on a line of its own), the title bar, lists, `TextPrompt` and the `:` line, `UiPicker`, the handout card, the dialogs (`ui_modal`, `ui_confirm`, `ui_choice`), all framed by `dialog_frame` |
-| `main.c` | options (`parse_args`), and the four ways to run: interactive, headless (`--bench`, `--dump-frame`, `--script`), the map tools, `--apply`; the interactive loop's poll timeout is every due thing's (autosave, pings, the channel, `app_events_due`), and it calls `app_events_flush` every turn after the keys (a waiting agent hears a verdict at once; no test covers this loop -- drive a live vtt, docs/CONFLICTS.md *Progress* step 5) |
-| `util.c/h`, `input.c`, `theme.c`, `prof.c` | `xmalloc`, `xstrdup`, `ByteBuf`, UTF-8, `str_lcpy`/`str_cut_word`/`str_cut_suffix`/`path_stem`, `dir_make`; the key parser (bytes to `Key`, ESC's timeout); the colors; the profiler (`PROF_ZONE`, the overlay, `--trace`) |
-| `grid.c`, `token.c`, `draw.c`, `render.c`, `term.c` | drawing down to the diffing renderer and the terminal |
-| `tests/` | `run.c` is the suite table and `main` only. Suites by area: `test_core.c` (text, input, render, map, file, undo, browser, golden, autosave), `test_build.c` (edges, terrain, brush, shapes, stamps), `test_play.c` (creatures, cursor, groups, moving, trail, labels, culling), `test_keys.c` (keymaps, key bar, `?`, remapping, cycling, focus), `test_marks.c` (markers, notes, counters, hidden), `test_saved.c` (picker, characters, scene and handout keys), `test_measure.c` (distances, rulesets, ruler, sight, range), `test_session.c` (dice, log, clocks, turns), `test_net.c` (wire, server, players' frame, pings, `:serve`, the page), `test_fog.c`, `test_maptools.c`, `test_ctl.c` (channel, room language, corridors, `--apply`), `test_places.c` (areas, links, floors), `test_cards.c` (cards, the box, `s k`, templates, the JSON reader, the import), `test_damage.c` (`:dmg`; suite `dmg`), `test_whisper.c` (names, whispers; suites `whisper`, `whisperapp`), `test_camera.c` (the players' camera; suites `camera`, `camerafloors`), `test_changeset.c` (change sets and the checkpoint), `test_disk.c` (suite `disk`: the base, a file changed behind the app, `:w`/`:w!`/`:e`, a map open elsewhere), `test_jobs.c` (`:ask`, the tints, `:review`; suite `jobsctl` the channel's job requests; suite `agentcmd` `:agent command` with a script that takes the job and proposes through the real `./vtt`; suite `events` the ring, `wait` answered at once, the map-changed event -- the held `wait` over a socket is `ctllive` in test_ctl.c). Tests that expect a request's edits to land set `a.ctl_auto = 1` after `app_init`. `build/run-tests NAME...` runs only the suites named in run.c's table. `harness.c` holds the counters and every helper more than one file uses (`press`, `players_text`, `sandbox_enter`, `write_map_file`, `golden`, `json_valid`, `ctl_ask`, ...), declared in `harness.h` with the `CHECK` macros and the shared types; a helper one file uses stays `static` there. `fuzz_mapio.c`, `fuzz_ctl.c`, `fuzz_json.c` are libFuzzer only |
+Architecture
+- **No dependencies.** No library beyond libc/POSIX/`-lm`; no build tool beyond `make` and tools/.
+- **Rules-agnostic core.** Game behavior lives only behind the `Ruleset` table in `ruler.c`
+  (bands, `action_roll`, `spotlight`, `countdown`, `damage`), documented under the README's
+  *Rulesets* with a subsection per game. Nothing else may know a game.
+- **One owner per question.** Before writing a check, find its function in CODEMAP: floors
+  go through `floor.c`, line of sight through `sight_walk`, file names through
+  `store_name_ok`, map draws through `grid_clip_push`, fog writes through `map_fog_set`.
+  Two copies are allowed; a third is extracted first (the watch list says which are at two).
 
-## Writing tests
+The players must never see the GM's things
+- Every frame goes through `app_frame`. Anything GM-only (a modal, prompt, overlay, tint)
+  checks `a->view` **and is added to `app_view_differs`**, or it reaches the phones.
+- "May the players see this creature" is `fog_token_unseen(m, t, fog_any)`, never
+  `fog_token_hidden` alone.
+- A message about a creature's numbers, the damage rule, a phone, a whisper, a job, a
+  scene, an area or a secret link is `app_note_gm`/`app_set_status_gm`, refusals included.
+  Only usage hints are plain.
 
-- `press(&a, "keys")` feeds bytes through the real parser; `\r` is enter, `\x1b`
-  esc, `\025` ctrl-u (clears a prompt). `Key k = { KEY_ENTER, 0, 0 }` for raw keys.
-- A new suite: a `void test_x(void)` in the file for its area (make it non-static and
-  declare it in `harness.h`), then a row in `run.c`'s table. A helper another file needs
-  moves its prototype to `harness.h` and loses `static`.
-- `sandbox_enter` sets `XDG_DATA_HOME` and `XDG_RUNTIME_DIR` to the sandbox: a test that runs
-  `./vtt` or opens the channel outside one reaches the user's own files and running vtts.
-  To check: `XDG_RUNTIME_DIR=/some/canary build/run-tests` must leave the canary untouched.
-- App tests: `Sandbox sb = sandbox_enter("name")`, `write_map_file(sb.dir, "fight.vtt")`
-  (a **2×2 empty map** — place tokens with `ipAria\r` after setting `a.ed.cx/cy`),
-  `app_open_map`, `Key f2 = {KEY_F2,0,0}` for play mode, `sandbox_leave(&sb)`.
-- `play_focus` moves the selection, not the cursor; `enter` acts on the cursor.
-- Rendered cells: `rnd_begin(&r); app_draw(&a);` then read `r.back[]`; `rnd_dump` for text.
-- Checks are `CHECK` / `CHECK_EQ` under a `CASE("...")`; failures print `FAIL file:line`.
-- Golden frames live under `tests/`; regenerate only when the change is intended.
-  `golden_bytes(name, data, len)` compares any text (a map tool's report) the same way.
+The map, the log, the file
+- Edits to the live map go through the undo log; `undo_balanced` must hold between keys.
+  **A writer of the map's squares round the log must call `cp_note`** (today: `fog_delete`).
+  LIT/RIM fog bits are never recorded and never saved.
+- A request's edits are a proposal: they come in through `app_job_set_proposal`; anything
+  an edit does to the live App is guarded by `!ed->proposal`. Only the GM decides a disk
+  job. **A new thing an agent should hear of calls `app_event`.**
+- The loader forgives damage silently: **every new silent-drop site calls `diag()`** with a
+  stable code. The writer picks the lowest file version that says everything.
+- The map the app will hold opens with `mapio_load_base`; a read-only look is `mapio_load`.
+  A save of the open map is `app_save_map`. A map is put down only by `app_close_map`;
+  each place a map leaves the app's hands sends `map closed` and calls `app_jobs_clear`;
+  anything that might discard work asks through `app_leave_map_for`.
+- `client_flush` returns -1 when it closed the client (the next one shifts into the slot):
+  every caller checks.
 
-## Conventions
+Code
+- `Cell` padding stays zero (the renderer memcmps rows). Tokens compare with `token_equal`,
+  never `memcmp`.
+- Print through the one helper: `dist_fmt`, `map_coord_name`, `token_name`. Overlap is
+  `token_meets`/`tokens_at`/`tokens_overlapping`; a label in a list `tokens_find_label`; the
+  same creature in two lists `token_same_key`. Never written out again.
+- `app_note` for what *happened* (logged); `app_set_status` for hints and errors.
+  `range_clear` resets the overlay; `range_off` keeps the shape. A prompt whose answer
+  lands in a fixed field sets `a->prompt.max`.
+- Keys: the bar and the `?` page both come from `src/keys.c`; the bar holds six hints; no
+  duplicate key strings per map.
+- American spelling everywhere (color, center, gray, canceled, labeled). Comments say
+  *why*; rationale lives in the header or the README, not at every call site.
 
-- Opening the map the app will hold is `mapio_load_base` (it keeps the file's bytes and
-  identity); anything that only reads a map file is `mapio_load`. A save of the open map is
-  `app_save_map` (it refuses over an unreviewed change on disk; `App.save_force` is `:w!`).
-- Status messages: `app_note` for things that *happened* (logged), `app_set_status`
-  for hints and errors. Anything that puts a map down goes through `app_close_map`; the three places a map leaves the app's hands (`app_close_map`, `app_travel_to`, `app_open_map` over a map in hand) each send `map closed` and `app_jobs_clear` -- a fourth must too;
-  anything that might discard work asks via `app_leave_map_for` (which `:e` uses).
-- A prompt whose answer lands in a fixed field sets `a->prompt.max` to the field size.
-- Every frame goes through `app_frame` (main, the bench and the net tests alike): the
-  GM's view to the terminal, then the players' frame to the clients from `Net.players`,
-  drawn with `app_draw_view(a, VIEW_PLAYERS)` when `app_view_differs` says the two
-  could differ, else copied from the GM's back buffer. `a->view` is what is being drawn;
-  GM-only things (modals, prompts, the profiler, the `(note)` hint, counters, a status
-  message set with `app_note_gm`) check it. Add any
-  new GM-only thing to `app_view_differs` too, or it reaches the phones. Build mode is
-  the GM's alone. Whether the players may see a creature is one question,
-  `fog_token_unseen(m, t, fog_any)` (its `Token.hidden` flag or fog over it): every
-  players' path asks it, never `fog_token_hidden` alone. While any creature is hidden the
-  players' frame is drawn (never copied), carries no status message, and gets the plain
-  status line (no count, no ruler or range line), as over fog.
-- Ideas consciously set aside live in `docs/IDEAS.md` with the reason (the Fear pool).
-- Distances print through `dist_fmt`; coordinates through `map_coord_name`; a
-  creature in a message through `token_name` (label, else its side). Overlap is
-  `token_meets` / `tokens_at` / `tokens_overlapping`, never written out again. A label in
-  a list is `tokens_find_label`; the same creature in two lists (a scene, a copy) is
-  `token_same_key`.
-- `range_clear` resets the overlay; `range_off` switches it off and keeps the shape.
-- The `Cell` padding must stay zero (row memcmp in the renderer); tokens compare
-  with `token_equal`, never `memcmp`.
-- American spelling everywhere -- docs, messages, comments, identifiers (color, center,
-  gray, canceled, labeled, counterclockwise). The loader still reads a marker saved as
-  `grey`.
-- Comments explain *why*; code says what. Rationale lives in the header or the README,
-  not repeated at every call site.
-- Never `pkill -f <pattern>` from a Bash call whose own command line contains the
-  pattern: it kills the shell running it (exit 144). Record PIDs instead.
-- To drive a live `vtt` from a script: `mkfifo f; (sleep 3600 > f &); script -qfc "./vtt map --serve 7792" /dev/null < f &`
-  then `printf 'l' > f`. Chrome (via the claude-in-chrome skill) can open the served page.
-- Environment quirks: `grep` is aliased oddly in this shell (use `awk` or plain
-  `grep -n` in a subshell); `ESC` + letter in a script means Alt; scratch files go in
-  the session scratchpad, not the repo.
+## Shell
 
-## Watch list
-
-Tech debt looked at in a health check and left on purpose. Each has the point
-at which it stops being cheap to ignore; check it whenever the code it names is
-touched, and move an item out of here once it is fixed. docs/HEALTH.md is the
-full record of each check -- what it found, the evidence, what is still open.
-The 2026-09-28 check's open items are there, in a proposed order.
-
-- **Squares and regions are parsed in two places:** `maptools_region` (clips,
-  takes a bare row `5:6`) and app_ctl.c's `region` (strict, refuses off-map).
-  Two is within the rule of three; a third caller makes them one function
-  with a clip flag, before the third copy is written. (2026-09-28: still two;
-  but "an area name, else a square, into a box" has reached three -- see
-  docs/HEALTH.md.)
-- **Two copies, left (2026-09-28):** removing a group highest index first with
-  `turn_before_remove`/`turn_settle` (app_play.c, app_link.c); describing a
-  character or a stamp (the picker and the channel); taking a creature out of
-  the fight (turn and init zeroed: stamp.c, character.c, app_link.c -- two
-  assignments each). A third copy of either of the first two, or any change to
-  what "out of the fight" means, makes them one function.
-- **The phone page ships two copy loops** (SIMD, and 8-byte for Safari before 16.4), about
-  300 bytes, for 6-27% on frames that redraw the screen (docs/PAGESPEED.md). If the page
-  nears the one-round-trip limit (12 KB as sent; 11.4 KB on 2026-10-04), drop the 8-byte
-  one first -- the user's call when it was shipped.
-- **`picker.open` reads every file** (about 6.5 µs each on the desktop since `file_read`
-  reads a file in one piece, 2026-10-10; 9 before): 3.2 ms for 500 templates, about
-  10 ms near 1,500. Cache details by mtime when someone's library gets there.
-
-## Docs to keep in step
-
-`README.md` (keys tables, feature sections, *Rulesets*, *File format*; written for a user,
-in a plain instructional tone: what a feature does and how to use it, no history and no
-design argument -- that belongs in docs/),
-`docs/PERFORMANCE.md` (tables + a paragraph per finding), `src/keys.c` (the `?`
-page). A feature is not done until all three agree with the code. `docs/HEALTH.md`
-records each health check; an item fixed says so there, by commit.
+- Never `pkill -f <pattern>` from a command whose own line contains the pattern (it kills
+  the shell, exit 144), and never kill `vtt` by name: the user may have one open. Record PIDs.
+- `grep` is aliased oddly here: use `awk`, or plain `grep -n` in a subshell.
+- Scratch files go in the session scratchpad, never the repo. In a key script `ESC` +
+  letter means Alt.
+- A test or script that runs `./vtt` or opens the channel must sit in a sandbox
+  (`sandbox_enter`: its own `XDG_DATA_HOME`/`XDG_RUNTIME_DIR`), or it reaches the user's
+  files and running vtts.
+- Driving a live vtt from a script (a fifo and `script`): CODEMAP, *Conventions*.

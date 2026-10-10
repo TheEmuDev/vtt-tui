@@ -132,7 +132,7 @@ it would leave less than 150 bytes of margin, **(c)**.
   `tools/blit_wasm.py` assembles both, writes `web/blit-simd.wasm` and `web/blit.wasm`, and
   keeps the measured variants (`--variant NAME`). **If the page nears the one-round-trip
   limit, this is the first place to revisit:** one module is about 300 bytes back (also on
-  CLAUDE.md's watch list).
+  docs/CODEMAP.md's watch list).
 - **The bytes for it** came from `tools/embed.sh`: a `//` comment after white space, with
   the spaces before it, and spaces at a line's end are no longer sent (never `ws://`,
   which follows a quote). 12,246 bytes with the second module became 11,497; the source
