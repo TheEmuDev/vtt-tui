@@ -199,6 +199,8 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
     flush now runs every turn of the loop. No test covers main's loop; the check is
     written down here: `vtt --ctl 'wait for 30'` held, `:ask` typed, the answer in 1 ms,
     and no CPU used in 3 s with a wait held, before and after an edit.
+- **Step 5 measured** (PERFORMANCE.md, *Events and `wait`*): a held wait costs no CPU; the
+  map-changed read is 1.6 µs after a dozen edits on the largest map, against about 1 µs.
 - **Next: step 6** (`--apply` to an open map, and `--wait`).
 - **Then steps 7-9 in the order below.**
 - **Follow-up after step 6 (the user, 2026-10-09): a thin agent skill.** A user-level skill
