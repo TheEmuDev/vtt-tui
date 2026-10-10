@@ -165,7 +165,7 @@ int ctl_pollfds(Ctl *c, struct pollfd *fds, int max)
     return n;
 }
 
-static void answer_text(Ctl *c, int i, const char *text)
+void ctl_answer_text(Ctl *c, int i, const char *text)
 {
     size_t n = strlen(text);
     char  *o = malloc(n);
@@ -192,7 +192,7 @@ static int conn_read(Ctl *c, int i)
             if (r < 0) { conn_close(c, i); return -1; }
             if (!k->over) break;               /* exactly the cap: a request */
             c->dropped++;
-            answer_text(c, i, "error: the request is over 64 KB\n");
+            ctl_answer_text(c, i, "error: the request is over 64 KB\n");
             return 0;
         }
         ssize_t r = recv(k->fd, k->in + k->in_len, CTL_REQ_CAP - k->in_len, 0);
@@ -225,6 +225,7 @@ static int conn_write(Ctl *c, int i)
 void ctl_service(Ctl *c, const struct pollfd *fds, int count, uint64_t now_ms)
 {
     if (!ctl_active(c) || count < 1) return;
+    c->now_ms = now_ms;
 
     /* The connections first, by fd -- the array shifts as they close, so
      * poll's entries are matched by descriptor, not by position. */
@@ -308,6 +309,9 @@ void ctl_answer(Ctl *c, int i, char *out, size_t len)
     k->out_len = len;
     k->out_off = 0;
     if (k->state == CTL_READY && k->in_len) c->requests++;    /* not a --ctl liveness probe */
+    /* A wait held for minutes is long past the deadline it connected
+     * under: taking its answer gets ten seconds from now. */
+    if (k->state == CTL_WAITING) k->since_ms = c->now_ms;
     k->state = CTL_WRITING;
     /* Most answers go at once; a big one finishes under poll. */
     (void)conn_write(c, i);
@@ -324,6 +328,8 @@ int ctl_hold(Ctl *c, int i, unsigned seq, uint64_t until_ms)
 {
     if (ctl_waiters(c) == CTL_MAX_WAIT) return -1;
     CtlConn *k = &c->c[i];
+    free(k->in);                       /* 64 KB nobody reads again, for up to ten minutes */
+    k->in            = NULL;
     k->state         = CTL_WAITING;
     k->wait_seq      = seq;
     k->wait_until_ms = until_ms;
@@ -361,9 +367,14 @@ static int ctl_connect(const char *path)
 /* How long the server may hold this request, in ms: a `wait` names its own
  * time (`wait [SEQ] for SECONDS`, a minute unsaid, ten at most); anything
  * else is answered at once. */
-static int held_ms(const char *req)
+int ctl_held_ms(const char *req)
 {
-    while (*req == ' ' || *req == '\t' || *req == '\n' || *req == '\r') req++;
+    /* Past what the server skips: blank lines and comments. */
+    for (;;) {
+        while (*req == ' ' || *req == '\t' || *req == '\n' || *req == '\r') req++;
+        if (*req != '#') break;
+        req += strcspn(req, "\n");
+    }
     if (strncmp(req, "wait", 4) != 0 || (req[4] && !strchr(" \t\r\n", req[4]))) return 0;
     size_t      line = strcspn(req, "\n");
     const char *f = strstr(req, " for ");
@@ -518,10 +529,12 @@ int ctl_client_main(const char *req, long pid)
     else len = strlen(req);
 
     size_t alen;
-    char  *ans = exchange(fd, req, len, &alen, held_ms(req) + CTL_TIMEOUT_MS + 5000);
+    char  *ans = exchange(fd, req, len, &alen, ctl_held_ms(req) + CTL_TIMEOUT_MS + 5000);
     close(fd);
     free(mine);
     if (!ans) { fputs("vtt: no answer from the vtt\n", stderr); return 2; }
+    /* Closed with nothing said: :agent off, or the vtt quit, on a held wait. */
+    if (!alen) { free(ans); fputs("vtt: the vtt closed the channel\n", stderr); return 2; }
 
     /* The first line is the verdict; the rest is the report. */
     size_t first = strcspn(ans, "\n");

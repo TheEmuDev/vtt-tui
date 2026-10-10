@@ -399,11 +399,9 @@ void app_tick(App *a, uint64_t now_ms)
                 continue;
             }
             if (a->ctl_held) {
-                static const char full[] = "error: as many agents as there is room for are waiting already\n";
                 free(ans);
-                ans = malloc(sizeof full);
-                if (ans) memcpy(ans, full, sizeof full);
-                len = sizeof full - 1;
+                ctl_answer_text(&a->ctl, i, "error: as many agents as there is room for are waiting already\n");
+                continue;
             }
             ctl_answer(&a->ctl, i, ans, ans ? len : 0);     /* none: out of memory, just close */
         }

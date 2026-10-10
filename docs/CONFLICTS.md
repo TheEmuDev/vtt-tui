@@ -160,7 +160,22 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
     requests wait for `:review`, for the review's perf rows.
   - **Sixteen jobs:** a finished one makes room; with sixteen waiting, a proposal is
     refused.
-- **Step 5: built (2026-10-09); Fable's review is next.** What it holds:
+- **Step 5: built (93e9a1c, 2026-10-09), reviewed by Fable, and fixed.** The review's fixes:
+  - **`wait N` with a number from before a restart** was held, then answered with nothing,
+    and the agent's next `wait` skipped what had happened. It is answered at once with a
+    `reset N` line and everything kept.
+  - **The client gave up at 15 s on a `wait` behind a comment line,** while the server held
+    it. `ctl_held_ms` skips what the server skips, and has a test.
+  - **`:agent off` or quitting with a wait held** printed an empty error. The client says
+    the channel closed; `:agent off` also stops the checkpoint's ten-minute window.
+  - **An answer to a held wait** gets ten seconds from then to be taken (it was measured
+    from the connection, long past); a held wait frees its 64 KB request buffer.
+  - **The bench's tick added a frame to every `--bench-ctl` row.** It runs inside the
+    request's frame now.
+  - `app_events_due` wakes the loop for a change the tick has not stamped, so the quiet time
+    does not lean on the autosave's timer; `ctl_answer_text` replaces two copies.
+
+  What it holds:
   - `app_event.c` (new): the ring of 32 numbered events, `wait [SEQ] [for SECONDS]`'s
     answer, the map-changed event from the checkpoint once the map is quiet 1.5 s, and
     `app_events_flush`, which answers held waits;

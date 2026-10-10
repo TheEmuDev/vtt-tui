@@ -1532,9 +1532,22 @@ void test_ctl_live(void)
     }
     app_jobs_clear(&a);
 
+    CASE(":agent off with a wait held: the waiter is closed with nothing said, and nothing listens on");
+    CtlReader held = { ctl_raw_connect(a.ctl.path), "", 0, 0 };
+    CHECK(write(held.fd, "wait for 600\n", 13) == 13);
+    shutdown(held.fd, SHUT_WR);
+    ctl_pump(&a, waiters_are, &(WaitersAre){ &a, 1 });
+    CHECK(a.agent_seen_ms != 0);
+
     CASE(":agent off closes it and removes the socket; --ctl then finds nobody (exit 2)");
     press(&a, ":agent off\r");
     CHECK_EQ(ctl_active(&a.ctl), 0);
+    CHECK_EQ(a.agent_seen_ms, 0u);
+    for (int k = 0; k < 50 && !ctl_read_some(&held); k++) poll(NULL, 0, 2);
+    CHECK(held.done && held.n == 0);                   /* closed, empty: the client says so */
+    close(held.fd);
+    app_tick(&a, prof_now_ns() / 1000000u);
+    CHECK(a.map->cp == NULL);                          /* no agent: no checkpoint */
     CHECK(access(want, F_OK) != 0);
     {
         fflush(stdout);

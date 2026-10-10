@@ -687,6 +687,22 @@ void test_events(void)
                          "7 job 1 removed by the GM\n"));
     free(t);
 
+    CASE("a number past the newest event is another vtt's: answered at once, with everything kept");
+    t = ctl_ask(&a, "wait 99");
+    CHECK(t && strstr(t, "ok\nseq 7\nreset 99: ") == t && strstr(t, "\n1 job 1 asked in B2:E5: a crypt\n")
+            && strstr(t, "\n7 job 1 removed by the GM\n"));
+    free(t);
+    CHECK_EQ(app_events_after(&a, 99), 1);                 /* so a socket never holds it */
+
+    CASE("the client reads how long a wait may be held: past comments, clamped, nothing else");
+    CHECK_EQ(ctl_held_ms("status\n"), 0);
+    CHECK_EQ(ctl_held_ms("waiter\n"), 0);
+    CHECK_EQ(ctl_held_ms("wait\n"), CTL_WAIT_DEFAULT_S * 1000);
+    CHECK_EQ(ctl_held_ms("wait 41 for 300\n"), 300000);
+    CHECK_EQ(ctl_held_ms("# the agent's loop\n\n  wait 41 for 5\n"), 5000);
+    CHECK_EQ(ctl_held_ms("wait for 9999"), CTL_WAIT_MAX_S * 1000);
+    CHECK_EQ(ctl_held_ms("dump\n# wait for 300\n"), 0);
+
     CASE("no agent listening: no checkpoint runs");
     a.agent_seen_ms = 0;
     app_tick(&a, 1000);
@@ -701,6 +717,7 @@ void test_events(void)
     undo_begin(&a.undo);
     undo_set_tile(&a.undo, m, 9, 9, TILE_ROUGH);
     undo_end(&a.undo);
+    CHECK_EQ(app_events_due(&a, 3000), 0);                 /* wake: the tick has not stamped it */
     app_tick(&a, 3000);                                    /* seen */
     CHECK_EQ(app_events_due(&a, 3000), AUTOSAVE_QUIET_MS);
     app_tick(&a, 3000 + AUTOSAVE_QUIET_MS - 1);

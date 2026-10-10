@@ -1501,6 +1501,7 @@ void app_agent_command(App *a, const char *rest)
     if (!strcmp(rest, "off")) {
         if (!ctl_active(c)) { app_set_status_gm(a, "the agent channel is already off"); return; }
         ctl_stop(c);
+        a->agent_seen_ms = 0;                /* nobody to tell: the checkpoint may stop */
         app_note_gm(a, "agent channel off");
         return;
     }

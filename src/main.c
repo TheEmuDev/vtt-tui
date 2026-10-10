@@ -370,6 +370,12 @@ static int run_headless(const Options *o)
         for (int loop = 0; loop < o->bench_loops && a.running; loop++) {
             if (ctl_req) {
                 prof_frame_begin();
+                /* The tick runs too, in the request's frame, on a clock that
+                 * lets the map go quiet: what it owes an agent for the last
+                 * loop's edits (the map-changed event) is measured. */
+                app_tick(&a, bench_clock_ms);
+                bench_clock_ms += 2 * AUTOSAVE_QUIET_MS;
+                app_tick(&a, bench_clock_ms);
                 size_t len = ctl_len;
                 char  *ans = app_ctl_exec(&a, ctl_req, &len);
                 if (loop == 0 && ans && strncmp(ans, "ok\n", 3) != 0) die("--bench-ctl: %.200s", ans);
@@ -427,16 +433,6 @@ static int run_headless(const Options *o)
                             if (i == 0 && recf) fwrite(sink, 1, (size_t)got, recf);
                     }
                 }
-            }
-            /* With a request each loop, the tick runs too, on a clock that
-             * lets the map go quiet: what it owes an agent for the loop's
-             * edits (the map-changed event) is measured. */
-            if (ctl_req) {
-                prof_frame_begin();
-                app_tick(&a, bench_clock_ms);
-                bench_clock_ms += 2 * AUTOSAVE_QUIET_MS;
-                app_tick(&a, bench_clock_ms);
-                prof_frame_end();
             }
             a.running = 1;      /* a 'q' in the script must not end the bench */
         }

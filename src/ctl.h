@@ -46,6 +46,7 @@ typedef struct {
     char     path[CTL_PATH_MAX];
     CtlConn  c[CTL_SLOTS];
     int      nc;
+    uint64_t now_ms;            /* the last ctl_service's clock */
     uint32_t requests;          /* answered, over the channel's life */
     uint32_t dropped;           /* too big, too slow, or refused for want of a slot */
 } Ctl;
@@ -87,6 +88,14 @@ int  ctl_hold(Ctl *c, int i, unsigned seq, uint64_t until_ms);
 int  ctl_waiters(const Ctl *c);
 /* 1 when connection i (0..nc-1) is a held wait, with what it waits for. */
 int  ctl_waiter(const Ctl *c, int i, unsigned *seq, uint64_t *until_ms);
+
+/* A line of text as connection i's answer (copied). */
+void ctl_answer_text(Ctl *c, int i, const char *text);
+
+/* How long the server may hold this request, in ms: a `wait` names its own
+ * time; anything else is answered at once (0). The client waits that much
+ * longer for its answer. */
+int  ctl_held_ms(const char *req);
 
 /* `vtt --ctl`: sends `req` (NULL reads stdin) to the vtt of `pid` (0: the
  * only one running), prints the answer. Returns the exit status. */

@@ -31,14 +31,22 @@ static unsigned oldest(const App *a)
     return a->event_seq > EVENT_MAX ? a->event_seq - EVENT_MAX + 1 : 1;
 }
 
+/* A number past the newest event is another vtt's (this one was started
+ * since): there is something to say at once -- that, and everything kept. */
 int app_events_after(const App *a, unsigned after)
 {
-    return after < a->event_seq ? (int)(a->event_seq - after) : 0;
+    if (after > a->event_seq) return 1;
+    return (int)(a->event_seq - after);
 }
 
 void app_events_write(const App *a, FILE *out, unsigned after)
 {
     fprintf(out, "seq %u\n", a->event_seq);
+    if (after > a->event_seq) {
+        fprintf(out, "reset %u: that number is not this vtt's (it was started since) - "
+                     "everything kept follows; read jobs and the map again\n", after);
+        after = 0;
+    }
     unsigned from = after + 1;
     if (from < oldest(a)) {
         fprintf(out, "lost %u-%u: more happened than is kept - read jobs and the map again\n", from, oldest(a) - 1);
@@ -93,6 +101,10 @@ static int map_due(const App *a, uint64_t now_ms)
 
 int app_events_due(const App *a, uint64_t now_ms)
 {
+    /* A change the tick has not stamped yet: wake for it, so the quiet time
+     * is counted from now and not from whatever else wakes the loop. */
+    const Map *m = a->map;
+    if (m && m->cp && m->gen != a->cp_gen && m->gen != a->seen_gen) return 0;
     return map_due(a, now_ms);          /* a held wait's deadline is ctl_due's */
 }
 
