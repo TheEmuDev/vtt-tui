@@ -1,6 +1,8 @@
 #include "util.h"
 
+#include <errno.h>
 #include <fcntl.h>
+#include <unistd.h>
 #include <stdarg.h>
 #include <sys/stat.h>
 #include <stdio.h>
@@ -310,22 +312,30 @@ int fd_nonblock_cloexec(int fd)
 char *file_read(const char *path, size_t cap, size_t *len, int *too_big)
 {
     if (too_big) *too_big = 0;
-    FILE *f = fopen(path, "rb");
-    if (!f) return NULL;
-    size_t size = 4096, n = 0;
+    int fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return NULL;
+    /* One buffer of the file's size and one read into it, where the size is
+     * known: growing by doubling through stdio copied a file three times.
+     * A pipe or a file that grows meanwhile still reads to its end. */
+    struct stat st;
+    size_t size = fstat(fd, &st) == 0 && S_ISREG(st.st_mode) && st.st_size > 0 ? (size_t)st.st_size + 1 : 4096;
+    if (size > cap + 2) size = cap + 2;                /* enough to see it is too big */
+    size_t n = 0;
     char  *buf = xmalloc(size);
+    int    bad = 0;
     for (;;) {
         if (n + 1 >= size) {
             if (size > cap + 1) break;
             buf = xrealloc(buf, size *= 2);
         }
-        size_t r = fread(buf + n, 1, size - n - 1, f);
-        if (!r) break;
-        n += r;
+        ssize_t r = read(fd, buf + n, size - n - 1);
+        if (r > 0) { n += (size_t)r; continue; }
+        if (r < 0 && errno == EINTR) continue;
+        bad = r < 0;
+        break;
     }
-    int err = ferror(f);
-    fclose(f);
-    if (err || n > cap) {
+    close(fd);
+    if (bad || n > cap) {
         if (n > cap && too_big) *too_big = 1;
         free(buf);
         return NULL;

@@ -980,7 +980,7 @@ times the pieces (the desktop, 2026-10-10, median of 51):
 | path | measured | speed of light | gap, and why |
 |---|---|---|---|
 | the look, on a key, at most once a second | 0.77 µs | one `stat`: 0.9 µs | none |
-| keeping the base at a load | nothing added: the file is read whole into the buffer that is kept, and parsed from it. `mapio.load` on 512×512 went from 3.2-3.3 ms to 2.7 | a copy of the bytes, 25 µs for 789 KB | none; under it, since the copy is the read |
+| keeping the base at a load | nothing added: the file is read whole into the buffer that is kept, and parsed from it. An A/B of the two loaders on one 512×512 file, 51 loads each, three times: 3.0-3.2 ms before the step, 2.6-2.8 after | a copy of the bytes, 25 µs for 789 KB | none; under it, since the copy is the read. (As first built it was 5% **slower**, 3.3 ms: `file_read` grew its buffer by doubling through stdio and copied the file three times. It sizes one buffer from the file and reads once now. The first figure published here, "3.2 to 2.7", had set a cold single load against a warm median, and was wrong when it was written.) |
 | keeping the base at a save | nothing added: the text written is the buffer kept | the same | none |
 | an outside change, once, when the keys are quiet | 5.4-5.8 ms on the largest map | the plan put it at two parses (about 8.4 ms by the laptop's loader) plus the compare | the two parses are all of it, and the loader's 3.4 ns a byte is the gap (*Known gaps*). Parsing the base again, where a parsed copy could be kept, is the plan's choice: a megabyte held all session to save 2.7 ms a change |
 | the compare of two whole maps | 29-35 µs | 59 µs a MB estimated | none |

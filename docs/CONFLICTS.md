@@ -292,7 +292,11 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
     needed the text in memory, so the `fputc` gap (HEALTH.md row 17) was closed with it:
     the largest unflushed save went from 3.26 to 1.18 ms.
   - **Every load now reads the file whole** and parses from memory, capped at 64 MB; the
-    base costs no second read. `mapio.load` on the largest map went from 3.2 to 2.7 ms.
+    base costs no second read. Loading the largest map is 2.6-2.8 ms against 3.0-3.2 before,
+    by an A/B of the two on one file. That was not so when this line was first written:
+    the load was 5% slower then, and the claim came from comparing a cold load with a warm
+    one. `file_read` reading the file in one sized read is what made it true (step 8's perf
+    run showed the row had not moved, which is how it was caught).
   - **Feedback (`c`) is refused on a change from the file:** there is nobody to send it to.
   - **`:w NAME` to another file is never refused,** and a change waiting from the old file
     is scrapped: the map is the new file's.
