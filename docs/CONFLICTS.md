@@ -356,9 +356,44 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
     corrected (the event's wording, the new link's summary, checkpoint.c).
   - `--bench-outside FILE` and the row `build, outside change 512x512`: another program
     rewriting the open map's file every loop, so `disk.reload` is measured as the app meets
-    it (5.0 ms at p50), not only by the tool.
+    it (6.0 ms at p50), not only by the tool.
   - PERFORMANCE.md's tables regenerated with that row, and the prose figures under
     *Proposals* and *The checkpoint* brought in line with them (HEALTH.md B6).
+- **Step 9's review: Fable looked at the whole feature, across the steps (2026-10-10).**
+  Every finding was reproduced in a test before it was fixed (suite `diskwhole`, 19 failing
+  checks first). What it found between the steps:
+  - **`:e` kept the old map's jobs** (high). `app_close_map` and a trip cleared them and
+    sent `map closed`; `app_open_map` over a map in hand did neither. A change set made
+    on one map could be reviewed and accepted onto another; an `--apply --wait` was left
+    to time out; and bare `:e`, the documented way to take the file's version, left the
+    file's job behind so `:w` was refused again. Opening now puts the old map's jobs down
+    and says so.
+  - **An agent could replace or scrap the file's change** (high, medium). `job N propose`
+    put the agent's change into the file's own job, and `job N drop` scrapped it; either
+    way the GM's next `:w` wrote over another program's work unseen. The file's job and an
+    `--apply`'s are now the GM's alone (`app_job_gm_only`): an agent may read them, and
+    `take`, `area`, `say`, `propose` and `drop` are refused.
+  - **A job's number was given out again at once** (medium): `:ask`, `:ask 1 remove`,
+    `:ask` made a second #1, and a program started for the first could take the second.
+    Step 7 had met the same reuse for the file's job. **Changed from the plan:** a new job
+    takes the number after the last one given (`App.job_last`), back to 1 after 99, and
+    the numbers carry on across maps.
+  - **"No room for another change" never cleared** (low): with 16 jobs waiting, the file's
+    change was said to be stuck, and stayed so after a job went. It is read again once a
+    slot is free.
+  - **A file's job kept the checkpoint running** with no agent anywhere (low). It no
+    longer counts as an agent listening. Measuring that showed the outside-change row
+    0.55 ms dearer, which is new pages and not work (PERFORMANCE.md, *Other writers of the
+    file*; HEALTH.md B12).
+  - A third copy of "a box as B2:F6" (app_agent.c) made it one function, `cs_box_name`
+    (HEALTH.md row 2, closed).
+  - PERFORMANCE.md: the prose under *The jobs' tints*, *Proposals from the channel* and
+    *Events and `wait`* still quoted the run before; read off the final tables.
+  - The plan's memory cap for change sets was never built; the plan's line says so now
+    (HEALTH.md row 44).
+  - **The perf scenarios broke on the new numbering** (`:ask 1 remove` named a job that
+    was #2 by the second loop, so jobs piled up and `job.highlight` read 5.5 µs). The bench
+    numbers each loop's jobs from 1.
 - **Follow-up after step 6 (the user, 2026-10-09): a thin agent skill.** A user-level skill
   (`~/.claude/skills/vtt/`, not the repo's `.claude/`: the agents that build maps run
   wherever the GM starts them) that says when to use vtt, the opening move (`vtt --ctl
@@ -743,6 +778,9 @@ Entering a review redraws the changed cells in the window, once.
 - A change set stores before and after per element: about 4 bytes a square, 512 per
   creature.
 - 16 jobs, plus a few outside proposals, are capped together at the undo log's limit.
+  *(Not built: nothing bounds a change set's memory but the 16 jobs and the map's size; a
+  set of every square of the largest map is about 6 MB (8 bytes a changed cell, three cells a
+  square). HEALTH.md row 44.)*
 - The base's bytes.
 - The checkpoint, only while an agent waits or a job is open.
 
@@ -778,10 +816,10 @@ the median of three runs, 2026-10-10. docs/PERFORMANCE.md has the tables these c
 | the map-changed event | the changed blocks + the small parts, about 1 µs | 1.6 µs for a dozen edits | the small parts are compared whole |
 | `wait`, held | nothing when idle | no CPU in 3 s; a verdict reaches the waiter 1 ms after the key, the client's start-up included | none. No bench row: the bench has no socket to hold a wait on (HEALTH.md row 8) |
 | the file check | one `stat`, 0.9 µs | 0.8 µs | none |
-| an outside change, 512×512 | two parses, about 8.4 ms by the laptop's loader, + the compare | 5.0-6.1 ms; the compare 42-54 µs | the two parses are all of it. The loader runs at 3.4 ns a byte (B10) |
+| an outside change, 512×512 | two parses, about 8.4 ms by the laptop's loader, + the compare | 5.6-6.1 ms; the compare 42-75 µs | the two parses are all of it. The loader runs at 3.4 ns a byte (B10), and about 0.55 ms is new pages for the two maps each time (B12) |
 | keeping the base | a copy of the bytes, 25 µs for 789 KB | nothing added: the file is read whole into the buffer that is kept, and a save keeps the text it wrote. A load went from 3.0-3.2 ms to 2.6-2.8 | none. (Step 7 first claimed this from a cold load against a warm one; the A/B on one file showed that build 5% slower, and `file_read` was fixed, 0df7624) |
 | `--apply` finding the holder | 3 µs per running vtt | about 0.1 ms per running vtt | **the estimate was wrong:** it took the round trip between two running processes, and this one wakes a vtt asleep in `poll` (B4). A tenth of what starting `vtt --apply` costs |
-| `:agent command` on `:ask` | not estimated in the plan; a process started, some tens of µs | 0.36 ms | forking twice, so the agent is nobody's child. On a key that hands work to a program taking seconds |
+| `:agent command` on `:ask` | not estimated in the plan; a process started, some tens of µs | 0.36-0.38 ms | forking twice, so the agent is nobody's child. On a key that hands work to a program taking seconds |
 
 **Where the promised rows are.** `tools/perf.sh`: `agent, proposal, review`, `agent,
 proposal, accept`, `build, a job's tint`, `agent, map changed event`, `build, :ask starts an

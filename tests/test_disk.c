@@ -148,7 +148,7 @@ void test_disk(void)
         CHECK(o && map_tile(o, 5, 5) == TILE_HAZARD && map_tile(o, 2, 2) == TILE_ROUGH);
         map_free(o);
     }
-    app_jobs_clear(&a);
+    jobs_reset(&a);
 
     CASE("their change where the GM has changed too is a conflict, shown as one");
     undo_begin(&a.undo);
@@ -172,7 +172,7 @@ void test_disk(void)
         CHECK(o && map_tile(o, 7, 7) == TILE_WATER);
         map_free(o);
     }
-    app_jobs_clear(&a);
+    jobs_reset(&a);
 
     CASE(":w! writes over an unreviewed change; its proposal is scrapped with it");
     outside_edit(path, 8, 8, TILE_BRUSH);
@@ -192,7 +192,7 @@ void test_disk(void)
         CHECK(o && map_tile(o, 8, 8) == TILE_FLOOR && map_tile(o, 9, 9) == TILE_WATER);
         map_free(o);
     }
-    app_jobs_clear(&a);
+    jobs_reset(&a);
 
     CASE("at most one look a second: a second key in the same second does not stat again");
     key_then_quiet(&a, &now);
@@ -217,7 +217,7 @@ void test_disk(void)
     CHECK_EQ(map_tile(m, 3, 3), TILE_BRUSH);
     press(&a, ":w\r");
     CHECK(strstr(a.status, "wrote ") != NULL);
-    app_jobs_clear(&a);
+    jobs_reset(&a);
 
     CASE("written again with nothing changed: nothing to review, and :w passes");
     {
@@ -301,7 +301,7 @@ void test_disk(void)
         map_free(o);
     }
     press(&a, ":w!\r");
-    app_jobs_clear(&a);
+    jobs_reset(&a);
 
     CASE("REVIEW 2: the file's job is the file's: an agent's job that took its number is left alone");
     outside_edit(path, 1, 5, TILE_BRUSH);
@@ -314,6 +314,7 @@ void test_disk(void)
         snprintf(rm, sizeof rm, ":ask %d remove\r", num);
         a.disk_checked_ms = a.now_ms;                       /* no look between: the same second */
         press(&a, rm);
+        a.job_last = num - 1;                               /* as after the numbers have gone round */
         char *t = ctl_ask(&a, "tile A12 water\n");          /* an agent's, taking the number */
         free(t);
         int aj = -1;
@@ -322,7 +323,7 @@ void test_disk(void)
         press(&a, ":w!\r");
         CHECK(aj >= 0 && a.jobs[aj].state == JOB_READY);    /* not scrapped as the file's */
     }
-    app_jobs_clear(&a);
+    jobs_reset(&a);
     key_then_quiet(&a, &now);
 
     CASE("REVIEW 4: a change noticed, then the file deleted: nothing to review, and :w puts the map back");
@@ -365,9 +366,9 @@ void test_disk(void)
         snprintf(other, sizeof other, ":w %s\r", path);     /* and back to the first file */
         press(&a, other);
     }
-    app_jobs_clear(&a);
+    jobs_reset(&a);
     key_then_quiet(&a, &now);
-    if (a.disk_state != DISK_NONE) { press(&a, ":w!\r"); app_jobs_clear(&a); }
+    if (a.disk_state != DISK_NONE) { press(&a, ":w!\r"); jobs_reset(&a); }
 
     CASE("REVIEW 6: a scrapped change brought back with :review N stands in :w's way again");
     outside_edit(path, 4, 5, TILE_BRUSH);
@@ -386,7 +387,7 @@ void test_disk(void)
         CHECK(strstr(a.status, "not saved - ") != NULL);
         press(&a, ":w!\r");
     }
-    app_jobs_clear(&a);
+    jobs_reset(&a);
 
     CASE("pinned: :wq is refused too and the map stays open; a part accepted by box leaves :w refused; two changes are one job");
     outside_edit(path, 5, 1, TILE_BRUSH);
@@ -409,7 +410,7 @@ void test_disk(void)
     press(&a, ":w\r");
     CHECK(strstr(a.status, "not saved - ") != NULL);        /* the rest still waits */
     press(&a, ":w!\r");
-    app_jobs_clear(&a);
+    jobs_reset(&a);
     m = a.map;
 
     CASE("a map another vtt has open: asked first; y opens it here too, n leaves it");
@@ -476,6 +477,130 @@ void test_disk(void)
     }
 
 out:
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
+static int jobs_used(const App *a)
+{
+    int n = 0;
+    for (int i = 0; i < JOB_MAX; i++) n += a->jobs[i].used;
+    return n;
+}
+
+/* What the review of the whole feature found between the steps: jobs across
+ * :e, an agent's requests on a job that is the file's, a table that was full. */
+void test_disk_whole(void)
+{
+    Sandbox sb = sandbox_enter("diskwhole");
+    Renderer r;
+    App a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK(ctl_blank_map(&a, sb.dir, 20, 12));
+    if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    char path[700], other[700], cmd[800];
+    str_lcpy(path, a.map->path, sizeof path);
+    write_map_file(sb.dir, "other.vtt");
+    snprintf(other, sizeof other, "%s/other.vtt", sb.dir);
+    uint64_t now = 10000;
+    char *t;
+
+    CASE(":e NAME puts the map down: its jobs go with it, an agent is told, a review typed over is left");
+    t = ctl_ask(&a, "tile D4 water\n");
+    free(t);
+    CHECK_EQ(jobs_used(&a), 1);
+    press(&a, ":review\r");
+    CHECK_EQ(a.ed.mode, ED_REVIEW);
+    unsigned seq = a.event_seq;
+    snprintf(cmd, sizeof cmd, ":e %s\r", other);
+    press(&a, cmd);
+    CHECK(a.map && a.map->w == 2);
+    CHECK_EQ(jobs_used(&a), 0);
+    CHECK_EQ(a.review, -1);
+    CHECK(a.ed.mode != ED_REVIEW);
+    CHECK(a.event_seq > seq && strstr(a.events[a.event_seq % EVENT_MAX].text, "map closed: ") != NULL);
+    snprintf(cmd, sizeof cmd, ":e %s\r", path);
+    press(&a, cmd);
+    CHECK(a.map && a.map->w == 20);
+
+    CASE("bare :e over the file's change: the file is the map now, its job is gone, and :w passes");
+    outside_edit(path, 5, 5, TILE_HAZARD);
+    key_then_quiet(&a, &now);
+    CHECK(disk_job(&a) >= 0);
+    press(&a, ":e\r");
+    CHECK(a.map && map_tile(a.map, 5, 5) == TILE_HAZARD);
+    CHECK_EQ(jobs_used(&a), 0);
+    key_then_quiet(&a, &now);
+    CHECK_EQ(a.disk_state, DISK_NONE);
+    press(&a, ":w\r");
+    CHECK(strstr(a.status, "wrote ") != NULL);
+    key_then_quiet(&a, &now);
+
+    CASE("the file's change is the GM's to decide: an agent can read it, never take, replace, answer or drop it");
+    outside_edit(path, 7, 7, TILE_WATER);
+    key_then_quiet(&a, &now);
+    int dj = disk_job(&a);
+    CHECK(dj >= 0);
+    if (dj >= 0) {
+        int num = a.jobs[dj].num;
+        char sum[sizeof a.jobs[0].summary];
+        str_lcpy(sum, a.jobs[dj].summary, sizeof sum);
+        static const char *const TRY[] = { "job %d propose \"mine\"\ntile B2 water\n", "job %d take\n", "job %d area B2:C3\n",
+                                           "job %d say \"hello\"\n", "job %d drop\n" };
+        for (int i = 0; i < 5; i++) {
+            snprintf(cmd, sizeof cmd, TRY[i], num);
+            t = ctl_ask(&a, cmd);
+            CHECK(t && !strncmp(t, "error", 5) && strstr(t, "the GM's to decide") != NULL);
+            free(t);
+        }
+        CHECK(a.jobs[dj].used && a.jobs[dj].state == JOB_READY && a.jobs[dj].from == JOB_FROM_DISK);
+        CHECK(!strcmp(a.jobs[dj].summary, sum));
+        snprintf(cmd, sizeof cmd, "job %d dump\n", num);
+        t = ctl_ask(&a, cmd);
+        CHECK(t && !strncmp(t, "ok\n", 3));
+        free(t);
+        CHECK_EQ(a.disk_state, DISK_PROPOSED);
+        /* The file's job alone is no agent listening: no checkpoint runs for it. */
+        a.agent_seen_ms = 0;
+        app_events_flush(&a, now);
+        CHECK(a.map->cp == NULL);
+    }
+    press(&a, ":w!\r");
+    jobs_reset(&a);
+    key_then_quiet(&a, &now);
+
+    CASE("no room for the file's change: once a job is gone, the next quiet key reads the file and proposes it");
+    for (int i = 0; i < JOB_MAX; i++) { t = ctl_ask(&a, "tile A1 water\n"); free(t); }
+    CHECK_EQ(jobs_used(&a), JOB_MAX);
+    outside_edit(path, 9, 9, TILE_BRUSH);
+    key_then_quiet(&a, &now);
+    CHECK_EQ(a.disk_state, DISK_STUCK);
+    CHECK_EQ(disk_job(&a), -1);
+    snprintf(cmd, sizeof cmd, ":ask %d remove\r", a.jobs[0].num);
+    press(&a, cmd);
+    key_then_quiet(&a, &now);
+    CHECK(disk_job(&a) >= 0);
+    CHECK_EQ(a.disk_state, DISK_PROPOSED);
+    press(&a, ":w!\r");
+    jobs_reset(&a);
+
+    CASE("a job's number is not given out again while another is free: a run started for the old job cannot take the new");
+    press(&a, ":ask a crypt\r");
+    int first = -1, second = -1;
+    for (int i = 0; i < JOB_MAX; i++) if (a.jobs[i].used) first = a.jobs[i].num;
+    snprintf(cmd, sizeof cmd, ":ask %d remove\r", first);
+    press(&a, cmd);
+    press(&a, ":ask a tavern\r");
+    for (int i = 0; i < JOB_MAX; i++) if (a.jobs[i].used) second = a.jobs[i].num;
+    CHECK(first > 0 && second > 0 && second != first);
+    snprintf(cmd, sizeof cmd, "job %d take\n", first);
+    t = ctl_ask(&a, cmd);
+    CHECK(t && !strncmp(t, "error", 5));
+    free(t);
+
     app_free(&a);
     rnd_free(&r);
     sandbox_leave(&sb);

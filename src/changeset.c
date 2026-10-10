@@ -853,6 +853,11 @@ void cs_summary(const ChangeSet *cs, const CsBox *box, char *out, size_t outsz)
     if (!out[0]) snprintf(out, outsz, "no changes");
 }
 
+void cs_box_name(const CsBox *b, char *buf, size_t sz)
+{
+    map_region_name(b->x0, b->y0, b->x1, b->y1, buf, sz);
+}
+
 int cs_bounds(const ChangeSet *cs, int *x0, int *y0, int *x1, int *y1)
 {
     Tally t = { 0 };

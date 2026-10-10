@@ -1129,6 +1129,11 @@ static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FIL
                 snprintf(err, errsz, "#%d was %s - propose alone offers a new change", j->num, app_job_state_name(j->state));
                 return -1;
             }
+            if (app_job_gm_only(j)) {
+                snprintf(err, errsz, "#%d is %s: the GM's to decide - propose alone offers a change of your own", j->num,
+                         j->from == JOB_FROM_DISK ? "what another program wrote to the file" : "an --apply's");
+                return -1;
+            }
         }
         ed->header = 1;
         ed->job = slot;

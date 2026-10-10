@@ -73,11 +73,11 @@ review and the next. The rules (the user, 2026-10-09):
 | # | review | item | kind | why it was left | closes when | checked |
 |---|---|---|---|---|---|---|
 | 1 | step 4 (ced6c35) | The proposal code (`propose` parsing, `proposal_begin`/`end`, `finish_proposal`, about 120 lines) sits in `app_ctl.c`, 1,564 lines, though `app_ctl_job.c` (204) now exists for jobs. | organization | It shares `app_ctl.c`'s `Edits` struct, which is private to that file; moving it means exporting the struct or splitting it. Skipped at the time with no reason written down. | `Edits` is exported or split and the three functions move; or `app_ctl.c` is next reorganized | 2026-10-09 |
-| 2 | step 4 | `box_name` (a `CsBox` to "B2:F6") is defined twice: `app_job.c:89`, `app_ctl_job.c:14`. | duplication | Two copies, within the rule of three. | a third caller appears: it becomes one function in `app_priv.h` | 2026-10-09 |
+| ~~2~~ | *closed, below* | | | | | |
 | 3 | step 4 | `jobs json` is checked for validity only with one asked job (test_jobs.c:375). Nothing checks it with a ready proposal, a thread of several lines, or a conflict count above 0. | test gap | Not written. | a `jobsctl` case runs `json_valid` on `jobs json` after a proposal and a conflicting GM edit | 2026-10-09 |
 | 4 | step 4 | No test for `job N say` with the wrong number of words, or `:agent accept` with no word after it. | test gap | Not written. | two error-path cases in `jobsctl` | 2026-10-09 |
 | 5 | step 4 | A proposal that came in under `:agent accept auto` while the GM was busy still lands at the next key after the GM types `:agent accept review`. | behavior | Kept: "at once" is decided when a proposal arrives, and is documented so in CONTROL.md. Arguable; the reviewer said so too. | the user decides it should follow the setting at landing time | 2026-10-09 |
-| 6 | step 5 (93e9a1c) | The "map closed" event when the GM travels through a link to another map (`app.c:196`) has no test. Closing a map is tested; traveling is not. | test gap | Needs two map files and a party to travel; skipped as "hard". | a case in `events` (or test_places.c's trip tests) checks the event after `g o` | 2026-10-09 |
+| 6 | step 5 (93e9a1c) | The "map closed" event when the GM travels through a link to another map (`app.c:196`) has no test. Closing a map is tested; traveling is not. | test gap | Needs two map files and a party to travel; skipped as "hard". | a case in `events` (or test_places.c's trip tests) checks the event after `g o` | 2026-10-10: the final review found the sibling path, `:e`, untested and broken (fixed, suite `diskwhole`); the trip is still untested |
 | ~~7~~ | *closed, below* | | | | | |
 | 8 | step 5; first raised by the review of the plan's third draft | `ctl.wait`, the zone round answering held waits, has no perf row: the bench has no socket to hold a wait on. | performance | Stood in for by a manual check against a live vtt (1 ms from key to answer, no CPU while held), written out in CONFLICTS.md *Progress*. | the bench gains a client that holds a wait, or a test times the flush | 2026-10-09 |
 | 9 | step 5 | The main loop (`main.c`) has no test. Its bug in step 5 (keys handled in the drain never reached the flush) was found only by driving a live vtt. | test gap | The loop needs a terminal; every test calls `app_key`/`app_tick` directly. | the loop's body becomes a function a test can call with a fake terminal | 2026-10-09 |
@@ -111,10 +111,11 @@ review and the next. The rules (the user, 2026-10-09):
 | 37 | step 8 (d5ed619) | The `:` line holds 255 characters and cuts a longer one without saying: an `:agent command` of 250 characters was set as its first 241. | behavior | The limit is the `:` line's own, older than the step, and true of every command. | the `:` line refuses to take a character past its length, or says it cut | 2026-10-10 |
 | 38 | step 8 | Three places start a process, each with its own care: the card editor (resets SIGINT/SIGQUIT), `:mirror` (a pipe that reports a failed exec), the agent command (closes descriptors, resets SIGPIPE, sets the environment). | duplication | The detaching double fork is two copies; what differs is the hygiene. | one `spawn` helper holds signals, descriptors and the exec-failure report | 2026-10-10 |
 | 39 | step 8 | A command that cannot run (a mistyped name) is seen only in the session log, and not at all with the log off: `sh` starts fine, and the failure is `sh`'s own message. | behavior | No way to tell from outside that the shell's command failed, short of waiting for it; README says to switch `:log` on. | the command's first lines of output, or its exit, reach the status line | 2026-10-10 |
-| 40 | step 8 | Nothing bounds how many agents run: each `:ask` and each `c` starts one, and feedback sent while a run is still working puts two on one job. | behavior | By design for now (README says so); vtt does not track what it started, since the agent is nobody's child. | vtt keeps the started pids and holds a second run of a job until the first is gone | 2026-10-10 |
+| 40 | step 8 | Nothing bounds how many agents run: each `:ask` and each `c` starts one, and feedback sent while a run is still working puts two on one job. | behavior | By design for now (README says so); vtt does not track what it started, since the agent is nobody's child. | vtt keeps the started pids and holds a second run of a job until the first is gone | 2026-10-10 ; 2026-10-10: the final review found this worse with reused job numbers (an orphaned run taking a new job); the numbers are no longer reused at once |
 | 41 | step 8 | Tests do not cover a fork or pipe failing (now said on the GM's line), a command that never reads its stdin, or descriptors at 256 and above being passed to the agent. | test gap | The first needs fault injection; the last is an edge of the GM's own shell. | a test with `RLIMIT_NPROC` or a stubbed `fork`; `close_range` where there is one | 2026-10-10 |
 | 42 | step 8's review, older than it | A vtt ended by SIGTERM leaves its socket file behind (`on_fatal` does not stop the channel); the next client's refused connect removes it. | robustness | Harmless: stale sockets are removed on sight. | `on_fatal` unlinks the socket | 2026-10-10 |
 | 43 | step 9's doc pass (2026-10-10) | The plan promised perf rows for a highlight and a review with the change off the window. Neither exists, and no test shows a job's tint drawing nothing when its box is off screen (the preview's cull is tested, test_changeset.c:391). | test gap, performance | The cull is by block before any square is read, the same code path as the measured rows with fewer blocks. | a `jobs` case scrolls the window off a job's box and checks no cell is tinted; a perf row only if the tint's walk ever shows | 2026-10-10 |
+| 44 | the final review (2026-10-10) | The plan says change sets are "capped together at the undo log's limit". Nothing bounds a change set's memory: 8 bytes a changed cell, so a proposal of every square of a 512×512 map is about 6 MB, and 16 of them about 100 MB. | robustness | Only a deliberate fill of the largest map sixteen times gets there; the request cap (64 KB, `CTL_OPS_MAX` ops) bounds what one request can write. | a cap on cells across all waiting jobs, with the refusal an agent is told | 2026-10-10 |
 
 ### A second opinion on this list (Fable, 2026-10-10)
 
@@ -149,6 +150,7 @@ still true. Its ranking, to work from:
 | B9 | step 7, PERFORMANCE.md *Known gaps* | The map writer is 1.18 ms for the largest map against about 0.5: the text grows in a memory stream (a reallocation and a copy each doubling) and each row is a locked `fwrite`. | Left after the larger gap closed. | the writer sizes one buffer from the map and fills it | 2026-10-10 |
 | B10 | step 7, PERFORMANCE.md *Known gaps* | The loader finds a square's kind by searching a table a character (`tile_from_file_char`, `edge_from_file_char`) and reads a line at a time: 3.4 ns a byte, 2.7 ms for the largest map. An outside change pays it twice. | It predates the step; measured here because step 7 leans on it. | a 256-entry table each way, and the rows parsed in place | 2026-10-10 |
 | B11 | step 7: `make fuzz` (the loader), 2026-10-10 | **A bug, not from step 7** (the commit before it fails the same input): a card whose text starts with a line holding only a control character saves with two leading blank lines (`\| ` and `\|`), and loading that file drops them, so the map saved, loaded and saved again is not the same bytes. The fuzzer's round-trip check aborts on it. The input is kept: `tests/fuzz-found/card-leading-blank.vtt`. | Outside step 7 (cards, card.c's cleaning and the loader's `card_take`); found while fuzzing the loader this step changed. To be fixed with the review items. | the card's text is normalized the same way when it is read as when it is set (leading blank lines dropped after control characters are cleaned), the input joins the fixtures, and `make fuzz` passes on it | 2026-10-10 |
+| B12 | the final review's fixes, 2026-10-10, PERFORMANCE.md *Other writers of the file* | Reading an outside change pays about 0.55 ms of its 5.9 for new pages: the two maps it parses are freed, the allocator hands the memory back, and the next reload faults it in again. | Outside changes are rare, and keeping two scratch maps would hold 2 MB for the session. | outside changes become frequent (an agent writing the file in a loop): keep the scratch maps | 2026-10-10 |
 
 ### Disproved
 
@@ -167,10 +169,11 @@ Rows move here when fixed, with the commit.
 | B5 | CONFLICTS.md said "the checkpoint in map.c". | step 9: checkpoint.c. |
 | B6 | PERFORMANCE.md's Proposals floor table quoted figures older than the table above it. | step 9: every figure in the two floor tables read off the current tables; the microsecond rows that move run to run are given as ranges. |
 | B8 | docs/KEYS.md did not mention the review mode. | step 9: *The review, read against the rules*. |
+| 2 | `box_name` (a `CsBox` to "B2:F6") was defined twice. | the final review found the third copy (app_agent.c): `cs_box_name` in changeset.c, 2026-10-10. |
 
 ### Where the rows came from
 
-Ten reviews, 2026-10-07 to 2026-10-09. The first seven predate this section: on 2026-10-09
+Thirteen reviews, 2026-10-07 to 2026-10-10. The first seven predate this section: on 2026-10-09
 their reports were read back from the session's record and every item checked against the
 code as it stood (137 items: 117 fixed, 4 overtaken when the plan dropped "accept saves", 16
 open, none disproved). Steps 4-6 were entered from their reports as they came.
@@ -187,6 +190,9 @@ open, none disproved). Steps 4-6 were entered from their reports as they came.
 | 2026-10-09 | step 4 | 1-5 |
 | 2026-10-09 | step 5 | 6-9 |
 | 2026-10-09 | step 6 | 10-16 |
+| 2026-10-10 | step 7 | 31-36 |
+| 2026-10-10 | step 8 | 37-42 |
+| 2026-10-10 | step 9 and the whole feature (two high, two medium, four low: all fixed but the memory cap) | 43, 44, B12 |
 
 ## 2026-09-28, at 17e31e3
 

@@ -293,6 +293,16 @@ feedback. Nothing you send changes the GM's map until then, unless the GM has ty
    was asked, `propose`, answer feedback), `wait` again from the last `seq`.
 6. `job N drop` gives a job back: the GM's waits as asked; one of your own is withdrawn
    (the GM can still bring it back with `:review N`).
+
+   Two kinds of job are the GM's alone to decide, and `take`, `area`, `say`, `propose` and
+   `drop` on them are refused: a change that came from the map's file, and one sent by
+   `--apply`. You may read them (`job N dump`, `check`, `describe`). To offer something
+   else, `propose` a change of your own.
+
+   A job's number is yours while the job lasts and is not given to another job straight
+   after: numbers climb to 99 before they start again at 1. If a number you hold answers
+   `no job #N`, the job was removed or its map was closed (`:e` to another map closes one
+   too, with a `map closed` event).
 7. When the GM says "here", "this room" or "that one", ask `vtt --ctl marked` and work from
    the squares it names. `marked` says which area the cursor is in.
 8. Put down the GM's stamps (`vtt --ctl stamps`) for anything they have one for, rather than

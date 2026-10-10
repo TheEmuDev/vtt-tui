@@ -22,6 +22,7 @@ void app_disk_reset(App *a)
     a->disk_new_len = 0;
     a->disk_state = DISK_NONE;
     a->disk_job = 0;
+    a->disk_full = 0;
     a->disk_why[0] = '\0';
 }
 
@@ -54,6 +55,7 @@ static void stuck(App *a, const char *why)
 {
     char msg[220];
     a->disk_state = DISK_STUCK;
+    a->disk_full = 0;
     str_lcpy(a->disk_why, why, sizeof a->disk_why);
     snprintf(msg, sizeof msg, "%s - :e opens the file's, :w! writes yours over it", why);
     app_note_gm(a, msg);
@@ -101,6 +103,7 @@ static void disk_read(App *a)
             if (slot < 0) {
                 cs_free(&cs);
                 stuck(a, "the file changed on disk, and there is no room for another change to review");
+                a->disk_full = 1;
             } else {
                 if (a->review == slot) app_review_leave(a);      /* its change set is replaced */
                 free(a->disk_new);
@@ -133,6 +136,10 @@ void app_disk_check(App *a, int now_too)
                 a->disk_job   = a->jobs[i].num;
                 a->disk_seen  = m->disk;
             }
+    /* Stuck only for want of room, and a job has gone since: read again. */
+    if (a->disk_state == DISK_STUCK && a->disk_full)
+        for (int i = 0; i < JOB_MAX; i++)
+            if (!a->jobs[i].used || a->jobs[i].state > JOB_READY) { a->disk_reread = 1; a->disk_full = 0; break; }
     {
         PROF_ZONE("disk.check");
         MapDisk cur;

@@ -43,7 +43,7 @@ typedef struct {
     uint8_t  state;                /* JobState */
     uint8_t  from;                 /* JobFrom */
     uint8_t  at_once;              /* :ask! -- the result lands when it comes */
-    int      num;                  /* 1..JOB_NUM_MAX, the lowest free when made */
+    int      num;                  /* 1..JOB_NUM_MAX, the next after the last given (App.job_last) */
     char     text[JOB_TEXT_MAX];   /* what was asked */
     int      has_box;              /* the GM's v box when asked */
     CsBox    box;

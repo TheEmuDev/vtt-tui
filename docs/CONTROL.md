@@ -99,7 +99,7 @@ GM accepts it, or at once under `:agent accept auto`):
 | `job N area REGION` | where the agent will work, tinted on the GM's screen |
 | `job N say "..."` | a line for the GM's status line and the job's thread |
 | `propose ["..."]`, `job N propose ["..."]` | first in a request: its edits are an idea of the agent's own (a new job), or job N's answer. Edits with neither are an idea of the agent's own |
-| `job N drop` | give it back: the GM's job waits as asked; the agent's own is scrapped, kept for the GM's `:review N` (KEYS.md rule 9: only `remove` destroys, and that is the GM's `:ask N remove`) |
+| `job N drop` | give it back: the GM's job waits as asked; the agent's own is scrapped, kept for the GM's `:review N` (KEYS.md rule 9: only `remove` destroys, and that is the GM's `:ask N remove`). **The file's job and an `--apply`'s are the GM's alone:** `take`, `area`, `say`, `propose` and `drop` on them are refused, the reads are not |
 | `job N dump [REGION]`, `job N describe [json]`, `job N check [json]` | the map as accepting job N's proposal would make it now |
 | `propose apply "plan.txt"` | what `vtt MAP --apply` sends when a vtt has MAP open: the job is from `--apply plan.txt` |
 | `holds DEVICE INODE` | `holds` when the map open here is that file, by `stat`'s identity (the two processes have different working directories); else `no`. Works with no map |
@@ -165,6 +165,10 @@ never move.
   - `--apply`, with no GM, edits the map itself as before (`App.ctl_direct`); the
     `propose` line is refused there. `--bench-ctl` and the fuzzer run under accept auto.
   - Sixteen jobs at most; a finished one (accepted or scrapped) makes room for a new one.
+  - A new job takes the number after the last one given (1 again after 99), never one just
+    freed: a program holding a removed job's number must not find another job under it.
+  - Jobs are their map's. Closing it, a trip to another map and `:e` (another map, or the
+    same file read again) all end them with a `map closed` event.
     With sixteen waiting, a proposal is refused.
   - `job N dump`/`describe`/`check` read the scratch map with the change set applied, not
     the review's swap: the swap leaves areas and rolls out, since drawing does not need

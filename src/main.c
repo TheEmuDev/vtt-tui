@@ -391,6 +391,9 @@ static int run_headless(const Options *o)
 
         uint64_t bench_clock_ms = 1000;
         for (int loop = 0; loop < o->bench_loops && a.running; loop++) {
+            /* Every loop starts alike: its jobs are numbered from 1 again,
+             * so a script's `:ask 1 remove` names the job it just made. */
+            a.job_last = 0;
             if (out_bytes) {
                 int fd = open(o->map_path, O_WRONLY | O_TRUNC);
                 if (fd < 0 || write(fd, out_bytes, out_len) != (ssize_t)out_len) die("--bench-outside: cannot write %s", o->map_path);

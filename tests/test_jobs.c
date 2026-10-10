@@ -96,11 +96,12 @@ void test_jobs(void)
     CHECK(strstr(a.status, "build mode's") != NULL);
     app_key(&a, f1);
 
-    CASE(":ask N remove takes it away; :ask N off says so, and the lowest free number is used again");
+    CASE(":ask N remove takes it away; :ask N off says so");
     press(&a, ":ask 2 off\r");
     CHECK(strstr(a.status, ":ask 2 remove") != NULL);
     press(&a, ":ask 2 remove\r");
     CHECK_EQ(job_slot(&a, 2), -1);
+    a.job_last = 1;                                     /* the cases below were written with 2 next */
     press(&a, ":jobs\r");
     CHECK(strstr(a.status, "#1 asked C3:F5 a flooded crypt") != NULL);
 
@@ -487,6 +488,7 @@ void test_jobs_ctl(void)
     CHECK(strstr(a.status, "#2 withdrawn by the agent - :review 2 brings it back") != NULL);
     press(&a, ":ask 2 remove\r");                       /* the GM's way to destroy it */
     CHECK_EQ(job_slot(&a, 2), -1);
+    a.job_last = 1;
     t = ctl_ask(&a, "tile H8 water\n");                  /* no header: the same */
     CHECK(t && !strncmp(t, "ok\nproposal #2: ", 16));
     free(t);
@@ -530,7 +532,7 @@ void test_jobs_ctl(void)
     CHECK(strstr(a.status, ":agent accept auto lands") != NULL);
 
     CASE("a full table of waiting changes refuses the next, and changes nothing");
-    app_jobs_clear(&a);
+    jobs_reset(&a);
     for (int k = 0; k < JOB_MAX; k++) {
         char req[64];
         snprintf(req, sizeof req, "tile %c10 water\n", 'A' + k);
@@ -549,12 +551,12 @@ void test_jobs_ctl(void)
         CHECK(fin >= 0);
         if (fin >= 0) a.jobs[fin].state = JOB_SCRAPPED;
         t = ctl_ask(&a, "tile A11 water\n");
-        CHECK(t && !strncmp(t, "ok\nproposal #5: ", 16));
+        CHECK(t && !strncmp(t, "ok\nproposal #17: ", 17));     /* the next number, not the freed one */
         free(t);
         int ready = 0;
         for (int k = 0; k < JOB_MAX; k++) ready += a.jobs[k].used && a.jobs[k].state == JOB_READY;
         CHECK_EQ(ready, JOB_MAX);
-        app_jobs_clear(&a);
+        jobs_reset(&a);
     }
 
     CASE("reads about the GM's side mid-proposal read the live map: marked, status");
@@ -562,7 +564,7 @@ void test_jobs_ctl(void)
     t = ctl_ask(&a, "token add enemy B9 \"Imp\"\ntoken add enemy D9 \"Orc\"\n");
     free(t);
     a.ctl_auto = 0;
-    app_jobs_clear(&a);
+    jobs_reset(&a);
     app_key(&a, (Key){ KEY_F2, 0, 0 });
     a.play.ngroup = 1;
     a.play.group[0] = a.play.sel = tokens_find_label(&m->tokens, "Imp", -1);
@@ -573,14 +575,14 @@ void test_jobs_ctl(void)
     CHECK(t && strstr(t, "Orc") == NULL);
     free(t);
     free(plain);
-    app_jobs_clear(&a);
+    jobs_reset(&a);
     app_key(&a, (Key){ KEY_F1, 0, 0 });
     char want[64];
     snprintf(want, sizeof want, "undo %d back, ", a.undo.depth);
     t = ctl_ask(&a, "tile A12 water\nstatus");
     CHECK(t && strstr(t, want) && strstr(t, "and this request's changes proposed"));
     free(t);
-    app_jobs_clear(&a);
+    jobs_reset(&a);
 
     CASE("job lines after a propose line are refused: the job it names cannot go from under it");
     press(&a, ":ask a well\r");
@@ -689,6 +691,7 @@ void test_events(void)
     press(&a, ":review 1\r");                              /* back, then whole */
     press(&a, "\r");
     press(&a, ":ask 1 remove\r");
+    a.job_last = 0;
     t = ctl_ask(&a, "wait 3");
     CHECK(t && strstr(t, "4 job 1 scrapped\n5 job 1 brought back for review\n6 job 1 accepted: ground in C2\n"
                          "7 job 1 removed by the GM\n"));
@@ -851,7 +854,7 @@ void test_agent_command(void)
     CHECK(strstr(a.status, "no agent command is set") != NULL);
     press(&a, ":ask nothing starts\r");
     CHECK_EQ(a.agent_on, 0);                               /* no command: nothing started, nothing opened */
-    app_jobs_clear(&a);
+    jobs_reset(&a);
 
     CASE("set: each :ask starts it, the job and how to answer on its stdin; the channel comes on for it");
     press(&a, cmd);
@@ -929,7 +932,7 @@ void test_agent_command(void)
         snprintf(runs_file, sizeof runs_file, "%s/runs.out", sb.dir);
         snprintf(c2, sizeof c2, ":agent command cat > /dev/null; echo run-$VTT_JOB >> %s\r", runs_file);
         press(&a, c2);
-        app_jobs_clear(&a);
+        jobs_reset(&a);
         char *t = ctl_ask(&a, "propose \"my own idea\"\ntile A2 water\n");
         free(t);
         CHECK(a.jobs[0].used && a.jobs[0].from == JOB_FROM_AGENT);
@@ -938,7 +941,7 @@ void test_agent_command(void)
         CHECK_EQ(a.jobs[0].state, JOB_WORKING);
         pump_until_file(&a, runs_file, "run-");
         CHECK(!file_has(runs_file, "run-"));               /* nothing was started */
-        app_jobs_clear(&a);
+        jobs_reset(&a);
 
         CASE("REVIEW 4: the channel coming on for the command is said on the GM's line, once");
         press(&a, ":agent off\r");
@@ -951,7 +954,7 @@ void test_agent_command(void)
         press(&a, ":ask another\r");
         CHECK(strstr(a.status, "agent channel on") == NULL);
         CHECK(pump_until_file(&a, runs_file, "run-2"));
-        app_jobs_clear(&a);
+        jobs_reset(&a);
 
         CASE("REVIEW 5: the command does not inherit SIGPIPE ignored (a pipeline in it must die quietly)");
         char sig_file[720];
@@ -968,7 +971,7 @@ void test_agent_command(void)
             CHECK((ign & (1ull << (SIGPIPE - 1))) == 0);
             free(st);
         }
-        app_jobs_clear(&a);
+        jobs_reset(&a);
 
         CASE("REVIEW 8: off switches it off and on brings it back as it was (KEYS.md rule 9)");
         press(&a, ":agent command off\r");
@@ -977,7 +980,7 @@ void test_agent_command(void)
         press(&a, ":agent command on\r");
         CHECK(strstr(a.status, "each :ask now starts: cat > /dev/null; grep SigIgn") != NULL);
         press(&a, ":agent command off\r");
-        app_jobs_clear(&a);
+        jobs_reset(&a);
     }
 
     CASE("REVIEW 6: the prompt's lines run as printed: the path quoted, the heredoc's end at the margin");

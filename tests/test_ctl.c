@@ -773,7 +773,7 @@ void test_ctl_edits(void)
     CHECK_EQ(map_tile(m, 7, 7), TILE_WATER);
     free(after);
     free(before);
-    app_jobs_clear(&a);
+    jobs_reset(&a);
     a.ctl_auto = 1;
 
     app_free(&a);
@@ -1551,7 +1551,7 @@ void test_ctl_live(void)
         CHECK_EQ(ctl_waiters(&a.ctl), 0);
         CHECK_EQ(a.ctl.nc, 0);
     }
-    app_jobs_clear(&a);
+    jobs_reset(&a);
 
     CASE(":agent off: the socket stays (an --apply must find the map), a held wait stays, the checkpoint stops");
     CtlReader held = { ctl_raw_connect(a.ctl.path), "", 0, 0 };
@@ -1615,7 +1615,7 @@ void test_ctl_live(void)
         for (int i = 0; i < JOB_MAX; i++)
             found += a.jobs[i].used && a.jobs[i].from == JOB_FROM_APPLY && !strcmp(a.jobs[i].text, "--apply plan.txt");
         CHECK_EQ(found, 1);
-        app_jobs_clear(&a);
+        jobs_reset(&a);
     }
 
     CASE("--ctl finds no vtt with its channel on, though one listens (exit 2)");
@@ -1651,7 +1651,7 @@ void test_ctl_live(void)
             { "tile B2 bogus\n",  NULL,  NULL,          20, 1, "" },
         };
         for (size_t k = 0; k < sizeof R / sizeof *R; k++) {
-            app_jobs_clear(&a);
+            jobs_reset(&a);
             fflush(stdout);
             pid_t pid = fork();
             if (pid == 0) {
@@ -1687,7 +1687,7 @@ void test_ctl_live(void)
         }
         stat(file, &f1);
         CHECK(f0.st_mtime == f1.st_mtime && f0.st_size == f1.st_size && f0.st_ino == f1.st_ino);
-        app_jobs_clear(&a);
+        jobs_reset(&a);
 
         CASE("--apply to a file no vtt has open is the file's, as before: nobody holds it");
         fflush(stdout);

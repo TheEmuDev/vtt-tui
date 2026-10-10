@@ -1291,6 +1291,11 @@ only in what it prints, so switch `:log` on when trying a new one. The command a
 A change waiting to land at once never lands while you are typing, answering a prompt,
 drawing a wall or in play mode: it lands at your next key once you are back.
 
+Jobs belong to the map they were asked on. Closing the map, walking through a link to
+another map, and `:e` (another map, or the same file read again) all end its jobs, and an
+agent waiting is told. A job's number is not used again straight after it is removed: the
+next job takes the next number, and the numbers start again at 1 after 99.
+
 ## Map tools (`--dump-map`, `--check`, `--describe`)
 
 These print a report about a map file and exit, without changing it.

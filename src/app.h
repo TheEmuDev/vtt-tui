@@ -223,6 +223,8 @@ typedef struct {
     int      disk_state;        /* DiskState */
     int      disk_reread;       /* the file moved again: read it when the keys go quiet */
     int      disk_job;
+    int      job_last;          /* the last job number given out; the next is after it */
+    int      disk_full;         /* DISK_STUCK only for want of a job slot: read again once one is free */
     MapDisk  disk_seen;
     char    *disk_new;
     size_t   disk_new_len;

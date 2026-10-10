@@ -37,7 +37,7 @@ void app_agent_prompt(const App *a, const Job *j, FILE *out)
     long pid = (long)getpid();
     const char *vtt = app_self_path ? app_self_path : "vtt";
     char where[2 * MAP_COORD_MAX + 2] = "";
-    if (j->has_box) map_region_name(j->box.x0, j->box.y0, j->box.x1, j->box.y1, where, sizeof where);
+    if (j->has_box) cs_box_name(&j->box, where, sizeof where);
 
     fputs("You are an agent for the GM of a tabletop map open in vtt, a virtual tabletop in a terminal.\n"
           "The GM asked for a change to the map. Make it as a proposal: the GM reviews it and accepts it or not.\n\n", out);

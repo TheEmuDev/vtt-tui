@@ -44,6 +44,7 @@ int main(int argc, char **argv)
         { "events", test_events },
         { "agentcmd", test_agent_command },
         { "disk", test_disk },
+        { "diskwhole", test_disk_whole },
         { "linkkeys", test_link_keys },
         { "floors", test_floors },
         { "floorview", test_floor_view },

@@ -180,6 +180,8 @@ void cs_summary(const ChangeSet *cs, const CsBox *box, char *out, size_t outsz);
 
 /* The squares the set touches, as a bounding box; 0 when it touches none. */
 int  cs_bounds(const ChangeSet *cs, int *x0, int *y0, int *x1, int *y1);
+/* A box as the GM reads it: "C3" or "B2:F6". */
+void cs_box_name(const CsBox *b, char *buf, size_t sz);
 
 /* The preview: the set's `after` values swapped into `live` for one draw --
  * the cells inside the window, the creatures, links and notes -- and back

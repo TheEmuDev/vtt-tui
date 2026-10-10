@@ -11,18 +11,13 @@
 #include "json.h"
 #include "maptools.h"
 
-static void box_name(const CsBox *b, char *buf, size_t sz)
-{
-    map_region_name(b->x0, b->y0, b->x1, b->y1, buf, sz);
-}
-
 
 /* One job as text: its line, its thread, its proposal. */
 static void job_text(App *a, Job *j, FILE *out)
 {
     char where[2 * MAP_COORD_MAX + 16] = "";
-    if (j->has_box)  { strcpy(where, " in ");   box_name(&j->box, where + 4, sizeof where - 4); }
-    else if (j->has_area) { strcpy(where, " area "); box_name(&j->area, where + 6, sizeof where - 6); }
+    if (j->has_box)  { strcpy(where, " in ");   cs_box_name(&j->box, where + 4, sizeof where - 4); }
+    else if (j->has_area) { strcpy(where, " area "); cs_box_name(&j->area, where + 6, sizeof where - 6); }
     static const char *const FROM[] = { "asked by the GM", "an agent's own", "from --apply", "the file on disk" };
     fprintf(out, "#%d %s%s, %s%s%s%s\n", j->num, app_job_state_name(j->state), where, FROM[j->from],
             j->at_once ? ", to land at once" : "", j->text[0] ? ": " : "", j->text);
@@ -41,7 +36,7 @@ static void json_box(Json *js, const char *key, int has, const CsBox *b)
     json_key(js, key);
     if (!has) { json_null(js); return; }
     char buf[2 * MAP_COORD_MAX + 2];
-    box_name(b, buf, sizeof buf);
+    cs_box_name(b, buf, sizeof buf);
     json_str(js, buf);
 }
 
@@ -136,6 +131,12 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
         return -1;
     }
 
+    if (app_job_gm_only(j)) {
+        snprintf(err, errsz, "#%d is %s: the GM's to decide - you may dump, check and describe it", num,
+                 j->from == JOB_FROM_DISK ? "what another program wrote to the file" : "an --apply's");
+        return -1;
+    }
+
     if (!strcmp(verb, "take")) {
         if (n != 3) { snprintf(err, errsz, "job N take takes nothing after it"); return -1; }
         if (j->state == JOB_ASKED) {
@@ -156,7 +157,7 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
         j->has_area = 1;
         j->area = (CsBox){ x0, y0, x1, y1 };
         char where[2 * MAP_COORD_MAX + 2];
-        box_name(&j->area, where, sizeof where);
+        cs_box_name(&j->area, where, sizeof where);
         snprintf(msg, sizeof msg, "#%d: the agent is working in %s", num, where);
         app_note_gm(a, msg);
         fprintf(out, "#%d area %s\n", num, where);

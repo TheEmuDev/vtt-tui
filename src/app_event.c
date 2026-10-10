@@ -64,7 +64,8 @@ static int listening(const App *a, uint64_t now_ms)
     if (ctl_active(&a->ctl) && !a->agent_on) return 0;
     if (ctl_waiters(&a->ctl)) return 1;
     for (int i = 0; i < JOB_MAX; i++)
-        if (a->jobs[i].used && a->jobs[i].state <= JOB_READY) return 1;
+        /* Not the file's: nobody waits to hear of that one but the GM. */
+        if (a->jobs[i].used && a->jobs[i].state <= JOB_READY && a->jobs[i].from != JOB_FROM_DISK) return 1;
     return a->agent_seen_ms && now_ms - a->agent_seen_ms < (uint64_t)CTL_WAIT_MAX_S * 1000;
 }
 

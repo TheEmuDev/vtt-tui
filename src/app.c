@@ -179,6 +179,12 @@ int app_open_map(App *a, const char *path)
     app_disk_reset(a);
 
     slog_close(&a->slog);
+    /* :e over a map in hand puts that one down: its jobs are its own (a
+     * change set applies to the map it was made on), and an agent is told. */
+    if (a->map) {
+        app_event(a, "map closed: %s - the GM opened %s, and its jobs went with it", a->map->name, m->name);
+        app_jobs_clear(a);
+    }
     map_free(a->map);
     a->map = m;
     undo_clear(&a->undo);          /* history does not survive a new map */

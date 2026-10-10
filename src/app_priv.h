@@ -200,6 +200,7 @@ void app_review_resume(App *a);
 void app_review_leave(App *a);
 /* For the channel's job requests (app_ctl_job.c). */
 int  app_job_find(const App *a, int num);
+int  app_job_gm_only(const Job *j);     /* the file's or an --apply's: not an agent's to take, replace, answer or drop */
 void app_job_thread_add(Job *j, char who, const char *text);
 const char *app_job_state_name(int state);
 const char *app_job_from_name(int from);

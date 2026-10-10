@@ -30,12 +30,23 @@ const char *app_job_state_name(int state) { return STATE_NAME[state]; }
 const char *app_job_from_name(int from) { return FROM_NAME[from]; }
 const char *app_job_who_name(char who) { return who == 'G' ? "gm" : who == 'A' ? "agent" : "-"; }
 
-static int job_free_num(const App *a)
+/* The next number after the last one given, round to 1 after the cap: a
+ * number is not given out again while another is free. A program started
+ * for a job (app_agent.c) or holding its number may outlive the job, and
+ * must not find a different job under it. */
+static int job_free_num(App *a)
 {
-    for (int n = 1; n <= JOB_NUM_MAX; n++)
-        if (job_index(a, n) < 0) return n;
+    for (int k = 1; k <= JOB_NUM_MAX; k++) {
+        int n = (a->job_last + k - 1) % JOB_NUM_MAX + 1;
+        if (job_index(a, n) < 0) return a->job_last = n;
+    }
     return 0;
 }
+
+/* A job that is not an agent's to change: the file's (another program's
+ * work, which only the GM may take or leave) and an --apply's (its sender
+ * waits for the verdict on what it sent). */
+int app_job_gm_only(const Job *j) { return j->from == JOB_FROM_DISK || j->from == JOB_FROM_APPLY; }
 
 static void job_clear(Job *j)
 {
@@ -87,11 +98,6 @@ int app_job_new(App *a, int from, const char *text, const CsBox *box, int at_onc
 
 /* ------------------------------------------------------------ landing */
 
-static void box_name(const CsBox *b, char *buf, size_t sz)
-{
-    map_region_name(b->x0, b->y0, b->x1, b->y1, buf, sz);
-}
-
 /* Where #N goes for a change set: the corner of what it touches, found once. */
 static void corner_from_set(Job *j)
 {
@@ -124,7 +130,7 @@ static void land(App *a, Job *j, const CsBox *box)
     }
     if (box) {
         char where[2 * MAP_COORD_MAX + 2];
-        box_name(box, where, sizeof where);
+        cs_box_name(box, where, sizeof where);
         cs_drop(&j->cs, box);
         cs_summary(&j->cs, NULL, j->summary, sizeof j->summary);
         corner_from_set(j);
@@ -408,7 +414,7 @@ void app_ask_command(App *a, const char *verb, const char *rest)
     int slot = app_job_new(a, JOB_FROM_GM, rest, bp, at_once);
     if (slot < 0) { snprintf(msg, sizeof msg, "%d jobs are open - :jobs, :ask N remove", JOB_MAX); app_set_status_gm(a, msg); return; }
     char where[2 * MAP_COORD_MAX + 8] = "";
-    if (bp) { strcpy(where, " in "); box_name(bp, where + 4, sizeof where - 4); }
+    if (bp) { strcpy(where, " in "); cs_box_name(bp, where + 4, sizeof where - 4); }
     app_event(a, "job %d asked%s%s: %s", a->jobs[slot].num, where, at_once ? ", to land at once" : "", rest);
     snprintf(msg, sizeof msg, "#%d asked%s%s: %.150s", a->jobs[slot].num, where, at_once ? ", to land at once" : "", rest);
     app_note_gm(a, msg);
@@ -438,7 +444,7 @@ void app_jobs_command(App *a, const char *rest)
         const Job *j = &a->jobs[i];
         if (!j->used) continue;
         char where[2 * MAP_COORD_MAX + 4] = "";
-        if (j->has_box) { where[0] = ' '; box_name(&j->box, where + 1, sizeof where - 1); }
+        if (j->has_box) { where[0] = ' '; cs_box_name(&j->box, where + 1, sizeof where - 1); }
         off += snprintf(msg + off, sizeof msg - (size_t)off, "%s#%d %s%s %.40s", any ? "; " : "jobs: ",
                         j->num, STATE_NAME[j->state], where, j->text[0] ? j->text : j->summary);
         any = 1;

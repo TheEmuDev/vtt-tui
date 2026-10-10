@@ -2,6 +2,7 @@
  * the app, sandboxes, fixtures, golden files and the JSON checker. */
 
 #include "harness.h"
+#include "app_priv.h"
 
 #include <dirent.h>
 
@@ -449,4 +450,12 @@ char *players_text(App *a, Renderer *r)
     rnd_dump(r, &f);
     bb_putc(&f, '\0');
     return (char *)f.data;
+}
+
+/* A test starting over: no jobs, and numbers from 1 again (in the app they
+ * carry on, so a number is not given out twice running). */
+void jobs_reset(App *a)
+{
+    app_jobs_clear(a);
+    a->job_last = 0;
 }
