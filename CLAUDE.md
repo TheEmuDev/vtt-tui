@@ -37,8 +37,11 @@ maintainer; this file is what survives a context reset, so keep it true.
 - **Model roles** (set 2026-09-26): **Opus 5.5** plans -- the plan goes to
   the user for sign-off -- and implements; a **Fable 5.1** subagent (Agent
   `model: "fable"`) reviews every finished change before it is reported
-  done -- verify its findings and fix what holds up. The user will name
-  different models when that changes.
+  done -- verify its findings and fix what holds up. **Never dismiss a finding
+  without validating it first** (the user, 2026-10-09): reproduce it or disprove it with
+  a check that was actually run, and say which; "X already handles it" from memory is not
+  a check. Ask the reviewer (SendMessage to its agent) for its reproduction when a
+  finding is unclear. The user will name different models when that changes.
 - **Every review includes the health check's questions** (the user, 2026-09-29), for the
   change and what it touches, beside correctness: duplication (the rule of three -- a
   third copy is extracted), organization (the right file, a file grown too big),
