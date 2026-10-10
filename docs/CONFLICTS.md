@@ -201,8 +201,31 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
     and no CPU used in 3 s with a wait held, before and after an edit.
 - **Step 5 measured** (PERFORMANCE.md, *Events and `wait`*): a held wait costs no CPU; the
   map-changed read is 1.6 µs after a dozen edits on the largest map, against about 1 µs.
-- **Next: step 6** (`--apply` to an open map, and `--wait`).
-- **Then steps 7-9 in the order below.**
+- **Step 6: built (2026-10-09); Fable's review is next.** What it holds:
+  - `ctl_apply_open` (ctl.c): `--apply` asks each running vtt `holds DEV INO`; the holder
+    takes the plan as a proposal from `--apply NAME` (`propose apply`), and the file is not
+    touched. `--wait SECONDS` reads the verdict from the vtt's events: exit 0 accepted, 4
+    scrapped, 5 sent back with the feedback on stdout;
+  - **decision 5:** the socket listens whenever vtt runs interactively; `:agent off`
+    (`App.agent_on`) leaves only `status`, `holds`, `wait` and proposals, never at once;
+  - `vtt --ctl` takes the vtt whose channel is on (`agent on` in `status`);
+  - tests in `ctllive` (each verdict through a forked `--apply --wait`), fuzz lines.
+- **Changed from the plan in step 6:**
+  - **The holder is found by the file's identity** (`stat`'s device and inode), not by
+    asking `status` for its file name: two processes have two working directories, and a
+    link names the same file.
+  - **Exit 3** for `--wait` running out with no verdict; the plan named only 0, 4 and 5.
+    Exit 4 also covers the job removed and the map closed.
+  - **With the channel off, `wait` still answers,** since `--wait` needs it. It tells of
+    jobs, never of the map: the checkpoint does not run.
+  - **Finding the holder costs about 0.1 ms a running vtt,** not the 3 µs estimated: the
+    estimate was a round trip between two hot processes, and this one wakes a sleeping
+    vtt. Dropping the liveness probe halved it (PERFORMANCE.md).
+  - Checked against a live vtt as well as the tests: a plan proposed, accepted with
+    `--wait` (exit 0, the file's bytes unchanged), and a second file applied headless
+    beside it.
+- **Next: step 7** (other writers of the file).
+- **Then steps 8-9 in the order below.**
 - **Follow-up after step 6 (the user, 2026-10-09): a thin agent skill.** A user-level skill
   (`~/.claude/skills/vtt/`, not the repo's `.claude/`: the agents that build maps run
   wherever the GM starts them) that says when to use vtt, the opening move (`vtt --ctl
@@ -211,8 +234,7 @@ safety net; no drafts to approve". Agents now propose and the GM approves.*
   as the phone page is, with a test that the two agree), so the skill stays a dozen lines and
   the guide always matches the installed vtt. After step 6 because steps 5 and 6 change the
   loop it describes (`wait`, `--apply` to an open map).
-- **docs/AGENTS.md still tells agents never to `--apply` an open map.** That stays true
-  until step 6.
+- **docs/AGENTS.md no longer tells agents never to `--apply` an open map** (step 6).
 
 ## How it feels to the GM
 

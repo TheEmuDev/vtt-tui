@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/stat.h>
 
 #include "app_priv.h"
 #include "card.h"
@@ -138,6 +139,7 @@ static void do_status(App *a, FILE *out, int own)
     else if (!a->ctl_auto) fputs("edits proposed, for the GM to review\n", out);
     else if (busy)         fprintf(out, "edits proposed, landing when the GM is back: %s\n", busy);
     else                   fputs("edits land at once (:agent accept auto)\n", out);
+    fprintf(out, "agent %s\n", a->agent_on ? "on" : "off - proposals, status and wait only");
 }
 
 /* An optional last word that must be `json`. */
@@ -167,6 +169,7 @@ typedef struct {
     Map     *live;
     Undo     live_undo;
     int      header;                  /* a `propose` or `job N propose` line came */
+    int      from;                    /* JobFrom of a new job: an agent, or --apply */
     int      job;                     /* the job it answers, or -1 for a new one */
     char     say[JOB_TEXT_MAX];       /* the line it came with */
 } Edits;
@@ -1016,14 +1019,16 @@ static int finish_proposal(App *a, Edits *ed, FILE *out, char *err, size_t errsz
             fputs("no change: the map already looked like that\n", out);
             return 0;
         }
-        if (slot < 0) slot = app_job_new(a, JOB_FROM_AGENT, ed->say, NULL, a->ctl_auto);
+        /* At once is :agent on's: with the channel off a proposal waits. */
+        int at_once = a->ctl_auto && (a->agent_on || !a->ctl_can_hold);
+        if (slot < 0) slot = app_job_new(a, ed->from, ed->say, NULL, at_once);
         if (slot < 0) {
             cs_free(&cs);
             snprintf(err, errsz, "%d changes are waiting for the GM - nothing more until some are reviewed", JOB_MAX);
             return -1;
         }
         Job *j = &a->jobs[slot];
-        if (a->ctl_auto) j->at_once = 1;           /* everything that comes in */
+        if (at_once) j->at_once = 1;               /* everything that comes in */
         app_job_set_proposal(a, slot, &cs, ed->job >= 0 ? ed->say : NULL);
     }
     Job *j = &a->jobs[slot];
@@ -1040,6 +1045,16 @@ static int is_edit(const char *v)
     for (size_t i = 0; i < sizeof EDITS / sizeof *EDITS; i++)
         if (!strcmp(v, EDITS[i])) return 1;
     return 0;
+}
+
+/* What a request over the socket may say with the channel off: nothing
+ * that reads the map, nothing that changes it. A proposal does neither
+ * until the GM accepts it. */
+static int off_takes(char w[][CTL_WORD_MAX], int n)
+{
+    const char *v = w[0];
+    if (!strcmp(v, "status") || !strcmp(v, "wait") || !strcmp(v, "holds") || !strcmp(v, "propose")) return 1;
+    return is_edit(v) && (strcmp(v, "scene") != 0 || scene_is_edit(w, n));
 }
 
 /* Runs one line. 0; -1 with why in err; -2 when an edit is refused because
@@ -1097,6 +1112,10 @@ static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FIL
         /* propose ["a line for the GM"], or job N propose [...]: what the
          * request's edits are. Without one, they are an agent's own idea. */
         int at = v[0] == 'p' ? 1 : 3, slot = -1, num;
+        /* propose apply "plan.txt": what `vtt map --apply` sends to the vtt
+         * that has the map open. */
+        int from_apply = at == 1 && n == 3 && !strcmp(w[1], "apply");
+        if (from_apply) at = 2;
         if (n > at + 1) { snprintf(err, errsz, "%s takes one line for the GM after it, in quotes", at == 1 ? "propose" : "job N propose"); return -1; }
         if (ed->header || ed->lines) { snprintf(err, errsz, "propose comes once, before the request's edits"); return -1; }
         if (a->ctl_direct) { snprintf(err, errsz, "there is no GM to propose to: --apply changes the file"); return -1; }
@@ -1113,7 +1132,11 @@ static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FIL
         }
         ed->header = 1;
         ed->job = slot;
-        str_lcpy(ed->say, n > at ? w[at] : "", sizeof ed->say);
+        if (from_apply) {
+            ed->from = JOB_FROM_APPLY;
+            snprintf(ed->say, sizeof ed->say, "--apply %.140s", w[at]);
+        }
+        else str_lcpy(ed->say, n > at ? w[at] : "", sizeof ed->say);
         return 0;
     }
     if (!strcmp(v, "job") || !strcmp(v, "jobs")) {
@@ -1170,6 +1193,20 @@ static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FIL
         return 0;
     }
 
+    if (!strcmp(v, "holds")) {
+        /* holds DEV INO: is that file (as stat names it) the map open here?
+         * --apply asks every vtt before it touches a file (docs/CONFLICTS.md,
+         * step 6). By identity, not by name: the two were started in
+         * different directories, and a link is the same file. */
+        char *e1, *e2;
+        unsigned long long dev = n == 3 ? strtoull(w[1], &e1, 10) : 0, ino = n == 3 ? strtoull(w[2], &e2, 10) : 0;
+        if (n != 3 || *e1 || *e2) { snprintf(err, errsz, "holds DEVICE INODE, as stat gives them"); return -1; }
+        struct stat st;
+        int same = m && m->path[0] && stat(m->path, &st) == 0 &&
+                   (unsigned long long)st.st_dev == dev && (unsigned long long)st.st_ino == ino;
+        fputs(same ? "holds\n" : "no\n", out);
+        return 0;
+    }
     if (!strcmp(v, "wait")) {
         /* wait [SEQ] [for SECONDS]: every event after SEQ (unsaid: from
          * now), held until there is one or the time is up. */
@@ -1397,6 +1434,7 @@ char *app_ctl_exec(App *a, const char *req, size_t *len)
     memset(&ed, 0, sizeof ed);
     ed.x1 = -1;
     ed.job = -1;
+    ed.from = JOB_FROM_AGENT;
     const char *p = req;
     if (strlen(req) != *len) {
         snprintf(verdict, sizeof verdict, "error: a nul byte in the request");
@@ -1428,8 +1466,12 @@ char *app_ctl_exec(App *a, const char *req, size_t *len)
 
         if (n == 0 || (n > 0 && w[0][0] == '#')) continue;
         /* With no map: status, and wait -- the map closing is an event. */
-        if (n > 0 && !a->map && strcmp(w[0], "status") != 0 && strcmp(w[0], "wait") != 0)
+        if (n > 0 && !a->map && strcmp(w[0], "status") != 0 && strcmp(w[0], "wait") != 0 && strcmp(w[0], "holds") != 0)
             snprintf(err, sizeof err, "no map is open");
+        /* The channel off: over the socket, only what changes nothing and
+         * shows nothing of the map (decision 5). */
+        else if (n > 0 && a->ctl_can_hold && !a->agent_on && !off_takes(w, n))
+            snprintf(err, sizeof err, "the agent channel is off - only proposals, status and wait are taken (:agent on)");
         int rc = err[0] ? -1 : run_line(a, line, w, n, out, &ed, err, sizeof err);
         if (rc == 0) continue;
         if (rc == -2) snprintf(verdict, sizeof verdict, "busy: %s", err);
@@ -1481,7 +1523,7 @@ void app_agent_command(App *a, const char *rest)
     Ctl *c = &a->ctl;
     char msg[CTL_PATH_MAX + 96];
     if (!*rest) {
-        if (!ctl_active(c)) app_set_status_gm(a, "the agent channel is off - :agent on opens it");
+        if (!a->agent_on) app_set_status_gm(a, "the agent channel is off - :agent on opens it; proposals (--apply to this map) still come");
         else {
             snprintf(msg, sizeof msg, "agent channel on at %s - %u request%s so far; changes %s", c->path,
                      c->requests, c->requests == 1 ? "" : "s", a->ctl_auto ? "land at once" : "wait for :review");
@@ -1499,20 +1541,23 @@ void app_agent_command(App *a, const char *rest)
         return;
     }
     if (!strcmp(rest, "off")) {
-        if (!ctl_active(c)) { app_set_status_gm(a, "the agent channel is already off"); return; }
-        ctl_stop(c);
-        a->agent_seen_ms = 0;                /* nobody to tell: the checkpoint may stop */
-        app_note_gm(a, "agent channel off");
+        if (!a->agent_on) { app_set_status_gm(a, "the agent channel is already off"); return; }
+        /* The socket stays: --apply must still find this map open, and its
+         * plan comes as a proposal. Reads and at-once landing stop. */
+        a->agent_on = 0;
+        a->agent_seen_ms = 0;                /* nobody to tell of the map: the checkpoint may stop */
+        app_note_gm(a, "agent channel off - a proposal (--apply to this map) still comes for :review");
         return;
     }
     if (strcmp(rest, "on") != 0) { app_set_status_gm(a, ":agent on, :agent off, :agent accept auto|review, or :agent to ask"); return; }
-    if (ctl_active(c)) {
+    if (a->agent_on) {
         snprintf(msg, sizeof msg, "the agent channel is already on at %s", c->path);
         app_set_status_gm(a, msg);
         return;
     }
     char err[CTL_PATH_MAX + 64];
     if (ctl_start(c, err, sizeof err) < 0) { app_set_status_gm(a, err); return; }
+    a->agent_on = 1;
     snprintf(msg, sizeof msg, "agent channel on - vtt --ctl talks to this map; its changes %s",
              a->ctl_auto ? "land at once, u takes each back" : "wait for :review");
     app_note_gm(a, msg);

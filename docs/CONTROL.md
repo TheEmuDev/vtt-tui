@@ -13,7 +13,7 @@ the agent's; this page is why it is the way it is.
 | question | answer |
 |---|---|
 | transport | a Unix socket and a one-shot client, `vtt --ctl`. Never the network: `:serve`'s port is on the Wi-Fi. An MCP server could wrap `vtt --ctl` later without touching vtt. |
-| on | off until `:agent on` (or `--agent` at start); `:agent off` closes it |
+| on | off until `:agent on` (or `--agent` at start). **Since 2026-10-09 (docs/CONFLICTS.md, decision 5) the socket listens whenever vtt runs interactively**, so an `--apply` can find a map that is open: off, a request may only propose, ask `status`, `holds` and `wait`; no read of the map, nothing lands at once |
 | where edits land | build mode only, so nothing an agent does reaches the players' phones in play. Proposals come in anywhere (play mode too) and wait; they land in build mode. Reads work anywhere a map is open. |
 | freedom | ~~free editing, undo as the safety net; no drafts to approve~~ **Reversed 2026-10-07** (docs/CONFLICTS.md, built 2026-10-09): an agent's edits are a **proposal** the GM reviews and accepts, whole or by box; `:agent accept auto` lands each at once |
 | a request | one undo batch, all or nothing: a line that fails rolls the whole request back and says which line and why |
@@ -98,6 +98,8 @@ GM accepts it, or at once under `:agent accept auto`):
 | `propose ["..."]`, `job N propose ["..."]` | first in a request: its edits are an idea of the agent's own (a new job), or job N's answer. Edits with neither are an idea of the agent's own |
 | `job N drop` | give it back: the GM's job waits as asked; the agent's own is scrapped, kept for the GM's `:review N` (KEYS.md rule 9: only `remove` destroys, and that is the GM's `:ask N remove`) |
 | `job N dump [REGION]`, `job N describe [json]`, `job N check [json]` | the map as accepting job N's proposal would make it now |
+| `propose apply "plan.txt"` | what `vtt MAP --apply` sends when a vtt has MAP open: the job is from `--apply plan.txt` |
+| `holds DEVICE INODE` | `holds` when the map open here is that file, by `stat`'s identity (the two processes have different working directories); else `no`. Works with no map |
 | `wait [SEQ] [for SECONDS]` | a long poll, alone in its request: `seq N` and every event after SEQ (unsaid: after now), held until there is one or SECONDS pass (60 unsaid, 600 at most). Works with no map open. docs/AGENTS.md lists the events |
 
 A proposal is never refused for the GM being busy. One that lands at once waits, as ready,
@@ -168,6 +170,18 @@ never move.
     map and log, not the scratch: the GM's selection holds live indices.
   - `job` and `jobs` lines go before a request's `propose` line and edits, so the job a
     proposal answers cannot be dropped from under it.
+- **`--apply` to an open map (2026-10-09, docs/CONFLICTS.md step 6).**
+  - `ctl_apply_open` (ctl.c) asks each socket `holds DEV INO`; the holder gets the plan
+    behind a `propose apply "NAME"` line. No holder: the file is the plan's, as before.
+  - `--wait` reads the vtt's events: it takes `seq` before proposing, then `wait`s for the
+    job's accepted, scrapped, feedback, removed or map-closed line.
+  - **The channel off** (`App.agent_on`): only requests over the socket are asked
+    (`App.ctl_can_hold`); the tests and the bench call `app_ctl_exec` straight. A held
+    `wait` stays, and hears of jobs but not of the map (no checkpoint runs).
+  - **`vtt --ctl` picks the vtt whose channel is on:** every vtt listens now, so it asks
+    each `status` and takes the one that says `agent on`.
+  - **No liveness probe.** Finding the sockets used to connect to each and close; that
+    woke every vtt twice an ask. A stale socket is removed when its connect is refused.
 - **Events and `wait` (2026-10-09, docs/CONFLICTS.md step 5).**
   - `App.events` is a ring of the last 32, numbered from 1 for the life of the vtt
     (`app_event.c`). A `wait` behind the ring is told what it lost.

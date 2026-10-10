@@ -953,6 +953,14 @@ does not show on the frame. `ctl.wait`, the zone round answering waiters, has no
 bench has no socket to hold one on; the live check above stands in for it, and is written
 out in docs/CONFLICTS.md's *Progress*.
 
+**`--apply` finding the map's holder** (step 6; the desktop, 300 runs a figure, the median of
+five): a failing plan on a file nobody has open takes 1.06 ms with no vtt running and 1.17 ms
+with one, so asking a running vtt costs about 0.1 ms. The plan's estimate was 3 µs, the
+round trip between two processes already running; this one wakes a vtt asleep in `poll`
+(on the powersave governor), and the wake is the cost. A liveness probe before each ask woke
+it twice (0.2 ms a vtt); it is gone. It is a tenth of what starting `vtt --apply` costs at
+all, once a plan.
+
 **The bench's tick.** Rows run with `--bench-ctl` now tick the app once a loop, inside the
 request's frame, on a clock that lets the map go quiet. With a job open (`agent, proposal,
 ...`) that puts a `checkpoint.read` in each loop's request frame, about 2 µs of its p99.

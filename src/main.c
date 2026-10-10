@@ -56,6 +56,7 @@ typedef struct {
     const char *bench_ctl;          /* --bench-ctl FILE: a request run each bench loop */
     int         bench_review;       /* --bench-review: its changes wait for review, not accept auto */
     const char *apply;              /* --apply FILE: run a request against the map, save it */
+    int         apply_wait;         /* --wait SECONDS: for the GM's verdict, when the map is open in a vtt; -1 unsaid */
     const char *import_adv;         /* --import-adversaries FILE: SRD adversaries as characters */
     int         force;              /* --force: the import replaces templates already there */
     int         new_w, new_h;       /* --new WxH: the map --apply starts from, when it is not there */
@@ -101,6 +102,10 @@ static void usage(void)
         "  --apply FILE       run FILE's control-channel requests against the map and save it\n"
         "                     (all or nothing; docs/AGENTS.md)\n"
         "  --new WxH          with --apply, the size of a new, empty map when the file is not there\n"
+        "                     When a running vtt has the map open, the plan goes to it as a\n"
+        "                     proposal for its GM to review, and the file is not touched.\n"
+        "  --wait SECONDS     with --apply to a map open in a vtt: wait for the GM's verdict.\n"
+        "                     Exit 0 accepted, 3 none yet, 4 scrapped, 5 sent back (feedback on stdout)\n"
         "  --import-adversaries FILE\n"
         "                     the Daggerheart SRD's adversaries (JSON) as character templates,\n"
         "                     each with its stat block as a card; --force replaces ones already there\n"
@@ -111,6 +116,7 @@ static void usage(void)
 static int parse_args(Options *o, int argc, char **argv)
 {
     memset(o, 0, sizeof *o);
+    o->apply_wait = -1;
     o->width       = 80;
     o->height      = 24;
     o->bench_loops = 50;
@@ -135,6 +141,10 @@ static int parse_args(Options *o, int argc, char **argv)
         else if (!strcmp(a, "--bench-ctl") && i + 1 < argc) o->bench_ctl = argv[++i];
         else if (!strcmp(a, "--bench-review")) o->bench_review = 1;
         else if (!strcmp(a, "--apply") && i + 1 < argc) o->apply = argv[++i];
+        else if (!strcmp(a, "--wait") && i + 1 < argc) {
+            o->apply_wait = atoi(argv[++i]);
+            if (o->apply_wait < 0) die("bad --wait (expected seconds)");
+        }
         else if (!strcmp(a, "--import-adversaries") && i + 1 < argc) o->import_adv = argv[++i];
         else if (!strcmp(a, "--force"))      o->force = 1;
         else if (!strcmp(a, "--new") && i + 1 < argc) {
@@ -492,9 +502,14 @@ static int run_interactive(const Options *o)
             app_set_status(&a, msg);
         }
     }
-    if (o->agent) {
+    /* The socket always: an --apply to a map open here must find it, and
+     * comes as a proposal (docs/CONFLICTS.md, decision 5). What it takes
+     * beyond that is :agent on's. Failing to listen is only worth a word
+     * when the channel was asked for. */
+    {
         char err[CTL_PATH_MAX + 64];
-        if (ctl_start(&a.ctl, err, sizeof err) < 0) app_set_status_gm(&a, err);
+        if (ctl_start(&a.ctl, err, sizeof err) < 0) { if (o->agent) app_set_status_gm(&a, err); }
+        else a.agent_on = o->agent;
     }
 
     /* Paint once before blocking so the first frame is up immediately. */
@@ -667,6 +682,13 @@ static int run_apply(const Options *o)
     int    big = 0;
     char  *req = file_read(o->apply, CTL_REQ_CAP, &len, &big);
     if (!req) { fprintf(stderr, big ? "vtt: %s is over 64 KB\n" : "vtt: cannot read %s\n", o->apply); return 2; }
+
+    /* Open in a running vtt: the plan is a proposal there, for its GM to
+     * review, and the file is left alone -- the GM's next :w would have
+     * written over it. */
+    const char *base = strrchr(o->apply, '/');
+    int open_rc = ctl_apply_open(o->map_path, base ? base + 1 : o->apply, req, len, o->apply_wait);
+    if (open_rc >= 0) { free(req); return open_rc; }
 
     int made = 0;                   /* this run made the file: a failure takes it away */
     if (access(o->map_path, F_OK) != 0) {

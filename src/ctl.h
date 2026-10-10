@@ -97,6 +97,14 @@ void ctl_answer_text(Ctl *c, int i, const char *text);
  * longer for its answer. */
 int  ctl_held_ms(const char *req);
 
+/* `vtt MAP --apply PLAN` when a running vtt has MAP open: the plan goes
+ * there as a proposal and the file is not touched (docs/CONFLICTS.md, step
+ * 6). -1 when no vtt holds the file (the caller applies it to the file);
+ * else the exit status: 0, 1 the plan failed, 2 no answer. With wait_s >= 0
+ * it waits that long for the GM's verdict: 0 accepted, 3 none in time, 4
+ * scrapped, 5 sent back (the feedback on stdout). */
+int  ctl_apply_open(const char *map_path, const char *plan_name, const char *plan, size_t len, int wait_s);
+
 /* `vtt --ctl`: sends `req` (NULL reads stdin) to the vtt of `pid` (0: the
  * only one running), prints the answer. Returns the exit status. */
 int  ctl_client_main(const char *req, long pid);

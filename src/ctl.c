@@ -9,6 +9,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "util.h"
@@ -448,7 +449,10 @@ static char *read_all(FILE *f, size_t *len)
 
 #define CTL_LIST_MAX 16
 
-/* Every vtt taking requests, by pid. Stale sockets are removed on the way. */
+/* Every socket in the directory, by pid. Whether a vtt is behind each is
+ * found by asking it something (`ask`): a probe first would wake every vtt
+ * twice, and waking a sleeping process is the whole cost of asking. A stale
+ * one is removed when the connect is refused. */
 static int find_live(const char *dir, long *pids, int max)
 {
     DIR *d = opendir(dir);
@@ -459,15 +463,22 @@ static int find_live(const char *dir, long *pids, int max)
         char *end;
         long pid = strtol(e->d_name, &end, 10);
         if (pid <= 0 || strcmp(end, ".sock") != 0) continue;
-        char path[CTL_PATH_MAX];
-        if (sock_path(path, sizeof path, dir, pid) < 0) continue;
-        int fd = ctl_connect(path);
-        if (fd < 0) continue;
-        close(fd);
         pids[n++] = pid;
     }
     closedir(d);
     return n;
+}
+
+/* One request to the vtt of `pid`, the whole answer (malloc'd), or NULL. */
+static char *ask(const char *dir, long pid, const char *req, size_t len, size_t *alen)
+{
+    char path[CTL_PATH_MAX];
+    if (sock_path(path, sizeof path, dir, pid) < 0) return NULL;
+    int fd = ctl_connect(path);
+    if (fd < 0) return NULL;
+    char *ans = exchange(fd, req, len, alen, ctl_held_ms(req) + CTL_TIMEOUT_MS + 5000);
+    close(fd);
+    return ans;
 }
 
 int ctl_client_main(const char *req, long pid)
@@ -480,35 +491,33 @@ int ctl_client_main(const char *req, long pid)
     }
 
     if (!pid) {
-        long pids[CTL_LIST_MAX];
-        int  n = find_live(dir, pids, CTL_LIST_MAX);
-        if (n == 0) {
+        /* Every interactive vtt listens (for --apply); --ctl talks to the
+         * one whose GM typed :agent on. Each says which it is in status. */
+        long pids[CTL_LIST_MAX], on[CTL_LIST_MAX];
+        char lines[CTL_LIST_MAX][160];
+        int  n = find_live(dir, pids, CTL_LIST_MAX), non = 0;
+        for (int i = 0; i < n; i++) {
+            size_t len;
+            char  *ans = ask(dir, pids[i], "status\n", 7, &len);
+            if (ans && strstr(ans, "\nagent on\n")) {
+                /* The line after "ok" is the map's. */
+                const char *nl = strchr(ans, '\n');
+                size_t k = strcspn(nl + 1, "\n");
+                snprintf(lines[non], sizeof lines[non], "%.*s", (int)(k < 150 ? k : 150), nl + 1);
+                on[non++] = pids[i];
+            }
+            free(ans);
+        }
+        if (non == 0) {
             fputs("vtt: no vtt is taking requests - type :agent on in the one you mean\n", stderr);
             return 2;
         }
-        if (n > 1) {
+        if (non > 1) {
             fputs("vtt: more than one vtt is taking requests; pick one with --ctl-pid:\n", stderr);
-            for (int i = 0; i < n; i++) {
-                char path[CTL_PATH_MAX], line[160] = "";
-                if (sock_path(path, sizeof path, dir, pids[i]) < 0) continue;
-                int fd = ctl_connect(path);
-                if (fd >= 0) {
-                    size_t len;
-                    char  *ans = exchange(fd, "status\n", 7, &len, CTL_TIMEOUT_MS + 5000);
-                    close(fd);
-                    /* The line after "ok" is the map's. */
-                    const char *nl = ans ? strchr(ans, '\n') : NULL;
-                    if (nl) {
-                        size_t k = strcspn(nl + 1, "\n");
-                        snprintf(line, sizeof line, "%.*s", (int)(k < 150 ? k : 150), nl + 1);
-                    }
-                    free(ans);
-                }
-                fprintf(stderr, "  --ctl-pid %-8ld %s\n", pids[i], line);
-            }
+            for (int i = 0; i < non; i++) fprintf(stderr, "  --ctl-pid %-8ld %s\n", on[i], lines[i]);
             return 2;
         }
-        pid = pids[0];
+        pid = on[0];
     }
 
     char path[CTL_PATH_MAX];
@@ -544,4 +553,122 @@ int ctl_client_main(const char *req, long pid)
     fwrite(body, 1, strlen(body), stdout);
     free(ans);
     return ok ? 0 : 1;
+}
+
+/* ---------------------------------------------------- --apply to an open map */
+
+/* The lines of an events answer that are about job `num`: 0 accepted (the
+ * line into *line), 4 scrapped or gone, 5 sent back with feedback (its text
+ * into *line), -1 none of them yet. *seq is the answer's "seq N". */
+static int verdict_in(const char *ans, int num, unsigned *seq, char *line, size_t sz)
+{
+    char acc[32], scr[32], fb[32], rm[48];
+    snprintf(acc, sizeof acc, " job %d accepted", num);
+    snprintf(scr, sizeof scr, " job %d scrapped", num);
+    snprintf(fb,  sizeof fb,  " job %d feedback: ", num);
+    snprintf(rm,  sizeof rm,  " job %d removed by the GM", num);
+    for (const char *p = ans; *p; ) {
+        size_t      ll = strcspn(p, "\n");
+        const char *sp = memchr(p, ' ', ll);
+        if (!strncmp(p, "seq ", 4)) *seq = (unsigned)strtoul(p + 4, NULL, 10);
+        else if (sp) {
+            size_t rest = ll - (size_t)(sp - p);
+            if (!strncmp(sp, acc, strlen(acc)))    { snprintf(line, sz, "%.*s", (int)rest - 1, sp + 1); return 0; }
+            if (!strncmp(sp, fb, strlen(fb)))      { snprintf(line, sz, "%.*s", (int)(rest - strlen(fb)), sp + strlen(fb)); return 5; }
+            if (!strncmp(sp, scr, strlen(scr)) || !strncmp(sp, rm, strlen(rm)) || !strncmp(sp, " map closed", 11)) {
+                snprintf(line, sz, "%.*s", (int)rest - 1, sp + 1);
+                return 4;
+            }
+        }
+        p += ll + (p[ll] == '\n');
+    }
+    return -1;
+}
+
+int ctl_apply_open(const char *map_path, const char *plan_name, const char *plan, size_t len, int wait_s)
+{
+    char dir[CTL_PATH_MAX], err[CTL_PATH_MAX + 64];
+    struct stat st;
+    if (stat(map_path, &st) < 0 || ctl_dir(dir, sizeof dir) < 0 || access(dir, F_OK) != 0 ||
+        dir_ours(dir, err, sizeof err) < 0)
+        return -1;
+
+    /* Which vtt has this file open, if any: by identity, since each was
+     * started in a directory of its own. */
+    char holds[96];
+    int  hl = snprintf(holds, sizeof holds, "holds %llu %llu\n", (unsigned long long)st.st_dev, (unsigned long long)st.st_ino);
+    long pids[CTL_LIST_MAX], pid = 0;
+    int  n = find_live(dir, pids, CTL_LIST_MAX);
+    for (int i = 0; i < n && !pid; i++) {
+        size_t al;
+        char  *ans = ask(dir, pids[i], holds, (size_t)hl, &al);
+        if (ans && !strcmp(ans, "ok\nholds\n")) pid = pids[i];
+        free(ans);
+    }
+    if (!pid) return -1;
+
+    /* Where its events stand, before the proposal: the verdict comes after. */
+    unsigned seq = 0;
+    size_t   al;
+    char    *ans = wait_s >= 0 ? ask(dir, pid, "wait for 0\n", 11, &al) : NULL;
+    if (ans && !strncmp(ans, "ok\nseq ", 7)) seq = (unsigned)strtoul(ans + 7, NULL, 10);
+    free(ans);
+
+    /* The plan, named: a proposal from --apply, never a write to the file. */
+    size_t cap = len + strlen(plan_name) * 2 + 32, k = 0;
+    char  *req = malloc(cap);
+    if (!req) { fputs("vtt: out of memory\n", stderr); return 2; }
+    k += (size_t)snprintf(req, cap, "propose apply \"");
+    for (const char *p = plan_name; *p; p++) {
+        if (*p == '"' || *p == '\\') req[k++] = '\\';
+        req[k++] = *p == '\n' ? ' ' : *p;
+    }
+    req[k++] = '"';
+    req[k++] = '\n';
+    memcpy(req + k, plan, len);
+    ans = ask(dir, pid, req, k + len, &al);
+    free(req);
+    if (!ans || !al) { free(ans); fputs("vtt: no answer from the vtt that has the map open\n", stderr); return 2; }
+
+    size_t first = strcspn(ans, "\n");
+    int    ok = first == 2 && !strncmp(ans, "ok", 2);
+    const char *body = ans[first] ? ans + first + 1 : ans + first;
+    if (!ok) {
+        fprintf(stderr, "vtt: %.*s - nothing proposed\n", (int)first, ans);
+        free(ans);
+        return 1;
+    }
+    fprintf(stderr, "vtt: %s is open in vtt %ld - the plan went there as a proposal; the file is untouched\n", map_path, pid);
+    fputs(body, stdout);
+    int num = 0;
+    const char *hash = strstr(body, "proposal #");
+    if (hash) num = atoi(hash + 10);
+    free(ans);
+    if (wait_s < 0 || !num) return 0;       /* not asked to wait, or nothing to wait for */
+
+    /* --wait: the GM's verdict, from the vtt's events. */
+    struct timespec t0;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    for (;;) {
+        struct timespec t;
+        clock_gettime(CLOCK_MONOTONIC, &t);
+        long left = wait_s - (long)(t.tv_sec - t0.tv_sec);
+        if (left < 0) left = 0;
+        char wreq[64];
+        int  wl = snprintf(wreq, sizeof wreq, "wait %u for %ld\n", seq, left > CTL_WAIT_MAX_S ? CTL_WAIT_MAX_S : left);
+        ans = ask(dir, pid, wreq, (size_t)wl, &al);
+        if (!ans || !al) { free(ans); fputs("vtt: the vtt closed before a verdict\n", stderr); return 2; }
+        char line[300] = "";
+        unsigned was = seq;
+        int v = verdict_in(ans, num, &seq, line, sizeof line);
+        free(ans);
+        if (seq < was) seq = 0;             /* a reset: hear everything kept */
+        if (v == 0) { printf("%s, not saved\n", line); return 0; }
+        if (v == 4) { printf("%s\n", line); return 4; }
+        if (v == 5) { printf("%s\n", line); return 5; }
+        if (left == 0) {
+            printf("no verdict in %d seconds - proposal #%d still waits for the GM\n", wait_s, num);
+            return 3;
+        }
+    }
 }

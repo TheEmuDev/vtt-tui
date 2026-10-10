@@ -23,12 +23,23 @@ A plan and a live session speak the same language, the one below, and follow the
 **a request is all or nothing** (if any line fails, nothing changed, and the answer names
 the line and why), and **one request is one undo step** for the GM, once accepted.
 
-**Which way.** If the GM has the map open in `vtt`, work live, even for a large change: run
-`vtt --ctl status` and, when it answers with that map, send your plan to `vtt --ctl`
-(it reads the same file on stdin, `vtt --ctl < plan.txt`). Never `--apply` to a file the
-GM has open. vtt does not notice the file changing under it, and the GM's next `:w` writes
-the map they have in memory over yours, silently. When `--ctl` exits 2, either nothing is
-open or the GM has not typed `:agent on`. Ask the GM which before you `--apply`.
+**Which way.** Either works at any time. `vtt map.vtt --apply plan.txt` asks every running
+vtt whether it has that file open. If one does, the plan goes to it as a **proposal** for its
+GM to review and the file is not touched (stderr says so); if none does, the plan is run on
+the file and saved, as always. So `--apply` is safe on a map the GM has open, with or without
+`:agent on`. Add `--wait SECONDS` to wait for the GM's verdict:
+
+| exit | means | stdout |
+|---|---|---|
+| 0 | accepted, whole or in part (or run on the file, with no vtt holding it) | `job N accepted: ..., not saved` -- saving is the GM's |
+| 1 | the plan failed: nothing proposed, nothing saved | |
+| 3 | no verdict in that time; the proposal still waits | `no verdict in N seconds ...` |
+| 4 | scrapped, or the job or the map went away | the event |
+| 5 | sent back | the GM's feedback, one line |
+
+A plan for `--apply` has no `propose` line of its own. To do more than propose (read the map
+as it is in memory, answer the GM's jobs, hear events), the GM types `:agent on` and you
+use `vtt --ctl`; it exits 2 when no vtt has its channel on.
 
 **Where the GM's maps are.** The GM's menu lists the maps in the directory vtt was started
 in and in `~/.local/share/vtt/maps` (`$XDG_DATA_HOME/vtt/maps` when that is set), and

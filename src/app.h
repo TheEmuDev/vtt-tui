@@ -223,6 +223,12 @@ typedef struct {
     Undo     ctl_sundo;
     int      ctl_auto;
     int      ctl_direct;
+    /* :agent on. The socket listens whenever vtt runs interactively, so
+     * --apply can find a map that is open (decision 5); off, a request over
+     * it may only propose, ask status and wait -- no reads of the map, and
+     * nothing lands at once. Requests not from the socket (the tests, the
+     * bench) are not asked. */
+    int      agent_on;
 
     TextPrompt prompt;
     PromptWhat prompt_what;

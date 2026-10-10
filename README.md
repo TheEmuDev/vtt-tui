@@ -1349,7 +1349,9 @@ reached only by a link as reachable (a one-way link only in its direction).
 The control channel lets an agent or script read the map open in a running vtt and propose
 changes to it (see *Asking an agent*).
 `:agent on` opens it (or `--agent` at startup) and `:agent off` closes it. It listens on a
-Unix socket in `$XDG_RUNTIME_DIR/vtt/` that only the same user can access.
+Unix socket in `$XDG_RUNTIME_DIR/vtt/` that only the same user can access. With the channel
+off the socket still takes proposals (an `--apply` to the open map), which change nothing
+until you accept them; it gives out nothing about the map.
 
 `vtt --ctl REQUEST` sends a request and prints the answer; with no request it reads one from
 stdin. It exits 0 on success, 1 on an error (the reason is printed on stderr), and 2 when no
@@ -1368,9 +1370,10 @@ waiting for the GM's review - :review 1
 
 `vtt map.vtt --apply plan.txt` runs the same requests against a map file without a live
 session and saves it; `--new WxH` creates an empty map first if the file does not exist.
-Don't use `--apply` on a map that is open in vtt: vtt doesn't notice the file changing,
-and your next `:w` writes over the plan's changes. Send the plan to the open map instead:
-`vtt --ctl < plan.txt` after `:agent on`.
+If the map is open in a running vtt, the plan goes there instead, as a proposal for you to
+`:review`, and the file is not touched. This works with the channel off too. `--wait
+SECONDS` then waits for your verdict: it exits 0 when you accept, 3 when the time runs out,
+4 when you scrap it, and 5 when you send it back, with your line of feedback on stdout.
 
 A request's edits become one proposal, made only if every line in it succeeds, and land as a
 single undo step when accepted. Under `:agent accept auto` a request lands at once, with a

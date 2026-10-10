@@ -222,6 +222,13 @@ static void ctl_pump(App *a, int (*until)(void *), void *ctx)
     }
 }
 
+/* For ctl_pump: stop once the first job has a proposal. */
+static int a_job_ready(void *ctx)
+{
+    App *a = ctx;
+    return a->jobs[0].used && a->jobs[0].state == JOB_READY;
+}
+
 /* For ctl_pump: stop once this many waits are held. */
 typedef struct { App *a; int n; } WaitersAre;
 static int waiters_are(void *ctx)
@@ -258,6 +265,18 @@ static int ctl_child_done(void *ctx)
 {
     int *st = ctx;
     return st[1] || (st[1] = waitpid((pid_t)st[0], &st[2], WNOHANG) > 0);
+}
+
+/* One request over the socket, the whole answer (free it). */
+static char *sock_ask(App *a, const char *req)
+{
+    CtlReader rd = { ctl_raw_connect(a->ctl.path), "", 0, 0 };
+    if (rd.fd < 0) return NULL;
+    if (write(rd.fd, req, strlen(req)) < 0) { }
+    shutdown(rd.fd, SHUT_WR);
+    ctl_pump(a, ctl_read_some, &rd);
+    close(rd.fd);
+    return strdup(rd.buf);
 }
 
 void test_ctl_marked(void)
@@ -1532,23 +1551,63 @@ void test_ctl_live(void)
     }
     app_jobs_clear(&a);
 
-    CASE(":agent off with a wait held: the waiter is closed with nothing said, and nothing listens on");
+    CASE(":agent off: the socket stays (an --apply must find the map), a held wait stays, the checkpoint stops");
     CtlReader held = { ctl_raw_connect(a.ctl.path), "", 0, 0 };
     CHECK(write(held.fd, "wait for 600\n", 13) == 13);
     shutdown(held.fd, SHUT_WR);
     ctl_pump(&a, waiters_are, &(WaitersAre){ &a, 1 });
     CHECK(a.agent_seen_ms != 0);
-
-    CASE(":agent off closes it and removes the socket; --ctl then finds nobody (exit 2)");
     press(&a, ":agent off\r");
-    CHECK_EQ(ctl_active(&a.ctl), 0);
+    CHECK_EQ(a.agent_on, 0);
+    CHECK_EQ(ctl_active(&a.ctl), 1);
+    CHECK(access(want, F_OK) == 0);
+    CHECK(strstr(a.status, "agent channel off - a proposal") != NULL);
     CHECK_EQ(a.agent_seen_ms, 0u);
-    for (int k = 0; k < 50 && !ctl_read_some(&held); k++) poll(NULL, 0, 2);
-    CHECK(held.done && held.n == 0);                   /* closed, empty: the client says so */
-    close(held.fd);
     app_tick(&a, prof_now_ns() / 1000000u);
-    CHECK(a.map->cp == NULL);                          /* no agent: no checkpoint */
-    CHECK(access(want, F_OK) != 0);
+    CHECK(a.map->cp == NULL);                          /* nothing of the map is told */
+    CHECK_EQ(ctl_waiters(&a.ctl), 1);
+    press(&a, ":agent off\r");
+    CHECK(strstr(a.status, "already off") != NULL);
+
+    CASE("off, over the socket: status, holds, wait and proposals; no read of the map, nothing at once");
+    {
+        char *t = sock_ask(&a, "dump\n");
+        CHECK(t && !strcmp(t, "error: line 1: the agent channel is off - only proposals, status and wait are taken (:agent on)\n"));
+        free(t);
+        t = sock_ask(&a, "jobs\n");
+        CHECK(t && !strncmp(t, "error: line 1: the agent channel is off", 39));
+        free(t);
+        t = sock_ask(&a, "status\n");
+        CHECK(t && !strncmp(t, "ok\n", 3) && strstr(t, "\nagent off - proposals, status and wait only\n"));
+        free(t);
+        struct stat fs;
+        char req[96];
+        CHECK(stat("tests/fixtures/two-rooms.vtt", &fs) == 0);
+        snprintf(req, sizeof req, "holds %llu %llu\n", (unsigned long long)fs.st_dev, (unsigned long long)fs.st_ino);
+        t = sock_ask(&a, req);
+        CHECK(t && !strcmp(t, "ok\nholds\n"));
+        free(t);
+        t = sock_ask(&a, "holds 1 2\n");
+        CHECK(t && !strcmp(t, "ok\nno\n"));
+        free(t);
+        t = sock_ask(&a, "holds here\n");
+        CHECK(t && strstr(t, "holds DEVICE INODE"));
+        free(t);
+        a.ctl_auto = 1;                                    /* at once is :agent on's */
+        int was = map_tile(a.map, 1, 1);
+        t = sock_ask(&a, "propose apply \"plan.txt\"\ntile B2 hazard\n");
+        CHECK(t && !strncmp(t, "ok\nproposal #", 13) && strstr(t, "\nwaiting for the GM's review"));
+        free(t);
+        a.ctl_auto = 0;
+        CHECK_EQ(map_tile(a.map, 1, 1), was);
+        int found = 0;
+        for (int i = 0; i < JOB_MAX; i++)
+            found += a.jobs[i].used && a.jobs[i].from == JOB_FROM_APPLY && !strcmp(a.jobs[i].text, "--apply plan.txt");
+        CHECK_EQ(found, 1);
+        app_jobs_clear(&a);
+    }
+
+    CASE("--ctl finds no vtt with its channel on, though one listens (exit 2)");
     {
         fflush(stdout);
         pid_t pid = fork();
@@ -1557,10 +1616,78 @@ void test_ctl_live(void)
             dup2(o, 2);
             _exit(ctl_client_main("status", 0));
         }
-        int stc = 0;
-        waitpid(pid, &stc, 0);
-        CHECK(WIFEXITED(stc) && WEXITSTATUS(stc) == 2);
+        int stc[3] = { (int)pid, 0, 0 };
+        ctl_pump(&a, ctl_child_done, stc);
+        CHECK(stc[1] && WIFEXITED(stc[2]) && WEXITSTATUS(stc[2]) == 2);
     }
+    close(held.fd);
+    ctl_pump(&a, waiters_are, &(WaitersAre){ &a, 0 });
+
+    CASE("--apply to a map open in a vtt: a proposal there, the file untouched; --wait gives the GM's verdict");
+    {
+        const char *file = "tests/fixtures/two-rooms.vtt";
+        struct stat f0, f1;
+        stat(file, &f0);
+        char out[700];
+        snprintf(out, sizeof out, "%s/apply-out.txt", sb.dir);
+        /* What the GM does with it, and what --apply --wait 20 then says. */
+        static const struct { const char *plan, *keys, *more; int wait, rc; const char *says; } R[] = {
+            { "tile B2 hazard\n", "\r",  NULL,          20, 0, "job 1 accepted: ground in B2, not saved\n" },
+            { "tile B3 hazard\n", "d",   NULL,          20, 4, "job 1 scrapped\n" },
+            { "tile B4 hazard\n", "c",   "not there\r", 20, 5, "not there\n" },
+            { "tile B5 hazard\n", NULL,  NULL,           0, 3, "no verdict in 0 seconds - proposal #1 still waits for the GM\n" },
+            { "tile B6 hazard\n", NULL,  NULL,          -1, 0, "waiting for the GM's review - :review 1\n" },
+            { "tile B2 bogus\n",  NULL,  NULL,          20, 1, "" },
+        };
+        for (size_t k = 0; k < sizeof R / sizeof *R; k++) {
+            app_jobs_clear(&a);
+            fflush(stdout);
+            pid_t pid = fork();
+            if (pid == 0) {
+                int o = open(out, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+                dup2(o, 1);
+                int e = open("/dev/null", O_WRONLY);
+                dup2(e, 2);
+                int rc = ctl_apply_open(file, "plan.txt", R[k].plan, strlen(R[k].plan), R[k].wait);
+                fflush(stdout);
+                _exit(rc < 0 ? 99 : rc);
+            }
+            int stc[3] = { (int)pid, 0, 0 };
+            if (R[k].keys) {
+                ctl_pump(&a, a_job_ready, &a);
+                CHECK_EQ(a.jobs[0].state, JOB_READY);
+                CHECK_EQ(a.jobs[0].from, JOB_FROM_APPLY);
+                press(&a, ":review\r");
+                press(&a, R[k].keys);
+                if (R[k].more) press(&a, R[k].more);
+                app_events_flush(&a, prof_now_ns() / 1000000u);   /* what main does after keys */
+            }
+            ctl_pump(&a, ctl_child_done, stc);
+            CHECK_EQ(stc[1], 1);
+            CHECK(WIFEXITED(stc[2]) && WEXITSTATUS(stc[2]) == R[k].rc);
+            FILE *f = fopen(out, "r");
+            char  text[512] = "";
+            size_t n = f ? fread(text, 1, sizeof text - 1, f) : 0;
+            text[n] = '\0';
+            if (f) fclose(f);
+            size_t sl = strlen(R[k].says);
+            CHECK(n >= sl && !strcmp(text + n - sl, R[k].says));
+            if (R[k].rc == 0 && R[k].keys) press(&a, "u");        /* the map as it was */
+        }
+        stat(file, &f1);
+        CHECK(f0.st_mtime == f1.st_mtime && f0.st_size == f1.st_size && f0.st_ino == f1.st_ino);
+        app_jobs_clear(&a);
+
+        CASE("--apply to a file no vtt has open is the file's, as before: nobody holds it");
+        fflush(stdout);
+        pid_t pid = fork();
+        if (pid == 0) _exit(ctl_apply_open("tests/fixtures/kinds.vtt", "plan.txt", "tile B2 hazard\n", 15, -1) < 0 ? 0 : 1);
+        int stc[3] = { (int)pid, 0, 0 };
+        ctl_pump(&a, ctl_child_done, stc);
+        CHECK(stc[1] && WIFEXITED(stc[2]) && WEXITSTATUS(stc[2]) == 0);
+    }
+    ctl_stop(&a.ctl);                                  /* the cases below want nobody listening */
+    CHECK(access(want, F_OK) != 0);
 
     CASE("a socket file nobody answers on is a crashed vtt's, and --ctl removes it");
     {
