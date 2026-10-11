@@ -4,6 +4,10 @@ Everything an AI agent needs to build and change `vtt` maps for a GM: from a des
 a file, or live in the GM's session while they watch. Read this page whole before the first
 map; the README is the reference for the rest of the app.
 
+> **Not the page for working on vtt's own code.** An agent changing the C source reads
+> `CLAUDE.md` at the top of the repository and `docs/CODEMAP.md`; this page is for an agent
+> *using* vtt to make maps.
+
 `vtt` is a virtual tabletop in the terminal, used beside a physical table: the GM builds an
 encounter map, then runs the fight on it while the players watch on their phones. It knows
 no game's rules. A map is a grid of squares (`A1` top left; columns `A`..`Z`, `AA`..; rows

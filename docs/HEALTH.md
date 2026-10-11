@@ -176,7 +176,7 @@ Rows move here when fixed, with the commit.
 
 ### Where the rows came from
 
-Fifteen reviews, 2026-10-07 to 2026-10-10. The first seven predate this section: on 2026-10-09
+Sixteen reviews, 2026-10-07 to 2026-10-10. The first seven predate this section: on 2026-10-09
 their reports were read back from the session's record and every item checked against the
 code as it stood (137 items: 117 fixed, 4 overtaken when the plan dropped "accept saves", 16
 open, none disproved). Steps 4-6 were entered from their reports as they came.
@@ -198,6 +198,7 @@ open, none disproved). Steps 4-6 were entered from their reports as they came.
 | 2026-10-10 | step 9 and the whole feature (two high, two medium, four low: all fixed but the memory cap) | 43, 44, B12 |
 | 2026-10-10 | the CLAUDE.md split (b9ae6bc) | 45 |
 | 2026-10-10 | the docs index and the status lines | none (46, closed) |
+| 2026-10-10 | PERFORMANCE.md's sub-headings and AGENTS.md's note | none |
 
 ## 2026-09-28, at 17e31e3
 

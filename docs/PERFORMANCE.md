@@ -292,6 +292,10 @@ Machine: Intel Core i7-8700K @ 3.70GHz (6 cores, 12 threads, 4.7 GHz max, powers
 
 ### Reading it
 
+A finding a paragraph for the most part, its bold lead the finding, in the groups headed below.
+
+#### The frame, what is layered on it, selecting several
+
 **The renderer stopped paying twice for the window.** Two changes to the flush, one
 commit, measured together at 200×50: the delivered frame becomes the front buffer by a
 pointer swap rather than a 160KB copy, and clean rows are skipped with one `memcmp`
@@ -343,6 +347,8 @@ is 22 cells and 131 bytes -- the creatures move, so their rings move with them, 
 three creatures walking abreast redraw barely more than one does, because the ribbon
 and the label are drawn once for the group rather than once each.
 
+#### Undo
+
 **Undo is 20 bytes an op and bounded.** An op used to carry two whole tokens, 228 bytes,
 for a tile paint that needs two. The token payloads now live in a side array the log
 owns, and a full fill of the largest map (512×512, 262,144 ops) went from 60 MB to
@@ -352,6 +358,8 @@ fills and then drops its oldest quarter in one memmove, `undo.trim`: about 5ms, 
 per 262,144 new ops, which is 19ns an op amortized and a thing that happens a handful
 of times in a long session of painting. The scenario that measures it (`fill history`)
 paints and clears 200×200 without undoing so the log grows 80,000 ops a loop.
+
+#### Play: range and templates, cards, damage, whispers, the camera, the turn order, the panel
 
 **The range highlight costs the window when it covers the window.** `play, range radius`
 holds a 100 ft reach over a 40×25 map, so every visible tile is in range and every one
@@ -429,6 +437,8 @@ is always up. At 80×24 the rows fell by a microsecond or two, the grid being 24
 narrower; at 200×50 `play, 24 tokens` rose from 102µs to 108µs, the panel's 8µs less the
 grid it displaced. None of it is the turn order, which the paragraph above prices.
 
+#### The players' frame, a watcher, the page, a jump of the view
+
 **The players' frame costs a copy and a second diff, or a second draw.** Since
 the players' frame landed, what the clients receive is a second renderer's
 diff. When nothing GM-only is on screen that renderer takes a copy of the
@@ -478,6 +488,8 @@ order: it is the first scenario that presses `t` at all, and `t` sends the view 
 creature that is usually somewhere else, so most of the window repaints. Walking the
 tokens in list order scrolls exactly as far.
 
+#### Clocks, notes, named rolls
+
 **Clocks cost a panel row each, and only when the panel is drawn.** `clock.draw` is
 1.6µs typical for two clocks: a fill of its rows, a name column, a dot per segment.
 `play, clocks` runs two `:clock` and two `:tick` commands a loop and its frame is the
@@ -487,6 +499,8 @@ op of the tile kind. **Notes cost nothing per frame in play mode**, by design: t
 text is never drawn there. Build mode's `note.marks` walks the notes, not the tiles,
 0.1µs for three. **A named roll is a string lookup**: `play, named roll` reads the
 same as `play, rolling`.
+
+#### Fog and sight
 
 **Fog costs the GM 1.5µs a frame and a map without it nothing.** `grid_draw` decides once a
 frame whether any patch is live; a map with none takes the path it always took, and
@@ -518,6 +532,8 @@ One more thing worth knowing: a keystroke that is not only moves still rebuilds 
 -- a counter, a clock, a note, the round, which cannot change sight. That is the price of one rule
 instead of a list of call sites that could miss one, and a missed one would be a leak.
 
+#### Phones: the keepalive and pings
+
 **A quiet phone costs 32 bytes a minute, not a reconnect.** A browser never speaks on
 its own, and the server used to drop one after a minute of silence: a phone whose player
 never tapped reconnected every minute -- a TCP handshake, a 300-byte upgrade, a 150-byte
@@ -537,6 +553,8 @@ frame runs; a single tap at a real table is a few hundred bytes once. Over fog t
 players' frame is drawn apart from the GM's anyway, and pinging adds about the same.
 `play, GM ping` is `g p` with no server: level with the plain play rows. A tap up the
 wire is under 16 bytes.
+
+#### Sight, scenario by scenario; the plan; the soft edge
 
 **Sight, scenario by scenario.** The zone table above keeps only each zone's worst
 scenario, so `tools/sight.sh` measures `fog.sight` per fog scenario (median of three,
@@ -605,6 +623,8 @@ edge shown: 83.1µs against 85.2µs, the difference inside the noise. `fog.sight
 recompute's code is unchanged by this step and its typical figure did not move, so the tail
 is the four clients' encoding sharing the machine with it, not the edge.
 
+#### Counters, the session log, the autosave and saves
+
 **A counter step is a token edit.** `counter.step` is 0.4µs typical: find the
 current counter, clamp, and one `undo_edit_token`, the same path a relabel takes.
 `play, counters` sets HP through the prompt and then steps it eight times a loop,
@@ -649,6 +669,8 @@ over replaying the undo log because the log does not see everything the map is: 
 ruleset, the scale, the clocks and named rolls, a resize. Anything that goes through
 `map_touch` is covered, which is everything. An idle `vtt` with nothing owed still
 blocks in `poll` for ever; the only timer is the one write it is waiting to make.
+
+#### Groups, selection and the cursor
 
 `group.move` is the whole formation's move: the check for every member, then the
 steps. **0.1us typical and 2.0us at p99** for the sizes a table plays at. It is
@@ -705,6 +727,8 @@ covers, so between one press and the next almost nothing on screen changes. Only
 selection highlight moves, and that is two token bodies. The walk itself is a scan of
 the token list per press, on a keystroke rather than a frame, and does not register.
 
+#### Routes, the profiler's overlay, a key's worst
+
 **The route search costs the route now, not the map.** It used to malloc, zero and
 free two map-sized arrays per keystroke, and ask the token list about every square it
 probed — O(map × tokens) however short the walk. Three changes took that apart: the
@@ -727,6 +751,8 @@ than no instrument. It is off unless you press F12.
 **`input.key`'s worst is a carried step**, not a cursor move: the route is recut
 underneath it, so it is `trail.path`'s worst wearing a different name. A bare cursor
 keystroke is 0.2µs.
+
+#### Links, floors, hidden creatures, trips
 
 **Links cost their marks and nothing else.** `link.marks` walks the links rather than the
 tiles, culls each end to the window, and writes a glyph and a number into cells the grid
@@ -760,6 +786,8 @@ round the whole write is half a millisecond more). That is kept on purpose: a tr
 deliberate change of map, like opening a file, and it is never half on disk. The frames
 right after a flush draw slower (`play, map trip there+back`, 50µs against 30µs with the
 same maps on tmpfs, A/B'd): the same code, run cold.
+
+#### Handouts, scenes, the character picker, stamps
 
 **Handouts cost a send, not a frame; and the players' frame stopped changing when only the
 GM's message does.** Putting a handout up is one `'H'` record to each client
@@ -797,6 +825,8 @@ stamp is under 10µs a draw at the p99 and about 20µs at worst on a 200×200 ma
 (`build, stamp 20x20`); turning or mirroring one (`stamp.turn`) is a new stamp built once,
 on the key, never a frame's work; `stamp.place`, the
 real thing, is one batch of undo edits, a fill's cost.
+
+#### An agent's request
 
 **`ctl` is an agent's request, and it is dearest when it reads the most.** A 40×40
 room over void with a dozen creatures in it -- 1,600 squares, the outline, twelve
