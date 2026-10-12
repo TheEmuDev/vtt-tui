@@ -103,4 +103,9 @@ void     rnd_clip_restore(Renderer *r, ClipRect saved);
  * row. Backs --dump-frame and the golden tests. */
 void rnd_dump(const Renderer *r, ByteBuf *out);
 
+/* The same with nothing stripped: each row's text, then a line of its runs of
+ * one style, `x+n fg/bg/attr` (colors in hex). What a tint or a highlight
+ * changes shows here and not in rnd_dump. Backs --dump-frame --cells. */
+void rnd_dump_cells(const Renderer *r, ByteBuf *out);
+
 #endif /* VTT_RENDER_H */

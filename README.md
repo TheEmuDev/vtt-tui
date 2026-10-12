@@ -113,6 +113,8 @@ vtt [options] [map.vtt]
   testing and profiling:
   --script PATH      replay a keystroke script instead of reading the terminal
   --dump-frame       render one frame as plain text and exit
+  --cells            with --dump-frame: under each row, its runs of one color (x+n fg/bg/attr)
+  --players          with --dump-frame: the frame the players' screens get (blank until play mode), not the GM's
   --size WxH         screen size for headless modes (default 80x24)
   --bench PATH       replay a script headlessly and report frame statistics
   --bench-loops N    how many times --bench replays it (default 50)

@@ -31,6 +31,8 @@ typedef struct {
     const char *script_path;
     int         ascii;
     int         dump_frame;
+    int         dump_cells;         /* --cells: the dump keeps each cell's colors */
+    int         dump_players;       /* --players: the dump is the players' frame, not the GM's */
     int         bench;
     int         bench_loops;
     int         width, height;      /* headless geometry */
@@ -77,6 +79,8 @@ static void usage(void)
         "  --bench PATH       replay a script headlessly and report frame statistics\n"
         "  --bench-loops N    repetitions for --bench (default 50)\n"
         "  --dump-frame       render one frame as plain text to stdout and exit\n"
+        "  --cells            ... with a line of colors under each row (x+n fg/bg/attr)\n"
+        "  --players          ... the frame the players' screens are sent (blank until play mode)\n"
         "  --size WxH         geometry for headless modes (default 80x24)\n"
         "  --seed N           seed the dice, for a repeatable session or script\n"
         "  --serve [PORT]     open the remote view at startup (:serve does it later)\n"
@@ -131,6 +135,8 @@ static int parse_args(Options *o, int argc, char **argv)
         if (!strcmp(a, "-h") || !strcmp(a, "--help")) { usage(); return 1; }
         else if (!strcmp(a, "--ascii"))      o->ascii = 1;
         else if (!strcmp(a, "--dump-frame")) o->dump_frame = 1;
+        else if (!strcmp(a, "--cells"))      o->dump_cells = 1;
+        else if (!strcmp(a, "--players"))    o->dump_players = 1;
         else if (!strcmp(a, "--trace")  && i + 1 < argc) o->trace_path  = argv[++i];
         else if (!strcmp(a, "--script") && i + 1 < argc) o->script_path = argv[++i];
         else if (!strcmp(a, "--bench")  && i + 1 < argc) { o->bench = 1; o->script_path = argv[++i]; }
@@ -321,12 +327,16 @@ static int run_headless(const Options *o)
     if (o->dump_frame) {
         prof_frame_begin();
         rnd_begin(&r);
-        app_draw(&a);
+        /* The players' frame is blank until play mode draws into it, as in
+         * app_frame: outside it a phone is sent nothing of the GM's screen. */
+        if (!o->dump_players)          app_draw(&a);
+        else if (app_remote_live(&a))  app_draw_view(&a, VIEW_PLAYERS);
         prof_frame_end();
 
         ByteBuf out;
         bb_init(&out, 8192);
-        rnd_dump(&r, &out);
+        if (o->dump_cells) rnd_dump_cells(&r, &out);
+        else               rnd_dump(&r, &out);
         fwrite(out.data, 1, out.len, stdout);
         bb_free(&out);
     } else {

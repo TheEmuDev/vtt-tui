@@ -1,0 +1,580 @@
+== crowd.vtt --check
+no findings
+-- exit 0
+== crowd.vtt --check --json
+{"file":"crowd.vtt","errors":0,"warnings":0,"notes":0,"findings":[]}
+-- exit 0
+== crowd.vtt --describe
+map  Crowd  14x10  scale 5 ft  metric alt  ruleset none
+  5 creatures, 1 room, starting in room 1 (A1)
+
+room 1 (A1)  A1:N10  140 squares
+  terrain  floor 140
+  player       C3       Aria
+  enemy        D3       Bram
+  player       E3       Cara
+  enemy        E7       Ogre  2x2
+  player       J3       Dax
+-- exit 0
+== crowd.vtt --describe --json
+{"map":{"name":"Crowd","width":14,"height":10,"scale_ft":5,"metric":"alt","ruleset":null,"round":0,"fog":false,"creatures":5,"rooms":1,"start_room":1},"rooms":[{"id":1,"name":"A1","area":null,"floor":null,"x":0,"y":0,"bounds":"A1:N10","squares":140,"reachable":true,"terrain":{"floor":140},"doors":[],"creatures":[{"label":"Aria","kind":"player","size":1,"at":"C3","x":2,"y":2},{"label":"Bram","kind":"enemy","size":1,"at":"D3","x":3,"y":2},{"label":"Cara","kind":"player","size":1,"at":"E3","x":4,"y":2},{"label":"Ogre","kind":"enemy","size":2,"at":"E7","x":4,"y":6},{"label":"Dax","kind":"player","size":1,"at":"J3","x":9,"y":2}],"notes":[],"fog":[]}],"areas":[],"floors":[],"links":[],"outside":[]}
+-- exit 0
+== crowd.vtt --dump-map
+    A B C D E F G H I J K L M N
+
+ 1  . . . . . . . . . . . . . .
+
+ 2  . . . . . . . . . . . . . .
+
+ 3  . . 1 2 3 . . . . 5 . . . .
+
+ 4  . . . . . . . . . . . . . .
+
+ 5  . . . . . . . . . . . . . .
+
+ 6  . . . . . . . . . . . . . .
+
+ 7  . . . . 4 4 . . . . . . . .
+
+ 8  . . . . 4 4 . . . . . . . .
+
+ 9  . . . . . . . . . . . . . .
+
+10  . . . . . . . . . . . . . .
+
+
+creatures
+  1  Aria             player       C3
+  2  Bram             enemy        D3
+  3  Cara             player       E3
+  4  Ogre             enemy 2x2    E7-F8
+  5  Dax              player       J3
+
+key
+  .  floor   ~  water   :  rough   "  brush   =  wood   ^  hazard   (blank) void
+  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door
+  S and s are the GM's: the players see a wall and an open door
+
+map  Crowd  14x10  scale 5 ft  metric alt  ruleset none
+-- exit 0
+== crowd.vtt --dump-map --region B2:F5
+   B C D E F
+
+2  . . . . .
+
+3  . 1 2 3 .
+
+4  . . . . .
+
+5  . . . . .
+
+
+creatures
+  1  Aria             player       C3
+  2  Bram             enemy        D3
+  3  Cara             player       E3
+
+key
+  .  floor   ~  water   :  rough   "  brush   =  wood   ^  hazard   (blank) void
+  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door
+  S and s are the GM's: the players see a wall and an open door
+
+map  Crowd  14x10  scale 5 ft  metric alt  ruleset none
+region B2:F5
+-- exit 0
+== crowd.vtt --seed 1 --script ../work/build-box.keys --dump-frame --size 80x24
+ Crowd                                                                    BUILD 
+               A   B   C   D   E   F   G   H   I   J   K   L   M   N            
+           1 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           2 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           3 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           4 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           5 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           6 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           7 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           8 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           9 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+          10 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             └───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘          
+ VISUAL  J8  floor  [wall/floor]  box  z… VISUAL - f floor, x clear, esc cancel 
+ hjkl extend  v/V shape  f floor  x clear  esc cancel                    ? keys 
+-- exit 0
+== crowd.vtt --seed 1 --script ../work/build-box.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== crowd.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 80x24
+-- cksum 2637585700-11654 exit 0
+== crowd.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== crowd.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 110x34
+-- cksum 4131021504-13862 exit 0
+== crowd.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== crowd.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 40x12
+-- cksum 1781978527-3436 exit 0
+== crowd.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --size 80x24
+ Crowd [+]                                                                BUILD 
+               A   B   C   D   E   F   G   H   I   J   K   L   M   N            
+           1 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           2 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           3 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           4 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           5 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           6 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           7 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           8 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           9 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+          10 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             └───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘          
+ NORMAL  H8  floor  [wall/floor]  zoom 1  map 14x10                        undo 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== crowd.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== crowd.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 80x24
+-- cksum 3803512912-11653 exit 0
+== crowd.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== crowd.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 110x34
+-- cksum 4210975894-13863 exit 0
+== crowd.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== crowd.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 40x12
+-- cksum 3903517856-3434 exit 0
+== crowd.vtt --seed 1 --script ../work/help.keys --dump-frame --size 80x24
+ VTT KEYS                                                            Build mode 
+  Build mode                                                                    
+  ──────────                                                                    
+    Move                                                                        
+      h j k l       move the cursor                                             
+      0  $          first / last column                                         
+      gg  G         first / last row                                            
+      3j            any motion takes a count                                    
+      :d6           jump to a square by its label  (:6 for a row)               
+      #             column letters and row numbers, on or off                   
+      ctrl-d        half a page down    ctrl-u up                               
+      z             center the view    + - zoom                                 
+                                                                                
+    Walls and doors                                                             
+      H J K L       wall on the west / south / north / east face                
+      w             trace mode: walk the cursor and leave wall behind           
+      t             cycle which boundary H J K L and the pen lay                
+      o  O          open or close a door / a secret door                        
+                                                                                
+    Floors                                                                      
+      :floor Upper 1                                                            
+                    make the named area Upper a floor, level 1   :floors list…  
+────────────────────────────────────────────────────────────────────────────────
+  j k  scroll      ctrl-d ctrl-u  page      g G  ends      q esc ?  close       
+-- exit 0
+== crowd.vtt --seed 1 --script ../work/help.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== crowd.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 80x24
+-- cksum 2258426481-3409 exit 0
+== crowd.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== crowd.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 110x34
+-- cksum 1788162512-5765 exit 0
+== crowd.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== crowd.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 40x12
+-- cksum 1540148677-1261 exit 0
+== crowd.vtt --seed 1 --script ../work/open.keys --dump-frame --size 80x24
+ Crowd                                                                    BUILD 
+               A   B   C   D   E   F   G   H   I   J   K   L   M   N            
+           1 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           2 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           3 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           4 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           5 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           6 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           7 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           8 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           9 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+          10 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             └───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘          
+ NORMAL  H6  floor  [wall/floor]  zoom 1  map 1… opened Crowd (14x10, 5 tokens) 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== crowd.vtt --seed 1 --script ../work/open.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== crowd.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 80x24
+-- cksum 3310121052-11654 exit 0
+== crowd.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== crowd.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 110x34
+-- cksum 1424124599-13862 exit 0
+== crowd.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== crowd.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 40x12
+-- cksum 104967168-3455 exit 0
+== crowd.vtt --seed 1 --script ../work/play-help.keys --dump-frame --size 80x24
+ VTT KEYS                                                             Play mode 
+  Play mode                                                                     
+  ─────────                                                                     
+    Move                                                                        
+      h j k l       move the cursor, or the creature in hand                    
+      arrows        the same                                                    
+      3j            any motion takes a count                                    
+      :d6           jump to a square by its label                               
+      :area Crypt   jump to a named area   :areas lists them                    
+      [  ]          the floor below / above   :floor all shows the whole map    
+      #             column letters and row numbers, on or off                   
+      z             center the view on the cursor                               
+      + -           zoom in and out                                             
+                                                                                
+    Creatures                                                                   
+      i p           place a player                                              
+      i e           place an enemy                                              
+      i t e  i t p  place a saved character as an enemy / a player: a list to…  
+      :character save                                                           
+                    save the creature under the cursor as a character   :char…  
+      :summon 3 lackey far                                                      
+                    light that range round this creature and place three insi…  
+────────────────────────────────────────────────────────────────────────────────
+  j k  scroll      ctrl-d ctrl-u  page      g G  ends      q esc ?  close       
+-- exit 0
+== crowd.vtt --seed 1 --script ../work/play-help.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== crowd.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 80x24
+-- cksum 52838005-3410 exit 0
+== crowd.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== crowd.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 110x34
+-- cksum 1795894224-5874 exit 0
+== crowd.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== crowd.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 40x12
+-- cksum 2644023987-1261 exit 0
+== crowd.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --size 80x24
+ Crowd                                                                     PLAY 
+               A   B   C   D   E   F   G   H   I   J   K   L   M   N            
+           1 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           2 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           3 │   │   │(A)│[B]│(C)│   │   │   │   │(D)│   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           4 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           5 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           6 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           7 │   │   │   │   │       │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼─Ogre ─┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           8 │   │   │   │   │       │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           9 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+          10 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             └───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘          
+ PLAY    J8  floor  5 tokens  ne… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== crowd.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --players --size 80x24
+ Crowd                                                                     PLAY 
+               A   B   C   D   E   F   G   H   I   J   K   L   M   N            
+           1 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           2 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           3 │   │   │(A)│[B]│(C)│   │   │   │   │(D)│   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           4 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           5 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           6 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           7 │   │   │   │   │       │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼─Ogre ─┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           8 │   │   │   │   │       │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           9 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+          10 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             └───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘          
+ PLAY    J8  floor  5 tokens  ne… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== crowd.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 80x24
+-- cksum 4113123491-11863 exit 0
+== crowd.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --players --size 80x24
+-- cksum 4113123491-11863 exit 0
+== crowd.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 110x34
+-- cksum 4022687633-14071 exit 0
+== crowd.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --players --size 110x34
+-- cksum 4022687633-14071 exit 0
+== crowd.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 40x12
+-- cksum 2872360936-3639 exit 0
+== crowd.vtt --seed 1 --script ../work/play.keys --dump-frame --size 80x24
+ Crowd                                                                     PLAY 
+               A   B   C   D   E   F   G   H   I   J   K   L   M   N            
+           1 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           2 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           3 │   │   │(A)│[B]│(C)│   │   │   │   │(D)│   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           4 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           5 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           6 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           7 │   │   │   │   │       │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼─Ogre ─┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           8 │   │   │   │   │       │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           9 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+          10 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             └───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘          
+ PLAY    H6  floor  5 tokens  ne… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== crowd.vtt --seed 1 --script ../work/play.keys --dump-frame --players --size 80x24
+ Crowd                                                                     PLAY 
+               A   B   C   D   E   F   G   H   I   J   K   L   M   N            
+           1 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           2 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           3 │   │   │(A)│[B]│(C)│   │   │   │   │(D)│   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           4 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           5 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           6 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           7 │   │   │   │   │       │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼─Ogre ─┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           8 │   │   │   │   │       │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           9 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+          10 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             └───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘          
+ PLAY    H6  floor  5 tokens  ne… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== crowd.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 80x24
+-- cksum 2902181993-11863 exit 0
+== crowd.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --players --size 80x24
+-- cksum 2902181993-11863 exit 0
+== crowd.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 110x34
+-- cksum 1134263771-14071 exit 0
+== crowd.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --players --size 110x34
+-- cksum 1134263771-14071 exit 0
+== crowd.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 40x12
+-- cksum 564478064-3660 exit 0
+== crowd.vtt --seed 1 --script ../work/roll.keys --dump-frame --size 80x24
+ Crowd                                                                    BUILD 
+               A   B   C   D   E   F   G   H   I   J   K   L   M   N            
+           1 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           2 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           3 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           4 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           5 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           6 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           7 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           8 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+           9 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             ├───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┤          
+          10 │   │   │   │   │   │   │   │   │   │   │   │   │   │   │          
+             └───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘          
+ NORMAL  H6  floor  [wall/floor]  zoom 1  map 14x10           2d6+3 = 12  [6 3] 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== crowd.vtt --seed 1 --script ../work/roll.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== crowd.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 80x24
+-- cksum 3621199711-11653 exit 0
+== crowd.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== crowd.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 110x34
+-- cksum 2891622370-13862 exit 0
+== crowd.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== crowd.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 40x12
+-- cksum 2681956483-3453 exit 0

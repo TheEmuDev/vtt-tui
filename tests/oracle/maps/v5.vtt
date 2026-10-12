@@ -1,0 +1,37 @@
+VTT 5
+name v3
+size 12 8
+zoom 1
+scale 5
+metric alt
+tiles
+            
+ ......     
+ ......     
+ ......     
+ ......     
+            
+            
+            
+vedges
+             
+ |     |     
+ |     |     
+ |     |     
+ |     |     
+             
+             
+             
+hedges
+            
+ ------     
+            
+            
+            
+ ------     
+            
+            
+            
+token player 2 2 1 "Aria"
+token enemy 4 3 1 "Ghoul"
+note 3 2 "a loose stone"

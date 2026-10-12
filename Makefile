@@ -54,7 +54,7 @@ DEPS      := $(OBJS:.o=.d)
 LIBSRCS   := $(filter-out $(SRCDIR)/main.c,$(SRCS))
 TESTSRCS  := $(filter-out $(TESTDIR)/fuzz_%.c,$(wildcard $(TESTDIR)/*.c))
 
-.PHONY: all debug test bench perf fuzz fuzz-ctl fuzz-json clean help
+.PHONY: all debug test oracle bench perf fuzz fuzz-ctl fuzz-json clean help
 .DEFAULT_GOAL := all
 
 all: BUILDFLAGS := $(RELFLAGS)
@@ -78,6 +78,13 @@ test: all
 	    $(LIBSRCS) $(TESTSRCS) -o $(OBJDIR)/run-tests \
 	    -fsanitize=address,undefined $(LDLIBS)
 	@$(OBJDIR)/run-tests
+	@./tools/oracle.sh check ./$(BIN)
+
+# What ./vtt prints for a fixed set of maps, keys and requests, against the
+# record under tests/oracle/expected (docs/V2.md, D11). After a change that is
+# meant to alter that output: tools/oracle.sh record, and read the diff.
+oracle: all
+	@./tools/oracle.sh check ./$(BIN)
 
 # Deterministic keystroke replay; prints frame statistics as a perf baseline.
 bench: all
@@ -117,6 +124,7 @@ help:
 	@echo "make          release build (-O2)"
 	@echo "make debug    -Og -g3 with ASan + UBSan"
 	@echo "make test     build and run the unit/golden test suite"
+	@echo "make oracle   compare ./vtt's output with tests/oracle/expected"
 	@echo "make bench    replay tests/bench.keys and print frame stats"
 	@echo "make perf     measure every path; regenerates docs/PERFORMANCE.md"
 	@echo "make clean    remove build artifacts"

@@ -192,7 +192,7 @@ Rows move here when fixed, with the commit.
 
 ### Where the rows came from
 
-Twenty-seven reviews, 2026-10-07 to 2026-10-12. The first seven predate this section: on 2026-10-09
+Twenty-eight reviews, 2026-10-07 to 2026-10-12. The first seven predate this section: on 2026-10-09
 their reports were read back from the session's record and every item checked against the
 code as it stood (137 items: 117 fixed, 4 overtaken when the plan dropped "accept saves", 16
 open, none disproved). Steps 4-6 were entered from their reports as they came.
@@ -224,6 +224,7 @@ open, none disproved). Steps 4-6 were entered from their reports as they came.
 | 2026-10-12 | environment cards, step 2, `:env adversaries` (two medium, four low: fixed but the names' matching) | 47 |
 | 2026-10-12 | environment cards, step 3, the import and `:env pick` (two medium, five low: all fixed; the importers' shared shape went to the watch list) | none |
 | 2026-10-12 | the three 2.0 reviews of the whole codebase (agent architecture, performance, testing: docs/reviews/; read-only, so nothing fixed; one finding disproved) | 48-57 |
+| 2026-10-12 | 2.0's step 0, the oracle (one high: the record's order followed the caller's locale; one medium: `--players` outside play mode dumped the GM's screen; three low; six coverage gaps: all fixed) | none |
 
 ## 2026-09-28, at 17e31e3
 

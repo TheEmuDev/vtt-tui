@@ -1,0 +1,585 @@
+== links.vtt --check
+no findings
+-- exit 0
+== links.vtt --check --json
+{"file":"links.vtt","errors":0,"warnings":0,"notes":0,"findings":[]}
+-- exit 0
+== links.vtt --describe
+map  new  20x10  scale 5 ft  metric alt  ruleset none
+  0 creatures, 2 rooms, starting in room 1 Crypt (B2)
+
+room 1 Crypt (B2)  B2:G6  30 squares
+  terrain  floor 30
+  ladder 1     D4       to N4, room 2 Tower (L2)  secret
+  portal 2     B2-C3    leads to L2-M3, room 2 Tower (L2)
+
+room 2 Tower (L2)  L2:Q6  30 squares
+  terrain  floor 30
+  ladder 1     N4       to D4, room 1 Crypt (B2)  secret
+  portal 2     L2-M3    comes from B2-C3, room 1 Crypt (B2)
+-- exit 0
+== links.vtt --describe --json
+{"map":{"name":"new","width":20,"height":10,"scale_ft":5,"metric":"alt","ruleset":null,"round":0,"fog":false,"creatures":0,"rooms":2,"start_room":1},"rooms":[{"id":1,"name":"B2","area":"Crypt","floor":null,"x":1,"y":1,"bounds":"B2:G6","squares":30,"reachable":true,"terrain":{"floor":30},"doors":[],"creatures":[],"notes":[],"fog":[]},{"id":2,"name":"L2","area":"Tower","floor":null,"x":11,"y":1,"bounds":"L2:Q6","squares":30,"reachable":true,"terrain":{"floor":30},"doors":[],"creatures":[],"notes":[],"fog":[]}],"areas":[{"name":"Crypt","bounds":"B2:G6","x0":1,"y0":1,"x1":6,"y1":5},{"name":"Tower","bounds":"L2:Q6","x0":11,"y0":1,"x1":16,"y1":5}],"floors":[],"links":[{"num":1,"kind":"ladder","size":1,"oneway":false,"secret":true,"ends":[{"at":"D4","x":3,"y":3,"room":1},{"at":"N4","x":13,"y":3,"room":2}]},{"num":2,"kind":"portal","size":2,"oneway":true,"secret":false,"ends":[{"at":"B2-C3","x":1,"y":1,"room":1},{"at":"L2-M3","x":11,"y":1,"room":2}]}],"outside":[]}
+-- exit 0
+== links.vtt --dump-map
+    A B C D E F G H I J K L M N O P Q R S T
+
+ 1
+     -------------       -------------
+ 2   |. . . . . .|       |. . . . . .|
+     |           |       |           |
+ 3   |. . . . . .|       |. . . . . .|
+     |           |       |           |
+ 4   |. . . . . .|       |. . . . . .|
+     |           |       |           |
+ 5   |. . . . . .|       |. . . . . .|
+     |           |       |           |
+ 6   |. . . . . .|       |. . . . . .|
+     -------------       -------------
+ 7
+
+ 8
+
+ 9
+
+10
+
+
+areas
+  Crypt            B2:G6
+  Tower            L2:Q6
+
+links
+  ladder 1     D4 <-> N4  secret
+  portal 2     B2-C3 -> L2-M3  2x2  one-way
+
+key
+  .  floor   ~  water   :  rough   "  brush   =  wood   ^  hazard   (blank) void
+  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door
+  S and s are the GM's: the players see a wall and an open door
+
+map  new  20x10  scale 5 ft  metric alt  ruleset none
+-- exit 0
+== links.vtt --dump-map --region B2:F5
+   B C D E F
+  -----------
+2 |. . . . .
+  |
+3 |. . . . .
+  |
+4 |. . . . .
+  |
+5 |. . . . .
+  |
+
+areas
+  Crypt            B2:G6
+
+links
+  ladder 1     D4 <-> N4  secret
+  portal 2     B2-C3 -> L2-M3  2x2  one-way
+
+key
+  .  floor   ~  water   :  rough   "  brush   =  wood   ^  hazard   (blank) void
+  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door
+  S and s are the GM's: the players see a wall and an open door
+
+map  new  20x10  scale 5 ft  metric alt  ruleset none
+region B2:F5
+-- exit 0
+== links.vtt --seed 1 --script ../work/build-box.keys --dump-frame --size 80x24
+ new                                                                      BUILD 
+     B   C   D   E   F   G   H   I   J   K   L   M   N   O   P   Q   R   S   T  
+ 1   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+   ┏━━━━━━━━━━━━━━━━━━━━━━━┓               ┏━━━━━━━━━━━━━━━━━━━━━━━┓            
+ 2 ┃◎2 │ ◎ │   │   │   │   ┃ ·   ·   ·   · ┃◎2 │ ◎ │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 3 ┃ ◎ │ ◎ │   │   │   │   ┃ ·   ·   ·   · ┃ ◎ │ ◎ │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 4 ┃   │   │‡1 │   │   │   ┃ ·   ·   ·   · ┃   │   │‡1 │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 5 ┃   │   │   │   │   │   ┃ ·   ·   ·   · ┃   │   │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 6 ┃   │   │   │   │   │   ┃ ·   ·   ·   · ┃   │   │   │   │   │   ┃ ·   ·   ·  
+   ┗━━━━━━━━━━━━━━━━━━━━━━━┛               ┗━━━━━━━━━━━━━━━━━━━━━━━┛            
+ 7   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ 8   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ 9   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+10   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ VISUAL  M8  void  [wall/floor]  box  zo… VISUAL - f floor, x clear, esc cancel 
+ hjkl extend  v/V shape  f floor  x clear  esc cancel                    ? keys 
+-- exit 0
+== links.vtt --seed 1 --script ../work/build-box.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== links.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 80x24
+-- cksum 2434658606-13950 exit 0
+== links.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== links.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 110x34
+-- cksum 172103569-16577 exit 0
+== links.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== links.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 40x12
+-- cksum 2027139472-3089 exit 0
+== links.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --size 80x24
+ new [+]                                                                  BUILD 
+     B   C   D   E   F   G   H   I   J   K   L   M   N   O   P   Q   R   S   T  
+ 1   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+   ┏━━━━━━━━━━━━━━━━━━━━━━━┓               ┏━━━━━━━━━━━━━━━━━━━━━━━┓            
+ 2 ┃◎2 │ ◎ │   │   │   │   ┃ ·   ·   ·   · ┃◎2 │ ◎ │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 3 ┃ ◎ │ ◎ │   │   │   │   ┃ ·   ·   ·   · ┃ ◎ │ ◎ │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 4 ┃   │   │‡1 │   │   │   ┃ ·   ·   ·   · ┃   │   │‡1 │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 5 ┃   │   │   │   │   │   ┃ ·   ·   ·   · ┃   │   │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 6 ┃   │   │   │   │   │   ┃ ·   ·   ·   · ┃   │   │   │   │   │   ┃ ·   ·   ·  
+   ┗━━━━━━━━━━━━━━━━━━━━━━━┛               ┗━━━━━━━━━━━━━━━━━━━━━━━┛            
+ 7   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ 8   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ 9   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+10   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ NORMAL  K8  void  [wall/floor]  zoom 1  map 20x10                         undo 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== links.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== links.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 80x24
+-- cksum 2217590684-13948 exit 0
+== links.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== links.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 110x34
+-- cksum 3292623171-16577 exit 0
+== links.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== links.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 40x12
+-- cksum 2478404723-3086 exit 0
+== links.vtt --seed 1 --script ../work/help.keys --dump-frame --size 80x24
+ VTT KEYS                                                            Build mode 
+  Build mode                                                                    
+  ──────────                                                                    
+    Move                                                                        
+      h j k l       move the cursor                                             
+      0  $          first / last column                                         
+      gg  G         first / last row                                            
+      3j            any motion takes a count                                    
+      :d6           jump to a square by its label  (:6 for a row)               
+      #             column letters and row numbers, on or off                   
+      ctrl-d        half a page down    ctrl-u up                               
+      z             center the view    + - zoom                                 
+                                                                                
+    Walls and doors                                                             
+      H J K L       wall on the west / south / north / east face                
+      w             trace mode: walk the cursor and leave wall behind           
+      t             cycle which boundary H J K L and the pen lay                
+      o  O          open or close a door / a secret door                        
+                                                                                
+    Floors                                                                      
+      :floor Upper 1                                                            
+                    make the named area Upper a floor, level 1   :floors list…  
+────────────────────────────────────────────────────────────────────────────────
+  j k  scroll      ctrl-d ctrl-u  page      g G  ends      q esc ?  close       
+-- exit 0
+== links.vtt --seed 1 --script ../work/help.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== links.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 80x24
+-- cksum 2258426481-3409 exit 0
+== links.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== links.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 110x34
+-- cksum 1788162512-5765 exit 0
+== links.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== links.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 40x12
+-- cksum 1540148677-1261 exit 0
+== links.vtt --seed 1 --script ../work/open.keys --dump-frame --size 80x24
+ new                                                                      BUILD 
+     B   C   D   E   F   G   H   I   J   K   L   M   N   O   P   Q   R   S   T  
+ 1   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+   ┏━━━━━━━━━━━━━━━━━━━━━━━┓               ┏━━━━━━━━━━━━━━━━━━━━━━━┓            
+ 2 ┃◎2 │ ◎ │   │   │   │   ┃ ·   ·   ·   · ┃◎2 │ ◎ │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 3 ┃ ◎ │ ◎ │   │   │   │   ┃ ·   ·   ·   · ┃ ◎ │ ◎ │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 4 ┃   │   │‡1 │   │   │   ┃ ·   ·   ·   · ┃   │   │‡1 │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 5 ┃   │   │   │   │   │   ┃ ·   ·   ·   · ┃   │   │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 6 ┃   │   │   │   │   │   ┃ ·   ·   ·   · ┃   │   │   │   │   │   ┃ ·   ·   ·  
+   ┗━━━━━━━━━━━━━━━━━━━━━━━┛               ┗━━━━━━━━━━━━━━━━━━━━━━━┛            
+ 7   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ 8   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ 9   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+10   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ NORMAL  K6  void  [wall/floor]  zoom 1  map 20x10 opened new (20x10, 0 tokens) 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== links.vtt --seed 1 --script ../work/open.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== links.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 80x24
+-- cksum 1619741009-13928 exit 0
+== links.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== links.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 110x34
+-- cksum 3570373008-16557 exit 0
+== links.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== links.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 40x12
+-- cksum 2711672121-3506 exit 0
+== links.vtt --seed 1 --script ../work/play-help.keys --dump-frame --size 80x24
+ VTT KEYS                                                             Play mode 
+  Play mode                                                                     
+  ─────────                                                                     
+    Move                                                                        
+      h j k l       move the cursor, or the creature in hand                    
+      arrows        the same                                                    
+      3j            any motion takes a count                                    
+      :d6           jump to a square by its label                               
+      :area Crypt   jump to a named area   :areas lists them                    
+      [  ]          the floor below / above   :floor all shows the whole map    
+      #             column letters and row numbers, on or off                   
+      z             center the view on the cursor                               
+      + -           zoom in and out                                             
+                                                                                
+    Creatures                                                                   
+      i p           place a player                                              
+      i e           place an enemy                                              
+      i t e  i t p  place a saved character as an enemy / a player: a list to…  
+      :character save                                                           
+                    save the creature under the cursor as a character   :char…  
+      :summon 3 lackey far                                                      
+                    light that range round this creature and place three insi…  
+────────────────────────────────────────────────────────────────────────────────
+  j k  scroll      ctrl-d ctrl-u  page      g G  ends      q esc ?  close       
+-- exit 0
+== links.vtt --seed 1 --script ../work/play-help.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== links.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 80x24
+-- cksum 52838005-3410 exit 0
+== links.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== links.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 110x34
+-- cksum 1795894224-5874 exit 0
+== links.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== links.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 40x12
+-- cksum 2644023987-1261 exit 0
+== links.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --size 80x24
+ new                                                                       PLAY 
+     B   C   D   E   F   G   H   I   J   K   L   M   N   O   P   Q   R   S   T  
+ 1   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+   ┏━━━━━━━━━━━━━━━━━━━━━━━┓               ┏━━━━━━━━━━━━━━━━━━━━━━━┓            
+ 2 ┃◎2 │ ◎ │   │   │   │   ┃ ·   ·   ·   · ┃◎2 │ ◎ │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 3 ┃ ◎ │ ◎ │   │   │   │   ┃ ·   ·   ·   · ┃ ◎ │ ◎ │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 4 ┃   │   │   │   │   │   ┃ ·   ·   ·   · ┃   │   │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 5 ┃   │   │   │   │   │   ┃ ·   ·   ·   · ┃   │   │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 6 ┃   │   │   │   │   │   ┃ ·   ·   ·   · ┃   │   │   │   │   │   ┃ ·   ·   ·  
+   ┗━━━━━━━━━━━━━━━━━━━━━━━┛               ┗━━━━━━━━━━━━━━━━━━━━━━━┛            
+ 7   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ 8   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ 9   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+10   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ PLAY    M8  void  0 tokens  nex… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== links.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --players --size 80x24
+ new                                                                       PLAY 
+     B   C   D   E   F   G   H   I   J   K   L   M   N   O   P   Q   R   S   T  
+ 1   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+   ┏━━━━━━━━━━━━━━━━━━━━━━━┓               ┏━━━━━━━━━━━━━━━━━━━━━━━┓            
+ 2 ┃◎2 │ ◎ │   │   │   │   ┃ ·   ·   ·   · ┃◎2 │ ◎ │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 3 ┃ ◎ │ ◎ │   │   │   │   ┃ ·   ·   ·   · ┃ ◎ │ ◎ │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 4 ┃   │   │   │   │   │   ┃ ·   ·   ·   · ┃   │   │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 5 ┃   │   │   │   │   │   ┃ ·   ·   ·   · ┃   │   │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 6 ┃   │   │   │   │   │   ┃ ·   ·   ·   · ┃   │   │   │   │   │   ┃ ·   ·   ·  
+   ┗━━━━━━━━━━━━━━━━━━━━━━━┛               ┗━━━━━━━━━━━━━━━━━━━━━━━┛            
+ 7   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ 8   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ 9   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+10   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ PLAY    M8  void  0 tokens  nex… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== links.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 80x24
+-- cksum 4158441030-14068 exit 0
+== links.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --players --size 80x24
+-- cksum 4158441030-14068 exit 0
+== links.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 110x34
+-- cksum 3040595422-16693 exit 0
+== links.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --players --size 110x34
+-- cksum 3040595422-16693 exit 0
+== links.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 40x12
+-- cksum 1674274296-3249 exit 0
+== links.vtt --seed 1 --script ../work/play.keys --dump-frame --size 80x24
+ new                                                                       PLAY 
+     B   C   D   E   F   G   H   I   J   K   L   M   N   O   P   Q   R   S   T  
+ 1   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+   ┏━━━━━━━━━━━━━━━━━━━━━━━┓               ┏━━━━━━━━━━━━━━━━━━━━━━━┓            
+ 2 ┃◎2 │ ◎ │   │   │   │   ┃ ·   ·   ·   · ┃◎2 │ ◎ │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 3 ┃ ◎ │ ◎ │   │   │   │   ┃ ·   ·   ·   · ┃ ◎ │ ◎ │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 4 ┃   │   │   │   │   │   ┃ ·   ·   ·   · ┃   │   │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 5 ┃   │   │   │   │   │   ┃ ·   ·   ·   · ┃   │   │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 6 ┃   │   │   │   │   │   ┃ ·   ·   ·   · ┃   │   │   │   │   │   ┃ ·   ·   ·  
+   ┗━━━━━━━━━━━━━━━━━━━━━━━┛               ┗━━━━━━━━━━━━━━━━━━━━━━━┛            
+ 7   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ 8   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ 9   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+10   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ PLAY    K6  void  0 tokens  nex… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== links.vtt --seed 1 --script ../work/play.keys --dump-frame --players --size 80x24
+ new                                                                       PLAY 
+     B   C   D   E   F   G   H   I   J   K   L   M   N   O   P   Q   R   S   T  
+ 1   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+   ┏━━━━━━━━━━━━━━━━━━━━━━━┓               ┏━━━━━━━━━━━━━━━━━━━━━━━┓            
+ 2 ┃◎2 │ ◎ │   │   │   │   ┃ ·   ·   ·   · ┃◎2 │ ◎ │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 3 ┃ ◎ │ ◎ │   │   │   │   ┃ ·   ·   ·   · ┃ ◎ │ ◎ │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 4 ┃   │   │   │   │   │   ┃ ·   ·   ·   · ┃   │   │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 5 ┃   │   │   │   │   │   ┃ ·   ·   ·   · ┃   │   │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 6 ┃   │   │   │   │   │   ┃ ·   ·   ·   · ┃   │   │   │   │   │   ┃ ·   ·   ·  
+   ┗━━━━━━━━━━━━━━━━━━━━━━━┛               ┗━━━━━━━━━━━━━━━━━━━━━━━┛            
+ 7   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ 8   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ 9   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+10   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ PLAY    K6  void  0 tokens  nex… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== links.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 80x24
+-- cksum 4204255728-13986 exit 0
+== links.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --players --size 80x24
+-- cksum 4204255728-13986 exit 0
+== links.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 110x34
+-- cksum 757320071-16613 exit 0
+== links.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --players --size 110x34
+-- cksum 757320071-16613 exit 0
+== links.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 40x12
+-- cksum 921499165-3606 exit 0
+== links.vtt --seed 1 --script ../work/roll.keys --dump-frame --size 80x24
+ new                                                                      BUILD 
+     B   C   D   E   F   G   H   I   J   K   L   M   N   O   P   Q   R   S   T  
+ 1   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+   ┏━━━━━━━━━━━━━━━━━━━━━━━┓               ┏━━━━━━━━━━━━━━━━━━━━━━━┓            
+ 2 ┃◎2 │ ◎ │   │   │   │   ┃ ·   ·   ·   · ┃◎2 │ ◎ │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 3 ┃ ◎ │ ◎ │   │   │   │   ┃ ·   ·   ·   · ┃ ◎ │ ◎ │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 4 ┃   │   │‡1 │   │   │   ┃ ·   ·   ·   · ┃   │   │‡1 │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 5 ┃   │   │   │   │   │   ┃ ·   ·   ·   · ┃   │   │   │   │   │   ┃ ·   ·   ·  
+   ┃───┼───┼───┼───┼───┼───┃               ┃───┼───┼───┼───┼───┼───┃            
+ 6 ┃   │   │   │   │   │   ┃ ·   ·   ·   · ┃   │   │   │   │   │   ┃ ·   ·   ·  
+   ┗━━━━━━━━━━━━━━━━━━━━━━━┛               ┗━━━━━━━━━━━━━━━━━━━━━━━┛            
+ 7   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ 8   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ 9   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+10   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ NORMAL  K6  void  [wall/floor]  zoom 1  map 20x10            2d6+3 = 12  [6 3] 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== links.vtt --seed 1 --script ../work/roll.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== links.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 80x24
+-- cksum 2003588206-13929 exit 0
+== links.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== links.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 110x34
+-- cksum 1367295243-16557 exit 0
+== links.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== links.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 40x12
+-- cksum 1348563685-3504 exit 0

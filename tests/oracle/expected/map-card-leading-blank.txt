@@ -1,0 +1,611 @@
+== card-leading-blank.vtt --check
+E013 bad-char           line 17   '&' in tiles row 9, column 14, reads as void
+E013 bad-char           line 27   '' in vedges row 9, column 4, reads as no boundary
+N021 row-short          line 27   1 vedges row is shorter than 17; the rest reads as empty
+W019 stray-row          line 28   rows outside any section, ignored: is the section before them one row too long, or its header swallowed by a short one?
+W015 unknown-line       line 46   ignored: 'to��������"ogr�"'
+W024 floor-dropped      line 60   floor Gsound dropped: no area has that name
+E014 bad-record         line 62   link dropped: 'link 27 7 to "town" "Gate"'
+W015 unknown-line       line 67   ignored: 'fogpath1 c Crypt reveal 2 memory on'
+W018 fog-unknown-patch  line 69   fog row 1 names patch 1 ('A'), which no fogpatch line creates; read as no fog
+W018 fog-unknown-patch  line 72   fog row 4 names patch 12 ('L'), which no fogpatch line creates; read as no fog
+W018 fog-unknown-patch  line 72   fog row 4 names patch 3 ('C'), which no fogpatch line creates; read as no fog
+W018 fog-unknown-patch  line 72   fog row 4 names patch 5 ('E'), which no fogpatch line creates; read as no fog
+3 errors, 8 warnings, 1 note
+-- exit 1
+== card-leading-blank.vtt --check --json
+{"file":"card-leading-blank.vtt","errors":3,"warnings":8,"notes":1,"findings":[{"code":"E013","slug":"bad-char","severity":"error","line":17,"column":13,"where":null,"x":null,"y":null,"edge":null,"message":"'&' in tiles row 9, column 14, reads as void"},{"code":"E013","slug":"bad-char","severity":"error","line":27,"column":3,"where":null,"x":null,"y":null,"edge":null,"message":"'\u0008' in vedges row 9, column 4, reads as no boundary"},{"code":"N021","slug":"row-short","severity":"note","line":27,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"1 vedges row is shorter than 17; the rest reads as empty"},{"code":"W019","slug":"stray-row","severity":"warning","line":28,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"rows outside any section, ignored: is the section before them one row too long, or its header swallowed by a short one?"},{"code":"W015","slug":"unknown-line","severity":"warning","line":46,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"ignored: 'to��������\"ogr�\"'"},{"code":"W024","slug":"floor-dropped","severity":"warning","line":60,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"floor Gsound dropped: no area has that name"},{"code":"E014","slug":"bad-record","severity":"error","line":62,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"link dropped: 'link 27 7 to \"town\" \"Gate\"'"},{"code":"W015","slug":"unknown-line","severity":"warning","line":67,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"ignored: 'fogpath1 c Crypt reveal 2 memory on'"},{"code":"W018","slug":"fog-unknown-patch","severity":"warning","line":69,"column":0,"where":null,"x":null,"y":null,"edge":null,"message":"fog row 1 names patch 1 ('A'), which no fogpatch line creates; read as no fog"},{"code":"W018","slug":"fog-unknown-patch","severity":"warning","line":72,"column":4,"where":null,"x":null,"y":null,"edge":null,"message":"fog row 4 names patch 12 ('L'), which no fogpatch line creates; read as no fog"},{"code":"W018","slug":"fog-unknown-patch","severity":"warning","line":72,"column":2,"where":null,"x":null,"y":null,"edge":null,"message":"fog row 4 names patch 3 ('C'), which no fogpatch line creates; read as no fog"},{"code":"W018","slug":"fog-unknown-patch","severity":"warning","line":72,"column":5,"where":null,"x":null,"y":null,"edge":null,"message":"fog row 4 names patch 5 ('E'), which no fogpatch line creates; read as no fog"}]}
+-- exit 1
+== card-leading-blank.vtt --describe
+map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
+  round 2
+  clocks Dragon 3/6, Fuse 4/4 down
+  rolls attack = 2d12+3
+  2 creatures, 1 room, starting in room 1 (A1)
+
+room 1 (A1)  A1:P9  143 squares
+  terrain  floor 143
+  player       C3       Aria  (note)
+  enemy        F5       �gre  2x2  (hidden)
+  note         F4       pressure plate
+  stairs 1     F3       to O3, room 1 (A1)
+  stairs 1     O3       to F3, room 1 (A1)
+-- exit 0
+== card-leading-blank.vtt --describe --json
+{"map":{"name":"Goblin Ambush","width":16,"height":9,"scale_ft":5,"metric":"alt","ruleset":"daggerheart","round":2,"fog":true,"creatures":2,"rooms":1,"start_room":1},"rooms":[{"id":1,"name":"A1","area":null,"floor":null,"x":0,"y":0,"bounds":"A1:P9","squares":143,"reachable":true,"terrain":{"floor":143},"doors":[],"creatures":[{"label":"Aria","kind":"player","size":1,"at":"C3","x":2,"y":2,"note":"wants the amulet&"},{"label":"�gre","kind":"enemy","size":2,"at":"F5","x":5,"y":4,"hidden":true}],"notes":[{"at":"F4","text":"pressure plate"}],"fog":[]}],"areas":[{"name":"Crypt","bounds":"B2:G5","x0":1,"y0":1,"x1":6,"y1":4},{"name":"Ground","bounds":"F1:P9","x0":5,"y0":0,"x1":15,"y1":8}],"floors":[],"links":[{"num":1,"kind":"stairs","size":1,"oneway":false,"secret":false,"ends":[{"at":"F3","x":5,"y":2,"room":1},{"at":"O3","x":14,"y":2,"room":1}]}],"outside":[]}
+-- exit 0
+== card-leading-blank.vtt --dump-map
+   A B C D E F G H I J K L M N O P
+  |                               |
+1 |. . . . . . . . . . . . . . . .|
+  |                               |
+2 |. . . . . . . . . . . . . . . .|
+  |                               |
+3 |. . 1 . . . . . . . . . . . . .|
+  |                               |
+4 |. . . . . . . . . . . . . . . .|
+  |                               |
+5 |. . . . . 2 2 . . . . . . . . .|
+  |                               |
+6 |. . . . . 2 2 . . . . . . . . .|
+  |                               |
+7 |. . . . . . . . . . . . . . . .|
+  |                               |
+8 |. . . . . . . . . . . . . . . .|
+  |                               |
+9 |. . . . . . . . . . . . .   . .
+  |
+
+creatures
+  1  Aria             player       C3
+     note: wants the amulet&
+  2  �gre             enemy 2x2    F5-G6  hidden
+
+notes
+  F4    pressure plate
+
+areas
+  Crypt            B2:G5
+  Ground           F1:P9
+
+links
+  stairs 1     F3 <-> O3
+
+key
+  .  floor   ~  water   :  rough   "  brush   =  wood   ^  hazard   (blank) void
+  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door
+  S and s are the GM's: the players see a wall and an open door
+
+map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
+-- exit 0
+== card-leading-blank.vtt --dump-map --region B2:F5
+   B C D E F
+
+2  . . . . .
+
+3  . 1 . . .
+
+4  . . . . .
+
+5  . . . . 2
+
+
+creatures
+  1  Aria             player       C3
+     note: wants the amulet&
+  2  �gre             enemy 2x2    F5-G6  hidden
+
+notes
+  F4    pressure plate
+
+areas
+  Crypt            B2:G5
+  Ground           F1:P9
+
+links
+  stairs 1     F3 <-> O3
+
+key
+  .  floor   ~  water   :  rough   "  brush   =  wood   ^  hazard   (blank) void
+  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door
+  S and s are the GM's: the players see a wall and an open door
+
+map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
+region B2:F5
+-- exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/build-box.keys --dump-frame --size 80x24
+ Goblin Ambush                                                            BUILD 
+          A   B   C   D   E   F   G   H   I   J   K   L   M   N   O   P         
+        ╻───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───╻       
+      1 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      2 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      3 ┃   │   │   │   │   │≡1 │   │   │   │   │   │   │   │   │≡1 │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      4 ┃   │   │   │   │   │  ”│   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      5 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      6 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      7 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      8 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───╹       
+      9 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ · │   │   │       
+        ╹───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘   └───┴───┘       
+                                                                                
+ VISUAL  K7  floor  [wall/floor]  box  z… VISUAL - f floor, x clear, esc cancel 
+ hjkl extend  v/V shape  f floor  x clear  esc cancel                    ? keys 
+-- exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/build-box.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 80x24
+-- cksum 2993073114-12407 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 110x34
+-- cksum 1526614545-14555 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 40x12
+-- cksum 3966324054-3389 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --size 80x24
+ Goblin Ambush [+]                                                        BUILD 
+          A   B   C   D   E   F   G   H   I   J   K   L   M   N   O   P         
+        ╻───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───╻       
+      1 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      2 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      3 ┃   │   │   │   │   │≡1 │   │   │   │   │   │   │   │   │≡1 │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      4 ┃   │   │   │   │   │  ”│   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      5 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      6 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      7 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      8 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───╹       
+      9 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ · │   │   │       
+        ╹───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘   └───┴───┘       
+                                                                                
+ NORMAL  I7  floor  [wall/floor]  zoom 1  map 16x9                         undo 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 80x24
+-- cksum 3765601738-12405 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 110x34
+-- cksum 632434293-14555 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 40x12
+-- cksum 2259892275-3386 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/help.keys --dump-frame --size 80x24
+ VTT KEYS                                                            Build mode 
+  Build mode                                                                    
+  ──────────                                                                    
+    Move                                                                        
+      h j k l       move the cursor                                             
+      0  $          first / last column                                         
+      gg  G         first / last row                                            
+      3j            any motion takes a count                                    
+      :d6           jump to a square by its label  (:6 for a row)               
+      #             column letters and row numbers, on or off                   
+      ctrl-d        half a page down    ctrl-u up                               
+      z             center the view    + - zoom                                 
+                                                                                
+    Walls and doors                                                             
+      H J K L       wall on the west / south / north / east face                
+      w             trace mode: walk the cursor and leave wall behind           
+      t             cycle which boundary H J K L and the pen lay                
+      o  O          open or close a door / a secret door                        
+                                                                                
+    Floors                                                                      
+      :floor Upper 1                                                            
+                    make the named area Upper a floor, level 1   :floors list…  
+────────────────────────────────────────────────────────────────────────────────
+  j k  scroll      ctrl-d ctrl-u  page      g G  ends      q esc ?  close       
+-- exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/help.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 80x24
+-- cksum 2258426481-3409 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 110x34
+-- cksum 1788162512-5765 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 40x12
+-- cksum 1540148677-1261 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/open.keys --dump-frame --size 80x24
+ Goblin Ambush                                                            BUILD 
+          A   B   C   D   E   F   G   H   I   J   K   L   M   N   O   P         
+        ╻───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───╻       
+      1 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      2 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      3 ┃   │   │   │   │   │≡1 │   │   │   │   │   │   │   │   │≡1 │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      4 ┃   │   │   │   │   │  ”│   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      5 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      6 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      7 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      8 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───╹       
+      9 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ · │   │   │       
+        ╹───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘   └───┴───┘       
+                                                                                
+ NORMAL  I5  floor  [wall/floor]  zoom 1… opened Goblin Ambush (16x9, 2 tokens) 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/open.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 80x24
+-- cksum 3203439434-12407 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 110x34
+-- cksum 1525631287-14555 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 40x12
+-- cksum 3839864959-3411 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/play-help.keys --dump-frame --size 80x24
+ VTT KEYS                                                             Play mode 
+  Play mode                                                                     
+  ─────────                                                                     
+    Move                                                                        
+      h j k l       move the cursor, or the creature in hand                    
+      arrows        the same                                                    
+      3j            any motion takes a count                                    
+      :d6           jump to a square by its label                               
+      :area Crypt   jump to a named area   :areas lists them                    
+      [  ]          the floor below / above   :floor all shows the whole map    
+      #             column letters and row numbers, on or off                   
+      z             center the view on the cursor                               
+      + -           zoom in and out                                             
+                                                                                
+    Creatures                                                                   
+      i p           place a player                                              
+      i e           place an enemy                                              
+      i t e  i t p  place a saved character as an enemy / a player: a list to…  
+      :character save                                                           
+                    save the creature under the cursor as a character   :char…  
+      :summon 3 lackey far                                                      
+                    light that range round this creature and place three insi…  
+────────────────────────────────────────────────────────────────────────────────
+  j k  scroll      ctrl-d ctrl-u  page      g G  ends      q esc ?  close       
+-- exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/play-help.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 80x24
+-- cksum 52838005-3410 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 110x34
+-- cksum 1795894224-5874 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 40x12
+-- cksum 2644023987-1261 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --size 80x24
+ Goblin Ambush    Round 2 - Aria's turn, then �gre                         PLAY 
+    A   B   C   D   E   F   G   H   I   J   K   L   M   │ Turn order            
+  ╻───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬─│ Round 2               
+1 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│ ▶  18  Aria       4/6 
+2 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │    12  �gre           
+  ┃───┼───┼P──┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│                       
+3 ┃   │   │(A)│   │   │≡1 │   │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│                       
+4 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│                       
+5 ┃   │   │   │   │   │       │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼─�gre ─┼───┼───┼───┼───┼───┼───┼─│                       
+6 ┃   │   │   │   │   │       │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│                       
+7 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│                       
+8 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│ Clocks                
+9 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │                       
+  ╹───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘ │ Dragon ●●●○○○         
+                                                        │ Fuse   ●●●●           
+ PLAY    K7  floor  2 tokens  ne… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --players --size 80x24
+ Goblin Ambush    Round 2 - Aria's turn, then ?                            PLAY 
+    A   B   C   D   E   F   G   H   I   J   K   L   M   │ Turn order            
+  ╻───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬─│ Round 2               
+1 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│ ▶  18  Aria           
+2 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │    12  ?              
+  ┃───┼───┼P──┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│                       
+3 ┃   │   │(A)│   │   │≡1 │   │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│                       
+4 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│                       
+5 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│                       
+6 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│                       
+7 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│                       
+8 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│ Clocks                
+9 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │                       
+  ╹───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘ │ Dragon ●●●○○○         
+                                                        │ Fuse   ●●●●           
+ PLAY    K7  floor  walls on                                                    
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 80x24
+-- cksum 2628694205-11756 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --players --size 80x24
+-- cksum 3716258344-11621 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 110x34
+-- cksum 4261454565-16436 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --players --size 110x34
+-- cksum 1877963749-16299 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 40x12
+-- cksum 851730380-3596 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/play.keys --dump-frame --size 80x24
+ Goblin Ambush    Round 2 - Aria's turn, then �gre                         PLAY 
+    A   B   C   D   E   F   G   H   I   J   K   L   M   │ Turn order            
+  ╻───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬─│ Round 2               
+1 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│ ▶  18  Aria       4/6 
+2 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │    12  �gre           
+  ┃───┼───┼P──┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│                       
+3 ┃   │   │(A)│   │   │≡1 │   │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│                       
+4 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│                       
+5 ┃   │   │   │   │   │       │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼─�gre ─┼───┼───┼───┼───┼───┼───┼─│                       
+6 ┃   │   │   │   │   │       │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│                       
+7 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│                       
+8 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│ Clocks                
+9 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │                       
+  ╹───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘ │ Dragon ●●●○○○         
+                                                        │ Fuse   ●●●●           
+ PLAY    I5  floor  2 tokens  ne… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/play.keys --dump-frame --players --size 80x24
+ Goblin Ambush    Round 2 - Aria's turn, then ?                            PLAY 
+    A   B   C   D   E   F   G   H   I   J   K   L   M   │ Turn order            
+  ╻───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬─│ Round 2               
+1 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│ ▶  18  Aria           
+2 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │    12  ?              
+  ┃───┼───┼P──┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│                       
+3 ┃   │   │(A)│   │   │≡1 │   │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│                       
+4 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│                       
+5 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│                       
+6 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│                       
+7 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│                       
+8 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │                       
+  ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼─│ Clocks                
+9 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ │                       
+  ╹───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘ │ Dragon ●●●○○○         
+                                                        │ Fuse   ●●●●           
+ PLAY    I5  floor  walls on                                                    
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 80x24
+-- cksum 1851485085-11757 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --players --size 80x24
+-- cksum 738352341-11623 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 110x34
+-- cksum 2773063252-16435 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --players --size 110x34
+-- cksum 3823511633-16299 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 40x12
+-- cksum 1545116445-3594 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/roll.keys --dump-frame --size 80x24
+ Goblin Ambush                                                            BUILD 
+          A   B   C   D   E   F   G   H   I   J   K   L   M   N   O   P         
+        ╻───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───┬───╻       
+      1 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      2 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      3 ┃   │   │   │   │   │≡1 │   │   │   │   │   │   │   │   │≡1 │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      4 ┃   │   │   │   │   │  ”│   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      5 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      6 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      7 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      8 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───╹       
+      9 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │ · │   │   │       
+        ╹───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴───┘   └───┴───┘       
+                                                                                
+ NORMAL  I5  floor  [wall/floor]  zoom 1  map 16x9            2d6+3 = 12  [6 3] 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/roll.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 80x24
+-- cksum 11175432-12406 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 110x34
+-- cksum 3509879738-14555 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== card-leading-blank.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 40x12
+-- cksum 926585666-3409 exit 0

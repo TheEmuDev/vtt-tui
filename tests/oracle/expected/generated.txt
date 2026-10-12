@@ -1,0 +1,32 @@
+== gen-small.vtt --check
+-- cksum 2642799888-77900 exit 1
+== gen-small.vtt --describe
+-- cksum 3081853765-69729 exit 0
+== gen-small.vtt --dump-map
+-- cksum 415767882-5754 exit 0
+== gen-small.vtt --dump-frame --cells --size 120x40
+-- cksum 740298883-34663 exit 0
+== gen-wide.vtt --check
+-- cksum 3089816360-27817 exit 1
+== gen-wide.vtt --describe
+-- cksum 3889074028-16068 exit 0
+== gen-wide.vtt --dump-map
+-- cksum 3223188267-102481 exit 0
+== gen-wide.vtt --dump-frame --cells --size 120x40
+-- cksum 2422105190-34249 exit 0
+== gen-turns.vtt --check
+-- cksum 1174543974-187266 exit 1
+== gen-turns.vtt --describe
+-- cksum 1579531972-171336 exit 0
+== gen-turns.vtt --dump-map
+-- cksum 2406401021-13050 exit 0
+== gen-turns.vtt --dump-frame --cells --size 120x40
+-- cksum 3708846669-34549 exit 0
+== gen-norules.vtt --check
+-- cksum 2716439080-12 exit 0
+== gen-norules.vtt --describe
+-- cksum 1446629435-530 exit 0
+== gen-norules.vtt --dump-map
+-- cksum 2970907492-9558 exit 0
+== gen-norules.vtt --dump-frame --cells --size 120x40
+-- cksum 796972477-34550 exit 0

@@ -1,0 +1,570 @@
+== two-rooms.vtt --check
+no findings
+-- exit 0
+== two-rooms.vtt --check --json
+{"file":"two-rooms.vtt","errors":0,"warnings":0,"notes":0,"findings":[]}
+-- exit 0
+== two-rooms.vtt --describe
+map  Two Rooms  16x9  scale 5 ft  metric alt  ruleset none
+  2 creatures, 1 room, starting in room 1 (A1)
+
+room 1 (A1)  A1:P9  144 squares
+  terrain  floor 144
+  player       C3       Aria
+  enemy        K5       Ogre  2x2
+-- exit 0
+== two-rooms.vtt --describe --json
+{"map":{"name":"Two Rooms","width":16,"height":9,"scale_ft":5,"metric":"alt","ruleset":null,"round":0,"fog":false,"creatures":2,"rooms":1,"start_room":1},"rooms":[{"id":1,"name":"A1","area":null,"floor":null,"x":0,"y":0,"bounds":"A1:P9","squares":144,"reachable":true,"terrain":{"floor":144},"doors":[],"creatures":[{"label":"Aria","kind":"player","size":1,"at":"C3","x":2,"y":2},{"label":"Ogre","kind":"enemy","size":2,"at":"K5","x":10,"y":4}],"notes":[],"fog":[]}],"areas":[],"floors":[],"links":[],"outside":[]}
+-- exit 0
+== two-rooms.vtt --dump-map
+   A B C D E F G H I J K L M N O P
+  ---------------------------------
+1 |. . . . . . . . . . . . . . . .|
+  | -----------                   |
+2 |.|. . . . .|. . . . . . . . . .|
+  | |         |   -------------   |
+3 |.|. 1 . . .|. .|. . . . . .|. .|
+  | |         |   |           |   |
+4 |.|. . . . . . .|. . . . . .|. .|
+  | |         |   |           |   |
+5 |.|. . . . .|. .|. . 2 2 . .|. .|
+  | -----------   |           |   |
+6 |. . . . . . . .|. . 2 2 . .|. .|
+  |               |           |   |
+7 |. . . . . . . .|. . . . . .|. .|
+  |               ----- -------   |
+8 |. . . . . . . . . . . . . . . .|
+  |                               |
+9 |. . . . . . . . . . . . . . . .|
+  ---------------------------------
+
+creatures
+  1  Aria             player       C3
+  2  Ogre             enemy 2x2    K5-L6
+
+key
+  .  floor   ~  water   :  rough   "  brush   =  wood   ^  hazard   (blank) void
+  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door
+  S and s are the GM's: the players see a wall and an open door
+
+map  Two Rooms  16x9  scale 5 ft  metric alt  ruleset none
+-- exit 0
+== two-rooms.vtt --dump-map --region B2:F5
+   B C D E F
+  -----------
+2 |. . . . .|
+  |         |
+3 |. 1 . . .|
+  |         |
+4 |. . . . .
+  |         |
+5 |. . . . .|
+  -----------
+
+creatures
+  1  Aria             player       C3
+
+key
+  .  floor   ~  water   :  rough   "  brush   =  wood   ^  hazard   (blank) void
+  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door
+  S and s are the GM's: the players see a wall and an open door
+
+map  Two Rooms  16x9  scale 5 ft  metric alt  ruleset none
+region B2:F5
+-- exit 0
+== two-rooms.vtt --seed 1 --script ../work/build-box.keys --dump-frame --size 80x24
+ Two Rooms                                                                BUILD 
+          A   B   C   D   E   F   G   H   I   J   K   L   M   N   O   P         
+        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓       
+      1 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┏━━━━━━━━━━━━━━━━━━━┓───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      2 ┃   ┃   │   │   │   │   ┃   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┃───┼───┼───┼───┼───┃───┼───┏━━━━━━━━━━━━━━━━━━━━━━━┓───┼───┃       
+      3 ┃   ┃   │   │   │   │   ┃   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┃───┼───┼───┼───┼───╹───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      4 ┃   ┃   │   │   │   │   │   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┃───┼───┼───┼───┼───╻───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      5 ┃   ┃   │   │   │   │   ┃   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┗━━━━━━━━━━━━━━━━━━━┛───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      6 ┃   │   │   │   │   │   │   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      7 ┃   │   │   │   │   │   │   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┗━━━━━━━╸───╺━━━━━━━━━━━┛───┼───┃       
+      8 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      9 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛       
+                                                                                
+ VISUAL  K7  floor  [wall/floor]  box  z… VISUAL - f floor, x clear, esc cancel 
+ hjkl extend  v/V shape  f floor  x clear  esc cancel                    ? keys 
+-- exit 0
+== two-rooms.vtt --seed 1 --script ../work/build-box.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== two-rooms.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 80x24
+-- cksum 2171972065-12974 exit 0
+== two-rooms.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== two-rooms.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 110x34
+-- cksum 4182259609-15121 exit 0
+== two-rooms.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== two-rooms.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 40x12
+-- cksum 3969219327-3550 exit 0
+== two-rooms.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --size 80x24
+ Two Rooms [+]                                                            BUILD 
+          A   B   C   D   E   F   G   H   I   J   K   L   M   N   O   P         
+        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓       
+      1 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┏━━━━━━━━━━━━━━━━━━━┓───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      2 ┃   ┃   │   │   │   │   ┃   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┃───┼───┼───┼───┼───┃───┼───┏━━━━━━━━━━━━━━━━━━━━━━━┓───┼───┃       
+      3 ┃   ┃   │   │   │   │   ┃   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┃───┼───┼───┼───┼───╹───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      4 ┃   ┃   │   │   │   │   │   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┃───┼───┼───┼───┼───╻───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      5 ┃   ┃   │   │   │   │   ┃   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┗━━━━━━━━━━━━━━━━━━━┛───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      6 ┃   │   │   │   │   │   │   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      7 ┃   │   │   │   │   │   │   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┗━━━━━━━╸───╺━━━━━━━━━━━┛───┼───┃       
+      8 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      9 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛       
+                                                                                
+ NORMAL  I7  floor  [wall/floor]  zoom 1  map 16x9                         undo 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== two-rooms.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== two-rooms.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 80x24
+-- cksum 3165342864-12973 exit 0
+== two-rooms.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== two-rooms.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 110x34
+-- cksum 3374200062-15121 exit 0
+== two-rooms.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== two-rooms.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 40x12
+-- cksum 2339597992-3548 exit 0
+== two-rooms.vtt --seed 1 --script ../work/help.keys --dump-frame --size 80x24
+ VTT KEYS                                                            Build mode 
+  Build mode                                                                    
+  ──────────                                                                    
+    Move                                                                        
+      h j k l       move the cursor                                             
+      0  $          first / last column                                         
+      gg  G         first / last row                                            
+      3j            any motion takes a count                                    
+      :d6           jump to a square by its label  (:6 for a row)               
+      #             column letters and row numbers, on or off                   
+      ctrl-d        half a page down    ctrl-u up                               
+      z             center the view    + - zoom                                 
+                                                                                
+    Walls and doors                                                             
+      H J K L       wall on the west / south / north / east face                
+      w             trace mode: walk the cursor and leave wall behind           
+      t             cycle which boundary H J K L and the pen lay                
+      o  O          open or close a door / a secret door                        
+                                                                                
+    Floors                                                                      
+      :floor Upper 1                                                            
+                    make the named area Upper a floor, level 1   :floors list…  
+────────────────────────────────────────────────────────────────────────────────
+  j k  scroll      ctrl-d ctrl-u  page      g G  ends      q esc ?  close       
+-- exit 0
+== two-rooms.vtt --seed 1 --script ../work/help.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== two-rooms.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 80x24
+-- cksum 2258426481-3409 exit 0
+== two-rooms.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== two-rooms.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 110x34
+-- cksum 1788162512-5765 exit 0
+== two-rooms.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== two-rooms.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 40x12
+-- cksum 1540148677-1261 exit 0
+== two-rooms.vtt --seed 1 --script ../work/open.keys --dump-frame --size 80x24
+ Two Rooms                                                                BUILD 
+          A   B   C   D   E   F   G   H   I   J   K   L   M   N   O   P         
+        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓       
+      1 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┏━━━━━━━━━━━━━━━━━━━┓───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      2 ┃   ┃   │   │   │   │   ┃   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┃───┼───┼───┼───┼───┃───┼───┏━━━━━━━━━━━━━━━━━━━━━━━┓───┼───┃       
+      3 ┃   ┃   │   │   │   │   ┃   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┃───┼───┼───┼───┼───╹───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      4 ┃   ┃   │   │   │   │   │   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┃───┼───┼───┼───┼───╻───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      5 ┃   ┃   │   │   │   │   ┃   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┗━━━━━━━━━━━━━━━━━━━┛───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      6 ┃   │   │   │   │   │   │   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      7 ┃   │   │   │   │   │   │   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┗━━━━━━━╸───╺━━━━━━━━━━━┛───┼───┃       
+      8 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      9 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛       
+                                                                                
+ NORMAL  I5  floor  [wall/floor]  zoom 1  ma… opened Two Rooms (16x9, 2 tokens) 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== two-rooms.vtt --seed 1 --script ../work/open.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== two-rooms.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 80x24
+-- cksum 619164426-12974 exit 0
+== two-rooms.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== two-rooms.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 110x34
+-- cksum 2844421200-15121 exit 0
+== two-rooms.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== two-rooms.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 40x12
+-- cksum 3717841709-3650 exit 0
+== two-rooms.vtt --seed 1 --script ../work/play-help.keys --dump-frame --size 80x24
+ VTT KEYS                                                             Play mode 
+  Play mode                                                                     
+  ─────────                                                                     
+    Move                                                                        
+      h j k l       move the cursor, or the creature in hand                    
+      arrows        the same                                                    
+      3j            any motion takes a count                                    
+      :d6           jump to a square by its label                               
+      :area Crypt   jump to a named area   :areas lists them                    
+      [  ]          the floor below / above   :floor all shows the whole map    
+      #             column letters and row numbers, on or off                   
+      z             center the view on the cursor                               
+      + -           zoom in and out                                             
+                                                                                
+    Creatures                                                                   
+      i p           place a player                                              
+      i e           place an enemy                                              
+      i t e  i t p  place a saved character as an enemy / a player: a list to…  
+      :character save                                                           
+                    save the creature under the cursor as a character   :char…  
+      :summon 3 lackey far                                                      
+                    light that range round this creature and place three insi…  
+────────────────────────────────────────────────────────────────────────────────
+  j k  scroll      ctrl-d ctrl-u  page      g G  ends      q esc ?  close       
+-- exit 0
+== two-rooms.vtt --seed 1 --script ../work/play-help.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== two-rooms.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 80x24
+-- cksum 52838005-3410 exit 0
+== two-rooms.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== two-rooms.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 110x34
+-- cksum 1795894224-5874 exit 0
+== two-rooms.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== two-rooms.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 40x12
+-- cksum 2644023987-1261 exit 0
+== two-rooms.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --size 80x24
+ Two Rooms                                                                 PLAY 
+          A   B   C   D   E   F   G   H   I   J   K   L   M   N   O   P         
+        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓       
+      1 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┏━━━━━━━━━━━━━━━━━━━┓───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      2 ┃   ┃   │   │   │   │   ┃   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┃───┼───┼───┼───┼───┃───┼───┏━━━━━━━━━━━━━━━━━━━━━━━┓───┼───┃       
+      3 ┃   ┃   │(A)│   │   │   ┃   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┃───┼───┼───┼───┼───╹───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      4 ┃   ┃   │   │   │   │   │   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┃───┼───┼───┼───┼───╻───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      5 ┃   ┃   │   │   │   │   ┃   │   ┃   │   │       │   │   ┃   │   ┃       
+        ┃───┗━━━━━━━━━━━━━━━━━━━┛───┼───┃───┼───┼─Ogre ─┼───┼───┃───┼───┃       
+      6 ┃   │   │   │   │   │   │   │   ┃   │   │       │   │   ┃   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      7 ┃   │   │   │   │   │   │   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┗━━━━━━━╸───╺━━━━━━━━━━━┛───┼───┃       
+      8 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      9 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛       
+                                                                                
+ PLAY    K7  floor  2 tokens  ne… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== two-rooms.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --players --size 80x24
+ Two Rooms                                                                 PLAY 
+          A   B   C   D   E   F   G   H   I   J   K   L   M   N   O   P         
+        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓       
+      1 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┏━━━━━━━━━━━━━━━━━━━┓───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      2 ┃   ┃   │   │   │   │   ┃   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┃───┼───┼───┼───┼───┃───┼───┏━━━━━━━━━━━━━━━━━━━━━━━┓───┼───┃       
+      3 ┃   ┃   │(A)│   │   │   ┃   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┃───┼───┼───┼───┼───╹───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      4 ┃   ┃   │   │   │   │   │   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┃───┼───┼───┼───┼───╻───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      5 ┃   ┃   │   │   │   │   ┃   │   ┃   │   │       │   │   ┃   │   ┃       
+        ┃───┗━━━━━━━━━━━━━━━━━━━┛───┼───┃───┼───┼─Ogre ─┼───┼───┃───┼───┃       
+      6 ┃   │   │   │   │   │   │   │   ┃   │   │       │   │   ┃   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      7 ┃   │   │   │   │   │   │   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┗━━━━━━━╸───╺━━━━━━━━━━━┛───┼───┃       
+      8 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      9 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛       
+                                                                                
+ PLAY    K7  floor  2 tokens  ne… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== two-rooms.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 80x24
+-- cksum 1592047727-13139 exit 0
+== two-rooms.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --players --size 80x24
+-- cksum 1592047727-13139 exit 0
+== two-rooms.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 110x34
+-- cksum 2783888900-15286 exit 0
+== two-rooms.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --players --size 110x34
+-- cksum 2783888900-15286 exit 0
+== two-rooms.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 40x12
+-- cksum 510087689-3716 exit 0
+== two-rooms.vtt --seed 1 --script ../work/play.keys --dump-frame --size 80x24
+ Two Rooms                                                                 PLAY 
+          A   B   C   D   E   F   G   H   I   J   K   L   M   N   O   P         
+        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓       
+      1 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┏━━━━━━━━━━━━━━━━━━━┓───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      2 ┃   ┃   │   │   │   │   ┃   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┃───┼───┼───┼───┼───┃───┼───┏━━━━━━━━━━━━━━━━━━━━━━━┓───┼───┃       
+      3 ┃   ┃   │(A)│   │   │   ┃   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┃───┼───┼───┼───┼───╹───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      4 ┃   ┃   │   │   │   │   │   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┃───┼───┼───┼───┼───╻───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      5 ┃   ┃   │   │   │   │   ┃   │   ┃   │   │       │   │   ┃   │   ┃       
+        ┃───┗━━━━━━━━━━━━━━━━━━━┛───┼───┃───┼───┼─Ogre ─┼───┼───┃───┼───┃       
+      6 ┃   │   │   │   │   │   │   │   ┃   │   │       │   │   ┃   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      7 ┃   │   │   │   │   │   │   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┗━━━━━━━╸───╺━━━━━━━━━━━┛───┼───┃       
+      8 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      9 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛       
+                                                                                
+ PLAY    I5  floor  2 tokens  ne… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== two-rooms.vtt --seed 1 --script ../work/play.keys --dump-frame --players --size 80x24
+ Two Rooms                                                                 PLAY 
+          A   B   C   D   E   F   G   H   I   J   K   L   M   N   O   P         
+        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓       
+      1 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┏━━━━━━━━━━━━━━━━━━━┓───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      2 ┃   ┃   │   │   │   │   ┃   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┃───┼───┼───┼───┼───┃───┼───┏━━━━━━━━━━━━━━━━━━━━━━━┓───┼───┃       
+      3 ┃   ┃   │(A)│   │   │   ┃   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┃───┼───┼───┼───┼───╹───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      4 ┃   ┃   │   │   │   │   │   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┃───┼───┼───┼───┼───╻───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      5 ┃   ┃   │   │   │   │   ┃   │   ┃   │   │       │   │   ┃   │   ┃       
+        ┃───┗━━━━━━━━━━━━━━━━━━━┛───┼───┃───┼───┼─Ogre ─┼───┼───┃───┼───┃       
+      6 ┃   │   │   │   │   │   │   │   ┃   │   │       │   │   ┃   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      7 ┃   │   │   │   │   │   │   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┗━━━━━━━╸───╺━━━━━━━━━━━┛───┼───┃       
+      8 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      9 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛       
+                                                                                
+ PLAY    I5  floor  2 tokens  ne… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== two-rooms.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 80x24
+-- cksum 1429761684-13099 exit 0
+== two-rooms.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --players --size 80x24
+-- cksum 1429761684-13099 exit 0
+== two-rooms.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 110x34
+-- cksum 2143401681-15246 exit 0
+== two-rooms.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --players --size 110x34
+-- cksum 2143401681-15246 exit 0
+== two-rooms.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 40x12
+-- cksum 711016765-3775 exit 0
+== two-rooms.vtt --seed 1 --script ../work/roll.keys --dump-frame --size 80x24
+ Two Rooms                                                                BUILD 
+          A   B   C   D   E   F   G   H   I   J   K   L   M   N   O   P         
+        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓       
+      1 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┏━━━━━━━━━━━━━━━━━━━┓───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      2 ┃   ┃   │   │   │   │   ┃   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┃───┼───┼───┼───┼───┃───┼───┏━━━━━━━━━━━━━━━━━━━━━━━┓───┼───┃       
+      3 ┃   ┃   │   │   │   │   ┃   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┃───┼───┼───┼───┼───╹───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      4 ┃   ┃   │   │   │   │   │   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┃───┼───┼───┼───┼───╻───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      5 ┃   ┃   │   │   │   │   ┃   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┗━━━━━━━━━━━━━━━━━━━┛───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      6 ┃   │   │   │   │   │   │   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┃───┼───┼───┼───┼───┼───┃───┼───┃       
+      7 ┃   │   │   │   │   │   │   │   ┃   │   │   │   │   │   ┃   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┗━━━━━━━╸───╺━━━━━━━━━━━┛───┼───┃       
+      8 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃       
+      9 ┃   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   ┃       
+        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛       
+                                                                                
+ NORMAL  I5  floor  [wall/floor]  zoom 1  map 16x9            2d6+3 = 12  [6 3] 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== two-rooms.vtt --seed 1 --script ../work/roll.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== two-rooms.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 80x24
+-- cksum 398225593-12973 exit 0
+== two-rooms.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== two-rooms.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 110x34
+-- cksum 3241456368-15121 exit 0
+== two-rooms.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== two-rooms.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 40x12
+-- cksum 3477615398-3648 exit 0

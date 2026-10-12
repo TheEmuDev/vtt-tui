@@ -85,6 +85,7 @@ tools/pagebench.sh   the phone page's own code per frame (node): --bench-record 
 tools/pageprobe.js   paste into a served page's console, then probe.report(): native costs (putImageData, DOM) node cannot see
 tools/saves.sh  a save flushed and unflushed, three map sizes, on the real disk (PERFORMANCE.md's save table)
 tools/proposals.sh  the proposal, checkpoint and outside-change tables (copy, diff, conflicts, preview, accept; stat, parse, compare) against the release objects
+tools/oracle.sh record|check [VTT]  what a vtt prints, from outside it, kept under tests/oracle/expected: the map tools and frames over every fixture, tests/fuzz-found and tests/oracle/maps (file versions 3, 4, 5, 10, 11, 12 and codes E001, N105, W024, which no other fixture has), each tests/fuzz-ctl request through `--apply`, checksums for generated maps and for cell dumps (`ORACLE_KEEP=DIR` keeps their text). `make test` ends with `check`; `make oracle` is it alone. `record` after a change meant to alter output, and read the diff. Sandboxed (its own XDG directories, copies of the maps). docs/V2.md, D11
 tools/machine.sh  the `Machine:` line every published table carries (perf.sh, saves.sh, pagebench.sh print it; median.py keeps it)
 VTT_FOGDIFF_OPS=36000 ./build/run-tests   the long run of the fog differential test
 make fuzz       libFuzzer on the map loader (clang), FUZZ_SECONDS=600 for longer
@@ -94,6 +95,7 @@ tools/embed.sh  after editing web/index.html; tools/blit_wasm.py after editing t
 ./vtt map.vtt --serve 7777      serve; a raw client: printf 'VTT1\n' | nc 127.0.0.1 7777
 ./vtt map --bench keys --bench-clients 4   the frame with four watchers attached
 ./vtt map.vtt --script keys --dump-frame --size 100x30     render one frame as text
+./vtt map.vtt --script keys --dump-frame --cells --players   the same with every cell's colors (`rnd_dump_cells`), and the players' frame (`app_draw_view`; blank outside play mode, as `app_frame` sends it) in place of the GM's
 ./vtt map.vtt --bench keys --bench-loops 400 --trace t.json  headless timing + Chrome trace
 ./vtt map --bench keys --bench-outside new.vtt   new.vtt written over the map's file each loop, as another program would (the map is written on: use a copy)
 ./vtt map --bench keys --bench-ctl req [--bench-review]   a request each loop, landing at once (or waiting for :review); the tick runs after each loop on a clock that lets the map go quiet

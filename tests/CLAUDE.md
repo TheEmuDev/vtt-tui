@@ -9,6 +9,9 @@ docs/CODEMAP.md; `tests/run.c` is the table of suites and `main`, nothing else.
 - `VTT_UPDATE_GOLDEN=1` regenerates golden frames; `VTT_REQUIRE_NODE=1` fails rather than
   skips the page decoder test; `VTT_FOGDIFF_OPS=36000 build/run-tests` is the long fog
   differential run.
+- `make test` ends with `tools/oracle.sh check`: ./vtt's own output (map tools, frames,
+  `--apply` answers) against `tests/oracle/expected`. A difference is a bug or a meant
+  change: for the second, `tools/oracle.sh record` and read `git diff` before committing it.
 - A test that expects a channel request's edits to land sets `a.ctl_auto = 1` after
   `app_init`; otherwise they arrive as a proposal. Job numbers are not lowest-free
   (`App.job_last`): reset with `jobs_reset()`.

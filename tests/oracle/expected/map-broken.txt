@@ -1,0 +1,634 @@
+== broken.vtt --check
+W020 clamped            line 4    zoom 7 is not 0-3; 3 is used
+W016 unknown-ruleset    line 5    no ruleset called 'nosuch'; the map has none
+E010 row-long           line 8    tiles row 2 is 9 characters, the map needs 8; the rest is ignored
+E013 bad-char           line 8    'X' in tiles row 2, column 5, reads as void
+N021 row-short          line 9    1 tiles row is shorter than 8; the rest reads as void
+W019 stray-row          line 25   rows outside any section, ignored: is the section before them one row too long, or its header swallowed by a short one?
+E014 bad-record         line 26   marker dropped: 'tokenstatus red "Early"'
+W015 unknown-line       line 33   ignored: 'mystery line'
+W018 fog-unknown-patch  line 38   fog row 1 names patch 3 ('C'), which no fogpatch line creates; read as no fog
+E011 section-short      line 39   the file ends inside 'fog' after 2 of 5 rows
+E101 door-in-void       E4|F4     door between two squares that are not map
+E110 token-on-void      F3        Ogre stands on void
+E111 token-overhang     H5        Giant is 2x2 and hangs off the map's edge
+E112 token-overlap      F3        Ogre and Ogre share a square
+W102 door-to-void       F3|G3     door leads into void
+W103 wall-in-void       H3|-      wall between two squares that are not map
+W104 door-loose         C1/C2     door with no wall at either end: is it in the row or column it was meant for?
+W113 duplicate-label    F3        two creatures called Ogre, here and at G3
+W120 unreachable-room   room E1   14 squares, no door leads to it from room A1
+W120 unreachable-room   room E3   1 square, no door leads to it from room A1
+W121 party-split        G2        Bram cannot reach the rest of the party in room A1
+W130 fog-patch-empty    Crypt     fog patch Crypt has no square painted in the fog section
+W130 fog-patch-empty    Mist      fog patch Mist has no square painted in the fog section
+W140 note-on-void       F3        a note on void: on the gap
+N131 fog-patch-disabled Mist      fog patch Mist is disabled: it hides nothing
+8 errors, 15 warnings, 2 notes
+-- exit 1
+== broken.vtt --check --json
+{"file":"broken.vtt","errors":8,"warnings":15,"notes":2,"findings":[{"code":"W020","slug":"clamped","severity":"warning","line":4,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"zoom 7 is not 0-3; 3 is used"},{"code":"W016","slug":"unknown-ruleset","severity":"warning","line":5,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"no ruleset called 'nosuch'; the map has none"},{"code":"E010","slug":"row-long","severity":"error","line":8,"column":8,"where":null,"x":null,"y":null,"edge":null,"message":"tiles row 2 is 9 characters, the map needs 8; the rest is ignored"},{"code":"E013","slug":"bad-char","severity":"error","line":8,"column":4,"where":null,"x":null,"y":null,"edge":null,"message":"'X' in tiles row 2, column 5, reads as void"},{"code":"N021","slug":"row-short","severity":"note","line":9,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"1 tiles row is shorter than 8; the rest reads as void"},{"code":"W019","slug":"stray-row","severity":"warning","line":25,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"rows outside any section, ignored: is the section before them one row too long, or its header swallowed by a short one?"},{"code":"E014","slug":"bad-record","severity":"error","line":26,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"marker dropped: 'tokenstatus red \"Early\"'"},{"code":"W015","slug":"unknown-line","severity":"warning","line":33,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"ignored: 'mystery line'"},{"code":"W018","slug":"fog-unknown-patch","severity":"warning","line":38,"column":2,"where":null,"x":null,"y":null,"edge":null,"message":"fog row 1 names patch 3 ('C'), which no fogpatch line creates; read as no fog"},{"code":"E011","slug":"section-short","severity":"error","line":39,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"the file ends inside 'fog' after 2 of 5 rows"},{"code":"E101","slug":"door-in-void","severity":"error","line":null,"column":null,"where":"E4|F4","x":5,"y":3,"edge":"v","message":"door between two squares that are not map"},{"code":"E110","slug":"token-on-void","severity":"error","line":null,"column":null,"where":"F3","x":5,"y":2,"edge":null,"message":"Ogre stands on void"},{"code":"E111","slug":"token-overhang","severity":"error","line":null,"column":null,"where":"H5","x":7,"y":4,"edge":null,"message":"Giant is 2x2 and hangs off the map's edge"},{"code":"E112","slug":"token-overlap","severity":"error","line":null,"column":null,"where":"F3","x":5,"y":2,"edge":null,"message":"Ogre and Ogre share a square"},{"code":"W102","slug":"door-to-void","severity":"warning","line":null,"column":null,"where":"F3|G3","x":6,"y":2,"edge":"v","message":"door leads into void"},{"code":"W103","slug":"wall-in-void","severity":"warning","line":null,"column":null,"where":"H3|-","x":8,"y":2,"edge":"v","message":"wall between two squares that are not map"},{"code":"W104","slug":"door-loose","severity":"warning","line":null,"column":null,"where":"C1/C2","x":2,"y":1,"edge":"h","message":"door with no wall at either end: is it in the row or column it was meant for?"},{"code":"W113","slug":"duplicate-label","severity":"warning","line":null,"column":null,"where":"F3","x":5,"y":2,"edge":null,"message":"two creatures called Ogre, here and at G3"},{"code":"W120","slug":"unreachable-room","severity":"warning","line":null,"column":null,"where":"room E1","x":4,"y":0,"edge":null,"message":"14 squares, no door leads to it from room A1"},{"code":"W120","slug":"unreachable-room","severity":"warning","line":null,"column":null,"where":"room E3","x":4,"y":2,"edge":null,"message":"1 square, no door leads to it from room A1"},{"code":"W121","slug":"party-split","severity":"warning","line":null,"column":null,"where":"G2","x":6,"y":1,"edge":null,"message":"Bram cannot reach the rest of the party in room A1"},{"code":"W130","slug":"fog-patch-empty","severity":"warning","line":null,"column":null,"where":"Crypt","x":null,"y":null,"edge":null,"message":"fog patch Crypt has no square painted in the fog section"},{"code":"W130","slug":"fog-patch-empty","severity":"warning","line":null,"column":null,"where":"Mist","x":null,"y":null,"edge":null,"message":"fog patch Mist has no square painted in the fog section"},{"code":"W140","slug":"note-on-void","severity":"warning","line":null,"column":null,"where":"F3","x":5,"y":2,"edge":null,"message":"a note on void: on the gap"},{"code":"N131","slug":"fog-patch-disabled","severity":"note","line":null,"column":null,"where":"Mist","x":null,"y":null,"edge":null,"message":"fog patch Mist is disabled: it hides nothing"}]}
+-- exit 1
+== broken.vtt --describe
+map  Broken  8x5  scale 5 ft  metric alt  ruleset none
+  fog on, 2 patches
+  5 creatures, 3 rooms, starting in room 1 (A1), 2 not reachable from it
+
+room 1 (A1)  A1:D5  20 squares
+  terrain  floor 20
+  door         C1/C2    to room 1 (A1)
+  player       B2       Aria
+
+room 2 (E1)  E1:H5  14 squares  NOT REACHABLE
+  terrain  floor 14
+  door         F3|G3    to void
+  player       G2       Bram
+  enemy        G3       Ogre
+  enemy        H5       Giant  2x2
+
+room 3 (E3)  E3:E3  1 square  NOT REACHABLE
+  terrain  floor 1
+
+outside any room
+  enemy        F3       Ogre
+-- exit 0
+== broken.vtt --describe --json
+{"map":{"name":"Broken","width":8,"height":5,"scale_ft":5,"metric":"alt","ruleset":null,"round":0,"fog":true,"creatures":5,"rooms":3,"start_room":1},"rooms":[{"id":1,"name":"A1","area":null,"floor":null,"x":0,"y":0,"bounds":"A1:D5","squares":20,"reachable":true,"terrain":{"floor":20},"doors":[{"kind":"door","where":"C1/C2","to":1}],"creatures":[{"label":"Aria","kind":"player","size":1,"at":"B2","x":1,"y":1}],"notes":[],"fog":[]},{"id":2,"name":"E1","area":null,"floor":null,"x":4,"y":0,"bounds":"E1:H5","squares":14,"reachable":false,"terrain":{"floor":14},"doors":[{"kind":"door","where":"F3|G3","to":"void"}],"creatures":[{"label":"Bram","kind":"player","size":1,"at":"G2","x":6,"y":1},{"label":"Ogre","kind":"enemy","size":1,"at":"G3","x":6,"y":2},{"label":"Giant","kind":"enemy","size":2,"at":"H5","x":7,"y":4}],"notes":[],"fog":[]},{"id":3,"name":"E3","area":null,"floor":null,"x":4,"y":2,"bounds":"E3:E3","squares":1,"reachable":false,"terrain":{"floor":1},"doors":[],"creatures":[],"notes":[],"fog":[]}],"areas":[],"floors":[],"links":[],"outside":[{"label":"Ogre","at":"F3"}]}
+-- exit 0
+== broken.vtt --dump-map
+   A B C D E F G H
+  -----------------
+1 |. . . .|. . . .|
+  |   -+- |       |
+2 |. 1 . .|  . 2 .|
+  |       |   |   |
+3 |. . . .|. 3+4  |
+  |       | | |   |
+4 |. . . .| +3 3 .|
+  |       | |     |
+5 |. . . .|. . . 5|
+  -----------------
+
+creatures
+  1  Aria             player       B2
+  2  Bram             player       G2
+  3  Ogre             enemy 2x2    F3-G4
+  4  Ogre             enemy        G3
+  5  Giant            enemy 2x2    H5-I6
+
+notes
+  F3    on the gap
+
+key
+  .  floor   ~  water   :  rough   "  brush   =  wood   ^  hazard   (blank) void
+  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door
+  S and s are the GM's: the players see a wall and an open door
+
+fog on, soft edge off
+  A  Crypt            reveal 2      memory on  soft edge map 0 squares, 0 seen
+  B  Mist             reveal 1      memory on  soft edge map 0 squares, 0 seen, disabled
+  . no fog   A-O a patch, unseen   a-o seen   1-9 !"#$%& lit by hand
+
+  ABCDEFGH
+1 ........
+2 ........
+3 ........
+4 ........
+5 ........
+
+map  Broken  8x5  scale 5 ft  metric alt  ruleset none
+-- exit 0
+== broken.vtt --dump-map --region B2:F5
+   B C D E F
+    -+- |
+2  1 . .|  .
+        |   |
+3  . . .|. 3+
+        | | |
+4  . . .| +3
+        | |
+5  . . .|. .
+  -----------
+
+creatures
+  1  Aria             player       B2
+  3  Ogre             enemy 2x2    F3-G4
+
+notes
+  F3    on the gap
+
+key
+  .  floor   ~  water   :  rough   "  brush   =  wood   ^  hazard   (blank) void
+  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door
+  S and s are the GM's: the players see a wall and an open door
+
+fog on, soft edge off
+  A  Crypt            reveal 2      memory on  soft edge map 0 squares, 0 seen
+  B  Mist             reveal 1      memory on  soft edge map 0 squares, 0 seen, disabled
+  . no fog   A-O a patch, unseen   a-o seen   1-9 !"#$%& lit by hand
+
+  BCDEF
+2 .....
+3 .....
+4 .....
+5 .....
+
+map  Broken  8x5  scale 5 ft  metric alt  ruleset none
+region B2:F5
+-- exit 0
+== broken.vtt --seed 1 --script ../work/build-box.keys --dump-frame --size 80x24
+ Broken                                                                   BUILD 
+            A       B       C       D       E       F       G       H           
+        ┃       │       │       │       ┃       │       │       │       ┃       
+      1 ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃───────┼───────╺═══════╸───────┃───────┼───────┼───────┼───────┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+      2 ┃       │       │       │       ┃   ·   │       │       │       ┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃───────┼───────┼───────┼───────┃───────┼───────╻───────┼───────┃       
+        ┃       │       │       │       ┃       │      ”║       │       ┃       
+      3 ┃       │       │       │       ┃       │   ·   ║       │   ·   ┃       
+        ┃       │       │       │       ┃       │       ║       │       ┃       
+        ┃───────┼───────┼───────┼───────┃───────╻       ╹───────┼───────┃       
+        ┃       │       │       │       ┃       ║       │       │       ┃       
+      4 ┃       │       │       │       ┃   ·   ║   ·   │       │       ┃       
+        ┃       │       │       │       ┃       ║       │       │       ┃       
+        ┃───────┼───────┼───────┼───────┃───────╹───────┼───────┼───────┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+      5 ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┻━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛       
+ VISUAL  G5  floor  [wall/floor]  box  z… VISUAL - f floor, x clear, esc cancel 
+ hjkl extend  v/V shape  f floor  x clear  esc cancel                    ? keys 
+-- exit 0
+== broken.vtt --seed 1 --script ../work/build-box.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== broken.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 80x24
+-- cksum 1930574828-10540 exit 0
+== broken.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== broken.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 110x34
+-- cksum 2889480004-12853 exit 0
+== broken.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== broken.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 40x12
+-- cksum 294658163-2724 exit 0
+== broken.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --size 80x24
+ Broken [+]                                                               BUILD 
+            A       B       C       D       E       F       G       H           
+        ┃       │       │       │       ┃       │       │       │       ┃       
+      1 ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃───────┼───────╺═══════╸───────┃───────┼───────┼───────┼───────┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+      2 ┃       │       │       │       ┃   ·   │       │       │       ┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃───────┼───────┼───────┼───────┃───────┼───────╻───────┼───────┃       
+        ┃       │       │       │       ┃       │      ”║       │       ┃       
+      3 ┃       │       │       │       ┃       │   ·   ║       │   ·   ┃       
+        ┃       │       │       │       ┃       │       ║       │       ┃       
+        ┃───────┼───────┼───────┼───────┃───────╻       ╹───────┼───────┃       
+        ┃       │       │       │       ┃       ║       │       │       ┃       
+      4 ┃       │       │       │       ┃   ·   ║   ·   │       │       ┃       
+        ┃       │       │       │       ┃       ║       │       │       ┃       
+        ┃───────┼───────┼───────┼───────┃───────╹───────┼───────┼───────┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+      5 ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┻━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛       
+ NORMAL  E5  floor  [wall/floor]  zoom 3  map 8x5                          undo 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== broken.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== broken.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 80x24
+-- cksum 2711343168-10540 exit 0
+== broken.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== broken.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 110x34
+-- cksum 1245562080-12854 exit 0
+== broken.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== broken.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 40x12
+-- cksum 471890582-2574 exit 0
+== broken.vtt --seed 1 --script ../work/help.keys --dump-frame --size 80x24
+ VTT KEYS                                                            Build mode 
+  Build mode                                                                    
+  ──────────                                                                    
+    Move                                                                        
+      h j k l       move the cursor                                             
+      0  $          first / last column                                         
+      gg  G         first / last row                                            
+      3j            any motion takes a count                                    
+      :d6           jump to a square by its label  (:6 for a row)               
+      #             column letters and row numbers, on or off                   
+      ctrl-d        half a page down    ctrl-u up                               
+      z             center the view    + - zoom                                 
+                                                                                
+    Walls and doors                                                             
+      H J K L       wall on the west / south / north / east face                
+      w             trace mode: walk the cursor and leave wall behind           
+      t             cycle which boundary H J K L and the pen lay                
+      o  O          open or close a door / a secret door                        
+                                                                                
+    Floors                                                                      
+      :floor Upper 1                                                            
+                    make the named area Upper a floor, level 1   :floors list…  
+────────────────────────────────────────────────────────────────────────────────
+  j k  scroll      ctrl-d ctrl-u  page      g G  ends      q esc ?  close       
+-- exit 0
+== broken.vtt --seed 1 --script ../work/help.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== broken.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 80x24
+-- cksum 2258426481-3409 exit 0
+== broken.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== broken.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 110x34
+-- cksum 1788162512-5765 exit 0
+== broken.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== broken.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 40x12
+-- cksum 1540148677-1261 exit 0
+== broken.vtt --seed 1 --script ../work/open.keys --dump-frame --size 80x24
+ Broken                                                                   BUILD 
+            A       B       C       D       E       F       G       H           
+        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+      1 ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃───────┼───────╺═══════╸───────┃───────┼───────┼───────┼───────┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+      2 ┃       │       │       │       ┃   ·   │       │       │       ┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃───────┼───────┼───────┼───────┃───────┼───────╻───────┼───────┃       
+        ┃       │       │       │       ┃       │      ”║       │       ┃       
+      3 ┃       │       │       │       ┃       │   ·   ║       │   ·   ┃       
+        ┃       │       │       │       ┃       │       ║       │       ┃       
+        ┃───────┼───────┼───────┼───────┃───────╻       ╹───────┼───────┃       
+        ┃       │       │       │       ┃       ║       │       │       ┃       
+      4 ┃       │       │       │       ┃   ·   ║   ·   │       │       ┃       
+        ┃       │       │       │       ┃       ║       │       │       ┃       
+        ┃───────┼───────┼───────┼───────┃───────╹───────┼───────┼───────┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+      5 ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+ NORMAL  E3  floor  [wall/floor]  zoom 3  map 8x5 opened Broken (8x5, 5 tokens) 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== broken.vtt --seed 1 --script ../work/open.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== broken.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 80x24
+-- cksum 530962634-10538 exit 0
+== broken.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== broken.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 110x34
+-- cksum 1985332135-12853 exit 0
+== broken.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== broken.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 40x12
+-- cksum 1554837928-2678 exit 0
+== broken.vtt --seed 1 --script ../work/play-help.keys --dump-frame --size 80x24
+ VTT KEYS                                                             Play mode 
+  Play mode                                                                     
+  ─────────                                                                     
+    Move                                                                        
+      h j k l       move the cursor, or the creature in hand                    
+      arrows        the same                                                    
+      3j            any motion takes a count                                    
+      :d6           jump to a square by its label                               
+      :area Crypt   jump to a named area   :areas lists them                    
+      [  ]          the floor below / above   :floor all shows the whole map    
+      #             column letters and row numbers, on or off                   
+      z             center the view on the cursor                               
+      + -           zoom in and out                                             
+                                                                                
+    Creatures                                                                   
+      i p           place a player                                              
+      i e           place an enemy                                              
+      i t e  i t p  place a saved character as an enemy / a player: a list to…  
+      :character save                                                           
+                    save the creature under the cursor as a character   :char…  
+      :summon 3 lackey far                                                      
+                    light that range round this creature and place three insi…  
+────────────────────────────────────────────────────────────────────────────────
+  j k  scroll      ctrl-d ctrl-u  page      g G  ends      q esc ?  close       
+-- exit 0
+== broken.vtt --seed 1 --script ../work/play-help.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== broken.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 80x24
+-- cksum 52838005-3410 exit 0
+== broken.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== broken.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 110x34
+-- cksum 1795894224-5874 exit 0
+== broken.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== broken.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 40x12
+-- cksum 2644023987-1261 exit 0
+== broken.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --size 80x24
+ Broken                                                                    PLAY 
+            A       B       C       D       E       F       G       H           
+        ┃       │       │       │       ┃       │       │       │       ┃       
+      1 ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃───────┼───────╺═══════╸───────┃───────┼───────┼───────┼───────┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+      2 ┃       │ Aria  │       │       ┃   ·   │       │ Bram  │       ┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃───────┼───────┼───────┼───────┃───────┼───────╻───────┼───────┃       
+        ┃       │       │       │       ┃       │       ║       │       ┃       
+      3 ┃       │       │       │       ┃       │         Ogre  │   ·   ┃       
+        ┃       │       │       │       ┃       │               │       ┃       
+        ┃───────┼───────┼───────┼───────┃───────╻     Ogre     ─┼───────┃       
+        ┃       │       │       │       ┃       ║               │       ┃       
+      4 ┃       │       │       │       ┃   ·   ║               │       ┃       
+        ┃       │       │       │       ┃       ║       │       │       ┃       
+        ┃───────┼───────┼───────┼───────┃───────╹───────┼───────┼───────┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+      5 ┃       │       │       │       ┃       │       │       │               
+        ┃       │       │       │       ┃       │       │       │               
+        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┻━━━━━━━━━━━━━━━━━━━━━━━━━    Giant     
+ PLAY    G5  floor  5 tokens  ne… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== broken.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --players --size 80x24
+ Broken                                                                    PLAY 
+            A       B       C       D       E       F       G       H           
+        ┃       │       │       │       ┃       │       │       │       ┃       
+      1 ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃───────┼───────╺═══════╸───────┃───────┼───────┼───────┼───────┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+      2 ┃       │ Aria  │       │       ┃   ·   │       │ Bram  │       ┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃───────┼───────┼───────┼───────┃───────┼───────╻───────┼───────┃       
+        ┃       │       │       │       ┃       │       ║       │       ┃       
+      3 ┃       │       │       │       ┃       │         Ogre  │   ·   ┃       
+        ┃       │       │       │       ┃       │               │       ┃       
+        ┃───────┼───────┼───────┼───────┃───────╻     Ogre     ─┼───────┃       
+        ┃       │       │       │       ┃       ║               │       ┃       
+      4 ┃       │       │       │       ┃   ·   ║               │       ┃       
+        ┃       │       │       │       ┃       ║       │       │       ┃       
+        ┃───────┼───────┼───────┼───────┃───────╹───────┼───────┼───────┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+      5 ┃       │       │       │       ┃       │       │       │               
+        ┃       │       │       │       ┃       │       │       │               
+        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┻━━━━━━━━━━━━━━━━━━━━━━━━━    Giant     
+ PLAY    G5  floor  5 tokens  ne… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== broken.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 80x24
+-- cksum 2590264298-10979 exit 0
+== broken.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --players --size 80x24
+-- cksum 2590264298-10979 exit 0
+== broken.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 110x34
+-- cksum 1072293925-13374 exit 0
+== broken.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --players --size 110x34
+-- cksum 1072293925-13374 exit 0
+== broken.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 40x12
+-- cksum 1361163437-2862 exit 0
+== broken.vtt --seed 1 --script ../work/play.keys --dump-frame --size 80x24
+ Broken                                                                    PLAY 
+            A       B       C       D       E       F       G       H           
+        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+      1 ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃───────┼───────╺═══════╸───────┃───────┼───────┼───────┼───────┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+      2 ┃       │ Aria  │       │       ┃   ·   │       │ Bram  │       ┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃───────┼───────┼───────┼───────┃───────┼───────╻───────┼───────┃       
+        ┃       │       │       │       ┃       │       ║       │       ┃       
+      3 ┃       │       │       │       ┃       │         Ogre  │   ·   ┃       
+        ┃       │       │       │       ┃       │               │       ┃       
+        ┃───────┼───────┼───────┼───────┃───────╻     Ogre     ─┼───────┃       
+        ┃       │       │       │       ┃       ║               │       ┃       
+      4 ┃       │       │       │       ┃   ·   ║               │       ┃       
+        ┃       │       │       │       ┃       ║       │       │       ┃       
+        ┃───────┼───────┼───────┼───────┃───────╹───────┼───────┼───────┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+      5 ┃       │       │       │       ┃       │       │       │               
+        ┃       │       │       │       ┃       │       │       │               
+ PLAY    E3  floor  5 tokens  ne… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== broken.vtt --seed 1 --script ../work/play.keys --dump-frame --players --size 80x24
+ Broken                                                                    PLAY 
+            A       B       C       D       E       F       G       H           
+        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+      1 ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃───────┼───────╺═══════╸───────┃───────┼───────┼───────┼───────┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+      2 ┃       │ Aria  │       │       ┃   ·   │       │ Bram  │       ┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃───────┼───────┼───────┼───────┃───────┼───────╻───────┼───────┃       
+        ┃       │       │       │       ┃       │       ║       │       ┃       
+      3 ┃       │       │       │       ┃       │         Ogre  │   ·   ┃       
+        ┃       │       │       │       ┃       │               │       ┃       
+        ┃───────┼───────┼───────┼───────┃───────╻     Ogre     ─┼───────┃       
+        ┃       │       │       │       ┃       ║               │       ┃       
+      4 ┃       │       │       │       ┃   ·   ║               │       ┃       
+        ┃       │       │       │       ┃       ║       │       │       ┃       
+        ┃───────┼───────┼───────┼───────┃───────╹───────┼───────┼───────┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+      5 ┃       │       │       │       ┃       │       │       │               
+        ┃       │       │       │       ┃       │       │       │               
+ PLAY    E3  floor  5 tokens  ne… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== broken.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 80x24
+-- cksum 916000117-10813 exit 0
+== broken.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --players --size 80x24
+-- cksum 916000117-10813 exit 0
+== broken.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 110x34
+-- cksum 2221066059-13254 exit 0
+== broken.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --players --size 110x34
+-- cksum 2221066059-13254 exit 0
+== broken.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 40x12
+-- cksum 2009173030-2661 exit 0
+== broken.vtt --seed 1 --script ../work/roll.keys --dump-frame --size 80x24
+ Broken                                                                   BUILD 
+            A       B       C       D       E       F       G       H           
+        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+      1 ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃───────┼───────╺═══════╸───────┃───────┼───────┼───────┼───────┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+      2 ┃       │       │       │       ┃   ·   │       │       │       ┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃───────┼───────┼───────┼───────┃───────┼───────╻───────┼───────┃       
+        ┃       │       │       │       ┃       │      ”║       │       ┃       
+      3 ┃       │       │       │       ┃       │   ·   ║       │   ·   ┃       
+        ┃       │       │       │       ┃       │       ║       │       ┃       
+        ┃───────┼───────┼───────┼───────┃───────╻       ╹───────┼───────┃       
+        ┃       │       │       │       ┃       ║       │       │       ┃       
+      4 ┃       │       │       │       ┃   ·   ║   ·   │       │       ┃       
+        ┃       │       │       │       ┃       ║       │       │       ┃       
+        ┃───────┼───────┼───────┼───────┃───────╹───────┼───────┼───────┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+      5 ┃       │       │       │       ┃       │       │       │       ┃       
+        ┃       │       │       │       ┃       │       │       │       ┃       
+ NORMAL  E3  floor  [wall/floor]  zoom 3  map 8x5             2d6+3 = 12  [6 3] 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== broken.vtt --seed 1 --script ../work/roll.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== broken.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 80x24
+-- cksum 3245795388-10539 exit 0
+== broken.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== broken.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 110x34
+-- cksum 1226150947-12853 exit 0
+== broken.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== broken.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 40x12
+-- cksum 3369395771-2676 exit 0

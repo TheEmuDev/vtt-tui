@@ -1,0 +1,558 @@
+== env.vtt --check
+no findings
+-- exit 0
+== env.vtt --check --json
+{"file":"env.vtt","errors":0,"warnings":0,"notes":0,"findings":[]}
+-- exit 0
+== env.vtt --describe
+map  env  4x3  scale 5 ft  metric alt  ruleset none
+  0 creatures, 1 room, starting in room 1 Nook (A1)
+  floors Ground (level 0) A1:D3
+
+room 1 Nook (A1)  A1:D3  12 squares  on Ground
+  terrain  floor 12
+-- exit 0
+== env.vtt --describe --json
+{"map":{"name":"env","width":4,"height":3,"scale_ft":5,"metric":"alt","ruleset":null,"round":0,"fog":false,"creatures":0,"rooms":1,"start_room":1},"rooms":[{"id":1,"name":"A1","area":"Nook","floor":"Ground","x":0,"y":0,"bounds":"A1:D3","squares":12,"reachable":true,"terrain":{"floor":12},"doors":[],"creatures":[],"notes":[],"fog":[]}],"areas":[{"name":"Nook","bounds":"A1:B2","x0":0,"y0":0,"x1":1,"y1":1,"environment":"damp-cellar"},{"name":"Ground","bounds":"A1:D3","x0":0,"y0":0,"x1":3,"y1":2}],"environment":"damp-cellar","floors":[{"name":"Ground","level":0,"bounds":"A1:D3"}],"links":[],"outside":[]}
+-- exit 0
+== env.vtt --dump-map
+   A B C D
+
+1  . . . .
+
+2  . . . .
+
+3  . . . .
+
+
+environment damp-cellar
+
+areas
+  Nook             A1:B2  environment damp-cellar
+  Ground           A1:D3
+
+key
+  .  floor   ~  water   :  rough   "  brush   =  wood   ^  hazard   (blank) void
+  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door
+  S and s are the GM's: the players see a wall and an open door
+
+map  env  4x3  scale 5 ft  metric alt  ruleset none
+-- exit 0
+== env.vtt --dump-map --region B2:F5
+   B C D
+
+2  . . .
+
+3  . . .
+
+
+environment damp-cellar
+
+areas
+  Nook             A1:B2  environment damp-cellar
+  Ground           A1:D3
+
+key
+  .  floor   ~  water   :  rough   "  brush   =  wood   ^  hazard   (blank) void
+  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door
+  S and s are the GM's: the players see a wall and an open door
+
+map  env  4x3  scale 5 ft  metric alt  ruleset none
+region B2:D3
+-- exit 0
+== env.vtt --seed 1 --script ../work/build-box.keys --dump-frame --size 80x24
+ env                                                                      BUILD 
+                                  A   B   C   D                                 
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                ┌───┬───┬───┬───┐                               
+                              1 │   │   │   │   │                               
+                                ├───┼───┼───┼───┤                               
+                              2 │   │   │   │   │                               
+                                ├───┼───┼───┼───┤                               
+                              3 │   │   │   │   │                               
+                                └───┴───┴───┴───┘                               
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ VISUAL  D3  floor  [wall/floor]  box  z… VISUAL - f floor, x clear, esc cancel 
+ hjkl extend  v/V shape  f floor  x clear  esc cancel                    ? keys 
+-- exit 0
+== env.vtt --seed 1 --script ../work/build-box.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== env.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 80x24
+-- cksum 705787099-4041 exit 0
+== env.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== env.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 110x34
+-- cksum 921797633-6107 exit 0
+== env.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== env.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 40x12
+-- cksum 2184301488-2213 exit 0
+== env.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --size 80x24
+ env [+]                                                                  BUILD 
+                                  A   B   C   D                                 
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                ┌───┬───┬───┬───┐                               
+                              1 │   │   │   │   │                               
+                                ├───┼───┼───┼───┤                               
+                              2 │   │   │   │   │                               
+                                ├───┼───┼───┼───┤                               
+                              3 │   │   │   │   │                               
+                                └───┴───┴───┴───┘                               
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ NORMAL  C3  floor  [wall/floor]  zoom 1  map 4x3                          undo 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== env.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== env.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 80x24
+-- cksum 3984868209-4039 exit 0
+== env.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== env.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 110x34
+-- cksum 469196868-6107 exit 0
+== env.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== env.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 40x12
+-- cksum 3942769822-2210 exit 0
+== env.vtt --seed 1 --script ../work/help.keys --dump-frame --size 80x24
+ VTT KEYS                                                            Build mode 
+  Build mode                                                                    
+  ──────────                                                                    
+    Move                                                                        
+      h j k l       move the cursor                                             
+      0  $          first / last column                                         
+      gg  G         first / last row                                            
+      3j            any motion takes a count                                    
+      :d6           jump to a square by its label  (:6 for a row)               
+      #             column letters and row numbers, on or off                   
+      ctrl-d        half a page down    ctrl-u up                               
+      z             center the view    + - zoom                                 
+                                                                                
+    Walls and doors                                                             
+      H J K L       wall on the west / south / north / east face                
+      w             trace mode: walk the cursor and leave wall behind           
+      t             cycle which boundary H J K L and the pen lay                
+      o  O          open or close a door / a secret door                        
+                                                                                
+    Floors                                                                      
+      :floor Upper 1                                                            
+                    make the named area Upper a floor, level 1   :floors list…  
+────────────────────────────────────────────────────────────────────────────────
+  j k  scroll      ctrl-d ctrl-u  page      g G  ends      q esc ?  close       
+-- exit 0
+== env.vtt --seed 1 --script ../work/help.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== env.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 80x24
+-- cksum 2258426481-3409 exit 0
+== env.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== env.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 110x34
+-- cksum 1788162512-5765 exit 0
+== env.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== env.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 40x12
+-- cksum 1540148677-1261 exit 0
+== env.vtt --seed 1 --script ../work/open.keys --dump-frame --size 80x24
+ env                                                                      BUILD 
+                                  A   B   C   D                                 
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                ┌───┬───┬───┬───┐                               
+                              1 │   │   │   │   │                               
+                                ├───┼───┼───┼───┤                               
+                              2 │   │   │   │   │                               
+                                ├───┼───┼───┼───┤                               
+                              3 │   │   │   │   │                               
+                                └───┴───┴───┴───┘                               
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ NORMAL  C2  floor  [wall/floor]  zoom 1  map 4x3    opened env (4x3, 0 tokens) 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== env.vtt --seed 1 --script ../work/open.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== env.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 80x24
+-- cksum 153778208-4039 exit 0
+== env.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== env.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 110x34
+-- cksum 1814929074-6107 exit 0
+== env.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== env.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 40x12
+-- cksum 2146669405-2211 exit 0
+== env.vtt --seed 1 --script ../work/play-help.keys --dump-frame --size 80x24
+ VTT KEYS                                                             Play mode 
+  Play mode                                                                     
+  ─────────                                                                     
+    Move                                                                        
+      h j k l       move the cursor, or the creature in hand                    
+      arrows        the same                                                    
+      3j            any motion takes a count                                    
+      :d6           jump to a square by its label                               
+      :area Crypt   jump to a named area   :areas lists them                    
+      [  ]          the floor below / above   :floor all shows the whole map    
+      #             column letters and row numbers, on or off                   
+      z             center the view on the cursor                               
+      + -           zoom in and out                                             
+                                                                                
+    Creatures                                                                   
+      i p           place a player                                              
+      i e           place an enemy                                              
+      i t e  i t p  place a saved character as an enemy / a player: a list to…  
+      :character save                                                           
+                    save the creature under the cursor as a character   :char…  
+      :summon 3 lackey far                                                      
+                    light that range round this creature and place three insi…  
+────────────────────────────────────────────────────────────────────────────────
+  j k  scroll      ctrl-d ctrl-u  page      g G  ends      q esc ?  close       
+-- exit 0
+== env.vtt --seed 1 --script ../work/play-help.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== env.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 80x24
+-- cksum 52838005-3410 exit 0
+== env.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== env.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 110x34
+-- cksum 1795894224-5874 exit 0
+== env.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== env.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 40x12
+-- cksum 2644023987-1261 exit 0
+== env.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --size 80x24
+ env                                                                       PLAY 
+                                  A   B   C   D                                 
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                ┌───┬───┬───┬───┐                               
+                              1 │   │   │   │   │                               
+                                ├───┼───┼───┼───┤                               
+                              2 │   │   │   │   │                               
+                                ├───┼───┼───┼───┤                               
+                              3 │   │   │   │   │                               
+                                └───┴───┴───┴───┘                               
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ PLAY    D3  floor  0 tokens  ne… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== env.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --players --size 80x24
+ env                                                                       PLAY 
+                                  A   B   C   D                                 
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                ┌───┬───┬───┬───┐                               
+                              1 │   │   │   │   │                               
+                                ├───┼───┼───┼───┤                               
+                              2 │   │   │   │   │                               
+                                ├───┼───┼───┼───┤                               
+                              3 │   │   │   │   │                               
+                                └───┴───┴───┴───┘                               
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ PLAY    D3  floor  0 tokens  ne… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== env.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 80x24
+-- cksum 3235723604-4161 exit 0
+== env.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --players --size 80x24
+-- cksum 3235723604-4161 exit 0
+== env.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 110x34
+-- cksum 2312791374-6227 exit 0
+== env.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --players --size 110x34
+-- cksum 2312791374-6227 exit 0
+== env.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 40x12
+-- cksum 2841523500-2333 exit 0
+== env.vtt --seed 1 --script ../work/play.keys --dump-frame --size 80x24
+ env                                                                       PLAY 
+                                  A   B   C   D                                 
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                ┌───┬───┬───┬───┐                               
+                              1 │   │   │   │   │                               
+                                ├───┼───┼───┼───┤                               
+                              2 │   │   │   │   │                               
+                                ├───┼───┼───┼───┤                               
+                              3 │   │   │   │   │                               
+                                └───┴───┴───┴───┘                               
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ PLAY    C2  floor  0 tokens  ne… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== env.vtt --seed 1 --script ../work/play.keys --dump-frame --players --size 80x24
+ env                                                                       PLAY 
+                                  A   B   C   D                                 
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                ┌───┬───┬───┬───┐                               
+                              1 │   │   │   │   │                               
+                                ├───┼───┼───┼───┤                               
+                              2 │   │   │   │   │                               
+                                ├───┼───┼───┼───┤                               
+                              3 │   │   │   │   │                               
+                                └───┴───┴───┴───┘                               
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ PLAY    C2  floor  0 tokens  ne… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== env.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 80x24
+-- cksum 20070344-4199 exit 0
+== env.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --players --size 80x24
+-- cksum 20070344-4199 exit 0
+== env.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 110x34
+-- cksum 4045317960-6265 exit 0
+== env.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --players --size 110x34
+-- cksum 4045317960-6265 exit 0
+== env.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 40x12
+-- cksum 2888172713-2371 exit 0
+== env.vtt --seed 1 --script ../work/roll.keys --dump-frame --size 80x24
+ env                                                                      BUILD 
+                                  A   B   C   D                                 
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                ┌───┬───┬───┬───┐                               
+                              1 │   │   │   │   │                               
+                                ├───┼───┼───┼───┤                               
+                              2 │   │   │   │   │                               
+                                ├───┼───┼───┼───┤                               
+                              3 │   │   │   │   │                               
+                                └───┴───┴───┴───┘                               
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ NORMAL  C2  floor  [wall/floor]  zoom 1  map 4x3             2d6+3 = 12  [6 3] 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== env.vtt --seed 1 --script ../work/roll.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== env.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 80x24
+-- cksum 3127480947-4040 exit 0
+== env.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== env.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 110x34
+-- cksum 1977226306-6107 exit 0
+== env.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== env.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 40x12
+-- cksum 3373710735-2211 exit 0

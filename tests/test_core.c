@@ -270,6 +270,29 @@ void test_render(void)
     CHECK_EQ(r.cells_changed, 100);
 
     rnd_free(&r);
+
+    /* What rnd_dump strips is what a GM-only tint is made of, so the dump
+     * that keeps it must say where each style starts and ends. */
+    CASE("the cell dump has each row's text, then its runs of one style");
+    Renderer d;
+    rnd_init(&d);
+    rnd_resize(&d, 6, 2);
+    rnd_begin(&d);
+    draw_text(&d, 0, 0, "hi", -1, style(0x112233, 0x445566, ATTR_BOLD));
+    ByteBuf cells;
+    bb_init(&cells, 256);
+    rnd_dump_cells(&d, &cells);
+    bb_putc(&cells, '\0');
+    const char *ct = (const char *)cells.data;
+    CHECK(!strncmp(ct, "hi", 2));
+    CHECK(strstr(ct, "\n 0+2 112233/445566/1 2+4 ") != NULL);
+    int rows = 0;
+    for (const char *q = ct; *q; q++) rows += *q == '\n';
+    CHECK_EQ(rows, 4);                    /* two rows, two lines each */
+    const char *second = strstr(ct, "\n 0+6 ");
+    CHECK(second != NULL);                /* an untouched row is one run */
+    bb_free(&cells);
+    rnd_free(&d);
 }
 
 void test_draw(void)

@@ -1,0 +1,596 @@
+== roundtrip-damaged.vtt --check
+W015 unknown-line       line 7    ignored: 'ru'
+W019 stray-row          line 8    rows outside any section, ignored: is the section before them one row too long, or its header swallowed by a short one?
+W015 unknown-line       line 9    ignored: '...............�'
+W019 stray-row          line 10   rows outside any section, ignored: is the section before them one row too long, or its header swallowed by a short one?
+W025 scene-dropped      line 17   scene  dropped: the file ends before its endscene
+W025 scene-dropped      line 17   scene ? dropped: its name does not read
+W019 stray-row          line 18   rows outside any section, ignored: is the section before them one row too long, or its header swallowed by a short one?
+W015 unknown-line       line 26   ignored: '|               �|'
+W015 unknown-line       line 27   ignored: 'hedg�����������������������������������������es'
+W019 stray-row          line 28   rows outside any section, ignored: is the section before them one row too long, or its header swallowed by a short one?
+E014 bad-record         line 35   link dropped: 'link 1 ladder 1 --   '
+W015 unknown-line       line 36   ignored: '         4           '
+W015 unknown-line       line 38   ignored: ' ressure plate"'
+E014 bad-record         line 44   area dropped: 'area 1 1 6 4 "Crypt"'
+W024 floor-dropped      line 46   floor Ground dropped: no area has that name
+W015 unknown-line       line 50   ignored: '������������������������������������������������������������'
+W019 stray-row          line 51   rows outside any section, ignored: is the section before them one row too long, or its header swallowed by a short one?
+W150 link-on-void       F3        stairs 1 has an end on void: nobody can land there
+W150 link-on-void       B7        portal 2 has an end on void: nobody can land there
+W150 link-on-void       H8        stairs 3 has an end on void: nobody can land there
+W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+2 errors, 19 warnings
+-- exit 1
+== roundtrip-damaged.vtt --check --json
+{"file":"roundtrip-damaged.vtt","errors":2,"warnings":19,"notes":0,"findings":[{"code":"W015","slug":"unknown-line","severity":"warning","line":7,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"ignored: 'ru'"},{"code":"W019","slug":"stray-row","severity":"warning","line":8,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"rows outside any section, ignored: is the section before them one row too long, or its header swallowed by a short one?"},{"code":"W015","slug":"unknown-line","severity":"warning","line":9,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"ignored: '...............�'"},{"code":"W019","slug":"stray-row","severity":"warning","line":10,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"rows outside any section, ignored: is the section before them one row too long, or its header swallowed by a short one?"},{"code":"W025","slug":"scene-dropped","severity":"warning","line":17,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"scene  dropped: the file ends before its endscene"},{"code":"W025","slug":"scene-dropped","severity":"warning","line":17,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"scene ? dropped: its name does not read"},{"code":"W019","slug":"stray-row","severity":"warning","line":18,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"rows outside any section, ignored: is the section before them one row too long, or its header swallowed by a short one?"},{"code":"W015","slug":"unknown-line","severity":"warning","line":26,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"ignored: '|               �\u0001|'"},{"code":"W015","slug":"unknown-line","severity":"warning","line":27,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"ignored: 'hedg�����������������������������������������es'"},{"code":"W019","slug":"stray-row","severity":"warning","line":28,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"rows outside any section, ignored: is the section before them one row too long, or its header swallowed by a short one?"},{"code":"E014","slug":"bad-record","severity":"error","line":35,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"link dropped: 'link 1 ladder 1 --   '"},{"code":"W015","slug":"unknown-line","severity":"warning","line":36,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"ignored: '         4           '"},{"code":"W015","slug":"unknown-line","severity":"warning","line":38,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"ignored: ' ressure plate\"'"},{"code":"E014","slug":"bad-record","severity":"error","line":44,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"area dropped: 'area 1 1 6 4 \"Crypt\"'"},{"code":"W024","slug":"floor-dropped","severity":"warning","line":46,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"floor Ground dropped: no area has that name"},{"code":"W015","slug":"unknown-line","severity":"warning","line":50,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"ignored: '������������������������������������������������������������'"},{"code":"W019","slug":"stray-row","severity":"warning","line":51,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"rows outside any section, ignored: is the section before them one row too long, or its header swallowed by a short one?"},{"code":"W150","slug":"link-on-void","severity":"warning","line":null,"column":null,"where":"F3","x":5,"y":2,"edge":null,"message":"stairs 1 has an end on void: nobody can land there"},{"code":"W150","slug":"link-on-void","severity":"warning","line":null,"column":null,"where":"B7","x":1,"y":6,"edge":null,"message":"portal 2 has an end on void: nobody can land there"},{"code":"W150","slug":"link-on-void","severity":"warning","line":null,"column":null,"where":"H8","x":7,"y":7,"edge":null,"message":"stairs 3 has an end on void: nobody can land there"},{"code":"W151","slug":"link-to-nowhere","severity":"warning","line":null,"column":null,"where":"H8","x":7,"y":7,"edge":null,"message":"stairs 3 to town, Gate leads nowhere: no map town beside this one"}]}
+-- exit 1
+== roundtrip-damaged.vtt --describe
+map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset none
+  0 creatures, 0 rooms
+-- exit 0
+== roundtrip-damaged.vtt --describe --json
+{"map":{"name":"Goblin Ambush","width":16,"height":9,"scale_ft":5,"metric":"alt","ruleset":null,"round":0,"fog":false,"creatures":0,"rooms":0,"start_room":null},"rooms":[],"areas":[{"name":"Crypt","bounds":"B2:G6","x0":1,"y0":1,"x1":6,"y1":5},{"name":"Tower","bounds":"L2:P6","x0":11,"y0":1,"x1":15,"y1":5},{"name":"Gro�nd","bounds":"A1:P9","x0":0,"y0":0,"x1":15,"y1":8}],"floors":[],"links":[{"num":1,"kind":"stairs","size":1,"oneway":false,"secret":false,"ends":[{"at":"F3","x":5,"y":2,"room":null},{"at":"O3","x":14,"y":2,"room":null}]},{"num":2,"kind":"portal","size":2,"oneway":true,"secret":true,"ends":[{"at":"B7-C8","x":1,"y":6,"room":null},{"at":"M7-N8","x":12,"y":6,"room":null}]},{"num":3,"kind":"stairs","size":1,"oneway":false,"secret":false,"to_map":"town","to_place":"Gate","ends":[{"at":"H8","x":7,"y":7,"room":null}]}],"outside":[]}
+-- exit 0
+== roundtrip-damaged.vtt --dump-map
+   A B C D E F G H I J K L M N O P
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+
+areas
+  Crypt            B2:G6
+  Tower            L2:P6
+  Gro�nd           A1:P9
+
+links
+  stairs 1     F3 <-> O3
+  portal 2     B7-C8 -> M7-N8  2x2  one-way  secret
+  stairs 3     H8 -> town, Gate
+
+key
+  .  floor   ~  water   :  rough   "  brush   =  wood   ^  hazard   (blank) void
+  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door
+  S and s are the GM's: the players see a wall and an open door
+
+map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset none
+-- exit 0
+== roundtrip-damaged.vtt --dump-map --region B2:F5
+   B C D E F
+
+2
+
+3
+
+4
+
+5
+
+
+areas
+  Crypt            B2:G6
+  Gro�nd           A1:P9
+
+links
+  stairs 1     F3 <-> O3
+
+key
+  .  floor   ~  water   :  rough   "  brush   =  wood   ^  hazard   (blank) void
+  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door
+  S and s are the GM's: the players see a wall and an open door
+
+map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset none
+region B2:F5
+-- exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/build-box.keys --dump-frame --size 80x24
+ Goblin Ambush                                                            BUILD 
+          A   B   C   D   E   F   G   H   I   J   K   L   M   N   O   P         
+                                                                                
+      1   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      2   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      3   ·   ·   ·   ·   ·  ≡1   ·   ·   ·   ·   ·   ·   ·   ·  ≡1   ·         
+                                                                                
+      4   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      5   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      6   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      7   ·  ◎2   ◎   ·   ·   ·   ·   ·   ·   ·   ·   ·  ◎2   ◎   ·   ·         
+                                                                                
+      8   ·   ◎   ◎   ·   ·   ·   ·  ≡3→  ·   ·   ·   ·   ◎   ◎   ·   ·         
+                                                                                
+      9   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+                                                                                
+ VISUAL  K7  void  [wall/floor]  box  zo… VISUAL - f floor, x clear, esc cancel 
+ hjkl extend  v/V shape  f floor  x clear  esc cancel                    ? keys 
+-- exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/build-box.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 80x24
+-- cksum 2572467532-9757 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 110x34
+-- cksum 3333888597-11857 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 40x12
+-- cksum 3085903381-2936 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --size 80x24
+ Goblin Ambush [+]                                                        BUILD 
+          A   B   C   D   E   F   G   H   I   J   K   L   M   N   O   P         
+                                                                                
+      1   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      2   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      3   ·   ·   ·   ·   ·  ≡1   ·   ·   ·   ·   ·   ·   ·   ·  ≡1   ·         
+                                                                                
+      4   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      5   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      6   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      7   ·  ◎2   ◎   ·   ·   ·   ·   ·   ·   ·   ·   ·  ◎2   ◎   ·   ·         
+                                                                                
+      8   ·   ◎   ◎   ·   ·   ·   ·  ≡3→  ·   ·   ·   ·   ◎   ◎   ·   ·         
+                                                                                
+      9   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+                                                                                
+ NORMAL  I7  void  [wall/floor]  zoom 1  map 16x9                          undo 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 80x24
+-- cksum 3113059951-9755 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 110x34
+-- cksum 798245714-11857 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 40x12
+-- cksum 2075056186-2933 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/help.keys --dump-frame --size 80x24
+ VTT KEYS                                                            Build mode 
+  Build mode                                                                    
+  ──────────                                                                    
+    Move                                                                        
+      h j k l       move the cursor                                             
+      0  $          first / last column                                         
+      gg  G         first / last row                                            
+      3j            any motion takes a count                                    
+      :d6           jump to a square by its label  (:6 for a row)               
+      #             column letters and row numbers, on or off                   
+      ctrl-d        half a page down    ctrl-u up                               
+      z             center the view    + - zoom                                 
+                                                                                
+    Walls and doors                                                             
+      H J K L       wall on the west / south / north / east face                
+      w             trace mode: walk the cursor and leave wall behind           
+      t             cycle which boundary H J K L and the pen lay                
+      o  O          open or close a door / a secret door                        
+                                                                                
+    Floors                                                                      
+      :floor Upper 1                                                            
+                    make the named area Upper a floor, level 1   :floors list…  
+────────────────────────────────────────────────────────────────────────────────
+  j k  scroll      ctrl-d ctrl-u  page      g G  ends      q esc ?  close       
+-- exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/help.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 80x24
+-- cksum 2258426481-3409 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 110x34
+-- cksum 1788162512-5765 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 40x12
+-- cksum 1540148677-1261 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/open.keys --dump-frame --size 80x24
+ Goblin Ambush                                                            BUILD 
+          A   B   C   D   E   F   G   H   I   J   K   L   M   N   O   P         
+                                                                                
+      1   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      2   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      3   ·   ·   ·   ·   ·  ≡1   ·   ·   ·   ·   ·   ·   ·   ·  ≡1   ·         
+                                                                                
+      4   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      5   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      6   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      7   ·  ◎2   ◎   ·   ·   ·   ·   ·   ·   ·   ·   ·  ◎2   ◎   ·   ·         
+                                                                                
+      8   ·   ◎   ◎   ·   ·   ·   ·  ≡3→  ·   ·   ·   ·   ◎   ◎   ·   ·         
+                                                                                
+      9   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+                                                                                
+ NORMAL  I5  void  [wall/floor]  zoom 1 … opened Goblin Ambush (16x9, 0 tokens) 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/open.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 80x24
+-- cksum 1709392027-9757 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 110x34
+-- cksum 532358284-11857 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 40x12
+-- cksum 3658223071-2932 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/play-help.keys --dump-frame --size 80x24
+ VTT KEYS                                                             Play mode 
+  Play mode                                                                     
+  ─────────                                                                     
+    Move                                                                        
+      h j k l       move the cursor, or the creature in hand                    
+      arrows        the same                                                    
+      3j            any motion takes a count                                    
+      :d6           jump to a square by its label                               
+      :area Crypt   jump to a named area   :areas lists them                    
+      [  ]          the floor below / above   :floor all shows the whole map    
+      #             column letters and row numbers, on or off                   
+      z             center the view on the cursor                               
+      + -           zoom in and out                                             
+                                                                                
+    Creatures                                                                   
+      i p           place a player                                              
+      i e           place an enemy                                              
+      i t e  i t p  place a saved character as an enemy / a player: a list to…  
+      :character save                                                           
+                    save the creature under the cursor as a character   :char…  
+      :summon 3 lackey far                                                      
+                    light that range round this creature and place three insi…  
+────────────────────────────────────────────────────────────────────────────────
+  j k  scroll      ctrl-d ctrl-u  page      g G  ends      q esc ?  close       
+-- exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/play-help.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 80x24
+-- cksum 52838005-3410 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 110x34
+-- cksum 1795894224-5874 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 40x12
+-- cksum 2644023987-1261 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --size 80x24
+ Goblin Ambush                                                             PLAY 
+          A   B   C   D   E   F   G   H   I   J   K   L   M   N   O   P         
+                                                                                
+      1   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      2   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      3   ·   ·   ·   ·   ·  ≡1   ·   ·   ·   ·   ·   ·   ·   ·  ≡1   ·         
+                                                                                
+      4   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      5   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      6   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      7   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      8   ·   ·   ·   ·   ·   ·   ·  ≡3→  ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      9   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+                                                                                
+ PLAY    K7  void  0 tokens  nex… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --players --size 80x24
+ Goblin Ambush                                                             PLAY 
+          A   B   C   D   E   F   G   H   I   J   K   L   M   N   O   P         
+                                                                                
+      1   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      2   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      3   ·   ·   ·   ·   ·  ≡1   ·   ·   ·   ·   ·   ·   ·   ·  ≡1   ·         
+                                                                                
+      4   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      5   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      6   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      7   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      8   ·   ·   ·   ·   ·   ·   ·  ≡3→  ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      9   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+                                                                                
+ PLAY    K7  void  0 tokens  nex… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 80x24
+-- cksum 3993283818-9911 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --players --size 80x24
+-- cksum 3993283818-9911 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 110x34
+-- cksum 3421599152-12009 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --players --size 110x34
+-- cksum 3421599152-12009 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 40x12
+-- cksum 171897756-3094 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/play.keys --dump-frame --size 80x24
+ Goblin Ambush                                                             PLAY 
+          A   B   C   D   E   F   G   H   I   J   K   L   M   N   O   P         
+                                                                                
+      1   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      2   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      3   ·   ·   ·   ·   ·  ≡1   ·   ·   ·   ·   ·   ·   ·   ·  ≡1   ·         
+                                                                                
+      4   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      5   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      6   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      7   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      8   ·   ·   ·   ·   ·   ·   ·  ≡3→  ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      9   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+                                                                                
+ PLAY    I5  void  0 tokens  nex… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/play.keys --dump-frame --players --size 80x24
+ Goblin Ambush                                                             PLAY 
+          A   B   C   D   E   F   G   H   I   J   K   L   M   N   O   P         
+                                                                                
+      1   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      2   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      3   ·   ·   ·   ·   ·  ≡1   ·   ·   ·   ·   ·   ·   ·   ·  ≡1   ·         
+                                                                                
+      4   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      5   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      6   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      7   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      8   ·   ·   ·   ·   ·   ·   ·  ≡3→  ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      9   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+                                                                                
+ PLAY    I5  void  0 tokens  nex… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 80x24
+-- cksum 318620336-9911 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --players --size 80x24
+-- cksum 318620336-9911 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 110x34
+-- cksum 2583298255-12009 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --players --size 110x34
+-- cksum 2583298255-12009 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 40x12
+-- cksum 3980876907-3093 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/roll.keys --dump-frame --size 80x24
+ Goblin Ambush                                                            BUILD 
+          A   B   C   D   E   F   G   H   I   J   K   L   M   N   O   P         
+                                                                                
+      1   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      2   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      3   ·   ·   ·   ·   ·  ≡1   ·   ·   ·   ·   ·   ·   ·   ·  ≡1   ·         
+                                                                                
+      4   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      5   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      6   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+      7   ·  ◎2   ◎   ·   ·   ·   ·   ·   ·   ·   ·   ·  ◎2   ◎   ·   ·         
+                                                                                
+      8   ·   ◎   ◎   ·   ·   ·   ·  ≡3→  ·   ·   ·   ·   ◎   ◎   ·   ·         
+                                                                                
+      9   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
+                                                                                
+                                                                                
+ NORMAL  I5  void  [wall/floor]  zoom 1  map 16x9             2d6+3 = 12  [6 3] 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/roll.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 80x24
+-- cksum 4257694890-9756 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 110x34
+-- cksum 1702859933-11857 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== roundtrip-damaged.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 40x12
+-- cksum 1113081134-2930 exit 0

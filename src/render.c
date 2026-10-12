@@ -1,6 +1,7 @@
 #include "render.h"
 
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 /* Sentinel that cannot equal any real color, so the first cell of a frame
@@ -250,16 +251,38 @@ void rnd_flush(Renderer *r, Term *t)
     }
 }
 
+static void dump_row(const Renderer *r, int y, ByteBuf *out)
+{
+    for (int x = 0; x < r->w; x++) {
+        const Cell *c = &r->back[(size_t)y * (size_t)r->w + (size_t)x];
+        if (c->ch == 0) continue;
+        char enc[4];
+        int  n = utf8_encode(c->ch, enc);
+        if (n <= 0) { enc[0] = ' '; n = 1; }
+        bb_put(out, enc, (size_t)n);
+    }
+    bb_putc(out, '\n');
+}
+
 void rnd_dump(const Renderer *r, ByteBuf *out)
 {
+    for (int y = 0; y < r->h; y++) dump_row(r, y, out);
+}
+
+void rnd_dump_cells(const Renderer *r, ByteBuf *out)
+{
     for (int y = 0; y < r->h; y++) {
-        for (int x = 0; x < r->w; x++) {
-            const Cell *c = &r->back[(size_t)y * (size_t)r->w + (size_t)x];
-            if (c->ch == 0) continue;
-            char enc[4];
-            int  n = utf8_encode(c->ch, enc);
-            if (n <= 0) { enc[0] = ' '; n = 1; }
-            bb_put(out, enc, (size_t)n);
+        dump_row(r, y, out);
+        const Cell *row = &r->back[(size_t)y * (size_t)r->w];
+        for (int x = 0; x < r->w; ) {
+            int n = 1;
+            while (x + n < r->w && row[x + n].fg == row[x].fg && row[x + n].bg == row[x].bg
+                   && row[x + n].attr == row[x].attr) n++;
+            char run[64];
+            int  len = snprintf(run, sizeof run, " %d+%d %x/%x/%x", x, n, (unsigned)row[x].fg,
+                                (unsigned)row[x].bg, (unsigned)row[x].attr);
+            bb_put(out, run, (size_t)len);
+            x += n;
         }
         bb_putc(out, '\n');
     }

@@ -1,0 +1,515 @@
+== e001.vtt --check
+E001 unreadable                   e001.vtt is not a vtt map
+1 error, 0 warnings
+-- exit 2
+== e001.vtt --check --json
+{"file":"e001.vtt","errors":1,"warnings":0,"notes":0,"findings":[{"code":"E001","slug":"unreadable","severity":"error","line":null,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"e001.vtt is not a vtt map"}]}
+-- exit 2
+== e001.vtt --describe
+vtt: e001.vtt is not a vtt map
+-- exit 2
+== e001.vtt --describe --json
+vtt: e001.vtt is not a vtt map
+-- exit 2
+== e001.vtt --dump-map
+vtt: e001.vtt is not a vtt map
+-- exit 2
+== e001.vtt --dump-map --region B2:F5
+vtt: e001.vtt is not a vtt map
+-- exit 2
+== e001.vtt --seed 1 --script ../work/build-box.keys --dump-frame --size 80x24
+ vtt                                                               F12 profiler 
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+              virtual tabletop                                                  
+              rules-agnostic battle maps for the terminal                       
+                                                                                
+                 Open Map                                                       
+                 New Map                                                        
+               > Quit                                                           
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ j/k move  enter select  q quit                                          ? keys 
+-- exit 0
+== e001.vtt --seed 1 --script ../work/build-box.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== e001.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 80x24
+-- cksum 4168915285-2865 exit 0
+== e001.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== e001.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 110x34
+-- cksum 634343427-4935 exit 0
+== e001.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== e001.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 40x12
+-- cksum 702305928-1087 exit 0
+== e001.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --size 80x24
+ vtt                                                               F12 profiler 
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+              virtual tabletop                                                  
+              rules-agnostic battle maps for the terminal                       
+                                                                                
+                 Open Map                                                       
+               > New Map                                                        
+                 Quit                                                           
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ j/k move  enter select  q quit                                          ? keys 
+-- exit 0
+== e001.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== e001.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 80x24
+-- cksum 2007495192-2865 exit 0
+== e001.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== e001.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 110x34
+-- cksum 933852509-4935 exit 0
+== e001.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== e001.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 40x12
+-- cksum 159081480-1085 exit 0
+== e001.vtt --seed 1 --script ../work/help.keys --dump-frame --size 80x24
+ vtt                                                               F12 profiler 
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+              virtual tabletop                                                  
+              rules-agnostic battle maps for the terminal                       
+                                                                                
+               > Open Map                                                       
+                 New Map                                                        
+                 Quit                                                           
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ j/k move  enter select  q quit                                          ? keys 
+-- exit 0
+== e001.vtt --seed 1 --script ../work/help.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== e001.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 80x24
+-- cksum 418794699-2865 exit 0
+== e001.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== e001.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 110x34
+-- cksum 17849980-4935 exit 0
+== e001.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== e001.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 40x12
+-- cksum 2306292080-1085 exit 0
+== e001.vtt --seed 1 --script ../work/open.keys --dump-frame --size 80x24
+ vtt                                                               F12 profiler 
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+              virtual tabletop                                                  
+              rules-agnostic battle maps for the terminal                       
+                        ╭─ Cannot open map ───────────╮                         
+               > Open Ma│                             │                         
+                 New Map│  e001.vtt is not a vtt map  │                         
+                 Quit   │                             │                         
+                        │  press any key              │                         
+                        │                             │                         
+                        ╰─────────────────────────────╯                         
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ j/k move  enter select  q quit                                          ? keys 
+-- exit 0
+== e001.vtt --seed 1 --script ../work/open.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== e001.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 80x24
+-- cksum 1855733827-3550 exit 0
+== e001.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== e001.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 110x34
+-- cksum 2688714445-5616 exit 0
+== e001.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== e001.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 40x12
+-- cksum 3088084601-1706 exit 0
+== e001.vtt --seed 1 --script ../work/play-help.keys --dump-frame --size 80x24
+ VTT KEYS                                                                  Menu 
+  Menu                                                                          
+  ────                                                                          
+    Menu                                                                        
+      j  k          move the selection                                          
+      enter         choose                                                      
+      q             quit vtt                                                    
+      F12           profiler overlay, from anywhere                             
+      ?             this page                                                   
+                                                                                
+  Play mode                                                                     
+  ─────────                                                                     
+    Move                                                                        
+      h j k l       move the cursor, or the creature in hand                    
+      arrows        the same                                                    
+      3j            any motion takes a count                                    
+      :d6           jump to a square by its label                               
+      :area Crypt   jump to a named area   :areas lists them                    
+      [  ]          the floor below / above   :floor all shows the whole map    
+      #             column letters and row numbers, on or off                   
+      z             center the view on the cursor                               
+      + -           zoom in and out                                             
+────────────────────────────────────────────────────────────────────────────────
+  j k  scroll      ctrl-d ctrl-u  page      g G  ends      q esc ?  close       
+-- exit 0
+== e001.vtt --seed 1 --script ../work/play-help.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== e001.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 80x24
+-- cksum 388380521-3483 exit 0
+== e001.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== e001.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 110x34
+-- cksum 3269043463-5881 exit 0
+== e001.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== e001.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 40x12
+-- cksum 1433019845-1200 exit 0
+== e001.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --size 80x24
+ vtt                                                               F12 profiler 
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+              virtual tabletop                                                  
+              rules-agnostic battle maps for the terminal                       
+                                                                                
+                 Open Map                                                       
+                 New Map                                                        
+               > Quit                                                           
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ j/k move  enter select  q quit                                          ? keys 
+-- exit 0
+== e001.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== e001.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 80x24
+-- cksum 4168915285-2865 exit 0
+== e001.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== e001.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 110x34
+-- cksum 634343427-4935 exit 0
+== e001.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== e001.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 40x12
+-- cksum 702305928-1087 exit 0
+== e001.vtt --seed 1 --script ../work/play.keys --dump-frame --size 80x24
+ vtt                                                               F12 profiler 
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+              virtual tabletop                                                  
+              rules-agnostic battle maps for the terminal                       
+                                                                                
+               > Open Map                                                       
+                 New Map                                                        
+                 Quit                                                           
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ j/k move  enter select  q quit                                          ? keys 
+-- exit 0
+== e001.vtt --seed 1 --script ../work/play.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== e001.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 80x24
+-- cksum 418794699-2865 exit 0
+== e001.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== e001.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 110x34
+-- cksum 17849980-4935 exit 0
+== e001.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== e001.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 40x12
+-- cksum 2306292080-1085 exit 0
+== e001.vtt --seed 1 --script ../work/roll.keys --dump-frame --size 80x24
+ open map                                                               20 maps 
+                                                                                
+   > areas.vtt                         ./areas.vtt                              
+     broken.vtt                        ./broken.vtt                             
+     card-leading-blank.vtt            ./card-leading-blank.vtt                 
+     crowd.vtt                         ./crowd.vtt                              
+     e001.vtt                          ./e001.vtt                               
+     env.vtt                           ./env.vtt                                
+     everything.vtt                    ./everything.vtt                         
+     floors.vtt                        ./floors.vtt                             
+     kinds.vtt                         ./kinds.vtt                              
+     links.vtt                         ./links.vtt                              
+     n105.vtt                          ./n105.vtt                               
+     roundtrip-damaged.vtt             ./roundtrip-damaged.vtt                  
+     two-rooms.vtt                     ./two-rooms.vtt                          
+     v10.vtt                           ./v10.vtt                                
+     v11.vtt                           ./v11.vtt                                
+     v12.vtt                           ./v12.vtt                                
+     v3.vtt                            ./v3.vtt                                 
+     v4.vtt                            ./v4.vtt                                 
+     v5.vtt                            ./v5.vtt                             v   
+                                                                                
+                                                                                
+ j/k move  enter open  d delete                                          ? keys 
+-- exit 0
+== e001.vtt --seed 1 --script ../work/roll.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== e001.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 80x24
+-- cksum 71745758-3420 exit 0
+== e001.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== e001.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 110x34
+-- cksum 100155651-5494 exit 0
+== e001.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== e001.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 40x12
+-- cksum 2635021697-1230 exit 0
