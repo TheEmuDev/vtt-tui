@@ -4,6 +4,18 @@ Things worth building that were consciously not built, with the reason, so
 the reason can be re-examined rather than the idea re-invented. Add to the
 top; move an entry to the README when it ships.
 
+## Vehicles
+
+*Parked 2026-10-12 with its plan written and reviewed* (docs/VEHICLES.md, roadmap item 24).
+A carriage, a cart or a raft as a named area that moves, carrying whoever stands wholly on
+it, with any creature markable as not riding. Why not: it touches areas, creatures, undo,
+sight's step path, the file's version, the channel and the map tools, and what it adds at
+the table is small: a carriage is run well enough by selecting its riders and moving them as
+a group. A train or an airship needs nothing new: the vehicle is the map, with floors for
+decks, links between cars, a clock for the distance. What would bring it back: sessions
+that keep moving the same formation by hand, or a fight that needs a vehicle crossing a
+battle map, which is the layer idea below (*Stacked layers*) rather than this plan.
+
 ## Merging an outside change into unsaved work
 
 *Set aside 2026-10-07, in the plan for proposals* (docs/CONFLICTS.md, decision 8). When

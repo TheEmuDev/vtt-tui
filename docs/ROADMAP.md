@@ -27,10 +27,6 @@ Item 1 was decided 2026-09-27, the rest 2026-09-29.
   blessed circle -- that stays on the map, tinted, for the GM and, when the GM says so, the
   players; taken away by name (`remove`). Perhaps blocking sight, as fog does. Builds on named
   areas and the range tint.
-- **24. Vehicles** (decided 2026-10-11). A carriage, a cart, a raft: a named area that moves,
-  carrying whoever stands on it; any creature can be switched to not riding. Trains and
-  airships are maps of their own, with what exists. The plan: docs/VEHICLES.md, awaiting
-  sign-off.
 - **8. Map import from generators.** A `--import` map tool reading Watabou's One Page Dungeon
   JSON (and perhaps donjon's text) into a `.vtt` map: rooms, doors, walls, the generator's
   notes as GM notes. For prep, which is all hand work or an agent's room language today. JSON
@@ -78,6 +74,11 @@ says what happened. The Fear pool stays set aside (IDEAS.md).
   handouts folder to the players' screens -- a creature, a drawn map, a letter's scan -- shown
   as the text card is, closable the same way; the terminal names it. The image travels as data
   over the existing connection, not as page code, so the page's size budget holds.
+
+- **24. Vehicles.** *Parked 2026-10-12 with its plan written and reviewed (docs/VEHICLES.md):
+  not enough gained at the table for the size of the change.* A carriage, a cart, a raft: a
+  named area that moves, carrying whoever stands on it; any creature can be switched to not
+  riding. Trains and airships are maps of their own, with what exists.
 
 ## Built
 

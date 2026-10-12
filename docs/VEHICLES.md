@@ -1,6 +1,8 @@
 # Vehicles
 
-> **Status: a plan, awaiting sign-off (written 2026-10-11).** Nothing here is built.
+> **Status: parked 2026-10-12.** A plan written and reviewed 2026-10-11, never signed off:
+> the user judged the gain too small for the size of the change (docs/IDEAS.md, *Vehicles*).
+> Nothing here is built.
 
 A **vehicle** is a named area that moves, and whoever stands on it moves with it. That
 covers what a table means by a horse-drawn carriage, a cart, a raft: a thing on the map,
