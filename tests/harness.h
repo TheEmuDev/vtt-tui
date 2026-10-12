@@ -313,5 +313,6 @@ void test_corridor_edges(void);
 void test_apply(void);
 void test_ctl_live(void);
 void test_loop(void);
+void test_ctl_table(void);
 
 #endif /* VTT_TEST_HARNESS_H */

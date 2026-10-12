@@ -155,6 +155,7 @@ can take back, so each goes in a request of its own.
 | `floors` | the floors, top first, with their levels and extents, and which the GM is looking at |
 | `status` | live only: the map, the floor on the GM's screen, whether edits are taken now |
 | `marked [json]` | live only: what the GM is pointing at -- the cursor (and the area it is in, and the floor on screen), a `v` box, selected creatures, the ruler, recent pings |
+| `help`, `help token`, `help json` | every request with a line each; how one is written; or all of it as JSON. The list vtt itself works from: if this page and `help` ever disagree, `help` is right |
 | `undo` | live only, alone in its request: take back your last request, while nothing has happened since |
 
 ## From a description to a map

@@ -912,6 +912,10 @@ void test_agent_command(void)
         CHECK(strstr(body, "Where: the GM drew no box") != NULL);
         CHECK(strstr(body, "--ctl 'dump'\n") != NULL);
         CHECK(strstr(body, "job 7 area") == NULL);          /* no box of the GM's to name */
+        /* The verbs come from the channel's table: once kept by hand here, the list fell a verb behind. */
+        CHECK(strstr(body, "The lines that change a map: room, area, ") != NULL);
+        CHECK(strstr(body, ", env, ") != NULL);
+        CHECK(strstr(body, "--ctl 'help token'\n") != NULL);
     }
     pump_until_file(&a, out, "\x01never");                  /* let the second run finish */
     press(&a, ":agent command off\r");

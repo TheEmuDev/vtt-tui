@@ -1948,3 +1948,88 @@ void test_ctl_scenes(void)
     rnd_free(&r);
     sandbox_leave(&sb);
 }
+
+/* The channel's table of requests (app_ctl.c) is the one list of verbs: help
+ * prints it, and docs/AGENTS.md may neither miss a verb nor name one that is
+ * not there. */
+void test_ctl_table(void)
+{
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+    app_open_map(&a, "tests/fixtures/two-rooms.vtt");
+
+    size_t dl = 0;
+    int    big = 0;
+    char  *doc = file_read("docs/AGENTS.md", (size_t)1 << 20, &dl, &big);
+    CHECK(doc != NULL);
+    if (!doc) return;
+
+    CASE("every request in the table is in docs/AGENTS.md, written as code");
+    int nverbs = 0;
+    unsigned fl;
+    for (const char *v; (v = app_ctl_verb(nverbs, &fl)) != NULL; nverbs++) {
+        if (!strcmp(v, "holds")) continue;          /* --apply's own question, not an agent's */
+        char a1[48], a2[48];
+        snprintf(a1, sizeof a1, "`%s ", v);
+        snprintf(a2, sizeof a2, "`%s`", v);
+        if (!strstr(doc, a1) && !strstr(doc, a2)) { printf("    not in AGENTS.md: %s\n", v); CHECK(0); }
+    }
+    CHECK(nverbs > 25);
+
+    CASE("every row of AGENTS.md's request tables starts with a request in the table");
+    const char *from = strstr(doc, "## The request language"), *to = from ? strstr(from, "## From a description") : NULL;
+    CHECK(from && to);
+    int rows = 0;
+    for (const char *p = from; p && p < to; p = strchr(p + 1, '\n')) {
+        if (strncmp(p, "\n| `", 4) != 0) continue;
+        char word[32];
+        size_t k = strcspn(p + 4, " `");
+        if (k >= sizeof word) { CHECK(0); continue; }
+        memcpy(word, p + 4, k);
+        word[k] = '\0';
+        int known = 0;
+        for (int i = 0; app_ctl_verb(i, NULL); i++) known |= !strcmp(app_ctl_verb(i, NULL), word);
+        if (!known) { printf("    AGENTS.md has a row for `%s`, which is no request\n", word); CHECK(0); }
+        rows++;
+    }
+    CHECK(rows > 30);
+    free(doc);
+
+    CASE("help lists every request; help VERB says how one is written; an unknown one is refused");
+    char *h = ctl_ask(&a, "help");
+    CHECK(!strncmp(h, "ok\n", 3));
+    for (int i = 0; app_ctl_verb(i, NULL); i++) {
+        char at[48];
+        snprintf(at, sizeof at, "\n%s ", app_ctl_verb(i, NULL));
+        CHECK(strstr(h, at) != NULL);
+    }
+    free(h);
+    h = ctl_ask(&a, "help token");
+    CHECK(strstr(h, "token move WHO SQUARE") != NULL);
+    free(h);
+    h = ctl_ask(&a, "help undo");
+    CHECK(strstr(h, "alone in its request") && strstr(h, "of a running vtt only"));
+    free(h);
+    h = ctl_ask(&a, "help frobnicate");
+    CHECK(!strncmp(h, "error: line 1: no request called frobnicate", 43));
+    free(h);
+
+    CASE("help json is one array with a row a request, and reads back");
+    h = ctl_ask(&a, "help json");
+    CHECK(!strncmp(h, "ok\n[", 4));
+    int objs = 0;
+    for (const char *p = h; (p = strstr(p, "\"name\":")) != NULL; p++) objs++;
+    CHECK_EQ(objs, nverbs);
+    CHECK(strstr(h, "\"name\":\"wait\",\"kind\":\"read\"") != NULL);
+    free(h);
+
+    CASE("help changes nothing and makes no proposal");
+    CHECK_EQ(a.undo.depth, 0);
+    CHECK_EQ(app_job_find(&a, 1), -1);
+
+    app_free(&a);
+    rnd_free(&r);
+}

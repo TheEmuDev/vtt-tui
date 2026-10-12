@@ -408,6 +408,18 @@ char *app_ctl_exec(App *a, const char *req, size_t *len);
 /* Why an agent's edit would be refused right now, or NULL when it would
  * be taken. */
 const char *app_ctl_busy(const App *a);
+
+/* The channel's requests, from app_ctl.c's one table: the i-th's name (NULL
+ * past the last) and what kind it is; and the edit verbs as "room, area, ..."
+ * for the prompt an agent is started with. */
+enum {
+    CTL_RQ_EDIT  = 1,       /* changes the map: its request is a proposal */
+    CTL_RQ_OFF   = 2,       /* taken over the socket with the channel off */
+    CTL_RQ_ALONE = 4,       /* must be the only line of its request */
+    CTL_RQ_LIVE  = 8,       /* means something only to a running vtt */
+};
+const char *app_ctl_verb(int i, unsigned *flags);
+void        app_ctl_edit_verbs(FILE *out);
 void app_set_status(App *a, const char *msg);
 void app_note(App *a, const char *msg);     /* status line + session log */
 void app_note_gm(App *a, const char *msg);  /* the same, kept off the players' frame */

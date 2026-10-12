@@ -1508,7 +1508,8 @@ and names they use (that a creature or an area it names is not there, for instan
 `vtt --ctl REQUEST` sends a request and prints the answer; with no request it reads one from
 stdin. It exits 0 on success, 1 on an error (the reason is printed on stderr), and 2 when no
 vtt is listening. With several vtts listening, `--ctl-pid N` chooses
-one.
+one. `vtt --ctl help` lists every request with a line each, and `vtt --ctl 'help token'` says
+how one is written.
 
 ```
 $ vtt --ctl <<'EOF'

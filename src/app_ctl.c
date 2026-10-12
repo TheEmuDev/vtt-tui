@@ -954,18 +954,6 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
  * bounds the memory one 64 KB request can make the undo log take. */
 #define CTL_OPS_MAX (2UL * MAP_MAX_DIM * MAP_MAX_DIM)
 
-/* Lines that change nothing the undo log can take back, so they cannot roll
- * back with the lines around them and go in a request of their own: the
- * agent's undo, and saving or removing a scene. The verb, or NULL. */
-static const char *lonely(char w[][CTL_WORD_MAX], int n)
-{
-    if (n >= 1 && !strcmp(w[0], "undo")) return "undo";
-    if (n >= 1 && !strcmp(w[0], "wait")) return "wait";
-    if (n >= 2 && !strcmp(w[0], "scene") && !strcmp(w[1], "save")) return "scene save";
-    if (n == 3 && !strcmp(w[0], "scene") && !strcmp(w[2], "remove")) return "scene NAME remove";
-    return NULL;
-}
-
 /* A scene put back is an edit; the scene's other lines are not. */
 static int scene_is_edit(char w[][CTL_WORD_MAX], int n)
 {
@@ -1055,12 +1043,518 @@ static int finish_proposal(App *a, Edits *ed, FILE *out, char *err, size_t errsz
     return 0;
 }
 
-static int is_edit(const char *v)
+/* What every request's handler is given: the app, the line as written and in
+ * words, where its report goes, the request's edits so far, and where to say
+ * why not. A handler returns 0; -1 with why in err; -2 when an edit is
+ * refused because the GM is busy, the reason in err. */
+#define RQ_ARGS App *a, const char *line, char w[][CTL_WORD_MAX], int n, FILE *out, Edits *ed, char *err, size_t errsz
+#define RQ_PASS a, line, w, n, out, ed, err, errsz
+/* Not every handler reads all of them. */
+#define RQ_LOCALS Map *m = a->map; const char *v = w[0]; (void)m; (void)v; (void)line; (void)n; (void)out; (void)ed; (void)err; (void)errsz
+
+static int rq_scene_other(RQ_ARGS)
 {
-    static const char *const EDITS[] = { "room", "area", "door", "corridor", "tile", "wall", "edge", "note", "fog", "token", "stamp", "link", "floor", "env", "scene" };
-    for (size_t i = 0; i < sizeof EDITS / sizeof *EDITS; i++)
-        if (!strcmp(v, EDITS[i])) return 1;
+    RQ_LOCALS;
+    /* scene diff NAME, a read; scene save NAME [REGION] and scene NAME
+     * remove, each alone in its request. */
+    if (n < 2 || (n != 3 && !strcmp(w[1], "diff"))) {
+        snprintf(err, errsz, "scene NAME, scene save NAME [REGION], scene NAME remove, or scene diff NAME");
+        return -1;
+    }
+    if (n == 3 && !strcmp(w[1], "diff")) {
+        int i = scene_find(m, w[2]);
+        if (i < 0) { snprintf(err, errsz, "no scene called %.31s", w[2]); return -1; }
+        if (!scene_diff(out, m, i)) fputs("no changes\n", out);
+        return 0;
+    }
+    if (n == 3 && !strcmp(w[2], "off")) { snprintf(err, errsz, "scene %.31s remove throws a scene away", w[1]); return -1; }
+    int save = !strcmp(w[1], "save");
+    if (save ? (n < 3 || n > 4) : !(n == 3 && !strcmp(w[2], "remove"))) {
+        snprintf(err, errsz, "scene NAME, scene save NAME [REGION], scene NAME remove, or scene diff NAME");
+        return -1;
+    }
+    const char *busy = app_ctl_busy(a);
+    if (busy) { str_lcpy(err, busy, errsz); return -2; }
+    char msg[160];
+    if (save) {
+        int box[4], boxed = n == 4;
+        if (boxed && !region(m, w[3], &box[0], &box[1], &box[2], &box[3], err, errsz)) return -1;
+        int i = scene_save(m, w[2], boxed ? box : NULL, err, errsz);
+        if (i < 0) return -1;
+        char what[64];
+        scene_describe(m, i, what, sizeof what);
+        fprintf(out, "saved scene \"%s\": %s\n", m->scenes[i].name, what);
+        snprintf(msg, sizeof msg, "agent: saved scene %.31s (%s)", m->scenes[i].name, what);
+    } else {
+        int i = scene_find(m, w[1]);
+        if (i < 0) { snprintf(err, errsz, "no scene called %.31s", w[1]); return -1; }
+        snprintf(msg, sizeof msg, "agent: removed scene %.31s", m->scenes[i].name);
+        fprintf(out, "removed scene \"%s\"\n", m->scenes[i].name);
+        scene_remove(m, i);
+    }
+    app_note_gm(a, msg);
+    a->dirty = 1;
     return 0;
+}
+
+static int rq_propose(RQ_ARGS)
+{
+    RQ_LOCALS;
+    /* propose ["a line for the GM"], or job N propose [...]: what the
+     * request's edits are. Without one, they are an agent's own idea. */
+    int at = v[0] == 'p' ? 1 : 3, slot = -1, num;
+    /* propose apply "plan.txt": what `vtt map --apply` sends to the vtt
+     * that has the map open. */
+    int from_apply = at == 1 && n == 3 && !strcmp(w[1], "apply");
+    if (from_apply) at = 2;
+    if (n > at + 1) { snprintf(err, errsz, "%s takes one line for the GM after it, in quotes", at == 1 ? "propose" : "job N propose"); return -1; }
+    if (ed->header || ed->lines) { snprintf(err, errsz, "propose comes once, before the request's edits"); return -1; }
+    if (a->ctl_direct) { snprintf(err, errsz, "there is no GM to propose to: --apply changes the file"); return -1; }
+    if (at == 3) {
+        if (!word_int(w[1], 1, JOB_NUM_MAX, &num) || (slot = app_job_find(a, num)) < 0) {
+            snprintf(err, errsz, "no job #%.10s - jobs lists them", w[1]);
+            return -1;
+        }
+        const Job *j = &a->jobs[slot];
+        if (j->state == JOB_ACCEPTED || j->state == JOB_SCRAPPED) {
+            snprintf(err, errsz, "#%d was %s - propose alone offers a new change", j->num, app_job_state_name(j->state));
+            return -1;
+        }
+        if (app_job_gm_only(j)) {
+            snprintf(err, errsz, "#%d is %s: the GM's to decide - propose alone offers a change of your own", j->num,
+                     j->from == JOB_FROM_DISK ? "what another program wrote to the file" : "an --apply's");
+            return -1;
+        }
+    }
+    ed->header = 1;
+    ed->job = slot;
+    if (from_apply) {
+        ed->from = JOB_FROM_APPLY;
+        snprintf(ed->say, sizeof ed->say, "--apply %.140s", w[at]);
+    }
+    else str_lcpy(ed->say, n > at ? w[at] : "", sizeof ed->say);
+    return 0;
+}
+
+static int rq_job(RQ_ARGS)
+{
+    RQ_LOCALS;
+    /* The scratch map holds this request's edits: a job's own result
+     * would be made in it. */
+    if (ed->lines || ed->header) { snprintf(err, errsz, "%.4s comes before the request's propose line and edits", v); return -1; }
+    return app_ctl_job(a, w, n, out, err, errsz);
+}
+
+static int rq_edit(RQ_ARGS)
+{
+    RQ_LOCALS;
+    if (!ed->lines && !a->ctl_direct) proposal_begin(a, ed);
+    else if (!ed->lines) {
+        /* Asked once, at the first edit: after it the open batch is
+         * this request's own. */
+        const char *busy = app_ctl_busy(a);
+        if (busy) { str_lcpy(err, busy, errsz); return -2; }
+        undo_begin(&a->undo);
+        ed->ops0 = a->undo.stamp;
+    }
+    if (ed->lines == 0) {
+        while (*line == ' ' || *line == '\t') line++;
+        str_lcpy(ed->first, line, sizeof ed->first);
+    }
+    ed->lines++;
+    ed->out = out;
+    if (edit_line(a, w, n, ed, err, errsz) < 0) return -1;
+    if ((unsigned long)(a->undo.stamp - ed->ops0) > CTL_OPS_MAX) {
+        snprintf(err, errsz, "the request changes more than %lu things at once", CTL_OPS_MAX);
+        return -1;
+    }
+    return 0;
+}
+
+static int rq_undo(RQ_ARGS)
+{
+    RQ_LOCALS;
+    if (n > 1) { snprintf(err, errsz, "undo takes nothing after it"); return -1; }
+    if (ed->lines) { snprintf(err, errsz, "undo comes before any edit in a request"); return -1; }
+    if (!a->ctl_undoable) { snprintf(err, errsz, "there is no change of the agent's to take back"); return -1; }
+    /* The log as the edit left it, and the map: a note or a fog setting
+     * the GM changes outside the log still moves Map.gen. */
+    if (a->undo.stamp != a->ctl_stamp || m->gen != a->ctl_gen) {
+        snprintf(err, errsz, "something has happened since the agent's last change - only the GM's u takes it back now");
+        return -1;
+    }
+    const char *busy = app_ctl_busy(a);
+    if (busy) { str_lcpy(err, busy, errsz); return -2; }
+    app_events_map_flush(a);             /* the GM's changes so far are their own event */
+    undo_undo(&a->undo, m);
+    app_events_map_restart(a);           /* the agent's own doing is no news to it */
+    range_history_changed(&a->play.range, m);
+    a->ctl_undoable = 0;
+    app_fog_sync(a);
+    a->dirty = 1;
+    app_note_gm(a, "the agent took back its last change - ctrl-r puts it back");
+    fputs("took back the last change\n", out);
+    return 0;
+}
+
+static int rq_holds(RQ_ARGS)
+{
+    RQ_LOCALS;
+    /* holds DEV INO: is that file (as stat names it) the map open here?
+     * --apply asks every vtt before it touches a file (docs/CONFLICTS.md,
+     * step 6). By identity, not by name: the two were started in
+     * different directories, and a link is the same file. */
+    char *e1, *e2;
+    unsigned long long dev = n == 3 ? strtoull(w[1], &e1, 10) : 0, ino = n == 3 ? strtoull(w[2], &e2, 10) : 0;
+    if (n != 3 || *e1 || *e2) { snprintf(err, errsz, "holds DEVICE INODE, as stat gives them"); return -1; }
+    struct stat st;
+    int same = m && m->path[0] && stat(m->path, &st) == 0 &&
+               (unsigned long long)st.st_dev == dev && (unsigned long long)st.st_ino == ino;
+    fputs(same ? "holds\n" : "no\n", out);
+    return 0;
+}
+
+static int rq_wait(RQ_ARGS)
+{
+    RQ_LOCALS;
+    /* wait [SEQ] [for SECONDS]: every event after SEQ (unsaid: from
+     * now), held until there is one or the time is up. */
+    unsigned seq = a->event_seq;
+    int      secs = CTL_WAIT_DEFAULT_S, at = 1, k;
+    if (at < n && strcmp(w[at], "for") != 0) {
+        if (!word_int(w[at], 0, 0x7fffffff, &k)) { snprintf(err, errsz, "wait [SEQ] [for SECONDS]: %.20s is not an event's number", w[at]); return -1; }
+        seq = (unsigned)k;
+        at++;
+    }
+    if (at < n) {
+        if (at + 2 != n || strcmp(w[at], "for") != 0 || !word_int(w[at + 1], 0, CTL_WAIT_MAX_S, &secs)) {
+            snprintf(err, errsz, "wait [SEQ] [for SECONDS], at most %d seconds", CTL_WAIT_MAX_S);
+            return -1;
+        }
+    }
+    a->agent_seen_ms = a->now_ms ? a->now_ms : 1;
+    /* Held only where there is a socket to hold it on (app_tick):
+     * --apply, the bench and the fuzzer are answered at once. */
+    if (app_events_after(a, seq) || !a->ctl_can_hold || secs == 0) app_events_write(a, out, seq);
+    else {
+        a->ctl_held     = 1;
+        a->ctl_hold_seq = seq;
+        a->ctl_hold_ms  = secs * 1000;
+    }
+    return 0;
+}
+
+static int rq_status(RQ_ARGS)
+{
+    RQ_LOCALS;
+    if (n > 1) { snprintf(err, errsz, "status takes nothing after it"); return -1; }
+    live_swap(a, ed);
+    do_status(a, out, ed->lines > 0);
+    live_swap(a, ed);
+    return 0;
+}
+
+static int rq_dump(RQ_ARGS)
+{
+    RQ_LOCALS;
+    int x0 = 0, y0 = 0, x1 = m->w - 1, y1 = m->h - 1;
+    if (n > 2) { snprintf(err, errsz, "dump takes one region, like B2:K12"); return -1; }
+    /* Refused off the map, as an edit is: clipped, a mistyped region
+     * would quietly read the wrong squares. */
+    if (n == 2 && !region(m, w[1], &x0, &y0, &x1, &y1, err, errsz)) return -1;
+    maptools_dump(out, m, x0, y0, x1, y1);
+    return 0;
+}
+
+static int rq_describe(RQ_ARGS)
+{
+    RQ_LOCALS;
+    int j = want_json(w, n, 1, err, errsz);
+    if (j < 0) return -1;
+    maptools_describe(out, m, j);
+    return 0;
+}
+
+static int rq_stamps(RQ_ARGS)
+{
+    RQ_LOCALS;
+    /* The saved stamps, one a line with its size: what `stamp` can put down. */
+    if (n > 1) { snprintf(err, errsz, "stamps takes nothing after it"); return -1; }
+    char names[64][MAP_NAME_MAX], e2[160];
+    int  k = stamp_list(names, 64);
+    for (int i = 0; i < k && i < 64; i++) {
+        Map *st = stamp_load(names[i], e2, sizeof e2);
+        if (!st) continue;
+        fprintf(out, "%s  %dx%d%s\n", names[i], st->w, st->h, st->tokens.n ? "  with creatures" : "");
+        map_free(st);
+    }
+    if (!k) fputs("no stamps\n", out);
+    else if (k > 64) fprintf(out, "... and %d more\n", k - 64);
+    return 0;
+}
+
+static int rq_scenes(RQ_ARGS)
+{
+    RQ_LOCALS;
+    /* The map's scenes: what `scene NAME` puts back. */
+    if (n > 1) { snprintf(err, errsz, "scenes takes nothing after it"); return -1; }
+    char what[64];
+    for (int i = 0; i < m->nscenes; i++) {
+        scene_describe(m, i, what, sizeof what);
+        fprintf(out, "\"%s\"  %s\n", m->scenes[i].name, what);
+    }
+    if (!m->nscenes) fputs("no scenes\n", out);
+    return 0;
+}
+
+static int rq_characters(RQ_ARGS)
+{
+    RQ_LOCALS;
+    /* The saved character templates: what `token add ... from NAME` places. */
+    if (n > 1) { snprintf(err, errsz, "characters takes nothing after it"); return -1; }
+    char names[64][MAP_NAME_MAX], e2[160];
+    int  k = character_list(names, 64);
+    for (int i = 0; i < k && i < 64; i++) {
+        Map *c = character_load(names[i], e2, sizeof e2);
+        if (!c) { fprintf(out, "%s  (%s)\n", names[i], e2); continue; }
+        const Token *t = character_token(c);
+        fprintf(out, "%s  \"%s\" %s %dx%d", names[i], t->label, token_kind_name(t->kind), t->size, t->size);
+        for (int j = 0; j < t->ncounters; j++)
+            fprintf(out, "%s%s %d", j ? ", " : "  ", t->counters[j].name, t->counters[j].max);
+        for (int j = 0, r = 0; j < ROLL_MAX; j++)
+            if (c->rolls[j].name[0]) fprintf(out, "%s%s = %s", r++ ? ", " : "  rolls ", c->rolls[j].name, c->rolls[j].expr);
+        const char *card = card_of(c, t);
+        if (card) {
+            char first[128];
+            card_first_line(card, first, sizeof first);
+            fprintf(out, "  card: %s", first);
+        }
+        fputc('\n', out);
+        map_free(c);
+    }
+    if (!k) fputs("no characters\n", out);
+    else if (k > 64) fprintf(out, "... and %d more\n", k - 64);
+    return 0;
+}
+
+static int rq_floors(RQ_ARGS)
+{
+    RQ_LOCALS;
+    /* The floors, highest first, as a building reads top to bottom. */
+    if (n > 1) { snprintf(err, errsz, "floors takes nothing after it"); return -1; }
+    int order[MAP_AREAS_MAX], nf = floor_order(m, order);
+    for (int k = nf - 1; k >= 0; k--) {
+        const Area *fa = &m->areas[order[k]];
+        char b0[MAP_COORD_MAX], b1[MAP_COORD_MAX];
+        map_coord_name(fa->x0, fa->y0, b0, sizeof b0);
+        map_coord_name(fa->x1, fa->y1, b1, sizeof b1);
+        fprintf(out, "%-16s level %3d  %s:%s%s\n", fa->name, fa->level, b0, b1,
+                order[k] == app_floor_shown(a) ? "  (the GM is looking at it)" : "");
+    }
+    if (!nf) fputs("no floors\n", out);
+    return 0;
+}
+
+static int rq_links(RQ_ARGS)
+{
+    RQ_LOCALS;
+    /* Every link, one a line, or as JSON: what `link N ...` changes. */
+    int j = want_json(w, n, 1, err, errsz);
+    if (j < 0) return -1;
+    if (j) {
+        Json js;
+        json_init(&js, out);
+        json_open(&js, '[');
+        for (int i = 0; i < m->nlinks; i++) {
+            const Link *l = &m->links[i];
+            char at[2 * MAP_COORD_MAX + 2];
+            json_open(&js, '{');
+            json_kint(&js, "num", l->num);
+            json_kstr(&js, "kind", link_kind_name(l->kind));
+            json_kint(&js, "size", l->size);
+            link_end_name(l, 0, at, sizeof at); json_kstr(&js, "from", at);
+            link_end_name(l, 1, at, sizeof at); json_kstr(&js, "to", at);
+            json_key(&js, "oneway"); json_bool(&js, l->oneway);
+            json_key(&js, "secret"); json_bool(&js, l->secret);
+            json_close(&js, '}');
+        }
+        json_close(&js, ']');
+        fputc('\n', out);
+        return 0;
+    }
+    for (int i = 0; i < m->nlinks; i++) {
+        char row[128];
+        link_describe(&m->links[i], row, sizeof row);
+        fprintf(out, "%s\n", row);
+    }
+    if (!m->nlinks) fputs("no links\n", out);
+    return 0;
+}
+
+static int rq_marked(RQ_ARGS)
+{
+    RQ_LOCALS;
+    int j = want_json(w, n, 1, err, errsz);
+    if (j < 0) return -1;
+    live_swap(a, ed);                    /* what the GM points at is on the GM's map */
+    app_ctl_marked(a, out, j);
+    live_swap(a, ed);
+    return 0;
+}
+
+static int rq_check(RQ_ARGS)
+{
+    RQ_LOCALS;
+    int j = want_json(w, n, 1, err, errsz);
+    if (j < 0) return -1;
+    maptools_check_map(out, m, j);
+    return 0;
+}
+
+static int rq_scene(RQ_ARGS)
+{
+    /* A scene put back is an edit; saving, removing and diffing one are not. */
+    return scene_is_edit(w, n) ? rq_edit(RQ_PASS) : rq_scene_other(RQ_PASS);
+}
+
+static int rq_job_any(RQ_ARGS)
+{
+    if (n >= 3 && !strcmp(w[2], "propose")) return rq_propose(RQ_PASS);
+    return rq_job(RQ_PASS);
+}
+
+static int rq_help(RQ_ARGS);
+
+/* Every request the channel takes, one row each: the one place a verb is
+ * named. The dispatcher, what an off channel takes, what must go alone in
+ * its request, `help`, the agent's prompt (app_ctl_edit_verbs) and the test
+ * that docs/AGENTS.md lists exactly these all read it. `use` is how the line
+ * is written, one form a line; `doc` one line of what it does. Nothing longer
+ * belongs here: the page is AGENTS.md. */
+typedef struct {
+    const char *name;
+    unsigned    flags;          /* CTL_RQ_* (app.h) */
+    int       (*run)(RQ_ARGS);
+    const char *use;
+    const char *doc;
+} Request;
+
+#define E (CTL_RQ_EDIT | CTL_RQ_OFF)
+static const Request REQUESTS[] = {
+    { "room",     E, rq_edit, "room [NAME] REGION\nroom NAME SQUARE WxH\nroom NAME WxH east|west|north|south of ROOM gap N [top|middle|bottom|left|right]",
+      "a room: floor with a wall round it, named as an area when NAME is given" },
+    { "area",     E, rq_edit, "area NAME REGION\narea NAME remove", "name a box without drawing anything, or take the name off" },
+    { "door",     E, rq_edit, "door ROOM north|south|east|west [N|middle] [KIND]", "a door (or window, secret door, opening) in a room's side" },
+    { "corridor", E, rq_edit, "corridor ROOM ROOM [width 1-3] [KIND]", "dug between two named rooms through void, with an opening at each end" },
+    { "tile",     E, rq_edit, "tile REGION void|floor|water|rough|brush|wood|hazard", "the ground of every square in the region" },
+    { "wall",     E, rq_edit, "wall REGION [wall|door|open|window|secret|opensecret|none]", "the region's outline" },
+    { "edge",     E, rq_edit, "edge BOUNDARY KIND", "one boundary between two squares" },
+    { "stamp",    E, rq_edit, "stamp NAME SQUARE [rotate 90|180|270] [mirror]", "one of the GM's saved stamps, its top-left on SQUARE" },
+    { "note",     E, rq_edit, "note SQUARE \"text\"\nnote SQUARE", "a note only the GM sees on a square, or take it off" },
+    { "fog",      E, rq_edit, "fog paint REGION N", "paint the region into fog patch N (0 scrubs)" },
+    { "floor",    E, rq_edit, "floor AREA LEVEL\nfloor AREA off", "the named area is a floor at that level (-99 to 99), or no longer one" },
+    { "env",      E, rq_edit, "env AREA CARD\nenv AREA remove", "the named area's environment is the card of that name, or it has none" },
+    { "link",     E, rq_edit, "link FROM TO [KIND] [size 2|3] [oneway] [secret]\nlink FROM to MAP PLACE [KIND] [size N] [secret]\nlink N KIND|oneway|twoway|reverse|secret|seen|remove",
+      "stairs, a ladder, a trapdoor or a portal joining two places, or a change to link N" },
+    { "token",    E, rq_edit, "token add player|enemy PLACE [size 1-3] [hidden] \"LABEL\"\ntoken add player|enemy PLACE from CHARACTER [hidden]\ntoken move WHO SQUARE\ntoken del WHO\ntoken set WHO label \"...\"|size N|note \"...\"|hidden on|off",
+      "put down, move, remove or change a creature" },
+    { "scene",    E, rq_scene, "scene \"NAME\"\nscene save \"NAME\" [REGION]\nscene \"NAME\" remove\nscene diff \"NAME\"",
+      "put a saved scene's creatures back (an edit); save or remove one (alone in its request); or say what changed since" },
+
+    { "dump",       0, rq_dump, "dump [REGION]", "the map as text, with a legend" },
+    { "describe",   0, rq_describe, "describe [json]", "the rooms walls make, their doors and links, and what is in each" },
+    { "check",      0, rq_check, "check [json]", "mistakes: loose doors, creatures on void, rooms nothing reaches" },
+    { "stamps",     0, rq_stamps, "stamps", "the GM's saved stamps and their sizes" },
+    { "characters", 0, rq_characters, "characters", "the GM's saved characters" },
+    { "scenes",     0, rq_scenes, "scenes", "the map's scenes" },
+    { "links",      0, rq_links, "links [json]", "every link: number, kind, ends, size, one-way, secret" },
+    { "floors",     0, rq_floors, "floors", "the floors, top first, and which the GM is looking at" },
+    { "status",     CTL_RQ_OFF | CTL_RQ_LIVE, rq_status, "status", "the map, the GM's screen and floor, whether edits are taken now" },
+    { "marked",     CTL_RQ_LIVE, rq_marked, "marked [json]", "what the GM is pointing at: cursor, box, selection, ruler, pings" },
+
+    { "propose",  CTL_RQ_OFF, rq_propose, "propose [\"a line for the GM\"]", "first line of a request: its edits are a proposal for the GM to review" },
+    { "job",      0, rq_job_any, "job N\njob N take|drop\njob N dump [REGION]|check|describe\njob N propose [\"a line for the GM\"]", "one job: read it, take it, read its proposal, or answer it with this request's edits" },
+    { "jobs",     0, rq_job, "jobs [json]", "every job and where it stands" },
+    { "wait",     CTL_RQ_OFF | CTL_RQ_ALONE, rq_wait, "wait [SEQ] [for SECONDS]", "every event after SEQ, held until there is one or the time is up" },
+    { "undo",     CTL_RQ_ALONE | CTL_RQ_LIVE, rq_undo, "undo", "take back your last accepted change, while nothing has happened since" },
+    { "holds",    CTL_RQ_OFF, rq_holds, "holds DEVICE INODE", "whether that file is the map open here (--apply asks)" },
+    { "help",     CTL_RQ_OFF, rq_help, "help [VERB|json]", "these requests, or how one is written" },
+};
+#undef E
+#define NREQUESTS ((int)(sizeof REQUESTS / sizeof *REQUESTS))
+
+static const Request *rq_find(const char *v)
+{
+    for (int i = 0; i < NREQUESTS; i++)
+        if (!strcmp(v, REQUESTS[i].name)) return &REQUESTS[i];
+    return NULL;
+}
+
+const char *app_ctl_verb(int i, unsigned *flags)
+{
+    if (i < 0 || i >= NREQUESTS) return NULL;
+    if (flags) *flags = REQUESTS[i].flags;
+    return REQUESTS[i].name;
+}
+
+void app_ctl_edit_verbs(FILE *out)
+{
+    for (int i = 0, k = 0; i < NREQUESTS; i++)
+        if (REQUESTS[i].flags & CTL_RQ_EDIT) fprintf(out, "%s%s", k++ ? ", " : "", REQUESTS[i].name);
+}
+
+static const char *rq_kind(const Request *r)
+{
+    return r->flags & CTL_RQ_EDIT ? "edit" : "read";
+}
+
+static int rq_help(RQ_ARGS)
+{
+    RQ_LOCALS;
+    if (n > 2) { snprintf(err, errsz, "help, help VERB, or help json"); return -1; }
+    if (n == 2 && !strcmp(w[1], "json")) {
+        Json js;
+        json_init(&js, out);
+        json_open(&js, '[');
+        for (int i = 0; i < NREQUESTS; i++) {
+            const Request *r = &REQUESTS[i];
+            json_open(&js, '{');
+            json_kstr(&js, "name", r->name);
+            json_kstr(&js, "kind", rq_kind(r));
+            json_kstr(&js, "use", r->use);
+            json_kstr(&js, "does", r->doc);
+            json_key(&js, "alone"); json_bool(&js, (r->flags & CTL_RQ_ALONE) != 0);
+            json_key(&js, "live");  json_bool(&js, (r->flags & CTL_RQ_LIVE) != 0);
+            json_close(&js, '}');
+        }
+        json_close(&js, ']');
+        fputc('\n', out);
+        return 0;
+    }
+    if (n == 2) {
+        const Request *r = rq_find(w[1]);
+        if (!r) { snprintf(err, errsz, "no request called %.40s - help lists them", w[1]); return -1; }
+        fprintf(out, "%s\n  %s%s%s\n", r->use, r->doc,
+                r->flags & CTL_RQ_ALONE ? "; alone in its request" : "",
+                r->flags & CTL_RQ_LIVE ? "; of a running vtt only" : "");
+        return 0;
+    }
+    for (int i = 0; i < NREQUESTS; i++) fprintf(out, "%-10s  %s\n", REQUESTS[i].name, REQUESTS[i].doc);
+    fputs("help VERB says how one is written; edits in one request are all or nothing\n", out);
+    return 0;
+}
+
+/* Lines that change nothing the undo log can take back, so they cannot roll
+ * back with the lines around them and go in a request of their own: the
+ * table's (the agent's undo, a wait), and saving or removing a scene. The
+ * verb, or NULL. */
+static const char *lonely(char w[][CTL_WORD_MAX], int n)
+{
+    const Request *r = n >= 1 ? rq_find(w[0]) : NULL;
+    if (r && (r->flags & CTL_RQ_ALONE)) return r->name;
+    if (n >= 2 && !strcmp(w[0], "scene") && !strcmp(w[1], "save")) return "scene save";
+    if (n == 3 && !strcmp(w[0], "scene") && !strcmp(w[2], "remove")) return "scene NAME remove";
+    return NULL;
 }
 
 /* What a request over the socket may say with the channel off: nothing
@@ -1068,332 +1562,19 @@ static int is_edit(const char *v)
  * until the GM accepts it. */
 static int off_takes(char w[][CTL_WORD_MAX], int n)
 {
-    const char *v = w[0];
-    if (!strcmp(v, "status") || !strcmp(v, "wait") || !strcmp(v, "holds") || !strcmp(v, "propose")) return 1;
-    return is_edit(v) && (strcmp(v, "scene") != 0 || scene_is_edit(w, n));
+    const Request *r = rq_find(w[0]);
+    return r && (r->flags & CTL_RQ_OFF) && (strcmp(w[0], "scene") != 0 || scene_is_edit(w, n));
 }
 
-/* Runs one line. 0; -1 with why in err; -2 when an edit is refused because
- * the GM is busy, the reason in err. */
-static int run_line(App *a, const char *line, char w[][CTL_WORD_MAX], int n, FILE *out,
-                    Edits *ed, char *err, size_t errsz)
+/* Runs one line through its row. */
+static int run_line(RQ_ARGS)
 {
-    Map *m = a->map;
-    const char *v = w[0];
-
-    if (!strcmp(v, "scene") && !scene_is_edit(w, n)) {
-        /* scene diff NAME, a read; scene save NAME [REGION] and scene NAME
-         * remove, each alone in its request. */
-        if (n < 2 || (n != 3 && !strcmp(w[1], "diff"))) {
-            snprintf(err, errsz, "scene NAME, scene save NAME [REGION], scene NAME remove, or scene diff NAME");
-            return -1;
-        }
-        if (n == 3 && !strcmp(w[1], "diff")) {
-            int i = scene_find(m, w[2]);
-            if (i < 0) { snprintf(err, errsz, "no scene called %.31s", w[2]); return -1; }
-            if (!scene_diff(out, m, i)) fputs("no changes\n", out);
-            return 0;
-        }
-        if (n == 3 && !strcmp(w[2], "off")) { snprintf(err, errsz, "scene %.31s remove throws a scene away", w[1]); return -1; }
-        int save = !strcmp(w[1], "save");
-        if (save ? (n < 3 || n > 4) : !(n == 3 && !strcmp(w[2], "remove"))) {
-            snprintf(err, errsz, "scene NAME, scene save NAME [REGION], scene NAME remove, or scene diff NAME");
-            return -1;
-        }
-        const char *busy = app_ctl_busy(a);
-        if (busy) { str_lcpy(err, busy, errsz); return -2; }
-        char msg[160];
-        if (save) {
-            int box[4], boxed = n == 4;
-            if (boxed && !region(m, w[3], &box[0], &box[1], &box[2], &box[3], err, errsz)) return -1;
-            int i = scene_save(m, w[2], boxed ? box : NULL, err, errsz);
-            if (i < 0) return -1;
-            char what[64];
-            scene_describe(m, i, what, sizeof what);
-            fprintf(out, "saved scene \"%s\": %s\n", m->scenes[i].name, what);
-            snprintf(msg, sizeof msg, "agent: saved scene %.31s (%s)", m->scenes[i].name, what);
-        } else {
-            int i = scene_find(m, w[1]);
-            if (i < 0) { snprintf(err, errsz, "no scene called %.31s", w[1]); return -1; }
-            snprintf(msg, sizeof msg, "agent: removed scene %.31s", m->scenes[i].name);
-            fprintf(out, "removed scene \"%s\"\n", m->scenes[i].name);
-            scene_remove(m, i);
-        }
-        app_note_gm(a, msg);
-        a->dirty = 1;
-        return 0;
+    const Request *r = rq_find(w[0]);
+    if (!r) {
+        snprintf(err, errsz, "unknown request %.40s", w[0]);
+        return -1;
     }
-
-    if (!strcmp(v, "propose") || (!strcmp(v, "job") && n >= 3 && !strcmp(w[2], "propose"))) {
-        /* propose ["a line for the GM"], or job N propose [...]: what the
-         * request's edits are. Without one, they are an agent's own idea. */
-        int at = v[0] == 'p' ? 1 : 3, slot = -1, num;
-        /* propose apply "plan.txt": what `vtt map --apply` sends to the vtt
-         * that has the map open. */
-        int from_apply = at == 1 && n == 3 && !strcmp(w[1], "apply");
-        if (from_apply) at = 2;
-        if (n > at + 1) { snprintf(err, errsz, "%s takes one line for the GM after it, in quotes", at == 1 ? "propose" : "job N propose"); return -1; }
-        if (ed->header || ed->lines) { snprintf(err, errsz, "propose comes once, before the request's edits"); return -1; }
-        if (a->ctl_direct) { snprintf(err, errsz, "there is no GM to propose to: --apply changes the file"); return -1; }
-        if (at == 3) {
-            if (!word_int(w[1], 1, JOB_NUM_MAX, &num) || (slot = app_job_find(a, num)) < 0) {
-                snprintf(err, errsz, "no job #%.10s - jobs lists them", w[1]);
-                return -1;
-            }
-            const Job *j = &a->jobs[slot];
-            if (j->state == JOB_ACCEPTED || j->state == JOB_SCRAPPED) {
-                snprintf(err, errsz, "#%d was %s - propose alone offers a new change", j->num, app_job_state_name(j->state));
-                return -1;
-            }
-            if (app_job_gm_only(j)) {
-                snprintf(err, errsz, "#%d is %s: the GM's to decide - propose alone offers a change of your own", j->num,
-                         j->from == JOB_FROM_DISK ? "what another program wrote to the file" : "an --apply's");
-                return -1;
-            }
-        }
-        ed->header = 1;
-        ed->job = slot;
-        if (from_apply) {
-            ed->from = JOB_FROM_APPLY;
-            snprintf(ed->say, sizeof ed->say, "--apply %.140s", w[at]);
-        }
-        else str_lcpy(ed->say, n > at ? w[at] : "", sizeof ed->say);
-        return 0;
-    }
-    if (!strcmp(v, "job") || !strcmp(v, "jobs")) {
-        /* The scratch map holds this request's edits: a job's own result
-         * would be made in it. */
-        if (ed->lines || ed->header) { snprintf(err, errsz, "%.4s comes before the request's propose line and edits", v); return -1; }
-        return app_ctl_job(a, w, n, out, err, errsz);
-    }
-
-    if (is_edit(v)) {
-        if (!ed->lines && !a->ctl_direct) proposal_begin(a, ed);
-        else if (!ed->lines) {
-            /* Asked once, at the first edit: after it the open batch is
-             * this request's own. */
-            const char *busy = app_ctl_busy(a);
-            if (busy) { str_lcpy(err, busy, errsz); return -2; }
-            undo_begin(&a->undo);
-            ed->ops0 = a->undo.stamp;
-        }
-        if (ed->lines == 0) {
-            while (*line == ' ' || *line == '\t') line++;
-            str_lcpy(ed->first, line, sizeof ed->first);
-        }
-        ed->lines++;
-        ed->out = out;
-        if (edit_line(a, w, n, ed, err, errsz) < 0) return -1;
-        if ((unsigned long)(a->undo.stamp - ed->ops0) > CTL_OPS_MAX) {
-            snprintf(err, errsz, "the request changes more than %lu things at once", CTL_OPS_MAX);
-            return -1;
-        }
-        return 0;
-    }
-    if (!strcmp(v, "undo")) {
-        if (n > 1) { snprintf(err, errsz, "undo takes nothing after it"); return -1; }
-        if (ed->lines) { snprintf(err, errsz, "undo comes before any edit in a request"); return -1; }
-        if (!a->ctl_undoable) { snprintf(err, errsz, "there is no change of the agent's to take back"); return -1; }
-        /* The log as the edit left it, and the map: a note or a fog setting
-         * the GM changes outside the log still moves Map.gen. */
-        if (a->undo.stamp != a->ctl_stamp || m->gen != a->ctl_gen) {
-            snprintf(err, errsz, "something has happened since the agent's last change - only the GM's u takes it back now");
-            return -1;
-        }
-        const char *busy = app_ctl_busy(a);
-        if (busy) { str_lcpy(err, busy, errsz); return -2; }
-        app_events_map_flush(a);             /* the GM's changes so far are their own event */
-        undo_undo(&a->undo, m);
-        app_events_map_restart(a);           /* the agent's own doing is no news to it */
-        range_history_changed(&a->play.range, m);
-        a->ctl_undoable = 0;
-        app_fog_sync(a);
-        a->dirty = 1;
-        app_note_gm(a, "the agent took back its last change - ctrl-r puts it back");
-        fputs("took back the last change\n", out);
-        return 0;
-    }
-
-    if (!strcmp(v, "holds")) {
-        /* holds DEV INO: is that file (as stat names it) the map open here?
-         * --apply asks every vtt before it touches a file (docs/CONFLICTS.md,
-         * step 6). By identity, not by name: the two were started in
-         * different directories, and a link is the same file. */
-        char *e1, *e2;
-        unsigned long long dev = n == 3 ? strtoull(w[1], &e1, 10) : 0, ino = n == 3 ? strtoull(w[2], &e2, 10) : 0;
-        if (n != 3 || *e1 || *e2) { snprintf(err, errsz, "holds DEVICE INODE, as stat gives them"); return -1; }
-        struct stat st;
-        int same = m && m->path[0] && stat(m->path, &st) == 0 &&
-                   (unsigned long long)st.st_dev == dev && (unsigned long long)st.st_ino == ino;
-        fputs(same ? "holds\n" : "no\n", out);
-        return 0;
-    }
-    if (!strcmp(v, "wait")) {
-        /* wait [SEQ] [for SECONDS]: every event after SEQ (unsaid: from
-         * now), held until there is one or the time is up. */
-        unsigned seq = a->event_seq;
-        int      secs = CTL_WAIT_DEFAULT_S, at = 1, k;
-        if (at < n && strcmp(w[at], "for") != 0) {
-            if (!word_int(w[at], 0, 0x7fffffff, &k)) { snprintf(err, errsz, "wait [SEQ] [for SECONDS]: %.20s is not an event's number", w[at]); return -1; }
-            seq = (unsigned)k;
-            at++;
-        }
-        if (at < n) {
-            if (at + 2 != n || strcmp(w[at], "for") != 0 || !word_int(w[at + 1], 0, CTL_WAIT_MAX_S, &secs)) {
-                snprintf(err, errsz, "wait [SEQ] [for SECONDS], at most %d seconds", CTL_WAIT_MAX_S);
-                return -1;
-            }
-        }
-        a->agent_seen_ms = a->now_ms ? a->now_ms : 1;
-        /* Held only where there is a socket to hold it on (app_tick):
-         * --apply, the bench and the fuzzer are answered at once. */
-        if (app_events_after(a, seq) || !a->ctl_can_hold || secs == 0) app_events_write(a, out, seq);
-        else {
-            a->ctl_held     = 1;
-            a->ctl_hold_seq = seq;
-            a->ctl_hold_ms  = secs * 1000;
-        }
-        return 0;
-    }
-    if (!strcmp(v, "status")) {
-        if (n > 1) { snprintf(err, errsz, "status takes nothing after it"); return -1; }
-        live_swap(a, ed);
-        do_status(a, out, ed->lines > 0);
-        live_swap(a, ed);
-        return 0;
-    }
-    if (!strcmp(v, "dump")) {
-        int x0 = 0, y0 = 0, x1 = m->w - 1, y1 = m->h - 1;
-        if (n > 2) { snprintf(err, errsz, "dump takes one region, like B2:K12"); return -1; }
-        /* Refused off the map, as an edit is: clipped, a mistyped region
-         * would quietly read the wrong squares. */
-        if (n == 2 && !region(m, w[1], &x0, &y0, &x1, &y1, err, errsz)) return -1;
-        maptools_dump(out, m, x0, y0, x1, y1);
-        return 0;
-    }
-    if (!strcmp(v, "describe")) {
-        int j = want_json(w, n, 1, err, errsz);
-        if (j < 0) return -1;
-        maptools_describe(out, m, j);
-        return 0;
-    }
-    if (!strcmp(v, "stamps")) {
-        /* The saved stamps, one a line with its size: what `stamp` can put down. */
-        if (n > 1) { snprintf(err, errsz, "stamps takes nothing after it"); return -1; }
-        char names[64][MAP_NAME_MAX], e2[160];
-        int  k = stamp_list(names, 64);
-        for (int i = 0; i < k && i < 64; i++) {
-            Map *st = stamp_load(names[i], e2, sizeof e2);
-            if (!st) continue;
-            fprintf(out, "%s  %dx%d%s\n", names[i], st->w, st->h, st->tokens.n ? "  with creatures" : "");
-            map_free(st);
-        }
-        if (!k) fputs("no stamps\n", out);
-        else if (k > 64) fprintf(out, "... and %d more\n", k - 64);
-        return 0;
-    }
-    if (!strcmp(v, "scenes")) {
-        /* The map's scenes: what `scene NAME` puts back. */
-        if (n > 1) { snprintf(err, errsz, "scenes takes nothing after it"); return -1; }
-        char what[64];
-        for (int i = 0; i < m->nscenes; i++) {
-            scene_describe(m, i, what, sizeof what);
-            fprintf(out, "\"%s\"  %s\n", m->scenes[i].name, what);
-        }
-        if (!m->nscenes) fputs("no scenes\n", out);
-        return 0;
-    }
-    if (!strcmp(v, "characters")) {
-        /* The saved character templates: what `token add ... from NAME` places. */
-        if (n > 1) { snprintf(err, errsz, "characters takes nothing after it"); return -1; }
-        char names[64][MAP_NAME_MAX], e2[160];
-        int  k = character_list(names, 64);
-        for (int i = 0; i < k && i < 64; i++) {
-            Map *c = character_load(names[i], e2, sizeof e2);
-            if (!c) { fprintf(out, "%s  (%s)\n", names[i], e2); continue; }
-            const Token *t = character_token(c);
-            fprintf(out, "%s  \"%s\" %s %dx%d", names[i], t->label, token_kind_name(t->kind), t->size, t->size);
-            for (int j = 0; j < t->ncounters; j++)
-                fprintf(out, "%s%s %d", j ? ", " : "  ", t->counters[j].name, t->counters[j].max);
-            for (int j = 0, r = 0; j < ROLL_MAX; j++)
-                if (c->rolls[j].name[0]) fprintf(out, "%s%s = %s", r++ ? ", " : "  rolls ", c->rolls[j].name, c->rolls[j].expr);
-            const char *card = card_of(c, t);
-            if (card) {
-                char first[128];
-                card_first_line(card, first, sizeof first);
-                fprintf(out, "  card: %s", first);
-            }
-            fputc('\n', out);
-            map_free(c);
-        }
-        if (!k) fputs("no characters\n", out);
-        else if (k > 64) fprintf(out, "... and %d more\n", k - 64);
-        return 0;
-    }
-    if (!strcmp(v, "floors")) {
-        /* The floors, highest first, as a building reads top to bottom. */
-        if (n > 1) { snprintf(err, errsz, "floors takes nothing after it"); return -1; }
-        int order[MAP_AREAS_MAX], nf = floor_order(m, order);
-        for (int k = nf - 1; k >= 0; k--) {
-            const Area *fa = &m->areas[order[k]];
-            char b0[MAP_COORD_MAX], b1[MAP_COORD_MAX];
-            map_coord_name(fa->x0, fa->y0, b0, sizeof b0);
-            map_coord_name(fa->x1, fa->y1, b1, sizeof b1);
-            fprintf(out, "%-16s level %3d  %s:%s%s\n", fa->name, fa->level, b0, b1,
-                    order[k] == app_floor_shown(a) ? "  (the GM is looking at it)" : "");
-        }
-        if (!nf) fputs("no floors\n", out);
-        return 0;
-    }
-    if (!strcmp(v, "links")) {
-        /* Every link, one a line, or as JSON: what `link N ...` changes. */
-        int j = want_json(w, n, 1, err, errsz);
-        if (j < 0) return -1;
-        if (j) {
-            Json js;
-            json_init(&js, out);
-            json_open(&js, '[');
-            for (int i = 0; i < m->nlinks; i++) {
-                const Link *l = &m->links[i];
-                char at[2 * MAP_COORD_MAX + 2];
-                json_open(&js, '{');
-                json_kint(&js, "num", l->num);
-                json_kstr(&js, "kind", link_kind_name(l->kind));
-                json_kint(&js, "size", l->size);
-                link_end_name(l, 0, at, sizeof at); json_kstr(&js, "from", at);
-                link_end_name(l, 1, at, sizeof at); json_kstr(&js, "to", at);
-                json_key(&js, "oneway"); json_bool(&js, l->oneway);
-                json_key(&js, "secret"); json_bool(&js, l->secret);
-                json_close(&js, '}');
-            }
-            json_close(&js, ']');
-            fputc('\n', out);
-            return 0;
-        }
-        for (int i = 0; i < m->nlinks; i++) {
-            char row[128];
-            link_describe(&m->links[i], row, sizeof row);
-            fprintf(out, "%s\n", row);
-        }
-        if (!m->nlinks) fputs("no links\n", out);
-        return 0;
-    }
-    if (!strcmp(v, "marked")) {
-        int j = want_json(w, n, 1, err, errsz);
-        if (j < 0) return -1;
-        live_swap(a, ed);                    /* what the GM points at is on the GM's map */
-        app_ctl_marked(a, out, j);
-        live_swap(a, ed);
-        return 0;
-    }
-    if (!strcmp(v, "check")) {
-        int j = want_json(w, n, 1, err, errsz);
-        if (j < 0) return -1;
-        maptools_check_map(out, m, j);
-        return 0;
-    }
-    snprintf(err, errsz, "unknown request %.40s", v);
-    return -1;
+    return r->run(RQ_PASS);
 }
 
 /* 0 when the request holds `undo` and any other line. */

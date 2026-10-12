@@ -75,8 +75,11 @@ void app_agent_prompt(const App *a, const Job *j, FILE *out)
     sh_quote(out, vtt); fprintf(out, "%s 'job %d dump'\n", call, j->num);
     fputs("    your proposal read back, as the map would be with it.\n\n", out);
     fputs("A request is all or nothing: if a line fails, nothing changed and the answer names the line and why.\n"
-          "The lines that change a map: room, tile, wall, edge, door, corridor, area, token add|move|del|set, note,\n"
-          "fog paint, stamp, link, floor, scene. docs/AGENTS.md in vtt's source has all of them.\n"
+          "The lines that change a map: ", out);
+    app_ctl_edit_verbs(out);            /* from the channel's own table: it cannot fall behind it */
+    fputs(".\n    ", out);
+    sh_quote(out, vtt); fprintf(out, "%s 'help token'\n", call);
+    fputs("    how one of them is written; help alone lists every request.\n"
           "Propose once, read it back, then stop. The verdict is the GM's; feedback starts you again with this job.\n", out);
 }
 
