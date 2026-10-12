@@ -62,9 +62,17 @@ static UiPickItem *pick_items(const App *a, PickWhat what, int *count)
     if (what == PICK_CHARACTER) character_dir(dir, sizeof dir);
     else                        stamp_dir(dir, sizeof dir);
     int n;
-    char (*names)[MAP_NAME_MAX] = store_list_all(dir, ".vtt", &n);
+    char (*names)[MAP_NAME_MAX];
+    if (what == PICK_CHARACTER && a->pick_only) {
+        /* A list given: only those are read, not the whole folder. */
+        n = a->npick_only;
+        names = xmalloc(sizeof *names * (size_t)(n > 0 ? n : 1));
+        memcpy(names, a->pick_only, sizeof *names * (size_t)n);
+    } else {
+        names = store_list_all(dir, ".vtt", &n);
+    }
     *count = 0;
-    if (n <= 0) return NULL;
+    if (n <= 0) { free(names); return NULL; }
     UiPickItem *items = xmalloc(sizeof *items * (size_t)n);
     for (int i = 0; i < n; i++) {
         char err[160];

@@ -566,11 +566,18 @@ environment is an ordinary card that the map, or a named area of it, points at.
 | `:env area "Crypt" NAME` | that area does; a floor is named this way |
 | `:env edit` | write the environment's card in your editor, as `s k` does a creature's |
 | `:env` | read the environment here, whole: the room's, else its floor's, else the map's |
+| `:env adversaries` | open the character picker holding only the creatures the environment's card names |
 | `:env remove` | take the name off; the card stays in the map |
 
 Name the card first, then `:env edit` to write it. Under Daggerheart a new one starts from
 the environment block's lines ready to fill in; otherwise from its name. `:env` shows the
-card as `:card` shows a creature's, to you only. An area's environment is undone by `u`; the
+card as `:card` shows a creature's, to you only.
+
+`:env adversaries` reads the card's `Potential Adversaries:` line. Names may be grouped,
+with lists in parentheses: `Beasts (Bear, Dire Wolf), Bandit` names Bear, Dire Wolf and
+Bandit. Each that is a [saved character](#characters-character-i-t) (`Dire Wolf` is the
+character `Dire-Wolf`) is in the picker; choose one and it is placed at the cursor, as `i t`
+places it. The status line lists the names it found no character for. An area's environment is undone by `u`; the
 map's own is not, and nor is a card's text.
 
 ### Importing the SRD's adversaries

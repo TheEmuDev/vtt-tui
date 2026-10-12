@@ -38,6 +38,8 @@ static inline const Token *character_token(const Map *tpl) { return &tpl->tokens
 
 /* The names, sorted; returns how many there are (see store_list). */
 int  character_list(char (*names)[MAP_NAME_MAX], int max);
+/* Is there a saved character of that name? Its file, by the name's own case. */
+int  character_exists(const char *name);
 
 /* Puts the template's creature down with its top-left square at (x,y) as
  * `kind` (TOKEN_PLAYER, TOKEN_ENEMY, or -1 for the side it was saved on),

@@ -112,7 +112,8 @@ static void put_cut(char *buf, size_t sz, const char *p, size_t k)
     buf[k] = '\0';
 }
 
-int card_value(const char *text, const char *label, char *buf, size_t sz)
+/* card_value and card_line: `whole` takes the rest of the line. */
+static int value_after(const char *text, const char *label, char *buf, size_t sz, int whole)
 {
     size_t n = strlen(label);
     buf[0] = '\0';
@@ -125,12 +126,22 @@ int card_value(const char *text, const char *label, char *buf, size_t sz)
          * card puts several on a line: "Thresholds: 8/15   HP: 3", or the
          * SRD's "Thresholds: 8/15 | HP: 3". */
         size_t k = 0;
-        while (p[k] && p[k] != '\n' && p[k] != '|' && !(p[k] == ' ' && p[k + 1] == ' ')) k++;
+        while (p[k] && p[k] != '\n' && (whole || (p[k] != '|' && !(p[k] == ' ' && p[k + 1] == ' ')))) k++;
         while (k && (p[k - 1] == ' ' || p[k - 1] == '*' || p[k - 1] == '_')) k--;
         put_cut(buf, sz, p, k);
         return 1;
     }
     return 0;
+}
+
+int card_value(const char *text, const char *label, char *buf, size_t sz)
+{
+    return value_after(text, label, buf, sz, 0);
+}
+
+int card_line(const char *text, const char *label, char *buf, size_t sz)
+{
+    return value_after(text, label, buf, sz, 1);
 }
 
 int card_feature(const char *text, const char *name, char *buf, size_t sz)

@@ -291,6 +291,10 @@ typedef struct {
     UiPicker   picker;
     PickWhat   pick_what;
     int        pick_kind;
+    /* The names the character picker is to hold, when it is not to hold
+     * them all (:env adversaries); NULL for all. Set round app_pick_open. */
+    char     (*pick_only)[MAP_NAME_MAX];
+    int        npick_only;
     char       pending_name[MAP_NAME_MAX];
 
     /* The file a pending delete or rename acts on, held in full so the

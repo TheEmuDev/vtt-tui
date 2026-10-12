@@ -355,6 +355,11 @@ run "play, damage"         "$DMGMOB" 80x24  ':play\r4ge:dmg 6\ru'   # 13 caught
 # The last Stress marked and cleared: Vulnerable goes on and comes off with it.
 run "play, stress to zero and back" "$MOB" 80x24 ':play\r:B2\rsvstress 1/1\r<>'
 run "play, 500 characters" "$MOB"    80x24  ':play\ritebeast-4\t\t\ru'
+# The picker holding only the three an environment's card names, of the 500 saved.
+ENVMOB="$DIR/envmob.vtt"
+{ sed '1s/^VTT [0-9]*/VTT 14/' "$MOB"
+  printf 'card "den"\n| Den - Tier 1 Exploration\n| Potential Adversaries: Beasts (beast-000, beast-001, beast-002)\nendcard\nenv "den"\n'; } > "$ENVMOB"
+run "play, env adversaries" "$ENVMOB" 80x24  ':play\r:env adversaries\r\ru'
 # Two summoned inside Far of the creature at B2, then taken back: the row reads the
 # template's file once a loop.
 run "play, summon"         "$MOB"    80x24  ':play\r:B2\r:summon 2 beast-000 far\rl\rl\ruuhh'

@@ -118,6 +118,7 @@ review and the next. The rules (the user, 2026-10-09):
 | 44 | the final review (2026-10-10) | The plan says change sets are "capped together at the undo log's limit". Nothing bounds a change set's memory: 8 bytes a changed cell, so a proposal of every square of a 512×512 map is about 6 MB, and 16 of them about 100 MB. | robustness | Only a deliberate fill of the largest map sixteen times gets there; the request cap (64 KB, `CTL_OPS_MAX` ops) bounds what one request can write. | a cap on cells across all waiting jobs, with the refusal an agent is told | 2026-10-10 |
 | 45 | the CLAUDE.md split's review (2026-10-10) | `:dmg massive` with no argument answers with plain `app_set_status` (`app_damage.c:107`: "massive damage on - twice Severe marks 4 HP ..."), though the file's row in docs/CODEMAP.md says every message about the rule is GM-only and only the usage hint is plain. Read in the source; not drawn in a players' frame. | correctness, docs | Found while moving docs; no code was in that change. It gives away a table rule, not a creature's numbers. | the line becomes `app_set_status_gm` with a players'-frame test, or the row says the rule's state is plain | 2026-10-10 |
 | ~~46~~ | *closed, below* | | | | | |
+| 47 | environment cards, step 2 (2026-10-12) | `:env adversaries` matches a card's names to saved characters as written: `dire wolf` does not find `Dire-Wolf.vtt` (the file's own case), a name ending in a number (`Skeleton 2`, `Captain (Tier 2)`) is read without it, as a copy's number is, and a name over 31 bytes is cut, so two long names can collapse to one. | behavior | None of the SRD's adversaries trips any of them, and each has a plain way round (write the name as the character is saved). A case-blind match means listing the folder, which the command exists to avoid. | a name with no file is tried again unrooted, and matched without case against a listing read only when a name misses; a test for each | 2026-10-12 |
 
 ### A second opinion on this list (Fable, 2026-10-10)
 
@@ -180,7 +181,7 @@ Rows move here when fixed, with the commit.
 
 ### Where the rows came from
 
-Twenty-two reviews, 2026-10-07 to 2026-10-12. The first seven predate this section: on 2026-10-09
+Twenty-three reviews, 2026-10-07 to 2026-10-12. The first seven predate this section: on 2026-10-09
 their reports were read back from the session's record and every item checked against the
 code as it stood (137 items: 117 fixed, 4 overtaken when the plan dropped "accept saves", 16
 open, none disproved). Steps 4-6 were entered from their reports as they came.
@@ -209,6 +210,7 @@ open, none disproved). Steps 4-6 were entered from their reports as they came.
 | 2026-10-12 | `:summon` as built (two medium, two low, five test gaps: all fixed) | none |
 | 2026-10-12 | conditions as built, and where the SRD's link is kept (two medium, three low, three test gaps: all fixed) | none |
 | 2026-10-12 | environment cards, step 1 (one medium: an outside change to the map's environment was lost; five low; four test gaps: all fixed) | none (B11 gained a second input) |
+| 2026-10-12 | environment cards, step 2, `:env adversaries` (two medium, four low: fixed but the names' matching) | 47 |
 
 ## 2026-09-28, at 17e31e3
 

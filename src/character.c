@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
+#include <unistd.h>
 
 #include "card.h"
 #include "mapio.h"
@@ -41,6 +42,12 @@ void character_name_from_label(const char *label, char *out, size_t outsz)
 static int path_of(const char *name, char *buf, size_t sz)
 {
     return store_path("characters", name, ".vtt", buf, sz);
+}
+
+int character_exists(const char *name)
+{
+    char path[MAP_PATH_MAX];
+    return path_of(name, path, sizeof path) && access(path, F_OK) == 0;
 }
 
 /* What a template's creature is, apart from any one fight. */

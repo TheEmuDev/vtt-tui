@@ -106,7 +106,7 @@ int import_adversaries(const char *path, int force, FILE *out, char *err, size_t
 
         char path_out[MAP_PATH_MAX];
         if (!store_path("characters", name, ".vtt", path_out, sizeof path_out)) { skipped++; continue; }
-        if (!force && access(path_out, F_OK) == 0) { kept++; continue; }
+        if (!force && character_exists(name)) { kept++; continue; }
 
         /* One creature, 1x1, full, naming its card. */
         Map *m = map_new(1, 1, name);

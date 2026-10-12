@@ -36,6 +36,9 @@ const char *card_of(const Map *m, const Token *t);
  * The first such label wins. 0 when the card has none. The core reads no
  * meaning into it; a ruleset does. */
 int         card_value(const char *text, const char *label, char *buf, size_t sz);
+/* The same label's whole line: for one that holds a list, where two spaces
+ * or a bar are part of what was written, not the start of another field. */
+int         card_line(const char *text, const char *label, char *buf, size_t sz);
 
 /* The X of a feature line starting "Name (X)" ("Minion (3) - Passive: ..."
  * gives "3"), bold or emphasis marks before it allowed. 0 for none. */

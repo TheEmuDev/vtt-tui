@@ -101,7 +101,7 @@ static const KeyDoc PLAY[] = {
     GROUP("Cards"),
     KEY("s k",    "its card in your editor; shown beside the map while selected"),
     KEY(":card",  "the card whole   :card off / :card on hide and show the box"),
-    KEY(":env",   "this place's environment card   :env NAME names it, :env edit writes it, :env remove"),
+    KEY(":env",   "this place's environment card   :env NAME, edit, adversaries, remove"),
 
     GROUP("Tools"),
     KEY("m",      "measure (the ruler)"),

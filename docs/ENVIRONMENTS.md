@@ -1,6 +1,6 @@
 # Environment cards
 
-> **Status: signed off 2026-10-12; step 1 of 3 built. *Progress* says what is left.**
+> **Status: signed off 2026-10-12; steps 1 and 2 of 3 built. *Progress* says what is left.**
 
 Roadmap item 18. The SRD's environment stat block (type, Difficulty, impulses, features,
 Fear features, potential adversaries) as a GM-only card on a map or on a named area, beside
@@ -11,21 +11,21 @@ dropped; step 1 alone is about 300.
 
 ## Progress
 
-*Step 1 of 3 is built and reviewed (2026-10-12): the card on the map and the area, `:env`,
-the file's version 14, `--describe`, `--check`, the channel's `env`. Steps 2 and 3 are next.*
+*Steps 1 and 2 of 3 are built and reviewed (2026-10-12): the card on the map and the area
+with `:env`, the file's version 14, the map tools and the channel's `env`; and `:env
+adversaries`, the picker holding the creatures the card names. Step 3 is next.*
 
-- **Step 2, potential adversaries**, begins at `pick_items` (app_picker.c), which reads the
-  whole characters folder and loads every template: give it a set of names. `:env
-  adversaries` reads the card's `Potential Adversaries:` line with `card_value`, splits on
-  commas outside parentheses, and turns each name into a template's with
-  `character_name_from_label`. `PROF_ZONE("env.pick")`.
 - **Step 3, the import**: `--import-environments FILE` beside `--import-adversaries`
-  (import.c), each environment a text file in `$XDG_DATA_HOME/vtt/environments`; `:env NAME`
-  copies one into the map's cards when the map has none of that name; a fifth list in the
-  picker. vtt ships none of the SRD's text: the importer reads a file the GM downloads.
+  (import.c: `card_text` builds an adversary's card from the JSON's fields, and main.c
+  has the flag), each environment a text file in `$XDG_DATA_HOME/vtt/environments`
+  (`store_dir("environments")`, names through `character_name_from_label` so they are a
+  card's name). `:env NAME` copies one into the map's cards when the map has none of that
+  name (`env_set` in app_card.c is where). A fifth list in the picker (`PickWhat`,
+  `pick_items`, `app_pick_key` in app_picker.c). vtt ships none of the SRD's text: the
+  importer reads a file the GM downloads, and its tests use made-up environments.
 - Then: roadmap item 18 to *Built*, this page's status, the index's row.
 
-What step 1 left the plan: *As built*, at the end.
+What the build left the plan: *As built*, at the end.
 
 ## What it does
 
@@ -138,3 +138,25 @@ fuzz corpus gains the two lines. Docs: `:env` on the `?` page (src/keys.c), the 
   or a keystroke's path, so there is no new zone and no `perf.sh` row for this step.
 - **The suite is `env`** (tests/test_cards.c). `tests/fixtures/env.vtt` puts the two lines
   in the loader's fuzz corpus.
+
+## As built: step 2
+
+- **A group's own word is not a creature.** `Beasts (Bear, Dire Wolf), Bandit` gives Bear,
+  Dire Wolf and Bandit: the text before a parenthesis is dropped, each name is made a
+  character's with `character_name_from_label`, repeats go, at most 32 are read.
+- **The picker is given names, not a filter** (`App.pick_only`): a name with no character
+  file never reaches it, and is listed on the GM's status line instead.
+- **The whole line is the list** (`card_line`, beside `card_value`): two spaces or a bar
+  in it are part of what was written, where on a stat line they start another field.
+- **`character_exists`** (character.c) is the one answer to "is there a saved character of
+  this name"; the importer asks it too.
+- **The names are matched as written**: `dire wolf` does not find `Dire-Wolf`, a name with
+  a number at its end (`Skeleton 2`) is read as Skeleton, one over 31 bytes is cut. None of
+  the SRD's names trips these; docs/HEALTH.md, *Left open by reviews*, row 47.
+- **The GM is told how many were found**, the count first and the missing names after, as
+  a note, so the log has the whole list when the line is too narrow for it.
+- **Play mode only**, since choosing places the creature at the cursor.
+- **Measured**: `env.pick` 25.6 µs typical, 50.2 µs at p99, for three of 500 saved
+  (docs/PERFORMANCE.md), against 3.2 ms for the whole folder. As the plan's table said.
+- The first benchmark script ended with `esc`, which the next loop's `:` turned into
+  Alt-`:`; the command ran once. The row chooses a creature and takes it back instead.

@@ -5,6 +5,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include "card.h"
+#include "character.h"
 #include "changeset.h"
 #include "floor.h"
 #include "mapio.h"
@@ -1042,6 +1043,60 @@ void test_env(void)
     t = ctl_ask(&a, "env Upper remove\n");
     CHECK(strstr(t, "has no environment") != NULL);
     free(t);
+
+    CASE(":env adversaries: the picker holds the card's creatures that are saved characters, and names the rest");
+    app_key(&a, (Key){ KEY_F2, 0, 0 });
+    a.ed.cx = 3; a.ed.cy = 3;
+    press(&a, ":env adversaries\r");                       /* the skeleton's line is empty */
+    CHECK(a.modal == MODAL_NONE && strstr(a.status, "no \"Potential Adversaries:\" line") != NULL);
+    CHECK(card_set(m, "haunted-crypt", "Haunted Crypt - Tier 1 Exploration\n"
+                   "**Potential Adversaries:** Beasts (Giant Rat, Bat), Ghoul, Undead (Skeleton Archer)\n") >= 0);
+    press(&a, ":env adversaries\r");
+    CHECK(a.modal == MODAL_NONE && strstr(a.status, "none of haunted-crypt's potential adversaries") != NULL);
+    {
+        Token t;
+        memset(&t, 0, sizeof t);
+        t.size = 1; t.kind = TOKEN_ENEMY; t.x = 10; t.y = 10;
+        const char *who[] = { "Giant Rat", "Bat", "Wolf" };
+        for (int k = 0; k < 3; k++) {
+            str_lcpy(t.label, who[k], sizeof t.label);
+            int idx = tokens_add(&m->tokens, t);
+            char nm[MAP_NAME_MAX];
+            character_name_from_label(who[k], nm, sizeof nm);
+            CHECK(character_save(m, idx, nm, NULL, 0, err, sizeof err) == 0);
+            tokens_remove(&m->tokens, idx);
+        }
+    }
+    int n0 = m->tokens.n;
+    press(&a, ":env adversaries\r");
+    CHECK_EQ(a.modal, MODAL_PICKER);
+    CHECK_EQ(a.picker.n, 2);                               /* Giant-Rat and Bat; not Wolf, not the missing two */
+    CHECK(!strcmp(a.picker.items[0].name, "Giant-Rat") || !strcmp(a.picker.items[1].name, "Giant-Rat"));
+    CHECK(strstr(a.status, "2 of 4 are saved characters; not saved: Ghoul, Skeleton-Archer") != NULL);
+    CHECK_EQ(a.status_gm, 1);
+    pf = players_text(&a, &r);                             /* the picker and the names are the GM's */
+    CHECK(strstr(pf, "Giant-Rat") == NULL && strstr(pf, "Ghoul") == NULL && strstr(pf, "Character") == NULL);
+    free(pf);
+    CHECK(a.pick_only == NULL);
+    a.ed.cx = 4; a.ed.cy = 4;
+    press(&a, "bat\r");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK_EQ(m->tokens.n, n0 + 1);
+    CHECK(!strcmp(m->tokens.v[n0].label, "Bat") && m->tokens.v[n0].x == 4);
+    press(&a, "u");
+    CHECK_EQ(m->tokens.n, n0);
+    /* The whole line is the list: two spaces in it end nothing. */
+    CHECK(card_set(m, "haunted-crypt", "Haunted Crypt\nPotential Adversaries: Beasts (Giant Rat,  Bat), Wolf\n") >= 0);
+    press(&a, ":env adversaries\r");
+    CHECK_EQ(a.modal, MODAL_PICKER);
+    CHECK_EQ(a.picker.n, 3);
+    press(&a, "\x1b");
+    press(&a, "ite");                                      /* the picker at large still holds them all */
+    CHECK_EQ(a.picker.n, 3);
+    press(&a, "\x1b");
+    app_key(&a, (Key){ KEY_F1, 0, 0 });
+    press(&a, ":env adversaries\r");
+    CHECK(a.modal == MODAL_NONE && strstr(a.status, "play mode's") != NULL);
 
     CASE(":env remove takes the name off and leaves the card; an area removed and undone has its own back");
     app_key(&a, (Key){ KEY_F2, 0, 0 });

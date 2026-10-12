@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -15,6 +16,8 @@
 #include "card.h"
 #include "character.h"
 #include "floor.h"
+#include "store.h"
+#include "prof.h"
 
 /* Runs $VISUAL, else $EDITOR, else vi, on the file, the terminal handed over
  * for the while. Returns the editor's exit status, or -1. */
@@ -278,15 +281,95 @@ static void env_edit(App *a, EnvAt at)
     free(now);
 }
 
+/* The names on a card's "Potential Adversaries" line, each as a saved
+ * character would be named. The line groups them, with lists in
+ * parentheses ("Beasts (Bear, Dire Wolf), Bandits"): a group's own word
+ * before a parenthesis is not a creature, what is inside is. Returns how
+ * many, at most `max`. */
+static int env_names(const char *line, char (*out)[MAP_NAME_MAX], int max)
+{
+    int n = 0;
+    for (const char *p = line; *p && n < max; ) {
+        const char *end = p + strcspn(p, ",");
+        const char *from = p, *open = memchr(p, '(', (size_t)(end - p));
+        if (open) from = open + 1;
+        char label[TOKEN_LABEL_MAX];
+        size_t len = (size_t)(end - from);
+        if (len >= sizeof label) len = sizeof label - 1;
+        memcpy(label, from, len);
+        label[len] = '\0';
+        char *close = strchr(label, ')');
+        if (close) *close = '\0';
+        character_name_from_label(label, out[n], sizeof out[n]);
+        int seen = !out[n][0];
+        for (int k = 0; k < n && !seen; k++) seen = !strcasecmp(out[k], out[n]);
+        if (!seen) n++;
+        p = *end ? end + 1 : end;
+    }
+    return n;
+}
+
+/* :env adversaries -- the character picker holding only the creatures the
+ * environment's card names, those that are saved characters. */
+static void env_adversaries(App *a, EnvAt at)
+{
+    PROF_ZONE("env.pick");
+    Map *m = a->map;
+    char msg[320], where[40], line[512];
+    env_where(m, at, where, sizeof where);
+    if (a->screen != SCREEN_PLAY) { app_set_status(a, "placing is play mode's - F2 first"); return; }
+    int ci = at.env[0] ? card_find(m, at.env) : -1;
+    if (ci < 0) {
+        snprintf(msg, sizeof msg, at.env[0] ? "%s: environment %s has no card - :env edit writes it"
+                                            : "%s has no environment - :env NAME names its card%s", where, at.env);
+        app_set_status_gm(a, msg);
+        return;
+    }
+    char names[32][MAP_NAME_MAX];
+    int  n = card_line(m->cards[ci].text, "Potential Adversaries", line, sizeof line)
+           ? env_names(line, names, 32) : 0;
+    if (!n) {
+        snprintf(msg, sizeof msg, "card %s has no \"Potential Adversaries:\" line to read", at.env);
+        app_set_status_gm(a, msg);
+        return;
+    }
+    /* Those that are saved characters stay; the rest are named. */
+    /* The count leads: the list may be longer than the line is wide, and
+     * the log keeps it whole. */
+    int have = 0, off = 0, missing = 0;
+    for (int i = 0; i < n; i++) missing += !character_exists(names[i]);
+    off = snprintf(msg, sizeof msg, "%d of %d are saved characters", n - missing, n);
+    for (int i = 0, first = 1; i < n; i++) {
+        if (character_exists(names[i])) { if (have != i) memcpy(names[have], names[i], sizeof names[0]); have++; }
+        else if (off < (int)sizeof msg - 1) {
+            off += snprintf(msg + off, sizeof msg - (size_t)off, "%s%s", first ? "; not saved: " : ", ", names[i]);
+            first = 0;
+        }
+    }
+    if (!have) {
+        char none[400];
+        snprintf(none, sizeof none, "none of %.24s's potential adversaries is a saved character - :character save, or --import-adversaries", at.env);
+        app_set_status_gm(a, none);
+        return;
+    }
+    a->pick_only  = names;
+    a->npick_only = have;
+    app_pick_open(a, PICK_CHARACTER, -1, "");
+    a->pick_only  = NULL;
+    a->npick_only = 0;
+    if (missing) app_note_gm(a, msg);
+}
+
 /* :env                    the environment here, read whole
  * :env NAME               the smallest area under the cursor (else the map) names the card NAME
  * :env map NAME           the map does
  * :env area "AREA" NAME   that area does (a floor is named this way)
  * :env edit               its card in the editor, the ruleset's block to start a new one
+ * :env adversaries        the picker, holding the creatures its card names
  * :env remove             the name comes off; the card stays in the map */
 void app_env_command(App *a, const char *rest)
 {
-    static const char USAGE[] = ":env, :env NAME, :env map NAME, :env area \"AREA\" NAME, :env edit, :env remove";
+    static const char USAGE[] = ":env, :env NAME, :env map NAME, :env area \"AREA\" NAME, :env edit, :env adversaries, :env remove";
     Map *m = a->map;
     char msg[200], where[40];
     if (!m) { app_set_status(a, "environments are a map's - open one first"); return; }
@@ -311,6 +394,7 @@ void app_env_command(App *a, const char *rest)
         return;
     }
     if (!strcmp(rest, "edit"))   { env_edit(a, env_here(a, 0)); return; }
+    if (!strcmp(rest, "adversaries")) { env_adversaries(a, env_here(a, 0)); return; }
     if (!strcmp(rest, "remove")) { env_set(a, env_here(a, 0), ""); return; }
 
     if (!strncmp(rest, "map ", 4)) {

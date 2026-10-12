@@ -30,7 +30,7 @@ plan is waiting to be built.*
 
 What is still owed, in the order the user set:
 
-1. **The findings the reviews left open**: docs/HEALTH.md, *Left open by reviews* (rows 1-45
+1. **The findings the reviews left open**: docs/HEALTH.md, *Left open by reviews* (rows 1-45 and 47
    and B1-B12; Fable's ranking of them is there). First: B11, the card round trip in
    `card_clean`, and row 10's test of two holders of one map.
 2. **A thin agent skill** (the user, 2026-10-09, as a follow-up after step 6). A user-level skill
