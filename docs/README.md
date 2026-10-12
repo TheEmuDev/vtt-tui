@@ -51,7 +51,7 @@ source: the column below is a copy, changed in the same commit.
 |---|---|
 | [PICTURES.md](PICTURES.md) | picture handouts: a finished plan, parked 2026-10-03 |
 | [VEHICLES.md](VEHICLES.md) | vehicles (an area that moves, with riders): a reviewed plan, parked 2026-10-12 |
-| [V2.md](V2.md) | vtt 2.0, the rewrite (branch `vtt-2.0`): a plan awaiting sign-off, 2026-10-12 |
+| [V2.md](V2.md) | vtt 2.0, the rewrite (branch `vtt-2.0`): a plan, its questions answered 2026-10-12; not built |
 | [reviews/](reviews/) | the three reviews V2.md rests on (agent architecture, performance, testing), 2026-10-12: reports as written, true of e7c58e9 |
 
 A new page gets a row here in the commit that adds it.
