@@ -47,5 +47,6 @@ source: the column below is a copy, changed in the same commit.
 | page | what it is |
 |---|---|
 | [PICTURES.md](PICTURES.md) | picture handouts: a finished plan, parked 2026-10-03 |
+| [VEHICLES.md](VEHICLES.md) | vehicles (an area that moves, with riders): a plan, awaiting sign-off, 2026-10-11 |
 
 A new page gets a row here in the commit that adds it.

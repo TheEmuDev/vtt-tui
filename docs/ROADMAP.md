@@ -27,6 +27,10 @@ Item 1 was decided 2026-09-27, the rest 2026-09-29.
   blessed circle -- that stays on the map, tinted, for the GM and, when the GM says so, the
   players; taken away by name (`remove`). Perhaps blocking sight, as fog does. Builds on named
   areas and the range tint.
+- **24. Vehicles** (decided 2026-10-11). A carriage, a cart, a raft: a named area that moves,
+  carrying whoever stands on it; any creature can be switched to not riding. Trains and
+  airships are maps of their own, with what exists. The plan: docs/VEHICLES.md, awaiting
+  sign-off.
 - **8. Map import from generators.** A `--import` map tool reading Watabou's One Page Dungeon
   JSON (and perhaps donjon's text) into a `.vtt` map: rooms, doors, walls, the generator's
   notes as GM notes. For prep, which is all hand work or an agent's room language today. JSON
