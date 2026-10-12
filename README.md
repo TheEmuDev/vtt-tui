@@ -1326,7 +1326,7 @@ use, and how `:dmg` marks HP. Available: `none`, `daggerheart`.
 | `:serve ...` | the [players' view](#the-players-view-serve-mirror); `:serve off` stops it |
 | `:player preview` | show the players' view on your screen; `:player floor NAME\|auto` pins their [floor](#floors); `:player camera follow\|party\|hold` their camera |
 | `:mirror` | open a second terminal with the players' view |
-| `:agent on` | open the [control channel](#control-channel-agent-vtt---ctl) for an AI agent; `:agent off` switches it off (proposals from `--apply` still come) |
+| `:agent on` | open the [control channel](#control-channel-agent-vtt---ctl) for an AI agent; `:agent off` switches it off (every request is then refused, with a line saying to switch it on) |
 | `:roll EXPR` | roll dice; `:roll NAME = EXPR` saves a named roll, `:rolls` lists them |
 | `:log` | start / stop the [session log](#session-log-log) |
 | `:play` `:build` | switch mode |
@@ -1500,10 +1500,9 @@ The control channel lets an agent or script read the map open in a running vtt a
 changes to it (see *Asking an agent*).
 `:agent on` switches it on (or `--agent` at startup) and `:agent off` switches it off. vtt
 listens on a Unix socket in `$XDG_RUNTIME_DIR/vtt/` that only the same user can access. With
-the channel off the socket still takes proposals (an `--apply` to the open map), which change
-nothing until you accept them. It then answers no request that reads the map; a caller
-still learns the map's name and file, and what a plan's own lines say back about the squares
-and names they use (that a creature or an area it names is not there, for instance).
+the channel off every request is refused, an `--apply` to the open map included: the
+answer names the map and says to type `:agent on` in that vtt, and nothing is changed or
+read. (`--apply` is still told that the map is open, so it never writes the file under you.)
 
 `vtt --ctl REQUEST` sends a request and prints the answer; with no request it reads one from
 stdin. It exits 0 on success, 1 on an error (the reason is printed on stderr), and 2 when no
@@ -1524,7 +1523,7 @@ waiting for the GM's review - :review 1
 `vtt map.vtt --apply plan.txt` runs the same requests against a map file without a live
 session and saves it; `--new WxH` creates an empty map first if the file does not exist.
 If the map is open in a running vtt, the plan goes there instead, as a proposal for you to
-`:review`, and the file is not touched. This works with the channel off too. `--wait
+`:review`, and the file is not touched. With the channel off it is refused instead, and says so. `--wait
 SECONDS` then waits for your verdict: it exits 0 when you accept, 3 when the time runs out,
 4 when you scrap it, and 5 when you send it back, with your line of feedback on stdout. If a
 running vtt does not answer whether it has the map open (it is stopped, or you are in your

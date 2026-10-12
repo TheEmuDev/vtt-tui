@@ -139,7 +139,9 @@ static void do_status(App *a, FILE *out, int own)
     else if (!a->ctl_auto) fputs("edits proposed, for the GM to review\n", out);
     else if (busy)         fprintf(out, "edits proposed, landing when the GM is back: %s\n", busy);
     else                   fputs("edits land at once (:agent accept auto)\n", out);
-    fprintf(out, "agent %s\n", a->agent_on ? "on" : "off - proposals, status and wait only");
+    fprintf(out, "agent %s\n", a->agent_on ? "on" : "off");
+    /* The newest event's number: what a first `wait` is given. */
+    fprintf(out, "seq %u\n", a->event_seq);
 }
 
 /* An optional last word that must be `json`. */
@@ -1220,8 +1222,9 @@ static int rq_wait(RQ_ARGS)
     /* wait [SEQ] [for SECONDS]: every event after SEQ (unsaid: from
      * now), held until there is one or the time is up. */
     unsigned seq = a->event_seq;
-    int      secs = CTL_WAIT_DEFAULT_S, at = 1, k;
+    int      secs = CTL_WAIT_DEFAULT_S, at = 1, k, said = 0;
     if (at < n && strcmp(w[at], "for") != 0) {
+        said = 1;
         if (!word_int(w[at], 0, 0x7fffffff, &k)) { snprintf(err, errsz, "wait [SEQ] [for SECONDS]: %.20s is not an event's number", w[at]); return -1; }
         seq = (unsigned)k;
         at++;
@@ -1235,7 +1238,9 @@ static int rq_wait(RQ_ARGS)
     a->agent_seen_ms = a->now_ms ? a->now_ms : 1;
     /* Held only where there is a socket to hold it on (app_tick):
      * --apply, the bench and the fuzzer are answered at once. */
-    if (app_events_after(a, seq) || !a->ctl_can_hold || secs == 0) app_events_write(a, out, seq);
+    /* `wait 0` asks for everything kept: an answer, not a wait, even when
+     * nothing is. */
+    if (app_events_after(a, seq) || !a->ctl_can_hold || secs == 0 || (said && seq == 0)) app_events_write(a, out, seq);
     else {
         a->ctl_held     = 1;
         a->ctl_hold_seq = seq;
@@ -1439,7 +1444,7 @@ typedef struct {
     const char *doc;
 } Request;
 
-#define E (CTL_RQ_EDIT | CTL_RQ_OFF)
+#define E CTL_RQ_EDIT
 static const Request REQUESTS[] = {
     { "room",     E, rq_edit, "room [NAME] REGION\nroom NAME SQUARE WxH\nroom NAME WxH east|west|north|south of ROOM [gap N] [top|middle|bottom|left|right]",
       "a room: floor with a wall round it, named as an area when NAME is given" },
@@ -1469,17 +1474,17 @@ static const Request REQUESTS[] = {
     { "scenes",     0, rq_scenes, "scenes", "the map's scenes" },
     { "links",      0, rq_links, "links [json]", "every link: number, kind, ends, size, one-way, secret" },
     { "floors",     0, rq_floors, "floors", "the floors, top first, and which the GM is looking at" },
-    { "status",     CTL_RQ_OFF | CTL_RQ_LIVE | CTL_RQ_NOMAP, rq_status, "status", "the map, the GM's screen and floor, whether edits are taken now" },
+    { "status",     CTL_RQ_LIVE | CTL_RQ_NOMAP, rq_status, "status", "the map, the GM's screen and floor, whether edits are taken now" },
     { "marked",     CTL_RQ_LIVE, rq_marked, "marked [json]", "what the GM is pointing at: cursor, box, selection, ruler, pings" },
 
-    { "propose",  CTL_RQ_OFF | CTL_RQ_LIVE, rq_propose, "propose [\"a line for the GM\"]", "first line of a request: its edits are a proposal for the GM to review" },
+    { "propose",  CTL_RQ_LIVE, rq_propose, "propose [\"a line for the GM\"]", "first line of a request: its edits are a proposal for the GM to review" },
     { "job",      0, rq_job_any, "job N take|drop\njob N area REGION\njob N say \"a line for the GM\"\njob N dump [REGION]|check|describe\njob N propose [\"a line for the GM\"]",
       "one job: take it or give it up, show the GM where you work, tell the GM a line, read its proposal back, or answer it with this request's edits" },
     { "jobs",     0, rq_job, "jobs [json]", "every job and where it stands" },
-    { "wait",     CTL_RQ_OFF | CTL_RQ_ALONE | CTL_RQ_NOMAP, rq_wait, "wait [SEQ] [for SECONDS]", "every event after SEQ; a running vtt holds the answer until there is one or the time is up" },
+    { "wait",     CTL_RQ_ALONE | CTL_RQ_NOMAP, rq_wait, "wait [SEQ] [for SECONDS]", "every event after SEQ; a running vtt holds the answer until there is one or the time is up" },
     { "undo",     CTL_RQ_ALONE | CTL_RQ_LIVE, rq_undo, "undo", "take back your last accepted change, while nothing has happened since" },
     { "holds",    CTL_RQ_OFF | CTL_RQ_NOMAP, rq_holds, "holds DEVICE INODE", "whether that file is the map open here (--apply asks)" },
-    { "help",     CTL_RQ_OFF | CTL_RQ_NOMAP, rq_help, "help [VERB|json]", "these requests, or how one is written" },
+    { "help",     CTL_RQ_NOMAP, rq_help, "help [VERB|json]", "these requests, or how one is written" },
 };
 #undef E
 #define NREQUESTS ((int)(sizeof REQUESTS / sizeof *REQUESTS))
@@ -1558,13 +1563,14 @@ static const char *lonely(char w[][CTL_WORD_MAX], int n)
     return NULL;
 }
 
-/* What a request over the socket may say with the channel off: nothing
- * that reads the map, nothing that changes it. A proposal does neither
- * until the GM accepts it. */
+/* What a request over the socket may say with the channel off: nothing but
+ * --apply's own question, whether the map it was given is open here. The
+ * rest is refused whole (docs/V2.md, ruling 9; it reverses docs/CONFLICTS.md's
+ * decision 5, under which proposals, status and wait were taken). */
 static int off_takes(char w[][CTL_WORD_MAX], int n)
 {
-    const Request *r = rq_find(w[0]);
-    return r && (r->flags & CTL_RQ_OFF) && (strcmp(w[0], "scene") != 0 || scene_is_edit(w, n));
+    const Request *r = n > 0 ? rq_find(w[0]) : NULL;
+    return r && (r->flags & CTL_RQ_OFF);
 }
 
 /* Runs one line through its row. */
@@ -1672,10 +1678,11 @@ char *app_ctl_exec(App *a, const char *req, size_t *len)
          * the map closing is an event). */
         if (n > 0 && !a->map && !(rq_find(w[0]) && (rq_find(w[0])->flags & CTL_RQ_NOMAP)))
             snprintf(err, sizeof err, "no map is open");
-        /* The channel off: over the socket, only what changes nothing and
-         * shows nothing of the map (decision 5). */
+        /* The channel off: over the socket, nothing is taken. The map is
+         * named so that a caller with several vtts open knows which. */
         else if (n > 0 && a->ctl_can_hold && !a->agent_on && !off_takes(w, n))
-            snprintf(err, sizeof err, "the agent channel is off - only proposals, status and wait are taken (:agent on)");
+            snprintf(err, sizeof err, "the agent channel is off%s%.63s - type :agent on in that vtt, then ask again",
+                     a->map ? " in the vtt with " : "", a->map ? a->map->name : "");
         int rc = err[0] ? -1 : run_line(a, line, w, n, out, &ed, err, sizeof err);
         if (rc == 0) continue;
         if (rc == -2) snprintf(verdict, sizeof verdict, "busy: %s", err);
@@ -1727,7 +1734,7 @@ void app_agent_command(App *a, const char *rest)
     Ctl *c = &a->ctl;
     char msg[CTL_PATH_MAX + 96];
     if (!*rest) {
-        if (!a->agent_on) app_set_status_gm(a, "the agent channel is off - :agent on opens it; proposals (--apply to this map) still come");
+        if (!a->agent_on) app_set_status_gm(a, "the agent channel is off - :agent on opens it; until then every request is refused");
         else {
             snprintf(msg, sizeof msg, "agent channel on at %s - %u request%s so far; changes %s", c->path,
                      c->requests, c->requests == 1 ? "" : "s", a->ctl_auto ? "land at once" : "wait for :review");
@@ -1754,7 +1761,7 @@ void app_agent_command(App *a, const char *rest)
          * plan comes as a proposal. Reads and at-once landing stop. */
         a->agent_on = 0;
         a->agent_seen_ms = 0;                /* nobody to tell of the map: the checkpoint may stop */
-        app_note_gm(a, "agent channel off - a proposal (--apply to this map) still comes for :review");
+        app_note_gm(a, "agent channel off - requests are refused until :agent on");
         return;
     }
     if (strcmp(rest, "on") != 0) { app_set_status_gm(a, ":agent on, :agent off, :agent accept auto|review, :agent command CMD, or :agent to ask"); return; }

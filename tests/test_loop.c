@@ -159,11 +159,23 @@ void test_loop(void)
     CHECK_EQ(g.a.agent_on, 1);
     loop_wait(&g.l, 1200);
     CHECK_EQ(loop_nfds(&g.l), LOOP_FIXED + 1);                /* the channel's listener beside the two */
+    uint64_t now = 1300;
+    {   /* HEALTH 48: on a vtt with no event yet this was held the default 60 s. */
+        CASE("wait 0 over the socket is answered, not held, when nothing has happened yet");
+        CtlReader r0 = { ctl_raw_connect(g.a.ctl.path), "", 0, 0 };
+        CHECK(write(r0.fd, "wait 0\n", 7) == 7);
+        shutdown(r0.fd, SHUT_WR);
+        for (int k = 0; k < 200 && !ctl_read_some(&r0); k++) { turn(&g, now++); poll(NULL, 0, 1); }
+        CHECK_EQ(r0.done, 1);
+        CHECK(!strcmp(r0.buf, "ok\nseq 0\n"));
+        CHECK_EQ(ctl_waiters(&g.a.ctl), 0);
+        close(r0.fd);
+        CASE("an agent's held wait is answered in the turn of the key that made the event");
+    }
     CtlReader rd = { ctl_raw_connect(g.a.ctl.path), "", 0, 0 };
     CHECK(rd.fd >= 0);
     CHECK(write(rd.fd, "wait for 600\n", 13) == 13);
     shutdown(rd.fd, SHUT_WR);
-    uint64_t now = 1300;
     for (int k = 0; k < 200 && ctl_waiters(&g.a.ctl) < 1; k++) { turn(&g, now++); poll(NULL, 0, 1); }
     CHECK_EQ(ctl_waiters(&g.a.ctl), 1);
     CHECK_EQ(ctl_read_some(&rd), 0);               /* held: no answer yet */

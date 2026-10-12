@@ -561,7 +561,8 @@ file req.vtt
 screen build, normal mode
 undo 0 back, 0 forward
 edits taken
-agent off - proposals, status and wait only
+agent off
+seq 0
    B C
   -----
 2 |. .
@@ -1841,7 +1842,8 @@ screen build, normal mode
 floor the whole map
 undo 0 back, 0 forward
 edits taken
-agent off - proposals, status and wait only
+agent off
+seq 0
    B C
 
 2  . .

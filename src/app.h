@@ -265,10 +265,10 @@ typedef struct {
     int      ctl_auto;
     int      ctl_direct;
     /* :agent on. The socket listens whenever vtt runs interactively, so
-     * --apply can find a map that is open (decision 5); off, a request over
-     * it may only propose, ask status and wait -- no reads of the map, and
-     * nothing lands at once. Requests not from the socket (the tests, the
-     * bench) are not asked. */
+     * --apply can find a map that is open; off, a request over it is refused
+     * with a line saying to turn it on (docs/V2.md, ruling 9), all but
+     * --apply's `holds`. Requests not from the socket (the tests, the bench)
+     * are not asked. */
     int      agent_on;
     /* :agent command (app_agent.c): what vtt starts for each :ask and each
      * job sent back, the job on its stdin. Empty: none. */

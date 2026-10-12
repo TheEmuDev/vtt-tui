@@ -1539,7 +1539,7 @@ void test_ctl_live(void)
     CHECK_EQ(a.agent_on, 0);
     CHECK_EQ(ctl_active(&a.ctl), 1);
     CHECK(access(want, F_OK) == 0);
-    CHECK(strstr(a.status, "agent channel off - a proposal") != NULL);
+    CHECK(strstr(a.status, "agent channel off - requests are refused") != NULL);
     CHECK_EQ(a.agent_seen_ms, 0u);
     app_tick(&a, prof_now_ns() / 1000000u);
     CHECK(a.map->cp == NULL);                          /* nothing of the map is told */
@@ -1547,31 +1547,32 @@ void test_ctl_live(void)
     press(&a, ":agent off\r");
     CHECK(strstr(a.status, "already off") != NULL);
 
-    CASE("off, over the socket: status, holds, wait and proposals; no read of the map, nothing at once");
+    /* docs/V2.md, ruling 9: off refuses, and says which vtt to turn on. Until
+     * then (docs/CONFLICTS.md, decision 5) proposals, status and wait were taken. */
+    CASE("off, over the socket: every request is refused with the map's name and what to type; only holds is answered");
     {
-        char *t = sock_ask(&a, "dump\n");
-        CHECK(t && !strcmp(t, "error: line 1: the agent channel is off - only proposals, status and wait are taken (:agent on)\n"));
-        free(t);
-        static const char *const REFUSED[] = { "jobs\n", "marked\n", "describe\n", "undo\n", "job 1 take\n",
-                                               "scene save Now\n", "scene Start remove\n", "scene diff Start\n",
-                                               "tile A1 water\ndump A1\n" };
+        const char *off = "error: line 1: the agent channel is off in the vtt with Two Rooms - type :agent on in that vtt, then ask again\n";
+        static const char *const REFUSED[] = { "dump\n", "status\n", "help\n", "wait 0\n", "wait for 0\n", "jobs\n", "marked\n",
+                                               "describe\n", "undo\n", "job 1 take\n", "scene save Now\n", "scene Nope\n",
+                                               "tile A1 water\n", "propose \"a well\"\ntile B2 water\n",
+                                               "propose apply \"plan.txt\"\ntile B2 hazard\n" };
+        a.ctl_auto = 1;                                    /* nor does anything land */
+        int was = map_tile(a.map, 1, 1);
         for (size_t k = 0; k < sizeof REFUSED / sizeof *REFUSED; k++) {
-            t = sock_ask(&a, REFUSED[k]);
-            CHECK(t && strstr(t, ": the agent channel is off"));
+            char *t = sock_ask(&a, REFUSED[k]);
+            if (!t || strcmp(t, off) != 0) printf("    not refused: %s", REFUSED[k]);
+            CHECK(t && !strcmp(t, off));
             free(t);
         }
-        t = sock_ask(&a, "scene Nope\n");                  /* putting one back is a proposal */
-        CHECK(t && strstr(t, "no scene called Nope"));
-        free(t);
-        CHECK_EQ(a.jobs[0].used, 0);
-        t = sock_ask(&a, "status\n");
-        CHECK(t && !strncmp(t, "ok\n", 3) && strstr(t, "\nagent off - proposals, status and wait only\n"));
-        free(t);
+        a.ctl_auto = 0;
+        CHECK_EQ(map_tile(a.map, 1, 1), was);
+        CHECK_EQ(a.jobs[0].used, 0);                       /* and nothing became a job */
+        /* --apply's own question, or it would take an open map for a file nobody holds and write it. */
         struct stat fs;
         char req[96];
         CHECK(stat("tests/fixtures/two-rooms.vtt", &fs) == 0);
         snprintf(req, sizeof req, "holds %llu %llu\n", (unsigned long long)fs.st_dev, (unsigned long long)fs.st_ino);
-        t = sock_ask(&a, req);
+        char *t = sock_ask(&a, req);
         CHECK(t && !strcmp(t, "ok\nholds\n"));
         free(t);
         t = sock_ask(&a, "holds 1 2\n");
@@ -1580,18 +1581,6 @@ void test_ctl_live(void)
         t = sock_ask(&a, "holds here\n");
         CHECK(t && strstr(t, "holds DEVICE INODE"));
         free(t);
-        a.ctl_auto = 1;                                    /* at once is :agent on's */
-        int was = map_tile(a.map, 1, 1);
-        t = sock_ask(&a, "propose apply \"plan.txt\"\ntile B2 hazard\n");
-        CHECK(t && !strncmp(t, "ok\nproposal #", 13) && strstr(t, "\nwaiting for the GM's review"));
-        free(t);
-        a.ctl_auto = 0;
-        CHECK_EQ(map_tile(a.map, 1, 1), was);
-        int found = 0;
-        for (int i = 0; i < JOB_MAX; i++)
-            found += a.jobs[i].used && a.jobs[i].from == JOB_FROM_APPLY && !strcmp(a.jobs[i].text, "--apply plan.txt");
-        CHECK_EQ(found, 1);
-        jobs_reset(&a);
     }
 
     CASE("--ctl finds no vtt with its channel on, though one listens (exit 2)");
@@ -1609,6 +1598,39 @@ void test_ctl_live(void)
     }
     close(held.fd);
     ctl_pump(&a, waiters_are, &(WaitersAre){ &a, 0 });
+
+    CASE("--apply to a map open in a vtt whose channel is off: refused, saying what to type, and the file is not written");
+    {
+        const char *file = "tests/fixtures/two-rooms.vtt";
+        struct stat f0, f1;
+        stat(file, &f0);
+        char errf[700];
+        snprintf(errf, sizeof errf, "%s/apply-err.txt", sb.dir);
+        fflush(stdout);
+        pid_t pid = fork();
+        if (pid == 0) {
+            int o = open("/dev/null", O_WRONLY);
+            dup2(o, 1);
+            int e = open(errf, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+            dup2(e, 2);
+            int rc = ctl_apply_open(file, "plan.txt", "tile B2 hazard\n", 15, -1);
+            _exit(rc < 0 ? 99 : rc);
+        }
+        int stc[3] = { (int)pid, 0, 0 };
+        ctl_pump(&a, ctl_child_done, stc);
+        CHECK(stc[1] && WIFEXITED(stc[2]) && WEXITSTATUS(stc[2]) == 1);     /* not 99: it did not take the file for nobody's */
+        FILE *f = fopen(errf, "r");
+        char  text[512] = "";
+        size_t n = f ? fread(text, 1, sizeof text - 1, f) : 0;
+        text[n] = '\0';
+        if (f) fclose(f);
+        CHECK(strstr(text, "the agent channel is off in the vtt with Two Rooms - type :agent on") != NULL);
+        stat(file, &f1);
+        CHECK(f0.st_mtime == f1.st_mtime && f0.st_size == f1.st_size && f0.st_ino == f1.st_ino);
+        CHECK_EQ(a.jobs[0].used, 0);
+    }
+    press(&a, ":agent on\r");
+    CHECK_EQ(a.agent_on, 1);
 
     CASE("--apply to a map open in a vtt: a proposal there, the file untouched; --wait gives the GM's verdict");
     {
@@ -2042,7 +2064,7 @@ void test_ctl_table(void)
         }
         CHECK(!strcmp(alone, "wait undo "));
         CHECK(!strcmp(nomap, "status wait holds help "));
-        CHECK(!strcmp(off, "status propose wait holds help "));
+        CHECK(!strcmp(off, "holds "));         /* --apply's own question, and nothing else */
     }
 
     CASE("with no map open, help still answers and a read still does not");
@@ -2068,6 +2090,11 @@ void test_ctl_table(void)
     free(h);
     h = ctl_ask(&a, "job 1");
     CHECK(!strncmp(h, "error: line 1: ", 15));          /* bare `job N` is no request, and help does not offer it */
+    free(h);
+
+    CASE("status ends with seq, the number a first wait is given");
+    h = ctl_ask(&a, "status");
+    CHECK(strstr(h, "\nagent off\nseq 0\n") != NULL);
     free(h);
 
     CASE("help changes nothing and makes no proposal");

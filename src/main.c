@@ -549,10 +549,10 @@ static int run_interactive(const Options *o)
             app_set_status(&a, msg);
         }
     }
-    /* The socket always: an --apply to a map open here must find it, and
-     * comes as a proposal (docs/CONFLICTS.md, decision 5). What it takes
-     * beyond that is :agent on's. Failing to listen is only worth a word
-     * when the channel was asked for. */
+    /* The socket always: an --apply to a map open here must find it, or
+     * it would write the file under the GM. What it takes beyond that
+     * question is :agent on's. Failing to listen is only worth a word when
+     * the channel was asked for. */
     {
         char err[CTL_PATH_MAX + 64];
         /* Said either way: with no socket, an --apply to this map cannot
