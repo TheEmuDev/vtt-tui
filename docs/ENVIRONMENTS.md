@@ -9,6 +9,12 @@ to them. **The largest of the three: two new fields, a file version, a store, an
 About 700 lines with its tests and docs, in three steps of which the last two can be
 dropped; step 1 alone is about 300.
 
+## Progress
+
+*Not started (2026-10-12). Built after conditions (docs/CONDITIONS.md, whose Progress says
+where that stands). Three steps, each reviewed before the next: the card on the map and
+the area; potential adversaries in the picker; the SRD's environments imported.*
+
 ## What it does
 
 - **An environment is an ordinary card** (docs/CARDS.md) that the map or an area names, as

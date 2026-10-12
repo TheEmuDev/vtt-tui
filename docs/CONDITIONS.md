@@ -8,6 +8,32 @@ each does, and Vulnerable comes and goes with a creature's last Stress.
 **Additive: a table in the ruleset, one hook where counters change. No new data, no file
 change.** About 300 lines with its tests and docs.
 
+## Progress
+
+*Not started. Next to build (2026-10-12): summoning, item 19, went in first as 8097d0c.*
+
+Where to begin, from what building summoning turned up:
+
+1. `ruler.c`/`ruler.h`: `Ruleset.conditions` and `Ruleset.auto_condition`, filled in for
+   Daggerheart. The three texts are the SRD's, word for word: check them against the SRD
+   itself before writing them, and cite the page.
+2. The marker prompt (`PROMPT_STATUS_LABEL`, app.c about line 741): a whole-word match,
+   any case, takes the table's spelling and color.
+3. `ruleset_counter_changed(rs, before, after)`, called where the GM edits a counter: the
+   `s v` prompt (app.c, the `counter_apply` call) and `<`/`>` (`counter_step`, app_play.c).
+   Counters count what is left, so the last Stress marked is Stress at 0.
+4. The card box: `app_card_shown` (app_draw.c) is the one test, and `app_view_differs`
+   reads it; the creature with a known marker and no card goes into that function.
+5. `:condition`, the `?` page (src/keys.c), the README's *Daggerheart*, CODEMAP, a
+   `perf.sh` row, then the Fable review, HEALTH.md's line for it, and roadmap item 13 to
+   *Built*.
+
+Lessons from summoning that apply here: a plain `app_set_status` reaches the phones unless
+fog or a hidden creature is about, so anything naming a creature or its numbers is
+`app_set_status_gm`; `make perf` three times and `tools/median.py` for the tables, and A/B
+any row that moves by a tenth against the commit before; `make test` takes over two
+minutes from clean.
+
 ## What it does
 
 - **A known marker is still a marker.** `s` then the whole word in any case (`vulnerable`)
