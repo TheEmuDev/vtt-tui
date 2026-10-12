@@ -237,7 +237,7 @@ static int waiters_are(void *ctx)
     return ctl_waiters(&w->a->ctl) == w->n;
 }
 
-static int ctl_raw_connect(const char *path)
+int ctl_raw_connect(const char *path)
 {
     int fd = socket(AF_UNIX, SOCK_STREAM, 0);
     struct sockaddr_un sa;
@@ -248,7 +248,7 @@ static int ctl_raw_connect(const char *path)
     return fd;
 }
 
-static int ctl_read_some(void *ctx)
+int ctl_read_some(void *ctx)
 {
     CtlReader *rd = ctx;
     for (;;) {

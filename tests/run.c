@@ -84,6 +84,7 @@ int main(int argc, char **argv)
         { "ctledit", test_ctl_edits },
         { "ctlcap", test_ctl_cap },
         { "ctllive", test_ctl_live },
+        { "loop", test_loop },
         { "webpage", test_webpage },
         { "turns",  test_turns },
         { "turnkeys", test_turn_keys },

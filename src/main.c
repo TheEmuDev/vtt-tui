@@ -14,17 +14,13 @@
 #include "dice.h"
 #include "draw.h"
 #include "input.h"
+#include "loop.h"
 #include "maptools.h"
 #include "prof.h"
 #include "render.h"
 #include "term.h"
 #include "util.h"
 #include "watch.h"
-
-/* Upper bound on bytes taken from the terminal in one pass of the event
- * loop, so a flood of input can never postpone the redraw indefinitely. Far
- * larger than any burst a held key produces. */
-#define INPUT_DRAIN_MAX ((size_t)64 * 1024)
 
 typedef struct {
     const char *trace_path;
@@ -524,13 +520,13 @@ static int run_interactive(const Options *o)
     a.ask_holders = 1;              /* a GM is here to be asked */
     if (o->map_path) app_open_map(&a, o->map_path);
 
-    InputParser p;
-    input_init(&p);
+    Loop l;
+    loop_init(&l, &a, &t, &r);
 
     /* Optional scripted input for reproducing a session on a real terminal. */
     if (o->script_path) {
         Script sc = read_script(o->script_path);
-        input_feed(&p, sc.bytes, sc.len);
+        input_feed(&l.in, sc.bytes, sc.len);
         script_free(&sc);
     }
 
@@ -566,128 +562,16 @@ static int run_interactive(const Options *o)
     }
 
     /* Paint once before blocking so the first frame is up immediately. */
-    prof_frame_begin();
-    app_frame(&a, &t, prof_now_ns() / 1000000u);
-    prof_frame_end();
-    prof_set_counters(r.cells_changed, r.bytes_written);
-    a.dirty = 0;
-
-    /* stdin, the signal pipe, then whatever the remote view is listening
-     * on: its entries are rebuilt every time round, since clients come and go. */
-    struct pollfd fds[2 + 1 + NET_MAX_CLIENTS + 1 + CTL_SLOTS];
-    fds[0].fd = t.in_fd;
-    fds[0].events = POLLIN;
-    fds[1].fd = term_signal_fd(&t);
-    fds[1].events = POLLIN;
+    loop_frame(&l, prof_now_ns() / 1000000u);
 
     while (a.running) {
-        /* Block indefinitely when there is nothing outstanding: an idle vtt
-         * must cost zero CPU. The only reason to wake on a timer is an
-         * unresolved ESC, which needs a decision after a short grace period. */
-        int timeout = input_pending(&p) ? INPUT_ESC_TIMEOUT_MS : -1;
-        int nnet = net_pollfds(&a.net, fds + 2, 1 + NET_MAX_CLIENTS);
-        /* With clients attached, wake now and then for keep-alives. */
-        if (nnet > 1 && (timeout < 0 || timeout > 1000)) timeout = 1000;
-        /* And once, for the autosave, when there is unsaved work it has
-         * not yet copied: a quiet vtt with nothing owed still sleeps. */
-        int due = app_autosave_due(&a, prof_now_ns() / 1000000u);
-        if (due >= 0 && (timeout < 0 || due < timeout)) timeout = due;
-        /* And when a ping's ring is due to come down. */
-        int pd = app_ping_due(&a, prof_now_ns() / 1000000u);
-        if (pd >= 0 && (timeout < 0 || pd < timeout)) timeout = pd;
-        /* And when the map's changes are due to be told to an agent. */
-        int ed = app_events_due(&a, prof_now_ns() / 1000000u);
-        if (ed >= 0 && (timeout < 0 || ed < timeout)) timeout = ed;
-        /* And when a file someone else wrote is due to be read. */
-        int dd = app_disk_due(&a, prof_now_ns() / 1000000u);
-        if (dd >= 0 && (timeout < 0 || dd < timeout)) timeout = dd;
-        /* And for an agent's connection that has gone quiet. */
-        int nctl = ctl_pollfds(&a.ctl, fds + 2 + nnet, 1 + CTL_SLOTS);
-        int cd = ctl_due(&a.ctl, prof_now_ns() / 1000000u);
-        if (cd >= 0 && (timeout < 0 || cd < timeout)) timeout = cd;
-
-        int nready = poll(fds, (nfds_t)(2 + nnet + nctl), timeout);
+        int timeout = loop_wait(&l, prof_now_ns() / 1000000u);
+        int nready  = poll(l.fds, (nfds_t)loop_nfds(&l), timeout);
         if (nready < 0) {
             if (errno == EINTR) continue;
             break;
         }
-        if (nnet > 0) net_service(&a.net, fds + 2, nnet, prof_now_ns() / 1000000u);
-        if (nctl > 0) ctl_service(&a.ctl, fds + 2 + nnet, nctl, prof_now_ns() / 1000000u);
-        app_tick(&a, prof_now_ns() / 1000000u);
-
-        if (nready > 0 && (fds[1].revents & POLLIN)) {
-            if (term_drain_signals(&t) && term_update_size(&t)) {
-                rnd_resize(&r, t.w, t.h);
-                a.dirty = 1;
-            }
-        }
-
-        if (nready > 0 && (fds[0].revents & (POLLIN | POLLHUP))) {
-            /* Drain everything the terminal has queued, dispatching as we go.
-             * Coalescing a burst of held-down keys into one frame is what
-             * keeps movement snappy: the frame is still drawn once, after
-             * this loop.
-             *
-             * Reads are sized to what the parser can still hold, because
-             * input_feed() drops the excess -- a long burst would otherwise
-             * lose keystrokes silently. The byte cap bounds how long one
-             * iteration can spend here so a flood cannot starve the redraw. */
-            int eof = 0;
-            size_t drained = 0;
-
-            while (drained < INPUT_DRAIN_MAX && term_input_ready(&t)) {
-                Key    k;
-                size_t room = input_room(&p);
-                if (room == 0) {
-                    while (input_next(&p, &k)) app_key(&a, k);
-                    room = input_room(&p);
-                    if (room == 0) break;    /* cannot happen; guard anyway */
-                }
-
-                char   buf[512];
-                size_t want = room < sizeof buf ? room : sizeof buf;
-
-                ssize_t n = read(t.in_fd, buf, want);
-                if (n > 0) {
-                    input_feed(&p, buf, (size_t)n);
-                    drained += (size_t)n;
-                    while (input_next(&p, &k)) app_key(&a, k);
-                    continue;
-                }
-                if (n == 0)         { eof = 1; break; }
-                if (errno == EINTR) continue;
-                break;
-            }
-            if (eof) break;
-        }
-
-        Key k;
-        int handled = 0;
-        while (input_next(&p, &k)) { app_key(&a, k); handled = 1; }
-
-        /* poll() returned with nothing readable, so the pending ESC really
-         * was the Escape key rather than a slow sequence. */
-        if (nready == 0 && input_pending(&p)) {
-            if (input_timeout(&p, &k)) { app_key(&a, k); handled = 1; }
-        }
-        (void)handled;
-        /* A waiting agent hears of a key's verdict now, not at the next
-         * wake: with nothing else due, poll would sleep on it for ever.
-         * Every turn, since keys are handled in the drain above too. */
-        app_events_flush(&a, prof_now_ns() / 1000000u);
-
-        if (a.dirty) {
-            prof_frame_begin();
-            app_frame(&a, &t, prof_now_ns() / 1000000u);
-            prof_frame_end();
-            prof_set_counters(r.cells_changed, r.bytes_written);
-            if (net_clients(&a.net)) prof_set_net((uint32_t)net_clients(&a.net), a.net.frame_bytes);
-            a.dirty = 0;
-        }
-
-        /* Only a genuine terminal failure ends the loop; falling behind is
-         * waited out inside term_write(). */
-        if (t.dead) break;
+        if (loop_once(&l, nready, prof_now_ns() / 1000000u)) break;
     }
 
     app_free(&a);

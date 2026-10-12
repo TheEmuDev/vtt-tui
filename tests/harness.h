@@ -112,6 +112,10 @@ typedef struct {
 extern const WireSink WC_SINK;
 
 typedef struct { int fd; char buf[8192]; size_t n; int done, reset; } CtlReader;
+/* test_ctl.c's raw client: a connection to the channel's socket, and a read
+ * of whatever has arrived (1 once the answer has ended). */
+int ctl_raw_connect(const char *path);
+int ctl_read_some(void *ctx);
 
 /* ------------------------------------------------------------ map tools */
 
@@ -308,5 +312,6 @@ void test_corridors(void);
 void test_corridor_edges(void);
 void test_apply(void);
 void test_ctl_live(void);
+void test_loop(void);
 
 #endif /* VTT_TEST_HARNESS_H */

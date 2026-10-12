@@ -15,7 +15,9 @@ docs/CODEMAP.md; `tests/run.c` is the table of suites and `main`, nothing else.
 - A test that expects a channel request's edits to land sets `a.ctl_auto = 1` after
   `app_init`; otherwise they arrive as a proposal. Job numbers are not lowest-free
   (`App.job_last`): reset with `jobs_reset()`.
-- Nothing covers main.c's interactive loop: drive a live vtt for that (CLAUDE.md, *Shell*).
+- The interactive loop is `src/loop.c`, and suite `loop` (test_loop.c) drives it: a pipe
+  for the keyboard, `turn()` for one pass, time as an argument. What is still untested is
+  main.c's few lines round it (`poll` itself, start-up, `--serve`): a live vtt for those.
 
 ## Writing tests
 
