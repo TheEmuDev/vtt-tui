@@ -24,6 +24,7 @@ typedef struct {
     int     async;
     int     skipped;
     ByteBuf pend;
+    size_t  pend_off;       /* how much of pend has gone: sent from here, never moved down */
 } Term;
 
 /* Puts the terminal in raw mode, switches to the alternate screen, hides the
@@ -45,12 +46,13 @@ int  term_update_size(Term *t);
 /* Drains the self-pipe. Returns 1 if a resize was signaled. */
 int  term_drain_signals(Term *t);
 
-/* Writes n bytes, returning how many were actually delivered.
+/* Writes n bytes, returning how many the terminal has or will have: taken
+ * now, or (after term_async) queued behind what it has not taken yet.
  *
  * A short return means the frame did not reach the terminal, and the caller
- * must not then believe the screen shows what it just drew. Backpressure is
- * waited out rather than treated as failure; only a real error stops it and
- * sets t->dead. */
+ * must not then believe the screen shows what it just drew; only a real
+ * error does that, and sets t->dead. A terminal that is merely behind is
+ * waited for when writes block, and queued for after term_async. */
 size_t term_write(Term *t, const char *buf, size_t n);
 
 /* True when a read() from the terminal would not block. The descriptors are
@@ -69,7 +71,7 @@ int term_input_ready(const Term *t);
 int term_async(Term *t);
 
 /* Bytes queued and not yet taken by the terminal; 0 when writes block. */
-static inline size_t term_pending(const Term *t) { return t->pend.len; }
+static inline size_t term_pending(const Term *t) { return t->pend.len - t->pend_off; }
 
 /* Sends what is queued, as far as the terminal will take it now. Returns the
  * bytes still waiting. */

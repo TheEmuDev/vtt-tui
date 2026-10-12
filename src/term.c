@@ -76,13 +76,56 @@ static int make_raw(Term *t)
  * it), before giving up on one that never will. */
 #define DRAIN_MS 1000
 
-static void term_drain(Term *t, int ms)
+/* As much of buf as the terminal takes now. Stops at the first write it
+ * would have to wait for; anything but that is the terminal gone. No
+ * allocation: the fatal handler comes through here. */
+static size_t write_some(Term *t, const char *buf, size_t n)
 {
-    while (t->pend.len && !t->dead && ms > 0) {
-        struct pollfd pfd = { t->out_fd, POLLOUT, 0 };
-        if (poll(&pfd, 1, 50) < 0 && errno != EINTR) break;
+    size_t off = 0;
+    while (off < n && !t->dead) {
+        ssize_t w = write(t->out_fd, buf + off, n - off);
+        if (w > 0) { off += (size_t)w; continue; }
+        if (w < 0 && errno == EINTR) continue;
+        if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) break;
+        t->dead = 1;
+    }
+    return off;
+}
+
+/* Waits up to *ms for the terminal to take more; what is left of *ms after. */
+static int wait_writable(Term *t, int *ms)
+{
+    struct pollfd pfd = { t->out_fd, POLLOUT, 0 };
+    int step = *ms < 0 ? -1 : *ms < 50 ? *ms : 50;
+    if (poll(&pfd, 1, step) < 0 && errno != EINTR) return -1;
+    if (*ms > 0) *ms -= step;
+    return 0;
+}
+
+size_t term_flush(Term *t)
+{
+    t->pend_off += write_some(t, (const char *)t->pend.data + t->pend_off, term_pending(t));
+    if (t->pend_off == t->pend.len) t->pend_off = t->pend.len = 0;
+    return term_pending(t);
+}
+
+/* Leaving the screen: what is queued, then the sequences that give the shell
+ * its screen back, each waited for until `ms` runs out -- a terminal that
+ * never reads again is given up on. Nothing is queued and nothing allocated:
+ * term_shutdown runs inside the fatal handler too. */
+static void term_leave(Term *t, const char *const *seq, int nseq, int ms)
+{
+    while (term_pending(t) && !t->dead && ms > 0) {
+        if (wait_writable(t, &ms) < 0) break;
         term_flush(t);
-        ms -= 50;
+    }
+    for (int i = 0; i < nseq && !term_pending(t) && !t->dead; i++) {
+        size_t n = strlen(seq[i]), off = 0;
+        while (off < n && !t->dead) {
+            off += write_some(t, seq[i] + off, n - off);
+            if (off < n && (!t->async || ms <= 0 || wait_writable(t, &ms) < 0)) break;
+        }
+        if (off < n) break;
     }
 }
 
@@ -95,23 +138,6 @@ int term_async(Term *t)
     t->out_fd = fd;
     t->async  = 1;
     return 0;
-}
-
-size_t term_flush(Term *t)
-{
-    size_t off = 0;
-    while (off < t->pend.len && !t->dead) {
-        ssize_t w = write(t->out_fd, t->pend.data + off, t->pend.len - off);
-        if (w > 0) { off += (size_t)w; continue; }
-        if (w < 0 && errno == EINTR) continue;
-        if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) break;
-        t->dead = 1;                    /* the terminal has gone away */
-    }
-    if (off) {
-        memmove(t->pend.data, t->pend.data + off, t->pend.len - off);
-        t->pend.len -= off;
-    }
-    return t->pend.len;
 }
 
 int term_init(Term *t)
@@ -170,22 +196,19 @@ int term_init(Term *t)
     return 0;
 }
 
+static const char *const LEAVE[] = { ESC_SGR_RESET, ESC_CURS_SHOW, ESC_ALT_OFF };
+
 void term_shutdown(Term *t)
 {
     if (!t) return;
 
-    if (t->altscreen) {
-        term_write(t, ESC_SGR_RESET, sizeof ESC_SGR_RESET - 1);
-        term_write(t, ESC_CURS_SHOW, sizeof ESC_CURS_SHOW - 1);
-        term_write(t, ESC_ALT_OFF, sizeof ESC_ALT_OFF - 1);
-        t->altscreen = 0;
-    }
-    term_drain(t, DRAIN_MS);
+    term_leave(t, LEAVE, t->altscreen ? 3 : 0, DRAIN_MS);
+    t->altscreen = 0;
     if (t->async) {
         close(t->out_fd);
         t->out_fd = STDOUT_FILENO;
         t->async  = 0;
-        t->pend.len = 0;
+        t->pend_off = t->pend.len = 0;
         if (!g_in_fatal) bb_free(&t->pend);
     }
     if (t->raw) {
@@ -201,13 +224,9 @@ void term_shutdown(Term *t)
 void term_suspend(Term *t)
 {
     if (!t) return;
-    if (t->altscreen) {
-        term_write(t, ESC_SGR_RESET, sizeof ESC_SGR_RESET - 1);
-        term_write(t, ESC_CURS_SHOW, sizeof ESC_CURS_SHOW - 1);
-        term_write(t, ESC_ALT_OFF, sizeof ESC_ALT_OFF - 1);
-        t->altscreen = 0;
-    }
-    term_drain(t, DRAIN_MS);            /* the terminal is about to be someone else's */
+    term_leave(t, LEAVE, t->altscreen ? 3 : 0, DRAIN_MS);   /* the terminal is about to be someone else's */
+    t->altscreen = 0;
+    t->pend_off = t->pend.len = 0;      /* what it never took belongs to a screen that is gone */
     if (t->raw) {
         tcsetattr(t->in_fd, TCSAFLUSH, &t->saved);
         t->raw = 0;
@@ -254,56 +273,26 @@ int term_drain_signals(Term *t)
 
 size_t term_write(Term *t, const char *buf, size_t n)
 {
-    size_t off = 0;
-
     /* Async: nothing waits. What is queued goes first, to keep the order;
      * what the terminal will not take now joins the queue, and counts as
      * written -- it will be, in order, and the renderer's `front` may go on
      * meaning what the terminal has been sent. */
     if (t->async) {
         if (t->dead) return 0;
-        if (t->pend.len == 0) {
-            while (off < n) {
-                ssize_t w = write(t->out_fd, buf + off, n - off);
-                if (w > 0) { off += (size_t)w; continue; }
-                if (w < 0 && errno == EINTR) continue;
-                if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) break;
-                t->dead = 1;
-                return off;
-            }
-        }
+        size_t off = term_pending(t) ? 0 : write_some(t, buf, n);
+        if (t->dead) return off;
         if (off < n) bb_put(&t->pend, buf + off, n - off);
         return n;
     }
 
-    while (off < n) {
-        ssize_t w = write(t->out_fd, buf + off, n - off);
-        if (w > 0) {
-            off += (size_t)w;
-            continue;
-        }
-        if (w < 0 && errno == EINTR) continue;
-
-        if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-            /* The terminal is behind, not gone. Waiting is the whole point:
-             * dropping the tail of a frame leaves cells on screen that the
-             * renderer believes it has already painted, and nothing repaints
-             * them afterwards. Blocking here is what a blocking write would
-             * do anyway, without the spin. */
-            struct pollfd pfd;
-            pfd.fd      = t->out_fd;
-            pfd.events  = POLLOUT;
-            pfd.revents = 0;
-            if (poll(&pfd, 1, -1) < 0 && errno != EINTR) {
-                t->dead = 1;
-                break;
-            }
-            continue;
-        }
-
-        /* Anything else is a real failure: the terminal has gone away. */
-        t->dead = 1;
-        break;
+    /* Blocking: the terminal behind is waited for, not given up on. Dropping
+     * the tail of a frame would leave cells on screen that the renderer
+     * believes it has painted, and nothing repaints them afterwards. */
+    size_t off = 0;
+    int    forever = -1;
+    while (off < n && !t->dead) {
+        off += write_some(t, buf + off, n - off);
+        if (off < n && !t->dead && wait_writable(t, &forever) < 0) t->dead = 1;
     }
     return off;
 }

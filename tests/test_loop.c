@@ -66,6 +66,15 @@ static void type(Rig *g, const char *s)
     CHECK(write(g->keys, s, strlen(s)) == (ssize_t)strlen(s));
 }
 
+/* What the terminal has been sent, cell by cell: rnd_flush's observer fires
+ * for every cell it emits, so this grid is the screen as the bytes paint it. */
+typedef struct { Cell *cells; int w; } Shadow;
+static void shadow_observe(void *ctx, int x, int y, const Cell *c)
+{
+    Shadow *s = ctx;
+    s->cells[(size_t)y * (size_t)s->w + (size_t)x] = *c;
+}
+
 void test_loop(void)
 {
     Rig g;
@@ -204,6 +213,9 @@ void test_loop(void)
         close(g.t.out_fd);
         g.t.out_fd = tty[1];
         g.t.async  = 1;
+        Shadow sh = { xmalloc(g.r.ncells * sizeof(Cell)), g.r.w };
+        memcpy(sh.cells, g.r.front, g.r.ncells * sizeof(Cell));   /* the screen after rig_up's full frame */
+        rnd_set_observer(&g.r, shadow_observe, &sh);
         uint64_t at = 2000;
 
         int toggles = 0;
@@ -239,6 +251,16 @@ void test_loop(void)
         rnd_begin(&g.r);
         app_draw(&g.a);                                      /* the screen as it should now be */
         CHECK(memcmp(g.r.back, g.r.front, g.r.ncells * sizeof(Cell)) == 0);
+        {   /* and the bytes sent, replayed cell by cell, paint that same screen */
+            int wrong = 0;
+            for (size_t i = 0; i < g.r.ncells; i++) {
+                const Cell *b = &g.r.back[i], *s = &sh.cells[i];
+                if (b->ch != 0 && (s->ch != b->ch || s->fg != b->fg || s->bg != b->bg || s->attr != b->attr)) wrong++;
+            }
+            CHECK_EQ(wrong, 0);
+            rnd_set_observer(&g.r, NULL, NULL);
+            free(sh.cells);
+        }
         CHECK_EQ(g.t.dead, 0);
         close(tty[0]);
         bb_free(&g.t.pend);
