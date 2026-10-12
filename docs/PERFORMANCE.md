@@ -1056,6 +1056,30 @@ does not show on the frame. `ctl.wait`, the zone round answering waiters, has no
 bench has no socket to hold one on; the live check above stands in for it, and is written
 out in docs/CONFLICTS.md's *Progress, step by step*.
 
+### A terminal that stops reading
+
+The GM's terminal can stop taking output: an ssh that stalls, ctrl-S, a tmux client gone
+with nothing reading. Until 2.0's step 2 (docs/V2.md, D4) the first frame it would not take
+stopped the whole program in `term_write`, phones and agents with it. The desktop, a live
+vtt on a pty nobody read, 120 help pages toggled 10 ms apart, 2026-10-12 (the machine not
+quiet; these are seconds against milliseconds, and a kernel wait channel).
+
+| path | before | after | speed of light | gap, and why |
+|---|---|---|---|---|
+| `vtt --ctl status` while the terminal is not reading | no answer in the client's 2 s; the process in `wait_woken` (the tty write) | 0.00 s; the process in `poll` | the 1 ms a request costs | none |
+| memory held for a terminal that is behind | none (it waited instead) | at most the one frame that did not fit (suite `loop`: not a byte more a hundred frames later) | the bytes the terminal has not taken | none: later frames are dropped whole, not queued |
+| catching up when it reads again | the frames it missed, in order, each waited for | the queue, then one diff from the last frame sent to the screen as it is | the cells that differ | none |
+| a turn with the terminal keeping up | -- | two tests of a length that is 0 (`loop_once`, `rnd_flush`) and a descriptor of -1 in `poll` | nothing | nanoseconds; not a row, and `--bench` cannot see it (it has no terminal) |
+
+The output is a second open of the same terminal, non-blocking (`term_async`): `O_NONBLOCK`
+on stdout itself would set it on stdin, one open file description. `term_write` queues what
+will not go and the loop sends it when the descriptor polls writable (`term.flush`). While
+anything is queued `rnd_flush` drops the GM's frame whole and leaves `front` alone, so the
+renderer's "front is what the terminal has been sent" still holds and the next frame is one
+diff however many were skipped. The players' frame and the agents' requests go on meanwhile.
+`--bench-stall`, which the plan promised, was not built: the bench has no terminal to stall.
+The suite's case and the live check above stand in for it.
+
 ### Other writers of the file
 
 vtt keeps the open map's file as it last read or wrote it, looks at the file on a key, and

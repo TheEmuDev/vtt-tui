@@ -147,6 +147,16 @@ void rnd_copy_back(Renderer *dst, const Renderer *src)
 
 void rnd_flush(Renderer *r, Term *t)
 {
+    /* A terminal still taking the last frame gets no second one queued
+     * behind it: this frame is dropped whole, `front` stays what the
+     * terminal has been sent, and the loop draws again when the queue has
+     * gone -- one diff from there to wherever the screen has got to, however
+     * many frames were skipped. The queue never holds more than a frame. */
+    if (t && term_pending(t)) {
+        t->skipped = 1;
+        return;
+    }
+
     ByteBuf *o = &r->out;
     bb_reset(o);
 

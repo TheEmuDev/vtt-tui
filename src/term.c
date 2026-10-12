@@ -39,8 +39,13 @@ static void on_winch(int sig)
     }
 }
 
+/* Set by the fatal handler: term_shutdown is then inside a signal handler,
+ * where free() is not safe. */
+static volatile sig_atomic_t g_in_fatal = 0;
+
 static void on_fatal(int sig)
 {
+    g_in_fatal = 1;
     if (g_term) term_shutdown(g_term);
     /* Re-raise with the default disposition so the exit status is honest. */
     signal(sig, SIG_DFL);
@@ -66,6 +71,49 @@ static int make_raw(Term *t)
     return 0;
 }
 
+/* How long leaving the screen waits for a terminal that is behind to take
+ * what is queued (the sequences that give the shell its screen back among
+ * it), before giving up on one that never will. */
+#define DRAIN_MS 1000
+
+static void term_drain(Term *t, int ms)
+{
+    while (t->pend.len && !t->dead && ms > 0) {
+        struct pollfd pfd = { t->out_fd, POLLOUT, 0 };
+        if (poll(&pfd, 1, 50) < 0 && errno != EINTR) break;
+        term_flush(t);
+        ms -= 50;
+    }
+}
+
+int term_async(Term *t)
+{
+    const char *name = ttyname(t->out_fd);
+    if (!name) return -1;
+    int fd = open(name, O_WRONLY | O_NONBLOCK | O_NOCTTY | O_CLOEXEC);
+    if (fd < 0) return -1;
+    t->out_fd = fd;
+    t->async  = 1;
+    return 0;
+}
+
+size_t term_flush(Term *t)
+{
+    size_t off = 0;
+    while (off < t->pend.len && !t->dead) {
+        ssize_t w = write(t->out_fd, t->pend.data + off, t->pend.len - off);
+        if (w > 0) { off += (size_t)w; continue; }
+        if (w < 0 && errno == EINTR) continue;
+        if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) break;
+        t->dead = 1;                    /* the terminal has gone away */
+    }
+    if (off) {
+        memmove(t->pend.data, t->pend.data + off, t->pend.len - off);
+        t->pend.len -= off;
+    }
+    return t->pend.len;
+}
+
 int term_init(Term *t)
 {
     memset(t, 0, sizeof *t);
@@ -81,12 +129,11 @@ int term_init(Term *t)
 
     if (make_raw(t) < 0) return -1;
 
-    /* The terminal descriptors are deliberately left blocking. In a terminal
+    /* These two descriptors are deliberately left blocking. In a terminal
      * stdin and stdout are the same open file description, so setting
-     * O_NONBLOCK on stdin sets it on stdout too, and writes then fail with
-     * EAGAIN as soon as the terminal falls behind -- which is exactly what
-     * holding a movement key does. The event loop polls before each read
-     * instead, which drains input just as well without that side effect. */
+     * O_NONBLOCK on stdin sets it on stdout too. The event loop polls before
+     * each read instead, which drains input just as well; and output that
+     * must not wait goes through a description of its own (term_async). */
 
     g_term = t;
 
@@ -133,6 +180,14 @@ void term_shutdown(Term *t)
         term_write(t, ESC_ALT_OFF, sizeof ESC_ALT_OFF - 1);
         t->altscreen = 0;
     }
+    term_drain(t, DRAIN_MS);
+    if (t->async) {
+        close(t->out_fd);
+        t->out_fd = STDOUT_FILENO;
+        t->async  = 0;
+        t->pend.len = 0;
+        if (!g_in_fatal) bb_free(&t->pend);
+    }
     if (t->raw) {
         tcsetattr(t->in_fd, TCSAFLUSH, &t->saved);
         t->raw = 0;
@@ -152,6 +207,7 @@ void term_suspend(Term *t)
         term_write(t, ESC_ALT_OFF, sizeof ESC_ALT_OFF - 1);
         t->altscreen = 0;
     }
+    term_drain(t, DRAIN_MS);            /* the terminal is about to be someone else's */
     if (t->raw) {
         tcsetattr(t->in_fd, TCSAFLUSH, &t->saved);
         t->raw = 0;
@@ -199,6 +255,26 @@ int term_drain_signals(Term *t)
 size_t term_write(Term *t, const char *buf, size_t n)
 {
     size_t off = 0;
+
+    /* Async: nothing waits. What is queued goes first, to keep the order;
+     * what the terminal will not take now joins the queue, and counts as
+     * written -- it will be, in order, and the renderer's `front` may go on
+     * meaning what the terminal has been sent. */
+    if (t->async) {
+        if (t->dead) return 0;
+        if (t->pend.len == 0) {
+            while (off < n) {
+                ssize_t w = write(t->out_fd, buf + off, n - off);
+                if (w > 0) { off += (size_t)w; continue; }
+                if (w < 0 && errno == EINTR) continue;
+                if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) break;
+                t->dead = 1;
+                return off;
+            }
+        }
+        if (off < n) bb_put(&t->pend, buf + off, n - off);
+        return n;
+    }
 
     while (off < n) {
         ssize_t w = write(t->out_fd, buf + off, n - off);

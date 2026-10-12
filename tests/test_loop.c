@@ -75,7 +75,7 @@ void test_loop(void)
 
     CASE("idle, with nothing owed, the loop asks to sleep without a timeout");
     CHECK_EQ(loop_wait(&g.l, 1000), -1);
-    CHECK_EQ(loop_nfds(&g.l), 2);                  /* the keyboard and the signal pipe: no sockets */
+    CHECK_EQ(loop_nfds(&g.l), LOOP_FIXED);                /* the keyboard and the signal pipe: no sockets */
 
     CASE("a turn with nothing ready changes nothing and draws nothing");
     g.r.cells_changed = 7;                         /* rnd_begin would zero it: a mark no frame leaves */
@@ -149,7 +149,7 @@ void test_loop(void)
     turn(&g, 1200);
     CHECK_EQ(g.a.agent_on, 1);
     loop_wait(&g.l, 1200);
-    CHECK_EQ(loop_nfds(&g.l), 3);                  /* the channel's listener beside the two */
+    CHECK_EQ(loop_nfds(&g.l), LOOP_FIXED + 1);                /* the channel's listener beside the two */
     CtlReader rd = { ctl_raw_connect(g.a.ctl.path), "", 0, 0 };
     CHECK(rd.fd >= 0);
     CHECK(write(rd.fd, "wait for 600\n", 13) == 13);
@@ -190,6 +190,59 @@ void test_loop(void)
     g.keys = -1;
     CHECK_EQ(turn(&g, now++), 1);
 
+    rig_down(&g);
+
+    /* docs/V2.md, D4. Before it, the first write the terminal would not take
+     * stopped the whole program in term_write: this case would hang there. */
+    CASE("a terminal that stops reading holds up neither the keys nor a frame's worth of memory");
+    rig_up(&g, "loop-stall");
+    {
+        int tty[2];
+        CHECK(pipe(tty) == 0);
+        fcntl(tty[0], F_SETFL, O_NONBLOCK);
+        fcntl(tty[1], F_SETFL, O_NONBLOCK);
+        close(g.t.out_fd);
+        g.t.out_fd = tty[1];
+        g.t.async  = 1;
+        uint64_t at = 2000;
+
+        int toggles = 0;
+        while (toggles < 2000 && !term_pending(&g.t)) {      /* whole screens, until the pipe is full */
+            type(&g, "?");
+            CHECK_EQ(turn(&g, at++), 0);
+            toggles++;
+        }
+        CHECK(term_pending(&g.t) > 0);
+        if (toggles % 2) { type(&g, "?"); turn(&g, at++); }  /* leave the help page */
+        size_t held = term_pending(&g.t);
+        cy = g.a.ed.cy;
+        type(&g, "jj");
+        CHECK_EQ(turn(&g, at++), 0);
+        CHECK_EQ(g.a.ed.cy, cy + 2);                         /* the GM's keys still land */
+        CHECK_EQ(g.t.skipped, 1);                            /* their frame is owed, not queued */
+        for (int k = 0; k < 100; k++) { type(&g, k % 2 ? "k" : "j"); turn(&g, at++); }
+        CHECK_EQ(term_pending(&g.t), held);                  /* a hundred frames later: not a byte more */
+        CHECK(held <= g.r.out.cap);                          /* at most the one frame that did not fit */
+        loop_wait(&g.l, at);
+        CHECK_EQ(g.l.fds[2].fd, tty[1]);                     /* and the loop is waiting on the terminal */
+
+        CASE("when it reads again it is sent the queue, then one frame to where the screen has got to");
+        char sink[4096];
+        for (int k = 0; k < 4000 && (term_pending(&g.t) || g.t.skipped); k++) {
+            while (read(tty[0], sink, sizeof sink) > 0) { }
+            turn(&g, at++);
+        }
+        CHECK_EQ(term_pending(&g.t), 0);
+        CHECK_EQ(g.t.skipped, 0);
+        loop_wait(&g.l, at);
+        CHECK_EQ(g.l.fds[2].fd, -1);                         /* nothing more to wait on it for */
+        rnd_begin(&g.r);
+        app_draw(&g.a);                                      /* the screen as it should now be */
+        CHECK(memcmp(g.r.back, g.r.front, g.r.ncells * sizeof(Cell)) == 0);
+        CHECK_EQ(g.t.dead, 0);
+        close(tty[0]);
+        bb_free(&g.t.pend);
+    }
     rig_down(&g);
 
     CASE("a terminal that has gone ends the loop");

@@ -23,6 +23,9 @@ void loop_init(Loop *l, App *a, Term *t, Renderer *r)
     l->fds[1].fd = term_signal_fd(t);
     l->fds[1].events = POLLIN;
     l->fds[1].revents = 0;
+    l->fds[2].fd = -1;
+    l->fds[2].events = POLLOUT;
+    l->fds[2].revents = 0;
 }
 
 static void sooner(int *timeout, int due)
@@ -37,15 +40,18 @@ int loop_wait(Loop *l, uint64_t now_ms)
      * must cost zero CPU. An unresolved ESC needs a decision after a short
      * grace period. */
     int timeout = input_pending(&l->in) ? INPUT_ESC_TIMEOUT_MS : -1;
+    /* Woken when a terminal that is behind can take more. */
+    l->fds[2].fd      = term_pending(l->t) ? l->t->out_fd : -1;
+    l->fds[2].revents = 0;
     /* The sockets' entries are rebuilt every turn: clients come and go. */
-    l->nnet = net_pollfds(&a->net, l->fds + 2, 1 + NET_MAX_CLIENTS);
+    l->nnet = net_pollfds(&a->net, l->fds + LOOP_FIXED, 1 + NET_MAX_CLIENTS);
     /* With clients attached, wake now and then for keep-alives. */
     if (l->nnet > 1) sooner(&timeout, 1000);
     sooner(&timeout, app_autosave_due(a, now_ms));   /* unsaved work not yet copied */
     sooner(&timeout, app_ping_due(a, now_ms));       /* a ping's ring coming down */
     sooner(&timeout, app_events_due(a, now_ms));     /* the map's changes, told to an agent */
     sooner(&timeout, app_disk_due(a, now_ms));       /* a file someone else wrote */
-    l->nctl = ctl_pollfds(&a->ctl, l->fds + 2 + l->nnet, 1 + CTL_SLOTS);
+    l->nctl = ctl_pollfds(&a->ctl, l->fds + LOOP_FIXED + l->nnet, 1 + CTL_SLOTS);
     sooner(&timeout, ctl_due(&a->ctl, now_ms));      /* an agent's connection gone quiet */
     return timeout;
 }
@@ -104,8 +110,8 @@ int loop_once(Loop *l, int nready, uint64_t now_ms)
 {
     App *a = l->a;
 
-    if (l->nnet > 0) net_service(&a->net, l->fds + 2, l->nnet, now_ms);
-    if (l->nctl > 0) ctl_service(&a->ctl, l->fds + 2 + l->nnet, l->nctl, now_ms);
+    if (l->nnet > 0) net_service(&a->net, l->fds + LOOP_FIXED, l->nnet, now_ms);
+    if (l->nctl > 0) ctl_service(&a->ctl, l->fds + LOOP_FIXED + l->nnet, l->nctl, now_ms);
     app_tick(a, now_ms);
 
     if (nready > 0 && (l->fds[1].revents & POLLIN)) {
@@ -129,9 +135,19 @@ int loop_once(Loop *l, int nready, uint64_t now_ms)
      * since keys are handled in the drain above too. */
     app_events_flush(a, now_ms);
 
+    /* The terminal's queue, and the frame held back while it was full. */
+    if (term_pending(l->t)) {
+        PROF_ZONE("term.flush");
+        term_flush(l->t);
+    }
+    if (l->t->skipped && !term_pending(l->t)) {
+        l->t->skipped = 0;
+        a->dirty = 1;
+    }
+
     if (a->dirty) loop_frame(l, now_ms);
 
-    /* Only a genuine terminal failure ends the loop; falling behind is
-     * waited out inside term_write(). */
+    /* Only a genuine terminal failure ends the loop; one that has fallen
+     * behind is neither waited for nor written past (term_write, rnd_flush). */
     return l->t->dead;
 }

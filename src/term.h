@@ -16,6 +16,14 @@ typedef struct {
     /* Set when the terminal genuinely fails, as opposed to merely falling
      * behind. The event loop exits rather than writing into the void. */
     int  dead;
+
+    /* term_async: out_fd is this process's own non-blocking open of the
+     * terminal, and what the terminal would not take at once waits in
+     * `pend`. `skipped`: a frame was held back while bytes were pending, and
+     * is owed once they have gone (render.c, loop.c). */
+    int     async;
+    int     skipped;
+    ByteBuf pend;
 } Term;
 
 /* Puts the terminal in raw mode, switches to the alternate screen, hides the
@@ -51,6 +59,21 @@ size_t term_write(Term *t, const char *buf, size_t n);
  * fail with EAGAIN under load -- so the input drain polls before each read
  * instead. */
 int term_input_ready(const Term *t);
+
+/* Stops a slow terminal from stopping the program: output goes through a
+ * second, non-blocking open of the same terminal (O_NONBLOCK on stdout itself
+ * would set it on stdin too: one open file description), and term_write
+ * queues what will not go at once instead of waiting. The caller then owes
+ * the terminal a term_flush whenever out_fd polls writable. Returns -1, and
+ * leaves writes blocking as before, when the terminal cannot be opened again. */
+int term_async(Term *t);
+
+/* Bytes queued and not yet taken by the terminal; 0 when writes block. */
+static inline size_t term_pending(const Term *t) { return t->pend.len; }
+
+/* Sends what is queued, as far as the terminal will take it now. Returns the
+ * bytes still waiting. */
+size_t term_flush(Term *t);
 
 /* fd to poll for resize notifications. */
 static inline int term_signal_fd(const Term *t) { return t->sig_pipe[0]; }

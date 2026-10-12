@@ -520,6 +520,10 @@ static int run_interactive(const Options *o)
     a.ask_holders = 1;              /* a GM is here to be asked */
     if (o->map_path) app_open_map(&a, o->map_path);
 
+    /* From here a terminal that stops reading holds nothing else up; one
+     * that cannot be opened a second time is written to as before. */
+    (void)term_async(&t);
+
     Loop l;
     loop_init(&l, &a, &t, &r);
 
