@@ -1502,7 +1502,7 @@ changes to it (see *Asking an agent*).
 listens on a Unix socket in `$XDG_RUNTIME_DIR/vtt/` that only the same user can access. With
 the channel off every request is refused, an `--apply` to the open map included: the
 answer names the map and says to type `:agent on` in that vtt, and nothing is changed or
-read. (`--apply` is still told that the map is open, so it never writes the file under you.)
+read; a `wait` already held when you switch it off is still answered when its time is up. (`--apply` is still told that the map is open, so it never writes the file under you.)
 
 `vtt --ctl REQUEST` sends a request and prints the answer; with no request it reads one from
 stdin. It exits 0 on success, 1 on an error (the reason is printed on stderr), and 2 when no

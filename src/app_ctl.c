@@ -1025,7 +1025,7 @@ static int finish_proposal(App *a, Edits *ed, FILE *out, char *err, size_t errsz
             fputs("no change: the map already looked like that\n", out);
             return 0;
         }
-        /* At once is :agent on's: with the channel off a proposal waits. */
+        /* At once is :agent on's (a request not from the socket is not asked). */
         int at_once = a->ctl_auto && (a->agent_on || !a->ctl_can_hold);
         if (slot < 0) slot = app_job_new(a, ed->from, ed->say, NULL, at_once);
         if (slot < 0) {
@@ -1229,6 +1229,7 @@ static int rq_wait(RQ_ARGS)
         seq = (unsigned)k;
         at++;
     }
+    int timed = at < n;
     if (at < n) {
         if (at + 2 != n || strcmp(w[at], "for") != 0 || !word_int(w[at + 1], 0, CTL_WAIT_MAX_S, &secs)) {
             snprintf(err, errsz, "wait [SEQ] [for SECONDS], at most %d seconds", CTL_WAIT_MAX_S);
@@ -1238,9 +1239,12 @@ static int rq_wait(RQ_ARGS)
     a->agent_seen_ms = a->now_ms ? a->now_ms : 1;
     /* Held only where there is a socket to hold it on (app_tick):
      * --apply, the bench and the fuzzer are answered at once. */
-    /* `wait 0` asks for everything kept: an answer, not a wait, even when
-     * nothing is. */
-    if (app_events_after(a, seq) || !a->ctl_can_hold || secs == 0 || (said && seq == 0)) app_events_write(a, out, seq);
+    /* `wait 0` alone asks for everything kept: an answer, not a wait, even
+     * when nothing is. With a time it is a wait like any other -- `--apply
+     * --wait` asks `wait SEQ for N` with the SEQ it was given, 0 on a vtt
+     * where nothing has happened yet, and must be held, not answered in a
+     * loop. */
+    if (app_events_after(a, seq) || !a->ctl_can_hold || secs == 0 || (said && seq == 0 && !timed)) app_events_write(a, out, seq);
     else {
         a->ctl_held     = 1;
         a->ctl_hold_seq = seq;
@@ -1757,8 +1761,8 @@ void app_agent_command(App *a, const char *rest)
     }
     if (!strcmp(rest, "off")) {
         if (!a->agent_on) { app_set_status_gm(a, "the agent channel is already off"); return; }
-        /* The socket stays: --apply must still find this map open, and its
-         * plan comes as a proposal. Reads and at-once landing stop. */
+        /* The socket stays: --apply must still find this map open, to be
+         * refused rather than write the file. Every other request is refused. */
         a->agent_on = 0;
         a->agent_seen_ms = 0;                /* nobody to tell of the map: the checkpoint may stop */
         app_note_gm(a, "agent channel off - requests are refused until :agent on");

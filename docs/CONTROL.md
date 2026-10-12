@@ -19,7 +19,7 @@ the agent's; this page is why it is the way it is.
 | question | answer |
 |---|---|
 | transport | a Unix socket and a one-shot client, `vtt --ctl`. Never the network: `:serve`'s port is on the Wi-Fi. An MCP server could wrap `vtt --ctl` later without touching vtt. |
-| on | off until `:agent on` (or `--agent` at start). **Since 2026-10-09 (docs/CONFLICTS.md, decision 5) the socket listens whenever vtt runs interactively**, so an `--apply` can find a map that is open: off, a request may only propose, ask `status`, `holds` and `wait`; no read of the map, nothing lands at once |
+| on | *(Reversed 2026-10-12, docs/V2.md ruling 9: off now refuses every request but `--apply`'s `holds`. What follows is the rule as it was.)* off until `:agent on` (or `--agent` at start). **Since 2026-10-09 (docs/CONFLICTS.md, decision 5) the socket listens whenever vtt runs interactively**, so an `--apply` can find a map that is open: off, a request may only propose, ask `status`, `holds` and `wait`; no read of the map, nothing lands at once |
 | where edits land | build mode only, so nothing an agent does reaches the players' phones in play. Proposals come in anywhere (play mode too) and wait; they land in build mode. Reads work anywhere a map is open. |
 | freedom | ~~free editing, undo as the safety net; no drafts to approve~~ **Reversed 2026-10-07** (docs/CONFLICTS.md, built 2026-10-09): an agent's edits are a **proposal** the GM reviews and accepts, whole or by box; `:agent accept auto` lands each at once |
 | a request | one undo batch, all or nothing: a line that fails rolls the whole request back and says which line and why |

@@ -170,6 +170,22 @@ void test_loop(void)
         CHECK(!strcmp(r0.buf, "ok\nseq 0\n"));
         CHECK_EQ(ctl_waiters(&g.a.ctl), 0);
         close(r0.fd);
+
+        /* --apply --wait asks exactly this on a vtt with no event yet: answered
+         * at once it came back 97,000 times in three seconds. */
+        CASE("wait 0 with a time is a wait: held, and not answered until something happens");
+        CtlReader r1 = { ctl_raw_connect(g.a.ctl.path), "", 0, 0 };
+        CHECK(write(r1.fd, "wait 0 for 600\n", 15) == 15);
+        shutdown(r1.fd, SHUT_WR);
+        for (int k = 0; k < 200 && ctl_waiters(&g.a.ctl) < 1; k++) { turn(&g, now++); poll(NULL, 0, 1); }
+        CHECK_EQ(ctl_waiters(&g.a.ctl), 1);
+        for (int k = 0; k < 20; k++) turn(&g, now++);
+        CHECK_EQ(ctl_read_some(&r1), 0);
+        unsigned asked = g.a.ctl.requests;
+        close(r1.fd);
+        for (int k = 0; k < 200 && ctl_waiters(&g.a.ctl) > 0; k++) { turn(&g, now++); poll(NULL, 0, 1); }
+        CHECK_EQ(ctl_waiters(&g.a.ctl), 0);
+        CHECK_EQ(g.a.ctl.requests, asked);
         CASE("an agent's held wait is answered in the turn of the key that made the event");
     }
     CtlReader rd = { ctl_raw_connect(g.a.ctl.path), "", 0, 0 };

@@ -278,8 +278,9 @@ feedback. Nothing you send changes the GM's map until then, unless the GM has ty
    44 job 5 asked in M3:Q8: a guard room
    ```
    Pass the `seq` it gave you to the next `wait`, so nothing is missed between two waits.
-   `wait` alone hears only what happens from now; `wait 0` everything still kept (the last
-   32); `wait 41 for 300` waits up to 300 seconds (60 unsaid, 600 at most) and then answers
+   `wait` alone hears only what happens from now; `wait 0` answers at once with everything
+   still kept (the last 32), and is a read, never a wait: do not call it in a loop. To wait,
+   give a time, with the `seq` you were last given (`status` has it too), 0 included; `wait 41 for 300` waits up to 300 seconds (60 unsaid, 600 at most) and then answers
    with `seq` alone. A `lost A-B` line means more happened than is kept, and a `reset N`
    line that the vtt was started again since your number (it is followed by everything
    kept): either way read `jobs` and the map again. The events:

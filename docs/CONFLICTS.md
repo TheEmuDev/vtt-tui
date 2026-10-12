@@ -4,6 +4,8 @@
 > was signed off. What is true now is the README (*Asking an agent*, *When something else
 > changes the file*), docs/AGENTS.md and the files' rows in docs/CODEMAP.md. *Progress* below
 > says what is still owed; *Progress, step by step* at the end says where the code left the plan.
+> **Decision 5 was reversed 2026-10-12** (docs/V2.md, ruling 9): an off channel now refuses
+> every request but `--apply`'s `holds`.
 
 *The design record. Planned 2026-10-07 (third draft, with Fable's review folded in; signed
 off that day: every recommendation below is the decision) and built in nine steps,
