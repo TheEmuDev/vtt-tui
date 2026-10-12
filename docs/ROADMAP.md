@@ -7,7 +7,7 @@ IDEAS.md.
 
 ## Order
 
-Suggested, of what is left: 12, 18, 8, 22, 7, 11; then 13, 14 and 15 when play asks for
+Suggested, of what is left: 12, 18, 8, 22, 7, 11; then 14 and 15 when play asks for
 them, and 1 if play testing of hidden creatures asks for it.
 
 ## To build
@@ -38,7 +38,7 @@ Item 1 was decided 2026-09-27, the rest 2026-09-29.
 
 ### Daggerheart
 
-Decided 2026-09-29 from the SRD 2.0 of 2026-08-25. Each applies only
+Decided 2026-09-29 from the [SRD 2.0 of 2026-08-25](https://www.daggerheart.com/wp-content/uploads/2026/08/DH_SRD_2_2026_08_25.pdf). Each applies only
 under `:ruleset daggerheart`, keeps the core rules-agnostic (the ruleset supplies the
 numbers and words), and never rolls or ticks by itself: the dice stay physical and the GM
 says what happened. The Fear pool stays set aside (IDEAS.md).
@@ -52,8 +52,6 @@ says what happened. The Fear pool stays set aside (IDEAS.md).
   that the GM advances by a roll's outcome (`:outcome success fear`: each moves 0-3 by the
   SRD's chart), linked pairs, loops that grow or shrink, and long-term clocks that advance on
   `:rest`.
-- **13. Conditions.** Hidden, Restrained and Vulnerable as known markers carrying their rules
-  text; Vulnerable set when a creature marks its last Stress and cleared when it clears any.
 - **14. The action tracker** (the SRD's optional rule): each player's tokens in the spotlight
   panel, three a scene by default, spent with a key and refilled per scene.
 - **15. Adversary tokens and pools**: the tokens Slow and Relentless count on a stat block,
@@ -88,6 +86,7 @@ says what happened. The Fear pool stays set aside (IDEAS.md).
 | 6 | Adversary reference cards: a GM-only card saved with a template, shown for the selected creature | 2026-09-29 | docs/CARDS.md |
 | 9 | Adversary stat blocks as templates: cards read by label, and `--import-adversaries` | 2026-09-29, with 6 | docs/CARDS.md |
 | 10 | Damage against thresholds: `:dmg 11` marks HP by the card's thresholds and says why | 2026-10-02 | docs/DAMAGE.md |
+| 13 | Conditions: Hidden, Restrained and Vulnerable as known markers; Vulnerable follows the last Stress | 2026-10-12 | docs/CONDITIONS.md |
 | 16 | Movement readout that knows the rules: the SRD's rule for the band a carried creature has reached | 2026-09-29 | the README, *Rulesets*, *Daggerheart* |
 | 17 | Group effects from a point: `g e` rings Very Close round the cursor and lists who is caught | 2026-09-29 | the README, *Group effects* |
 | 19 | Summoning at a range: `:summon 3 lackey far` lights the range round a creature and the GM places them inside it | 2026-10-12 | docs/SUMMON.md |

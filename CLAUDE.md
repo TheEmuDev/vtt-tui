@@ -12,6 +12,7 @@ prohibitions only, under 150 lines. Reference lives where it is read on demand.
 | before touching a source file | its row in docs/CODEMAP.md: `grep -n 'fog\.c' docs/CODEMAP.md` -- what the file owns and the invariants kept there. Never the whole file (42 KB) |
 | a command not listed below; a convention's reason; the watch list | docs/CODEMAP.md, by heading |
 | writing or running tests | tests/CLAUDE.md (loads itself under tests/) |
+| a Daggerheart rule's wording or page | the SRD 2.0 PDF: its link is in docs/CODEMAP.md's `ruler.c` row. Summarize with the page; never copy its text in |
 | binding a key | docs/KEYS.md, the nine rules (the ninth: `off` switches off, `remove` destroys) |
 | a plan's performance section | docs/PERFORMANCE.md, *Speed of light* |
 | reviewing | docs/HEALTH.md: *The questions*, *Left open by reviews* |
@@ -132,8 +133,7 @@ Code
 - `app_note` for what *happened* (logged); `app_set_status` for hints and errors.
   `range_clear` resets the overlay; `range_off` keeps the shape. A prompt whose answer
   lands in a fixed field sets `a->prompt.max`.
-- Keys: the bar and the `?` page both come from `src/keys.c`; the bar holds six hints; no
-  duplicate key strings per map.
+- Keys: bar and `?` page both come from `src/keys.c`; six hints on the bar; no duplicate key strings per map.
 - American spelling everywhere (color, center, gray, canceled, labeled). Comments say
   *why*; rationale lives in the header or the README, not at every call site.
 

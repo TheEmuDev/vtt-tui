@@ -167,3 +167,91 @@ void app_card_edit(App *a)
     free(begun);
     free(text);
 }
+
+/* ------------------------------------------------------------- conditions */
+
+const char *app_card_box_text(App *a, int i)
+{
+    const Map     *m    = a->map;
+    const Token   *t    = &m->tokens.v[i];
+    const char    *card = card_of(m, t);
+    const Ruleset *rs   = ruleset_by_name(m->ruleset);
+    if (!ruleset_has_condition(rs, t)) return card;
+
+    /* Built once and kept while the map, the creature and the cards are as
+     * they were: the box is drawn every frame the cursor rests there. */
+    if (a->box_text && a->box_map == m && a->box_token == i && a->box_gen == m->gen &&
+        a->box_cards_gen == m->cards_gen)
+        return a->box_text;
+
+    ByteBuf b;
+    bb_init(&b, 512);
+    if (card) { bb_puts(&b, card); bb_putc(&b, '\n'); }
+    for (int k = 0, first = 1; k < t->nstatus; k++) {
+        const Condition *c = ruleset_condition(rs, t->status[k].label);
+        if (!c) continue;
+        if (!first || card) bb_putc(&b, '\n');       /* between lines, never after the last */
+        first = 0;
+        bb_puts(&b, "**");
+        bb_puts(&b, c->name);
+        bb_puts(&b, ":** ");
+        bb_puts(&b, c->text);
+    }
+    bb_putc(&b, '\0');
+    free(a->box_text);
+    a->box_text      = b.data;
+    a->box_map       = m;
+    a->box_token     = i;
+    a->box_gen       = m->gen;
+    a->box_cards_gen = m->cards_gen;
+    return a->box_text;
+}
+
+void app_card_box_forget(App *a)
+{
+    free(a->box_text);
+    a->box_text = NULL;
+    a->box_map  = NULL;
+}
+
+void app_condition_command(App *a, const char *rest)
+{
+    char msg[256];
+    if (!a->map) { app_set_status(a, "conditions are a map's ruleset's - open a map first"); return; }
+    const Ruleset *rs = ruleset_by_name(a->map->ruleset);
+    if (!rs || !rs->nconditions) {
+        app_set_status(a, "this ruleset names no conditions - a marker is a word of your own: s a");
+        return;
+    }
+    while (*rest == ' ') rest++;
+    if (!*rest) {
+        int off = snprintf(msg, sizeof msg, "conditions: ");
+        for (int i = 0; i < rs->nconditions && off < (int)sizeof msg - 1; i++)
+            off += snprintf(msg + off, sizeof msg - (size_t)off, "%s%s", i ? ", " : "", rs->conditions[i].name);
+        if (off < (int)sizeof msg - 1)
+            snprintf(msg + off, sizeof msg - (size_t)off, " - :condition NAME reads one, s a puts one on");
+        app_set_status(a, msg);
+        return;
+    }
+    const Condition *c = ruleset_condition(rs, rest);
+    if (!c) {
+        snprintf(msg, sizeof msg, "no condition called %.24s - :condition lists them", rest);
+        app_set_status(a, msg);
+        return;
+    }
+    snprintf(a->cond_modal, sizeof a->cond_modal, "%s%s%s", c->text, c->note ? "\n\n" : "", c->note ? c->note : "");
+    str_lcpy(a->card_title, c->name, sizeof a->card_title);
+    a->card_text = a->cond_modal;
+    a->card_top  = 0;
+    a->modal     = MODAL_CARD;
+}
+
+const char *app_condition_said(CondChange cc)
+{
+    switch (cc) {
+    case COND_ADDED:   return " - now ";
+    case COND_REMOVED: return " - no longer ";
+    case COND_NO_ROOM: return " - four markers already, no room for ";
+    default:           return "";
+    }
+}

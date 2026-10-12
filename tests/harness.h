@@ -254,6 +254,7 @@ void test_net_server(void);
 void test_serve_lifetime(void);
 void test_players_frame(void);
 void test_counters(void);
+void test_conditions(void);
 void test_pings(void);
 void test_fog(void);
 void test_sight_walk(void);

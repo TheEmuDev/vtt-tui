@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include "util.h"
 
@@ -183,6 +184,13 @@ int token_add_status(Token *t, uint8_t color, const char *label)
     str_lcpy(st->label, label ? label : "", sizeof st->label);
     t->nstatus++;
     return 1;
+}
+
+int token_find_status(const Token *t, const char *label)
+{
+    for (int i = 0; i < t->nstatus; i++)
+        if (!strcasecmp(t->status[i].label, label)) return i;
+    return -1;
 }
 
 void token_clear_status(Token *t)

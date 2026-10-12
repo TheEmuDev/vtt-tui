@@ -326,6 +326,18 @@ typedef struct {
     int      card_box_off;
     int      card_top;
     int      card_token;
+    /* :condition's text in the same view, in place of a creature's card;
+     * NULL when the view is a card's. */
+    const char *card_text;
+    char        card_title[48];
+    char        cond_modal[640];
+    /* The box's text for a creature with a marker the ruleset knows: its
+     * card and what each such marker does, built when what it was built from
+     * changes (app_card_box_text). */
+    char      *box_text;
+    const Map *box_map;
+    int        box_token;
+    unsigned   box_gen, box_cards_gen;
     int      card_lines;
     /* The map and generation the phones' names were last offered from
      * (app_whisper.c): rebuilt only when one changes. */

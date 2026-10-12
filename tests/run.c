@@ -72,6 +72,7 @@ int main(int argc, char **argv)
         { "servelife", test_serve_lifetime },
         { "pframe", test_players_frame },
         { "counters", test_counters },
+        { "conditions", test_conditions },
         { "fog",    test_fog },
         { "fogsight", test_fog_sight },
         { "fogedge", test_fog_edge },

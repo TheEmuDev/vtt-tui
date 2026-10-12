@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -55,6 +56,7 @@ void app_creatures_renumbered(App *a)
 void app_free(App *a)
 {
     app_summon_end(a);
+    app_card_box_forget(a);
     map_free(a->map);
     a->map = NULL;
     free(a->entries);
@@ -222,6 +224,7 @@ static void drop_autosave(const App *a);
 void app_travel_to(App *a, Map *m)
 {
     app_summon_end(a);
+    app_card_box_forget(a);
     if (a->handout_up) net_set_handout(&a->net, "", 0, a->now_ms);
     a->handout_up = 0;
     a->handout_title[0] = a->handout_body[0] = '\0';
@@ -748,7 +751,21 @@ static void prompt_accept(App *a)
         if (!text[0]) { app_set_status(a, "canceled: a marker needs a word"); return; }
 
         Token t = a->map->tokens.v[idx];
-        if (!token_add_status(&t, a->play.status_color, text)) {
+        /* A word the ruleset knows takes its spelling and its color, and
+         * goes on once (docs/CONDITIONS.md). Only the whole word: a start of
+         * one is the GM's own marker. */
+        const Condition *known = ruleset_condition(ruleset_by_name(a->map->ruleset), text);
+        uint8_t color = known ? known->color : a->play.status_color;
+        if (known) {
+            text = known->name;
+            if (token_find_status(&t, known->name) >= 0) {
+                char msg[96];
+                snprintf(msg, sizeof msg, "%.24s is already %s", token_name(&t), known->name);
+                app_set_status(a, msg);
+                return;
+            }
+        }
+        if (!token_add_status(&t, color, text)) {
             char msg[64];
             snprintf(msg, sizeof msg, "a token holds at most %d markers", TOKEN_STATUS_MAX);
             app_set_status(a, msg);
@@ -761,7 +778,7 @@ static void prompt_accept(App *a)
 
         char msg[96];
         snprintf(msg, sizeof msg, "%s marker on %.24s: %.30s",
-                 status_color_name(a->play.status_color),
+                 status_color_name(color),
                  token_name(&t), text);
         app_note(a, msg);
         return;
@@ -785,10 +802,13 @@ static void prompt_accept(App *a)
         str_lcpy(a->play.counter, cur, sizeof a->play.counter);
         const Token *was = &a->map->tokens.v[idx];
         if (token_equal(was, &t)) { app_set_status_gm(a, msg); return; }
+        const char *cond = NULL;
+        CondChange cc = ruleset_counter_changed(rs, was, &t, &cond);
         undo_begin(&a->undo);
         undo_edit_token(&a->undo, a->map, idx, t);
         undo_end(&a->undo);
-        snprintf(out, sizeof out, "%.24s: %s", token_name(&t), msg);
+        snprintf(out, sizeof out, "%.24s: %.100s%s%s", token_name(&t), msg,
+                 app_condition_said(cc), cc != COND_SAME ? cond : "");
         app_note_gm(a, out);
         return;
     }
@@ -1253,6 +1273,7 @@ static void close_server_with_map(App *a)
 void app_close_map(App *a)
 {
     app_summon_end(a);
+    app_card_box_forget(a);
     a->preview = 0;
     /* A handout is the encounter's: it comes down with the map, before a
      * server kept alive carries on to the next one. */

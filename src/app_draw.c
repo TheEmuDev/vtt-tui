@@ -201,7 +201,8 @@ static void draw_card_box(App *a, int i)
     int  w = imin(48, v.w / 2);
     if (w < 20 || v.h < 5) return;
     Rect box = rect(v.x + v.w - w, v.y, w, v.h);
-    int lines = ui_card_lines(card_of(m, t), w);
+    const char *text = app_card_box_text(a, i);
+    int lines = ui_card_lines(text, w);
     box.h = imin(v.h, lines + 2);                                /* as tall as it needs */
     /* Never over the creature it is about: the bottom right, else the left. */
     Rect c;
@@ -218,7 +219,7 @@ static void draw_card_box(App *a, int i)
         snprintf(title, sizeof title, "%.24s - attack now %s", token_name(t), horde);
     else
         snprintf(title, sizeof title, "%s", token_name(t));
-    ui_card_draw(a->rnd, a->th, box, title, card_of(m, t), 0, lines, a->ascii ? &BOX_ASCII : &BOX_ROUND);
+    ui_card_draw(a->rnd, a->th, box, title, text, 0, lines, a->ascii ? &BOX_ASCII : &BOX_ROUND);
 }
 
 static void draw_editor_body(App *a)
@@ -448,13 +449,19 @@ void app_draw_view(App *a, View view)
     case MODAL_PICKER:  ui_picker_draw(a->rnd, a->th, &a->picker, frame); break;
     case MODAL_CARD: {
         const Map *m = a->map;
-        if (!m || a->card_token < 0 || a->card_token >= m->tokens.n) break;
-        const Token *t = &m->tokens.v[a->card_token];
+        /* A creature's card, or a condition's text (:condition). */
+        if (!a->card_text && (!m || a->card_token < 0 || a->card_token >= m->tokens.n)) break;
+        const char *text  = a->card_text ? a->card_text : card_of(m, &m->tokens.v[a->card_token]);
+        const char *title = a->card_text ? a->card_title : token_name(&m->tokens.v[a->card_token]);
         Rect box = rect_center(rect(0, 0, a->rnd->w, a->rnd->h), imin(72, a->rnd->w - 4), a->rnd->h - 4);
         int rows = box.h - 2;
-        a->card_lines = ui_card_lines(card_of(m, t), box.w);
+        a->card_lines = ui_card_lines(text, box.w);
+        if (a->card_text) {                        /* a few lines: a box their size */
+            box = rect_center(rect(0, 0, a->rnd->w, a->rnd->h), box.w, imin(box.h, a->card_lines + 2));
+            rows = box.h - 2;
+        }
         a->card_top = iclamp(a->card_top, 0, imax(0, a->card_lines - rows));
-        ui_card_draw(a->rnd, a->th, box, token_name(t), card_of(m, t), a->card_top, a->card_lines, frame);
+        ui_card_draw(a->rnd, a->th, box, title, text, a->card_top, a->card_lines, frame);
         break;
     }
     case MODAL_MESSAGE: ui_modal(a->rnd, a->th, a->modal_title, a->modal_body,
@@ -517,7 +524,11 @@ int app_card_shown(const App *a)
 {
     if (a->card_box_off || a->screen != SCREEN_PLAY || !a->map) return -1;
     int i = app_target_token(a);
-    return i >= 0 && card_of(a->map, &a->map->tokens.v[i]) ? i : -1;
+    if (i < 0) return -1;
+    /* A card, or a marker the ruleset has words for (docs/CONDITIONS.md).
+     * app_view_differs reads this too: it is what keeps both off the phones. */
+    const Token *t = &a->map->tokens.v[i];
+    return card_of(a->map, t) || ruleset_has_condition(ruleset_by_name(a->map->ruleset), t) ? i : -1;
 }
 
 

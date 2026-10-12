@@ -53,6 +53,23 @@ typedef struct {
     const char *horde;        /* "Horde (X)": its attack deals X once half its HP is marked */
 } DamageRule;
 
+/* A marker the game knows: one spelling, one color, and what it does, in a
+ * line of the tool's with the page of the rules to read (docs/CONDITIONS.md). `note` is the tool's line about
+ * it, when the name could be taken for something of the tool's; NULL else. */
+typedef struct {
+    const char *name;
+    uint8_t     color;        /* index into the status palette */
+    const char *text;
+    const char *note;
+} Condition;
+
+/* A condition that comes and goes with a counter: on when the last of the
+ * counter is marked (it reaches 0), off when any of it is cleared. */
+typedef struct {
+    const char *counter;      /* "Stress" */
+    const char *condition;    /* "Vulnerable" */
+} AutoCondition;
+
 typedef struct {
     const char      *name;
     const RangeBand *bands;
@@ -84,7 +101,32 @@ typedef struct {
     const char      *card_skeleton;
     /* Marking HP by damage thresholds; NULL to take damage off HP as is. */
     const DamageRule *damage;
+    /* The markers the game knows, and the one a counter sets; NULL for none. */
+    const Condition     *conditions;
+    int                  nconditions;
+    const AutoCondition *auto_condition;
 } Ruleset;
+
+/* ------------------------------------------------------------- conditions */
+
+/* The condition a marker's word names: the whole word, any case. NULL for a
+ * word of the GM's own, and under a ruleset with none. */
+const Condition *ruleset_condition(const Ruleset *rs, const char *word);
+/* Does the creature carry a marker the ruleset knows? */
+int ruleset_has_condition(const Ruleset *rs, const Token *t);
+
+/* What a change to a creature's counters did to the condition that follows
+ * one, applied to `after` before the edit is recorded so both are one undo
+ * step: the last of the counter marked puts the condition on, any of it
+ * cleared takes it off. Only the change does either. */
+typedef enum {
+    COND_SAME = 0,
+    COND_ADDED,
+    COND_REMOVED,
+    COND_NO_ROOM,       /* it should be on, and the creature holds no more markers */
+} CondChange;
+CondChange ruleset_counter_changed(const Ruleset *rs, const Token *before, Token *after,
+                                   const char **name);
 
 const Ruleset *ruleset_by_name(const char *name);   /* NULL if unknown */
 const Ruleset *ruleset_at(int i);                   /* for listing */

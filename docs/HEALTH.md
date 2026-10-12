@@ -180,7 +180,7 @@ Rows move here when fixed, with the commit.
 
 ### Where the rows came from
 
-Twenty reviews, 2026-10-07 to 2026-10-12. The first seven predate this section: on 2026-10-09
+Twenty-one reviews, 2026-10-07 to 2026-10-12. The first seven predate this section: on 2026-10-09
 their reports were read back from the session's record and every item checked against the
 code as it stood (137 items: 117 fixed, 4 overtaken when the plan dropped "accept saves", 16
 open, none disproved). Steps 4-6 were entered from their reports as they came.
@@ -207,6 +207,7 @@ open, none disproved). Steps 4-6 were entered from their reports as they came.
 | 2026-10-12 | the first drafts of docs/SUMMON.md, CONDITIONS.md and ENVIRONMENTS.md (plans; all seventeen findings taken into them) | none |
 | 2026-10-12 | docs/SUMMON.md's second draft (the GM places inside the highlight; all seven findings taken in) | none |
 | 2026-10-12 | `:summon` as built (two medium, two low, five test gaps: all fixed) | none |
+| 2026-10-12 | conditions as built, and where the SRD's link is kept (two medium, three low, three test gaps: all fixed) | none |
 
 ## 2026-09-28, at 17e31e3
 

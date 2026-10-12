@@ -1,6 +1,8 @@
 /* Tests: what the GM keeps on a creature: markers, notes, counters, hidden creatures. */
 
 #include "harness.h"
+#include "app_priv.h"
+#include "card.h"
 
 void test_status_draw(void)
 {
@@ -680,3 +682,231 @@ void test_hidden(void)
 }
 
 /* ------------------------------------------------------------- the picker */
+
+/* ------------------------------------------------- conditions (ruler.c) */
+
+static int has_marker(const Token *t, const char *label)
+{
+    for (int i = 0; i < t->nstatus; i++)
+        if (!strcmp(t->status[i].label, label)) return 1;
+    return 0;
+}
+
+void test_conditions(void)
+{
+    Sandbox sb = sandbox_enter("conditions");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    write_map_file(sb.dir, "fight.vtt");
+    char path[600];
+    snprintf(path, sizeof path, "%s/fight.vtt", sb.dir);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK_EQ(app_open_map(&a, path), 0);
+    Key f2 = { KEY_F2, 0, 0 };
+    app_key(&a, f2);
+    press(&a, ":ruleset daggerheart\r");
+    a.ed.cx = a.ed.cy = 0;
+    press(&a, "ieOgre\r");
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, "ipAria\r");
+    Map *m = a.map;
+    const Ruleset *dh = ruleset_by_name("daggerheart");
+    Token *ogre = &m->tokens.v[0], *aria = &m->tokens.v[1];
+
+    CASE("the table: the whole word in any case, and nothing shorter or longer");
+    CHECK(ruleset_condition(dh, "vulnerable") && !strcmp(ruleset_condition(dh, "VULNERABLE")->name, "Vulnerable"));
+    CHECK(ruleset_condition(dh, "Hidden") && ruleset_condition(dh, "restrained"));
+    CHECK(!ruleset_condition(dh, "v") && !ruleset_condition(dh, "hid") && !ruleset_condition(dh, "hidden guard"));
+    CHECK(!ruleset_condition(ruleset_by_name(""), "vulnerable"));
+    CHECK(!ruleset_condition(NULL, "vulnerable"));
+
+    CASE("s a with a known word: the ruleset's spelling and color, whatever color is current");
+    play_focus(&a.play, 0); a.ed.cx = a.ed.cy = 0;
+    a.play.status_color = 4;
+    press(&a, "sarestrained\r");
+    CHECK_EQ(ogre->nstatus, 1);
+    CHECK(!strcmp(ogre->status[0].label, "Restrained"));
+    CHECK_EQ(ogre->status[0].color, ruleset_condition(dh, "restrained")->color);
+    CHECK(strstr(a.status, "orange marker on Ogre: Restrained") != NULL);
+    press(&a, "saRESTRAINED\r");                           /* a condition goes on once */
+    CHECK_EQ(ogre->nstatus, 1);
+    CHECK(strstr(a.status, "already Restrained") != NULL);
+
+    CASE("a word of the GM's own is left as typed, a start of a condition included");
+    press(&a, "sahid\r");
+    CHECK_EQ(ogre->nstatus, 2);
+    CHECK(!strcmp(ogre->status[1].label, "hid") && ogre->status[1].color == 4);
+    press(&a, "u");
+    CHECK_EQ(ogre->nstatus, 1);
+
+    CASE("the last Stress marked puts Vulnerable on, in the same undo step; an adversary as a PC");
+    press(&a, "svstress 2/2\r");
+    CHECK(!has_marker(ogre, "Vulnerable"));
+    int d0 = a.undo.depth;
+    press(&a, "<");
+    CHECK(!has_marker(ogre, "Vulnerable"));
+    press(&a, "<");
+    CHECK_EQ(ogre->counters[0].value, 0);
+    CHECK(has_marker(ogre, "Vulnerable"));
+    CHECK(ogre->nstatus > 0 && ogre->status[ogre->nstatus - 1].color == ruleset_condition(dh, "vulnerable")->color);
+    CHECK(strstr(a.status, "Ogre Stress 0/2 - now Vulnerable") != NULL);
+    CHECK_EQ(a.status_gm, 1);
+    CHECK_EQ(a.undo.depth, d0 + 2);
+    press(&a, "u");                                        /* the Stress and the marker, one step */
+    CHECK_EQ(ogre->counters[0].value, 1);
+    CHECK(!has_marker(ogre, "Vulnerable"));
+    press(&a, "\x12");
+    CHECK(has_marker(ogre, "Vulnerable") && ogre->counters[0].value == 0);
+    play_focus(&a.play, 1); a.ed.cx = a.ed.cy = 1;
+    press(&a, "svstress 1/6\r<");
+    CHECK(has_marker(aria, "Vulnerable"));
+
+    CASE("clearing any Stress takes it off, by < > or by the prompt");
+    press(&a, ">");
+    CHECK(!has_marker(aria, "Vulnerable"));
+    CHECK(strstr(a.status, "no longer Vulnerable") != NULL);
+    play_focus(&a.play, 0); a.ed.cx = a.ed.cy = 0;
+    press(&a, "svstress +1\r");
+    CHECK(!has_marker(ogre, "Vulnerable"));
+    CHECK(strstr(a.status, "no longer Vulnerable") != NULL);
+    press(&a, "svstress 0\r");
+    CHECK(has_marker(ogre, "Vulnerable"));
+    CHECK(strstr(a.status, "now Vulnerable") != NULL);
+
+    CASE("only the change does it: one taken off by hand stays off, one put on by hand stays on");
+    Token t = *ogre;
+    for (int i = 0; i < t.nstatus; i++)
+        if (!strcmp(t.status[i].label, "Vulnerable")) { token_remove_status(&t, i); break; }
+    *ogre = t;                                             /* off, with Stress still 0 */
+    press(&a, "svhp 4\r");                                 /* another counter changes */
+    CHECK(!has_marker(ogre, "Vulnerable"));
+    press(&a, "svstress\r>");                              /* Stress is current again; one cleared */
+    CHECK(!has_marker(ogre, "Vulnerable"));
+    press(&a, "savulnerable\r");                           /* the GM's own, at Stress 1 */
+    CHECK(has_marker(ogre, "Vulnerable"));
+    press(&a, ">");                                        /* 2/2: was not 0, so it is not touched */
+    CHECK(has_marker(ogre, "Vulnerable"));
+    press(&a, "2<");                                       /* to 0: already on, not doubled */
+    int nv = 0;
+    for (int i = 0; i < ogre->nstatus; i++) nv += !strcmp(ogre->status[i].label, "Vulnerable");
+    CHECK_EQ(nv, 1);
+
+    CASE("a Stress counter made at 0 puts it on; taking the counter away takes it off");
+    play_focus(&a.play, 1); a.ed.cx = a.ed.cy = 1;
+    press(&a, "sv-stress\r");
+    CHECK(!has_marker(aria, "Vulnerable"));
+    press(&a, "svstress 0/6\r");
+    CHECK(has_marker(aria, "Vulnerable"));
+    press(&a, "sv-stress\r");
+    CHECK(!has_marker(aria, "Vulnerable"));
+
+    CASE("four markers already: the Stress is marked and the GM is told it did not fit");
+    press(&a, "svstress 1/6\r");
+    press(&a, "saone\rsatwo\rsathree\rsafour\r");
+    CHECK_EQ(aria->nstatus, 4);
+    press(&a, "<");
+    CHECK_EQ(aria->counters[aria->ncounters - 1].value, 0);
+    CHECK_EQ(aria->nstatus, 4);
+    CHECK(strstr(a.status, "no room for Vulnerable") != NULL);
+    CHECK_EQ(a.status_gm, 1);
+
+    CASE("the box beside the map says what a known marker does, with no card; never to the players");
+    play_focus(&a.play, 0); a.ed.cx = a.ed.cy = 0;                                 /* Ogre: Restrained, Vulnerable, no card */
+    CHECK(app_card_shown(&a) == 0);
+    CHECK(app_view_differs(&a));
+    const char *text = app_card_box_text(&a, 0);
+    CHECK(text && strstr(text, "**Restrained:** Held in place: no moving, other actions as usual.") != NULL);
+    CHECK(strstr(text, "**Vulnerable:** Easier to hit.") != NULL);
+    CHECK(app_card_box_text(&a, 0) == text);               /* kept, not built again */
+    CHECK(text[strlen(text) - 1] != '\n');                 /* no blank row under the last line */
+    rnd_begin(&r);
+    app_draw_view(&a, VIEW_GM);
+    ByteBuf gf;
+    bb_init(&gf, 65536);
+    rnd_dump(&r, &gf);
+    bb_putc(&gf, '\0');
+    CHECK(strstr(gf.data, "Easier to hit") != NULL);
+    bb_free(&gf);
+    char *pf = players_text(&a, &r);
+    CHECK(strstr(pf, "Easier to hit") == NULL && strstr(pf, "Held in place") == NULL);
+    free(pf);
+    press(&a, ":card off\r");
+    CHECK(app_card_shown(&a) < 0);
+    press(&a, ":card on\r");
+
+    CASE("the text follows the markers: one dropped is gone from the box");
+    press(&a, "svstress 2\r");                             /* clears Vulnerable */
+    text = app_card_box_text(&a, 0);
+    CHECK(text && strstr(text, "Restrained") != NULL && strstr(text, "Vulnerable") == NULL);
+
+    CASE("a creature with a card too: the card, a blank line, then the conditions");
+    CHECK(card_set(m, "ogre", "Ogre - Tier 1 Bruiser\nDifficulty: 13") >= 0);
+    str_lcpy(ogre->card, "ogre", sizeof ogre->card);
+    map_touch(m);
+    text = app_card_box_text(&a, 0);
+    CHECK(text && !strncmp(text, "Ogre - Tier 1 Bruiser\nDifficulty: 13\n\n**Restrained:**", 52));
+    ogre->card[0] = '\0';
+    map_touch(m);
+
+    CASE("what the box kept does not outlive its map");
+    CHECK(a.box_text != NULL);
+    app_card_box_forget(&a);
+    CHECK(a.box_text == NULL && a.box_map == NULL);
+    text = app_card_box_text(&a, 0);
+    CHECK(text && strstr(text, "Restrained") != NULL);
+
+    CASE(":condition lists them and reads one; the text is the GM's");
+    press(&a, ":condition\r");
+    CHECK(strstr(a.status, "conditions: Hidden, Restrained, Vulnerable") != NULL);
+    press(&a, ":condition hidden\r");
+    CHECK_EQ(a.modal, MODAL_CARD);
+    CHECK(a.card_text && strstr(a.card_text, "Unseen and unlocated: harder to hit.") != NULL);
+    CHECK(strstr(a.card_text, "s h is what keeps a creature off their screens") != NULL);
+    CHECK(app_view_differs(&a));
+    rnd_begin(&r);
+    app_draw_view(&a, VIEW_GM);
+    bb_init(&gf, 65536);
+    rnd_dump(&r, &gf);
+    bb_putc(&gf, '\0');
+    CHECK(strstr(gf.data, "harder to hit") != NULL && strstr(gf.data, "Hidden") != NULL);
+    bb_free(&gf);
+    pf = players_text(&a, &r);
+    CHECK(strstr(pf, "harder to hit") == NULL);
+    free(pf);
+    press(&a, "\x1b");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    press(&a, ":condition dazed\r");
+    CHECK(strstr(a.status, "no condition called dazed") != NULL);
+    press(&a, ":card\r");                                  /* :card is a creature's card again */
+    CHECK(a.modal == MODAL_NONE && strstr(a.status, "has no card") != NULL);
+
+    CASE("the Hidden marker hides nothing, and hiding sets no marker");
+    play_focus(&a.play, 1); a.ed.cx = a.ed.cy = 1;
+    press(&a, "u");                                        /* make room: the Stress and a marker back */
+    press(&a, "uu");
+    press(&a, "sahidden\r");
+    CHECK(has_marker(aria, "Hidden") && !aria->hidden);
+
+    CASE("no ruleset: the same words are plain markers, and Stress sets nothing");
+    press(&a, ":ruleset none\r");
+    play_focus(&a.play, 0); a.ed.cx = a.ed.cy = 0;
+    int n1 = ogre->nstatus;
+    press(&a, "svstress 0\r");
+    CHECK_EQ(ogre->nstatus, n1);
+    CHECK(strstr(a.status, "Vulnerable") == NULL);
+    a.play.status_color = 5;
+    press(&a, "savulnerable\r");
+    CHECK(!strcmp(ogre->status[ogre->nstatus - 1].label, "vulnerable") && ogre->status[ogre->nstatus - 1].color == 5);
+    press(&a, ":condition\r");
+    CHECK(strstr(a.status, "names no conditions") != NULL);
+    CHECK(undo_balanced(&a.undo));
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}

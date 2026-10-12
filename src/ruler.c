@@ -6,6 +6,7 @@
 #include <strings.h>
 
 #include "card.h"
+#include "counter.h"
 #include "prof.h"
 
 /* ---------------------------------------------------------------- metrics */
@@ -110,13 +111,35 @@ static const RangeBand DAGGERHEART_BANDS[] = {
 /* The SRD's names for what :dmg reads off an adversary's card. */
 static const DamageRule DAGGERHEART_DAMAGE = { "HP", "Thresholds", "Minion", "Horde" };
 
+/* The SRD's three standard conditions (p. 52) and its rule tying one to the
+ * last Stress (p. 50). Which SRD, and where it is: docs/CODEMAP.md, this
+ * file's row. Each text is this tool's summary and the page to read, never
+ * the SRD's wording: vtt ships no SRD content. */
+static const Condition DAGGERHEART_CONDITIONS[] = {
+    { "Hidden", 7,
+      "Unseen and unlocated: harder to hit. Lost once an enemy can see it, or it attacks. "
+      "(SRD 2.0, p. 52)",
+      "A marker the players see. s h is what keeps a creature off their screens." },
+    { "Restrained", 1,
+      "Held in place: no moving, other actions as usual. (SRD 2.0, p. 52)",
+      NULL },
+    { "Vulnerable", 0,
+      "Easier to hit. On while no Stress is left, off when some is cleared. "
+      "(SRD 2.0, pp. 50, 52)",
+      NULL },
+};
+static const AutoCondition DAGGERHEART_LAST_STRESS = { "Stress", "Vulnerable" };
+
 static const Ruleset RULESETS[] = {
-    { "none",        NULL, 0, 1, NULL, 0, 0, NULL, -1, NULL, NULL },
+    { "none",        NULL, 0, 1, NULL, 0, 0, NULL, -1, NULL, NULL, NULL, 0, NULL },
     /* A group effect's targets are within Very Close of one origin point
      * "unless stated otherwise" (the SRD's Area of Effect). */
     { "daggerheart", DAGGERHEART_BANDS,
       (int)(sizeof DAGGERHEART_BANDS / sizeof *DAGGERHEART_BANDS), 1, "duality", 1, 1,
-      "HP Stress Armor", 1, DH_CARD, &DAGGERHEART_DAMAGE },
+      "HP Stress Armor", 1, DH_CARD, &DAGGERHEART_DAMAGE,
+      DAGGERHEART_CONDITIONS,
+      (int)(sizeof DAGGERHEART_CONDITIONS / sizeof *DAGGERHEART_CONDITIONS),
+      &DAGGERHEART_LAST_STRESS },
 };
 
 #define NRULESETS ((int)(sizeof RULESETS / sizeof *RULESETS))
@@ -132,6 +155,52 @@ const Ruleset *ruleset_by_name(const char *name)
 const Ruleset *ruleset_at(int i)
 {
     return (i >= 0 && i < NRULESETS) ? &RULESETS[i] : NULL;
+}
+
+const Condition *ruleset_condition(const Ruleset *rs, const char *word)
+{
+    if (!rs || !word) return NULL;
+    for (int i = 0; i < rs->nconditions; i++)
+        if (!strcasecmp(rs->conditions[i].name, word)) return &rs->conditions[i];
+    return NULL;
+}
+
+int ruleset_has_condition(const Ruleset *rs, const Token *t)
+{
+    if (!rs || !rs->nconditions) return 0;
+    for (int i = 0; i < t->nstatus; i++)
+        if (ruleset_condition(rs, t->status[i].label)) return 1;
+    return 0;
+}
+
+/* What is left of the counter, or -1 when the creature has none by that name. */
+static int counter_left(const Token *t, const char *name)
+{
+    int i = counter_find(t, name);
+    return i >= 0 ? t->counters[i].value : -1;
+}
+
+CondChange ruleset_counter_changed(const Ruleset *rs, const Token *before, Token *after,
+                                   const char **name)
+{
+    if (name) *name = NULL;
+    if (!rs || !rs->auto_condition) return COND_SAME;
+    const Condition *c = ruleset_condition(rs, rs->auto_condition->condition);
+    if (!c) return COND_SAME;
+    if (name) *name = c->name;
+
+    int was = counter_left(before, rs->auto_condition->counter);
+    int now = counter_left(after, rs->auto_condition->counter);
+    int at  = token_find_status(after, c->name);
+    if (now == 0 && was != 0) {
+        if (at >= 0) return COND_SAME;
+        return token_add_status(after, c->color, c->name) ? COND_ADDED : COND_NO_ROOM;
+    }
+    if (was == 0 && now != 0 && at >= 0) {
+        token_remove_status(after, at);
+        return COND_REMOVED;
+    }
+    return COND_SAME;
 }
 
 const RangeBand *ruleset_band_of(const Ruleset *rs, double units)

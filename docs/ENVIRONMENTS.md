@@ -11,9 +11,18 @@ dropped; step 1 alone is about 300.
 
 ## Progress
 
-*Not started (2026-10-12). Built after conditions (docs/CONDITIONS.md, whose Progress says
-where that stands). Three steps, each reviewed before the next: the card on the map and
-the area; potential adversaries in the picker; the SRD's environments imported.*
+*Not started; next to build (2026-10-12: summoning and conditions are in). Three steps,
+each reviewed before the next: the card on the map and the area; potential adversaries in
+the picker; the SRD's environments imported.*
+
+Before step 1, two things conditions turned up:
+
+- **vtt ships no SRD content.** The environment skeleton (`Ruleset.env_skeleton`) is labels
+  to fill in, as the adversary card's is, never an environment's text; the importer reads
+  a file the GM downloads. The SRD 2.0's link and how to read it: docs/CODEMAP.md, the
+  `ruler.c` row.
+- `MODAL_CARD` now shows any text through `App.card_text` (`:condition` uses it): `:env`
+  can show its card the same way, with no creature to name.
 
 ## What it does
 

@@ -352,6 +352,8 @@ run "play, rolling"        "$MOB"    80x24  ':play\r:roll 2d6+3\r:roll +1\r'
 run "play, group effect"   "$MOB"    80x24  ':play\r2gellllhhhhjjkk'
 run "play, card box"      "$CARDMOB" 80x24 ':play\rtjjllkkhh'
 run "play, damage"         "$DMGMOB" 80x24  ':play\r4ge:dmg 6\ru'   # 13 caught
+# The last Stress marked and cleared: Vulnerable goes on and comes off with it.
+run "play, stress to zero and back" "$MOB" 80x24 ':play\r:B2\rsvstress 1/1\r<>'
 run "play, 500 characters" "$MOB"    80x24  ':play\ritebeast-4\t\t\ru'
 # Two summoned inside Far of the creature at B2, then taken back: the row reads the
 # template's file once a loop.

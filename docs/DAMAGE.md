@@ -9,7 +9,8 @@ Signed off 2026-10-02 with the recommendations (list Minions only, massive damag
 the map, the group effect included). The README is the user's reference; this page is why it
 is the way it is.
 
-The rules it follows are the SRD's (2025-09-09), "Hit Points & Damage Thresholds",
+The rules it follows are the SRD's (2025-09-09, the edition then current; the one in use now is the 2.0 of
+2026-08-25, docs/CODEMAP.md's `ruler.c` row), "Hit Points & Damage Thresholds",
 "Resistance, Immunity, and Direct Damage", "Multi-target Attack Rolls", "Multiple Damage
 Sources", "Rounding Up" and the adversary passives Minion (X) and Horde (X).
 

@@ -1,6 +1,8 @@
 # Conditions
 
-> **Status: signed off 2026-10-12, to be built after summoning (docs/SUMMON.md).**
+> **Status: built 2026-10-12.** A design record: the plan as it was signed off. What is true
+> now is the README (*Daggerheart*, *Conditions*) and the rows of `ruler.c` and `card.c` in
+> docs/CODEMAP.md. *As built* below says where the code left the plan.
 
 Roadmap item 13. Under `:ruleset daggerheart`, Hidden, Restrained and Vulnerable are markers
 the tool knows: typed in any case they get one spelling and one color, the GM can read what
@@ -10,29 +12,7 @@ change.** About 300 lines with its tests and docs.
 
 ## Progress
 
-*Not started. Next to build (2026-10-12): summoning, item 19, went in first as 8097d0c.*
-
-Where to begin, from what building summoning turned up:
-
-1. `ruler.c`/`ruler.h`: `Ruleset.conditions` and `Ruleset.auto_condition`, filled in for
-   Daggerheart. The three texts are the SRD's, word for word: check them against the SRD
-   itself before writing them, and cite the page.
-2. The marker prompt (`PROMPT_STATUS_LABEL`, app.c about line 741): a whole-word match,
-   any case, takes the table's spelling and color.
-3. `ruleset_counter_changed(rs, before, after)`, called where the GM edits a counter: the
-   `s v` prompt (app.c, the `counter_apply` call) and `<`/`>` (`counter_step`, app_play.c).
-   Counters count what is left, so the last Stress marked is Stress at 0.
-4. The card box: `app_card_shown` (app_draw.c) is the one test, and `app_view_differs`
-   reads it; the creature with a known marker and no card goes into that function.
-5. `:condition`, the `?` page (src/keys.c), the README's *Daggerheart*, CODEMAP, a
-   `perf.sh` row, then the Fable review, HEALTH.md's line for it, and roadmap item 13 to
-   *Built*.
-
-Lessons from summoning that apply here: a plain `app_set_status` reaches the phones unless
-fog or a hidden creature is about, so anything naming a creature or its numbers is
-`app_set_status_gm`; `make perf` three times and `tools/median.py` for the tables, and A/B
-any row that moves by a tenth against the commit before; `make test` takes over two
-minutes from clean.
+*Built and reviewed, 2026-10-12. Nothing of the plan is waiting.*
 
 ## What it does
 
@@ -105,3 +85,32 @@ Docs: `:condition` on the `?` page (src/keys.c), the README's *Daggerheart*, COD
 - **Adversaries too.** Vulnerable follows the last Stress for every creature, player
   characters and adversaries alike (the user's ruling, written into this page).
 - The SRD's three conditions; a fourth is one row in the table.
+
+## As built: what the plan did not say
+
+- **The text is the tool's summary with the page, not the SRD's wording.** The plan said
+  "copied word for word". The project's standing rule is that vtt ships no SRD content
+  (the README, *Importing the SRD's adversaries*; docs/CARDS.md), and three paragraphs of
+  the SRD in ruler.c would have broken it. Each condition has one line of the tool's and
+  the page to read: SRD 2.0 of 2026-08-25, conditions p. 52, Stress p. 50
+  (https://www.daggerheart.com/wp-content/uploads/2026/08/DH_SRD_2_2026_08_25.pdf).
+  2.0's text for the three is the same as 1.0's. The first summaries still followed the
+  SRD's sentences clause for clause; the review caught it and they were rewritten.
+- **The key is `s a`**, then the word: `s` alone is the markers' prefix.
+- **A condition goes on once.** `s a vulnerable` on a creature that is Vulnerable is
+  refused ("already Vulnerable"); the SRD says the same condition is not applied twice.
+- **`:condition NAME` uses the card's view** (`MODAL_CARD`, through `App.card_text`), a
+  box the size of its few lines, so it scrolls and closes as a card does and is the GM's
+  by the same test.
+- **The box's text is built once and kept** (`App.box_text`) until the map's `gen`, its
+  cards or the creature under the cursor change: the box is drawn every frame.
+- **`token_find_status`** (token.c) is the one lookup of a marker by its word; the hook
+  finds the counter with `counter_find`.
+- **What the box kept is dropped with its map** (`app_card_box_forget`, from
+  `app_close_map`, `app_travel_to`, `app_free`): two maps newly read can share an address
+  and a generation.
+- **The suite is `conditions`** (tests/test_marks.c), 70-odd checks.
+- **Measured**: `counter.step` 0.4 µs typical and 2.8 µs at p99 in `play, stress to zero
+  and back`, against 0.2 and 2.3 for a plain step; `card.draw` unchanged
+  (docs/PERFORMANCE.md, *Counters, the session log, the autosave and saves*). The plan's
+  table held: nothing on a map with no ruleset but one NULL test.

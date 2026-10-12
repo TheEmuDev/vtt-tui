@@ -194,6 +194,9 @@ int         status_color_from_name(const char *name);   /* -1 if unknown */
 int  token_add_status(Token *t, uint8_t color, const char *label);
 void token_clear_status(Token *t);
 
+/* The marker of that word, any case: its index, or -1. */
+int  token_find_status(const Token *t, const char *label);
+
 /* Drops one marker, keeping the rest in order. Out-of-range is a no-op. */
 void token_remove_status(Token *t, int idx);
 

@@ -1011,8 +1011,14 @@ static void cmd_card(App *a, const char *verb, const char *rest)
         return;
     }
     a->card_token = i;
+    a->card_text  = NULL;
     a->card_top   = 0;
     a->modal      = MODAL_CARD;
+}
+
+static void cmd_condition(App *a, const char *verb, const char *rest)
+{
+    app_condition_command(a, rest);
 }
 
 static void cmd_whisper(App *a, const char *verb, const char *rest)
@@ -1136,6 +1142,7 @@ static const struct {
     { "stamp", NULL, cmd_stamp },
     { "character", "characters", cmd_character },
     { "summon", NULL, cmd_summon },
+    { "condition", "conditions", cmd_condition },
     { "scene", "scenes", cmd_scene },
     { "handout", "handouts", cmd_handout },
     { "link", "links", cmd_link },

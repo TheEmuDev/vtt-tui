@@ -84,6 +84,7 @@ static const KeyDoc PLAY[] = {
     KEY("s d",    "drop a marker, asking which when there are several"),
     GROUP("Counters"),
     KEY("s v",    "the creature's counters: hp 6, hp -2, stress 0/6, -hp"),
+    KEY(":condition", "the ruleset's conditions; :condition hidden reads one. s a vulnerable puts one on"),
     KEY("<  >",   "one off / one on its current counter; 3< takes three"),
     KEY(":dmg 11", "mark HP by its card's thresholds, all caught while g e is up; 11 half, massive on"),
     GROUP("Fog"),

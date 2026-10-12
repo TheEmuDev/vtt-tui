@@ -109,6 +109,19 @@ int app_target_token_under(const App *a);
 
 /* app_card.c: s k -- the creature's card in the GM's editor. */
 void app_card_edit(App *a);
+/* What the box beside the map says of creature i: its card, and under it
+ * what each marker the ruleset knows does. NULL when it has neither. The
+ * text is the map's or the app's and lasts until the next call. */
+const char *app_card_box_text(App *a, int i);
+/* Drops what it kept: called wherever the map leaves the app's hands, since a
+ * map newly read can match the old one's address and generation. */
+void app_card_box_forget(App *a);
+/* :condition [NAME] -- the ruleset's conditions, or one read whole. */
+void app_condition_command(App *a, const char *rest);
+/* What a counter's edit did to the condition that follows it, for the end of
+ * the message: " - now ", " - no longer ", or " - four markers already, no
+ * room for " before the condition's name; "" when nothing. */
+const char *app_condition_said(CondChange cc);
 
 /* app_whisper.c: :whisper, :players; and each tick, the names a phone is
  * offered kept in step and the phones that arrived said. */

@@ -406,7 +406,8 @@ status markers.
 **Status markers.** `s a` adds a marker to the selected creature: a word of your choice in a
 color chosen with `s c`. Markers are drawn as the first letter of the word above the
 creature; the status line spells them out. A creature holds up to four.
-`s d` removes one, asking which when there are several.
+`s d` removes one, asking which when there are several. A ruleset may know some words
+(Daggerheart's [conditions](#daggerheart)): those get its spelling and color.
 
 **Counters.** `s v` edits numbers kept on the selected creature, such as hit points. Each
 counter has a name, a value and a maximum; a creature holds four. The prompt accepts one or
@@ -1222,6 +1223,21 @@ use, and how `:dmg` marks HP. Available: `none`, `daggerheart`.
   The Hope die is shown in gold and the Fear die in purple. `:roll duality +2` makes the same
   roll under any ruleset.
 - **Counters**: HP, Stress and Armor.
+- **Conditions.** Hidden, Restrained and Vulnerable are markers vtt knows. Add one with `s a`
+  and the whole word in any case (`s a` `vulnerable`): it gets that spelling and its own color,
+  and goes on a creature once. Anything else you type is still a marker of your own.
+  - With the cursor on a creature that has one, the box beside the map says what it does,
+    under its card if it has a card. Only you see the box.
+  - `:condition` lists them; `:condition hidden` shows one whole.
+  - **Vulnerable follows Stress**, for players and adversaries alike: marking a creature's
+    last Stress (`<`, or `s v` `stress 0`) puts Vulnerable on, and clearing any takes it off.
+    Each is one `u` with the Stress. If the creature already has four markers the Stress is
+    still marked and the status line says Vulnerable did not fit.
+  - The Hidden marker is a word the players can see. `s h` is what hides a creature from
+    their screens; neither sets the other.
+
+  vtt's line for each is a summary with the page to read, not the rules' text: the
+  [SRD 2.0](https://www.daggerheart.com/wp-content/uploads/2026/08/DH_SRD_2_2026_08_25.pdf) has them on pages 50 and 52.
 - **Damage thresholds.** `:dmg` marks HP by the card's `Thresholds:` line, and knows the
   `Minion (X)` and `Horde (X)` features (see [Damage](#damage-dmg)).
 
@@ -1245,6 +1261,7 @@ use, and how `:dmg` marks HP. Available: `none`, `daggerheart`.
 | `:area NAME` | name the selection, or jump to a named area; `:areas` lists, `:area NAME remove` removes |
 | `:stamp ...` | save, load and choose [stamps](#build-mode) |
 | `:character ...` | save and place [characters](#characters-character-i-t) |
+| `:condition [NAME]` | list the ruleset's conditions, or show what one does ([Daggerheart](#daggerheart)) |
 | `:summon [hidden] [N\|any] NAME [RANGE]` | place a character inside a highlighted range of a creature ([summoning](#summoning-summon)) |
 | `:scene ...`, `:scenes` | save, put back and list [scenes](#scenes-scene) |
 | `:handout ...` | show a [handout](#the-players-view-serve-mirror) on the players' screens; `:handout off` takes it down |

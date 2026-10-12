@@ -284,11 +284,14 @@ static void counter_step(App *a, int delta)
         app_set_status_gm(a, msg);
         return;
     }
+    const char *cond = NULL;
+    CondChange cc = ruleset_counter_changed(ruleset_by_name(a->map->ruleset), &a->map->tokens.v[idx], &t, &cond);
     undo_begin(&a->undo);
     undo_edit_token(&a->undo, a->map, idx, t);
     undo_end(&a->undo);
-    snprintf(msg, sizeof msg, "%.24s %s %d/%d", who, t.counters[i].name,
-             t.counters[i].value, t.counters[i].max);
+    snprintf(msg, sizeof msg, "%.24s %s %d/%d%s%s", who, t.counters[i].name,
+             t.counters[i].value, t.counters[i].max,
+             app_condition_said(cc), cc != COND_SAME ? cond : "");
     app_note_gm(a, msg);
 }
 
