@@ -100,6 +100,18 @@ double dist_tiles(DistMetric m, int dx, int dy)
     "Feature - Action: what it does in the spotlight.\n" \
     "Feature - Reaction: what it does when something happens.\n"
 
+/* An environment's block, its labels only (the SRD's "Environments"); what
+ * goes after each is the GM's to write or to import. */
+#define DH_ENV \
+    "%s - Tier 1 Exploration\n" \
+    "What the place is like.\n" \
+    "Impulses: \n" \
+    "Difficulty: 11\n" \
+    "Potential Adversaries: \n" \
+    "\n" \
+    "Feature - Passive: what is always true here.\n" \
+    "Feature - Action: what the place does in the spotlight.\n"
+
 static const RangeBand DAGGERHEART_BANDS[] = {
     { "Melee",       5.0,      DH_NEAR_PC, DH_NEAR_ADV },  /* touching distance: an adjacent square */
     { "Very Close", 15.0,      DH_NEAR_PC, DH_NEAR_ADV },  /* the short edge of a game card, 2-3 in */
@@ -131,12 +143,12 @@ static const Condition DAGGERHEART_CONDITIONS[] = {
 static const AutoCondition DAGGERHEART_LAST_STRESS = { "Stress", "Vulnerable" };
 
 static const Ruleset RULESETS[] = {
-    { "none",        NULL, 0, 1, NULL, 0, 0, NULL, -1, NULL, NULL, NULL, 0, NULL },
+    { "none",        NULL, 0, 1, NULL, 0, 0, NULL, -1, NULL, NULL, NULL, NULL, 0, NULL },
     /* A group effect's targets are within Very Close of one origin point
      * "unless stated otherwise" (the SRD's Area of Effect). */
     { "daggerheart", DAGGERHEART_BANDS,
       (int)(sizeof DAGGERHEART_BANDS / sizeof *DAGGERHEART_BANDS), 1, "duality", 1, 1,
-      "HP Stress Armor", 1, DH_CARD, &DAGGERHEART_DAMAGE,
+      "HP Stress Armor", 1, DH_CARD, &DAGGERHEART_DAMAGE, DH_ENV,
       DAGGERHEART_CONDITIONS,
       (int)(sizeof DAGGERHEART_CONDITIONS / sizeof *DAGGERHEART_CONDITIONS),
       &DAGGERHEART_LAST_STRESS },

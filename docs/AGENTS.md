@@ -108,6 +108,7 @@ screens show the party's floor.
 | line | does |
 |---|---|
 | `floor Upper 1`, `floor Upper off` | the named area is a floor at level 1 (-99 to 99), or no longer one. Floors may not overlap |
+| `env Crypt haunted-crypt`, `env Crypt remove` | the named area's environment is the card of that name (letters, digits, `-`, `_`), or it has none. The card is the GM's to write; the map's own environment is the GM's to set |
 
 **Links.** Stairs, a ladder, a trapdoor or a portal: two places joined, so the GM can send
 creatures from one to the other with a key. Floors of a building, or a place reached by
@@ -411,6 +412,6 @@ blank line inside a section is a row. A door on the map's own edge is a way out 
 
 Creatures: `token player X Y SIZE "Label"` (or `enemy`), anchored at the top-left square;
 `tokennote "text"` after one, and `tokenhidden` to keep it off the players' screens. Square notes: `note X Y "text"`. Areas: `area X0 Y0 X1 Y1
-"Name"`. Floors: `floor "Name" LEVEL` after the area lines. Links: `link N KIND SIZE X0 Y0 X1 Y1
+"Name"`. Floors: `floor "Name" LEVEL` after the area lines. Environments: `env "card"` for the map, `areaenv "Name" "card"` for an area, after those. Links: `link N KIND SIZE X0 Y0 X1 Y1
 [oneway] [secret]`, each end by its top-left square. Fog: `fog on`, `fogpatch N Name reveal R memory on`, then a `fog` section of `H`
 rows of `W` characters (`.` none, `A`-`O` patch 1-15).

@@ -6,6 +6,7 @@
 #include "clock.h"
 #include "mapio.h"
 #include "dice.h"
+#include "card.h"
 #include "floor.h"
 #include "fog.h"
 #include "json.h"
@@ -188,6 +189,7 @@ void maptools_dump(FILE *out, const Map *m, int x0, int y0, int x1, int y1)
         fprintf(out, "  %-5s %s\n", at, n->text);
     }
 
+    if (m->env[0]) fprintf(out, "\nenvironment %s\n", m->env);
     shown = 0;
     for (int i = 0; i < m->nareas; i++) {
         const Area *ar = &m->areas[i];
@@ -196,7 +198,7 @@ void maptools_dump(FILE *out, const Map *m, int x0, int y0, int x1, int y1)
         if (!shown++) fputs("\nareas\n", out);
         map_coord_name(ar->x0, ar->y0, b0, sizeof b0);
         map_coord_name(ar->x1, ar->y1, b1, sizeof b1);
-        fprintf(out, "  %-16s %s:%s\n", ar->name, b0, b1);
+        fprintf(out, "  %-16s %s:%s%s%s\n", ar->name, b0, b1, ar->env[0] ? "  environment " : "", ar->env);
     }
 
     shown = 0;
@@ -615,9 +617,11 @@ void maptools_describe(FILE *out, const Map *m, int json)
             json_kstr(&j, "bounds", buf);
             json_kint(&j, "x0", ar->x0); json_kint(&j, "y0", ar->y0);
             json_kint(&j, "x1", ar->x1); json_kint(&j, "y1", ar->y1);
+            if (ar->env[0]) json_kstr(&j, "environment", ar->env);
             json_close(&j, '}');
         }
         json_close(&j, ']');
+        if (m->env[0]) json_kstr(&j, "environment", m->env);    /* the map's own */
 
         json_key(&j, "floors");                    /* areas marked as floors, low level first */
         json_open(&j, '[');
@@ -1001,6 +1005,16 @@ static void check_map(const Map *m, Findings *fs)
         map_coord_name(n->x, n->y, where, sizeof where);
         snprintf(msg, sizeof msg, "a note on void: %.60s", n->text);
         map_finding(fs, "W140", "note-on-void", n->x, n->y, 0, where, msg);
+    }
+    /* An environment naming a card the map does not hold: :env has nothing to show. */
+    for (int i = -1; i < m->nareas; i++) {
+        const char *env = i < 0 ? m->env : m->areas[i].env;
+        if (!env[0] || card_find(m, env) >= 0) continue;
+        int ex = i < 0 ? 0 : m->areas[i].x0, ey = i < 0 ? 0 : m->areas[i].y0;
+        map_coord_name(ex, ey, where, sizeof where);
+        snprintf(msg, sizeof msg, "%s%.31s names the environment %s, and the map has no card of that name",
+                 i < 0 ? "the map" : "area ", i < 0 ? "" : m->areas[i].name, env);
+        map_finding(fs, "W170", "env-no-card", ex, ey, 0, where, msg);
     }
     for (int i = 0; i < m->nareas; i++) {
         if (!m->areas[i].floor || !floor_problem(m, i)) continue;

@@ -101,6 +101,9 @@ typedef struct {
     const char      *card_skeleton;
     /* Marking HP by damage thresholds; NULL to take damage off HP as is. */
     const DamageRule *damage;
+    /* A new environment's card for :env edit to start from, "%s" its name:
+     * the game's block with its labels ready to fill in. NULL for just the name. */
+    const char      *env_skeleton;
     /* The markers the game knows, and the one a counter sets; NULL for none. */
     const Condition     *conditions;
     int                  nconditions;

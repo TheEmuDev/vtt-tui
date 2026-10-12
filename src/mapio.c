@@ -32,7 +32,7 @@
  * v3 added status markers on tokens. An older reader would ignore those lines
  * and silently drop them, which loses combat state from a saved fight, so it
  * refuses too. Each version still loads everything older. */
-#define FORMAT_VERSION 13
+#define FORMAT_VERSION 14
 
 /* Version 4 added the turn order. A map with no fight in it is still written
  * as version 3, which says everything it needs and stays loadable by the
@@ -60,6 +60,8 @@
 #define FORMAT_BEFORE_MAPLINKS 11
 /* Version 13 added cards (docs/CARDS.md): a map with none is still 12. */
 #define FORMAT_BEFORE_CARDS    12
+/* 14 added environments: a card's name on the map or an area. */
+#define FORMAT_BEFORE_ENV      13
 
 /* Fog rows: a held tile of patch 1..15 is one of these, in order. */
 static const char FOG_HELD_CHARS[FOG_PATCH_MAX + 1] = "123456789!\"#$%&";
@@ -220,7 +222,11 @@ static int write_map(const Map *m, const char *path, int autosave, char **keep, 
     for (int i = 0; i < m->tokens.n && !v13; i++) v13 = m->tokens.v[i].card[0] != '\0';
     for (int s = 0; s < m->nscenes && !v13; s++)
         for (int i = 0; i < m->scenes[s].tokens.n && !v13; i++) v13 = m->scenes[s].tokens.v[i].card[0] != '\0';
-    fprintf(f, "VTT %d\n", v13 ? FORMAT_VERSION : v12 ? FORMAT_BEFORE_CARDS : v11 ? FORMAT_BEFORE_MAPLINKS : v10 ? FORMAT_BEFORE_SCENES : v9 ? FORMAT_BEFORE_HIDDEN : v8 ? FORMAT_BEFORE_FLOORS : v7 ? FORMAT_BEFORE_LINKS : v6 ? FORMAT_BEFORE_AREAS : v5 ? FORMAT_BEFORE_COUNTERS
+    /* 14: an environment on the map or an area (docs/ENVIRONMENTS.md). An
+     * older build would ignore the lines and save the map without them. */
+    int v14 = m->env[0] != '\0';
+    for (int i = 0; i < m->nareas; i++) v14 |= m->areas[i].env[0] != '\0';
+    fprintf(f, "VTT %d\n", v14 ? FORMAT_VERSION : v13 ? FORMAT_BEFORE_ENV : v12 ? FORMAT_BEFORE_CARDS : v11 ? FORMAT_BEFORE_MAPLINKS : v10 ? FORMAT_BEFORE_SCENES : v9 ? FORMAT_BEFORE_HIDDEN : v8 ? FORMAT_BEFORE_FLOORS : v7 ? FORMAT_BEFORE_LINKS : v6 ? FORMAT_BEFORE_AREAS : v5 ? FORMAT_BEFORE_COUNTERS
                           : fight ? FORMAT_BEFORE_CLOCKS : FORMAT_BEFORE_TURNS);
     fprintf(f, "name %s\n", m->name);
     fprintf(f, "size %d %d\n", m->w, m->h);
@@ -261,6 +267,9 @@ static int write_map(const Map *m, const char *path, int autosave, char **keep, 
                 m->areas[i].x1, m->areas[i].y1, m->areas[i].name);
     for (int i = 0; i < m->nareas; i++)
         if (m->areas[i].floor) fprintf(f, "floor \"%s\" %d\n", m->areas[i].name, m->areas[i].level);
+    if (m->env[0]) fprintf(f, "env \"%s\"\n", m->env);
+    for (int i = 0; i < m->nareas; i++)
+        if (m->areas[i].env[0]) fprintf(f, "areaenv \"%s\" \"%s\"\n", m->areas[i].name, m->areas[i].env);
     for (int i = 0; i < m->nlinks; i++) {
         const Link *l = &m->links[i];
         if (l->to_map[0])
@@ -488,7 +497,7 @@ static int looks_like_record(const char *line)
 {
     static const char *const words[] = {
         "tiles", "vedges", "hedges", "fog", "fogpatch", "token", "tokenstatus",
-        "tokenturn", "tokencounter", "tokennote", "tokenhidden", "tokencard", "card", "endcard", "note", "area", "floor", "link", "spotlight", "clock",
+        "tokenturn", "tokencounter", "tokennote", "tokenhidden", "tokencard", "card", "endcard", "note", "area", "floor", "env", "areaenv", "link", "spotlight", "clock",
         "roll", "round", "name", "size", "zoom", "scale", "ruleset", "rule", "metric", "scene", "endscene", NULL,
     };
     size_t n = 0;
@@ -1067,6 +1076,9 @@ static Map *load_text(FILE *f, const char *path, char *err, size_t errsz, MapioD
     memset(&scene_new, 0, sizeof scene_new);
     memset(&map_tokens, 0, sizeof map_tokens);
     int nfloors = 0;
+    /* An area's environment, held like a floor's mark until the areas are in. */
+    struct { char area[AREA_NAME_MAX], card[CARD_NAME_MAX]; int line; } envs[MAP_AREAS_MAX];
+    int nenvs = 0;
     CardRead card;
     memset(&card, 0, sizeof card);
     card.buf = xmalloc(CARD_TEXT_MAX);
@@ -1243,6 +1255,31 @@ static Map *load_text(FILE *f, const char *path, char *err, size_t errsz, MapioD
                 floors[nfloors].line  = ld->line;
                 nfloors++;
             }
+        } else if (!strncmp(line, "env ", 4)) {
+            char cname[CARD_NAME_MAX + 8];
+            if (m->env[0])
+                diag(ld, ld->line, -1, "W030", "env-dropped", "a second environment for the map dropped: one came before it");
+            else if (parse_quoted(line + 4, cname, sizeof cname) && card_name_ok(cname))
+                str_lcpy(m->env, cname, sizeof m->env);
+            else
+                diag(ld, ld->line, -1, "W030", "env-dropped", "the map's environment dropped: '%.60s'", line);
+        } else if (!strncmp(line, "areaenv ", 8)) {
+            /* Two quoted names; neither kind of name may hold a quote. */
+            char aname[AREA_NAME_MAX + 8] = "", cname[CARD_NAME_MAX + 8] = "";
+            const char *a0 = line[8] == '"' ? line + 9 : NULL, *a1 = a0 ? strchr(a0, '"') : NULL;
+            const char *c0 = a1 && !strncmp(a1, "\" \"", 3) ? a1 + 3 : NULL, *c1 = c0 ? strchr(c0, '"') : NULL;
+            if (c1 && !c1[1] && a1 > a0 && (size_t)(a1 - a0) < AREA_NAME_MAX && (size_t)(c1 - c0) < CARD_NAME_MAX) {
+                memcpy(aname, a0, (size_t)(a1 - a0));
+                memcpy(cname, c0, (size_t)(c1 - c0));
+            }
+            if (nenvs < MAP_AREAS_MAX && map_area_name_ok(aname) && card_name_ok(cname)) {
+                str_lcpy(envs[nenvs].area, aname, sizeof envs[nenvs].area);
+                str_lcpy(envs[nenvs].card, cname, sizeof envs[nenvs].card);
+                envs[nenvs].line = ld->line;
+                nenvs++;
+            } else {
+                diag(ld, ld->line, -1, "W030", "env-dropped", "an area's environment dropped: '%.60s'", line);
+            }
         } else if (!strncmp(line, "link ", 5)) {
             RECORD(parse_link_line(m, line), "link");
             int num = 0;
@@ -1343,6 +1380,18 @@ static Map *load_text(FILE *f, const char *path, char *err, size_t errsz, MapioD
             if (why) m->areas[ai].floor = 0, m->areas[ai].level = 0;
         }
         if (why) diag(ld, floors[i].line, -1, "W024", "floor-dropped", "floor %.31s dropped: %s", floors[i].name, why);
+    }
+
+    /* Environments, likewise: one naming no area goes with a finding. A card
+     * that is not there is let stand, as a creature's is (--check says so). */
+    for (int i = 0; i < nenvs; i++) {
+        int ai = map_area_find(m, envs[i].area);
+        if (ai >= 0 && m->areas[ai].env[0])
+            diag(ld, envs[i].line, -1, "W030", "env-dropped", "a second environment for %.31s dropped: one came before it",
+                 m->areas[ai].name);
+        else if (ai >= 0) str_lcpy(m->areas[ai].env, envs[i].card, sizeof m->areas[ai].env);
+        else diag(ld, envs[i].line, -1, "W030", "env-dropped", "environment %.31s dropped: no area called %.31s",
+                  envs[i].card, envs[i].area);
     }
 
     /* Links are checked now that the size is certain. One that cannot stand

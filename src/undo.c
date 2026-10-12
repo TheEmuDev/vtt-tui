@@ -329,6 +329,7 @@ static Token area_slot(const Map *m, const Area *ar)
     t.counters[0].max   = ar->y1;
     t.counters[1].value = ar->level;
     t.counters[1].max   = ar->floor;
+    str_lcpy(t.card, ar->env, sizeof t.card);
     return t;
 }
 
@@ -339,6 +340,7 @@ static void area_from_slot(Map *m, const Token *want, const Token *other)
     if (i < 0) return;
     m->areas[i].level = (int8_t)want->counters[1].value;
     m->areas[i].floor = (uint8_t)want->counters[1].max;
+    str_lcpy(m->areas[i].env, want->card, sizeof m->areas[i].env);
     /* Put back where it was: naming order is precedence among equals. */
     int at = want->size;
     if (i > at && at < m->nareas) {
@@ -379,6 +381,20 @@ int undo_set_floor(Undo *u, Map *m, const char *name, int on, int level)
     Token before = area_slot(m, ar);
     ar->floor = (uint8_t)(on != 0);
     ar->level = (int8_t)(on ? level : 0);
+    map_touch(m);
+    Token after = area_slot(m, ar);
+    record_area(u, &before, &after);
+    return 1;
+}
+
+int undo_set_area_env(Undo *u, Map *m, const char *name, const char *card)
+{
+    int i = map_area_find(m, name);
+    if (i < 0) return 0;
+    Area *ar = &m->areas[i];
+    if (!strcmp(ar->env, card)) return 1;
+    Token before = area_slot(m, ar);
+    str_lcpy(ar->env, card, sizeof ar->env);
     map_touch(m);
     Token after = area_slot(m, ar);
     record_area(u, &before, &after);

@@ -102,6 +102,10 @@ typedef struct {
     CsCard  *cards; int ncards;
     uint8_t  round_changed, spot_changed, round_conflict, spot_conflict;
     int      round_before, round_after, spot_before, spot_after;
+    /* The map's own environment (docs/ENVIRONMENTS.md): a card's name. Not in
+     * the undo log, as the cards are not; applied whole, never with a box. */
+    uint8_t  env_changed, env_conflict;
+    char     env_before[CARD_NAME_MAX], env_after[CARD_NAME_MAX];
 
     /* What a checkpoint (checkpoint.h) can only say changed, not how: the
      * cards, the scenes, the clocks, and the map's size. Never applied. */
@@ -151,7 +155,7 @@ int  cs_finish(ChangeSet *cs, const Map *before, const Map *after, int cards);
 static inline int cs_empty(const ChangeSet *cs)
 {
     return !cs->ncells && !cs->ntoks && !cs->nareas && !cs->nlinks && !cs->nnotes &&
-           !cs->nrolls && !cs->ncards && !cs->round_changed && !cs->spot_changed &&
+           !cs->nrolls && !cs->ncards && !cs->round_changed && !cs->spot_changed && !cs->env_changed &&
            !cs->cards_changed && !cs->scenes_changed && !cs->clocks_changed && !cs->fog_changed &&
            !cs->resized;
 }

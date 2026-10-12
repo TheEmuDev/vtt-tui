@@ -116,6 +116,8 @@ const char *app_card_box_text(App *a, int i);
 /* Drops what it kept: called wherever the map leaves the app's hands, since a
  * map newly read can match the old one's address and generation. */
 void app_card_box_forget(App *a);
+/* :env ... -- a card as the environment of the map or an area (docs/ENVIRONMENTS.md). */
+void app_env_command(App *a, const char *rest);
 /* :condition [NAME] -- the ruleset's conditions, or one read whole. */
 void app_condition_command(App *a, const char *rest);
 /* What a counter's edit did to the condition that follows it, for the end of

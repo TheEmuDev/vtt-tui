@@ -330,6 +330,7 @@ typedef struct {
      * NULL when the view is a card's. */
     const char *card_text;
     char        card_title[48];
+    char       *card_own;      /* :env's copy of a card: the map's may change under the view */
     char        cond_modal[640];
     /* The box's text for a creature with a marker the ruleset knows: its
      * card and what each such marker does, built when what it was built from

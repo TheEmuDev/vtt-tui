@@ -139,6 +139,9 @@ int  undo_remove_area(Undo *u, Map *m, const char *name);
 int  undo_set_floor(Undo *u, Map *m, const char *name, int on, int level);
 /* Adds a link, or changes the one with its number; checks nothing but room
  * (link_problem is the caller's). Returns 0, recording nothing, when full. */
+/* An area's environment, a card's name or "" (docs/ENVIRONMENTS.md): rides
+ * OP_AREA, as a floor's mark does. 0 when no area has that name. */
+int  undo_set_area_env(Undo *u, Map *m, const char *name, const char *card);
 int  undo_set_link(Undo *u, Map *m, const Link *l);
 int  undo_remove_link(Undo *u, Map *m, int num);
 

@@ -189,7 +189,8 @@ static int label_taken(const TokenList *l, const char *label)
 static int area_equal(const Area *a, const Area *b)
 {
     return !strcmp(a->name, b->name) && a->x0 == b->x0 && a->y0 == b->y0 && a->x1 == b->x1 &&
-           a->y1 == b->y1 && a->floor == b->floor && (!a->floor || a->level == b->level);
+           a->y1 == b->y1 && a->floor == b->floor && (!a->floor || a->level == b->level) &&
+           !strcmp(a->env, b->env);
 }
 
 static int link_equal(const Link *a, const Link *b)
@@ -395,6 +396,11 @@ static void diff_small(ChangeSet *cs, const Map *a, const Map *b, int cards)
         cs->spot_before = a->spotlight;
         cs->spot_after  = b->spotlight;
     }
+    if (strcmp(a->env, b->env) != 0) {
+        cs->env_changed = 1;
+        str_lcpy(cs->env_before, a->env, sizeof cs->env_before);
+        str_lcpy(cs->env_after, b->env, sizeof cs->env_after);
+    }
     for (int i = 0; i < FOG_PATCH_MAX; i++)
         if (!b->fog_patches[i].dead) str_lcpy(cs->fog_names[i], b->fog_patches[i].name, FOG_NAME_MAX);
 }
@@ -411,7 +417,7 @@ void cs_begin(ChangeSet *cs, int w, int h)
 static int cs_count(const ChangeSet *cs)
 {
     return cs->ncells + cs->ntoks + cs->nareas + cs->nlinks + cs->nnotes + cs->nrolls + cs->ncards +
-           cs->round_changed + cs->spot_changed;
+           cs->round_changed + cs->spot_changed + cs->env_changed;
 }
 
 int cs_finish(ChangeSet *cs, const Map *a, const Map *b, int cards)
@@ -517,7 +523,8 @@ int cs_check(ChangeSet *cs, const Map *live)
     }
     cs->round_conflict = (uint8_t)(cs->round_changed && live->round != cs->round_before);
     cs->spot_conflict  = (uint8_t)(cs->spot_changed && live->spotlight != cs->spot_before);
-    n += cs->round_conflict + cs->spot_conflict;
+    cs->env_conflict   = (uint8_t)(cs->env_changed && strcmp(live->env, cs->env_before) != 0);
+    n += cs->round_conflict + cs->spot_conflict + cs->env_conflict;
     cs->conflicts   = n;
     cs->checked     = 1;
     cs->checked_gen = live->gen;
@@ -661,6 +668,7 @@ int cs_apply(const ChangeSet *cs, Map *live, Undo *u, const CsBox *box, char *ou
             continue;
         }
         undo_set_floor(u, live, a->name, a->floor, a->level);
+        undo_set_area_env(u, live, a->name, a->env);
         n++;
     }
 
@@ -715,6 +723,12 @@ int cs_apply(const ChangeSet *cs, Map *live, Undo *u, const CsBox *box, char *ou
         }
         if (cs->round_changed) { undo_set_round(u, live, cs->round_after); n++; }
         if (cs->spot_changed)  { undo_set_spotlight(u, live, cs->spot_after); n++; }
+        if (cs->env_changed) {                          /* round the log, with the cards */
+            str_lcpy(live->env, cs->env_after, sizeof live->env);
+            live->cards_gen++;
+            map_touch(live);
+            n++;
+        }
     }
 
     undo_end(u);
@@ -840,6 +854,7 @@ void cs_summary(const ChangeSet *cs, const CsBox *box, char *out, size_t outsz)
         for (int i = 0; i < cs->ncards; i++) say(out, outsz, "card %s", cs->cards[i].name);
         if (cs->round_changed) say(out, outsz, "round %d -> %d", cs->round_before, cs->round_after);
         if (cs->spot_changed) say(out, outsz, "spotlight to the %s", cs->spot_after ? "GM" : "players");
+        if (cs->env_changed)  say(out, outsz, cs->env_after[0] ? "the map's environment %s" : "the map's environment removed%s", cs->env_after);
         if (cs->cards_changed)  say(out, outsz, "cards changed");
         if (cs->scenes_changed) say(out, outsz, "scenes changed");
         if (cs->clocks_changed) say(out, outsz, "clocks changed");

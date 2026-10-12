@@ -792,6 +792,22 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
         }
         x0 = ar->x0; y0 = ar->y0; x1 = ar->x1; y1 = ar->y1;
     }
+    else if (!strcmp(v, "env")) {
+        /* env AREA CARD, env AREA remove: the area's environment, a card's
+         * name (docs/ENVIRONMENTS.md). The map's own is the GM's (:env map). */
+        if (n != 3) BAD("env AREA CARD, or env AREA remove");
+        int ai = map_area_find(m, w[1]);
+        if (ai < 0) BAD("no area called %.40s - area NAME REGION names one", w[1]);
+        const Area *ar = &m->areas[ai];
+        if (!strcmp(w[2], "remove")) {
+            if (!ar->env[0]) BAD("%.40s has no environment", w[1]);
+            undo_set_area_env(u, m, ar->name, "");
+        } else {
+            if (!card_name_ok(w[2])) BAD("%.40s: a card's name is letters, digits, - and _", w[2]);
+            undo_set_area_env(u, m, ar->name, w[2]);
+        }
+        x0 = ar->x0; y0 = ar->y0; x1 = ar->x1; y1 = ar->y1;
+    }
     else if (!strcmp(v, "link")) {
         /* link A B [KIND] [size 2|3] [oneway] [secret]: a new one, numbered
          * the lowest free. link N remove, or link N and what changes. */
@@ -1041,7 +1057,7 @@ static int finish_proposal(App *a, Edits *ed, FILE *out, char *err, size_t errsz
 
 static int is_edit(const char *v)
 {
-    static const char *const EDITS[] = { "room", "area", "door", "corridor", "tile", "wall", "edge", "note", "fog", "token", "stamp", "link", "floor", "scene" };
+    static const char *const EDITS[] = { "room", "area", "door", "corridor", "tile", "wall", "edge", "note", "fog", "token", "stamp", "link", "floor", "env", "scene" };
     for (size_t i = 0; i < sizeof EDITS / sizeof *EDITS; i++)
         if (!strcmp(v, EDITS[i])) return 1;
     return 0;

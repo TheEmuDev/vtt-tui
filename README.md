@@ -554,6 +554,25 @@ its side with its name (`Goblin 2`, `Goblin 3`) that have none, and editing it c
 them. Cards are saved with the map, and a saved character keeps its card, so placing one
 brings its card too (a map that has its own card by that name keeps it, and says so).
 
+### Environments (`:env`)
+
+A place can have a card too: what it is like, what it does, who turns up there. An
+environment is an ordinary card that the map, or a named area of it, points at.
+
+| command | action |
+|---------|--------|
+| `:env NAME` | the area under the cursor (the smallest, when several hold it) takes the card NAME as its environment; with no area there, the map does |
+| `:env map NAME` | the map does, wherever the cursor is |
+| `:env area "Crypt" NAME` | that area does; a floor is named this way |
+| `:env edit` | write the environment's card in your editor, as `s k` does a creature's |
+| `:env` | read the environment here, whole: the room's, else its floor's, else the map's |
+| `:env remove` | take the name off; the card stays in the map |
+
+Name the card first, then `:env edit` to write it. Under Daggerheart a new one starts from
+the environment block's lines ready to fill in; otherwise from its name. `:env` shows the
+card as `:card` shows a creature's, to you only. An area's environment is undone by `u`; the
+map's own is not, and nor is a card's text.
+
 ### Importing the SRD's adversaries
 
 ```sh
@@ -1261,6 +1280,7 @@ use, and how `:dmg` marks HP. Available: `none`, `daggerheart`.
 | `:area NAME` | name the selection, or jump to a named area; `:areas` lists, `:area NAME remove` removes |
 | `:stamp ...` | save, load and choose [stamps](#build-mode) |
 | `:character ...` | save and place [characters](#characters-character-i-t) |
+| `:env ...` | a card as the [environment](#environments-env) of the map or an area |
 | `:condition [NAME]` | list the ruleset's conditions, or show what one does ([Daggerheart](#daggerheart)) |
 | `:summon [hidden] [N\|any] NAME [RANGE]` | place a character inside a highlighted range of a creature ([summoning](#summoning-summon)) |
 | `:scene ...`, `:scenes` | save, put back and list [scenes](#scenes-scene) |
@@ -1493,7 +1513,7 @@ nothing has happened since. The full request language is in [docs/AGENTS.md](doc
 Maps are plain text, one record per line:
 
 ```
-VTT 13
+VTT 14
 name Goblin Ambush
 size 16 9
 zoom 1
@@ -1526,6 +1546,8 @@ endcard
 area 1 1 6 4 "Crypt"
 area 0 0 15 8 "Ground"
 floor "Ground" 0
+env "Ogre"
+areaenv "Crypt" "Ogre"
 link 1 stairs 1 5 2 14 2
 link 2 portal 2 1 6 12 6 oneway secret
 fog on
@@ -1537,7 +1559,8 @@ fog
 Coordinates in the file are 0-based `x y`. The file has no comment syntax. `rule massive` is there while
 `:dmg massive on` is. A card's text
 follows its `card` line a line at a time after `| `; a long line continues on lines starting
-`+ `. A recovery
+`+ `. `env` names the map's environment card and `areaenv` an area's, after the area lines.
+A recovery
 autosave ends with a line `end`, which shows it was written whole; reading stops there.
 
 **Sections.** A map `W` squares wide and `H` tall has:
@@ -1616,8 +1639,10 @@ that can hold its contents:
 | 10 | hidden creatures |
 | 11 | scenes |
 | 12 | links to other maps |
+| 13 | cards |
+| 14 | environments |
 
-vtt reads every version up to 12 and refuses newer files.
+vtt reads every version up to 14 and refuses newer files.
 
 ## Performance
 

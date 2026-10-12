@@ -60,6 +60,7 @@ typedef struct {
     int16_t x0, y0, x1, y1;       /* inclusive, on the map */
     uint8_t floor;                /* a floor of the building: see floor.h */
     int8_t  level;                /* its elevation, when it is one */
+    char    env[CARD_NAME_MAX];   /* its environment: a card's name, "" for none (docs/ENVIRONMENTS.md) */
 } Area;
 /* A link: two blocks of squares joined, so a creature on one can be sent
  * to the other -- stairs, a ladder, a trapdoor, a portal. Nothing crosses
@@ -275,6 +276,7 @@ typedef struct {
     int   nscenes;
     Card  cards[MAP_CARDS_MAX];   /* the GM's cards, by name; see card.h */
     int   ncards;
+    char  env[CARD_NAME_MAX];     /* the map's environment: a card's name, "" for none */
     uint8_t *fog;                         /* w*h, see FOG_* */
     int      fog_on;                      /* the master switch */
     int      fog_soft_edge;               /* the map's default for patches that follow it */

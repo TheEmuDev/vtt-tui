@@ -130,6 +130,7 @@ int main(int argc, char **argv)
         { "dmg",        test_damage },
         { "cardbox",    test_card_box },
         { "cardedit",   test_card_edit },
+        { "env",        test_env },
         { "cardtpl",    test_card_templates },
         { "jsonread",   test_json_read },
         { "import",     test_import },

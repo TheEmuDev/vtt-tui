@@ -93,6 +93,7 @@ GM accepts it, or at once under `:agent accept auto`):
 | `link A to MAP PLACE [KIND] [size N] [secret]` | a link to another map, checked against that file (added with links between map files, docs/MAPLINKS.md); taking one opens maps, which stays the GM's |
 | `link A B [KIND] [size N] [oneway] [secret]`, `link N ... \| remove` | a link between two places, or a change to link N (added with links); docs/AGENTS.md has the details |
 | `floor NAME LEVEL`, `floor NAME off` | mark a named area a floor, or unmark it (added with floors) |
+| `env NAME CARD`, `env NAME remove` | a named area's environment: a card's name, or none (added with environments, docs/ENVIRONMENTS.md) |
 | `scene NAME`; `scene save NAME [REGION]`, `scene NAME remove` | put a scene back (an edit, one step with the request); save or remove one, each alone in its request since neither is in the undo log (added with scenes) |
 | `undo` | takes back the agent's last accepted change, only while nothing came after it; alone in its request, since it cannot roll back with other lines |
 

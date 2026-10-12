@@ -151,7 +151,7 @@ still true. Its ranking, to work from:
 | ~~B8~~ | *closed, below* | | | | |
 | B9 | step 7, PERFORMANCE.md *Known gaps* | The map writer is 1.18 ms for the largest map against about 0.5: the text grows in a memory stream (a reallocation and a copy each doubling) and each row is a locked `fwrite`. | Left after the larger gap closed. | the writer sizes one buffer from the map and fills it | 2026-10-10 |
 | B10 | step 7, PERFORMANCE.md *Known gaps* | The loader finds a square's kind by searching a table a character (`tile_from_file_char`, `edge_from_file_char`) and reads a line at a time: 3.4 ns a byte, 2.7 ms for the largest map. An outside change pays it twice. | It predates the step; measured here because step 7 leans on it. | a 256-entry table each way, and the rows parsed in place | 2026-10-10 |
-| B11 | step 7: `make fuzz` (the loader), 2026-10-10 | **A bug, not from step 7** (the commit before it fails the same input): a card whose text starts with a line holding only a control character saves with two leading blank lines (`\| ` and `\|`), and loading that file drops them, so the map saved, loaded and saved again is not the same bytes. The fuzzer's round-trip check aborts on it. The input is kept: `tests/fuzz-found/card-leading-blank.vtt`. | Outside step 7 (cards, card.c's cleaning and the loader's `card_take`); found while fuzzing the loader this step changed. To be fixed with the review items. | the card's text is normalized the same way when it is read as when it is set (leading blank lines dropped after control characters are cleaned), the input joins the fixtures, and `make fuzz` passes on it | 2026-10-10 |
+| B11 | step 7: `make fuzz` (the loader), 2026-10-10 | **A bug, not from step 7** (the commit before it fails the same input): a card whose text starts with a line holding only a control character saves with two leading blank lines (`\| ` and `\|`), and loading that file drops them, so the map saved, loaded and saved again is not the same bytes. The fuzzer's round-trip check aborts on it. The input is kept: `tests/fuzz-found/card-leading-blank.vtt`. | Outside step 7 (cards, card.c's cleaning and the loader's `card_take`); found while fuzzing the loader this step changed. To be fixed with the review items. | the card's text is normalized the same way when it is read as when it is set (leading blank lines dropped after control characters are cleaned), the input joins the fixtures, and `make fuzz` passes on it | 2026-10-10. Met again 2026-10-12 fuzzing the loader for environment cards: a second input, `tests/fuzz-found/roundtrip-damaged.vtt` (a card whose first line starts with a control character, in a badly damaged file); the commit before that work fails it the same way |
 | B12 | the final review's fixes, 2026-10-10, PERFORMANCE.md *Other writers of the file* | Reading an outside change pays about 0.55 ms of its 5.9 for new pages: the two maps it parses are freed, the allocator hands the memory back, and the next reload faults it in again. | Outside changes are rare, and keeping two scratch maps would hold 2 MB for the session. | outside changes become frequent (an agent writing the file in a loop): keep the scratch maps | 2026-10-10 |
 
 ### Disproved
@@ -180,7 +180,7 @@ Rows move here when fixed, with the commit.
 
 ### Where the rows came from
 
-Twenty-one reviews, 2026-10-07 to 2026-10-12. The first seven predate this section: on 2026-10-09
+Twenty-two reviews, 2026-10-07 to 2026-10-12. The first seven predate this section: on 2026-10-09
 their reports were read back from the session's record and every item checked against the
 code as it stood (137 items: 117 fixed, 4 overtaken when the plan dropped "accept saves", 16
 open, none disproved). Steps 4-6 were entered from their reports as they came.
@@ -208,6 +208,7 @@ open, none disproved). Steps 4-6 were entered from their reports as they came.
 | 2026-10-12 | docs/SUMMON.md's second draft (the GM places inside the highlight; all seven findings taken in) | none |
 | 2026-10-12 | `:summon` as built (two medium, two low, five test gaps: all fixed) | none |
 | 2026-10-12 | conditions as built, and where the SRD's link is kept (two medium, three low, three test gaps: all fixed) | none |
+| 2026-10-12 | environment cards, step 1 (one medium: an outside change to the map's environment was lost; five low; four test gaps: all fixed) | none (B11 gained a second input) |
 
 ## 2026-09-28, at 17e31e3
 

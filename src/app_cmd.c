@@ -1016,6 +1016,11 @@ static void cmd_card(App *a, const char *verb, const char *rest)
     a->modal      = MODAL_CARD;
 }
 
+static void cmd_env(App *a, const char *verb, const char *rest)
+{
+    app_env_command(a, rest);
+}
+
 static void cmd_condition(App *a, const char *verb, const char *rest)
 {
     app_condition_command(a, rest);
@@ -1143,6 +1148,7 @@ static const struct {
     { "character", "characters", cmd_character },
     { "summon", NULL, cmd_summon },
     { "condition", "conditions", cmd_condition },
+    { "env", NULL, cmd_env },
     { "scene", "scenes", cmd_scene },
     { "handout", "handouts", cmd_handout },
     { "link", "links", cmd_link },

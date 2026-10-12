@@ -5,6 +5,10 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include "card.h"
+#include "changeset.h"
+#include "floor.h"
+#include "mapio.h"
+#include "maptools.h"
 
 typedef struct { const char *code; int n; } CardCodes;
 
@@ -770,3 +774,294 @@ void test_card_fixes(void)
     sandbox_leave(&sb);
 }
 
+
+/* ------------------------------------------------ environments (:env) */
+
+static int first_line_is(const char *path, const char *want)
+{
+    char line[64] = "";
+    FILE *f = fopen(path, "r");
+    if (f) { if (!fgets(line, sizeof line, f)) line[0] = '\0'; fclose(f); }
+    return !strcmp(line, want);
+}
+
+void test_env(void)
+{
+    Sandbox sb = sandbox_enter("env");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    const char *old_visual = getenv("VISUAL"), *old_tmp = getenv("TMPDIR");
+    char keep_visual[256] = "", keep_tmp[256] = "";
+    if (old_visual) str_lcpy(keep_visual, old_visual, sizeof keep_visual);
+    if (old_tmp)    str_lcpy(keep_tmp, old_tmp, sizeof keep_tmp);
+    setenv("TMPDIR", sb.dir, 1);
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK(ctl_blank_map(&a, sb.dir, 20, 12));
+    if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    a.ctl_auto = 1;
+    Map *m = a.map;
+    char err[160], path[700];
+    snprintf(path, sizeof path, "%s/env.vtt", sb.dir);
+    str_lcpy(m->ruleset, "daggerheart", sizeof m->ruleset);
+    CHECK(map_area_set(m, "Crypt", 1, 1, 6, 6) >= 0);
+    CHECK(map_area_set(m, "Upper", 0, 0, 19, 11) >= 0);
+    m->areas[map_area_find(m, "Upper")].floor = 1;
+    Area *crypt = &m->areas[map_area_find(m, "Crypt")], *upper = &m->areas[map_area_find(m, "Upper")];
+    app_key(&a, (Key){ KEY_F2, 0, 0 });
+
+    CASE("no environment yet; a card's name must be one");
+    a.ed.cx = 3; a.ed.cy = 3;
+    press(&a, ":env\r");
+    CHECK(strstr(a.status, "no environment here") != NULL);
+    press(&a, ":env bad/name\r");
+    CHECK(strstr(a.status, "letters, digits") != NULL && !crypt->env[0]);
+    press(&a, ":env a b\r");
+    CHECK(strstr(a.status, ":env, :env NAME") != NULL);
+
+    CASE(":env NAME goes to the smallest area under the cursor, one undo step; outside any, to the map");
+    int d0 = a.undo.depth;
+    press(&a, ":env haunted-crypt\r");
+    CHECK(!strcmp(crypt->env, "haunted-crypt") && !upper->env[0] && !m->env[0]);
+    CHECK(strstr(a.status, "Crypt: environment haunted-crypt - no card of that name yet") != NULL);
+    CHECK_EQ(a.status_gm, 1);
+    CHECK_EQ(a.undo.depth, d0 + 1);
+    press(&a, "u");
+    CHECK(!crypt->env[0]);
+    press(&a, "\x12");
+    CHECK(!strcmp(crypt->env, "haunted-crypt"));
+    a.ed.cx = 15; a.ed.cy = 9;                             /* on the floor, in no room */
+    unsigned cg = m->cards_gen;
+    press(&a, ":env old-keep\r");
+    CHECK(!strcmp(m->env, "old-keep") && !upper->env[0]);
+    CHECK(m->cards_gen != cg && m->modified);
+    press(&a, ":env old-keep\r");
+    CHECK(strstr(a.status, "the map already has old-keep") != NULL);
+
+    CASE(":env map NAME and :env area \"AREA\" NAME say which outright; a floor is named that way");
+    press(&a, ":env map the-keep\r");
+    CHECK(!strcmp(m->env, "the-keep"));
+    press(&a, ":env area \"Upper\" windy-hall\r");
+    CHECK(!strcmp(upper->env, "windy-hall"));
+    press(&a, ":env area \"Nowhere\" x\r");
+    CHECK(strstr(a.status, "no area called Nowhere") != NULL);
+
+    CASE("the environment here: the room's, else its floor's, else the map's");
+    press(&a, ":env\r");                                   /* (15,9): the floor's */
+    CHECK(strstr(a.status, "Upper: environment windy-hall has no card") != NULL);
+    CHECK_EQ(a.modal, MODAL_NONE);
+
+    CASE(":env edit starts a new one from the ruleset's block, its labels only");
+    a.ed.cx = 3; a.ed.cy = 3;
+    set_editor(sb.dir, "sed -i 's/What the place is like./Cold, and the dead do not rest./' \"$1\"\n");
+    press(&a, ":env edit\r");
+    int ci = card_find(m, "haunted-crypt");
+    CHECK(ci >= 0);
+    if (ci >= 0) {
+        const char *t = m->cards[ci].text;
+        CHECK(!strncmp(t, "haunted-crypt - Tier 1 Exploration\nCold, and the dead do not rest.\n", 66));
+        CHECK(strstr(t, "Potential Adversaries:") != NULL && strstr(t, ">8") == NULL);
+    }
+    CHECK(strstr(a.status, "card haunted-crypt written") != NULL);
+    set_editor(sb.dir, "true\n");
+    press(&a, ":env edit\r");
+    CHECK(strstr(a.status, "card unchanged") != NULL);
+    CHECK_EQ(leftover_card_files(sb.dir), 0);
+    a.ed.cx = 19; a.ed.cy = 0;
+    upper->env[0] = '\0';
+    m->env[0] = '\0';
+    press(&a, ":env edit\r");
+    CHECK(strstr(a.status, "has no environment - :env NAME") != NULL);
+    str_lcpy(m->env, "the-keep", sizeof m->env);
+    str_lcpy(upper->env, "windy-hall", sizeof upper->env);
+
+    CASE(":env reads it whole, in the card's view: the GM's alone, and its own copy of the text");
+    a.ed.cx = 3; a.ed.cy = 3;
+    press(&a, ":env\r");
+    CHECK_EQ(a.modal, MODAL_CARD);
+    CHECK(a.card_text && a.card_text != m->cards[ci].text && strstr(a.card_text, "the dead do not rest") != NULL);
+    CHECK(!strcmp(a.card_title, "Crypt: haunted-crypt"));
+    CHECK(app_view_differs(&a));
+    rnd_begin(&r);
+    app_draw_view(&a, VIEW_GM);
+    ByteBuf gf;
+    bb_init(&gf, 65536);
+    rnd_dump(&r, &gf);
+    bb_putc(&gf, '\0');
+    CHECK(strstr(gf.data, "the dead do not rest") != NULL);
+    bb_free(&gf);
+    char *pf = players_text(&a, &r);
+    CHECK(strstr(pf, "the dead do not rest") == NULL && strstr(pf, "haunted-crypt") == NULL);
+    free(pf);
+    press(&a, "\x1b");
+    CHECK_EQ(a.modal, MODAL_NONE);
+
+    CASE("the file: version 14, both lines, and back again; without one it is written as before");
+    CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
+    CHECK(first_line_is(path, "VTT 14\n"));
+    Map *back = mapio_load(path, err, sizeof err);
+    CHECK(back != NULL);
+    if (back) {
+        CHECK(!strcmp(back->env, "the-keep"));
+        CHECK(!strcmp(back->areas[map_area_find(back, "Crypt")].env, "haunted-crypt"));
+        CHECK(!strcmp(back->areas[map_area_find(back, "Upper")].env, "windy-hall"));
+        CHECK(card_find(back, "haunted-crypt") >= 0);
+        back->env[0] = '\0';
+        for (int i = 0; i < back->nareas; i++) back->areas[i].env[0] = '\0';
+        char p2[700];
+        snprintf(p2, sizeof p2, "%s/plain.vtt", sb.dir);
+        CHECK_EQ(mapio_save(back, p2, err, sizeof err), 0);
+        CHECK(first_line_is(p2, "VTT 13\n"));               /* a card is still there */
+        map_free(back);
+    }
+
+    CASE("a line naming no area, or no card's name, is dropped with its code");
+    {
+        char p3[700];
+        snprintf(p3, sizeof p3, "%s/bad.vtt", sb.dir);
+        FILE *f = fopen(p3, "w");
+        if (f) {
+            fputs("VTT 14\nname bad\nsize 4 4\nzoom 1\ntiles\n....\n....\n....\n....\n"
+                  "area 0 0 1 1 \"Nook\"\nareaenv \"Nook\" \"damp\"\nareaenv \"Gone\" \"damp\"\n"
+                  "areaenv \"Nook\" \"bad name\"\nenv \"bad name\"\nareaenv Nook damp\n", f);
+            fclose(f);
+        }
+        FILE *out = tmpfile();
+        int rc = maptools_check(out, p3, 0);
+        char said[4096] = "";
+        rewind(out);
+        size_t got = fread(said, 1, sizeof said - 1, out);
+        said[got] = '\0';
+        fclose(out);
+        CHECK_EQ(rc, 1);
+        int n30 = 0;
+        for (const char *q = said; (q = strstr(q, "W030")); q++) n30++;
+        CHECK_EQ(n30, 4);
+        CHECK(strstr(said, "one came before it") == NULL);
+        CHECK(strstr(said, "no area called Gone") != NULL);
+        CHECK(strstr(said, "W170") != NULL && strstr(said, "Nook names the environment damp") != NULL);
+        Map *b = mapio_load(p3, err, sizeof err);
+        CHECK(b && !strcmp(b->areas[0].env, "damp") && !b->env[0]);
+        map_free(b);
+    }
+
+    CASE("a second line for the map, or for an area, is dropped and said; the first stands");
+    {
+        char p4[700];
+        snprintf(p4, sizeof p4, "%s/twice.vtt", sb.dir);
+        FILE *f = fopen(p4, "w");
+        if (f) {
+            fputs("VTT 14\nname twice\nsize 4 4\nzoom 1\ntiles\n....\n....\n....\n....\n"
+                  "area 0 0 1 1 \"Nook\"\nenv \"first\"\nenv \"second\"\n"
+                  "areaenv \"Nook\" \"one\"\nareaenv \"nook\" \"two\"\n", f);
+            fclose(f);
+        }
+        Map *b = mapio_load(p4, err, sizeof err);
+        CHECK(b && !strcmp(b->env, "first") && !strcmp(b->areas[0].env, "one"));
+        map_free(b);
+        FILE *out = tmpfile();
+        maptools_check(out, p4, 0);
+        char said[4096] = "";
+        rewind(out);
+        size_t got = fread(said, 1, sizeof said - 1, out);
+        said[got] = '\0';
+        fclose(out);
+        CHECK(strstr(said, "a second environment for the map dropped") != NULL);
+        CHECK(strstr(said, "a second environment for Nook dropped") != NULL);
+    }
+
+    CASE("a change set carries both: the map's own and an area's, each seen, each put on");
+    {
+        Map *base = map_new(20, 12, "base"), *want = map_new(20, 12, "base");
+        CHECK(map_area_set(base, "Crypt", 1, 1, 6, 6) >= 0 && map_area_set(want, "Crypt", 1, 1, 6, 6) >= 0);
+        ChangeSet cs;
+        memset(&cs, 0, sizeof cs);
+        cs_diff(&cs, base, want, NULL);
+        CHECK(cs_empty(&cs));
+        str_lcpy(want->env, "moor", sizeof want->env);
+        cs_diff(&cs, base, want, NULL);
+        CHECK(cs.env_changed && !cs.nareas && !strcmp(cs.env_after, "moor"));
+        char sum[256] = "";
+        cs_summary(&cs, NULL, sum, sizeof sum);
+        CHECK(strstr(sum, "the map's environment moor") != NULL);
+        Undo u;
+        undo_init(&u);
+        cs_check(&cs, base);
+        CHECK_EQ(cs.conflicts, 0);
+        CHECK(cs_apply(&cs, base, &u, NULL, sum, sizeof sum) > 0);
+        CHECK(!strcmp(base->env, "moor"));
+        str_lcpy(want->areas[0].env, "bog", sizeof want->areas[0].env);
+        cs_diff(&cs, base, want, NULL);
+        CHECK(!cs.env_changed && cs.nareas == 1);
+        CHECK(cs_apply(&cs, base, &u, NULL, sum, sizeof sum) > 0);
+        CHECK(!strcmp(base->areas[0].env, "bog"));
+        undo_undo(&u, base);
+        CHECK(!base->areas[0].env[0] && !strcmp(base->env, "moor"));   /* the area's is in the log, the map's is not */
+        cs_free(&cs);
+        undo_free(&u);
+        map_free(base);
+        map_free(want);
+    }
+
+    CASE(":env area \"X\" remove takes that area's off");
+    press(&a, ":env area \"Upper\" remove\r");
+    CHECK(!upper->env[0]);
+    press(&a, "u");
+    CHECK(!strcmp(upper->env, "windy-hall"));
+
+    CASE("--describe and the dump name them; --check is quiet once the cards exist");
+    char *t = ctl_ask(&a, "dump\n");
+    CHECK(strstr(t, "\nenvironment the-keep\n") != NULL);
+    CHECK(strstr(t, "B2:G7  environment haunted-crypt\n") != NULL);
+    free(t);
+    t = ctl_ask(&a, "describe json\n");
+    CHECK(t && strstr(t, "\"environment\":\"haunted-crypt\"") != NULL && strstr(t, "\"environment\":\"the-keep\"") != NULL);
+    free(t);
+
+    CASE("the channel: env AREA CARD and env AREA remove, one undo step; the map's is not an agent's");
+    app_key(&a, (Key){ KEY_F1, 0, 0 });
+    t = ctl_ask(&a, "env Crypt sunken-crypt\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0);
+    free(t);
+    CHECK(!strcmp(crypt->env, "sunken-crypt"));
+    press(&a, "u");
+    CHECK(!strcmp(crypt->env, "haunted-crypt"));
+    t = ctl_ask(&a, "env Nowhere x\n");
+    CHECK(strstr(t, "no area called Nowhere") != NULL);
+    free(t);
+    t = ctl_ask(&a, "env Crypt bad/name\n");
+    CHECK(strstr(t, "a card's name") != NULL);
+    free(t);
+    t = ctl_ask(&a, "env Upper remove\n");
+    CHECK(strncmp(t, "ok\n", 3) == 0 && !upper->env[0]);
+    free(t);
+    t = ctl_ask(&a, "env Upper remove\n");
+    CHECK(strstr(t, "has no environment") != NULL);
+    free(t);
+
+    CASE(":env remove takes the name off and leaves the card; an area removed and undone has its own back");
+    app_key(&a, (Key){ KEY_F2, 0, 0 });
+    a.ed.cx = 3; a.ed.cy = 3;
+    press(&a, ":env remove\r");
+    CHECK(!crypt->env[0] && card_find(m, "haunted-crypt") >= 0);
+    CHECK(strstr(a.status, "Crypt has no environment now") != NULL);
+    press(&a, "u");
+    CHECK(!strcmp(crypt->env, "haunted-crypt"));
+    undo_begin(&a.undo);
+    undo_remove_area(&a.undo, m, "Crypt");
+    undo_end(&a.undo);
+    CHECK_EQ(map_area_find(m, "Crypt"), -1);
+    press(&a, "u");
+    CHECK(map_area_find(m, "Crypt") >= 0 && !strcmp(m->areas[map_area_find(m, "Crypt")].env, "haunted-crypt"));
+    CHECK(undo_balanced(&a.undo));
+
+    if (keep_visual[0]) setenv("VISUAL", keep_visual, 1); else unsetenv("VISUAL");
+    if (keep_tmp[0])    setenv("TMPDIR", keep_tmp, 1);    else unsetenv("TMPDIR");
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}

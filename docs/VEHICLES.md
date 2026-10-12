@@ -142,7 +142,7 @@ Every vehicle question goes through it, as every floor question goes through `fl
 - `app_event`: `vehicle moved: NAME to REGION`, so an agent watching hears of it.
 - `--describe` lists each vehicle with its riders; `--check` warns of a vehicle overlapping
   another or straddling a floor, and of a link's end inside a vehicle (the end does not move
-  with it): W030 and up, the next free.
+  with it): W031 and up, the next free when this was last checked (W030 went to environments).
 
 ## Performance considerations
 
