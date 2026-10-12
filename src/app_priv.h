@@ -118,6 +118,16 @@ const char *app_card_box_text(App *a, int i);
 void app_card_box_forget(App *a);
 /* :env ... -- a card as the environment of the map or an area (docs/ENVIRONMENTS.md). */
 void app_env_command(App *a, const char *rest);
+/* The picker's rows for :env pick: each environment kept in the folder, its first line beside it. */
+UiPickItem *app_env_items(int *count);
+/* The picker's rows for a set of names: each name, and beside it what
+ * `detail` says of it. Takes the names (from store_list_all) and frees them;
+ * NULL and *count 0 for none. The one builder of such a list. */
+typedef void (*PickDetail)(const char *name, char *buf, size_t sz);
+UiPickItem *app_pick_named(char (*names)[MAP_NAME_MAX], int n, PickDetail detail, int *count);
+/* The environment the picker chose, given to this place: never read as one
+ * of :env's own words, whatever it is called. */
+void app_env_name(App *a, const char *name);
 /* :condition [NAME] -- the ruleset's conditions, or one read whole. */
 void app_condition_command(App *a, const char *rest);
 /* What a counter's edit did to the condition that follows it, for the end of

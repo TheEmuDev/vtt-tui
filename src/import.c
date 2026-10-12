@@ -143,3 +143,114 @@ int import_adversaries(const char *path, int force, FILE *out, char *err, size_t
     fputc('\n', out);
     return written;
 }
+
+/* ----------------------------------------------------------- environments */
+
+/* The block as a card, in the order the SRD prints it; a line whose field
+ * is missing is left out. */
+static void env_text(const JsonVal *o, ByteBuf *b)
+{
+    char t1[32], t2[32], t3[32], line[1024];
+    const char *name = field(o, "name", t1, sizeof t1), *tier = field(o, "tier", t2, sizeof t2);
+    const char *type = field(o, "type", t3, sizeof t3);
+    /* "Abandoned Grove - Tier 1 Exploration" */
+    snprintf(line, sizeof line, "%s%s%s%s%s%s\n", name, tier[0] || type[0] ? " -" : "",
+             tier[0] ? " Tier " : "", tier, type[0] ? " " : "", type);
+    bb_puts(b, line);
+    static const struct { const char *key, *label; } LINES[] = {
+        { "description", NULL }, { "impulses", "Impulses: " }, { "difficulty", "Difficulty: " },
+        { "potential_adversaries", "Potential Adversaries: " },
+    };
+    for (size_t i = 0; i < sizeof LINES / sizeof *LINES; i++) {
+        char nb[32];
+        const char *v = field(o, LINES[i].key, nb, sizeof nb);
+        if (!v[0]) continue;
+        if (LINES[i].label) bb_puts(b, LINES[i].label);
+        bb_puts(b, v);
+        bb_putc(b, '\n');
+    }
+    const JsonVal *feats = json_get(o, "feature");
+    for (int i = 0, shown = 0; feats && feats->kind == JSON_ARR && i < feats->n; i++) {
+        const char *fn = json_text(json_get(&feats->kids[i], "name"));
+        const char *ft = json_text(json_get(&feats->kids[i], "text"));
+        const char *fq = json_text(json_get(&feats->kids[i], "question"));
+        if (!fn && !ft) continue;
+        bb_puts(b, shown++ ? "\n\n" : "\n");    /* each a block of its own: some run to several lines */
+        if (fn) bb_puts(b, fn);
+        if (fn && ft) bb_puts(b, ": ");
+        if (ft) bb_puts(b, ft);
+        if (fq && fq[0]) { bb_putc(b, '\n'); bb_puts(b, fq); }
+    }
+    bb_putc(b, '\0');
+}
+
+char *environment_load(const char *name)
+{
+    char path[MAP_PATH_MAX];
+    if (!store_name_ok(name) || !store_path("environments", name, ".txt", path, sizeof path)) return NULL;
+    size_t len = 0;
+    int    big = 0;
+    return file_read(path, (size_t)1 << 20, &len, &big);
+}
+
+int import_environments(const char *path, int force, FILE *out, char *err, size_t errsz)
+{
+    size_t len = 0;
+    int    big = 0;
+    char  *text = file_read(path, (size_t)16 << 20, &len, &big);
+    if (!text) { snprintf(err, errsz, big ? "%.200s is over 16 MB" : "cannot read %.200s", path); return -1; }
+    char why[160];
+    JsonVal *doc = json_parse(text, len, why, sizeof why);
+    free(text);
+    if (!doc) { snprintf(err, errsz, "%.200s: %s", path, why); return -1; }
+    if (doc->kind != JSON_ARR) { json_free(doc); snprintf(err, errsz, "%.200s is not a list of environments", path); return -1; }
+
+    char dir[MAP_PATH_MAX];
+    store_dir("environments", dir, sizeof dir);
+    dir_make(dir);
+    int written = 0, kept = 0, skipped = 0;
+    char (*done)[CARD_NAME_MAX] = xmalloc((size_t)(doc->n > 0 ? doc->n : 1) * CARD_NAME_MAX);
+    int ndone = 0;
+    for (int i = 0; i < doc->n; i++) {
+        const JsonVal *o = &doc->kids[i];
+        const char *label = json_text(json_get(o, "name"));
+        char name[CARD_NAME_MAX];
+        if (!label || !label[0]) { skipped++; continue; }
+        character_name_from_label(label, name, sizeof name);
+        if (!card_name_ok(name)) { fprintf(out, "skipped %s: its name makes no file name\n", label); skipped++; continue; }
+        int twice = 0;
+        for (int k = 0; k < ndone && !twice; k++) twice = !strcmp(done[k], name);
+        if (twice) { fprintf(out, "skipped %s: cut to %s, the name of one before it\n", label, name); skipped++; continue; }
+
+        char path_out[MAP_PATH_MAX];
+        if (!store_path("environments", name, ".txt", path_out, sizeof path_out)) { skipped++; continue; }
+        if (!force && access(path_out, F_OK) == 0) { kept++; continue; }
+
+        /* Stored as a card will hold it, so what :env copies is what is read here. */
+        ByteBuf b;
+        bb_init(&b, 2048);
+        env_text(o, &b);
+        int   cut = 0;
+        char *clean = card_clean_cut((const char *)b.data, &cut);
+        if (cut) fprintf(out, "%s: cut to what a card holds (4 KB)\n", label);
+        bb_free(&b);
+        /* Whole or not at all: --force must not leave half of one behind. */
+        char tmp[MAP_PATH_MAX + 8];
+        snprintf(tmp, sizeof tmp, "%s.tmp", path_out);
+        FILE *f = fopen(tmp, "w");
+        int ok = f && fputs(clean, f) >= 0 && fputc('\n', f) != EOF;
+        if (f && fclose(f) != 0) ok = 0;
+        if (ok && rename(tmp, path_out) != 0) ok = 0;
+        if (!ok) unlink(tmp);
+        free(clean);
+        if (ok) { written++; str_lcpy(done[ndone++], name, CARD_NAME_MAX); }
+        else { fprintf(out, "skipped %s: cannot write %s\n", label, path_out); skipped++; }
+    }
+    json_free(doc);
+    free(done);
+    fprintf(out, "imported %d environment%s into %s", written, written == 1 ? "" : "s", dir);
+    if (kept) fprintf(out, " - %d already there, kept (--force replaces them)", kept);
+    if (skipped) fprintf(out, " - %d skipped", skipped);
+    fputc('\n', out);
+    return written;
+}

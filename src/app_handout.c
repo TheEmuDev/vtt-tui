@@ -74,6 +74,18 @@ void app_handout_show(App *a, const char *name)
     app_note_gm(a, msg);
 }
 
+static void handout_row(const char *name, char *buf, size_t sz)
+{
+    char *body = xmalloc(HANDOUT_BODY_MAX), err[200];
+    if (read_handout(name, body, HANDOUT_BODY_MAX, err, sizeof err) < 0) str_lcpy(buf, "cannot be read", sz);
+    else {
+        char *nl = strchr(body, '\n');
+        if (nl) *nl = '\0';
+        str_lcpy(buf, body, sz);
+    }
+    free(body);
+}
+
 /* The picker's rows: each handout's name and its first line. */
 UiPickItem *app_handout_items(int *count)
 {
@@ -81,24 +93,7 @@ UiPickItem *app_handout_items(int *count)
     handout_dir(dir, sizeof dir);
     int n;
     char (*names)[MAP_NAME_MAX] = store_list_all(dir, ".txt", &n);
-    *count = 0;
-    if (n <= 0) return NULL;
-    UiPickItem *items = xmalloc(sizeof *items * (size_t)(n > 0 ? n : 1));
-    char *body = xmalloc(HANDOUT_BODY_MAX), err[200];
-    for (int i = 0; i < n; i++) {
-        str_lcpy(items[i].name, names[i], sizeof items[i].name);
-        if (read_handout(names[i], body, HANDOUT_BODY_MAX, err, sizeof err) < 0) {
-            str_lcpy(items[i].detail, "cannot be read", sizeof items[i].detail);
-            continue;
-        }
-        char *nl = strchr(body, '\n');
-        if (nl) *nl = '\0';
-        str_lcpy(items[i].detail, body, sizeof items[i].detail);
-    }
-    free(body);
-    free(names);
-    *count = n;
-    return items;
+    return app_pick_named(names, n, handout_row, count);
 }
 
 /* :handout              the picker

@@ -181,7 +181,7 @@ Rows move here when fixed, with the commit.
 
 ### Where the rows came from
 
-Twenty-three reviews, 2026-10-07 to 2026-10-12. The first seven predate this section: on 2026-10-09
+Twenty-four reviews, 2026-10-07 to 2026-10-12. The first seven predate this section: on 2026-10-09
 their reports were read back from the session's record and every item checked against the
 code as it stood (137 items: 117 fixed, 4 overtaken when the plan dropped "accept saves", 16
 open, none disproved). Steps 4-6 were entered from their reports as they came.
@@ -211,6 +211,7 @@ open, none disproved). Steps 4-6 were entered from their reports as they came.
 | 2026-10-12 | conditions as built, and where the SRD's link is kept (two medium, three low, three test gaps: all fixed) | none |
 | 2026-10-12 | environment cards, step 1 (one medium: an outside change to the map's environment was lost; five low; four test gaps: all fixed) | none (B11 gained a second input) |
 | 2026-10-12 | environment cards, step 2, `:env adversaries` (two medium, four low: fixed but the names' matching) | 47 |
+| 2026-10-12 | environment cards, step 3, the import and `:env pick` (two medium, five low: all fixed; the importers' shared shape went to the watch list) | none |
 
 ## 2026-09-28, at 17e31e3
 

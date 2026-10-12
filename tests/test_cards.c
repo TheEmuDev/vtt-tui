@@ -3,8 +3,11 @@
 #include "harness.h"
 
 #include <dirent.h>
+#include <unistd.h>
 #include <sys/stat.h>
 #include "card.h"
+#include "store.h"
+#include "import.h"
 #include "character.h"
 #include "changeset.h"
 #include "floor.h"
@@ -1116,6 +1119,167 @@ void test_env(void)
 
     if (keep_visual[0]) setenv("VISUAL", keep_visual, 1); else unsetenv("VISUAL");
     if (keep_tmp[0])    setenv("TMPDIR", keep_tmp, 1);    else unsetenv("TMPDIR");
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
+/* --------------------------------- --import-environments, :env pick */
+
+void test_env_import(void)
+{
+    Sandbox sb = sandbox_enter("envimport");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    char path[700], err[320], lib[700];
+    snprintf(path, sizeof path, "%s/environments.json", sb.dir);
+    /* Made-up places: vtt ships none of the SRD's. */
+    FILE *f = fopen(path, "w");
+    if (f) {
+        fputs("[{\"name\": \"Misty Bog\", \"tier\": 1, \"type\": \"Traversal\", \"description\": \"Wet to the knee.\","
+              " \"impulses\": \"Swallow, mislead\", \"difficulty\": \"12\","
+              " \"potential_adversaries\": \"Beasts (Bog Rat, Heron), Lost Soul\","
+              " \"feature\": [{\"name\": \"Sucking Mud - Passive\", \"text\": \"Moving costs more.\", \"question\": \"What was lost here?\"},"
+              " {\"name\": \"Fog - Action\", \"text\": \"It closes in.\"}]},"
+              " {\"name\": \"Empty Hall\"}, {\"name\": \"???\"}, {\"tier\": 2}]", f);
+        fclose(f);
+    }
+    FILE *out = tmpfile();
+
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK(ctl_blank_map(&a, sb.dir, 12, 8));
+    if (!a.map) { app_free(&a); rnd_free(&r); fclose(out); sandbox_leave(&sb); return; }
+    Map *m = a.map;
+    app_key(&a, (Key){ KEY_F2, 0, 0 });
+
+    CASE("no environments kept yet: :env pick says how to get some");
+    press(&a, ":env pick\r");
+    CHECK(a.modal == MODAL_NONE && strstr(a.status, "no environments kept") != NULL);
+
+    CASE("each environment becomes a text file, laid out as a card; a sparse one has what it has");
+    CHECK_EQ(import_environments(path, 0, out, err, sizeof err), 2);
+    char *bog = environment_load("Misty-Bog");
+    CHECK(bog != NULL);
+    if (bog) {
+        CHECK(!strncmp(bog, "Misty Bog - Tier 1 Traversal\nWet to the knee.\nImpulses: Swallow, mislead\n"
+                            "Difficulty: 12\nPotential Adversaries: Beasts (Bog Rat, Heron), Lost Soul\n\n"
+                            "Sucking Mud - Passive: Moving costs more.\nWhat was lost here?\n\n"
+                            "Fog - Action: It closes in.\n", 220));
+        free(bog);
+    }
+    char *hall = environment_load("Empty-Hall");
+    CHECK(hall && !strcmp(hall, "Empty Hall\n"));
+    free(hall);
+    CHECK(environment_load("Nowhere") == NULL && environment_load("../x") == NULL);
+
+    CASE("again, the ones there are kept; --force replaces them");
+    CHECK_EQ(import_environments(path, 0, out, err, sizeof err), 0);
+    CHECK_EQ(import_environments(path, 1, out, err, sizeof err), 2);
+    rewind(out);
+    char said[2048] = "";
+    size_t n = fread(said, 1, sizeof said - 1, out);
+    said[n] = '\0';
+    fclose(out);
+    CHECK(strstr(said, "imported 2 environments") != NULL);
+    CHECK(strstr(said, "2 already there, kept (--force replaces them)") != NULL);
+    CHECK(strstr(said, "skipped ???: its name makes no file name") != NULL);
+
+    CASE("a file that is not a list, or not JSON, is refused with why");
+    snprintf(lib, sizeof lib, "%s/bad.json", sb.dir);
+    f = fopen(lib, "w");
+    if (f) { fputs("{\"name\": \"x\"}", f); fclose(f); }
+    CHECK_EQ(import_environments(lib, 0, stdout, err, sizeof err), -1);
+    CHECK(strstr(err, "not a list of environments") != NULL);
+    CHECK_EQ(import_environments("/nonexistent/e.json", 0, stdout, err, sizeof err), -1);
+
+    CASE(":env NAME copies a kept one into a map that has no card of that name, once");
+    press(&a, ":env Misty-Bog\r");
+    CHECK(!strcmp(m->env, "Misty-Bog"));
+    int ci = card_find(m, "Misty-Bog");
+    CHECK(ci >= 0 && !strncmp(m->cards[ci].text, "Misty Bog - Tier 1 Traversal\n", 29));
+    CHECK(strstr(a.status, "copied from your environments") != NULL);
+    CHECK_EQ(a.status_gm, 1);
+    CHECK(card_set(m, "Misty-Bog", "Mine now.") >= 0);     /* the map's own copy from here on */
+    press(&a, ":env remove\r");
+    press(&a, ":env Misty-Bog\r");
+    ci = card_find(m, "Misty-Bog");
+    CHECK(ci >= 0 && !strcmp(m->cards[ci].text, "Mine now."));
+    CHECK(strstr(a.status, "copied") == NULL);
+
+    CASE("one called like a word of :env's is still a name when the picker chooses it; a name no card can have is not offered");
+    {
+        char p5[700], dir[600];
+        store_dir("environments", dir, sizeof dir);
+        snprintf(p5, sizeof p5, "%s/remove.txt", dir);
+        FILE *g = fopen(p5, "w");
+        if (g) { fputs("Remove - Tier 1 Event\n", g); fclose(g); }
+        snprintf(p5, sizeof p5, "%s/a-name-far-too-long-to-be-the-name-of-a-card.txt", dir);
+        g = fopen(p5, "w");
+        if (g) { fputs("Too long\n", g); fclose(g); }
+        press(&a, ":env Misty-Bog\r");
+        press(&a, ":env pick\r");
+        CHECK_EQ(a.picker.n, 3);                          /* the long one is not there */
+        press(&a, "remove\r");
+        CHECK(!strcmp(m->env, "remove") && card_find(m, "remove") >= 0);
+        snprintf(p5, sizeof p5, "%s/remove.txt", dir);
+        unlink(p5);
+        snprintf(p5, sizeof p5, "%s/a-name-far-too-long-to-be-the-name-of-a-card.txt", dir);
+        unlink(p5);
+    }
+
+    CASE("an environment over what a card holds is cut, and the import says so; a short one says nothing");
+    {
+        char p6[700];
+        snprintf(p6, sizeof p6, "%s/long.json", sb.dir);
+        FILE *g = fopen(p6, "w");
+        if (g) {
+            fputs("[{\"name\": \"Long Road\", \"description\": \"", g);
+            for (int k = 0; k < 5000; k++) fputc('x', g);
+            fputs("\"}, {\"name\": \"Short Road\", \"description\": \"ctl\\u0001\\u0001 gone\"}]", g);
+            fclose(g);
+        }
+        FILE *o2 = tmpfile();
+        CHECK_EQ(import_environments(p6, 0, o2, err, sizeof err), 2);
+        rewind(o2);
+        char s2[1024] = "";
+        size_t got = fread(s2, 1, sizeof s2 - 1, o2);
+        s2[got] = '\0';
+        fclose(o2);
+        CHECK(strstr(s2, "Long Road: cut to what a card holds") != NULL);
+        CHECK(strstr(s2, "Short Road: cut") == NULL);
+        char *lr = environment_load("Long-Road");
+        CHECK(lr && strlen(lr) <= CARD_TEXT_MAX);
+        free(lr);
+        char dir[600], p7[700];
+        store_dir("environments", dir, sizeof dir);
+        snprintf(p7, sizeof p7, "%s/Long-Road.txt", dir);  unlink(p7);
+        snprintf(p7, sizeof p7, "%s/Short-Road.txt", dir); unlink(p7);
+        snprintf(p7, sizeof p7, "%s/Long-Road.txt.tmp", dir);
+        CHECK(access(p7, F_OK) != 0);                      /* nothing half-written left */
+    }
+
+    CASE(":env pick is the picker over what is kept, its first line beside each; choosing names it here");
+    press(&a, ":env remove\r");
+    CHECK(map_area_set(m, "Hall", 0, 0, 3, 3) >= 0);
+    a.ed.cx = 1; a.ed.cy = 1;
+    press(&a, ":env pick\r");
+    CHECK_EQ(a.modal, MODAL_PICKER);
+    CHECK_EQ(a.picker.n, 2);
+    CHECK(!strcmp(a.picker.items[0].name, "Empty-Hall") && !strcmp(a.picker.items[0].detail, "Empty Hall"));
+    CHECK(!strcmp(a.picker.items[1].detail, "Misty Bog - Tier 1 Traversal"));
+    CHECK(app_view_differs(&a));
+    press(&a, "empty\r");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK(!strcmp(m->areas[map_area_find(m, "Hall")].env, "Empty-Hall") && !m->env[0]);
+    CHECK(card_find(m, "Empty-Hall") >= 0);
+    press(&a, "u");                                        /* the area's name comes off; the card stays */
+    CHECK(!m->areas[map_area_find(m, "Hall")].env[0] && card_find(m, "Empty-Hall") >= 0);
+    CHECK(undo_balanced(&a.undo));
+
     app_free(&a);
     rnd_free(&r);
     sandbox_leave(&sb);

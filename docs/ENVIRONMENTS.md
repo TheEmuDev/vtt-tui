@@ -1,6 +1,8 @@
 # Environment cards
 
-> **Status: signed off 2026-10-12; steps 1 and 2 of 3 built. *Progress* says what is left.**
+> **Status: built 2026-10-12.** A design record: the plan as it was signed off. What is true
+> now is the README (*Environments*) and the rows of `card.c`, `import.c` and `ruler.c` in
+> docs/CODEMAP.md. *As built*, at the end, says where the code left the plan, step by step.
 
 Roadmap item 18. The SRD's environment stat block (type, Difficulty, impulses, features,
 Fear features, potential adversaries) as a GM-only card on a map or on a named area, beside
@@ -11,21 +13,9 @@ dropped; step 1 alone is about 300.
 
 ## Progress
 
-*Steps 1 and 2 of 3 are built and reviewed (2026-10-12): the card on the map and the area
-with `:env`, the file's version 14, the map tools and the channel's `env`; and `:env
-adversaries`, the picker holding the creatures the card names. Step 3 is next.*
-
-- **Step 3, the import**: `--import-environments FILE` beside `--import-adversaries`
-  (import.c: `card_text` builds an adversary's card from the JSON's fields, and main.c
-  has the flag), each environment a text file in `$XDG_DATA_HOME/vtt/environments`
-  (`store_dir("environments")`, names through `character_name_from_label` so they are a
-  card's name). `:env NAME` copies one into the map's cards when the map has none of that
-  name (`env_set` in app_card.c is where). A fifth list in the picker (`PickWhat`,
-  `pick_items`, `app_pick_key` in app_picker.c). vtt ships none of the SRD's text: the
-  importer reads a file the GM downloads, and its tests use made-up environments.
-- Then: roadmap item 18 to *Built*, this page's status, the index's row.
-
-What the build left the plan: *As built*, at the end.
+*All three steps are built and reviewed, 2026-10-12. Nothing of the plan is waiting. One
+finding is left open: docs/HEALTH.md, row 47 (how a card's names are matched to saved
+characters).*
 
 ## What it does
 
@@ -160,3 +150,32 @@ fuzz corpus gains the two lines. Docs: `:env` on the `?` page (src/keys.c), the 
   (docs/PERFORMANCE.md), against 3.2 ms for the whole folder. As the plan's table said.
 - The first benchmark script ended with `esc`, which the next loop's `:` turned into
   Alt-`:`; the command ran once. The row chooses a creature and takes it back instead.
+
+## As built: step 3
+
+- **`:env pick`** is how the fifth list is reached; choosing one is `:env NAME`, so it goes
+  to the area under the cursor, else the map.
+- **A kept environment is a card's text**, cleaned and cut as a card stores it when it is
+  imported, so what `:env` copies in is what the file holds. It is copied only when the map
+  has no card of that name; after that the map's copy is the map's.
+- **A feature's question** (the SRD lists one under some features) goes on the line after
+  the feature's text.
+- **The names are a card's**, made as an adversary's are (`Misty Bog` is `Misty-Bog`). A
+  file in the folder whose name no card can have is not offered, and a name the picker
+  chose is never read as one of `:env`'s own words (`app_env_name`): a kept environment may
+  be called `remove`.
+- **Each feature is a block of its own**, a blank line between them; a file is written
+  whole or not at all (a `.tmp` beside it, renamed).
+- **The channel's `env AREA CARD` does not copy from the folder.** The card is the GM's to
+  bring in; an agent names it.
+- **The picker's refactor was A/B'd**: `env.pick` reads 29 to 30 µs on the commit before
+  and after it, three runs each (a single later run read a tenth over the published
+  median, which is what prompted the check).
+- **`app_pick_named`** is now the one builder of a picker's rows (characters, stamps,
+  handouts, environments): this list was the third of its kind. `card_clean_cut` says when
+  a text was more than a card holds, which is what the import's message reads.
+- **No new zone or row**: the import is a command-line run, and `:env pick` is the picker
+  (`picker.open`), reading one small file an environment as the handouts' list does.
+- **The suite is `envimport`** (tests/test_cards.c), with made-up environments: vtt ships
+  none of the SRD's. The public SRD project's list was imported once into a scratch
+  folder by the reviewer: 19 written, none skipped or cut.

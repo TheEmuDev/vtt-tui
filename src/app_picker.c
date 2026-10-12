@@ -41,12 +41,45 @@ static void stamp_detail(const Map *s, char *buf, size_t sz)
     if (!n) snprintf(buf, sz, "%dx%d", s->w, s->h);
 }
 
+UiPickItem *app_pick_named(char (*names)[MAP_NAME_MAX], int n, PickDetail detail, int *count)
+{
+    *count = 0;
+    if (n <= 0) { free(names); return NULL; }
+    UiPickItem *items = xmalloc(sizeof *items * (size_t)n);
+    for (int i = 0; i < n; i++) {
+        str_lcpy(items[i].name, names[i], sizeof items[i].name);
+        detail(names[i], items[i].detail, sizeof items[i].detail);
+    }
+    free(names);
+    *count = n;
+    return items;
+}
+
+static void character_row(const char *name, char *buf, size_t sz)
+{
+    char err[160];
+    Map *m = character_load(name, err, sizeof err);
+    if (m) character_detail(m, buf, sz);
+    else   str_lcpy(buf, "cannot be read", sz);
+    map_free(m);
+}
+
+static void stamp_row(const char *name, char *buf, size_t sz)
+{
+    char err[160];
+    Map *m = stamp_load(name, err, sizeof err);
+    if (m) stamp_detail(m, buf, sz);
+    else   str_lcpy(buf, "cannot be read", sz);
+    map_free(m);
+}
+
 /* Every saved one, each read for what the picker says of it; a map's scenes
  * are in hand already. */
 static UiPickItem *pick_items(const App *a, PickWhat what, int *count)
 {
     PROF_ZONE("picker.open");
     if (what == PICK_HANDOUT) return app_handout_items(count);
+    if (what == PICK_ENV)     return app_env_items(count);
     if (what == PICK_SCENE) {
         const Map *m = a->map;
         *count = m ? m->nscenes : 0;
@@ -71,22 +104,7 @@ static UiPickItem *pick_items(const App *a, PickWhat what, int *count)
     } else {
         names = store_list_all(dir, ".vtt", &n);
     }
-    *count = 0;
-    if (n <= 0) { free(names); return NULL; }
-    UiPickItem *items = xmalloc(sizeof *items * (size_t)n);
-    for (int i = 0; i < n; i++) {
-        char err[160];
-        str_lcpy(items[i].name, names[i], sizeof items[i].name);
-        Map *m = what == PICK_CHARACTER ? character_load(names[i], err, sizeof err)
-                                        : stamp_load(names[i], err, sizeof err);
-        if (!m) str_lcpy(items[i].detail, "cannot be read", sizeof items[i].detail);
-        else if (what == PICK_CHARACTER) character_detail(m, items[i].detail, sizeof items[i].detail);
-        else stamp_detail(m, items[i].detail, sizeof items[i].detail);
-        map_free(m);
-    }
-    free(names);
-    *count = n;
-    return items;
+    return app_pick_named(names, n, what == PICK_CHARACTER ? character_row : stamp_row, count);
 }
 
 void app_pick_open(App *a, PickWhat what, int kind, const char *initial)
@@ -101,6 +119,8 @@ void app_pick_open(App *a, PickWhat what, int kind, const char *initial)
             snprintf(msg, sizeof msg, "no handouts - write NAME.txt in %.200s, or :handout say TEXT", dir);
             app_set_status_gm(a, msg);
         }
+        else if (what == PICK_ENV)
+            app_set_status(a, "no environments kept - vtt --import-environments FILE brings the SRD's in; :env NAME and :env edit write one here");
         else app_set_status(a, what == PICK_CHARACTER
             ? "no characters saved yet - :character save keeps the creature under the cursor"
             : "no stamps yet - y copies, :stamp save NAME keeps it");
@@ -110,6 +130,7 @@ void app_pick_open(App *a, PickWhat what, int kind, const char *initial)
     if (what == PICK_STAMP)      snprintf(title, sizeof title, "Stamp");
     else if (what == PICK_SCENE) snprintf(title, sizeof title, "Scene to put back");
     else if (what == PICK_HANDOUT) snprintf(title, sizeof title, "Handout to show the players");
+    else if (what == PICK_ENV)     snprintf(title, sizeof title, "Environment for this place");
     else if (kind < 0)      snprintf(title, sizeof title, "Character");
     else                    snprintf(title, sizeof title, "Character, as %s %s",
                                      kind == TOKEN_ENEMY ? "an" : "a", token_kind_name((uint8_t)kind));
@@ -136,6 +157,7 @@ void app_pick_key(App *a, Key k)
     if (a->pick_what == PICK_STAMP) app_stamp_command(a, name);
     else if (a->pick_what == PICK_SCENE) { if (a->map) app_scene_restore(a, name); }
     else if (a->pick_what == PICK_HANDOUT) app_handout_show(a, name);
+    else if (a->pick_what == PICK_ENV) { if (a->map) app_env_name(a, name); }
     else if (a->map && a->screen == SCREEN_PLAY) app_character_place(a, name, a->pick_kind);
 }
 

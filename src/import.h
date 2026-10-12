@@ -13,4 +13,16 @@
  * did on out; returns how many it wrote, or -1 with why in err. */
 int import_adversaries(const char *path, int force, FILE *out, char *err, size_t errsz);
 
+/* vtt --import-environments FILE: the SRD's environment list as JSON (a list
+ * of objects: name, tier, type, description, impulses, difficulty,
+ * potential_adversaries, feature[{name, text, question}]) made cards kept as
+ * text files in the environments folder, for :env to copy into a map
+ * (docs/ENVIRONMENTS.md). One already there is kept unless force. Says what
+ * it did on out; returns how many it wrote, or -1 with why in err. */
+int import_environments(const char *path, int force, FILE *out, char *err, size_t errsz);
+
+/* An environment kept in that folder: its text for the caller to free, or
+ * NULL when there is none of that name. */
+char *environment_load(const char *name);
+
 #endif /* VTT_IMPORT_H */

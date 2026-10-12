@@ -131,6 +131,7 @@ int main(int argc, char **argv)
         { "cardbox",    test_card_box },
         { "cardedit",   test_card_edit },
         { "env",        test_env },
+        { "envimport",  test_env_import },
         { "cardtpl",    test_card_templates },
         { "jsonread",   test_json_read },
         { "import",     test_import },

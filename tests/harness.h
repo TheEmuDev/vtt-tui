@@ -230,6 +230,7 @@ void test_damage(void);
 void test_card_box(void);
 void test_card_edit(void);
 void test_env(void);
+void test_env_import(void);
 void test_card_templates(void);
 void test_json_read(void);
 void test_import(void);

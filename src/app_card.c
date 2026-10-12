@@ -16,6 +16,7 @@
 #include "card.h"
 #include "character.h"
 #include "floor.h"
+#include "import.h"
 #include "store.h"
 #include "prof.h"
 
@@ -240,7 +241,17 @@ static void env_set(App *a, EnvAt at, const char *card)
         m->cards_gen++;
         map_touch(m);
     }
+    /* A card the map lacks is copied from the GM's kept environments, when
+     * there is one of that name (--import-environments). */
+    int copied = 0, full = 0;
+    if (card[0] && card_find(m, card) < 0) {
+        char *kept = environment_load(card);
+        if (kept) { copied = card_set(m, card, kept) >= 0; full = !copied; }
+        free(kept);
+    }
     if (!card[0])                     snprintf(msg, sizeof msg, "%s has no environment now", where);
+    else if (copied)                  snprintf(msg, sizeof msg, "%s: environment %s, copied from your environments - :env reads it", where, card);
+    else if (full)                    snprintf(msg, sizeof msg, "%s: environment %s - not copied in: a map holds 64 cards", where, card);
     else if (card_find(m, card) >= 0) snprintf(msg, sizeof msg, "%s: environment %s - :env reads it", where, card);
     else                              snprintf(msg, sizeof msg, "%s: environment %s - no card of that name yet, :env edit writes it", where, card);
     app_note_gm(a, msg);
@@ -360,16 +371,42 @@ static void env_adversaries(App *a, EnvAt at)
     if (missing) app_note_gm(a, msg);
 }
 
+static void env_row(const char *name, char *buf, size_t sz)
+{
+    char *text = environment_load(name);
+    if (text) card_first_line(text, buf, sz);
+    else      str_lcpy(buf, "cannot be read", sz);
+    free(text);
+}
+
+UiPickItem *app_env_items(int *count)
+{
+    char dir[MAP_PATH_MAX];
+    store_dir("environments", dir, sizeof dir);
+    int n, keep = 0;
+    char (*names)[MAP_NAME_MAX] = store_list_all(dir, ".txt", &n);
+    /* A file's name may be longer than a card's: one that cannot be a card is not offered. */
+    for (int i = 0; i < n; i++)
+        if (card_name_ok(names[i])) { if (keep != i) memcpy(names[keep], names[i], sizeof names[0]); keep++; }
+    return app_pick_named(names, keep, env_row, count);
+}
+
+void app_env_name(App *a, const char *name)
+{
+    if (a->map) env_set(a, env_here(a, 1), name);
+}
+
 /* :env                    the environment here, read whole
  * :env NAME               the smallest area under the cursor (else the map) names the card NAME
  * :env map NAME           the map does
  * :env area "AREA" NAME   that area does (a floor is named this way)
  * :env edit               its card in the editor, the ruleset's block to start a new one
  * :env adversaries        the picker, holding the creatures its card names
+ * :env pick               the picker, holding the environments kept in the folder
  * :env remove             the name comes off; the card stays in the map */
 void app_env_command(App *a, const char *rest)
 {
-    static const char USAGE[] = ":env, :env NAME, :env map NAME, :env area \"AREA\" NAME, :env edit, :env adversaries, :env remove";
+    static const char USAGE[] = ":env, :env NAME, :env map NAME, :env area \"AREA\" NAME, :env edit, :env pick, :env adversaries, :env remove";
     Map *m = a->map;
     char msg[200], where[40];
     if (!m) { app_set_status(a, "environments are a map's - open one first"); return; }
@@ -395,6 +432,7 @@ void app_env_command(App *a, const char *rest)
     }
     if (!strcmp(rest, "edit"))   { env_edit(a, env_here(a, 0)); return; }
     if (!strcmp(rest, "adversaries")) { env_adversaries(a, env_here(a, 0)); return; }
+    if (!strcmp(rest, "pick"))   { app_pick_open(a, PICK_ENV, -1, ""); return; }
     if (!strcmp(rest, "remove")) { env_set(a, env_here(a, 0), ""); return; }
 
     if (!strncmp(rest, "map ", 4)) {

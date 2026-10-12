@@ -59,6 +59,7 @@ typedef struct {
     const char *apply;              /* --apply FILE: run a request against the map, save it */
     int         apply_wait;         /* --wait SECONDS: for the GM's verdict, when the map is open in a vtt; -1 unsaid */
     const char *import_adv;         /* --import-adversaries FILE: SRD adversaries as characters */
+    const char *import_env;         /* --import-environments FILE: SRD environments as cards for :env */
     int         force;              /* --force: the import replaces templates already there */
     int         new_w, new_h;       /* --new WxH: the map --apply starts from, when it is not there */
 } Options;
@@ -108,6 +109,8 @@ static void usage(void)
         "                     proposal for its GM to review, and the file is not touched.\n"
         "  --wait SECONDS     with --apply to a map open in a vtt: wait for the GM's verdict.\n"
         "                     Exit 0 accepted, 3 none yet, 4 scrapped, 5 sent back (feedback on stdout)\n"
+        "  --import-environments FILE\n"
+        "                     the SRD's environments (JSON) as cards for :env to give a map\n"
         "  --import-adversaries FILE\n"
         "                     the Daggerheart SRD's adversaries (JSON) as character templates,\n"
         "                     each with its stat block as a card; --force replaces ones already there\n"
@@ -149,6 +152,7 @@ static int parse_args(Options *o, int argc, char **argv)
             if (o->apply_wait < 0) die("bad --wait (expected seconds)");
         }
         else if (!strcmp(a, "--import-adversaries") && i + 1 < argc) o->import_adv = argv[++i];
+        else if (!strcmp(a, "--import-environments") && i + 1 < argc) o->import_env = argv[++i];
         else if (!strcmp(a, "--force"))      o->force = 1;
         else if (!strcmp(a, "--new") && i + 1 < argc) {
             if (sscanf(argv[++i], "%dx%d", &o->new_w, &o->new_h) != 2 || o->new_w < 1 || o->new_h < 1 ||
@@ -796,6 +800,12 @@ int main(int argc, char **argv)
     if (o.import_adv) {
         char err[320];
         int n = import_adversaries(o.import_adv, o.force, stdout, err, sizeof err);
+        if (n < 0) fprintf(stderr, "vtt: %s\n", err);
+        return n < 0 ? 2 : 0;
+    }
+    if (o.import_env) {
+        char err[320];
+        int n = import_environments(o.import_env, o.force, stdout, err, sizeof err);
         if (n < 0) fprintf(stderr, "vtt: %s\n", err);
         return n < 0 ? 2 : 0;
     }

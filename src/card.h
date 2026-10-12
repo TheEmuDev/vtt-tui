@@ -20,6 +20,8 @@ int         card_set(Map *m, const char *name, const char *text);
 /* The text as a card keeps it, on the heap: line ends made \n, cut at
  * CARD_TEXT_MAX-1 bytes on a character's edge, no blank lines at either end. */
 char       *card_clean(const char *text);
+/* The same, *cut set when the text was more than a card holds (left alone otherwise). */
+char       *card_clean_cut(const char *text, int *cut);
 
 /* A card's first line, "**" marks dropped, into buf: what a listing says of
  * it ("Acid Burrower - Tier 1 Solo"). */

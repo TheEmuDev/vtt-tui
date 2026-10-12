@@ -19,7 +19,7 @@ int card_find(const Map *m, const char *name)
     return -1;
 }
 
-char *card_clean(const char *text)
+char *card_clean_cut(const char *text, int *cut)
 {
     /* One pass: line ends made \n; bytes that are not UTF-8 made U+FFFD, so
      * what is kept always writes and reads back; control characters dropped,
@@ -35,7 +35,7 @@ char *card_clean(const char *text)
             if (*p == '\r' && p + 1 < end && p[1] == '\n') p++;
             p++;
             while (n > line && t[n - 1] == ' ') n--;
-            if (n + 2 > CARD_TEXT_MAX) break;
+            if (n + 2 > CARD_TEXT_MAX) { if (cut) *cut = 1; break; }
             t[n++] = '\n';
             line = n;
             continue;
@@ -48,7 +48,7 @@ char *card_clean(const char *text)
         else if (cp < 0x20 || cp == 0x7F) m = 0;                      /* dropped */
         else if (cp == 0xFFFD && !(k == 3 && !memcmp(p, "\xef\xbf\xbd", 3))) m = utf8_encode(0xFFFD, enc);
         else { memcpy(enc, p, (size_t)k); m = k; }
-        if (n + (size_t)m + 1 > CARD_TEXT_MAX) break;
+        if (n + (size_t)m + 1 > CARD_TEXT_MAX) { if (cut) *cut = 1; break; }
         memcpy(t + n, enc, (size_t)m);
         n += (size_t)m;
         p += k;
@@ -72,6 +72,11 @@ int card_set(Map *m, const char *name, const char *text)
     m->cards[i].text = card_clean(text);
     m->cards_gen++;                 /* round the undo log and Map.gen: a checkpoint's way to see it */
     return i;
+}
+
+char *card_clean(const char *text)
+{
+    return card_clean_cut(text, NULL);
 }
 
 const char *card_of(const Map *m, const Token *t)

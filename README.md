@@ -98,6 +98,8 @@ vtt [options] [map.vtt]
   --import-adversaries FILE
                      the Daggerheart SRD's adversaries as characters with cards
                      (see Cards); --force replaces ones already saved
+  --import-environments FILE
+                     the SRD's environments as cards for :env (see Environments)
   --apply FILE       run FILE's requests against the map and save it
   --new WxH          with --apply, create an empty map of this size if the file is missing
 
@@ -566,6 +568,7 @@ environment is an ordinary card that the map, or a named area of it, points at.
 | `:env area "Crypt" NAME` | that area does; a floor is named this way |
 | `:env edit` | write the environment's card in your editor, as `s k` does a creature's |
 | `:env` | read the environment here, whole: the room's, else its floor's, else the map's |
+| `:env pick` | choose from the environments you keep (below) and give the one chosen to this place |
 | `:env adversaries` | open the character picker holding only the creatures the environment's card names |
 | `:env remove` | take the name off; the card stays in the map |
 
@@ -579,6 +582,22 @@ Bandit. Each that is a [saved character](#characters-character-i-t) (`Dire Wolf`
 character `Dire-Wolf`) is in the picker; choose one and it is placed at the cursor, as `i t`
 places it. The status line lists the names it found no character for. An area's environment is undone by `u`; the
 map's own is not, and nor is a card's text.
+
+**Environments you keep.** An environment can be kept outside any map, as a text file in
+`~/.local/share/vtt/environments/` (or `$XDG_DATA_HOME/vtt/environments/`), named like a card
+(`Misty-Bog.txt`). `:env Misty-Bog` on a map with no card of that name copies it in, and from
+then on the map has its own copy to edit. `:env pick` lists them. To fill the folder from
+the Daggerheart SRD's environment list:
+
+```sh
+vtt --import-environments environments.json
+```
+
+reads the list as JSON, such as `environments.json` from the
+[daggerheart-srd](https://github.com/seansbox/daggerheart-srd) project, and writes each as
+a card: its name, tier and type, description, impulses, Difficulty, potential adversaries
+and features. Ones already there are kept unless `--force` is given. As with the
+adversaries, vtt includes no SRD content.
 
 ### Importing the SRD's adversaries
 
