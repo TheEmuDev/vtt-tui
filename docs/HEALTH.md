@@ -80,7 +80,7 @@ review and the next. The rules (the user, 2026-10-09):
 | 6 | step 5 (93e9a1c) | The "map closed" event when the GM travels through a link to another map (`app.c:196`) has no test. Closing a map is tested; traveling is not. | test gap | Needs two map files and a party to travel; skipped as "hard". | a case in `events` (or test_places.c's trip tests) checks the event after `g o` | 2026-10-10: the final review found the sibling path, `:e`, untested and broken (fixed, suite `diskwhole`); the trip is still untested |
 | ~~7~~ | *closed, below* | | | | | |
 | 8 | step 5; first raised by the review of the plan's third draft | `ctl.wait`, the zone round answering held waits, has no perf row: the bench has no socket to hold a wait on. | performance | Stood in for by a manual check against a live vtt (1 ms from key to answer, no CPU while held), written out in CONFLICTS.md *Progress, step by step*. | the bench gains a client that holds a wait, or a test times the flush | 2026-10-09 |
-| 9 | step 5 | The main loop (`main.c`) has no test. Its bug in step 5 (keys handled in the drain never reached the flush) was found only by driving a live vtt. | test gap | The loop needs a terminal; every test calls `app_key`/`app_tick` directly. | the loop's body becomes a function a test can call with a fake terminal | 2026-10-09 |
+| ~~9~~ | *closed, below* | | | | | |
 | 10 | step 6 (f306906); step 7's review: opening now asks first, so it is rarer | Two vtts holding one file: the proposal goes to the first found, and stderr says how many others. The others' GMs are not told. No test covers it. | behavior, test gap | Step 7 makes it rare ("opening a map another vtt has open asks first"); the warning was the cheap part. | step 7 lands; a test with two listening apps on one file checks the warning | 2026-10-09 |
 | 11 | step 6 | No test that `vtt --ctl` picks the one vtt with `agent on` when two are listening. | test gap | Needs two apps listening in one test. | a `ctllive` case with a second `Ctl` | 2026-10-09 |
 | 12 | step 6 | No test for `--apply --wait` when the vtt quits before a verdict (it should exit 2). | test gap | Not written. | a `ctllive` case stops the channel while a forked `--wait` is held | 2026-10-09 |
@@ -129,6 +129,7 @@ review and the next. The rules (the user, 2026-10-09):
 | 55 | the 2.0 reviews, 3 (2026-10-12) | A refused request is answered to the agent and written nowhere else (no `slog_write` on `app_ctl_exec`'s error path), and no undo op carries an author, so a session's log cannot say why an agent was refused or who changed a square. A spawned agent that dies leaves its job `WORKING` for ever (no PID kept, no deadline). Read by review 3; not rechecked by the planner. | observability | A design gap. docs/V2.md, D8 and D13. | a log line per request, an agent and job stamp on each landing, a deadline on a working job | 2026-10-12 |
 | 56 | the 2.0 reviews, 1 (2026-10-12) | The prompt vtt hands a spawned agent lists the edit verbs without `env` (`app_agent.c:78-79` against `EDITS[]`, `app_ctl.c:1060`). The verb set is kept by hand in six lists, three doc tables and this prompt; nothing checks they agree. | docs, duplication | Small alone; the cause is the missing table. docs/V2.md, D6. | one `REQUESTS[]` table the prompt and the docs' tables are checked against | 2026-10-12 |
 | 57 | the 2.0 reviews, all three (2026-10-12) | The design-level findings of the three reviews that are not a row above: docs/V2.md's table, F3, F6 to F16, F18, F19 (prose verdicts, no delta read, conflicts as a count, the file's density and the flush on a key, the whole-map proposal copy, the untested loop, no fault injection, handlers needing `App`, white-box tests, the glyph-only players' oracle, truth inside design records, per-creature frame cost). | organization, performance, test gaps | They are the case for the rewrite, and a plan's to answer, not a patch's. | docs/V2.md is signed off and its steps close them, or the user rules one out there | 2026-10-12 |
+| 58 | 2.0's step 1, the loop (2026-10-12) | What suite `loop` does not reach: main.c's lines round the loop (the `poll` itself, `EINTR`, `a.running`, start-up, `--serve`), the input drain's 64 KB cap, and `loop_wait`'s folds other than the lone ESC and a held wait's deadline (keep-alives with a phone attached, the autosave, a ping's ring, `app_events_due`, the disk). | test gap | Row 9's residue. The folds are one line each over functions that have their own tests; the cap needs 64 KB through a pipe in pieces. | a case per fold with the thing owed (an edit with `autosave_on`, a phone on a `Conn`), and a pty test of the real binary (docs/V2.md, *Verification* 5) | 2026-10-12 |
 
 ### A second opinion on this list (Fable, 2026-10-10)
 
@@ -188,11 +189,12 @@ Rows move here when fixed, with the commit.
 | B5 | CONFLICTS.md said "the checkpoint in map.c". | step 9: checkpoint.c. |
 | B6 | PERFORMANCE.md's Proposals floor table quoted figures older than the table above it. | step 9: every figure in the two floor tables read off the current tables; the microsecond rows that move run to run are given as ranges. |
 | B8 | docs/KEYS.md did not mention the review mode. | step 9: *The review, read against the rules*. |
+| 9 | The main loop (`main.c`) had no test. | 0421c0a and the commit after it (2026-10-12): the loop is `src/loop.c`, suite `loop` drives `loop_once` through a pipe with time as an argument, and step 5's bug has a case (the reviewer's mutation that flushes before the drain fails it). What it does not reach is row 58. |
 | 2 | `box_name` (a `CsBox` to "B2:F6") was defined twice. | the final review found the third copy (app_agent.c): `cs_box_name` in changeset.c, 2026-10-10. |
 
 ### Where the rows came from
 
-Twenty-eight reviews, 2026-10-07 to 2026-10-12. The first seven predate this section: on 2026-10-09
+Twenty-nine reviews, 2026-10-07 to 2026-10-12. The first seven predate this section: on 2026-10-09
 their reports were read back from the session's record and every item checked against the
 code as it stood (137 items: 117 fixed, 4 overtaken when the plan dropped "accept saves", 16
 open, none disproved). Steps 4-6 were entered from their reports as they came.
@@ -225,6 +227,7 @@ open, none disproved). Steps 4-6 were entered from their reports as they came.
 | 2026-10-12 | environment cards, step 3, the import and `:env pick` (two medium, five low: all fixed; the importers' shared shape went to the watch list) | none |
 | 2026-10-12 | the three 2.0 reviews of the whole codebase (agent architecture, performance, testing: docs/reviews/; read-only, so nothing fixed; one finding disproved) | 48-57 |
 | 2026-10-12 | 2.0's step 0, the oracle (one high: the record's order followed the caller's locale; one medium: `--players` outside play mode dumped the GM's screen; three low; six coverage gaps: all fixed) | none |
+| 2026-10-12 | 2.0's step 1, the loop moved to `src/loop.c` (a faithful move; one medium: a case that could not see a draw; three low; five untested paths, four given a case) | 58 |
 
 ## 2026-09-28, at 17e31e3
 

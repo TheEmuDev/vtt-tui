@@ -459,3 +459,29 @@ void jobs_reset(App *a)
     app_jobs_clear(a);
     a->job_last = 0;
 }
+
+/* A raw client of the channel's socket, and whatever has arrived on it (1
+ * once the answer has ended). */
+int ctl_raw_connect(const char *path)
+{
+    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    struct sockaddr_un sa;
+    memset(&sa, 0, sizeof sa);
+    sa.sun_family = AF_UNIX;
+    str_lcpy(sa.sun_path, path, sizeof sa.sun_path);
+    if (connect(fd, (struct sockaddr *)&sa, sizeof sa) < 0) { close(fd); return -1; }
+    return fd;
+}
+
+int ctl_read_some(void *ctx)
+{
+    CtlReader *rd = ctx;
+    for (;;) {
+        struct pollfd p = { rd->fd, POLLIN, 0 };
+        if (poll(&p, 1, 0) <= 0) return rd->done;
+        ssize_t k = read(rd->fd, rd->buf + rd->n, sizeof rd->buf - 1 - rd->n);
+        if (k < 0) rd->reset = 1;          /* the answer must end in a clean EOF */
+        if (k <= 0) { rd->done = 1; rd->buf[rd->n] = '\0'; return 1; }
+        rd->n += (size_t)k;
+    }
+}
