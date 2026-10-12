@@ -47,9 +47,9 @@ source: the column below is a copy, changed in the same commit.
 | page | what it is |
 |---|---|
 | [PICTURES.md](PICTURES.md) | picture handouts: a finished plan, parked 2026-10-03 |
-| [SUMMON.md](SUMMON.md) | summoning at a range (roadmap 19): a plan, awaiting sign-off, 2026-10-12 |
-| [CONDITIONS.md](CONDITIONS.md) | Daggerheart's conditions as known markers (roadmap 13): a plan, awaiting sign-off, 2026-10-12 |
-| [ENVIRONMENTS.md](ENVIRONMENTS.md) | environment cards on a map or an area (roadmap 18): a plan, awaiting sign-off, 2026-10-12 |
+| [SUMMON.md](SUMMON.md) | summoning at a range (roadmap 19): signed off 2026-10-12, being built |
+| [CONDITIONS.md](CONDITIONS.md) | Daggerheart's conditions as known markers (roadmap 13): signed off 2026-10-12, not yet built |
+| [ENVIRONMENTS.md](ENVIRONMENTS.md) | environment cards on a map or an area (roadmap 18): signed off 2026-10-12, not yet built |
 | [VEHICLES.md](VEHICLES.md) | vehicles (an area that moves, with riders): a reviewed plan, parked 2026-10-12 |
 
 A new page gets a row here in the commit that adds it.

@@ -1,6 +1,6 @@
 # Summoning at a range
 
-> **Status: a plan, awaiting sign-off (second draft, 2026-10-12).** Nothing here is built.
+> **Status: signed off 2026-10-12 (second draft), being built.**
 
 Roadmap item 19. For a feature like "summon three Lackeys at Far range": `:summon 3 lackey
 far` lights up everything within Far of the summoner and hands the GM three Lackeys to put
@@ -115,3 +115,4 @@ Docs: the README (*Characters*, *Daggerheart*), CODEMAP's rows, the `?` page.
 - Where each summoned creature goes is the GM's choice, inside the highlighted range.
 - The count is 1 when left out; `any` places until `esc`.
 - The players see the highlight, as they see `r`.
+- `any` is the word for placing until `esc`.

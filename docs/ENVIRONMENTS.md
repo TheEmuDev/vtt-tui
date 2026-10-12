@@ -1,6 +1,6 @@
 # Environment cards
 
-> **Status: a plan, awaiting sign-off (written 2026-10-12).** Nothing here is built.
+> **Status: signed off 2026-10-12, to be built after conditions (docs/CONDITIONS.md).**
 
 Roadmap item 18. The SRD's environment stat block (type, Difficulty, impulses, features,
 Fear features, potential adversaries) as a GM-only card on a map or on a named area, beside
@@ -88,9 +88,7 @@ players' frame never holding the text, a proposal carrying an area's), and the l
 fuzz corpus gains the two lines. Docs: `:env` on the `?` page (src/keys.c), the README
 (*Cards*, *Daggerheart*, *File format*), AGENTS.md's request, CODEMAP's rows.
 
-## Open questions
+## Decided with the user, 2026-10-12
 
-1. **Steps 2 and 3.** Proposed: all three. Step 1 alone is about 300 lines; say if the
-   picker filter or the importer is not worth its size.
-2. **Where imported environments live.** Proposed: their own folder, plain text. The other
-   choice keeps no library and has the GM paste each card into a map.
+- All three steps are built.
+- Imported environments live in their own folder, as plain text.

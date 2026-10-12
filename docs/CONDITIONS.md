@@ -1,10 +1,10 @@
 # Conditions
 
-> **Status: a plan, awaiting sign-off (written 2026-10-12).** Nothing here is built.
+> **Status: signed off 2026-10-12, to be built after summoning (docs/SUMMON.md).**
 
 Roadmap item 13. Under `:ruleset daggerheart`, Hidden, Restrained and Vulnerable are markers
 the tool knows: typed in any case they get one spelling and one color, the GM can read what
-each does, and Vulnerable comes and goes with a player character's last Stress.
+each does, and Vulnerable comes and goes with a creature's last Stress.
 **Additive: a table in the ruleset, one hook where counters change. No new data, no file
 change.** About 300 lines with its tests and docs.
 
@@ -23,8 +23,8 @@ change.** About 300 lines with its tests and docs.
   function and nowhere else.
   `:condition NAME` shows one by name; `:condition` lists them. The text is the SRD's,
   copied word for word when built and cited by page.
-- **Vulnerable follows Stress**, for player characters (the SRD's rule is about a PC).
-  Counters count what is left, so "marks its last Stress" is Stress reaching 0:
+- **Vulnerable follows Stress**, for every creature that has a Stress counter, whichever
+  side it is on. Counters count what is left, so "marks its last Stress" is Stress reaching 0:
   - Stress goes from above 0 to 0: Vulnerable is added, in the same undo step.
   - Stress goes from 0 to above 0: Vulnerable is taken off, in the same undo step.
   - Only the change does it. A Vulnerable the GM put on for another reason stays while
@@ -43,7 +43,7 @@ change.** About 300 lines with its tests and docs.
 ## Where it lives
 
 - `ruler.c`: `Ruleset.conditions` (name, color, text) and `Ruleset.auto_condition` (the
-  counter's name, the condition's name, players only). The core reads the table and knows
+  counter's name, the condition's name). The core reads the table and knows
   no game: another ruleset fills in its own or leaves it NULL.
 - One function, `ruleset_counter_changed(rs, before, after)`, edits `after` before it is
   recorded, so the marker rides the same `OP_TOKEN_EDIT`. It is called from the two places
@@ -70,12 +70,12 @@ Reference figures: docs/PERFORMANCE.md, *Speed of light* (desktop).
 No new zone: the work is inside `counter.step` and `card.draw`, whose rows are re-measured.
 A `perf.sh` row `play, stress to zero and back` (`<` and `>` on a PC at 1 Stress,
 loop-neutral). Tests: the spelling and color, Stress to 0 and back with one undo each, the
-GM's own Vulnerable kept, four markers full, an adversary untouched, no ruleset, and the
+GM's own Vulnerable kept, four markers full, an adversary the same as a PC, no ruleset, and the
 players' frame never holding the text (a creature with a marker and no card included).
 Docs: `:condition` on the `?` page (src/keys.c), the README's *Daggerheart*, CODEMAP's rows.
 
-## Open questions
+## Decided with the user, 2026-10-12
 
-1. **Adversaries.** Proposed: Vulnerable follows Stress for player characters only, as the
-   SRD has it. The roadmap's line says "a creature"; say if adversaries should do it too.
-2. **More conditions.** Proposed: the SRD's three. Table-driven, so a fourth is one row.
+- **Adversaries too.** Vulnerable follows the last Stress for every creature, player
+  characters and adversaries alike (the user's ruling, written into this page).
+- The SRD's three conditions; a fourth is one row in the table.
