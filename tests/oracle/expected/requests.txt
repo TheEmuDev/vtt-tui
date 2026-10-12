@@ -145,9 +145,9 @@ floors      the floors, top first, and which the GM is looking at
 status      the map, the GM's screen and floor, whether edits are taken now
 marked      what the GM is pointing at: cursor, box, selection, ruler, pings
 propose     first line of a request: its edits are a proposal for the GM to review
-job         one job: read it, take it, read its proposal, or answer it with this request's edits
+job         one job: take it or give it up, show the GM where you work, tell the GM a line, read its proposal back, or answer it with this request's edits
 jobs        every job and where it stands
-wait        every event after SEQ, held until there is one or the time is up
+wait        every event after SEQ; a running vtt holds the answer until there is one or the time is up
 undo        take back your last accepted change, while nothing has happened since
 holds       whether that file is the map open here (--apply asks)
 help        these requests, or how one is written
@@ -1134,9 +1134,9 @@ floors      the floors, top first, and which the GM is looking at
 status      the map, the GM's screen and floor, whether edits are taken now
 marked      what the GM is pointing at: cursor, box, selection, ruler, pings
 propose     first line of a request: its edits are a proposal for the GM to review
-job         one job: read it, take it, read its proposal, or answer it with this request's edits
+job         one job: take it or give it up, show the GM where you work, tell the GM a line, read its proposal back, or answer it with this request's edits
 jobs        every job and where it stands
-wait        every event after SEQ, held until there is one or the time is up
+wait        every event after SEQ; a running vtt holds the answer until there is one or the time is up
 undo        take back your last accepted change, while nothing has happened since
 holds       whether that file is the map open here (--apply asks)
 help        these requests, or how one is written

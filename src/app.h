@@ -417,6 +417,7 @@ enum {
     CTL_RQ_OFF   = 2,       /* taken over the socket with the channel off */
     CTL_RQ_ALONE = 4,       /* must be the only line of its request */
     CTL_RQ_LIVE  = 8,       /* means something only to a running vtt */
+    CTL_RQ_NOMAP = 16,      /* answered with no map open */
 };
 const char *app_ctl_verb(int i, unsigned *flags);
 void        app_ctl_edit_verbs(FILE *out);

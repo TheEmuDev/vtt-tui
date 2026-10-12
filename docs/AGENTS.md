@@ -140,6 +140,18 @@ can take back, so each goes in a request of its own.
 | `scene "Before"` | put it back: one undo step with the rest of the request; a boxed scene replaces only the creatures in its box |
 | `scene "Before" remove` | alone in its request: throw it away |
 
+**Jobs and events.** *Working live with the GM*, below, says how these are used.
+
+| line | does |
+|---|---|
+| `propose ["a line for the GM"]` | live only, the first line of a request: its edits are a proposal of your own for the GM to review |
+| `job N take`, `job N drop` | the job is yours (the GM sees it taken), or you give it up |
+| `job N area REGION`, `job N say "..."` | show the GM where you will work, or put a line on the GM's status line |
+| `job N propose ["a line for the GM"]` | the first line of a request: its edits are your answer to job N |
+| `job N dump [REGION]`, `job N check`, `job N describe` | your proposal read back, as the map would be with it |
+| `jobs [json]` | every job and where it stands, with what was said on each |
+| `wait [SEQ] [for SECONDS]` | alone in its request: every event after SEQ, held until there is one or the time is up |
+
 **Reads.**
 
 | line | answers |

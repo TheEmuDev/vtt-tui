@@ -1972,10 +1972,10 @@ void test_ctl_table(void)
     unsigned fl;
     for (const char *v; (v = app_ctl_verb(nverbs, &fl)) != NULL; nverbs++) {
         if (!strcmp(v, "holds")) continue;          /* --apply's own question, not an agent's */
-        char a1[48], a2[48];
-        snprintf(a1, sizeof a1, "`%s ", v);
-        snprintf(a2, sizeof a2, "`%s`", v);
-        if (!strstr(doc, a1) && !strstr(doc, a2)) { printf("    not in AGENTS.md: %s\n", v); CHECK(0); }
+        char a1[48], a2[48];                        /* a table's row, not a mention in passing */
+        snprintf(a1, sizeof a1, "\n| `%s ", v);
+        snprintf(a2, sizeof a2, "\n| `%s`", v);
+        if (!strstr(doc, a1) && !strstr(doc, a2)) { printf("    no row in AGENTS.md: %s\n", v); CHECK(0); }
     }
     CHECK(nverbs > 25);
 
@@ -2024,6 +2024,50 @@ void test_ctl_table(void)
     for (const char *p = h; (p = strstr(p, "\"name\":")) != NULL; p++) objs++;
     CHECK_EQ(objs, nverbs);
     CHECK(strstr(h, "\"name\":\"wait\",\"kind\":\"read\"") != NULL);
+    free(h);
+
+    CASE("the table's kinds are the ones the channel has always had");
+    {
+        char  got[512] = "";
+        FILE *f = fmemopen(got, sizeof got - 1, "w");
+        app_ctl_edit_verbs(f);
+        fclose(f);
+        CHECK(!strcmp(got, "room, area, door, corridor, tile, wall, edge, stamp, note, fog, floor, env, link, token, scene"));
+        char alone[64] = "", nomap[64] = "", off[64] = "";
+        const char *v;
+        for (int i = 0; (v = app_ctl_verb(i, &fl)) != NULL; i++) {
+            if (fl & CTL_RQ_ALONE) { strcat(alone, v); strcat(alone, " "); }
+            if (fl & CTL_RQ_NOMAP) { strcat(nomap, v); strcat(nomap, " "); }
+            if ((fl & CTL_RQ_OFF) && !(fl & CTL_RQ_EDIT)) { strcat(off, v); strcat(off, " "); }
+        }
+        CHECK(!strcmp(alone, "wait undo "));
+        CHECK(!strcmp(nomap, "status wait holds help "));
+        CHECK(!strcmp(off, "status propose wait holds help "));
+    }
+
+    CASE("with no map open, help still answers and a read still does not");
+    {
+        Renderer r2;
+        App      b;
+        rnd_init(&r2);
+        rnd_resize(&r2, 80, 24);
+        app_init(&b, NULL, &r2);
+        h = ctl_ask(&b, "help wait");
+        CHECK(!strncmp(h, "ok\nwait [SEQ]", 13));
+        free(h);
+        h = ctl_ask(&b, "dump");
+        CHECK(!strcmp(h, "error: line 1: no map is open\n"));
+        free(h);
+        app_free(&b);
+        rnd_free(&r2);
+    }
+
+    CASE("help job names the forms job takes, and each is one the channel knows");
+    h = ctl_ask(&a, "help job");
+    CHECK(strstr(h, "job N area REGION") && strstr(h, "job N say ") && !strstr(h, "job N\n"));
+    free(h);
+    h = ctl_ask(&a, "job 1");
+    CHECK(!strncmp(h, "error: line 1: ", 15));          /* bare `job N` is no request, and help does not offer it */
     free(h);
 
     CASE("help changes nothing and makes no proposal");

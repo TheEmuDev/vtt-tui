@@ -131,6 +131,7 @@ review and the next. The rules (the user, 2026-10-09):
 | 57 | the 2.0 reviews, all three (2026-10-12) | The design-level findings of the three reviews that are not a row above: docs/V2.md's table, F3, F6 to F16, F18, F19 (prose verdicts, no delta read, conflicts as a count, the file's density and the flush on a key, the whole-map proposal copy, the untested loop, no fault injection, handlers needing `App`, white-box tests, the glyph-only players' oracle, truth inside design records, per-creature frame cost). | organization, performance, test gaps | They are the case for the rewrite, and a plan's to answer, not a patch's. | docs/V2.md is signed off and its steps close them, or the user rules one out there | 2026-10-12 |
 | 58 | 2.0's step 1, the loop (2026-10-12) | What suite `loop` does not reach: main.c's lines round the loop (the `poll` itself, `EINTR`, `a.running`, start-up, `--serve`), the input drain's 64 KB cap, and `loop_wait`'s folds other than the lone ESC and a held wait's deadline (keep-alives with a phone attached, the autosave, a ping's ring, `app_events_due`, the disk). | test gap | Row 9's residue. The folds are one line each over functions that have their own tests; the cap needs 64 KB through a pipe in pieces. | a case per fold with the thing owed (an edit with `autosave_on`, a phone on a `Conn`), and a pty test of the real binary (docs/V2.md, *Verification* 5) | 2026-10-12 |
 | 59 | 2.0's step 2, the terminal (2026-10-12) | Leaving a terminal that has not read for over a second (`:q`, SIGTERM, the card editor's `term_suspend`) gives up on it after `DRAIN_MS`: the sequences that leave the alternate screen and show the cursor are never sent, so when it reads again the shell is on the alternate screen with no cursor (`reset` puts it right; cooked mode is restored either way). Quitting can take that second. Reproduced by the reviewer: SIGTERM on an unread pty, exit in 1.02 s, no `?1049l` in what the pty held. | robustness | Before step 2 the process never exited in that state, so this is the better end; waiting longer only trades it for a hang. | a longer wait on a deliberate `:q` than on a signal, or the README's troubleshooting says `reset`; a pty test | 2026-10-12 |
+| 60 | 2.0's step 4, the request table's review (2026-10-12) | `--apply` of a plan that only reads (`dump`, `help`) saves the file all the same: `tests/fixtures/two-rooms.vtt`, 595 bytes at `VTT 1`, comes back 614 bytes at `VTT 3` with `scale` and `metric` lines it did not have. Reproduced (`--apply` of a one-line `dump` on a copy). Older than the table. | behavior | Not the table's doing, and harmless to the map: the file is rewritten as vtt writes it. | `--apply` saves only when an edit landed; a test that a reading plan leaves the file's bytes alone | 2026-10-12 |
 
 ### A second opinion on this list (Fable, 2026-10-10)
 
@@ -197,7 +198,7 @@ Rows move here when fixed, with the commit.
 
 ### Where the rows came from
 
-Thirty reviews, 2026-10-07 to 2026-10-12. The first seven predate this section: on 2026-10-09
+Thirty-one reviews, 2026-10-07 to 2026-10-12. The first seven predate this section: on 2026-10-09
 their reports were read back from the session's record and every item checked against the
 code as it stood (137 items: 117 fixed, 4 overtaken when the plan dropped "accept saves", 16
 open, none disproved). Steps 4-6 were entered from their reports as they came.
@@ -232,6 +233,7 @@ open, none disproved). Steps 4-6 were entered from their reports as they came.
 | 2026-10-12 | 2.0's step 0, the oracle (one high: the record's order followed the caller's locale; one medium: `--players` outside play mode dumped the GM's screen; three low; six coverage gaps: all fixed) | none |
 | 2026-10-12 | 2.0's step 1, the loop moved to `src/loop.c` (a faithful move; one medium: a case that could not see a draw; three low; five untested paths, four given a case) | 58 |
 | 2026-10-12 | 2.0's step 2, the non-blocking terminal (two medium: an allocation inside the fatal handler, a case that passed with the renderer's invariant broken; five low: four fixed) | 59 |
+| 2026-10-12 | 2.0's step 4, `REQUESTS[]` and `help` (the dispatch found equivalent; two medium: `help job` offered a form that is refused and hid two, `help` was refused with no map; test gaps and four low: all fixed; one older finding) | 60 |
 
 ## 2026-09-28, at 17e31e3
 

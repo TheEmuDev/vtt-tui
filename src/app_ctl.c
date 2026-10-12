@@ -1441,7 +1441,7 @@ typedef struct {
 
 #define E (CTL_RQ_EDIT | CTL_RQ_OFF)
 static const Request REQUESTS[] = {
-    { "room",     E, rq_edit, "room [NAME] REGION\nroom NAME SQUARE WxH\nroom NAME WxH east|west|north|south of ROOM gap N [top|middle|bottom|left|right]",
+    { "room",     E, rq_edit, "room [NAME] REGION\nroom NAME SQUARE WxH\nroom NAME WxH east|west|north|south of ROOM [gap N] [top|middle|bottom|left|right]",
       "a room: floor with a wall round it, named as an area when NAME is given" },
     { "area",     E, rq_edit, "area NAME REGION\narea NAME remove", "name a box without drawing anything, or take the name off" },
     { "door",     E, rq_edit, "door ROOM north|south|east|west [N|middle] [KIND]", "a door (or window, secret door, opening) in a room's side" },
@@ -1469,16 +1469,17 @@ static const Request REQUESTS[] = {
     { "scenes",     0, rq_scenes, "scenes", "the map's scenes" },
     { "links",      0, rq_links, "links [json]", "every link: number, kind, ends, size, one-way, secret" },
     { "floors",     0, rq_floors, "floors", "the floors, top first, and which the GM is looking at" },
-    { "status",     CTL_RQ_OFF | CTL_RQ_LIVE, rq_status, "status", "the map, the GM's screen and floor, whether edits are taken now" },
+    { "status",     CTL_RQ_OFF | CTL_RQ_LIVE | CTL_RQ_NOMAP, rq_status, "status", "the map, the GM's screen and floor, whether edits are taken now" },
     { "marked",     CTL_RQ_LIVE, rq_marked, "marked [json]", "what the GM is pointing at: cursor, box, selection, ruler, pings" },
 
-    { "propose",  CTL_RQ_OFF, rq_propose, "propose [\"a line for the GM\"]", "first line of a request: its edits are a proposal for the GM to review" },
-    { "job",      0, rq_job_any, "job N\njob N take|drop\njob N dump [REGION]|check|describe\njob N propose [\"a line for the GM\"]", "one job: read it, take it, read its proposal, or answer it with this request's edits" },
+    { "propose",  CTL_RQ_OFF | CTL_RQ_LIVE, rq_propose, "propose [\"a line for the GM\"]", "first line of a request: its edits are a proposal for the GM to review" },
+    { "job",      0, rq_job_any, "job N take|drop\njob N area REGION\njob N say \"a line for the GM\"\njob N dump [REGION]|check|describe\njob N propose [\"a line for the GM\"]",
+      "one job: take it or give it up, show the GM where you work, tell the GM a line, read its proposal back, or answer it with this request's edits" },
     { "jobs",     0, rq_job, "jobs [json]", "every job and where it stands" },
-    { "wait",     CTL_RQ_OFF | CTL_RQ_ALONE, rq_wait, "wait [SEQ] [for SECONDS]", "every event after SEQ, held until there is one or the time is up" },
+    { "wait",     CTL_RQ_OFF | CTL_RQ_ALONE | CTL_RQ_NOMAP, rq_wait, "wait [SEQ] [for SECONDS]", "every event after SEQ; a running vtt holds the answer until there is one or the time is up" },
     { "undo",     CTL_RQ_ALONE | CTL_RQ_LIVE, rq_undo, "undo", "take back your last accepted change, while nothing has happened since" },
-    { "holds",    CTL_RQ_OFF, rq_holds, "holds DEVICE INODE", "whether that file is the map open here (--apply asks)" },
-    { "help",     CTL_RQ_OFF, rq_help, "help [VERB|json]", "these requests, or how one is written" },
+    { "holds",    CTL_RQ_OFF | CTL_RQ_NOMAP, rq_holds, "holds DEVICE INODE", "whether that file is the map open here (--apply asks)" },
+    { "help",     CTL_RQ_OFF | CTL_RQ_NOMAP, rq_help, "help [VERB|json]", "these requests, or how one is written" },
 };
 #undef E
 #define NREQUESTS ((int)(sizeof REQUESTS / sizeof *REQUESTS))
@@ -1667,8 +1668,9 @@ char *app_ctl_exec(App *a, const char *req, size_t *len)
         p = end ? end + 1 : p + ll;
 
         if (n == 0 || (n > 0 && w[0][0] == '#')) continue;
-        /* With no map: status, and wait -- the map closing is an event. */
-        if (n > 0 && !a->map && strcmp(w[0], "status") != 0 && strcmp(w[0], "wait") != 0 && strcmp(w[0], "holds") != 0)
+        /* With no map: what the table says needs none (a wait among them --
+         * the map closing is an event). */
+        if (n > 0 && !a->map && !(rq_find(w[0]) && (rq_find(w[0])->flags & CTL_RQ_NOMAP)))
             snprintf(err, sizeof err, "no map is open");
         /* The channel off: over the socket, only what changes nothing and
          * shows nothing of the map (decision 5). */
