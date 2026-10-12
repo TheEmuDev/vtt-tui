@@ -39,6 +39,7 @@ source: the column below is a copy, changed in the same commit.
 | [DAMAGE.md](DAMAGE.md) | `:dmg` | built 2026-10-02 |
 | [WHISPER.md](WHISPER.md) | phones' names and whispers | built 2026-10-03 |
 | [CAMERA.md](CAMERA.md) | the players' camera | built 2026-10-04 |
+| [SUMMON.md](SUMMON.md) | summoning at a range: `:summon` | built 2026-10-12 |
 | [PAGESPEED.md](PAGESPEED.md) | where a frame goes on a phone, and what was done about it | built 2026-10-04 |
 | [CONFLICTS.md](CONFLICTS.md) | proposals, jobs and the review; other writers of the map's file | built 2026-10-08 to 10; *Progress* says what is still owed |
 
@@ -47,7 +48,6 @@ source: the column below is a copy, changed in the same commit.
 | page | what it is |
 |---|---|
 | [PICTURES.md](PICTURES.md) | picture handouts: a finished plan, parked 2026-10-03 |
-| [SUMMON.md](SUMMON.md) | summoning at a range (roadmap 19): signed off 2026-10-12, being built |
 | [CONDITIONS.md](CONDITIONS.md) | Daggerheart's conditions as known markers (roadmap 13): signed off 2026-10-12, not yet built |
 | [ENVIRONMENTS.md](ENVIRONMENTS.md) | environment cards on a map or an area (roadmap 18): signed off 2026-10-12, not yet built |
 | [VEHICLES.md](VEHICLES.md) | vehicles (an area that moves, with riders): a reviewed plan, parked 2026-10-12 |

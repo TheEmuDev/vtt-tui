@@ -1,6 +1,7 @@
 /* Tests: saved things in play: the picker, character templates, scenes, handouts. */
 
 #include "harness.h"
+#include "app_priv.h"
 
 static UiPickItem *pick_fixture(int *n)
 {
@@ -683,6 +684,288 @@ void test_handout_keys(void)
     press(&a, ":q!\r");
     CHECK(a.map == NULL);
     CHECK(!a.handout_up && !a.handout_body[0] && a.net.handout_len == 0);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
+/* ------------------------------------------------------------------ :summon */
+
+static int summon_token(Map *m, const char *label, int kind, int size, int x, int y)
+{
+    Token t;
+    memset(&t, 0, sizeof t);
+    t.x = (int16_t)x; t.y = (int16_t)y;
+    t.size = (uint8_t)size;
+    t.kind = (uint8_t)kind;
+    str_lcpy(t.label, label, sizeof t.label);
+    return tokens_add(&m->tokens, t);
+}
+
+void test_summon(void)
+{
+    Sandbox sb = sandbox_enter("summon");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK(ctl_blank_map(&a, sb.dir, 30, 20));
+    if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    Map  *m  = a.map;
+    Play *pl = &a.play;
+    Key f1 = { KEY_F1, 0, 0 }, f2 = { KEY_F2, 0, 0 };
+    char err[160];
+
+    /* Two templates, saved from creatures that then leave the map. */
+    str_lcpy(m->ruleset, "daggerheart", sizeof m->ruleset);
+    summon_token(m, "Lackey", TOKEN_ENEMY, 1, 0, 0);
+    summon_token(m, "Ogre", TOKEN_ENEMY, 2, 2, 0);
+    CHECK(character_save(m, 0, "lackey", NULL, 0, err, sizeof err) == 0);
+    CHECK(character_save(m, 1, "ogre", NULL, 0, err, sizeof err) == 0);
+    tokens_remove(&m->tokens, 1);
+    tokens_remove(&m->tokens, 0);
+    int korr = summon_token(m, "Korr", TOKEN_ENEMY, 1, 15, 10);
+
+    CASE(":summon is play mode's, and wants a creature to summon from");
+    press(&a, ":summon lackey far\r");
+    CHECK(strstr(a.status, "play mode's") != NULL);
+    app_key(&a, f2);
+    a.ed.cx = 3; a.ed.cy = 3;
+    press(&a, ":summon lackey far\r");
+    CHECK(strstr(a.status, "no creature here") != NULL);
+    CHECK(!app_summoning(&a));
+    press(&a, ":summon\r");
+    CHECK(strstr(a.status, ":summon [hidden]") != NULL);
+
+    CASE("a band by name, case and spaces aside; a number is not a band; a missing template");
+    a.ed.cx = 15; a.ed.cy = 10;
+    press(&a, ":summon lackey sideways\r");
+    CHECK(strstr(a.status, "no band called sideways") != NULL && strstr(a.status, "Very Close") != NULL);
+    press(&a, ":summon lackey 30\r");
+    CHECK(strstr(a.status, "no band called 30") != NULL);
+    press(&a, ":summon nobody far\r");
+    CHECK(!app_summoning(&a) && a.status[0]);
+    press(&a, ":summon 33 lackey far\r");
+    CHECK(strstr(a.status, "1 to 32") != NULL);
+    press(&a, ":summon lackey VERYCLOSE\r");
+    CHECK(app_summoning(&a) && pl->range.band == 1);
+    press(&a, "\x1b");
+    CHECK(!app_summoning(&a) && strstr(a.status, "canceled") != NULL);
+    press(&a, ":summon lackey very close\r");
+    CHECK(app_summoning(&a) && pl->range.band == 1);
+    press(&a, "\x1b");
+    press(&a, ":summon lackey\r");                   /* left out: beside the summoner */
+    CHECK(app_summoning(&a) && pl->range.band == 0 && a.summon.left == 1);
+    press(&a, "\x1b");
+
+    CASE("the highlight is a circle round the summoner whatever R was; the cursor takes the size");
+    pl->range.shape = RANGE_CONE;
+    pl->next_size = 3;
+    press(&a, ":summon 3 ogre close\r");
+    CHECK(app_summoning(&a));
+    CHECK(pl->range.active && pl->range.token == korr && pl->range.shape == RANGE_CIRCLE);
+    CHECK_EQ(pl->next_size, 2);
+    CHECK_EQ(app_keymap_id(&a), KEYS_PLAY_SUMMON);
+    press(&a, "\x1b");
+    CHECK(!pl->range.active && pl->range.shape == RANGE_CONE);   /* put back whole */
+    CHECK_EQ(pl->next_size, 3);
+    pl->next_size = 1;
+    pl->range.shape = RANGE_CIRCLE;
+
+    CASE("the mode's line and bar are the GM's; the players get neither the template nor the count");
+    press(&a, ":summon 3 lackey close\r");
+    CHECK(app_view_differs(&a));
+    rnd_begin(&r);
+    app_draw_view(&a, VIEW_GM);
+    ByteBuf gf;
+    bb_init(&gf, 65536);
+    rnd_dump(&r, &gf);
+    golden_bytes("summon_mode", gf.data, gf.len);
+    bb_putc(&gf, '\0');
+    CHECK(strstr(gf.data, "SUMMONING  Lackey 1x1 from Korr  3 of 3 to place") != NULL);
+    CHECK(strstr(gf.data, "take back") != NULL);
+    bb_free(&gf);
+    char *pf = players_text(&a, &r);
+    CHECK(strstr(pf, "SUMMONING") == NULL && strstr(pf, "Lackey") == NULL);
+    free(pf);
+
+    CASE("enter is refused on a creature, outside the range, and says which");
+    int n0 = m->tokens.n, d0 = a.undo.depth;
+    press(&a, "\r");                                  /* on Korr */
+    CHECK(strstr(a.status, "a creature is in the way") != NULL);
+    a.ed.cx = 0; a.ed.cy = 0;
+    press(&a, "\r");
+    CHECK(strstr(a.status, "outside the range") != NULL);
+    a.ed.cx = 15 + 7; a.ed.cy = 10;                   /* Close is 6 squares */
+    press(&a, "\r");
+    CHECK(strstr(a.status, "outside the range") != NULL);
+    CHECK_EQ(m->tokens.n, n0);
+    CHECK_EQ(a.undo.depth, d0);
+
+    CASE("enter places one where the GM points: one undo step, numbered, nobody selected");
+    a.ed.cx = 15 + 6; a.ed.cy = 10;
+    press(&a, "\r");
+    CHECK_EQ(m->tokens.n, n0 + 1);
+    CHECK_EQ(a.undo.depth, d0 + 1);
+    CHECK(!strcmp(m->tokens.v[n0].label, "Lackey") && m->tokens.v[n0].x == 21 && m->tokens.v[n0].y == 10);
+    CHECK(m->tokens.v[n0].kind == TOKEN_ENEMY && !m->tokens.v[n0].hidden);
+    CHECK(strstr(a.status, "summoned enemy Lackey at V11") != NULL);
+    CHECK(app_summoning(&a) && a.summon.left == 2 && pl->range.active && pl->sel != n0);
+    press(&a, "hh\r");                                /* the cursor moves as ever */
+    CHECK_EQ(m->tokens.n, n0 + 2);
+    CHECK(!strcmp(m->tokens.v[n0 + 1].label, "Lackey 2") && m->tokens.v[n0 + 1].x == 19);
+
+    CASE("u takes back the summon's own, one at a time, and no further");
+    press(&a, "u");
+    CHECK_EQ(m->tokens.n, n0 + 1);
+    CHECK_EQ(a.summon.left, 2);
+    press(&a, "u");
+    CHECK_EQ(m->tokens.n, n0);
+    CHECK_EQ(a.summon.left, 3);
+    press(&a, "u");
+    CHECK(strstr(a.status, "nothing of this summon") != NULL);
+    CHECK_EQ(m->tokens.n, n0);
+    CHECK_EQ(a.undo.depth, d0);
+    CHECK(app_summoning(&a) && pl->range.active && pl->range.token == korr);
+
+    CASE("the mode owns the keys: no command line, no other floor, a hint for the rest");
+    press(&a, ":");
+    CHECK(a.ed.mode != ED_COMMAND && strstr(a.status, "enter places") != NULL);
+    press(&a, "]");
+    CHECK(strstr(a.status, "esc first") != NULL && app_summoning(&a));
+    press(&a, "r");
+    CHECK(app_summoning(&a) && pl->range.band == 2);
+    press(&a, "?");
+    CHECK_EQ(a.screen, SCREEN_HELP);
+    CHECK_EQ(a.help_id, KEYS_PLAY_SUMMON);
+    press(&a, "\x1b");
+    CHECK_EQ(a.screen, SCREEN_PLAY);
+
+    CASE("the last one placed ends it: the highlight goes, three undo steps are left");
+    a.ed.cx = 14; a.ed.cy = 9;  press(&a, "\r");
+    a.ed.cx = 15; a.ed.cy = 9;  press(&a, "\r");
+    CHECK(app_summoning(&a));
+    a.ed.cx = 16; a.ed.cy = 9;  press(&a, "\r");
+    CHECK(!app_summoning(&a) && !pl->range.active);
+    CHECK_EQ(m->tokens.n, n0 + 3);
+    CHECK(!strcmp(m->tokens.v[n0 + 2].label, "Lackey 3"));
+    CHECK_EQ(a.undo.depth, d0 + 3);
+    CHECK_EQ(app_keymap_id(&a), KEYS_PLAY);
+    press(&a, "uuu");
+    CHECK_EQ(m->tokens.n, n0);
+
+    CASE("any places until esc; hidden puts them down hidden");
+    a.ed.cx = 15; a.ed.cy = 10;
+    press(&a, ":summon hidden any lackey close\r");
+    CHECK(app_summoning(&a) && a.summon.any && a.summon.hidden);
+    a.ed.cx = 14; a.ed.cy = 10; press(&a, "\r");
+    a.ed.cx = 16; a.ed.cy = 10; press(&a, "\r");
+    CHECK(app_summoning(&a));
+    CHECK_EQ(m->tokens.n, n0 + 2);
+    CHECK(m->tokens.v[n0].hidden && m->tokens.v[n0 + 1].hidden);
+    char line[192];
+    app_summon_status(&a, line, sizeof line);
+    CHECK(strstr(line, "2 placed  hidden") != NULL);
+    press(&a, "\x1b");
+    CHECK(!app_summoning(&a) && strstr(a.status, "stopped - 2 placed") != NULL);
+    m->tokens.v[n0].hidden = m->tokens.v[n0 + 1].hidden = 0;    /* so the players get messages at all */
+    pf = players_text(&a, &r);
+    CHECK(strstr(pf, "stopped") == NULL && strstr(pf, "placed") == NULL);
+    free(pf);
+    CHECK_EQ(m->tokens.n, n0 + 2);                    /* what was placed stays */
+    press(&a, "uu");
+    CHECK_EQ(m->tokens.n, n0);
+
+    CASE("a refusal is the GM's too; a count moves the cursor; the arrows move it");
+    a.ed.cx = 15; a.ed.cy = 10;
+    press(&a, ":summon 2 lackey far\r");
+    press(&a, "\r");                                  /* on Korr */
+    CHECK(strstr(a.status, "in the way") != NULL);
+    pf = players_text(&a, &r);
+    CHECK(strstr(pf, "in the way") == NULL);
+    free(pf);
+    press(&a, "3l");
+    CHECK_EQ(a.ed.cx, 18);
+    app_key(&a, (Key){ KEY_LEFT, 0, 0 });
+    CHECK_EQ(a.ed.cx, 17);
+    CHECK(app_summoning(&a));
+
+    CASE("a void square is off the map; another floor is refused; renumbering ends it");
+    uint8_t was = m->tiles[10 * m->w + 17];
+    m->tiles[10 * m->w + 17] = TILE_VOID;
+    press(&a, "\r");
+    CHECK(strstr(a.status, "off the map") != NULL);
+    m->tiles[10 * m->w + 17] = was;
+    CHECK(map_area_set(m, "Upper", 18, 0, 29, 19) >= 0);
+    m->areas[map_area_find(m, "Upper")].floor = 1;
+    m->areas[map_area_find(m, "Upper")].level = 1;
+    a.ed.cx = 19; a.ed.cy = 10;
+    press(&a, "\r");
+    CHECK(strstr(a.status, "on another floor") != NULL);
+    CHECK_EQ(m->tokens.n, n0);
+    CHECK(map_area_remove(m, "Upper"));
+    app_creatures_renumbered(&a);
+    CHECK(!app_summoning(&a) && !pl->range.active);
+    CHECK(undo_balanced(&a.undo));
+
+    CASE("a 2x2 half out of the range, or over the map's edge, is refused");
+    a.ed.cx = 15; a.ed.cy = 10;
+    press(&a, ":summon ogre melee\r");
+    a.ed.cx = 16; a.ed.cy = 10;                       /* its far column is two squares off */
+    press(&a, "\r");
+    CHECK(strstr(a.status, "outside the range") != NULL);
+    CHECK_EQ(m->tokens.n, n0);
+    a.ed.cx = 29; a.ed.cy = 19;
+    press(&a, "\r");
+    CHECK(strstr(a.status, "off the map") != NULL);
+    a.ed.cx = 13; a.ed.cy = 10;                       /* both columns beside Korr? no: one is */
+    press(&a, "\r");
+    CHECK_EQ(m->tokens.n, n0);
+    a.ed.cx = 15; a.ed.cy = 11;                       /* under Korr: every square is adjacent */
+    press(&a, "\r");
+    CHECK_EQ(m->tokens.n, n0);                        /* (16,12) is not */
+    press(&a, "\x1b");
+
+    CASE("it does not start while a creature is carried, and leaving play mode ends it");
+    a.ed.cx = 15; a.ed.cy = 10;
+    press(&a, "\r");                                  /* pick Korr up */
+    CHECK(pl->grabbed);
+    press(&a, ":summon lackey far\r");
+    CHECK(!app_summoning(&a) && strstr(a.status, "esc first") != NULL);
+    press(&a, "\x1b");
+    press(&a, ":summon any lackey far\r");
+    CHECK(app_summoning(&a));
+    a.ed.cx = 15; a.ed.cy = 12; press(&a, "\r");
+    CHECK_EQ(m->tokens.n, n0 + 1);
+    app_key(&a, f1);
+    CHECK(!app_summoning(&a) && !pl->range.active);
+    CHECK_EQ(m->tokens.n, n0 + 1);
+    app_key(&a, f2);
+    press(&a, "u");
+    CHECK_EQ(m->tokens.n, n0);
+
+    CASE("no ruleset: the range is a distance, in whole squares");
+    m->ruleset[0] = '\0';
+    a.ed.cx = 15; a.ed.cy = 10;
+    press(&a, ":summon lackey far\r");
+    CHECK(!app_summoning(&a) && strstr(a.status, "the range is a distance") != NULL);
+    press(&a, ":summon lackey inf\r");
+    CHECK(!app_summoning(&a) && strstr(a.status, "the range is a distance") != NULL);
+    press(&a, ":summon lackey 1e300\r");              /* no further than the overlay reaches */
+    CHECK(app_summoning(&a) && pl->range.radius == RANGE_RADIUS_MAX);
+    press(&a, "\x1b");
+    press(&a, ":summon lackey 32\r");                 /* 5 ft squares: six of them */
+    CHECK(app_summoning(&a) && pl->range.radius == 6);
+    a.ed.cx = 15 + 7; a.ed.cy = 10; press(&a, "\r");
+    CHECK(strstr(a.status, "outside the range") != NULL);
+    a.ed.cx = 15 + 6; a.ed.cy = 10; press(&a, "\r");
+    CHECK_EQ(m->tokens.n, n0 + 1);
+    CHECK(!app_summoning(&a));
+    CHECK(undo_balanced(&a.undo));
 
     app_free(&a);
     rnd_free(&r);

@@ -61,6 +61,13 @@ void range_off(RangeOverlay *ro);
  * press took it off. */
 int range_burst(RangeOverlay *ro, const Map *m, int from_token, int cx, int cy, int count);
 
+/* A circle round a creature, switched on outright: `reach` is a band's index
+ * under a ruleset with bands and a radius in squares without. */
+void range_circle(RangeOverlay *ro, const Map *m, int token, int reach);
+/* How many bands the map's ruleset cycles, 0 when it grows a radius instead;
+ * `name` gets band i's. */
+int  range_bands(const Map *m, int i, const char **name);
+
 /* R: the next shape, or the one a count names (2R is the cone). */
 int         range_cycle_shape(RangeOverlay *ro, int count);
 const char *range_shape_name(int shape);

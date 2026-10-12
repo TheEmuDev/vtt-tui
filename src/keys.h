@@ -29,6 +29,7 @@ typedef enum {
     KEYS_PLAY = 0,
     KEYS_PLAY_VISUAL,
     KEYS_PLAY_GRABBED,
+    KEYS_PLAY_SUMMON,
     KEYS_BUILD,
     KEYS_VISUAL,
     KEYS_WALL,

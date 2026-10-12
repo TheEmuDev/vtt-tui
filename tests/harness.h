@@ -271,6 +271,7 @@ void test_ctl_cap(void);
 void test_stamp_keys(void);
 void test_picker(void);
 void test_characters(void);
+void test_summon(void);
 void test_ctl_characters(void);
 void test_scenes(void);
 void test_map_links(void);

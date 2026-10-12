@@ -45,6 +45,7 @@ void app_init(App *a, Term *t, Renderer *r)
 
 void app_creatures_renumbered(App *a)
 {
+    app_summon_end(a);                  /* its summoner is an index */
     play_focus(&a->play, -1);
     a->play.visual = 0;
     range_clear(&a->play.range);
@@ -53,6 +54,7 @@ void app_creatures_renumbered(App *a)
 
 void app_free(App *a)
 {
+    app_summon_end(a);
     map_free(a->map);
     a->map = NULL;
     free(a->entries);
@@ -219,6 +221,7 @@ static void drop_autosave(const App *a);
  * A handout is the encounter's and comes down. */
 void app_travel_to(App *a, Map *m)
 {
+    app_summon_end(a);
     if (a->handout_up) net_set_handout(&a->net, "", 0, a->now_ms);
     a->handout_up = 0;
     a->handout_title[0] = a->handout_body[0] = '\0';
@@ -1015,6 +1018,7 @@ KeyMapId app_keymap_id(const App *a)
     case SCREEN_MENU:    return KEYS_MENU;
     case SCREEN_BROWSER: return KEYS_BROWSER;
     case SCREEN_PLAY:
+        if (app_summoning(a)) return KEYS_PLAY_SUMMON;
         if (a->play.visual)  return KEYS_PLAY_VISUAL;
         return a->play.grabbed ? KEYS_PLAY_GRABBED : KEYS_PLAY;
     case SCREEN_EDITOR:
@@ -1248,6 +1252,7 @@ static void close_server_with_map(App *a)
  * closes here and nowhere else. */
 void app_close_map(App *a)
 {
+    app_summon_end(a);
     a->preview = 0;
     /* A handout is the encounter's: it comes down with the map, before a
      * server kept alive carries on to the next one. */
@@ -1490,6 +1495,10 @@ static void app_key_dispatch(App *a, Key k)
         a->ed.mode != ED_COMMAND && !a->pending && !a->ed.pending_g) {
         a->ed.count = 0;
         /* Something anchored on this floor would stretch onto the next. */
+        if (app_summoning(a)) {
+            app_set_status(a, "esc first - the summon's range is on this floor");
+            return;
+        }
         if (a->ed.mode == ED_VISUAL || a->play.visual || (a->ed.mode == ED_WALL && a->ed.has_anchor) ||
             a->ruler.active || (a->ed.mode == ED_REVIEW && a->rv_box)) {
             app_set_status(a, "esc first - the box or the ruler would stretch onto the other floor");
@@ -1502,6 +1511,7 @@ static void app_key_dispatch(App *a, Key k)
     /* F1/F2 switch between building the map and running the fight on it. */
     if (a->map && (k.kind == KEY_F1 || k.kind == KEY_F2)) {
         int to_play = (k.kind == KEY_F2);
+        if (!to_play) app_summon_end(a);     /* a summon is play mode's */
         a->screen   = to_play ? SCREEN_PLAY : SCREEN_EDITOR;
         /* Leaving wall mode lifts the pen, as esc does: the stroke is one
          * step, and the next run is another. */

@@ -29,6 +29,7 @@ static const KeyDoc PLAY[] = {
     KEY("i e",    "place an enemy"),
     KEY("i t e  i t p", "place a saved character as an enemy / a player: a list to pick from"),
     KEY(":character save", "save the creature under the cursor as a character   :character NAME picks one"),
+    KEY(":summon 3 lackey far", "light that range round this creature and place three inside it   any: until esc"),
     KEY(":scene save Ambush", "keep every creature as it stands (a v box: those in it)   :scene Ambush puts them back"),
     KEY(":handout Tomb", "put Tomb.txt up on the players' screens   :handout say TEXT, :handout off"),
     KEY("b  B",   "the cursor's size, cycled; resizes the selected"),
@@ -143,6 +144,15 @@ static const KeyDoc PLAY_GRABBED[] = {
     { "esc",      "cancel: back to where it set out from", NULL, "cancel" },
     { "u",        "take back a step",                  NULL, "undo" },
     KEY("ctrl-w", "let it through walls and creatures, or stop it"),
+    { "?",        "this page",                         NULL, "keys" },
+};
+
+static const KeyDoc PLAY_SUMMON[] = {
+    GROUP("Summoning"),
+    { "h j k l",  "move the cursor; it has the creature's size", "hjkl", "move" },
+    { "enter",    "put one down here, inside the highlight", NULL, "place" },
+    { "u",        "take back the last one placed",     NULL, "take back" },
+    { "esc",      "stop: what was placed stays",       NULL, "stop" },
     { "?",        "this page",                         NULL, "keys" },
 };
 
@@ -304,6 +314,7 @@ static const KeyMap MAPS[KEYS_COUNT] = {
     MAP(KEYS_PLAY,         "Play mode",           PLAY),
     MAP(KEYS_PLAY_VISUAL,  "Play mode, selecting", PLAY_VISUAL),
     MAP(KEYS_PLAY_GRABBED, "Play mode, carrying", PLAY_GRABBED),
+    MAP(KEYS_PLAY_SUMMON,  "Play mode, summoning", PLAY_SUMMON),
     MAP(KEYS_BUILD,        "Build mode",          BUILD),
     MAP(KEYS_VISUAL,       "Build mode, visual",  VISUAL),
     MAP(KEYS_STAMP,        "Build mode, stamp",   STAMP),

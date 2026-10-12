@@ -333,6 +333,9 @@ static void draw_editor_body(App *a)
      * it: with anything hidden the players get the plain line, as over fog. */
     int quiet_players = fog_players || (a->view == VIEW_PLAYERS && tokens_any_hidden(&m->tokens));
     if (a->psplit)                  status[0] = '\0';
+    /* The template's name is the GM's until the creature is on the map. */
+    else if (playing && a->view == VIEW_GM && app_summoning(a))
+                                    app_summon_status(a, status, sizeof status);
     else if (quiet_players && playing) play_status(&a->play, m, &a->ed, 0, status, sizeof status);
     else if (a->ruler.active)       ruler_status(&a->ruler, m, status, sizeof status);
     else if (playing && a->play.range.active)
@@ -529,6 +532,7 @@ int app_view_differs(const App *a)
     if (a->agent_ring.until_ms) return 1;       /* the GM's alone */
     if (app_jobs_shown(a)) return 1;            /* the jobs' tints, likewise */
     if (app_card_shown(a) >= 0) return 1;       /* the card box is the GM's */
+    if (app_summoning(a)) return 1;             /* its status line names the template */
     if (a->screen == SCREEN_PLAY && a->map) {
         const Map  *m  = a->map;
         const Play *pl = &a->play;

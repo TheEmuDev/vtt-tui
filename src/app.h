@@ -100,6 +100,21 @@ typedef struct {
     uint64_t until_ms;
 } Ping;
 
+/* A summon in progress (app_character.c). The range overlay is the
+ * highlight; this is what is in hand and what to put back afterwards. */
+typedef struct {
+    Map         *tpl;           /* the template, read once; NULL when not summoning */
+    char         name[MAP_NAME_MAX];
+    int          left;          /* still to place; not counted with `any` */
+    int          placed;
+    int          any;           /* place until esc */
+    int          hidden;        /* put them down hidden */
+    unsigned     stamp;         /* the undo log's after the summon's last change:
+                                 * u takes one back only while it still matches */
+    uint8_t      saved_size;    /* the cursor's footprint before */
+    RangeOverlay saved_range;   /* the overlay before, shape and all */
+} Summon;
+
 typedef struct {
     Term        *term;
     Renderer    *rnd;
@@ -316,6 +331,10 @@ typedef struct {
      * (app_whisper.c): rebuilt only when one changes. */
     const Map *offer_map;
     unsigned   offer_gen;
+
+    /* :summon (docs/SUMMON.md): a template in hand and the range it may be
+     * put down in. `tpl` is NULL when nothing is being summoned. */
+    Summon   summon;
 
     /* A prefix key waiting for the one that completes it -- i for placing, s
      * for markers, PENDING_IT for i t. 0 when nothing is pending. */

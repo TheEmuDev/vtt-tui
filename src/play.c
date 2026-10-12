@@ -925,6 +925,24 @@ int range_cycle(RangeOverlay *ro, const Map *m, int anchor_token, int cx, int cy
     return ro->band;
 }
 
+void range_circle(RangeOverlay *ro, const Map *m, int token, int reach)
+{
+    range_clear(ro);
+    ro->active = 1;
+    ro->token  = token;
+    ro->shape  = RANGE_CIRCLE;
+    if (bands_of(m)) ro->band = reach;
+    else             ro->radius = iclamp(reach, 1, RANGE_RADIUS_MAX);
+}
+
+int range_bands(const Map *m, int i, const char **name)
+{
+    const Ruleset *rs = bands_of(m);
+    if (!rs) return 0;
+    if (name && i >= 0 && i < rs->nbands) *name = rs->bands[i].name;
+    return rs->nbands;
+}
+
 void range_history_changed(RangeOverlay *ro, const Map *m)
 {
     if (!ro->active) return;

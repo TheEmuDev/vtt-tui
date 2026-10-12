@@ -7,7 +7,7 @@ IDEAS.md.
 
 ## Order
 
-Suggested, of what is left: 12, 18, 8, 19, 22, 7, 11; then 13, 14 and 15 when play asks for
+Suggested, of what is left: 12, 18, 8, 22, 7, 11; then 13, 14 and 15 when play asks for
 them, and 1 if play testing of hidden creatures asks for it.
 
 ## To build
@@ -63,9 +63,6 @@ says what happened. The Fear pool stays set aside (IDEAS.md).
   features, Fear features, potential adversaries -- as a GM-only card on a map or a named
   area, beside item 6's adversary card; its potential adversaries open the template picker
   filtered to them.
-- **19. Summoning at a range.** For features like "summon three Lackeys at Far range":
-  `:summon 3 lackey far` puts three of a template at that band from the selected creature, on
-  free ground, numbered. Needs item 9.
 
 ## Parked
 
@@ -93,6 +90,7 @@ says what happened. The Fear pool stays set aside (IDEAS.md).
 | 10 | Damage against thresholds: `:dmg 11` marks HP by the card's thresholds and says why | 2026-10-02 | docs/DAMAGE.md |
 | 16 | Movement readout that knows the rules: the SRD's rule for the band a carried creature has reached | 2026-09-29 | the README, *Rulesets*, *Daggerheart* |
 | 17 | Group effects from a point: `g e` rings Very Close round the cursor and lists who is caught | 2026-09-29 | the README, *Group effects* |
+| 19 | Summoning at a range: `:summon 3 lackey far` lights the range round a creature and the GM places them inside it | 2026-10-12 | docs/SUMMON.md |
 | 21 | A camera for a TV: `:player camera follow\|party\|hold` | 2026-10-04 | docs/CAMERA.md |
 | 23 | Whisper to one player: a handout to one phone; each phone picks a name when it joins | 2026-10-03 | docs/WHISPER.md |
 

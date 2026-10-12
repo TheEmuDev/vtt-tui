@@ -1,6 +1,8 @@
 # Summoning at a range
 
-> **Status: signed off 2026-10-12 (second draft), being built.**
+> **Status: built 2026-10-12.** A design record: the plan as it was signed off. What is true
+> now is the README (*Summoning*) and the files' rows in docs/CODEMAP.md. *As built* below
+> says where the code left the plan.
 
 Roadmap item 19. For a feature like "summon three Lackeys at Far range": `:summon 3 lackey
 far` lights up everything within Far of the summoner and hands the GM three Lackeys to put
@@ -116,3 +118,25 @@ Docs: the README (*Characters*, *Daggerheart*), CODEMAP's rows, the `?` page.
 - The count is 1 when left out; `any` places until `esc`.
 - The players see the highlight, as they see `r`.
 - `any` is the word for placing until `esc`.
+
+## As built: what the plan did not say
+
+- **The tests are a suite of their own**, `summon` (in tests/test_saved.c), not part of
+  `characters`: about a hundred checks, and a golden frame of the mode (`tests/golden/summon_mode.txt`).
+- **`range_circle` and `range_bands`** are the two functions play.c gained: the overlay
+  switched on outright for a band or a radius, and the bands' names for the command to match
+  and to list in its refusal. `range_cycle` was left alone; it steps, and this sets.
+- **The square's floor is tested too** (`floor_at` against the summoner's): the plan's
+  second draft dropped the floor from the placing test when it refused `[` and `]`, but the
+  cursor can still walk over a floor's edge on a map that shows them all.
+- **No hint on starting.** The first build put "enter places one..." on the status line
+  and it crowded the mode's own line off a 100-column screen; the bar says the keys.
+- **Measured**: `summon.place` 1.0 µs typical, 1.5 µs at p99, of which `character_place`
+  is 0.8; the frame 19.6 µs and 257 bytes, 36 cells (docs/PERFORMANCE.md,
+  *Handouts, scenes, the character picker, stamps*). Against the plan's table: the test of
+  the square and the placing are as estimated; nothing is drawn that `r` does not draw.
+- **The players' frame is drawn apart while summoning** (the mode is in `app_view_differs`):
+  a second draw a frame with phones watching, which the plan's table did not list. Every
+  message the mode sets is the GM's, refusals and the stop included.
+- **A count before a movement key works** (`3l`); the digits pass the mode by.
+- **Not built, as planned:** a channel request. An agent places with `token add`.

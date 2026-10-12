@@ -26,6 +26,7 @@ int main(int argc, char **argv)
         { "stampkeys", test_stamp_keys },
         { "picker", test_picker },
         { "characters", test_characters },
+        { "summon", test_summon },
         { "ctlchars", test_ctl_characters },
         { "scenes", test_scenes },
         { "maplinks", test_map_links },

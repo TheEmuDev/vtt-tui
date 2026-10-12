@@ -134,6 +134,14 @@ void app_pick_key(App *a, Key k);
  * cursor. */
 void app_character_command(App *a, const char *rest);
 void app_character_place(App *a, const char *name, int kind);
+/* :summon [hidden] [N|any] TEMPLATE [BAND] (docs/SUMMON.md), and its mode:
+ * app_summon_key takes every key but the movement ones while it is on.
+ * app_summon_end is the one way out, safe to call when nothing is summoned. */
+void app_summon_command(App *a, const char *rest);
+void app_summon_key(App *a, Key k);
+void app_summon_end(App *a);
+void app_summon_status(const App *a, char *buf, size_t bufsz);
+static inline int app_summoning(const App *a) { return a->summon.tpl != NULL; }
 
 /* app.c: a trip through a link to another map puts this map down (saved)
  * and takes `m` up, keeping the server, the log and the play settings. */

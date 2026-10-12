@@ -353,6 +353,9 @@ run "play, group effect"   "$MOB"    80x24  ':play\r2gellllhhhhjjkk'
 run "play, card box"      "$CARDMOB" 80x24 ':play\rtjjllkkhh'
 run "play, damage"         "$DMGMOB" 80x24  ':play\r4ge:dmg 6\ru'   # 13 caught
 run "play, 500 characters" "$MOB"    80x24  ':play\ritebeast-4\t\t\ru'
+# Two summoned inside Far of the creature at B2, then taken back: the row reads the
+# template's file once a loop.
+run "play, summon"         "$MOB"    80x24  ':play\r:B2\r:summon 2 beast-000 far\rl\rl\ruuhh'
 run "play, scene of 500"   "$HORDE"  80x24  ':play\r:scene save A\r:scene A\ru'
 run "play, map trip there+back" "$TOWN" 80x24 ':play\r:C3\rgogo'
 run "play, handout typed, 4 watch" "$MOB"  80x24  ':play\r:handout say The door reads: SPEAK, FRIEND\r:handout off\r' "--bench-clients 4"

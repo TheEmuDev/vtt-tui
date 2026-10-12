@@ -466,6 +466,43 @@ turn order and hidden are not saved: a character arrives visible, and `s h` hide
 Saved characters are map files in `~/.local/share/vtt/characters/` (or
 `$XDG_DATA_HOME/vtt/characters/`). Names may use letters, digits, `-` and `_`.
 
+### Summoning (`:summon`)
+
+For a feature that brings creatures in at a range ("summon three Lackeys at Far range"). Put
+the cursor on the summoner, or select it, and name the character and the range:
+
+| command | action |
+|---------|--------|
+| `:summon lackey far` | light everything within Far of the summoner and place one `lackey` inside it |
+| `:summon 3 lackey far` | three of them (up to 32) |
+| `:summon any lackey far` | as many as you like, until `esc` |
+| `:summon hidden 3 lackey far` | put them down hidden from the players |
+
+The range is the [range highlight](#range-highlight-r), a circle round the summoner: squares
+out of the summoner's sight are fainter, and still allowed. The cursor takes the creature's
+size. Move it where you want one and press `enter`; a square outside the highlight, off the
+map, on another floor or already taken is refused, and the status line says which.
+
+| key | while summoning |
+|-----|-----------------|
+| `h j k l`, the arrows | move the cursor; a count works (`3l`) |
+| `enter` | put one down here |
+| `u` | take back the last one placed |
+| `esc` | stop; what was placed stays |
+
+```
+SUMMONING  Lackey 1x1 from Korr  2 of 3 to place
+```
+
+Placing the last one ends it, and the highlight and the cursor go back to what they were.
+Each creature placed is one undo step, numbered as a paste is (`Lackey`, `Lackey 2`), on the
+side its character was saved on. The players see the highlight as they see `r`; the
+character's name and the count are yours alone.
+
+With a ruleset the range is one of its bands (`far`, `very close`); left out, it is the
+nearest (Daggerheart's Melee: the squares beside the summoner). With no ruleset it is a
+distance in the map's units, in whole squares: `:summon 3 lackey 30`.
+
 ### The picker
 
 `:stamp`, `:character` and `i t` open a list of what you have saved. Type to narrow it: a name
@@ -1130,7 +1167,8 @@ use, and how `:dmg` marks HP. Available: `none`, `daggerheart`.
 
 `:ruleset daggerheart` adds:
 
-- **Range bands**, used by the ruler, the movement readout and the range highlight. The
+- **Range bands**, used by the ruler, the movement readout, the range highlight and
+  [`:summon`](#summoning-summon). The
   thresholds follow the SRD's estimates for playing on a map, at 1 inch = 5 feet:
 
   | band | threshold | squares at 5 ft |
@@ -1207,6 +1245,7 @@ use, and how `:dmg` marks HP. Available: `none`, `daggerheart`.
 | `:area NAME` | name the selection, or jump to a named area; `:areas` lists, `:area NAME remove` removes |
 | `:stamp ...` | save, load and choose [stamps](#build-mode) |
 | `:character ...` | save and place [characters](#characters-character-i-t) |
+| `:summon [hidden] [N\|any] NAME [RANGE]` | place a character inside a highlighted range of a creature ([summoning](#summoning-summon)) |
 | `:scene ...`, `:scenes` | save, put back and list [scenes](#scenes-scene) |
 | `:handout ...` | show a [handout](#the-players-view-serve-mirror) on the players' screens; `:handout off` takes it down |
 | `:whisper NAME TEXT` | a [whisper](#the-players-view-serve-mirror) to one player's phone; `:players` lists who is watching |

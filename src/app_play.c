@@ -572,8 +572,6 @@ void app_play_key(App *a, Key k)
     if (!m) { a->screen = SCREEN_MENU; return; }
 
     if (e->mode == ED_COMMAND) { app_command_key(a, k); return; }
-    if (app_ruler_key(a, k))       { return; }
-    if (pending_key(a, k))     { return; }
 
     /* Movement drives the grabbed token when there is one, and the cursor
      * otherwise. */
@@ -587,6 +585,14 @@ void app_play_key(App *a, Key k)
         else if (k.ch == 'l') dx = 1;
         else if (k.ch == 'k') dy = -1;
         else if (k.ch == 'j') dy = 1;
+    }
+
+    /* Summoning owns the keys but the cursor's (docs/SUMMON.md). */
+    int digit = k.kind == KEY_CHAR && k.mods == 0 && k.ch >= '1' && k.ch <= '9';
+    if (app_summoning(a) && !dx && !dy && !digit) { app_summon_key(a, k); return; }
+    if (!app_summoning(a)) {
+        if (app_ruler_key(a, k))   { return; }
+        if (pending_key(a, k))     { return; }
     }
 
     if (dx || dy) {
