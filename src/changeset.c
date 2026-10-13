@@ -582,6 +582,93 @@ static int ar_in(const CsBox *b, const CsArea *c)
     return (!c->had || area_in(b, &c->before)) && (!c->has || area_in(b, &c->after));
 }
 
+/* A line of cs_conflicts_write, while there is room for one. */
+static int room_for(int *left)
+{
+    if (*left <= 0) return 0;
+    (*left)--;
+    return 1;
+}
+
+int cs_conflicts_write(ChangeSet *cs, const Map *live, FILE *out, int max)
+{
+    PROF_ZONE("job.conflicts");
+    int n = cs_check(cs, live), left = max;
+    if (!n) return 0;
+    char at[MAP_COORD_MAX];
+    for (int i = 0; i < cs->ncells; i++) {
+        const CsCell *c = &cs->cells[i];
+        if (!c->conflict || !room_for(&left)) continue;
+        /* An edge on the map's far side is the last square's other face. */
+        int far_x = c->kind == CS_VEDGE && c->x == cs->w, far_y = c->kind == CS_HEDGE && c->y == cs->h;
+        map_coord_name(c->x - far_x, c->y - far_y, at, sizeof at);
+        int     on = cell_on_map(live, c);
+        uint8_t now = on ? cell_value(live, c->kind, c->x, c->y) : 0;
+        switch (c->kind) {
+        case CS_TILE:
+            if (on) fprintf(out, "tile %s: %s when proposed, %s now\n", at, tile_name(c->before), tile_name(now));
+            else    fprintf(out, "tile %s: off the map as it is now\n", at);
+            break;
+        case CS_VEDGE: case CS_HEDGE: {
+            const char *side = c->kind == CS_VEDGE ? (far_x ? "east" : "west") : (far_y ? "south" : "north");
+            if (on) fprintf(out, "edge %s of %s: %s when proposed, %s now\n", side, at, edge_name(c->before), edge_name(now));
+            else    fprintf(out, "edge %s of %s: off the map as it is now\n", side, at);
+            break;
+        }
+        default:
+            if (on) fprintf(out, "fog %s: painted over, or its patch deleted, since\n", at);
+            else    fprintf(out, "fog %s: off the map as it is now\n", at);
+        }
+    }
+    for (int i = 0; i < cs->ntoks; i++) {
+        const CsToken *c = &cs->toks[i];
+        if (!c->conflict || !room_for(&left)) continue;
+        if (!c->had) { fprintf(out, "creature %s: one with that label is there now\n", token_name(&c->after)); continue; }
+        int j = token_match(&live->tokens, &c->before);
+        if (j < 0) { fprintf(out, "creature %s: gone since\n", token_name(&c->before)); continue; }
+        map_coord_name(live->tokens.v[j].x, live->tokens.v[j].y, at, sizeof at);
+        fprintf(out, "creature %s: changed since (now at %s)\n", token_name(&c->before), at);
+    }
+    for (int i = 0; i < cs->nareas; i++) {
+        const CsArea *c = &cs->areas[i];
+        if (!c->conflict || !room_for(&left)) continue;
+        const char *name = c->had ? c->before.name : c->after.name;
+        fprintf(out, "area %s: %s\n", name, !c->had ? "one with that name is there now"
+                                          : map_area_find(live, name) < 0 ? "gone since" : "changed since");
+    }
+    for (int i = 0; i < cs->nlinks; i++) {
+        const CsLink *c = &cs->links[i];
+        if (!c->conflict || !room_for(&left)) continue;
+        fprintf(out, "link %d: %s\n", c->before.num, link_find(live, c->before.num) < 0 ? "gone since" : "changed since");
+    }
+    for (int i = 0; i < cs->nnotes; i++) {
+        const CsNote *c = &cs->notes[i];
+        if (!c->conflict || !room_for(&left)) continue;
+        map_coord_name(c->x, c->y, at, sizeof at);
+        fprintf(out, "note %s: %s\n", at, !c->before[0] ? "one is there now"
+                                         : map_note_at(live, c->x, c->y) ? "changed since" : "gone since");
+    }
+    for (int i = 0; i < cs->nrolls; i++) {
+        const CsRoll *c = &cs->rolls[i];
+        if (!c->conflict || !room_for(&left)) continue;
+        fprintf(out, "roll %s: %s\n", c->before.name[0] ? c->before.name : c->after.name,
+                c->before.name[0] ? "changed or gone since" : "one with that name is there now");
+    }
+    for (int i = 0; i < cs->ncards; i++) {
+        const CsCard *c = &cs->cards[i];
+        if (!c->conflict || !room_for(&left)) continue;
+        fprintf(out, "card %s: %s\n", c->name, c->before ? "changed or gone since" : "one with that name is there now");
+    }
+    if (cs->round_conflict && room_for(&left))
+        fprintf(out, "the round: %d when proposed, %d now\n", cs->round_before, live->round);
+    if (cs->spot_conflict && room_for(&left)) fprintf(out, "the spotlight: moved since\n");
+    if (cs->env_conflict && room_for(&left))
+        fprintf(out, "the environment: %s when proposed, %s now\n", cs->env_before[0] ? cs->env_before : "none",
+                live->env[0] ? live->env : "none");
+    if (n > max) fprintf(out, "and %d more\n", n - max);
+    return n;
+}
+
 /* --------------------------------------------------------------- apply */
 
 /* The creature holding the turn, other than `skip`; -1 for none. */

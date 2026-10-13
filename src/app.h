@@ -92,6 +92,7 @@ typedef struct {
     CsWhere  where;         /* the pieces of the map it changed (cs_where), for `changes` */
     uint8_t  other;         /* and something on no square */
     uint8_t  gone;          /* the map itself went (closed): nothing before this says where anything is */
+    char     by[CTL_NAME_MAX];  /* the agent whose doing it was, who is not told of it; "" the GM's, told to all */
 } AgentEvent;
 
 #define PING_SHOW_MS 2000
@@ -215,21 +216,16 @@ typedef struct {
      * seconds; the GM's screen alone (never the players' frame), and only
      * while until_ms is set. */
     Ping     agent_ring;
-    /* The undo log's stamp just after the channel's last edit, and whether
-     * that edit is still there to take back: the agent's `undo` works only
-     * while the log is exactly as the edit left it. */
+    /* Whose a landing is, for the channel's `undo` and `job N undo`, is the
+     * undo log's own to say: its batch is tagged (undo_tag). */
     /* Jobs (docs/CONFLICTS.md, app_job.c): asked of agents or offered by
      * them, kept with the map. `review` is the one ED_REVIEW shows, and the
      * review's own box (v) is held here, not in the editor's visual mode. */
     Job      jobs[JOB_MAX];
     int      review;
     int      rv_box, rv_ax, rv_ay;
-    unsigned ctl_stamp;
-    unsigned ctl_gen;           /* Map.gen then, for changes outside the log */
     unsigned ctl_refused;       /* the last refusal logged, hashed: a caller repeating itself is one line */
-    int      ctl_undoable;
     char     ctl_who[CTL_NAME_MAX];       /* the name of the request being run (`agent NAME`, or cli) */
-    char     ctl_undo_who[CTL_NAME_MAX];  /* whose landing `undo` would take back */
     /* A request's edits run on a copy of the map, never the live one, and
      * become a proposal (docs/CONFLICTS.md); the copy and its log are kept
      * for their buffers. `ctl_auto` (:agent accept auto) lands each one at

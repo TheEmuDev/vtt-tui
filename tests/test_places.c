@@ -359,9 +359,9 @@ void test_links(void)
         link_put(dst, &mine);
         Undo u;
         undo_init(&u);
-        CHECK_EQ(stamp_place(dst, &u, turned, 0, 0, err, sizeof err), 1);
+        CHECK_EQ(stamp_place(dst, &u, turned, 0, 0, NULL, err, sizeof err), 1);
         CHECK(dst->nlinks == 2 && link_find(dst, 2) >= 0);
-        CHECK_EQ(stamp_place(dst, &u, turned, 0, 0, err, sizeof err), 0);   /* on stairs 2 now */
+        CHECK_EQ(stamp_place(dst, &u, turned, 0, 0, NULL, err, sizeof err), 0);   /* on stairs 2 now */
         CHECK(strstr(err, "a link would end on stairs 2") != NULL);
         undo_undo(&u, dst);
         CHECK_EQ(dst->nlinks, 1);

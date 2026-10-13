@@ -95,7 +95,7 @@ GM accepts it, or at once under `:agent accept auto`):
 | `floor NAME LEVEL`, `floor NAME off` | mark a named area a floor, or unmark it (added with floors) |
 | `env NAME CARD`, `env NAME remove` | a named area's environment: a card's name, or none (added with environments, docs/ENVIRONMENTS.md) |
 | `scene NAME`; `scene save NAME [REGION]`, `scene NAME remove` | put a scene back (an edit, one step with the request); save or remove one, each alone in its request since neither is in the undo log (added with scenes) |
-| `undo` | takes back the agent's last accepted change, only while nothing came after it; alone in its request, since it cannot roll back with other lines |
+| `undo` | takes back the caller's last change to land, once, only while it is the last step in the log; alone in its request, since it cannot roll back with other lines. `job N undo` (2.0) is the same for a job by number |
 
 **Jobs** (docs/CONFLICTS.md; `job` and `jobs` lines come before a request's edits):
 
@@ -107,6 +107,7 @@ GM accepts it, or at once under `:agent accept auto`):
 | `job N say "..."` | a line for the GM's status line and the job's thread |
 | `propose ["..."]`, `job N propose ["..."]` | first in a request: its edits are an idea of the agent's own (a new job), or job N's answer. Edits with neither are an idea of the agent's own |
 | `job N drop` | give it back: the GM's job waits as asked; the agent's own is scrapped, kept for the GM's `:review N` (KEYS.md rule 9: only `remove` destroys, and that is the GM's `:ask N remove`). **The file's job and an `--apply`'s are the GM's alone:** `take`, `area`, `say`, `propose` and `drop` on them are refused, the reads are not |
+| `job N conflicts`, `job N undo` | since 2.0 (docs/V2.md, D8; docs/AGENTS.md has them): what changed under a waiting proposal, a line each; and job N's landing taken back by the name that made it, while it is the last step |
 | `job N dump [REGION]`, `job N describe [json]`, `job N check [json]` | the map as accepting job N's proposal would make it now |
 | `propose apply "plan.txt"` | what `vtt MAP --apply` sends when a vtt has MAP open: the job is from `--apply plan.txt` |
 | `holds DEVICE INODE` | `holds` when the map open here is that file, by `stat`'s identity (the two processes have different working directories); else `no`. Works with no map |
@@ -134,7 +135,10 @@ never move.
 - **Rolling back** is `undo_abort`: the open batch's ops are applied backwards and
   forgotten. A redo tail the GM had (from an undo of their own) is let go by the first
   op, as any edit would, and does not come back with the rollback.
-- **The agent's `undo`** compares `Undo.stamp`, which every record, undo, redo and clear
+- **Since 2.0 the agent's `undo` asks the log itself** whose its last step is (`undo_tag`;
+  docs/V2.md, *Names, as built: the second part*), and no longer stops at a change made
+  round the log. What follows is 1.x's rule.
+- **The agent's `undo`** compared `Undo.stamp`, which every record, undo, redo and clear
   moves, and `Map.gen`, which every change moves (the GM's own square notes and fog
   settings go round the log), with what its last request left; any difference means
   something came after, and only the GM's `u` may take it back. It goes in a request of

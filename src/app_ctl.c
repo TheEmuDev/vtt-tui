@@ -988,10 +988,11 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
         if (!rq_cover(a, (long)st->w * st->h, err, errsz)) { map_free(st); return -1; }
         if (quarters) { Map *t = stamp_turned(st, quarters); map_free(st); st = t; }
         if (mirror)   { Map *t = stamp_mirrored(st); map_free(st); st = t; }
-        int ok = stamp_place(m, u, st, x, y, err, errsz);
+        int full, ok = stamp_place(m, u, st, x, y, &full, err, errsz);
         x0 = x; y0 = y; x1 = x + st->w - 1; y1 = y + st->h - 1;
         map_free(st);
-        if (!ok) return rq_class(CTL_E_CONFLICT);
+        /* Refused: something in the way, or the map full of links or notes. */
+        if (!ok) return rq_class(full ? CTL_E_LIMIT : CTL_E_CONFLICT);
     }
     else if (!strcmp(v, "scene")) {
         /* scene NAME: put it back, one step with the rest of the request. */
@@ -1259,30 +1260,55 @@ static int rq_undo(RQ_ARGS)
     RQ_LOCALS;
     if (n > 1) { snprintf(err, errsz, "undo takes nothing after it"); return -1; }
     if (ed->lines) { snprintf(err, errsz, "undo comes before any edit in a request"); return -1; }
-    if (!a->ctl_undoable) { rq_class(CTL_E_STATE), snprintf(err, errsz, "there is no change of the agent's to take back"); return -1; }
-    if (strcmp(a->ctl_undo_who, a->ctl_who) != 0) {
+    /* Whose a step is, the log says (undo_tag). `undo` takes back the
+     * caller's newest landing and no other: only while it is the last step
+     * applied, and once -- a caller repeating itself must not walk back
+     * through everything the GM accepted of it (`job N undo` names one). */
+    const UndoTag *top = undo_tag_top(&a->undo), *t = undo_tag_last(&a->undo, a->ctl_who);
+    if (top && strcmp(top->who, a->ctl_who) != 0) {
         rq_class(CTL_E_STATE);
-        snprintf(err, errsz, "the last change to land is %s's, and you are %s - undo takes back your own", a->ctl_undo_who, a->ctl_who);
+        snprintf(err, errsz, "the last change to land is %s's, and you are %s - undo takes back your own", top->who, a->ctl_who);
         return -1;
     }
-    /* The log as the edit left it, and the map: a note or a fog setting
-     * the GM changes outside the log still moves Map.gen. */
-    if (a->undo.stamp != a->ctl_stamp || m->gen != a->ctl_gen) {
+    if (!t || t->batch >= a->undo.depth) {
+        rq_class(CTL_E_STATE);
+        /* Its newest was taken back already (by it, or the GM's u), and an
+         * older one of its is the last step: said, with what reaches it. */
+        if (t && top && top->job)
+            snprintf(err, errsz, "your newest change was taken back already, and undo is once - job %d undo takes back the one before it", top->job);
+        else snprintf(err, errsz, "there is no change of the agent's to take back");
+        return -1;
+    }
+    if (t != top) {
         rq_class(CTL_E_STATE), snprintf(err, errsz, "something has happened since the agent's last change - only the GM's u takes it back now");
         return -1;
     }
-    const char *busy = app_ctl_busy(a);
-    if (busy) { str_lcpy(err, busy, errsz); return -2; }
-    app_events_map_flush(a);             /* the GM's changes so far are their own event */
-    undo_undo(&a->undo, m);
-    app_events_map_restart(a);           /* the agent's own doing is no news to it */
-    range_history_changed(&a->play.range, m);
-    a->ctl_undoable = 0;
-    app_fog_sync(a);
-    a->dirty = 1;
+    if (!app_ctl_undo(a, 1, t->job, err, errsz)) return -2;
     app_note_gm(a, "the agent took back its last change - ctrl-r puts it back");
     fputs("took back the last change\n", out);
     return 0;
+}
+
+int app_ctl_undo(App *a, int steps, int job, char *err, size_t errsz)
+{
+    int         slot = job ? app_job_find(a, job) : -1;
+    const char *busy = app_ctl_busy(a);
+    /* Not from under the GM's eyes: the rest of that job is on screen, and
+     * what it shows was made against the map with the part landed. */
+    if (!busy && slot >= 0 && a->review == slot) busy = "the GM is reviewing the rest of that job";
+    if (busy) { str_lcpy(err, busy, errsz); return 0; }
+    char msg[120];
+    app_events_map_flush(a);             /* the GM's changes so far are their own event */
+    for (int k = 0; k < steps; k++) undo_undo(&a->undo, a->map);
+    /* News to every name but the caller's: a job's step, or a change that
+     * had none (--apply on a file, where nobody listens). */
+    snprintf(msg, sizeof msg, "taken back by %s", a->ctl_who);
+    app_event_of_change(a, job ? CTL_EV_UNDONE : CTL_EV_CHANGED, job, a->ctl_who, msg);
+    if (slot >= 0) app_job_thread_add(&a->jobs[slot], '-', msg);
+    range_history_changed(&a->play.range, a->map);
+    app_fog_sync(a);
+    a->dirty = 1;
+    return 1;
 }
 
 static int rq_holds(RQ_ARGS)
@@ -1336,7 +1362,7 @@ static int rq_wait(RQ_ARGS)
      * --wait` asks `wait SEQ for N` with the SEQ it was given, 0 on a vtt
      * where nothing has happened yet, and must be held, not answered in a
      * loop. */
-    if (app_events_after(a, seq) || !a->ctl_can_hold || secs == 0 || (said && seq == 0 && !timed)) app_events_write(a, out, seq);
+    if (app_events_after(a, seq, a->ctl_who) || !a->ctl_can_hold || secs == 0 || (said && seq == 0 && !timed)) app_events_write(a, out, seq, a->ctl_who);
     else {
         a->ctl_held     = 1;
         a->ctl_hold_seq = seq;
@@ -1420,10 +1446,10 @@ static int rq_changes(RQ_ARGS)
     if (!a->ctl_direct && ++g_changes > 3) BADC(CTL_E_LIMIT, "changes is asked at most three times in a request");
     a->agent_seen_ms = a->now_ms ? a->now_ms : 1;       /* someone is listening: the checkpoint stays */
     app_events_hear(a);                                 /* and a change nobody heard of is said first */
-    app_events_write(a, out, (unsigned)k);
+    app_events_write(a, out, (unsigned)k, a->ctl_who);
     CsWhere where, asked = { { 0 } };
     int     other;
-    if (!app_events_where(a, (unsigned)k, &where, &other)) return 0;   /* `lost` has said to read the map again */
+    if (!app_events_where(a, (unsigned)k, &where, &other, a->ctl_who)) return 0;   /* `lost` has said to read the map again */
     cs_pieces(m->w, m->h, box[0], box[1], box[2], box[3], &asked);
     char more[CS_GRID * CS_GRID * 16] = "";              /* room for every piece's name */
     fflush(out);
@@ -1698,11 +1724,11 @@ static const Request REQUESTS[] = {
     { "marked",     CTL_RQ_LIVE, rq_marked, "marked [json]", "what the GM is pointing at: cursor, box, selection, ruler, pings" },
 
     { "propose",  CTL_RQ_LIVE, rq_propose, "propose [\"a line for the GM\"]", "first line of a request: its edits are a proposal for the GM to review" },
-    { "job",      0, rq_job_any, "job N take|drop\njob N area REGION\njob N say \"a line for the GM\"\njob N dump [REGION|all|key]|check|describe\njob N propose [\"a line for the GM\"]",
-      "one job: take it or give it up, show the GM where you work, tell the GM a line, read its proposal back, or answer it with this request's edits" },
+    { "job",      0, rq_job_any, "job N take|drop\njob N area REGION\njob N say \"a line for the GM\"\njob N dump [REGION|all|key]|check|describe\njob N conflicts\njob N undo\njob N propose [\"a line for the GM\"]",
+      "one job: take it or give it up, show the GM where you work, tell the GM a line, read its proposal back, list what changed under it, take its landing back, or answer it with this request's edits" },
     { "jobs",     0, rq_job, "jobs [json]", "every job and where it stands" },
     { "wait",     CTL_RQ_ALONE | CTL_RQ_NOMAP, rq_wait, "wait [SEQ] [for SECONDS]", "every event after SEQ; a running vtt holds the answer until there is one or the time is up" },
-    { "undo",     CTL_RQ_ALONE | CTL_RQ_LIVE, rq_undo, "undo", "take back your last accepted change, while nothing has happened since" },
+    { "undo",     CTL_RQ_ALONE | CTL_RQ_LIVE, rq_undo, "undo", "take back the last change to land, when it is yours and nothing has happened since (job N undo: that job's)" },
     { "holds",    CTL_RQ_OFF | CTL_RQ_NOMAP, rq_holds, "holds DEVICE INODE", "whether that file is the map open here (--apply asks)" },
     { "help",     CTL_RQ_NOMAP, rq_help, "help [VERB|json]", "these requests, or how one is written" },
 };
@@ -1780,6 +1806,7 @@ static const char *lonely(char w[][CTL_WORD_MAX], int n)
     if (r && (r->flags & CTL_RQ_ALONE)) return r->name;
     if (n >= 2 && !strcmp(w[0], "scene") && !strcmp(w[1], "save")) return "scene save";
     if (n == 3 && !strcmp(w[0], "scene") && !strcmp(w[2], "remove")) return "scene NAME remove";
+    if (n == 3 && !strcmp(w[0], "job") && !strcmp(w[2], "undo")) return "job N undo";
     return NULL;
 }
 
@@ -1839,10 +1866,7 @@ static void finish_edits(App *a, Edits *ed, FILE *out)
         fprintf(out, "no change: the map already looked like that\n");
         return;
     }
-    a->ctl_stamp    = a->undo.stamp;
-    a->ctl_gen      = a->map->gen;
-    a->ctl_undoable = 1;
-    str_lcpy(a->ctl_undo_who, a->ctl_who, sizeof a->ctl_undo_who);
+    undo_tag(&a->undo, 0, a->ctl_who);           /* whose step: `undo` takes back the caller's own */
     say_changed(a, ed, out);
     char msg[160];
     if (ed->lines == 1) snprintf(msg, sizeof msg, "agent: %s - u takes it back", ed->first);

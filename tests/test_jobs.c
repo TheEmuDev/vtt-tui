@@ -506,9 +506,15 @@ void test_jobs_ctl(void)
     CHECK_EQ(m->tokens.n, 0);
     press(&a, "\x12");                                   /* the GM's ctrl-r */
     CHECK_EQ(map_tile(m, 2, 3), TILE_WATER);
-    t = ctl_ask(&a, "undo");                              /* once is all */
+    t = ctl_ask(&a, "undo");                              /* the step is back, and still the agent's */
+    CHECK(t && !strcmp(t, "ok\ntook back the last change\n"));
+    free(t);
+    CHECK_EQ(map_tile(m, 2, 3), TILE_FLOOR);
+    t = ctl_ask(&a, "undo");                              /* once is all: nothing of its is applied */
     CHECK(t && strstr(t, "there is no change of the agent's to take back"));
     free(t);
+    press(&a, "\x12");                                   /* as the case found it */
+    CHECK_EQ(map_tile(m, 2, 3), TILE_WATER);
 
     CASE("propose: an agent's own idea is a job of its own; job N drop withdraws it");
     t = ctl_ask(&a, "propose \"a pool\"\ntile H8 water\n");
@@ -748,18 +754,19 @@ void test_events(void)
     press(&a, ":review 1\rv\r");                           /* the box is B2 alone */
     CHECK_EQ(map_tile(m, 1, 1), TILE_WATER);
     t = ctl_ask(&a, "wait 1");
-    CHECK(t && strstr(t, "ok\nseq 2\n2 job 1 part: B2: ground in B2 - the rest waits\n") == t);
+    /* The proposal was event 2, the agent's own: not told to it, and its number is passed over. */
+    CHECK(t && strstr(t, "ok\nseq 3\n3 job 1 part: B2: ground in B2 - the rest waits\n") == t);
     /* What --wait makes of the words as they are really sent (HEALTH 16). */
     unsigned vseq = 0;
     char     vline[200];
     CHECK_EQ(ctl_verdict_in(t, 1, &vseq, vline, sizeof vline), 0);
-    CHECK(!strcmp(vline, "job 1 part: B2: ground in B2 - the rest waits") && vseq == 2);
+    CHECK(!strcmp(vline, "job 1 part: B2: ground in B2 - the rest waits") && vseq == 3);
     CHECK_EQ(ctl_verdict_in(t, 2, &vseq, vline, sizeof vline), -1);
     free(t);
     press(&a, "c");
     press(&a, "deeper\r");
-    t = ctl_ask(&a, "wait 2");
-    CHECK(t && !strcmp(t, "ok\nseq 3\n3 job 1 feedback: deeper\n"));
+    t = ctl_ask(&a, "wait 3");
+    CHECK(t && !strcmp(t, "ok\nseq 4\n4 job 1 feedback: deeper\n"));
     CHECK_EQ(ctl_verdict_in(t, 1, &vseq, vline, sizeof vline), 5);
     CHECK(!strcmp(vline, "deeper"));
     free(t);
@@ -770,14 +777,14 @@ void test_events(void)
     press(&a, "\r");
     press(&a, ":ask 1 remove\r");
     a.job_last = 0;
-    t = ctl_ask(&a, "wait 3");
-    CHECK(t && strstr(t, "4 job 1 scrapped\n5 job 1 back: for review\n6 job 1 accepted: ground in C2\n"
-                         "7 job 1 removed\n"));
+    t = ctl_ask(&a, "wait 4");
+    CHECK(t && strstr(t, "6 job 1 scrapped\n7 job 1 back: for review\n8 job 1 accepted: ground in C2\n"
+                         "9 job 1 removed\n"));
     CHECK_EQ(ctl_verdict_in(t, 1, &vseq, vline, sizeof vline), 4);
     CHECK(!strcmp(vline, "job 1 scrapped"));
-    CHECK_EQ(ctl_verdict_in(strstr(t, "5 job 1"), 1, &vseq, vline, sizeof vline), 0);      /* back is no verdict; accepted is */
+    CHECK_EQ(ctl_verdict_in(strstr(t, "7 job 1"), 1, &vseq, vline, sizeof vline), 0);      /* back is no verdict; accepted is */
     CHECK(!strcmp(vline, "job 1 accepted: ground in C2"));
-    CHECK_EQ(ctl_verdict_in(strstr(t, "7 job 1"), 1, &vseq, vline, sizeof vline), 4);
+    CHECK_EQ(ctl_verdict_in(strstr(t, "9 job 1"), 1, &vseq, vline, sizeof vline), 4);
     free(t);
 
     CASE("asked, in its four forms: with a box or none, to land at once or not");
@@ -807,8 +814,8 @@ void test_events(void)
 
     CASE("a number past the newest event is another vtt's: answered at once, with everything kept");
     t = ctl_ask(&a, "wait 99");
-    CHECK(t && strstr(t, "ok\nseq 7\nreset 99: ") == t && strstr(t, "\n1 job 1 asked: in B2:E5: a crypt\n")
-            && strstr(t, "\n7 job 1 removed\n"));
+    CHECK(t && strstr(t, "ok\nseq 9\nreset 99: ") == t && strstr(t, "\n1 job 1 asked: in B2:E5: a crypt\n")
+            && strstr(t, "\n9 job 1 removed\n"));
     /* Every event sent has a kind the one table knows, and names its job. */
     {
         int seen = 0, kinds = 0;
@@ -825,7 +832,7 @@ void test_events(void)
                         1 << CTL_EV_BACK | 1 << CTL_EV_ACCEPTED | 1 << CTL_EV_REMOVED);
     }
     free(t);
-    CHECK_EQ(app_events_after(&a, 99), 1);                 /* so a socket never holds it */
+    CHECK_EQ(app_events_after(&a, 99, NULL), 1);                 /* so a socket never holds it */
 
     CASE("the client reads how long a wait may be held: past comments, clamped, nothing else");
     CHECK_EQ(ctl_held_ms("status\n"), 0);
@@ -887,10 +894,11 @@ void test_events(void)
     app_tick(&a, 31000);
     app_tick(&a, 40000);
     char two[160];
-    snprintf(two, sizeof two, "%u map changed: ground in L10\n%u job 1 accepted: ground in A12\n", seq0 + 2, seq0 + 3);
+    /* Before the two is the agent's own proposal (seq0 + 2), not told to it. */
+    snprintf(two, sizeof two, "%u map changed: ground in L10\n%u job 1 accepted: ground in A12\n", seq0 + 3, seq0 + 4);
     t = ctl_ask(&a, "wait 0");
     CHECK(t && strstr(t, two));
-    CHECK_EQ(a.event_seq, seq0 + 3);
+    CHECK_EQ(a.event_seq, seq0 + 4);
     free(t);
 
     CASE("changes: the events after SEQ, then the map as it is now in the pieces they changed, and only those");
@@ -903,7 +911,7 @@ void test_events(void)
                                     "%u job 1 accepted: ground in A12\n"
                                     "changed I10:L10\n    I J K L\n\n10  . : . :\n\n"
                                     "changed A12:B12\n    A B\n\n12  ~ .\n\n",
-                 seq0 + 3, seq0 + 1, seq0 + 2, seq0 + 3);
+                 seq0 + 4, seq0 + 1, seq0 + 3, seq0 + 4);
         CHECK(t && !strcmp(t, all));
         if (t && strcmp(t, all)) printf("    got:\n%s    want:\n%s", t, all);
         free(t);

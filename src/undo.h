@@ -51,6 +51,17 @@ typedef struct {
 #define UNDO_MAX_OPS (4 * MAP_MAX_DIM * MAP_MAX_DIM)
 #define UNDO_TRIM_TO (UNDO_MAX_OPS - UNDO_MAX_OPS / 4)
 
+/* Whose batch one is, when it is not the GM's own (docs/V2.md, D8): a job's
+ * landing carries the job's number and the name of the agent that had it, so
+ * the channel's `undo` and `job N undo` find it. Kept apart from the marks,
+ * a few among thousands: a log no agent wrote to carries none. */
+#define UNDO_WHO_MAX 32
+typedef struct {
+    int  batch;          /* which batch, as marks[] counts them */
+    int  job;            /* 0 for a change with no job (--apply on a file) */
+    char who[UNDO_WHO_MAX];
+} UndoTag;
+
 /* A flat op array plus batch boundaries: filling a rectangle or tracing a
  * wall run records many ops but undoes as one step, which is what a user
  * means by "undo that". */
@@ -63,6 +74,9 @@ typedef struct {
 
     int *marks;          /* marks[i] = index of the first op of batch i */
     int  nmarks, cap_marks;
+
+    UndoTag *tags;       /* in batch order; a batch dropped takes its tag along */
+    int      ntags, cap_tags;
 
     int  depth;          /* batches currently applied; the redo boundary */
     int  open;           /* a batch is being built */
@@ -158,6 +172,23 @@ int  undo_undo(Undo *u, Map *m);
  * taken back out of the history rather than answered with a step back. */
 int  undo_rewind_moves(Undo *u, Map *m, int depth, const int *idx, int nidx);
 int  undo_redo(Undo *u, Map *m);
+
+/* Says whose the newest applied batch is: called once a landing's batch is
+ * closed. Nothing when the log is empty. */
+void undo_tag(Undo *u, int job, const char *who);
+/* The newest applied batch's tag; NULL when it is the GM's own, or none. */
+const UndoTag *undo_tag_top(const Undo *u);
+/* The newest batch of `who`'s the log holds, applied or taken back (its
+ * `batch` against `depth` says which); NULL for none. */
+const UndoTag *undo_tag_last(const Undo *u, const char *who);
+/* How many of the newest applied batches in a row are job `job`'s and
+ * `who`'s (a job accepted in parts landed in several; given back and taken
+ * by another name, its steps are two names'); *under is set to how many
+ * more of them lie below a batch that is not, out of the count's reach. */
+int  undo_tag_run(const Undo *u, int job, const char *who, int *under);
+/* The job is gone and its number free to be given again: its batches keep
+ * their author and lose the number. */
+void undo_tag_forget(Undo *u, int job);
 
 static inline int undo_can_undo(const Undo *u) { return u->depth > 0; }
 static inline int undo_can_redo(const Undo *u) { return u->depth < u->nmarks; }

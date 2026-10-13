@@ -1051,11 +1051,63 @@ void test_undo(void)
     /* The log is bounded: past the cap the oldest batches go, the newest
      * stay usable, and the token slots follow the ops. Each fill of the
      * largest map is one batch of MAP_MAX_DIM^2 ops, so this takes five. */
+    CASE("a batch says whose it is: tagged once closed, found from the top, gone with the batch");
+    {
+        Undo  tu;
+        Map  *tm = map_new(4, 4, "tags");
+        int   under = -1;
+        undo_init(&tu);
+        undo_tag(&tu, 1, "nobody");                         /* an empty log has no batch to tag */
+        CHECK_EQ(tu.ntags, 0);
+        CHECK(undo_tag_top(&tu) == NULL && undo_tag_last(&tu, "a") == NULL);
+        undo_begin(&tu); undo_set_tile(&tu, tm, 0, 0, TILE_WATER); undo_end(&tu);      /* 0: the GM's */
+        CHECK(undo_tag_top(&tu) == NULL);
+        undo_begin(&tu); undo_set_tile(&tu, tm, 1, 0, TILE_WATER); undo_end(&tu);      /* 1 */
+        undo_tag(&tu, 3, "a");
+        undo_begin(&tu); undo_set_tile(&tu, tm, 2, 0, TILE_WATER); undo_end(&tu);      /* 2: the same job, a second part */
+        undo_tag(&tu, 3, "a");
+        undo_tag(&tu, 3, "a");                              /* said twice is said once */
+        CHECK_EQ(tu.ntags, 2);
+        CHECK(undo_tag_top(&tu) && undo_tag_top(&tu)->job == 3 && !strcmp(undo_tag_top(&tu)->who, "a"));
+        CHECK_EQ(undo_tag_run(&tu, 3, "a", &under), 2);
+        CHECK_EQ(under, 0);
+        CHECK_EQ(undo_tag_run(&tu, 9, "a", &under), 0);
+        CHECK_EQ(under, 0);
+        undo_begin(&tu); undo_set_tile(&tu, tm, 3, 0, TILE_WATER); undo_end(&tu);      /* 3: the GM's, over them */
+        CHECK(undo_tag_top(&tu) == NULL);
+        CHECK_EQ(undo_tag_run(&tu, 3, "a", &under), 0);
+        CHECK_EQ(under, 2);                                 /* both lie under a step that is not the job's */
+        CHECK(undo_tag_last(&tu, "a") && undo_tag_last(&tu, "a")->batch == 2);
+        CHECK_EQ(undo_tag_run(&tu, 3, "b", &under), 0);     /* a job's steps are their maker's, not the number's */
+        CHECK_EQ(under, 0);
+        undo_undo(&tu, tm);                                 /* the GM's step back: the job's are the top again */
+        CHECK_EQ(undo_tag_run(&tu, 3, "a", &under), 2);
+        undo_undo(&tu, tm);                                 /* part two taken back: kept for a redo, not applied */
+        CHECK_EQ(undo_tag_run(&tu, 3, "a", &under), 1);
+        CHECK(undo_tag_last(&tu, "a")->batch >= tu.depth);
+        undo_redo(&tu, tm);
+        CHECK_EQ(undo_tag_run(&tu, 3, "a", &under), 2);
+        undo_undo(&tu, tm);
+        undo_begin(&tu); undo_set_tile(&tu, tm, 0, 1, TILE_WATER); undo_end(&tu);      /* a new step: the redo tail goes, tags and all */
+        CHECK_EQ(tu.ntags, 1);
+        CHECK_EQ(undo_tag_run(&tu, 3, "a", &under), 0);
+        CHECK_EQ(under, 1);
+        undo_tag_forget(&tu, 3);                            /* the job is gone: the author stays, the number does not */
+        CHECK(tu.tags[0].job == 0 && !strcmp(tu.tags[0].who, "a"));
+        CHECK_EQ(undo_tag_run(&tu, 3, "a", &under), 0);
+        CHECK_EQ(under, 0);
+        undo_clear(&tu);
+        CHECK_EQ(tu.ntags, 0);
+        undo_free(&tu);
+        map_free(tm);
+    }
+
     CASE("the history is capped and trims from the oldest end");
     undo_clear(&u);
     Map *big = map_new(MAP_MAX_DIM, MAP_MAX_DIM, "cap");
     Token g1 = { 0, 0, 1, TOKEN_PLAYER, "Keep" };
     undo_begin(&u); undo_add_token(&u, big, g1); undo_end(&u);     /* batch 0 */
+    undo_tag(&u, 4, "first");                               /* goes with its batch */
     int fills = 0;
     while (u.trimmed == 0) {                                /* one fill per batch */
         uint8_t kind = fills % 2 ? TILE_VOID : TILE_FLOOR;
@@ -1063,7 +1115,18 @@ void test_undo(void)
         for (int y = 0; y < big->h; y++)
             for (int x = 0; x < big->w; x++) undo_set_tile(&u, big, x, y, kind);
         undo_end(&u);
+        undo_tag(&u, 5, "filler");
         fills++;
+    }
+    /* A batch dropped takes its tag along, and the ones kept are counted
+     * from the new front: the newest fill is still the top, and job 5's. */
+    CHECK(u.ntags == u.nmarks && u.tags[0].batch == 0 && !strcmp(u.tags[0].who, "filler"));
+    CHECK(undo_tag_top(&u) && undo_tag_top(&u)->batch == u.depth - 1);
+    CHECK(undo_tag_last(&u, "first") == NULL);
+    {
+        int under = -1;
+        CHECK_EQ(undo_tag_run(&u, 5, "filler", &under), u.nmarks);
+        CHECK_EQ(under, 0);
     }
     CHECK(u.nops <= UNDO_TRIM_TO);
     CHECK(u.nops > UNDO_TRIM_TO / 2);                       /* not emptied */

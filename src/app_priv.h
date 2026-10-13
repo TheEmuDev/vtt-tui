@@ -198,17 +198,27 @@ void app_event(App *a, int kind, int job, const char *fmt, ...) __attribute__((f
 /* Where on the map the newest event's change is (cs_where's pieces), said
  * straight after the app_event that made it. */
 void app_event_where(App *a, const CsWhere *where, int other);
+/* Whose doing the newest event is, said straight after it: that name is not
+ * told of it (its own doing is no news to it), every other is. Callers with
+ * no name are one name, `cli`, as everywhere. */
+void app_event_by(App *a, const char *who);
+/* In every reader below `who` is the name asking, whose own events are
+ * passed over; NULL hears all. */
 /* The pieces changed by every event after `after`, and whether something on
  * no square changed. 0 when events older than are kept would be among them:
  * then nobody knows. */
-int  app_events_where(const App *a, unsigned after, CsWhere *where, int *other);
+int  app_events_where(const App *a, unsigned after, CsWhere *where, int *other, const char *who);
 /* An agent is listening from now: the checkpoint starts if it was stopped,
  * and a change made while it was is an event before anything is answered
  * (`wait` and `changes` call it; the tick does for a held wait or a job). */
 void app_events_hear(App *a);
-int  app_events_after(const App *a, unsigned after);
+int  app_events_after(const App *a, unsigned after, const char *who);
 /* "seq N", then every event after `after`, one a line. */
-void app_events_write(const App *a, FILE *out, unsigned after);
+void app_events_write(const App *a, FILE *out, unsigned after, const char *who);
+/* A change to the map that is an agent's own (its undo), made into one event
+ * with where it was: called after the change, the caller having told the
+ * GM's changes so far before it (app_events_map_flush). */
+void app_event_of_change(App *a, int kind, int job, const char *who, const char *text);
 /* app_events_flush and app_events_due are the main loop's too: app.h. */
 /* Round a change that is not the GM's (an accept, the agent's undo): the
  * GM's changes so far become their event first, and the checkpoint starts
@@ -311,8 +321,13 @@ int  app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, si
  * with why in err (class `state`) when it is another's. */
 int  app_ctl_job_mine(App *a, const Job *j, char *err, size_t errsz);
 /* The request's name takes a job nobody has: the one rule for `take`, `area`
- * and a proposal. */
-void app_ctl_job_claim(App *a, Job *j);
+ * and a proposal. 1 when it did (the job was nobody's). */
+int  app_ctl_job_claim(App *a, Job *j);
+/* The channel's step back, for `undo` and `job N undo` alike: the newest
+ * `steps` batches, job `job`'s (0: a change that had none), told to the
+ * other names as one event with where. 0 with why in err when the GM is
+ * busy (app_ctl_busy, or reviewing that very job): nothing was done. */
+int  app_ctl_undo(App *a, int steps, int job, char *err, size_t errsz);
 /* `dump`'s words after the verb, for the live map and a job's alike: none
  * (the whole map, refused above CTL_DUMP_SQUARES: an agent that forgot the
  * region should not be sent half a megabyte), `all`, or a region. 0 with why

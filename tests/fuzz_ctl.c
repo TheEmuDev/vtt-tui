@@ -65,7 +65,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 
     while (undo_undo(&app.undo, app.map)) { }
     undo_clear(&app.undo);
-    app.ctl_undoable = 0;
+    app.undo.ntags = 0;
     app_jobs_clear(&app);
     /* A job asked by the GM, so `job 1 ...` reaches past "no job #1". */
     CsBox box = { 1, 1, 4, 4 };

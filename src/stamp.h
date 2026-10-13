@@ -31,8 +31,10 @@ Map *stamp_mirrored(const Map *s);
  * log (one batch, which nests in the caller's). All or nothing: checked
  * first -- it must lie on the map, every creature must land on ground and
  * on nobody, the square notes must fit -- and refused with the reason in
- * err, changing nothing. Returns 1 placed, 0 refused. */
-int  stamp_place(Map *m, Undo *u, const Map *s, int x, int y, char *err, size_t errsz);
+ * err, changing nothing. Returns 1 placed, 0 refused; *full (may be NULL)
+ * says the refusal was the map having no slot left for its links or notes,
+ * not something in the way (the channel's class `limit`). */
+int  stamp_place(Map *m, Undo *u, const Map *s, int x, int y, int *full, char *err, size_t errsz);
 
 /* The directory stamps live in: store_dir("stamps") (store.h). */
 void stamp_dir(char *buf, size_t sz);

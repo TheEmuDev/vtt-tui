@@ -1,5 +1,5 @@
 /* The channel's requests about jobs (docs/CONFLICTS.md, docs/CONTROL.md):
- * `jobs`, and `job N take|area|say|drop|dump|check|describe`. `job N propose`
+ * `jobs`, and `job N take|area|say|drop|undo|conflicts|dump|check|describe`. `job N propose`
  * and `propose` are app_ctl.c's, because the edits after them run there.
  * Every message to the GM is the GM's alone. */
 
@@ -76,9 +76,46 @@ int app_ctl_job_mine(App *a, const Job *j, char *err, size_t errsz)
     return 0;
 }
 
-void app_ctl_job_claim(App *a, Job *j)
+int app_ctl_job_claim(App *a, Job *j)
 {
-    if (!j->taker[0]) str_lcpy(j->taker, a->ctl_who, sizeof j->taker);
+    if (j->taker[0]) return 0;
+    str_lcpy(j->taker, a->ctl_who, sizeof j->taker);
+    return 1;
+}
+
+/* A job taken is news to the other agents: they would learn it from a
+ * refusal otherwise. */
+static void say_taken(App *a, const Job *j)
+{
+    app_event(a, CTL_EV_TAKEN, j->num, "by %s", a->ctl_who);
+    app_event_by(a, a->ctl_who);
+}
+
+/* job N undo: the job's landing taken back, while it is the last thing done
+ * to the map. A step under later ones is not reached: taking it out from
+ * under them is a new change to the map as it is, and that is a proposal. */
+static int job_undo(App *a, Job *j, FILE *out, char *err, size_t errsz)
+{
+    /* The caller's own steps: a job given back and taken by another name
+     * has landed for both, and each takes back what it landed. */
+    int under, run = undo_tag_run(&a->undo, j->num, a->ctl_who, &under);
+    const UndoTag *top = undo_tag_top(&a->undo);
+    if (!run) {
+        app_ctl_class(CTL_E_STATE);
+        if (top && top->job == j->num)
+            snprintf(err, errsz, "what #%d landed last is %s's, and you are %s - undo takes back your own", j->num, top->who, a->ctl_who);
+        else if (under) snprintf(err, errsz, "#%d landed, and something has changed the map since - only the GM's u reaches it now; "
+                                        "propose what would put it right", j->num);
+        else snprintf(err, errsz, "#%d has nothing landed to take back", j->num);
+        return -1;
+    }
+    if (!app_ctl_undo(a, run, j->num, err, errsz)) return -2;
+    char msg[160];
+    snprintf(msg, sizeof msg, "#%d taken back by %s - ctrl-r puts it back", j->num,
+             strcmp(a->ctl_who, CTL_NAME_NONE) ? a->ctl_who : "the agent");
+    app_note_gm(a, msg);
+    fprintf(out, "took back #%d%s\n", j->num, run > 1 ? ", every part of it" : "");
+    return 0;
 }
 
 _Static_assert(sizeof ((Job *)0)->taker == CTL_NAME_MAX, "a job's taker is an agent's name");
@@ -104,7 +141,7 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
     }
 
     /* job N VERB ... */
-    if (n < 3) { snprintf(err, errsz, "job N take, area REGION, say \"...\", propose, drop, dump, check or describe"); return -1; }
+    if (n < 3) { snprintf(err, errsz, "job N take, area REGION, say \"...\", propose, drop, undo, conflicts, dump, check or describe"); return -1; }
     int num = 0;
     char *end;
     long v = strtol(w[1], &end, 10);
@@ -140,6 +177,32 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
         return 0;
     }
 
+    if (!strcmp(verb, "conflicts")) {
+        if (n != 3) { snprintf(err, errsz, "job N conflicts takes nothing after it"); return -1; }
+        if (j->state != JOB_READY || !j->has_cs) {
+            app_ctl_class(CTL_E_STATE), snprintf(err, errsz, "#%d has no proposal waiting", num);
+            return -1;
+        }
+        /* Every element of the set against the map, once (cs_check is gated on Map.gen). */
+        if (!app_ctl_read(a, j->cs.ncells + CTL_FILE_CHARGE, err, errsz)) return -1;
+        if (!cs_conflicts_write(&j->cs, a->map, out, CTL_CONFLICT_LINES))
+            fprintf(out, "#%d has no conflicts: nothing it touches has changed since\n", num);
+        return 0;
+    }
+
+    /* A landing is taken back by the name whose job it is, whatever the
+     * job's state since (accepted, or ready again with a part landed). */
+    if (!strcmp(verb, "undo")) {
+        if (n != 3) { snprintf(err, errsz, "job N undo takes nothing after it"); return -1; }
+        if (app_job_gm_only(j)) {
+            app_ctl_class(CTL_E_STATE), snprintf(err, errsz, "#%d is %s: the GM's to take back", num,
+                     j->from == JOB_FROM_DISK ? "what another program wrote to the file" : "an --apply's");
+            return -1;
+        }
+        if (!app_ctl_job_mine(a, j, err, errsz)) return -1;
+        return job_undo(a, j, out, err, errsz);
+    }
+
     if (!open) {
         app_ctl_class(CTL_E_STATE), snprintf(err, errsz, "#%d was %s%s", num, app_job_state_name(j->state),
                  j->state == JOB_SCRAPPED ? " - :review N is the GM's way to bring it back" : "");
@@ -157,7 +220,8 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
 
     if (!strcmp(verb, "take")) {
         if (n != 3) { snprintf(err, errsz, "job N take takes nothing after it"); return -1; }
-        app_ctl_job_claim(a, j);
+        int fresh = app_ctl_job_claim(a, j);
+        if (fresh || j->state == JOB_ASKED) say_taken(a, j);
         if (j->state == JOB_ASKED) {
             j->state = JOB_WORKING;
             if (strcmp(a->ctl_who, CTL_NAME_NONE) != 0) snprintf(msg, sizeof msg, "#%d taken by %s", num, a->ctl_who);
@@ -173,7 +237,7 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
         if (j->state == JOB_READY) { app_ctl_class(CTL_E_STATE), snprintf(err, errsz, "#%d has a proposal waiting - its squares are what the GM sees", num); return -1; }
         int x0, y0, x1, y1;
         if (!app_ctl_region(a->map, w[3], &x0, &y0, &x1, &y1, err, errsz)) return -1;
-        app_ctl_job_claim(a, j);               /* working on it is having it */
+        if (app_ctl_job_claim(a, j) || j->state == JOB_ASKED) say_taken(a, j);     /* working on it is having it */
         j->state = JOB_WORKING;
         j->has_area = 1;
         j->area = (CsBox){ x0, y0, x1, y1 };
@@ -204,6 +268,8 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
              * brings it back; a finished job makes room when the table fills. */
             j->state = JOB_SCRAPPED;
             app_job_thread_add(j, '-', "withdrawn by the agent");
+            app_event(a, CTL_EV_SCRAPPED, num, "withdrawn by %s", a->ctl_who);
+            app_event_by(a, a->ctl_who);
             snprintf(msg, sizeof msg, "#%d withdrawn by the agent - :review %d brings it back", num, num);
             fprintf(out, "#%d withdrawn\n", num);
         } else {
@@ -213,6 +279,9 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
             j->has_area = 0;
             j->summary[0] = '\0';
             app_job_thread_add(j, '-', "given back");
+            /* Asked again: what an agent looking for work waits to hear. */
+            app_event(a, CTL_EV_ASKED, num, "given back by %s: %.150s", a->ctl_who, j->text);
+            app_event_by(a, a->ctl_who);
             snprintf(msg, sizeof msg, "#%d given back by the agent - it waits as asked", num);
             fprintf(out, "#%d given back, as asked\n", num);
         }
@@ -220,6 +289,6 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
         a->dirty = 1;
         return 0;
     }
-    snprintf(err, errsz, "job N %.20s: take, area, say, propose, drop, dump, check or describe", verb);
+    snprintf(err, errsz, "job N %.20s: take, area, say, propose, drop, undo, conflicts, dump, check or describe", verb);
     return -1;
 }

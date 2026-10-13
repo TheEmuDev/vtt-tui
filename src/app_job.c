@@ -48,8 +48,11 @@ static int job_free_num(App *a)
  * waits for the verdict on what it sent). */
 int app_job_gm_only(const Job *j) { return j->from == JOB_FROM_DISK || j->from == JOB_FROM_APPLY; }
 
-static void job_clear(Job *j)
+/* The job goes, and its number is free to be given again: a landing of its
+ * that the log still holds keeps its author and not the number. */
+static void job_clear(App *a, Job *j)
 {
+    if (j->used) undo_tag_forget(&a->undo, j->num);
     if (j->has_cs) cs_free(&j->cs);
     memset(j, 0, sizeof *j);
 }
@@ -67,7 +70,7 @@ void app_job_thread_add(Job *j, char who, const char *text)
 
 void app_jobs_clear(App *a)
 {
-    for (int i = 0; i < JOB_MAX; i++) job_clear(&a->jobs[i]);
+    for (int i = 0; i < JOB_MAX; i++) job_clear(a, &a->jobs[i]);
     app_review_leave(a);
 }
 
@@ -82,7 +85,7 @@ int app_job_new(App *a, int from, const char *text, const CsBox *box, int at_onc
     if (slot < 0) return -1;
     if (a->review == slot) app_review_leave(a);
     Job *j = &a->jobs[slot];
-    job_clear(j);                      /* first: its number is free again */
+    job_clear(a, j);                   /* first: its number is free again */
     int num = job_free_num(a);
     if (!num) return -1;
     j->used    = 1;
@@ -112,6 +115,7 @@ static void land(App *a, Job *j, const CsBox *box)
     cs_summary(&j->cs, box, what, sizeof what);
     int creatures = j->cs.ntoks > 0;
     app_events_map_flush(a);                 /* the GM's own changes so far, told apart */
+    unsigned logged = a->undo.stamp;
     int n = cs_apply(&j->cs, a->map, &a->undo, box, left, sizeof left);
     app_events_map_restart(a);               /* the accept is its own event, below */
     if (n) {
@@ -121,13 +125,13 @@ static void land(App *a, Job *j, const CsBox *box)
         else a->last_acting = turn_acting(a->map);     /* an accept starts no turn */
         app_fog_sync(a);
         a->dirty = 1;
-        /* The agent's `undo` takes it back while nothing happens after. */
-        if (j->from != JOB_FROM_DISK) {
-            a->ctl_stamp    = a->undo.stamp;
-            a->ctl_gen      = a->map->gen;
-            a->ctl_undoable = 1;
-            str_lcpy(a->ctl_undo_who, j->taker[0] ? j->taker : CTL_NAME_NONE, sizeof a->ctl_undo_who);
-        }
+        /* Whose step it is, written on the step: the agent's `undo` and
+         * `job N undo` take it back while it is the last thing done. Not the
+         * file's nor an --apply's, the GM's alone to take back; and not a landing that
+         * wrote nothing to the log (cards alone), or the tag would fall on
+         * the GM's own step under it. */
+        if (!app_job_gm_only(j) && a->undo.stamp != logged)
+            undo_tag(&a->undo, j->num, j->taker[0] ? j->taker : CTL_NAME_NONE);
     }
     if (box) {
         char where[2 * MAP_COORD_MAX + 2];
@@ -185,6 +189,12 @@ void app_job_set_proposal(App *a, int slot, ChangeSet *cs, const char *line)
     snprintf(msg, sizeof msg, "proposed: %s", j->summary);
     app_job_thread_add(j, '-', msg);
     if (line && line[0]) app_job_thread_add(j, 'A', line);
+    /* News to every agent but the one that made it; the file's change is
+     * nobody's to hear of but the GM (app_event.c, `listening`). */
+    if (j->from != JOB_FROM_DISK) {
+        app_event(a, CTL_EV_PROPOSED, j->num, "%s", j->summary);
+        app_event_by(a, j->taker[0] ? j->taker : CTL_NAME_NONE);
+    }
     /* Never under the GM's eyes: a job being reviewed waits for enter. */
     if (j->at_once && can_land(a) && a->review != slot) { land(a, j, NULL); return; }
     snprintf(msg, sizeof msg, "#%d ready: %.150s - :review %d%s%.60s", j->num, j->summary, j->num,
@@ -413,7 +423,7 @@ void app_ask_command(App *a, const char *verb, const char *rest)
             int i = job_index(a, num);
             if (i < 0) { snprintf(msg, sizeof msg, "no job #%d", num); app_set_status_gm(a, msg); return; }
             if (a->review == i) review_close(a, "");
-            job_clear(&a->jobs[i]);
+            job_clear(a, &a->jobs[i]);
             app_event(a, CTL_EV_REMOVED, num, NULL);
             snprintf(msg, sizeof msg, "#%d removed", num);
             app_note_gm(a, msg);

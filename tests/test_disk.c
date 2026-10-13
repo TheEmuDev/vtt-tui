@@ -138,7 +138,7 @@ void test_disk(void)
     CHECK_EQ(map_tile(m, 5, 5), TILE_HAZARD);
     CHECK_EQ(map_tile(m, 2, 2), TILE_ROUGH);
     CHECK_EQ(a.undo.depth, depth + 1);
-    CHECK_EQ(a.ctl_undoable, 0);                            /* not the agent's to take back */
+    CHECK(undo_tag_top(&a.undo) == NULL);                           /* not the agent's to take back */
     press(&a, ":w\r");
     CHECK(strstr(a.status, "wrote ") != NULL);
     CHECK_EQ(a.disk_state, DISK_NONE);

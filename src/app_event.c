@@ -22,6 +22,7 @@ void app_event(App *a, int kind, int job, const char *fmt, ...)
     memset(&e->where, 0, sizeof e->where);
     e->other = 0;
     e->gone = kind == CTL_EV_CLOSED;
+    e->by[0] = '\0';
     int k = job ? snprintf(e->text, sizeof e->text, "job %d %s", job, ctl_event_name(kind))
                 : snprintf(e->text, sizeof e->text, "map %s", ctl_event_name(kind));
     if (!fmt || k >= (int)sizeof e->text - 3) return;
@@ -46,7 +47,18 @@ void app_event_where(App *a, const CsWhere *where, int other)
     e->other = other != 0;
 }
 
-int app_events_where(const App *a, unsigned after, CsWhere *where, int *other)
+void app_event_by(App *a, const char *who)
+{
+    str_lcpy(a->events[a->event_seq % EVENT_MAX].by, who, sizeof a->events[0].by);
+}
+
+/* Is event e one `who` is told of? Not its own. */
+static int heard(const AgentEvent *e, const char *who)
+{
+    return !who || !e->by[0] || strcmp(e->by, who) != 0;
+}
+
+int app_events_where(const App *a, unsigned after, CsWhere *where, int *other, const char *who)
 {
     memset(where, 0, sizeof *where);
     *other = 0;
@@ -55,6 +67,7 @@ int app_events_where(const App *a, unsigned after, CsWhere *where, int *other)
     for (unsigned s = after + 1; s <= a->event_seq && s > after; s++) {
         /* Another map since: the pieces before it were that map's. */
         if (a->events[s % EVENT_MAX].gone) return 0;
+        if (!heard(&a->events[s % EVENT_MAX], who)) continue;
         for (size_t i = 0; i < sizeof where->b / sizeof *where->b; i++) where->b[i] |= a->events[s % EVENT_MAX].where.b[i];
         *other |= a->events[s % EVENT_MAX].other;
     }
@@ -63,13 +76,16 @@ int app_events_where(const App *a, unsigned after, CsWhere *where, int *other)
 
 /* A number past the newest event is another vtt's (this one was started
  * since): there is something to say at once -- that, and everything kept. */
-int app_events_after(const App *a, unsigned after)
+int app_events_after(const App *a, unsigned after, const char *who)
 {
     if (after > a->event_seq) return 1;
-    return (int)(a->event_seq - after);
+    if (after + 1 < oldest(a)) return 1;             /* `lost` is something to say */
+    int n = 0;
+    for (unsigned s = after + 1; s <= a->event_seq && s > after; s++) n += heard(&a->events[s % EVENT_MAX], who);
+    return n;
 }
 
-void app_events_write(const App *a, FILE *out, unsigned after)
+void app_events_write(const App *a, FILE *out, unsigned after, const char *who)
 {
     fprintf(out, "seq %u\n", a->event_seq);
     if (after > a->event_seq) {
@@ -83,7 +99,7 @@ void app_events_write(const App *a, FILE *out, unsigned after)
         from = oldest(a);
     }
     for (unsigned s = from; s <= a->event_seq && s >= from; s++)
-        fprintf(out, "%u %s\n", s, a->events[s % EVENT_MAX].text);
+        if (heard(&a->events[s % EVENT_MAX], who)) fprintf(out, "%u %s\n", s, a->events[s % EVENT_MAX].text);
 }
 
 /* --------------------------------------------------------- the map changed */
@@ -122,6 +138,21 @@ void app_events_map_flush(App *a)
         app_event_where(a, &where, other);
     }
     cs_free(&cs);
+    app_events_map_restart(a);
+}
+
+void app_event_of_change(App *a, int kind, int job, const char *who, const char *text)
+{
+    Map *m = a->map;
+    ChangeSet cs;
+    cs_init(&cs);
+    int     other = 0, known = m->cp && checkpoint_changes(m, &cs);
+    CsWhere where = { { 0 } };
+    if (known) cs_where(&cs, &where, &other);
+    cs_free(&cs);
+    app_event(a, kind, job, "%s", text);
+    app_event_where(a, &where, other);
+    app_event_by(a, who);
     app_events_map_restart(a);
 }
 
@@ -179,16 +210,17 @@ void app_events_flush(App *a, uint64_t now_ms)
     /* Backwards: an answer written whole closes its connection, and the
      * ones after it shift down. */
     for (int i = a->ctl.nc - 1; i >= 0; i--) {
-        unsigned seq;
-        uint64_t until;
-        if (!ctl_waiter(&a->ctl, i, &seq, &until)) continue;
-        if (!app_events_after(a, seq) && now_ms < until) continue;
+        unsigned    seq;
+        uint64_t    until;
+        const char *who;
+        if (!ctl_waiter(&a->ctl, i, &seq, &until, &who)) continue;
+        if (!app_events_after(a, seq, who) && now_ms < until) continue;
         char  *body = NULL;
         size_t len = 0;
         FILE  *out = open_memstream(&body, &len);
         if (!out) continue;
         fputs("ok\n", out);
-        app_events_write(a, out, seq);
+        app_events_write(a, out, seq, who);
         fclose(out);
         ctl_answer(&a->ctl, i, body, len);
     }

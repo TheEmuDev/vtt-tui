@@ -174,9 +174,27 @@ Map *stamp_mirrored(const Map *s)
 
 /* --------------------------------------------------------------- placing */
 
-int stamp_place(Map *m, Undo *u, const Map *s, int x, int y, char *err, size_t errsz)
+/* Slots left in the map for the stamp's links and notes. */
+static int stamp_room(const Map *m, const Map *s, int x, int y, char *err, size_t errsz)
+{
+    if (s->nlinks > MAP_LINKS_MAX - m->nlinks) {
+        snprintf(err, errsz, "no room: a map holds %d links", MAP_LINKS_MAX);
+        return 0;
+    }
+    int fresh_notes = 0;
+    for (int i = 0; i < s->nnotes; i++)
+        fresh_notes += map_note_at(m, x + s->notes[i].x, y + s->notes[i].y) == NULL;
+    if (m->nnotes + fresh_notes > MAP_NOTES_MAX) {
+        snprintf(err, errsz, "no room: a map holds %d notes on squares", MAP_NOTES_MAX);
+        return 0;
+    }
+    return 1;
+}
+
+int stamp_place(Map *m, Undo *u, const Map *s, int x, int y, int *full, char *err, size_t errsz)
 {
     PROF_ZONE("stamp.place");
+    if (full) *full = 0;
     char at[MAP_COORD_MAX];
     map_coord_name(x, y, at, sizeof at);
     if (x < 0 || y < 0 || x + s->w > m->w || y + s->h > m->h) {
@@ -203,9 +221,9 @@ int stamp_place(Map *m, Undo *u, const Map *s, int x, int y, char *err, size_t e
         }
     }
     /* Its links: every square of an end on ground, clear of the map's own
-     * links, and a number free for each. */
-    if (s->nlinks > MAP_LINKS_MAX - m->nlinks) {
-        snprintf(err, errsz, "no room: a map holds %d links", MAP_LINKS_MAX);
+     * links, and a number free for each; and a slot for each of its notes. */
+    if (!stamp_room(m, s, x, y, err, errsz)) {
+        if (full) *full = 1;
         return 0;
     }
     for (int i = 0; i < s->nlinks; i++) {
@@ -227,13 +245,6 @@ int stamp_place(Map *m, Undo *u, const Map *s, int x, int y, char *err, size_t e
                 return 0;
             }
         }
-    }
-    int fresh_notes = 0;
-    for (int i = 0; i < s->nnotes; i++)
-        fresh_notes += map_note_at(m, x + s->notes[i].x, y + s->notes[i].y) == NULL;
-    if (m->nnotes + fresh_notes > MAP_NOTES_MAX) {
-        snprintf(err, errsz, "no room: a map holds %d notes on squares", MAP_NOTES_MAX);
-        return 0;
     }
 
     undo_begin(u);

@@ -455,7 +455,7 @@ void app_tick(App *a, uint64_t now_ms)
                 FILE *of = open_memstream(&older, &olen);
                 if (of) {
                     fputs("ok\n", of);
-                    app_events_write(a, of, oseq);
+                    app_events_write(a, of, oseq, a->ctl_who);
                     fprintf(of, "superseded: a newer wait from %s took this one's place\n", a->ctl_who);
                     fclose(of);
                 }

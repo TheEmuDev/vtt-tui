@@ -383,11 +383,12 @@ const char *ctl_name_line(const char *req)
     return !strncmp(req, "agent", 5) && (!req[5] || strchr(" \t\r\n", req[5])) ? req : NULL;
 }
 
-int ctl_waiter(const Ctl *c, int i, unsigned *seq, uint64_t *until_ms)
+int ctl_waiter(const Ctl *c, int i, unsigned *seq, uint64_t *until_ms, const char **who)
 {
     if (i < 0 || i >= c->nc || c->c[i].state != CTL_WAITING) return 0;
     *seq      = c->c[i].wait_seq;
     *until_ms = c->c[i].wait_until_ms;
+    *who      = c->c[i].who;
     return 1;
 }
 
@@ -694,7 +695,8 @@ int ctl_client_main(const char *req, long pid)
 
 static const char *const CLASS_NAMES[CTL_E_COUNT] = { "usage", "missing", "conflict", "state", "limit", "internal" };
 static const char *const EVENT_NAMES[CTL_EV_COUNT] = {
-    "asked", "accepted", "part", "feedback", "scrapped", "removed", "back", "changed", "closed"
+    "asked", "accepted", "part", "feedback", "scrapped", "removed", "back", "changed", "closed",
+    "taken", "proposed", "undone"
 };
 
 const char *ctl_class_name(int cls) { return cls >= 0 && cls < CTL_E_COUNT ? CLASS_NAMES[cls] : CLASS_NAMES[CTL_E_INTERNAL]; }

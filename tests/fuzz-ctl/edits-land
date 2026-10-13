@@ -1,0 +1,9 @@
+tile A1 water
+wall A1:B2 door
+edge A1|B1 window
+edge -/A1 wall
+token add enemy A1 "Seedling"
+token move Seedling B1
+token set Seedling note "x"
+note A2 "hi"
+area Seeded A1:B2

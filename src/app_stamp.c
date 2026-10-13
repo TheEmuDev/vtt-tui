@@ -73,7 +73,7 @@ static void place(App *a)
         app_set_status(a, "the stamp runs off the floor - move it, or :floor all");
         return;
     }
-    if (!stamp_place(a->map, &a->undo, a->stamp, a->ed.cx, a->ed.cy, err, sizeof err)) {
+    if (!stamp_place(a->map, &a->undo, a->stamp, a->ed.cx, a->ed.cy, NULL, err, sizeof err)) {
         app_set_status(a, err);
         return;
     }

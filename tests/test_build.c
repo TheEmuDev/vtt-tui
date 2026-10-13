@@ -867,7 +867,7 @@ void test_stamps(void)
         undo_init(&u);
         for (int y = 0; y < 6; y++)
             for (int x = 0; x < 8; x++) map_set_tile(m, x, y, TILE_FLOOR);
-        CHECK_EQ(stamp_place(m, &u, s, 2, 2, err, sizeof err), 1);
+        CHECK_EQ(stamp_place(m, &u, s, 2, 2, NULL, err, sizeof err), 1);
         m->tokens.v[0].turn = TURN_IN | TURN_ACTING;
         token_add_status(&m->tokens.v[0], 1, "Poisoned");
         p = stamp_copy(m, 2, 2, 5, 4);
@@ -901,7 +901,7 @@ void test_stamps(void)
         str_lcpy(og.label, "Ogre", sizeof og.label);
         tokens_add(&m->tokens, og);
         char *before = stamp_text(m);
-        CHECK_EQ(stamp_place(m, &u, s, 3, 3, err, sizeof err), 1);
+        CHECK_EQ(stamp_place(m, &u, s, 3, 3, NULL, err, sizeof err), 1);
         CHECK_EQ(map_tile(m, 3, 5), TILE_BRUSH);        /* the stamp's void square: the map's */
         CHECK_EQ(map_tile(m, 6, 3), TILE_WATER);
         CHECK_EQ(map_hedge(m, 5, 5), EDGE_WALL);        /* see-through boundary */
@@ -916,24 +916,24 @@ void test_stamps(void)
 
         CASE("placing is refused whole: off the map, a creature on void or on another, notes full");
         before = stamp_text(m);
-        CHECK_EQ(stamp_place(m, &u, s, 7, 3, err, sizeof err), 0);
+        CHECK_EQ(stamp_place(m, &u, s, 7, 3, NULL, err, sizeof err), 0);
         CHECK(strstr(err, "runs off the map") != NULL);
         Map *hole = stamp_copy(s, 0, 0, 3, 2);
         map_set_tile(hole, 1, 2, TILE_VOID);            /* the Ogre's square in the stamp goes see-through */
         map_set_tile(m, 4, 5, TILE_VOID);               /* and the map has no ground there */
-        CHECK_EQ(stamp_place(m, &u, hole, 3, 3, err, sizeof err), 0);
+        CHECK_EQ(stamp_place(m, &u, hole, 3, 3, NULL, err, sizeof err), 0);
         CHECK(strstr(err, "Ogre would stand on void at E6") != NULL);
         map_set_tile(m, 4, 5, TILE_BRUSH);
-        CHECK_EQ(stamp_place(m, &u, s, 8, 5, err, sizeof err), 0);
+        CHECK_EQ(stamp_place(m, &u, s, 8, 5, NULL, err, sizeof err), 0);
         CHECK(strstr(err, "runs off the map") != NULL);
         m->tokens.v[0].x = 4; m->tokens.v[0].y = 4;     /* where the stamp's Ogre would go */
-        CHECK_EQ(stamp_place(m, &u, s, 3, 3, err, sizeof err), 0);
+        CHECK_EQ(stamp_place(m, &u, s, 3, 3, NULL, err, sizeof err), 0);
         CHECK(strstr(err, "would land on Ogre") != NULL);
         m->tokens.v[0].x = 9; m->tokens.v[0].y = 7;
         for (int i = 0; m->nnotes < MAP_NOTES_MAX; i++) map_note_set(m, i % 10, i / 10, "x");
         map_note_set(m, 6, 3, "");                       /* the stamp's note square is free */
         map_note_set(m, 9, 7, "y");
-        CHECK_EQ(stamp_place(m, &u, s, 3, 3, err, sizeof err), 0);
+        CHECK_EQ(stamp_place(m, &u, s, 3, 3, NULL, err, sizeof err), 0);
         CHECK(strstr(err, "no room") != NULL);
         map_free(hole);
         free(before);
@@ -1170,6 +1170,35 @@ void test_stamp_keys(void)
     t = ctl_ask(&a, "stamp Nope B2\n");
     CHECK(strstr(t, "no stamp called Nope") != NULL);
     free(t);
+
+    CASE("a stamp refused has the class its reason asks for: off the map is in the way, a map full of notes is a limit");
+    {
+        Map *noted = map_new(1, 1, "Noted");
+        char serr[160];
+        map_set_tile(noted, 0, 0, TILE_FLOOR);
+        CHECK(map_note_set(noted, 0, 0, "a note of the stamp's"));
+        CHECK_EQ(stamp_save(noted, "Noted", serr, sizeof serr), 0);
+        map_free(noted);
+        t = ctl_ask(&a, "stamp Pool L8\n");
+        CHECK(ctl_refused(t, "conflict", 1));
+        free(t);
+        Note kept[MAP_NOTES_MAX];
+        int  nkept = m->nnotes;
+        memcpy(kept, m->notes, sizeof kept);
+        for (int i = 1; i < m->w * m->h && m->nnotes < MAP_NOTES_MAX; i++)     /* every square but A1, till it is full */
+            if (!map_note_at(m, i % m->w, i / m->w)) map_note_set(m, i % m->w, i / m->w, "full");
+        CHECK_EQ(m->nnotes, MAP_NOTES_MAX);
+        t = ctl_ask(&a, "stamp Noted A1\n");            /* no note on A1: one more than the map holds */
+        CHECK(ctl_refused(t, "limit", 1) && strstr(t, "no room: a map holds"));
+        free(t);
+        memcpy(m->notes, kept, sizeof kept);
+        m->nnotes = nkept;
+        t = ctl_ask(&a, "stamp Noted A1\n");
+        CHECK(t && !strncmp(t, "ok\n", 3));
+        free(t);
+        t = ctl_ask(&a, "undo\n");
+        free(t);
+    }
 
     CASE("stamps are build mode's");
     Key f2 = { KEY_F2, 0, 0 };

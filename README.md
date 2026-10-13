@@ -1542,8 +1542,8 @@ A request's edits become one proposal, made only if every line in it succeeds, a
 single undo step when accepted. Under `:agent accept auto` a request lands at once, with a
 summary on the status line and a highlight around the changed squares; if you are in play
 mode or in the middle of something (typing a command, drawing a wall), it lands at your next
-key once you are back. `vtt --ctl undo` takes back an agent's last accepted change while
-nothing has happened since. The full request language is in [docs/AGENTS.md](docs/AGENTS.md).
+key once you are back. `vtt --ctl undo` takes back the calling agent's last accepted change,
+once, while nothing has happened since; `vtt --ctl 'job N undo'` takes back job N's. The full request language is in [docs/AGENTS.md](docs/AGENTS.md).
 
 ## File format
 

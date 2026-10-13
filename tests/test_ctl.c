@@ -1,6 +1,7 @@
 /* Tests: the control channel, the room language, corridors, --apply. */
 
 #include "link.h"
+#include "card.h"
 #include "harness.h"
 #include "app_priv.h"
 
@@ -681,18 +682,24 @@ void test_ctl_edits(void)
     free(t);
     CHECK_EQ(map_tile(m, 1, 1), TILE_FLOOR);
     CHECK(strstr(a.status, "the agent took back its last change") != NULL);
-    t = ctl_ask(&a, "undo\n");
-    CHECK(strstr(t, "there is no change of the agent's to take back") != NULL);
+    t = ctl_ask(&a, "undo\n");                        /* once: an older landing of its own is the last step now, and is named */
+    CHECK(ctl_refused(t, "state", 1) && strstr(t, "undo is once - job ") != NULL);
     free(t);
     t = ctl_ask(&a, "tile B2 water\n");
     free(t);
     a.ed.cx = 5; a.ed.cy = 5;
     press(&a, " ");                                  /* the GM paints a square */
-    press(&a, "u");                                  /* and takes it back again */
-    t = ctl_ask(&a, "undo\n");
-    CHECK(strstr(t, "something has happened since") != NULL);
+    t = ctl_ask(&a, "undo\n");                        /* the GM's step lies over the agent's */
+    CHECK(strstr(t, "something has happened since") != NULL && ctl_refused(t, "state", 1));
     free(t);
     CHECK_EQ(map_tile(m, 1, 1), TILE_WATER);
+    press(&a, "u");                                  /* and takes it back again: the agent's is the last step once more */
+    t = ctl_ask(&a, "undo\n");
+    CHECK_EQ(strcmp(t, "ok\ntook back the last change\n"), 0);
+    free(t);
+    CHECK_EQ(map_tile(m, 1, 1), TILE_FLOOR);
+    t = ctl_ask(&a, "tile B2 water\n");
+    free(t);
     t = ctl_ask(&a, "tile B3 water\nundo\n");
     CHECK_EQ(strcmp(t, "error usage: undo goes in a request of its own\n"), 0);
     free(t);
@@ -703,12 +710,15 @@ void test_ctl_edits(void)
     CHECK_EQ(strcmp(t, "error usage: undo goes in a request of its own\n"), 0);
     free(t);
     CHECK_EQ(map_tile(m, 1, 2), TILE_WATER);           /* not taken back half way */
-    CASE("the agent's undo also stops at a change the GM made outside the log");
+    CASE("the agent's undo is the log's step back, as the GM's u is: a change outside the log does not stop it");
     CHECK(map_note_set(m, 7, 7, "the GM's own"));      /* outside the log, as a fog setting is */
     t = ctl_ask(&a, "undo\n");
-    CHECK(strstr(t, "something has happened since") != NULL);
+    CHECK_EQ(strcmp(t, "ok\ntook back the last change\n"), 0);
     free(t);
-    CHECK_EQ(map_tile(m, 1, 2), TILE_WATER);
+    CHECK_EQ(map_tile(m, 1, 2), TILE_FLOOR);
+    CHECK(map_note_at(m, 7, 7) != NULL);
+    t = ctl_ask(&a, "tile B3 water\n");                /* as the cases after found it */
+    free(t);
 
     CASE("the GM's own note on a square is one u away, and ctrl-r puts it back");
     a.ed.cx = 3; a.ed.cy = 6;
@@ -1636,9 +1646,9 @@ void test_ctl_live(void)
         poll(NULL, 0, 20);                                     /* both in the socket before a turn reads either */
         ctl_pump(&a, ctl_read_some, &o1);
         a.ctl_auto = 0;
-        CHECK_EQ(a.event_seq, before + 1);
+        CHECK_EQ(a.event_seq, before + 2);                     /* proposed, and accepted at once */
         char ev[64];
-        snprintf(ev, sizeof ev, "\n%u job ", before + 1);
+        snprintf(ev, sizeof ev, "\n%u job ", before + 2);
         CHECK(o1.done && strstr(o1.buf, ev) && strstr(o1.buf, " accepted: ") && strstr(o1.buf, "\nsuperseded: "));
         close(o1.fd); close(e1.fd); close(o2.fd);
         ctl_pump(&a, waiters_are, &(WaitersAre){ &a, 0 });
@@ -2384,7 +2394,8 @@ void test_ctl_table(void)
     {
         /* The words are the wire: an agent's instructions name them. */
         static const char *const CLS[CTL_E_COUNT] = { "usage", "missing", "conflict", "state", "limit", "internal" };
-        static const char *const EV[CTL_EV_COUNT] = { "asked", "accepted", "part", "feedback", "scrapped", "removed", "back", "changed", "closed" };
+        static const char *const EV[CTL_EV_COUNT] = { "asked", "accepted", "part", "feedback", "scrapped", "removed", "back", "changed", "closed",
+                                                         "taken", "proposed", "undone" };
         char row[48];
         for (int k = 0; k < CTL_E_COUNT; k++) {
             snprintf(row, sizeof row, "\n| `%s` |", CLS[k]);
@@ -2718,6 +2729,30 @@ void test_ctl_reads(void)
             const char *cm = u ? strstr(u, "\nseq ") : NULL;
             CHECK(u && !strncmp(u, "ok\n", 3) && cm && !strstr(cm, "\nchanged ") && strstr(cm, "\nmore: A1:"));
             free(u);
+            /* A scene's creatures against the map's is work that is no square, and counted
+             * (HEALTH 72): as many diffs as the bound holds, and the next refused. */
+            {
+                for (int k = 0; k < 500; k++) {
+                    Token c = { (int16_t)(k % 100), (int16_t)(300 + k / 100), 1, TOKEN_ENEMY, "" };
+                    snprintf(c.label, sizeof c.label, "c%d", k);
+                    tokens_add(&b.map->tokens, c);
+                }
+                char serr[160];
+                int  si = scene_save(b.map, "crowd", NULL, serr, sizeof serr);
+                CHECK(si >= 0);
+                long one = si >= 0 ? (long)b.map->scenes[si].tokens.n * b.map->tokens.n / 8 + 1 : 1;
+                int  fit = (int)(CTL_READ_SQUARES / one);
+                CHECK(b.map->tokens.n >= 500 && fit >= 2 && fit < 40);
+                char many[1024] = "";
+                for (int k = 0; k < fit; k++) strcat(many, "scene diff crowd\n");
+                u = ctl_ask(&b, many);
+                CHECK(u && !strncmp(u, "ok\n", 3));
+                free(u);
+                strcat(many, "scene diff crowd\n");
+                u = ctl_ask(&b, many);
+                CHECK(ctl_refused(u, "limit", fit + 1));
+                free(u);
+            }
             /* --apply on a file has no GM waiting on a frame: no bound. */
             b.ctl_direct = 1;
             u = ctl_ask(&b, "describe\ncheck\ndump all");
@@ -3035,11 +3070,18 @@ void test_ctl_names(void)
         snprintf(mark, sizeof mark, "%s/started", sb.dir);
         snprintf(cmdline, sizeof cmdline, ":agent command cat > /dev/null; touch %s\r", mark);
         press(&a, cmdline);
+        press(&a, ":log on\r");
         snprintf(q, sizeof q, ":review %d\r", num);         /* other's proposal on the GM's job */
         press(&a, q);
         press(&a, "c");
         press(&a, "deeper\r");
-        /* (The GM's line said "back to other", and the review moved on to the next ready job.) */
+        /* The GM's line said whose it went back to; the review moved on to the next ready job
+         * and wrote over it, so the session's log is where it is read. */
+        char *logged = slurp(a.slog.path), back[64];
+        snprintf(back, sizeof back, "#%d back to other: deeper", num);
+        CHECK(logged && strstr(logged, back));
+        free(logged);
+        press(&a, "\x1b:log off\r");
         int slot = -1;
         for (int i = 0; i < JOB_MAX; i++) if (a.jobs[i].used && a.jobs[i].num == num) slot = i;
         CHECK(slot >= 0 && a.jobs[slot].state == JOB_WORKING && !strcmp(a.jobs[slot].taker, "other"));
@@ -3070,6 +3112,438 @@ void test_ctl_names(void)
     free(t);
     CHECK(map_tile(a.map, 5, 5) != TILE_WATER);
     a.ctl_auto = 0;
+
+    CASE("what an agent does is an event for every other name, and none for its own");
+    {
+        unsigned s0 = a.event_seq;
+        char     ev[120];
+        press(&a, ":ask a tower\r");
+        int n3 = a.job_last;
+        snprintf(q, sizeof q, "agent mapper\njob %d take", n3);
+        t = ctl_ask(&a, q);
+        CHECK(t && !strncmp(t, "ok\n", 3));
+        free(t);
+        CHECK_EQ(a.event_seq, s0 + 2);                       /* asked, taken */
+        snprintf(ev, sizeof ev, "\n%u job %d taken: by mapper\n", s0 + 2, n3);
+        snprintf(q, sizeof q, "agent other\nwait %u", s0);
+        t = ctl_ask(&a, q);
+        CHECK(t && strstr(t, ev) && strstr(t, " asked: "));
+        free(t);
+        snprintf(q, sizeof q, "wait %u", s0);                /* and the caller with no name */
+        t = ctl_ask(&a, q);
+        CHECK(t && strstr(t, ev));
+        free(t);
+        snprintf(q, sizeof q, "agent mapper\nwait %u", s0); /* its own doing is no news to it */
+        t = ctl_ask(&a, q);
+        CHECK(t && !strstr(t, " taken") && strstr(t, " asked: "));
+        free(t);
+        snprintf(q, sizeof q, "agent mapper\njob %d take", n3);   /* taken again: nothing new */
+        t = ctl_ask(&a, q);
+        free(t);
+        CHECK_EQ(a.event_seq, s0 + 2);
+
+        snprintf(q, sizeof q, "agent mapper\njob %d propose\ntile H8 water", n3);
+        t = ctl_ask(&a, q);
+        CHECK(t && !strncmp(t, "ok\n", 3));
+        free(t);
+        CHECK_EQ(a.event_seq, s0 + 3);
+        CHECK_EQ(app_events_after(&a, s0 + 2, "mapper"), 0);  /* a wait of its own stays held */
+        CHECK_EQ(app_events_after(&a, s0 + 2, "other"), 1);
+        CHECK_EQ(app_events_after(&a, s0 + 2, NULL), 1);
+        snprintf(ev, sizeof ev, "\n%u job %d proposed: ground in H8\n", s0 + 3, n3);
+        snprintf(q, sizeof q, "agent other\nwait %u", s0 + 2);
+        t = ctl_ask(&a, q);
+        CHECK(t && strstr(t, ev));
+        free(t);
+        snprintf(q, sizeof q, "agent mapper\nwait %u", s0 + 2);
+        t = ctl_ask(&a, q);
+        snprintf(ev, sizeof ev, "ok\nseq %u\n", s0 + 3);
+        CHECK(t && !strcmp(t, ev));
+        free(t);
+
+        /* Given back, a GM's job is asked again; an agent's own, withdrawn, is scrapped. */
+        press(&a, ":ask a ditch\r");
+        int n4 = a.job_last;
+        snprintf(q, sizeof q, "agent mapper\njob %d take", n4);
+        t = ctl_ask(&a, q);
+        free(t);
+        unsigned s1 = a.event_seq;
+        snprintf(q, sizeof q, "agent mapper\njob %d drop", n4);
+        t = ctl_ask(&a, q);
+        free(t);
+        snprintf(ev, sizeof ev, "\n%u job %d asked: given back by mapper: a ditch\n", s1 + 1, n4);
+        snprintf(q, sizeof q, "agent other\nwait %u", s1);
+        t = ctl_ask(&a, q);
+        CHECK(t && strstr(t, ev));
+        free(t);
+        snprintf(q, sizeof q, "agent mapper\nwait %u", s1);
+        t = ctl_ask(&a, q);
+        CHECK(t && !strstr(t, "given back"));
+        free(t);
+        s1 = a.event_seq;                                    /* saying where it works takes a job too, and is told */
+        snprintf(q, sizeof q, "agent other\njob %d area B2:C3", n4);
+        t = ctl_ask(&a, q);
+        free(t);
+        snprintf(ev, sizeof ev, "\n%u job %d taken: by other\n", s1 + 1, n4);
+        snprintf(q, sizeof q, "agent mapper\nwait %u", s1);
+        t = ctl_ask(&a, q);
+        CHECK(t && strstr(t, ev));
+        free(t);
+        t = ctl_ask(&a, "agent mapper\npropose \"a well\"\ntile A12 water");
+        int own = a.job_last;
+        free(t);
+        s1 = a.event_seq;
+        snprintf(q, sizeof q, "agent mapper\njob %d drop", own);
+        t = ctl_ask(&a, q);
+        free(t);
+        snprintf(ev, sizeof ev, "\n%u job %d scrapped: withdrawn by mapper\n", s1 + 1, own);
+        snprintf(q, sizeof q, "agent other\nwait %u", s1);
+        t = ctl_ask(&a, q);
+        CHECK(t && strstr(t, ev));
+        free(t);
+        snprintf(q, sizeof q, "agent mapper\nwait %u", s1);
+        t = ctl_ask(&a, q);
+        CHECK(t && !strstr(t, "withdrawn"));
+        free(t);
+        snprintf(q, sizeof q, ":ask %d remove\r", n4);
+        press(&a, q);
+
+    CASE("job N undo takes back a job's landing by number: its taker's, alone, and only while it is the last thing done");
+        snprintf(q, sizeof q, ":review %d\r", n3);
+        press(&a, q);
+        press(&a, "\r");
+        press(&a, "\x1b");                                   /* out of whatever review came next */
+        CHECK_EQ(map_tile(a.map, 7, 7), TILE_WATER);
+        snprintf(q, sizeof q, "agent other\njob %d undo", n3);
+        t = ctl_ask(&a, q);
+        CHECK(ctl_refused(t, "state", 1) && strstr(t, "is mapper's, and you are other"));
+        free(t);
+        snprintf(q, sizeof q, "agent mapper\njob %d undo\nstatus", n3);
+        t = ctl_ask(&a, q);
+        CHECK(t && !strcmp(t, "error usage: job N undo goes in a request of its own\n"));
+        free(t);
+        snprintf(q, sizeof q, "agent mapper\njob %d undo now", n3);
+        t = ctl_ask(&a, q);
+        CHECK(ctl_refused(t, "usage", 1));
+        free(t);
+        t = ctl_ask(&a, "agent mapper\njob 98 undo");
+        CHECK(ctl_refused(t, "missing", 1));
+        free(t);
+        undo_begin(&a.undo);                                 /* the GM's step, over it */
+        undo_set_tile(&a.undo, a.map, 0, 0, TILE_ROUGH);
+        undo_end(&a.undo);
+        snprintf(q, sizeof q, "agent mapper\njob %d undo", n3);
+        t = ctl_ask(&a, q);
+        CHECK(ctl_refused(t, "state", 1) && strstr(t, "something has changed the map since"));
+        free(t);
+        CHECK_EQ(map_tile(a.map, 7, 7), TILE_WATER);
+        undo_undo(&a.undo, a.map);                           /* the GM's u */
+        s1 = a.event_seq;
+        t = ctl_ask(&a, q);
+        snprintf(ev, sizeof ev, "ok\ntook back #%d\n", n3);
+        CHECK(t && !strcmp(t, ev));
+        free(t);
+        CHECK(map_tile(a.map, 7, 7) != TILE_WATER);
+        CHECK(strstr(a.status, "taken back by mapper") != NULL);
+        /* An event with where, for the others: `changes` reads back the squares, and not for its maker. */
+        snprintf(ev, sizeof ev, "job %d undone: taken back by mapper\n", n3);
+        snprintf(q, sizeof q, "agent other\nchanges %u", s1);
+        t = ctl_ask(&a, q);
+        CHECK(t && strstr(t, ev) && strstr(t, "\nchanged "));
+        free(t);
+        snprintf(q, sizeof q, "agent mapper\nchanges %u", s1);
+        t = ctl_ask(&a, q);
+        CHECK(t && !strstr(t, "undone") && !strstr(t, "\nchanged "));
+        free(t);
+        snprintf(q, sizeof q, "agent mapper\njob %d undo", n3);     /* once is all */
+        t = ctl_ask(&a, q);
+        CHECK(ctl_refused(t, "state", 1) && strstr(t, "has nothing landed to take back"));
+        free(t);
+        undo_redo(&a.undo, a.map);                           /* the GM's ctrl-r: plain undo is the same step, the caller's own */
+        CHECK_EQ(map_tile(a.map, 7, 7), TILE_WATER);
+        s1 = a.event_seq;
+        t = ctl_ask(&a, "agent mapper\nundo");
+        CHECK(t && !strncmp(t, "ok\n", 3));
+        free(t);
+        snprintf(ev, sizeof ev, "job %d undone: taken back by mapper", n3);
+        /* (The GM's redo before it is told first, as a change of the map's.) */
+        CHECK(a.event_seq > s1 && !strcmp(a.events[a.event_seq % EVENT_MAX].text, ev));
+        t = ctl_ask(&a, "agent mapper\nundo");                /* and once is all for it too */
+        CHECK(ctl_refused(t, "state", 1) && (strstr(t, "there is no change of the agent's to take back") || strstr(t, "undo is once")));
+        free(t);
+
+        /* Accepted in two parts, a job is two steps: both go, and nothing under them. */
+        press(&a, ":ask two pools\r");
+        int n5 = a.job_last;
+        snprintf(q, sizeof q, "agent mapper\njob %d propose\ntile B10 water\ntile D10 water", n5);
+        t = ctl_ask(&a, q);
+        CHECK(t && !strncmp(t, "ok\n", 3));
+        free(t);
+        int depth0 = a.undo.depth;
+        a.ed.cx = 1; a.ed.cy = 9;
+        snprintf(q, sizeof q, ":review %d\rv\r", n5);        /* the box is B10 alone */
+        press(&a, q);
+        CHECK(map_tile(a.map, 1, 9) == TILE_WATER && map_tile(a.map, 3, 9) != TILE_WATER);
+        press(&a, "\r");                                     /* and the rest */
+        press(&a, "\x1b");
+        CHECK_EQ(map_tile(a.map, 3, 9), TILE_WATER);
+        CHECK_EQ(a.undo.depth, depth0 + 2);
+        snprintf(q, sizeof q, "agent mapper\njob %d undo", n5);
+        t = ctl_ask(&a, q);
+        snprintf(ev, sizeof ev, "ok\ntook back #%d, every part of it\n", n5);
+        CHECK(t && !strcmp(t, ev));
+        free(t);
+        CHECK_EQ(a.undo.depth, depth0);
+        CHECK(map_tile(a.map, 1, 9) != TILE_WATER && map_tile(a.map, 3, 9) != TILE_WATER);
+
+        /* A job removed leaves its steps their author and not its number: a new job #N is not the old one. */
+        undo_redo(&a.undo, a.map);
+        snprintf(q, sizeof q, ":ask %d remove\r", n5);
+        press(&a, q);
+        int still = 0;
+        for (int i = 0; i < a.undo.ntags; i++) still += a.undo.tags[i].job == n5;
+        CHECK_EQ(still, 0);
+        CHECK(undo_tag_top(&a.undo) && !strcmp(undo_tag_top(&a.undo)->who, "mapper"));
+        undo_undo(&a.undo, a.map);
+    }
+
+    CASE("a landing is its maker's whoever has the job since; an --apply's is the GM's; the GM busy, both undos wait");
+    {
+        char ev[120];
+        /* A part lands for mapper, who then gives the job back: the step is still mapper's. */
+        press(&a, ":ask a pond\r");
+        int n = a.job_last;
+        snprintf(q, sizeof q, "agent mapper\njob %d propose\ntile B11 water\ntile D11 water", n);
+        t = ctl_ask(&a, q);
+        free(t);
+        a.ed.cx = 1; a.ed.cy = 10;
+        snprintf(q, sizeof q, ":review %d\rv\r", n);          /* B11 alone; the review stays on the rest */
+        press(&a, q);
+        CHECK(map_tile(a.map, 1, 10) == TILE_WATER && a.ed.mode == ED_REVIEW);
+        /* While the GM reviews the rest of it, its landed part is not pulled from under the review. */
+        snprintf(q, sizeof q, "agent mapper\njob %d undo", n);
+        t = ctl_ask(&a, q);
+        CHECK(t && !strncmp(t, "busy: ", 6) && strstr(t, "reviewing"));
+        free(t);
+        t = ctl_ask(&a, "agent mapper\nundo");
+        CHECK(t && !strncmp(t, "busy: ", 6));
+        free(t);
+        CHECK_EQ(map_tile(a.map, 1, 10), TILE_WATER);
+        press(&a, "\x1b");
+        snprintf(q, sizeof q, "agent mapper\njob %d drop", n);
+        t = ctl_ask(&a, q);
+        free(t);
+        snprintf(q, sizeof q, "agent other\njob %d undo", n);   /* nobody's job now, and still not other's step */
+        t = ctl_ask(&a, q);
+        CHECK(ctl_refused(t, "state", 1) && strstr(t, "mapper's"));
+        free(t);
+        CHECK_EQ(map_tile(a.map, 1, 10), TILE_WATER);
+        snprintf(q, sizeof q, "agent other\njob %d propose\ntile F11 water", n);
+        t = ctl_ask(&a, q);
+        free(t);
+        snprintf(q, sizeof q, ":review %d\r", n);
+        press(&a, q);
+        press(&a, "\r");
+        press(&a, "\x1b");
+        CHECK_EQ(map_tile(a.map, 5, 10), TILE_WATER);
+        press(&a, ":");                                      /* the GM typing a command: nothing lands, nothing is taken back */
+        snprintf(q, sizeof q, "agent other\njob %d undo", n);
+        t = ctl_ask(&a, q);
+        CHECK(t && !strncmp(t, "busy: ", 6));
+        free(t);
+        t = ctl_ask(&a, "agent other\nundo");
+        CHECK(t && !strncmp(t, "busy: ", 6));
+        free(t);
+        CHECK_EQ(map_tile(a.map, 5, 10), TILE_WATER);
+        press(&a, "\x1b");
+        t = ctl_ask(&a, q);                                  /* other's own step, and not mapper's under it */
+        snprintf(ev, sizeof ev, "ok\ntook back #%d\n", n);
+        CHECK(t && !strcmp(t, ev));
+        free(t);
+        CHECK(map_tile(a.map, 5, 10) != TILE_WATER && map_tile(a.map, 1, 10) == TILE_WATER);
+        undo_undo(&a.undo, a.map);                           /* mapper's B11 */
+        snprintf(q, sizeof q, ":ask %d remove\r", n);
+        press(&a, q);
+
+        /* An --apply's change is the GM's alone: neither undo takes it back. */
+        t = ctl_ask(&a, "propose apply \"plan.txt\"\ntile C12 water");
+        int ap = a.job_last;
+        CHECK(t && !strncmp(t, "ok\n", 3));
+        free(t);
+        snprintf(q, sizeof q, ":review %d\r", ap);
+        press(&a, q);
+        press(&a, "\r");
+        press(&a, "\x1b");
+        CHECK_EQ(map_tile(a.map, 2, 11), TILE_WATER);
+        CHECK(undo_tag_top(&a.undo) == NULL);
+        t = ctl_ask(&a, "undo");
+        CHECK(ctl_refused(t, "state", 1));
+        free(t);
+        snprintf(q, sizeof q, "job %d undo", ap);
+        t = ctl_ask(&a, q);
+        CHECK(ctl_refused(t, "state", 1) && strstr(t, "the GM's to take back"));
+        free(t);
+        CHECK_EQ(map_tile(a.map, 2, 11), TILE_WATER);
+        undo_undo(&a.undo, a.map);
+
+        /* The newest of two taken back by the GM: undo is once, and says what does reach the older. */
+        a.ctl_auto = 1;
+        t = ctl_ask(&a, "agent mapper\ntile H2 water");
+        int first = a.job_last;
+        free(t);
+        t = ctl_ask(&a, "agent mapper\ntile H3 water");
+        free(t);
+        a.ctl_auto = 0;
+        undo_undo(&a.undo, a.map);                           /* the GM's u */
+        t = ctl_ask(&a, "agent mapper\nundo");
+        snprintf(ev, sizeof ev, "job %d undo", first);
+        CHECK(ctl_refused(t, "state", 1) && strstr(t, ev));
+        free(t);
+        snprintf(q, sizeof q, "agent mapper\njob %d undo", first);
+        t = ctl_ask(&a, q);
+        CHECK(t && !strncmp(t, "ok\n", 3));
+        free(t);
+        CHECK(map_tile(a.map, 7, 1) != TILE_WATER);
+
+        /* A landing that writes nothing to the log (a card alone) tags nothing: the GM's step under it stays the GM's. */
+        undo_begin(&a.undo);
+        undo_set_tile(&a.undo, a.map, 0, 0, TILE_ROUGH);
+        undo_end(&a.undo);
+        Map      *sc = app_scratch_copy(&a);
+        ChangeSet cs;
+        cs_init(&cs);
+        CHECK(card_set(sc, "Bog", "a bog") >= 0);
+        CHECK(cs_diff(&cs, a.map, sc, NULL) > 0);
+        int cslot = app_job_new(&a, JOB_FROM_AGENT, "a card", NULL, 0);
+        CHECK(cslot >= 0);
+        if (cslot >= 0) {
+            str_lcpy(a.jobs[cslot].taker, "mapper", sizeof a.jobs[cslot].taker);
+            app_job_set_proposal(&a, cslot, &cs, NULL);
+            snprintf(q, sizeof q, ":review %d\r", a.jobs[cslot].num);
+            press(&a, q);
+            press(&a, "\r");
+            press(&a, "\x1b");
+            CHECK(card_find(a.map, "Bog") >= 0);
+            CHECK(undo_tag_top(&a.undo) == NULL);
+            t = ctl_ask(&a, "agent mapper\nundo");
+            CHECK(ctl_refused(t, "state", 1));
+            free(t);
+            CHECK_EQ(map_tile(a.map, 0, 0), TILE_ROUGH);
+        }
+        cs_free(&cs);
+        undo_undo(&a.undo, a.map);
+    }
+
+    CASE("job N conflicts lists what changed under a waiting proposal: what was, what is now; 64 lines and a count");
+    {
+        t = ctl_ask(&a, "agent mapper\npropose \"a lake\"\ntile A1:T12 water");
+        int lake = a.job_last;
+        CHECK(t && !strncmp(t, "ok\n", 3));
+        free(t);
+        int slot = -1;
+        for (int i = 0; i < JOB_MAX; i++) if (a.jobs[i].used && a.jobs[i].num == lake) slot = i;
+        int cells = slot >= 0 ? a.jobs[slot].cs.ncells : 0;
+        CHECK(cells > 100);
+        char want[160];
+        snprintf(q, sizeof q, "agent other\njob %d conflicts", lake);    /* a read: anyone's */
+        t = ctl_ask(&a, q);
+        snprintf(want, sizeof want, "ok\n#%d has no conflicts: nothing it touches has changed since\n", lake);
+        CHECK(t && !strcmp(t, want));
+        free(t);
+        /* One square the lake would change (some are water already), changed under it. */
+        int     cx = slot >= 0 && cells ? a.jobs[slot].cs.cells[0].x : 0, cy = slot >= 0 && cells ? a.jobs[slot].cs.cells[0].y : 0;
+        uint8_t was = map_tile(a.map, cx, cy);
+        char    sq[MAP_COORD_MAX];
+        map_coord_name(cx, cy, sq, sizeof sq);
+        undo_begin(&a.undo);
+        undo_set_tile(&a.undo, a.map, cx, cy, TILE_ROUGH);
+        undo_end(&a.undo);
+        t = ctl_ask(&a, q);
+        snprintf(want, sizeof want, "ok\ntile %s: %s when proposed, %s now\n", sq, tile_name(was), tile_name(TILE_ROUGH));
+        CHECK(t && !strcmp(t, want));
+        free(t);
+        undo_begin(&a.undo);
+        for (int y = 0; y < a.map->h; y++)
+            for (int x = 0; x < a.map->w; x++) undo_set_tile(&a.undo, a.map, x, y, TILE_HAZARD);
+        undo_end(&a.undo);
+        t = ctl_ask(&a, q);
+        int lines = 0;
+        for (const char *p = t ? t : ""; *p; p++) lines += *p == '\n';
+        snprintf(want, sizeof want, "\nand %d more\n", cells - CTL_CONFLICT_LINES);
+        CHECK_EQ(lines, 1 + CTL_CONFLICT_LINES + 1);         /* ok, the 64, the count */
+        CHECK(t && strstr(t, want));
+        free(t);
+        undo_undo(&a.undo, a.map);
+        undo_undo(&a.undo, a.map);
+        {
+            /* Counted as a read: the set against the map each time, till the request's bound. */
+            int   fit = CTL_READ_SQUARES / (cells + CTL_FILE_CHARGE);
+            char *many = malloc((size_t)(fit + 2) * 24);
+            size_t ml = 0;
+            for (int k = 0; k <= fit; k++) ml += (size_t)sprintf(many + ml, "job %d conflicts\n", lake);
+            t = ctl_ask(&a, many);
+            CHECK(ctl_refused(t, "limit", fit + 1));
+            free(t);
+            free(many);
+        }
+        {
+            /* An edge is named by its square and side; a note put where the proposal puts one is said so. */
+            t = ctl_ask(&a, "agent mapper\npropose \"a door\"\nedge A1|B1 wall\nnote E5 \"hi\"");
+            int door = a.job_last;
+            free(t);
+            undo_begin(&a.undo);
+            undo_set_vedge(&a.undo, a.map, 1, 0, EDGE_WINDOW);
+            undo_set_note(&a.undo, a.map, 4, 4, "there");
+            undo_end(&a.undo);
+            snprintf(q, sizeof q, "job %d conflicts", door);
+            t = ctl_ask(&a, q);
+            snprintf(want, sizeof want, "ok\nedge west of B1: %s when proposed, %s now\nnote E5: one is there now\n",
+                     edge_name(EDGE_NONE), edge_name(EDGE_WINDOW));
+            CHECK(t && !strcmp(t, want));
+            if (t && strcmp(t, want)) printf("    got:\n%s    want:\n%s", t, want);
+            free(t);
+            undo_undo(&a.undo, a.map);
+            snprintf(q, sizeof q, "agent mapper\njob %d drop", door);
+            t = ctl_ask(&a, q);
+            free(t);
+        }
+        snprintf(q, sizeof q, "job %d conflicts now", lake);
+        t = ctl_ask(&a, q);
+        CHECK(ctl_refused(t, "usage", 1));
+        free(t);
+        t = ctl_ask(&a, "job 98 conflicts");
+        CHECK(ctl_refused(t, "missing", 1));
+        free(t);
+        snprintf(q, sizeof q, "agent mapper\njob %d drop", lake);
+        t = ctl_ask(&a, q);
+        free(t);
+        snprintf(q, sizeof q, "job %d conflicts", lake);     /* withdrawn: nothing waits */
+        t = ctl_ask(&a, q);
+        CHECK(ctl_refused(t, "state", 1) && strstr(t, "has no proposal waiting"));
+        free(t);
+    }
+
+    CASE("an event's text is cut at its room and never past it");
+    {
+        char longt[400];
+        memset(longt, 'x', sizeof longt - 1);
+        longt[sizeof longt - 1] = '\0';
+        app_event(&a, CTL_EV_FEEDBACK, 7, "%s", longt);
+        const AgentEvent *e = &a.events[a.event_seq % EVENT_MAX];
+        CHECK_EQ((long)strlen(e->text), EVENT_TEXT_MAX - 1);
+        CHECK(!strncmp(e->text, "job 7 feedback: xxx", 19));
+        const char *text;
+        size_t      tl;
+        int         en;
+        char        line[EVENT_TEXT_MAX + 16];
+        int         ll = snprintf(line, sizeof line, "%u %s", e->seq, e->text);
+        CHECK(ctl_event_parse(line, (size_t)ll, &en, &text, &tl) == CTL_EV_FEEDBACK && en == 7);
+        /* More of its own than the ring keeps: nothing for it to hear, but `lost` is something to say. */
+        for (int k = 0; k < EVENT_MAX + 4; k++) { app_event(&a, CTL_EV_TAKEN, 1, "x"); app_event_by(&a, "mapper"); }
+        CHECK_EQ(app_events_after(&a, a.event_seq - 3, "mapper"), 0);
+        CHECK(app_events_after(&a, a.event_seq - EVENT_MAX - 2, "mapper") > 0);
+        CHECK_EQ(app_events_after(&a, a.event_seq - 3, "other"), 3);
+    }
 
     CASE("with the channel off the name is taken and the refusal is the channel's");
     a.ctl_can_hold = 1;

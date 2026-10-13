@@ -884,7 +884,7 @@ static void cs_checkpoint_writers(void)
     cs_apply(&cs, m, &u, NULL, NULL, 0);
     Map *st = stamp_copy(m, 7, 1, 10, 4);                     /* a corner of the room, nobody in it */
     char err[80];
-    CHECK(st && stamp_place(m, &u, st, 25, 18, err, sizeof err) == 1);
+    CHECK(st && stamp_place(m, &u, st, 25, 18, NULL, err, sizeof err) == 1);
     ChangeSet a, b;
     cs_init(&a);
     cs_init(&b);

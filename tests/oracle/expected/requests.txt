@@ -80,6 +80,58 @@ map  Two Rooms  16x9  scale 5 ft  metric alt  ruleset none
 no findings
 -- exit 0
    file: as it was
+== req.vtt --apply edits-land.req
+changed A1:B2: 9 lines, one undo step
+-- exit 0
+   (on two-rooms)
+== req.vtt --dump-map
+   A B C D E F G H I J K L M N O P
+  ---+-----------------------------
+1 +~%3+. . . . . . . . . . . . . .|
+  | -----------                   |
+2 +.|.+. . . .|. . . . . . . . . .|
+  -+-+-       |   -------------   |
+3 |.|. 1 . . .|. .|. . . . . .|. .|
+  | |         |   |           |   |
+4 |.|. . . . . . .|. . . . . .|. .|
+  | |         |   |           |   |
+5 |.|. . . . .|. .|. . 2 2 . .|. .|
+  | -----------   |           |   |
+6 |. . . . . . . .|. . 2 2 . .|. .|
+  |               |           |   |
+7 |. . . . . . . .|. . . . . .|. .|
+  |               ----- -------   |
+8 |. . . . . . . . . . . . . . . .|
+  |                               |
+9 |. . . . . . . . . . . . . . . .|
+  ---------------------------------
+
+creatures
+  1  Aria             player       C3
+  2  Ogre             enemy 2x2    K5-L6
+  3  Seedling         enemy        B1
+     note: x
+
+notes
+  A2    hi
+
+areas
+  Seeded           A1:B2
+
+key
+  .  floor   ~  water   :  rough   "  brush   =  wood   ^  hazard   (blank) void
+  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door
+  S and s are the GM's: the players see a wall and an open door
+
+map  Two Rooms  16x9  scale 5 ft  metric alt  ruleset none
+-- exit 0
+== req.vtt --check
+N105 door-off-map       -|A1      door leads off the map: a way out?
+N105 door-off-map       -/B1      door leads off the map: a way out?
+N105 door-off-map       -|A2      door leads off the map: a way out?
+0 errors, 0 warnings, 3 notes
+-- exit 0
+   file: written
 == req.vtt --apply floors.req
 vtt: error usage: line 3: R6 is not a square on this map (A1 to P9), nor a room's name - nothing saved
 -- exit 1
@@ -150,10 +202,10 @@ agent       who is asking, as a request's first line (vtt --ctl writes it from $
 status      the map, the GM's screen and floor, whether edits are taken now
 marked      what the GM is pointing at: cursor, box, selection, ruler, pings
 propose     first line of a request: its edits are a proposal for the GM to review
-job         one job: take it or give it up, show the GM where you work, tell the GM a line, read its proposal back, or answer it with this request's edits
+job         one job: take it or give it up, show the GM where you work, tell the GM a line, read its proposal back, list what changed under it, take its landing back, or answer it with this request's edits
 jobs        every job and where it stands
 wait        every event after SEQ; a running vtt holds the answer until there is one or the time is up
-undo        take back your last accepted change, while nothing has happened since
+undo        take back the last change to land, when it is yours and nothing has happened since (job N undo: that job's)
 holds       whether that file is the map open here (--apply asks)
 help        these requests, or how one is written
 help VERB says how one is written; edits in one request are all or nothing
@@ -1234,6 +1286,83 @@ W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map t
 0 errors, 1 warning
 -- exit 1
    file: as it was
+== req.vtt --apply edits-land.req
+changed A1:B2: 9 lines, one undo step
+-- exit 0
+   (on everything)
+== req.vtt --dump-map
+   A B C D E F G H I J K L M N O P
+  ---+-----------------------------
+1 +~%3+. . . . . . . . . . . . . .|
+  | | |                           |
+2 +. .+. . . . . . . . . . . . . .|
+  -+-+-                           |
+3 |. . 1 . . . . . . . . . . . . .|
+  |                               |
+4 |. . . . . . . . . . . . . . . .|
+  |                               |
+5 |. . . . . . . . . . 2 2 . . . .|
+  |                               |
+6 |. . . . . . . . . . 2 2 . . . .|
+  |                               |
+7 |. . . . . . . . . . . . . . . .|
+  |                               |
+8 |. . . . . . . . . . . . . . . .|
+  |                               |
+9 |. . . . . . . . . . . . . . . .|
+  ---------------------------------
+
+creatures
+  1  Aria             player       C3
+     note: wants the amulet
+  2  Ogre             enemy 2x2    K5-L6  hidden
+  3  Seedling         enemy        B1
+     note: x
+
+notes
+  F4    pressure plate
+  A2    hi
+
+areas
+  Crypt            B2:G5
+  Ground           A1:P9
+  Seeded           A1:B2
+
+links
+  stairs 1     F3 <-> O3
+  portal 2     B7-C8 -> M7-N8  2x2  one-way  secret
+  stairs 3     H8 -> town, Gate
+
+key
+  .  floor   ~  water   :  rough   "  brush   =  wood   ^  hazard   (blank) void
+  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door
+  S and s are the GM's: the players see a wall and an open door
+
+fog on, soft edge off
+  A  Crypt            reveal 2      memory on  soft edge map 30 squares, 21 seen
+  . no fog   A-O a patch, unseen   a-o seen   1-9 !"#$%& lit by hand
+
+  ABCDEFGHIJKLMNOP
+1 AaaaAA..........
+2 aaaaaA..........
+3 aaaaaA..........
+4 aaaaaA..........
+5 AaaaAA..........
+6 ................
+7 ................
+8 ................
+9 ................
+
+map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
+-- exit 0
+== req.vtt --check
+W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+N105 door-off-map       -|A1      door leads off the map: a way out?
+N105 door-off-map       -/B1      door leads off the map: a way out?
+N105 door-off-map       -|A2      door leads off the map: a way out?
+0 errors, 1 warning, 3 notes
+-- exit 1
+   file: written
 == req.vtt --apply floors.req
 vtt: error usage: line 3: R6 is not a square on this map (A1 to P9), nor a room's name - nothing saved
 -- exit 1
@@ -1333,10 +1462,10 @@ agent       who is asking, as a request's first line (vtt --ctl writes it from $
 status      the map, the GM's screen and floor, whether edits are taken now
 marked      what the GM is pointing at: cursor, box, selection, ruler, pings
 propose     first line of a request: its edits are a proposal for the GM to review
-job         one job: take it or give it up, show the GM where you work, tell the GM a line, read its proposal back, or answer it with this request's edits
+job         one job: take it or give it up, show the GM where you work, tell the GM a line, read its proposal back, list what changed under it, take its landing back, or answer it with this request's edits
 jobs        every job and where it stands
 wait        every event after SEQ; a running vtt holds the answer until there is one or the time is up
-undo        take back your last accepted change, while nothing has happened since
+undo        take back the last change to land, when it is yours and nothing has happened since (job N undo: that job's)
 holds       whether that file is the map open here (--apply asks)
 help        these requests, or how one is written
 help VERB says how one is written; edits in one request are all or nothing

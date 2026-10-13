@@ -163,6 +163,8 @@ can take back, so each goes in a request of its own.
 | `job N area REGION`, `job N say "..."` | show the GM where you will work, or put a line on the GM's status line |
 | `job N propose ["a line for the GM"]` | the first line of a request: its edits are your answer to job N |
 | `job N dump [REGION\|all\|key]`, `job N check`, `job N describe` | your proposal read back, as the map would be with it |
+| `job N conflicts` | what the GM changed under a waiting proposal since you made it, a line each (the first 64): what was there when you proposed and what is there now. Propose again from these |
+| `job N undo` | live only, alone in its request: take back job N's accepted change, every part of it, while it is the last thing done to the map |
 | `jobs [json]` | every job and where it stands, with what was said on each |
 | `wait [SEQ] [for SECONDS]` | alone in its request: every event after SEQ, held until there is one or the time is up |
 
@@ -185,7 +187,7 @@ can take back, so each goes in a request of its own.
 | `status` | live only: the map, the floor on the GM's screen, whether edits are taken now, and `seq`, the newest event's number, to give your first `wait` |
 | `marked [json]` | live only: what the GM is pointing at -- the cursor (and the area it is in, and the floor on screen), a `v` box, selected creatures, the ruler, recent pings |
 | `help`, `help token`, `help json` | every request with a line each; how one is written; or all of it as JSON. The list vtt itself works from: if this page and `help` ever disagree, `help` is right |
-| `undo` | live only, alone in its request: take back your last request, while nothing has happened since |
+| `undo` | live only, alone in its request: take back your last change to land, once, while nothing has happened since |
 
 ## From a description to a map
 
@@ -313,11 +315,16 @@ feedback. Nothing you send changes the GM's map until then, unless the GM has ty
    | `job N feedback` | `: TEXT` -- the job is yours again, with what to do instead: `job N propose` |
    | `job N back` | `: for review` -- the GM brought a scrapped or undone proposal back |
    | `job N removed` | the GM removed the job: its number answers `no job #N` now |
+   | `job N taken` | `: by NAME` -- another agent has the job: leave it |
+   | `job N proposed` | `: WHAT` -- another agent's proposal is waiting for the GM: its squares may change under you |
+   | `job N undone` | `: taken back by NAME` -- another agent took its accepted change back: read `changes` |
    | `map changed` | `: WHAT` -- the GM changed the map (told once it has been quiet 1.5 s): what you read may be stale |
    | `map closed` | `: NAME ...` -- the map, and every job on it, is gone |
 
    `jobs` shows the same state at any time, and counts a ready proposal's **conflicts**:
-   squares the GM changed since you looked, which accepting would overwrite. A part accepted
+   squares the GM changed since you looked, which accepting would overwrite; `job N
+   conflicts` lists them (`tile C3: floor when proposed, water now`), so you can propose
+   again without reading the map over. A part accepted
    by box leaves the rest `ready`; feedback means propose again with `job N propose`, and
    the new proposal replaces the old.
 
@@ -327,6 +334,12 @@ feedback. Nothing you send changes the GM's map until then, unless the GM has ty
 
    An event's text is cut at 240 characters; `jobs` has a job's whole text. The GM undoing
    an accepted change with `u` comes as `map changed`, not as a job event.
+
+   **What you do yourself is not told to you.** Taking a job, proposing, giving one back
+   and undoing are events for every other name and none for yours, so your own `wait` is
+   never woken by your own request. Their numbers are still used: the events you read can
+   skip one (`41`, `43`), which is not a `lost`. Callers with no name are all `cli`, and
+   none of them hears another: give each agent a name when there are two.
 
    **After `map changed` or an accept, do not dump the map again.** `changes 41` gives the
    events after 41 and then the map as it is now in the parts they touched:
@@ -380,8 +393,14 @@ started has it set already, to `job-N`. `status` shows the name vtt took you for
 NAME`; `cli` with none). It matters in three places. **A job is its taker's:** once you
 `take` a job, or propose one of your own, only your name may `take`, `area`, `say`,
 `propose` to or `drop` it, and another's answers `state: #N is NAME's`; anyone may read one
-(`job N dump`, `check`, `describe`), and `jobs` says who has what. **`undo` is your own:** it
-takes back the last change to land only if it was yours. **One `wait` a name:** a second
+(`job N dump`, `check`, `describe`, `conflicts`), and `jobs` says who has what. **`undo` is
+your own:** it takes back the last change to land only if it was yours, and once. **`job N
+undo` takes back job N's accepted change by number,** every part of it, while it is the
+last thing done to the map; under a later change (the GM's, or another job's) it answers
+`state`, and the way to put it right is a new proposal, which the GM sees. What it takes
+back is what **you** landed for that job: a job you were given after another agent gave it
+back has that agent's steps too, and they are not yours. Both undos answer `busy` while the
+GM is in the middle of something, reviewing the rest of that job included: ask again. **One `wait` a name:** a second
 `wait` from your name takes the first one's place, and the first is answered `superseded`,
 so an agent that was stopped and starts again is never locked out by its own old wait; the
 answer it gets carries every event since the number it waited from, so nothing is lost

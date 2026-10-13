@@ -15,12 +15,14 @@ void undo_free(Undo *u)
     free(u->ops);
     free(u->toks);
     free(u->marks);
+    free(u->tags);
     memset(u, 0, sizeof *u);
 }
 
 void undo_clear(Undo *u)
 {
     u->nops = u->ntoks = u->nmarks = u->depth = 0;
+    u->ntags = 0;
     u->open = u->started = u->trimmed = 0;
     u->nest = u->stroke = 0;
     u->stamp++;
@@ -75,6 +77,14 @@ static void trim(Undo *u)
     u->nmarks  -= b;
     u->depth   -= b;
     u->trimmed += b;
+
+    int k = 0;
+    for (int i = 0; i < u->ntags; i++) {
+        if (u->tags[i].batch < b) continue;
+        u->tags[k] = u->tags[i];
+        u->tags[k++].batch -= b;
+    }
+    u->ntags = k;
 }
 
 void undo_end(Undo *u)
@@ -105,6 +115,7 @@ static void batch_start(Undo *u)
         u->ntoks  = u->ops[keep].tok;    /* the first dropped op's slots go too */
         u->nops   = keep;
         u->nmarks = u->depth;
+        while (u->ntags && u->tags[u->ntags - 1].batch >= u->nmarks) u->ntags--;   /* the redo tail's */
     }
     if (u->nmarks == u->cap_marks) {
         u->cap_marks = u->cap_marks ? u->cap_marks * 2 : 64;
@@ -676,6 +687,62 @@ int undo_rewind_moves(Undo *u, Map *m, int depth, const int *idx, int nidx)
         undone++;
     }
     return undone;
+}
+
+/* ------------------------------------------------------- whose batch it is */
+
+void undo_tag(Undo *u, int job, const char *who)
+{
+    if (u->depth == 0) return;
+    int b = u->depth - 1;
+    UndoTag *t = u->ntags && u->tags[u->ntags - 1].batch == b ? &u->tags[u->ntags - 1] : NULL;
+    if (!t) {
+        if (u->ntags == u->cap_tags) {
+            u->cap_tags = u->cap_tags ? u->cap_tags * 2 : 16;
+            u->tags = xrealloc(u->tags, (size_t)u->cap_tags * sizeof *u->tags);
+        }
+        t = &u->tags[u->ntags++];
+    }
+    t->batch = b;
+    t->job   = job;
+    str_lcpy(t->who, who, sizeof t->who);
+}
+
+/* The tag of applied batch b, looked for from the newest: tags past the
+ * redo boundary are skipped first. */
+static const UndoTag *tag_of(const Undo *u, int b)
+{
+    for (int i = u->ntags - 1; i >= 0 && u->tags[i].batch >= b; i--)
+        if (u->tags[i].batch == b) return &u->tags[i];
+    return NULL;
+}
+
+const UndoTag *undo_tag_top(const Undo *u)
+{
+    return u->depth ? tag_of(u, u->depth - 1) : NULL;
+}
+
+const UndoTag *undo_tag_last(const Undo *u, const char *who)
+{
+    for (int i = u->ntags - 1; i >= 0; i--)
+        if (!strcmp(u->tags[i].who, who)) return &u->tags[i];
+    return NULL;
+}
+
+int undo_tag_run(const Undo *u, int job, const char *who, int *under)
+{
+    int run = 0, b = u->depth - 1;
+    for (const UndoTag *t; b >= 0 && (t = tag_of(u, b)) && t->job == job && !strcmp(t->who, who); b--) run++;
+    *under = 0;
+    for (int i = 0; i < u->ntags && u->tags[i].batch <= b; i++)
+        *under += u->tags[i].job == job && !strcmp(u->tags[i].who, who);
+    return run;
+}
+
+void undo_tag_forget(Undo *u, int job)
+{
+    for (int i = 0; i < u->ntags; i++)
+        if (u->tags[i].job == job) u->tags[i].job = 0;
 }
 
 int undo_redo(Undo *u, Map *m)

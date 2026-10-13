@@ -14,6 +14,7 @@
  * creatures with one label. */
 
 #include <stddef.h>
+#include <stdio.h>
 #include "map.h"
 #include "undo.h"
 
@@ -163,6 +164,12 @@ static inline int cs_empty(const ChangeSet *cs)
 /* Marks every element whose live value is no longer its `before`; returns
  * how many. Does nothing when `live` has not changed since the last check. */
 int  cs_check(ChangeSet *cs, const Map *live);
+
+/* cs_check, and each conflict on a line of `out`: what the element was when
+ * the set was made and what the live map holds now, at most `max` lines and
+ * then how many more. For the agent that must propose again (docs/V2.md,
+ * D8); the GM sees them in red. Returns the conflicts. */
+int  cs_conflicts_write(ChangeSet *cs, const Map *live, FILE *out, int max);
 
 /* A box to accept part of a set by: the elements wholly inside it. */
 typedef struct { int x0, y0, x1, y1; } CsBox;

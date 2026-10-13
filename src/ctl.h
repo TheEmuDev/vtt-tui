@@ -52,6 +52,9 @@ int  ctl_name_ok(const char *name);
 #define CTL_EDIT_SQUARES  (2 * 512 * 512)
 #define CTL_FILE_CHARGE   500
 #define CTL_LIST_CHARGE   (CTL_READ_SQUARES / 3)
+/* `job N conflicts` lists this many and counts the rest: an agent proposes
+ * again from the first few, never from a thousand. */
+#define CTL_CONFLICT_LINES 64
 /* And by what it answers: a read that walks no map and opens no file can
  * still be written 12,800 times in 64 KB (`help` so was 43 ms and tens of
  * megabytes). Once the answer is past this, no further line is run. A
@@ -148,8 +151,9 @@ int  ctl_waiter_of(const Ctl *c, const char *who, unsigned *seq);
 const char *ctl_name_line(const char *req);
 
 int  ctl_waiters(const Ctl *c);
-/* 1 when connection i (0..nc-1) is a held wait, with what it waits for. */
-int  ctl_waiter(const Ctl *c, int i, unsigned *seq, uint64_t *until_ms);
+/* 1 when connection i (0..nc-1) is a held wait, with what it waits for and
+ * whose it is. */
+int  ctl_waiter(const Ctl *c, int i, unsigned *seq, uint64_t *until_ms, const char **who);
 
 /* A line of text as connection i's answer (copied). */
 void ctl_answer_text(Ctl *c, int i, const char *text);
@@ -176,7 +180,9 @@ const char *ctl_class_name(int cls);
  * a colon or the line. Emitters (app_event) and --wait read the one table. */
 enum {
     CTL_EV_ASKED, CTL_EV_ACCEPTED, CTL_EV_PART, CTL_EV_FEEDBACK, CTL_EV_SCRAPPED,
-    CTL_EV_REMOVED, CTL_EV_BACK, CTL_EV_CHANGED, CTL_EV_CLOSED, CTL_EV_COUNT
+    CTL_EV_REMOVED, CTL_EV_BACK, CTL_EV_CHANGED, CTL_EV_CLOSED,
+    /* What an agent did, told to the other names (docs/V2.md, D8). */
+    CTL_EV_TAKEN, CTL_EV_PROPOSED, CTL_EV_UNDONE, CTL_EV_COUNT
 };
 const char *ctl_event_name(int kind);
 /* One line of an events answer, `SEQ job N KIND[: text]` or `SEQ map
