@@ -127,7 +127,7 @@ static char *edit_text(App *a, const char *name, const char *start, int had, con
 
 void app_card_edit(App *a)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     int  i = app_target_token(a);
     if (i < 0) { app_set_status(a, "no creature here - s k writes the selected one's card"); return; }
 
@@ -200,7 +200,7 @@ typedef struct {
  * area whether it has one or not: where a new one goes. */
 static EnvAt env_here(App *a, int any)
 {
-    Map *m  = a->map;
+    Map *m  = a->world.map;
     int  ai = map_area_at(m, a->ed.cx, a->ed.cy);
     if (ai >= 0 && (any || m->areas[ai].env[0])) return (EnvAt){ ai, m->areas[ai].env };
     if (!any) {
@@ -219,7 +219,7 @@ static void env_where(const Map *m, EnvAt at, char *buf, size_t sz)
 /* Names the card as the place's environment, or takes the name off with "". */
 static void env_set(App *a, EnvAt at, const char *card)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     char msg[160], where[40];
     env_where(m, at, where, sizeof where);
     if (card[0] && !card_name_ok(card)) {
@@ -232,9 +232,9 @@ static void env_set(App *a, EnvAt at, const char *card)
         return;
     }
     if (at.area >= 0) {
-        undo_begin(&a->undo);
-        undo_set_area_env(&a->undo, m, m->areas[at.area].name, card);
-        undo_end(&a->undo);
+        undo_begin(&a->world.undo);
+        undo_set_area_env(&a->world.undo, m, m->areas[at.area].name, card);
+        undo_end(&a->world.undo);
     } else {
         /* The map's own goes round the undo log, as the cards do. */
         str_lcpy(m->env, card, sizeof m->env);
@@ -259,7 +259,7 @@ static void env_set(App *a, EnvAt at, const char *card)
 
 static void env_edit(App *a, EnvAt at)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     char msg[160], where[40], name[CARD_NAME_MAX];
     env_where(m, at, where, sizeof where);
     if (!at.env[0]) {
@@ -325,7 +325,7 @@ static int env_names(const char *line, char (*out)[MAP_NAME_MAX], int max)
 static void env_adversaries(App *a, EnvAt at)
 {
     PROF_ZONE("env.pick");
-    Map *m = a->map;
+    Map *m = a->world.map;
     char msg[320], where[40], line[512];
     env_where(m, at, where, sizeof where);
     if (a->screen != SCREEN_PLAY) { app_set_status(a, "placing is play mode's - F2 first"); return; }
@@ -393,7 +393,7 @@ UiPickItem *app_env_items(int *count)
 
 void app_env_name(App *a, const char *name)
 {
-    if (a->map) env_set(a, env_here(a, 1), name);
+    if (a->world.map) env_set(a, env_here(a, 1), name);
 }
 
 /* :env                    the environment here, read whole
@@ -407,7 +407,7 @@ void app_env_name(App *a, const char *name)
 void app_env_command(App *a, const char *rest)
 {
     static const char USAGE[] = ":env, :env NAME, :env map NAME, :env area \"AREA\" NAME, :env edit, :env pick, :env adversaries, :env remove";
-    Map *m = a->map;
+    Map *m = a->world.map;
     char msg[200], where[40];
     if (!m) { app_set_status(a, "environments are a map's - open one first"); return; }
     while (*rest == ' ') rest++;
@@ -470,7 +470,7 @@ void app_env_command(App *a, const char *rest)
 
 const char *app_card_box_text(App *a, int i)
 {
-    const Map     *m    = a->map;
+    const Map     *m    = a->world.map;
     const Token   *t    = &m->tokens.v[i];
     const char    *card = card_of(m, t);
     const Ruleset *rs   = ruleset_by_name(m->ruleset);
@@ -522,8 +522,8 @@ void app_card_box_forget(App *a)
 void app_condition_command(App *a, const char *rest)
 {
     char msg[256];
-    if (!a->map) { app_set_status(a, "conditions are a map's ruleset's - open a map first"); return; }
-    const Ruleset *rs = ruleset_by_name(a->map->ruleset);
+    if (!a->world.map) { app_set_status(a, "conditions are a map's ruleset's - open a map first"); return; }
+    const Ruleset *rs = ruleset_by_name(a->world.map->ruleset);
     if (!rs || !rs->nconditions) {
         app_set_status(a, "this ruleset names no conditions - a marker is a word of your own: s a");
         return;

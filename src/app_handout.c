@@ -47,14 +47,14 @@ static void publish(App *a, int up)
 {
     a->handout_up = up;
     a->dirty = 1;
-    if (!up) { net_set_handout(&a->net, "", 0, a->now_ms); return; }
+    if (!up) { net_set_handout(&a->net, "", 0, a->world.now_ms); return; }
     char   rec[WIRE_HANDOUT_MAX];
     size_t tl = strlen(a->handout_title), bl = strlen(a->handout_body);
     if (tl + 1 + bl > sizeof rec) bl = sizeof rec - tl - 1;
     memcpy(rec, a->handout_title, tl);
     rec[tl] = '\n';
     memcpy(rec + tl + 1, a->handout_body, bl);
-    net_set_handout(&a->net, rec, tl + 1 + bl, a->now_ms);
+    net_set_handout(&a->net, rec, tl + 1 + bl, a->world.now_ms);
 }
 
 void app_handout_show(App *a, const char *name)

@@ -50,7 +50,7 @@ static int  g_changes;                 /* `changes` lines so far */
  * CTL_EDIT_SQUARES. */
 static int rq_cover(const App *a, long squares, char *err, size_t errsz)
 {
-    if (a->ctl_direct) return 1;
+    if (a->world.ctl_direct) return 1;
     g_cover += squares;
     if (g_cover <= CTL_EDIT_SQUARES) return 1;
     rq_class(CTL_E_LIMIT);
@@ -62,7 +62,7 @@ static int rq_cover(const App *a, long squares, char *err, size_t errsz)
 int app_ctl_read(const App *a, long squares, char *err, size_t errsz)
 {
     /* --apply on a file has no GM waiting on a frame. */
-    if (a->ctl_direct) return 1;
+    if (a->world.ctl_direct) return 1;
     g_read += squares;
     if (g_read <= CTL_READ_SQUARES) return 1;
     rq_class(CTL_E_LIMIT);
@@ -157,7 +157,7 @@ const char *app_ctl_mode_name(EdMode m)
 
 const char *app_ctl_busy(const App *a)
 {
-    if (!a->map)                         return "no map is open";
+    if (!a->world.map)                         return "no map is open";
     if (a->screen == SCREEN_PLAY)        return "the GM is in play mode - edits are build mode's";
     if (a->screen != SCREEN_EDITOR)      return "the GM is not in build mode";
     if (a->modal == MODAL_PROMPT)        return "the GM is answering a prompt";
@@ -165,7 +165,7 @@ const char *app_ctl_busy(const App *a)
     if (a->modal != MODAL_NONE)          return "a question is open on the GM's screen";
     if (a->ed.mode == ED_COMMAND)        return "the GM is typing a : command";
     if (a->pending || a->ed.pending_g)   return "the GM is part way through a key";
-    if (a->undo.open)                    return "the GM is laying wall";
+    if (a->world.undo.open)                    return "the GM is laying wall";
     return NULL;
 }
 
@@ -175,8 +175,8 @@ const char *app_ctl_busy(const App *a)
  * and log (live_swap, mid-proposal). */
 static void do_status(App *a, FILE *out, int own)
 {
-    const Map  *m = a->map;
-    const Undo *u = &a->undo;
+    const Map  *m = a->world.map;
+    const Undo *u = &a->world.undo;
     if (m) {
         fprintf(out, "map %s  %dx%d\n", m->name, m->w, m->h);
         fprintf(out, "file %s%s\n", m->path[0] ? m->path : "(never saved)",
@@ -191,18 +191,18 @@ static void do_status(App *a, FILE *out, int own)
             fprintf(out, "floor %s\n", floor_name(m, app_floor_shown(a)));
     }
     fprintf(out, "undo %d back, %d forward%s\n", u->depth, u->nmarks - u->depth,
-            !own ? "" : a->ctl_direct ? ", and this request's changes one more" : ", and this request's changes proposed");
+            !own ? "" : a->world.ctl_direct ? ", and this request's changes one more" : ", and this request's changes proposed");
     const char *busy = app_ctl_busy(a);
-    if (a->ctl_direct || !m)
+    if (a->world.ctl_direct || !m)
         fprintf(out, "edits %s%s\n", busy && !own ? "not now: " : "taken", busy && !own ? busy : "");
-    else if (!a->ctl_auto) fputs("edits proposed, for the GM to review\n", out);
+    else if (!a->world.ctl_auto) fputs("edits proposed, for the GM to review\n", out);
     else if (busy)         fprintf(out, "edits proposed, landing when the GM is back: %s\n", busy);
     else                   fputs("edits land at once (:agent accept auto)\n", out);
     /* The caller's name as vtt took it: a mistyped one shows here, not in whose job a change became. */
-    fprintf(out, "you %s\n", a->ctl_who[0] ? a->ctl_who : CTL_NAME_NONE);
-    fprintf(out, "agent %s\n", a->agent_on ? "on" : "off");
+    fprintf(out, "you %s\n", a->world.ctl_who[0] ? a->world.ctl_who : CTL_NAME_NONE);
+    fprintf(out, "agent %s\n", a->world.agent_on ? "on" : "off");
     /* The newest event's number: what a first `wait` is given. */
-    fprintf(out, "seq %u\n", a->event_seq);
+    fprintf(out, "seq %u\n", a->world.event_seq);
 }
 
 /* An optional last word that must be `json`. */
@@ -574,8 +574,8 @@ static int room_box(const Map *m, char w[][CTL_WORD_MAX], int n, const char **na
 
 static int token_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err, size_t errsz)
 {
-    Map  *m = a->map;
-    Undo *u = &a->undo;
+    Map  *m = a->world.map;
+    Undo *u = &a->world.undo;
     if (n < 2) BAD("token add, token move, token del or token set");
     const char *sub = w[1];
 
@@ -700,8 +700,8 @@ static int token_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *er
 /* One edit line: 0, or -1 with why. The caller has the batch open. */
 static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err, size_t errsz)
 {
-    Map  *m = a->map;
-    Undo *u = &a->undo;
+    Map  *m = a->world.map;
+    Undo *u = &a->world.undo;
     const char *v = w[0];
     int x0, y0, x1, y1;
 
@@ -1048,12 +1048,12 @@ static void proposal_begin(App *a, Edits *ed)
 {
     app_scratch_copy(a);
     ed->proposal  = 1;
-    ed->live      = a->map;
-    ed->live_undo = a->undo;
-    a->undo = a->ctl_sundo;
-    a->map  = a->ctl_scratch;
-    undo_begin(&a->undo);
-    ed->ops0 = a->undo.stamp;
+    ed->live      = a->world.map;
+    ed->live_undo = a->world.undo;
+    a->world.undo = a->world.ctl_sundo;
+    a->world.map  = a->world.ctl_scratch;
+    undo_begin(&a->world.undo);
+    ed->ops0 = a->world.undo.stamp;
 }
 
 /* A read about the GM's side (status, marked) in the middle of a proposal:
@@ -1061,8 +1061,8 @@ static void proposal_begin(App *a, Edits *ed)
 static void live_swap(App *a, Edits *ed)
 {
     if (!ed->proposal) return;
-    Map *m = a->map;   a->map  = ed->live;      ed->live      = m;
-    Undo u = a->undo;  a->undo = ed->live_undo; ed->live_undo = u;
+    Map *m = a->world.map;   a->world.map  = ed->live;      ed->live      = m;
+    Undo u = a->world.undo;  a->world.undo = ed->live_undo; ed->live_undo = u;
 }
 
 /* What a request that landed says, and the ring round it on the GM's screen. */
@@ -1075,17 +1075,17 @@ static void say_changed(App *a, const Edits *ed, FILE *out)
     Ping *r = &a->agent_ring;
     r->who = PING_GM;
     r->x0 = ed->x0; r->y0 = ed->y0; r->x1 = ed->x1; r->y1 = ed->y1;
-    r->until_ms = a->now_ms + PING_SHOW_MS;
+    r->until_ms = a->world.now_ms + PING_SHOW_MS;
     if (!r->until_ms) r->until_ms = 1;
 }
 
 /* The live map back, the scratch log kept beside it for the diff. */
 static void proposal_end(App *a, Edits *ed)
 {
-    undo_end(&a->undo);
-    a->ctl_sundo = a->undo;
-    a->undo = ed->live_undo;
-    a->map  = ed->live;
+    undo_end(&a->world.undo);
+    a->world.ctl_sundo = a->world.undo;
+    a->world.undo = ed->live_undo;
+    a->world.map  = ed->live;
 }
 
 /* The request's edits are in, on the scratch map: their change set becomes a
@@ -1098,25 +1098,25 @@ static int finish_proposal(App *a, Edits *ed, FILE *out, char *err, size_t errsz
     int slot = ed->job;
     {
         PROF_ZONE("job.propose");
-        if (!cs_diff(&cs, a->map, a->ctl_scratch, &a->ctl_sundo)) {
+        if (!cs_diff(&cs, a->world.map, a->world.ctl_scratch, &a->world.ctl_sundo)) {
             cs_free(&cs);
             fputs("no change: the map already looked like that\n", out);
             return 0;
         }
         /* At once is :agent on's (a request not from the socket is not asked). */
-        int at_once = a->ctl_auto && (a->agent_on || !a->ctl_can_hold);
+        int at_once = a->world.ctl_auto && (a->world.agent_on || !a->world.ctl_can_hold);
         if (slot < 0) slot = app_job_new(a, ed->from, ed->say, NULL, at_once);
         if (slot < 0) {
             cs_free(&cs);
             rq_class(CTL_E_LIMIT), snprintf(err, errsz, "%d changes are waiting for the GM - nothing more until some are reviewed", JOB_MAX);
             return -1;
         }
-        Job *j = &a->jobs[slot];
+        Job *j = &a->world.jobs[slot];
         if (j->from != JOB_FROM_APPLY) app_ctl_job_claim(a, j);    /* --apply's is nobody's: the GM's alone to decide */
         if (at_once) j->at_once = 1;               /* everything that comes in */
         app_job_set_proposal(a, slot, &cs, ed->job >= 0 ? ed->say : NULL);
     }
-    Job *j = &a->jobs[slot];
+    Job *j = &a->world.jobs[slot];
     fprintf(out, "proposal #%d: %s\n", j->num, j->summary);
     if (j->state == JOB_ACCEPTED) say_changed(a, ed, out);
     else if (j->at_once) fprintf(out, "lands when the GM is back: %s\n", app_ctl_busy(a));
@@ -1131,7 +1131,7 @@ static int finish_proposal(App *a, Edits *ed, FILE *out, char *err, size_t errsz
 #define RQ_ARGS App *a, const char *line, char w[][CTL_WORD_MAX], int n, FILE *out, Edits *ed, char *err, size_t errsz
 #define RQ_PASS a, line, w, n, out, ed, err, errsz
 /* Not every handler reads all of them. */
-#define RQ_LOCALS Map *m = a->map; const char *v = w[0]; (void)m; (void)v; (void)line; (void)n; (void)out; (void)ed; (void)err; (void)errsz
+#define RQ_LOCALS Map *m = a->world.map; const char *v = w[0]; (void)m; (void)v; (void)line; (void)n; (void)out; (void)ed; (void)err; (void)errsz
 
 static int rq_scene_other(RQ_ARGS)
 {
@@ -1192,13 +1192,13 @@ static int rq_propose(RQ_ARGS)
     if (from_apply) at = 2;
     if (n > at + 1) { snprintf(err, errsz, "%s takes one line for the GM after it, in quotes", at == 1 ? "propose" : "job N propose"); return -1; }
     if (ed->header || ed->lines) { snprintf(err, errsz, "propose comes once, before the request's edits"); return -1; }
-    if (a->ctl_direct) { rq_class(CTL_E_STATE), snprintf(err, errsz, "there is no GM to propose to: --apply changes the file"); return -1; }
+    if (a->world.ctl_direct) { rq_class(CTL_E_STATE), snprintf(err, errsz, "there is no GM to propose to: --apply changes the file"); return -1; }
     if (at == 3) {
         if (!word_int(w[1], 1, JOB_NUM_MAX, &num) || (slot = app_job_find(a, num)) < 0) {
             rq_class(CTL_E_MISSING), snprintf(err, errsz, "no job #%.10s - jobs lists them", w[1]);
             return -1;
         }
-        const Job *j = &a->jobs[slot];
+        const Job *j = &a->world.jobs[slot];
         if (j->state == JOB_ACCEPTED || j->state == JOB_SCRAPPED) {
             rq_class(CTL_E_STATE), snprintf(err, errsz, "#%d was %s - propose alone offers a new change", j->num, app_job_state_name(j->state));
             return -1;
@@ -1232,14 +1232,14 @@ static int rq_job(RQ_ARGS)
 static int rq_edit(RQ_ARGS)
 {
     RQ_LOCALS;
-    if (!ed->lines && !a->ctl_direct) proposal_begin(a, ed);
+    if (!ed->lines && !a->world.ctl_direct) proposal_begin(a, ed);
     else if (!ed->lines) {
         /* Asked once, at the first edit: after it the open batch is
          * this request's own. */
         const char *busy = app_ctl_busy(a);
         if (busy) { str_lcpy(err, busy, errsz); return -2; }
-        undo_begin(&a->undo);
-        ed->ops0 = a->undo.stamp;
+        undo_begin(&a->world.undo);
+        ed->ops0 = a->world.undo.stamp;
     }
     if (ed->lines == 0) {
         while (*line == ' ' || *line == '\t') line++;
@@ -1248,7 +1248,7 @@ static int rq_edit(RQ_ARGS)
     ed->lines++;
     ed->out = out;
     if (edit_line(a, w, n, ed, err, errsz) < 0) return -1;
-    if ((unsigned long)(a->undo.stamp - ed->ops0) > CTL_OPS_MAX) {
+    if ((unsigned long)(a->world.undo.stamp - ed->ops0) > CTL_OPS_MAX) {
         rq_class(CTL_E_LIMIT), snprintf(err, errsz, "the request changes more than %lu things at once", CTL_OPS_MAX);
         return -1;
     }
@@ -1264,13 +1264,13 @@ static int rq_undo(RQ_ARGS)
      * caller's newest landing and no other: only while it is the last step
      * applied, and once -- a caller repeating itself must not walk back
      * through everything the GM accepted of it (`job N undo` names one). */
-    const UndoTag *top = undo_tag_top(&a->undo), *t = undo_tag_last(&a->undo, a->ctl_who);
-    if (top && strcmp(top->who, a->ctl_who) != 0) {
+    const UndoTag *top = undo_tag_top(&a->world.undo), *t = undo_tag_last(&a->world.undo, a->world.ctl_who);
+    if (top && strcmp(top->who, a->world.ctl_who) != 0) {
         rq_class(CTL_E_STATE);
-        snprintf(err, errsz, "the last change to land is %s's, and you are %s - undo takes back your own", top->who, a->ctl_who);
+        snprintf(err, errsz, "the last change to land is %s's, and you are %s - undo takes back your own", top->who, a->world.ctl_who);
         return -1;
     }
-    if (!t || t->batch >= a->undo.depth) {
+    if (!t || t->batch >= a->world.undo.depth) {
         rq_class(CTL_E_STATE);
         /* Its newest was taken back already (by it, or the GM's u), and an
          * older one of its is the last step: said, with what reaches it. */
@@ -1299,13 +1299,13 @@ int app_ctl_undo(App *a, int steps, int job, char *err, size_t errsz)
     if (busy) { str_lcpy(err, busy, errsz); return 0; }
     char msg[120];
     app_events_map_flush(a);             /* the GM's changes so far are their own event */
-    for (int k = 0; k < steps; k++) undo_undo(&a->undo, a->map);
+    for (int k = 0; k < steps; k++) undo_undo(&a->world.undo, a->world.map);
     /* News to every name but the caller's: a job's step, or a change that
      * had none (--apply on a file, where nobody listens). */
-    snprintf(msg, sizeof msg, "taken back by %s", a->ctl_who);
-    app_event_of_change(a, job ? CTL_EV_UNDONE : CTL_EV_CHANGED, job, a->ctl_who, msg);
-    if (slot >= 0) app_job_thread_add(&a->jobs[slot], '-', msg);
-    range_history_changed(&a->play.range, a->map);
+    snprintf(msg, sizeof msg, "taken back by %s", a->world.ctl_who);
+    app_event_of_change(a, job ? CTL_EV_UNDONE : CTL_EV_CHANGED, job, a->world.ctl_who, msg);
+    if (slot >= 0) app_job_thread_add(&a->world.jobs[slot], '-', msg);
+    range_history_changed(&a->play.range, a->world.map);
     app_fog_sync(a);
     a->dirty = 1;
     return 1;
@@ -1334,7 +1334,7 @@ static int rq_wait(RQ_ARGS)
     RQ_LOCALS;
     /* wait [SEQ] [for SECONDS]: every event after SEQ (unsaid: from
      * now), held until there is one or the time is up. */
-    unsigned seq = a->event_seq;
+    unsigned seq = a->world.event_seq;
     int      secs = CTL_WAIT_DEFAULT_S, at = 1, k, said = 0;
     if (at < n && strcmp(w[at], "for") != 0) {
         said = 1;
@@ -1353,7 +1353,7 @@ static int rq_wait(RQ_ARGS)
             return -1;
         }
     }
-    a->agent_seen_ms = a->now_ms ? a->now_ms : 1;
+    a->world.agent_seen_ms = a->world.now_ms ? a->world.now_ms : 1;
     app_events_hear(a);
     /* Held only where there is a socket to hold it on (app_tick):
      * --apply, the bench and the fuzzer are answered at once. */
@@ -1362,11 +1362,11 @@ static int rq_wait(RQ_ARGS)
      * --wait` asks `wait SEQ for N` with the SEQ it was given, 0 on a vtt
      * where nothing has happened yet, and must be held, not answered in a
      * loop. */
-    if (app_events_after(a, seq, a->ctl_who) || !a->ctl_can_hold || secs == 0 || (said && seq == 0 && !timed)) app_events_write(a, out, seq, a->ctl_who);
+    if (app_events_after(a, seq, a->world.ctl_who) || !a->world.ctl_can_hold || secs == 0 || (said && seq == 0 && !timed)) app_events_write(a, out, seq, a->world.ctl_who);
     else {
-        a->ctl_held     = 1;
-        a->ctl_hold_seq = seq;
-        a->ctl_hold_ms  = secs * 1000;
+        a->world.ctl_held     = 1;
+        a->world.ctl_hold_seq = seq;
+        a->world.ctl_hold_ms  = secs * 1000;
     }
     return 0;
 }
@@ -1436,20 +1436,20 @@ static int rq_changes(RQ_ARGS)
         snprintf(err, errsz, "changes SEQ [REGION], SEQ the number wait or status last gave");
         return -1;
     }
-    /* After an edit `a->map` is the request's own copy: "the map as it is
+    /* After an edit `a->world.map` is the request's own copy: "the map as it is
      * now" would be the proposal, where dump means that and this does not. */
     if (ed->lines || ed->header) { snprintf(err, errsz, "changes comes before the request's propose line and edits"); return -1; }
     if (n == 3 && !region(m, w[2], &box[0], &box[1], &box[2], &box[3], err, errsz)) return -1;
     /* Each writes its regions aside before it sends them, and one tells
      * all there is to tell: three a request is two to spare. Its own count,
      * since the squares it may not read it lists and does not refuse. */
-    if (!a->ctl_direct && ++g_changes > 3) BADC(CTL_E_LIMIT, "changes is asked at most three times in a request");
-    a->agent_seen_ms = a->now_ms ? a->now_ms : 1;       /* someone is listening: the checkpoint stays */
+    if (!a->world.ctl_direct && ++g_changes > 3) BADC(CTL_E_LIMIT, "changes is asked at most three times in a request");
+    a->world.agent_seen_ms = a->world.now_ms ? a->world.now_ms : 1;       /* someone is listening: the checkpoint stays */
     app_events_hear(a);                                 /* and a change nobody heard of is said first */
-    app_events_write(a, out, (unsigned)k, a->ctl_who);
+    app_events_write(a, out, (unsigned)k, a->world.ctl_who);
     CsWhere where, asked = { { 0 } };
     int     other;
-    if (!app_events_where(a, (unsigned)k, &where, &other, a->ctl_who)) return 0;   /* `lost` has said to read the map again */
+    if (!app_events_where(a, (unsigned)k, &where, &other, a->world.ctl_who)) return 0;   /* `lost` has said to read the map again */
     cs_pieces(m->w, m->h, box[0], box[1], box[2], box[3], &asked);
     char more[CS_GRID * CS_GRID * 16] = "";              /* room for every piece's name */
     fflush(out);
@@ -1860,13 +1860,13 @@ static const char *not_alone(const char *p)
 /* A request's edits are in: close the batch and tell both sides. */
 static void finish_edits(App *a, Edits *ed, FILE *out)
 {
-    int changed = a->undo.stamp != ed->ops0;     /* a stamp a recorded op */
-    undo_end(&a->undo);
+    int changed = a->world.undo.stamp != ed->ops0;     /* a stamp a recorded op */
+    undo_end(&a->world.undo);
     if (!changed) {
         fprintf(out, "no change: the map already looked like that\n");
         return;
     }
-    undo_tag(&a->undo, 0, a->ctl_who);           /* whose step: `undo` takes back the caller's own */
+    undo_tag(&a->world.undo, 0, a->world.ctl_who);           /* whose step: `undo` takes back the caller's own */
     say_changed(a, ed, out);
     char msg[160];
     if (ed->lines == 1) snprintf(msg, sizeof msg, "agent: %s - u takes it back", ed->first);
@@ -1882,8 +1882,8 @@ static void log_refusal(App *a, const char *verdict)
     if (!slog_on(&a->slog)) return;
     unsigned h = 2166136261u;
     for (const char *p = verdict; *p; p++) h = (h ^ (unsigned char)*p) * 16777619u;
-    if (h == a->ctl_refused) return;
-    a->ctl_refused = h;
+    if (h == a->world.ctl_refused) return;
+    a->world.ctl_refused = h;
     char msg[360];
     snprintf(msg, sizeof msg, "agent refused: %s", verdict);
     slog_write(&a->slog, msg);
@@ -1902,7 +1902,7 @@ char *app_ctl_exec(App *a, const char *req, size_t *len)
     g_read = g_cover = 0;
     g_changes = 0;
     int ran = 0;                         /* a line has been met: the name's must be the first */
-    str_lcpy(a->ctl_who, CTL_NAME_NONE, sizeof a->ctl_who);
+    str_lcpy(a->world.ctl_who, CTL_NAME_NONE, sizeof a->world.ctl_who);
     Edits ed;
     memset(&ed, 0, sizeof ed);
     ed.x1 = -1;
@@ -1946,8 +1946,8 @@ char *app_ctl_exec(App *a, const char *req, size_t *len)
             /* Lines are numbered from the one after it: `vtt --ctl` wrote
              * it, and the agent counts its own. */
             if (n == 2 && ctl_name_ok(w[1])) {
-                str_lcpy(a->ctl_who, w[1], sizeof a->ctl_who);
-                app_agent_heard(a, a->ctl_who);           /* one vtt started is alive */
+                str_lcpy(a->world.ctl_who, w[1], sizeof a->world.ctl_who);
+                app_agent_heard(a, a->world.ctl_who);           /* one vtt started is alive */
                 lineno--;
                 continue;
             }
@@ -1957,19 +1957,19 @@ char *app_ctl_exec(App *a, const char *req, size_t *len)
         /* With no map: what the table says needs none (a wait among them --
          * the map closing is an event). */
         if (err[0]) { }                 /* the name's line, written wrong: said as it is */
-        else if (n > 0 && !a->map && !(rq_find(w[0]) && (rq_find(w[0])->flags & CTL_RQ_NOMAP)))
+        else if (n > 0 && !a->world.map && !(rq_find(w[0]) && (rq_find(w[0])->flags & CTL_RQ_NOMAP)))
             rq_class(CTL_E_STATE), snprintf(err, sizeof err, "no map is open");
         /* The channel off: over the socket, nothing is taken. The map is
          * named so that a caller with several vtts open knows which. */
-        else if (n > 0 && a->ctl_can_hold && !a->agent_on && !off_takes(w, n))
+        else if (n > 0 && a->world.ctl_can_hold && !a->world.agent_on && !off_takes(w, n))
             rq_class(CTL_E_STATE), snprintf(err, sizeof err, "the agent channel is off%s%.63s - type :agent on in that vtt, then ask again",
-                     a->map ? " in the vtt with " : "", a->map ? a->map->name : "");
+                     a->world.map ? " in the vtt with " : "", a->world.map ? a->world.map->name : "");
         /* The answer so far (ctl.h, the budget): once it is past the cap no
          * further line is run. One line's answer is never refused for its
          * size -- a whole read of a crowded map is what was asked, and its
          * squares were counted -- only what is piled on top of it. Not under
          * --apply on a file, whose answer is a terminal's or a pipe's. */
-        if (n > 0 && !err[0] && !a->ctl_direct && (fflush(out), blen > CTL_ANSWER_CAP)) {
+        if (n > 0 && !err[0] && !a->world.ctl_direct && (fflush(out), blen > CTL_ANSWER_CAP)) {
             rq_class(CTL_E_LIMIT);
             snprintf(err, sizeof err, "the answer was over %d MB before this line: send the rest in another request",
                      CTL_ANSWER_CAP >> 20);
@@ -1993,7 +1993,7 @@ char *app_ctl_exec(App *a, const char *req, size_t *len)
         refuse(verdict, sizeof verdict, CTL_E_USAGE, "propose wants edit lines after it");
     else if (ed.lines) {
         if (strcmp(verdict, "ok") != 0) {
-            undo_abort(&a->undo, a->map);                 /* all or nothing */
+            undo_abort(&a->world.undo, a->world.map);                 /* all or nothing */
             /* The overlay followed the deletion; the creature is back. */
             if (ed.deleted) range_clear(&a->play.range);
         }
@@ -2026,20 +2026,20 @@ void app_agent_command(App *a, const char *rest)
     Ctl *c = &a->ctl;
     char msg[CTL_PATH_MAX + 96];
     if (!*rest) {
-        if (!a->agent_on) app_set_status_gm(a, "the agent channel is off - :agent on opens it; until then every request is refused");
+        if (!a->world.agent_on) app_set_status_gm(a, "the agent channel is off - :agent on opens it; until then every request is refused");
         else {
             snprintf(msg, sizeof msg, "agent channel on at %s - %u request%s so far; changes %s", c->path,
-                     c->requests, c->requests == 1 ? "" : "s", a->ctl_auto ? "land at once" : "wait for :review");
+                     c->requests, c->requests == 1 ? "" : "s", a->world.ctl_auto ? "land at once" : "wait for :review");
             app_set_status_gm(a, msg);
         }
         return;
     }
     if (!strncmp(rest, "accept", 6) && (!rest[6] || rest[6] == ' ')) {
         const char *how = rest[6] ? rest + 7 : "";
-        if (!strcmp(how, "auto"))        a->ctl_auto = 1;
-        else if (!strcmp(how, "review")) a->ctl_auto = 0;
+        if (!strcmp(how, "auto"))        a->world.ctl_auto = 1;
+        else if (!strcmp(how, "review")) a->world.ctl_auto = 0;
         else { app_set_status_gm(a, ":agent accept auto lands an agent's changes at once; :agent accept review waits for you"); return; }
-        app_note_gm(a, a->ctl_auto ? "an agent's changes land at once - u takes each back"
+        app_note_gm(a, a->world.ctl_auto ? "an agent's changes land at once - u takes each back"
                                    : "an agent's changes wait for :review");
         return;
     }
@@ -2048,24 +2048,24 @@ void app_agent_command(App *a, const char *rest)
         return;
     }
     if (!strcmp(rest, "off")) {
-        if (!a->agent_on) { app_set_status_gm(a, "the agent channel is already off"); return; }
+        if (!a->world.agent_on) { app_set_status_gm(a, "the agent channel is already off"); return; }
         /* The socket stays: --apply must still find this map open, to be
          * refused rather than write the file. Every other request is refused. */
-        a->agent_on = 0;
-        a->agent_seen_ms = 0;                /* nobody to tell of the map: the checkpoint may stop */
+        a->world.agent_on = 0;
+        a->world.agent_seen_ms = 0;                /* nobody to tell of the map: the checkpoint may stop */
         app_note_gm(a, "agent channel off - requests are refused until :agent on");
         return;
     }
     if (strcmp(rest, "on") != 0) { app_set_status_gm(a, ":agent on, :agent off, :agent accept auto|review, :agent command CMD, or :agent to ask"); return; }
-    if (a->agent_on) {
+    if (a->world.agent_on) {
         snprintf(msg, sizeof msg, "the agent channel is already on at %s", c->path);
         app_set_status_gm(a, msg);
         return;
     }
     char err[CTL_PATH_MAX + 64];
     if (ctl_start(c, err, sizeof err) < 0) { app_set_status_gm(a, err); return; }
-    a->agent_on = 1;
+    a->world.agent_on = 1;
     snprintf(msg, sizeof msg, "agent channel on - vtt --ctl talks to this map; its changes %s",
-             a->ctl_auto ? "land at once, u takes each back" : "wait for :review");
+             a->world.ctl_auto ? "land at once, u takes each back" : "wait for :review");
     app_note_gm(a, msg);
 }

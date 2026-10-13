@@ -403,11 +403,11 @@ void test_link_keys(void)
     rnd_init(&r);
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
-    a.ctl_auto = 1;                       /* edits land at once (decision 6) */
+    a.world.ctl_auto = 1;                       /* edits land at once (decision 6) */
     CHECK_EQ(app_open_map(&a, path), 0);
     Key f1 = { KEY_F1, 0, 0 }, f2 = { KEY_F2, 0, 0 };
     app_key(&a, f1);
-    Map *m = a.map;
+    Map *m = a.world.map;
 
     CASE("g l on one end and g l on the other makes stairs 1; the first end is checked alone");
     a.ed.cx = 5; a.ed.cy = 0;
@@ -827,11 +827,11 @@ void test_floor_view(void)
     rnd_init(&r);
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
-    a.ctl_auto = 1;                       /* edits land at once (decision 6) */
+    a.world.ctl_auto = 1;                       /* edits land at once (decision 6) */
     CHECK_EQ(app_open_map(&a, path), 0);
     Key f1 = { KEY_F1, 0, 0 }, f2 = { KEY_F2, 0, 0 };
     app_key(&a, f1);
-    Map *m = a.map;
+    Map *m = a.world.map;
 
     CASE("a map opens on the whole of it; ] shows the lowest floor, the cursor on it");
     CHECK_EQ(app_floor_shown(&a), -1);
@@ -1014,7 +1014,7 @@ void test_floor_players(void)
     CHECK_EQ(app_open_map(&a, path), 0);
     Key f2 = { KEY_F2, 0, 0 };
     app_key(&a, f2);
-    Map *m = a.map;
+    Map *m = a.world.map;
     int cellar = map_area_find(m, "Cellar"), ground = map_area_find(m, "Ground"), upper = map_area_find(m, "Upper");
 
     CASE("the players see the party's floor: most of them are on Ground");
@@ -1139,14 +1139,14 @@ void test_floor_big_camera(void)
     for (int i = 0; i < 2; i++) {
         rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
         int x0, y0, x1, y1;
-        grid_visible_tiles(&a.pview, a.map, &x0, &y0, &x1, &y1);
+        grid_visible_tiles(&a.pview, a.world.map, &x0, &y0, &x1, &y1);
         CHECK(x0 <= 2 && x1 >= 3 && y0 <= 3 && y1 >= 4);
     }
     press(&a, "+");
     rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
     {
         int x0, y0, x1, y1;
-        grid_visible_tiles(&a.pview, a.map, &x0, &y0, &x1, &y1);
+        grid_visible_tiles(&a.pview, a.world.map, &x0, &y0, &x1, &y1);
         CHECK(x0 <= 2 && x1 >= 3);
     }
     app_free(&a);
@@ -1278,10 +1278,10 @@ void test_map_links(void)
     rnd_init(&r);
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
-    a.ctl_auto = 1;                       /* edits land at once (decision 6) */
+    a.world.ctl_auto = 1;                       /* edits land at once (decision 6) */
     snprintf(path, sizeof path, "%s/town.vtt", sb.dir);
     CHECK_EQ(app_open_map(&a, path), 0);
-    Map *t = a.map;
+    Map *t = a.world.map;
     a.ed.cx = 6; a.ed.cy = 3;
     press(&a, ":link to nowhere Entrance\r");
     CHECK(strstr(a.status, "no map nowhere beside this one") != NULL);
@@ -1295,10 +1295,10 @@ void test_map_links(void)
     CHECK(strstr(a.status, "-> crypt, Entrance") != NULL);
     press(&a, ":link 1 reverse\r");
     CHECK(strstr(a.status, "leads to another map") != NULL);
-    int depth0 = a.undo.depth;
+    int depth0 = a.world.undo.depth;
     press(&a, ":link 1 oneway\r");
     CHECK(strstr(a.status, "leads to another map") != NULL);
-    CHECK_EQ(a.undo.depth, depth0);
+    CHECK_EQ(a.world.undo.depth, depth0);
     char ls[160];
     link_status(t, 6, 3, 0, ls, sizeof ls);
     CHECK(!strcmp(ls, "  stairs 1"));                      /* the players hear no file's name */
@@ -1330,16 +1330,16 @@ void test_map_links(void)
     press(&a, ":handout say A draft blows up the stairs\r");
     a.ed.cx = 6; a.ed.cy = 3;
     press(&a, "go");
-    CHECK(a.map && !strcmp(a.map->name, "crypt"));
+    CHECK(a.world.map && !strcmp(a.world.map->name, "crypt"));
     CHECK_EQ(a.screen, SCREEN_PLAY);
-    CHECK_EQ(a.map->tokens.n, 1);
-    const Token *arr = &a.map->tokens.v[0];
+    CHECK_EQ(a.world.map->tokens.n, 1);
+    const Token *arr = &a.world.map->tokens.v[0];
     CHECK(!strcmp(arr->label, "Aria") && arr->nstatus == 1 && arr->turn == 0);
     CHECK(arr->x >= 2 && arr->x <= 5 && arr->y >= 2 && arr->y <= 5);
     CHECK(a.ed.cx == arr->x && a.ed.cy == arr->y);
     CHECK(net_active(&a.net));                              /* the phones followed */
     CHECK(!a.handout_up);
-    CHECK(!a.map->modified);                                /* written where they arrived too */
+    CHECK(!a.world.map->modified);                                /* written where they arrived too */
     {
         char cp[700];
         snprintf(cp, sizeof cp, "%s/crypt.vtt", sb.dir);
@@ -1358,25 +1358,25 @@ void test_map_links(void)
     app_key(&a, (Key){ KEY_F1, 0, 0 });
     a.ed.cx = 8; a.ed.cy = 8;
     press(&a, ":link to town Gate\r");
-    CHECK_EQ(a.map->nlinks, 1);
+    CHECK_EQ(a.world.map->nlinks, 1);
     press(&a, ":w\r");
     app_key(&a, (Key){ KEY_F2, 0, 0 });
-    Token *aria = &a.map->tokens.v[0];
+    Token *aria = &a.world.map->tokens.v[0];
     aria->x = 8; aria->y = 8;
-    map_touch(a.map);
+    map_touch(a.world.map);
     a.ed.cx = 8; a.ed.cy = 8;
     press(&a, "go");
-    CHECK(!strcmp(a.map->name, "town"));
+    CHECK(!strcmp(a.world.map->name, "town"));
     CHECK(strstr(a.status, "Aria took stairs 1 from crypt to town, Gate") != NULL);
     CHECK(strstr(a.status, "no way back") == NULL);
-    CHECK_EQ(a.map->tokens.n, 2);
+    CHECK_EQ(a.world.map->tokens.n, 2);
 
     CASE("refused, nothing moving: no room there, a crash's autosave there, a map never saved");
     press(&a, ":w\r");
     a.ed.cx = 6; a.ed.cy = 3;
     int ai = -1;
-    for (int i = 0; i < a.map->tokens.n; i++) if (!strcmp(a.map->tokens.v[i].label, "Aria")) ai = i;
-    a.map->tokens.v[ai].x = 6; a.map->tokens.v[ai].y = 3;
+    for (int i = 0; i < a.world.map->tokens.n; i++) if (!strcmp(a.world.map->tokens.v[i].label, "Aria")) ai = i;
+    a.world.map->tokens.v[ai].x = 6; a.world.map->tokens.v[ai].y = 3;
     char cpath[700], apath[720];
     snprintf(cpath, sizeof cpath, "%s/crypt.vtt", sb.dir);
     Map *cm = mapio_load(cpath, err, sizeof err);
@@ -1386,21 +1386,21 @@ void test_map_links(void)
     struct timespec later[2] = { { 0, UTIME_NOW }, { time(NULL) + 60, 0 } };
     utimensat(AT_FDCWD, apath, later, 0);
     press(&a, "go");
-    CHECK(!strcmp(a.map->name, "town"));
+    CHECK(!strcmp(a.world.map->name, "town"));
     CHECK(strstr(a.status, "unsaved work from a crash") != NULL);
     unlink(apath);
     {
         /* This map's own file written by someone else: the trip would save
          * over it, so nobody goes until the change is looked at. */
         char tpath[700];
-        str_lcpy(tpath, a.map->path, sizeof tpath);
+        str_lcpy(tpath, a.world.map->path, sizeof tpath);
         Map *other = mapio_load(tpath, err, sizeof err);
         CHECK(other != NULL);
         map_set_tile(other, 0, 0, TILE_WATER);
         CHECK(mapio_write(other, tpath, err, sizeof err) == 0);
         map_free(other);
         press(&a, "go");
-        CHECK(!strcmp(a.map->name, "town"));
+        CHECK(!strcmp(a.world.map->name, "town"));
         CHECK(strstr(a.status, "the file changed on disk") != NULL && strstr(a.status, "nobody went") != NULL);
         Map *still = mapio_load(tpath, err, sizeof err);
         CHECK(still && map_tile(still, 0, 0) == TILE_WATER);   /* theirs, not written over */
@@ -1418,31 +1418,31 @@ void test_map_links(void)
     CHECK(mapio_save(full, cpath, err, sizeof err) == 0);
     map_free(full);
     press(&a, "go");
-    CHECK(!strcmp(a.map->name, "town"));
+    CHECK(!strcmp(a.world.map->name, "town"));
     CHECK(strstr(a.status, "no room in crypt's Entrance") != NULL);
     CHECK_EQ(a.status_gm, 1);                               /* an area's name is the GM's */
 
     CASE("a save that fails puts the party back, and leaves nothing to redo");
     write_floor_map(sb.dir, "crypt", 12, 10, "Entrance", 2, 2, 5, 5);   /* room again */
     if (geteuid() != 0) {                                   /* root writes anyway */
-        int before_n = a.map->tokens.n;
+        int before_n = a.world.map->tokens.n;
         chmod(sb.dir, 0555);
         press(&a, "go");
         chmod(sb.dir, 0755);
-        CHECK(!strcmp(a.map->name, "town"));
-        CHECK_EQ(a.map->tokens.n, before_n);
+        CHECK(!strcmp(a.world.map->name, "town"));
+        CHECK_EQ(a.world.map->tokens.n, before_n);
         CHECK(strstr(a.status, "nobody went") != NULL);
-        CHECK(!undo_can_redo(&a.undo));
+        CHECK(!undo_can_redo(&a.world.undo));
     } else {
         printf("  (skipped as root: a read-only folder does not stop a save)\n");
     }
     char keep[MAP_PATH_MAX];
-    str_lcpy(keep, a.map->path, sizeof keep);
-    a.map->path[0] = '\0';                                  /* as a map never saved has */
+    str_lcpy(keep, a.world.map->path, sizeof keep);
+    a.world.map->path[0] = '\0';                                  /* as a map never saved has */
     press(&a, "go");
-    CHECK(!strcmp(a.map->name, "town"));
+    CHECK(!strcmp(a.world.map->name, "town"));
     CHECK(strstr(a.status, "save this map first") != NULL);
-    str_lcpy(a.map->path, keep, sizeof a.map->path);
+    str_lcpy(a.world.map->path, keep, sizeof a.world.map->path);
 
     CASE("--check: W151 for a link whose map or place is not there");
     {
@@ -1469,13 +1469,13 @@ void test_map_links(void)
     CHECK(ans && strncmp(ans, "ok", 2) == 0);
     free(ans);
     int li = -1;
-    for (int i = 0; i < a.map->nlinks; i++) if (a.map->links[i].kind == LINK_PORTAL) li = i;
-    CHECK(li >= 0 && a.map->links[li].secret && !strcmp(a.map->links[li].to_place, "Entrance"));
+    for (int i = 0; i < a.world.map->nlinks; i++) if (a.world.map->links[i].kind == LINK_PORTAL) li = i;
+    CHECK(li >= 0 && a.world.map->links[li].secret && !strcmp(a.world.map->links[li].to_place, "Entrance"));
     ans = ctl_ask(&a, "link B2 to crypt Attic");
     CHECK(ans && strstr(ans, "crypt has no area or square called Attic") != NULL);
     free(ans);
     char req[64];
-    snprintf(req, sizeof req, "link %d reverse", a.map->links[li].num);
+    snprintf(req, sizeof req, "link %d reverse", a.world.map->links[li].num);
     ans = ctl_ask(&a, req);
     CHECK(ans && strstr(ans, "leads to another map") != NULL);
     free(ans);

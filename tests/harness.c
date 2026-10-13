@@ -132,11 +132,11 @@ void write_map_file(const char *dir, const char *name)
 static void press_balanced(const App *a, Key k)
 {
     static int told;
-    if (undo_balanced(&a->undo)) return;
+    if (undo_balanced(&a->world.undo)) return;
     g_fails++;
     if (told++ < 3)
         fprintf(stderr, "  FAIL [%s] the undo log is left open (nest %d) after key %d/%u\n",
-                g_case, a->undo.nest, (int)k.kind, (unsigned)k.ch);
+                g_case, a->world.undo.nest, (int)k.kind, (unsigned)k.ch);
 }
 
 void press(App *a, const char *keys)
@@ -444,7 +444,7 @@ int ctl_blank_map(App *a, const char *dir, int w, int h)
         fputc('\n', f);
     }
     fclose(f);
-    return app_open_map(a, path) == 0 && a->map != NULL;
+    return app_open_map(a, path) == 0 && a->world.map != NULL;
 }
 
 /* The players' frame as text, drawn now. */
@@ -464,7 +464,7 @@ char *players_text(App *a, Renderer *r)
 void jobs_reset(App *a)
 {
     app_jobs_clear(a);
-    a->job_last = 0;
+    a->world.job_last = 0;
 }
 
 /* A raw client of the channel's socket, and whatever has arrived on it (1

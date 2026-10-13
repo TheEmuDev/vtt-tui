@@ -22,7 +22,7 @@
 void app_link_mark(App *a)
 {
     Editor *e = &a->ed;
-    Map    *m = a->map;
+    Map    *m = a->world.map;
     char    msg[160], at[2 * MAP_COORD_MAX + 2];
 
     if (!e->link_on) {
@@ -77,9 +77,9 @@ void app_link_mark(App *a)
         app_set_status(a, msg);
         return;
     }
-    undo_begin(&a->undo);
-    (void)undo_set_link(&a->undo, m, &l);
-    undo_end(&a->undo);
+    undo_begin(&a->world.undo);
+    (void)undo_set_link(&a->world.undo, m, &l);
+    undo_end(&a->world.undo);
     e->link_on = 0;
     char line[96];
     link_describe(&l, line, sizeof line);
@@ -101,7 +101,7 @@ void app_link_cancel(App *a)
 static void travel(App *a, int li)
 {
     PROF_ZONE("link.trip.map");
-    Map *m = a->map;
+    Map *m = a->world.map;
     Link l = m->links[li];
     char name[32], msg[320], why[200], path[MAP_PATH_MAX + 32], err[MAPIO_ERR_MAX];
     link_name(&l, name, sizeof name);
@@ -151,18 +151,18 @@ static void travel(App *a, int li)
 
     /* They leave, and the map they leave is saved; a failed save takes that
      * back -- out of the log too -- and goes nowhere. */
-    undo_begin(&a->undo);
+    undo_begin(&a->world.undo);
     for (int k = n - 1; k >= 0; k--) {
-        turn_before_remove(m, &a->undo, idx[k]);
-        undo_del_token(&a->undo, m, idx[k]);
+        turn_before_remove(m, &a->world.undo, idx[k]);
+        undo_del_token(&a->world.undo, m, idx[k]);
     }
-    turn_settle(m, &a->undo);
+    turn_settle(m, &a->world.undo);
     if (mapio_save(m, m->path, err, sizeof err) != 0) {
-        undo_abort(&a->undo, m);
+        undo_abort(&a->world.undo, m);
         map_free(d);
         REFUSE("%.120s - nobody went", err);
     }
-    undo_end(&a->undo);
+    undo_end(&a->world.undo);
 #undef REFUSE
     char left[MAP_NAME_MAX];
     str_lcpy(left, m->name, sizeof left);
@@ -213,7 +213,7 @@ static void travel(App *a, int li)
 
 void app_link_go(App *a, int li, int end, int enforce, int *moved_dx, int *moved_dy)
 {
-    Map     *m = a->map;
+    Map     *m = a->world.map;
     LinkTrip tr;
     *moved_dx = *moved_dy = 0;
     const Link *l = &m->links[li];
@@ -227,12 +227,12 @@ void app_link_go(App *a, int li, int end, int enforce, int *moved_dx, int *moved
         return;
     }
     PROF_ZONE("play.link");
-    undo_begin(&a->undo);
+    undo_begin(&a->world.undo);
     for (int i = 0; i < tr.n; i++) {
         const Token *t = &m->tokens.v[tr.idx[i]];
-        undo_move_token(&a->undo, m, tr.idx[i], t->x + tr.dx, t->y + tr.dy);
+        undo_move_token(&a->world.undo, m, tr.idx[i], t->x + tr.dx, t->y + tr.dy);
     }
-    undo_end(&a->undo);
+    undo_end(&a->world.undo);
     for (int i = 0; i < tr.n; i++) app_floor_note_move(a, &m->tokens.v[tr.idx[i]]);
     *moved_dx = tr.dx;
     *moved_dy = tr.dy;
@@ -250,7 +250,7 @@ void app_link_go(App *a, int li, int end, int enforce, int *moved_dx, int *moved
 
 static void list_links(App *a)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     char msg[sizeof a->status];
     if (!m->nlinks) {
         app_set_status_gm(a, "no links - in build mode, g l on one end and g l on the other makes one");
@@ -282,7 +282,7 @@ static void list_links(App *a)
 
 void app_link_command(App *a, const char *rest)
 {
-    Map    *m = a->map;
+    Map    *m = a->world.map;
     Editor *e = &a->ed;
     char    msg[160];
     if (!*rest) { list_links(a); return; }
@@ -315,9 +315,9 @@ void app_link_command(App *a, const char *rest)
         const char *bad = link_problem(m, &nl);
         if (bad) { snprintf(msg, sizeof msg, "no link here: %s", bad); app_set_status_gm(a, msg); return; }
         e->link_on = 0;
-        undo_begin(&a->undo);
-        (void)undo_set_link(&a->undo, m, &nl);
-        undo_end(&a->undo);
+        undo_begin(&a->world.undo);
+        (void)undo_set_link(&a->world.undo, m, &nl);
+        undo_end(&a->world.undo);
         char line[160];
         link_describe(&nl, line, sizeof line);
         app_note_gm(a, line);
@@ -379,9 +379,9 @@ void app_link_command(App *a, const char *rest)
     if (nw == 2 && !strcmp(words[1], "remove")) {
         char name[32];
         link_name(&l, name, sizeof name);
-        undo_begin(&a->undo);
-        undo_remove_link(&a->undo, m, l.num);
-        undo_end(&a->undo);
+        undo_begin(&a->world.undo);
+        undo_remove_link(&a->world.undo, m, l.num);
+        undo_end(&a->world.undo);
         snprintf(msg, sizeof msg, "%s is gone", name);
         app_note_gm(a, msg);
         return;
@@ -410,9 +410,9 @@ void app_link_command(App *a, const char *rest)
             return;
         }
     }
-    undo_begin(&a->undo);
-    (void)undo_set_link(&a->undo, m, &l);
-    undo_end(&a->undo);
+    undo_begin(&a->world.undo);
+    (void)undo_set_link(&a->world.undo, m, &l);
+    undo_end(&a->world.undo);
     char line[96];
     link_describe(&l, line, sizeof line);
     app_note_gm(a, line);

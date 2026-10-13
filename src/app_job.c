@@ -21,7 +21,7 @@ static const char *const FROM_NAME[] = { "gm", "agent", "apply", "disk" };
 static int job_index(const App *a, int num)
 {
     for (int i = 0; i < JOB_MAX; i++)
-        if (a->jobs[i].used && a->jobs[i].num == num) return i;
+        if (a->world.jobs[i].used && a->world.jobs[i].num == num) return i;
     return -1;
 }
 
@@ -37,8 +37,8 @@ const char *app_job_who_name(char who) { return who == 'G' ? "gm" : who == 'A' ?
 static int job_free_num(App *a)
 {
     for (int k = 1; k <= JOB_NUM_MAX; k++) {
-        int n = (a->job_last + k - 1) % JOB_NUM_MAX + 1;
-        if (job_index(a, n) < 0) return a->job_last = n;
+        int n = (a->world.job_last + k - 1) % JOB_NUM_MAX + 1;
+        if (job_index(a, n) < 0) return a->world.job_last = n;
     }
     return 0;
 }
@@ -52,7 +52,7 @@ int app_job_gm_only(const Job *j) { return j->from == JOB_FROM_DISK || j->from =
  * that the log still holds keeps its author and not the number. */
 static void job_clear(App *a, Job *j)
 {
-    if (j->used) { undo_tag_forget(&a->undo, j->num); app_agent_forget(a, j->num); }
+    if (j->used) { undo_tag_forget(&a->world.undo, j->num); app_agent_forget(a, j->num); }
     if (j->has_cs) cs_free(&j->cs);
     memset(j, 0, sizeof *j);
 }
@@ -70,7 +70,7 @@ void app_job_thread_add(Job *j, char who, const char *text)
 
 void app_jobs_clear(App *a)
 {
-    for (int i = 0; i < JOB_MAX; i++) job_clear(a, &a->jobs[i]);
+    for (int i = 0; i < JOB_MAX; i++) job_clear(a, &a->world.jobs[i]);
     app_review_leave(a);
 }
 
@@ -78,13 +78,13 @@ int app_job_new(App *a, int from, const char *text, const CsBox *box, int at_onc
 {
     int slot = -1;
     for (int i = 0; i < JOB_MAX && slot < 0; i++)
-        if (!a->jobs[i].used) slot = i;
+        if (!a->world.jobs[i].used) slot = i;
     /* Full: the oldest finished job makes room, as a log would. */
     for (int i = 0; i < JOB_MAX && slot < 0; i++)
-        if (a->jobs[i].state == JOB_ACCEPTED || a->jobs[i].state == JOB_SCRAPPED) slot = i;
+        if (a->world.jobs[i].state == JOB_ACCEPTED || a->world.jobs[i].state == JOB_SCRAPPED) slot = i;
     if (slot < 0) return -1;
     if (a->review == slot) app_review_leave(a);
-    Job *j = &a->jobs[slot];
+    Job *j = &a->world.jobs[slot];
     job_clear(a, j);                   /* first: its number is free again */
     int num = job_free_num(a);
     if (!num) return -1;
@@ -115,14 +115,14 @@ static void land(App *a, Job *j, const CsBox *box)
     cs_summary(&j->cs, box, what, sizeof what);
     int creatures = j->cs.ntoks > 0;
     app_events_map_flush(a);                 /* the GM's own changes so far, told apart */
-    unsigned logged = a->undo.stamp;
-    int n = cs_apply(&j->cs, a->map, &a->undo, box, left, sizeof left);
+    unsigned logged = a->world.undo.stamp;
+    int n = cs_apply(&j->cs, a->world.map, &a->world.undo, box, left, sizeof left);
     app_events_map_restart(a);               /* the accept is its own event, below */
     if (n) {
         /* What the channel's edits did to the live App when they landed
          * straight: the overlay and the selection name creatures by index. */
         if (creatures) app_creatures_renumbered(a);
-        else a->last_acting = turn_acting(a->map);     /* an accept starts no turn */
+        else a->last_acting = turn_acting(a->world.map);     /* an accept starts no turn */
         app_fog_sync(a);
         a->dirty = 1;
         /* Whose step it is, written on the step: the agent's `undo` and
@@ -130,8 +130,8 @@ static void land(App *a, Job *j, const CsBox *box)
          * file's nor an --apply's, the GM's alone to take back; and not a landing that
          * wrote nothing to the log (cards alone), or the tag would fall on
          * the GM's own step under it. */
-        if (!app_job_gm_only(j) && a->undo.stamp != logged)
-            undo_tag(&a->undo, j->num, j->taker[0] ? j->taker : CTL_NAME_NONE);
+        if (!app_job_gm_only(j) && a->world.undo.stamp != logged)
+            undo_tag(&a->world.undo, j->num, j->taker[0] ? j->taker : CTL_NAME_NONE);
     }
     if (box) {
         char where[2 * MAP_COORD_MAX + 2];
@@ -147,7 +147,7 @@ static void land(App *a, Job *j, const CsBox *box)
                       j->state == JOB_READY ? " - the rest waits" : "");
             /* What landed lies wholly in the box. */
             CsWhere in = { { 0 } };
-            cs_pieces(a->map->w, a->map->h, box->x0, box->y0, box->x1, box->y1, &in);
+            cs_pieces(a->world.map->w, a->world.map->h, box->x0, box->y0, box->x1, box->y1, &in);
             app_event_where(a, &in, 0);
         }
         if (!n) snprintf(msg, sizeof msg, "#%d: nothing of it is in %s - the box takes what lies wholly inside", j->num, where);
@@ -177,7 +177,7 @@ static int can_land(const App *a)
 
 void app_job_set_proposal(App *a, int slot, ChangeSet *cs, const char *line)
 {
-    Job *j = &a->jobs[slot];
+    Job *j = &a->world.jobs[slot];
     if (j->has_cs) cs_free(&j->cs);
     j->cs = *cs;                       /* the set is the job's now */
     cs_init(cs);
@@ -204,29 +204,29 @@ void app_job_set_proposal(App *a, int slot, ChangeSet *cs, const char *line)
 
 Map *app_scratch_copy(App *a)
 {
-    if (!a->ctl_scratch) a->ctl_scratch = map_new(1, 1, "scratch");
-    map_copy_into(a->ctl_scratch, a->map);
-    undo_clear(&a->ctl_sundo);
-    return a->ctl_scratch;
+    if (!a->world.ctl_scratch) a->world.ctl_scratch = map_new(1, 1, "scratch");
+    map_copy_into(a->world.ctl_scratch, a->world.map);
+    undo_clear(&a->world.ctl_sundo);
+    return a->world.ctl_scratch;
 }
 
 Map *app_job_result(App *a, int slot)
 {
-    Job *j = &a->jobs[slot];
+    Job *j = &a->world.jobs[slot];
     /* A set made for another size of map would put its squares and
      * creatures off this one: the review refuses to show it too. */
-    if (!j->has_cs || j->cs.w != a->map->w || j->cs.h != a->map->h) return NULL;
+    if (!j->has_cs || j->cs.w != a->world.map->w || j->cs.h != a->world.map->h) return NULL;
     Map *m = app_scratch_copy(a);
-    cs_apply(&j->cs, m, &a->ctl_sundo, NULL, NULL, 0);
+    cs_apply(&j->cs, m, &a->world.ctl_sundo, NULL, NULL, 0);
     return m;
 }
 
 /* What waited to land at once, landed when the GM is back (after each key). */
 void app_jobs_land_waiting(App *a)
 {
-    if (!a->map || !can_land(a)) return;
+    if (!a->world.map || !can_land(a)) return;
     for (int i = 0; i < JOB_MAX; i++) {
-        Job *j = &a->jobs[i];
+        Job *j = &a->world.jobs[i];
         if (j->used && j->at_once && j->state == JOB_READY && j->has_cs && a->review != i) land(a, j, NULL);
     }
 }
@@ -237,15 +237,15 @@ static int ready_after(const App *a, int from, int dir)
 {
     for (int k = 1; k <= JOB_MAX; k++) {
         int i = ((from + dir * k) % JOB_MAX + JOB_MAX) % JOB_MAX;
-        if (a->jobs[i].used && a->jobs[i].state == JOB_READY && a->jobs[i].has_cs) return i;
+        if (a->world.jobs[i].used && a->world.jobs[i].state == JOB_READY && a->world.jobs[i].has_cs) return i;
     }
     return -1;
 }
 
 static void review_status(App *a)
 {
-    Job *j = &a->jobs[a->review];
-    int conflicts = cs_check(&j->cs, a->map);
+    Job *j = &a->world.jobs[a->review];
+    int conflicts = cs_check(&j->cs, a->world.map);
     char msg[256];
     snprintf(msg, sizeof msg, "#%d %.70s: %.110s%s%s", j->num, j->text[0] ? j->text : "an agent's change",
              j->summary, conflicts ? " - in red: " : "", conflicts ? "would overwrite changes since" : "");
@@ -293,12 +293,12 @@ void app_review_key(App *a, Key k)
 {
     PROF_ZONE("job.review");
     Editor *e = &a->ed;
-    Map    *m = a->map;
-    if (a->review < 0 || !a->jobs[a->review].used || a->jobs[a->review].state != JOB_READY) {
+    Map    *m = a->world.map;
+    if (a->review < 0 || !a->world.jobs[a->review].used || a->world.jobs[a->review].state != JOB_READY) {
         review_close(a, "");
         return;
     }
-    Job *j = &a->jobs[a->review];
+    Job *j = &a->world.jobs[a->review];
 
     if (k.kind == KEY_ESC) {
         e->count = 0;
@@ -322,7 +322,7 @@ void app_review_key(App *a, Key k)
     if (k.kind == KEY_UP)    { ed_move(e, m,  0, -1, take_count(e)); return; }
     if (k.kind == KEY_DOWN)  { ed_move(e, m,  0,  1, take_count(e)); return; }
     if (k.kind == KEY_CHAR && (k.mods & MOD_CTRL)) {
-        if (k.ch == 'r' && undo_redo(&a->undo, m)) app_set_status_gm(a, "redo");
+        if (k.ch == 'r' && undo_redo(&a->world.undo, m)) app_set_status_gm(a, "redo");
         return;
     }
     if (k.kind != KEY_CHAR || k.mods) return;
@@ -369,7 +369,7 @@ void app_review_key(App *a, Key k)
         break;
     }
     case 'u':
-        app_set_status_gm(a, undo_undo(&a->undo, m) ? "undo" : "nothing to undo");
+        app_set_status_gm(a, undo_undo(&a->world.undo, m) ? "undo" : "nothing to undo");
         break;
     case ':':
         e->mode = ED_COMMAND;
@@ -386,7 +386,7 @@ void app_review_key(App *a, Key k)
 void app_job_feedback(App *a, const char *text)
 {
     if (a->review < 0) return;
-    Job *j = &a->jobs[a->review];
+    Job *j = &a->world.jobs[a->review];
     if (!text[0]) { review_status(a); return; }
     app_job_thread_add(j, 'G', text);
     if (j->has_cs) { cs_free(&j->cs); j->has_cs = 0; }
@@ -423,7 +423,7 @@ void app_ask_command(App *a, const char *verb, const char *rest)
             int i = job_index(a, num);
             if (i < 0) { snprintf(msg, sizeof msg, "no job #%d", num); app_set_status_gm(a, msg); return; }
             if (a->review == i) review_close(a, "");
-            job_clear(a, &a->jobs[i]);
+            job_clear(a, &a->world.jobs[i]);
             app_event(a, CTL_EV_REMOVED, num, NULL);
             snprintf(msg, sizeof msg, "#%d removed", num);
             app_note_gm(a, msg);
@@ -443,11 +443,11 @@ void app_ask_command(App *a, const char *verb, const char *rest)
     if (slot < 0) { snprintf(msg, sizeof msg, "%d jobs are open - :jobs, :ask N remove", JOB_MAX); app_set_status_gm(a, msg); return; }
     char where[2 * MAP_COORD_MAX + 8] = "";
     if (bp) { strcpy(where, " in "); cs_box_name(bp, where + 4, sizeof where - 4); }
-    app_event(a, CTL_EV_ASKED, a->jobs[slot].num, "%s%s%s%s", bp ? where + 1 : "", at_once ? (bp ? ", to land at once" : "to land at once") : "",
+    app_event(a, CTL_EV_ASKED, a->world.jobs[slot].num, "%s%s%s%s", bp ? where + 1 : "", at_once ? (bp ? ", to land at once" : "to land at once") : "",
               bp || at_once ? ": " : "", rest);
-    snprintf(msg, sizeof msg, "#%d asked%s%s: %.150s", a->jobs[slot].num, where, at_once ? ", to land at once" : "", rest);
+    snprintf(msg, sizeof msg, "#%d asked%s%s: %.150s", a->world.jobs[slot].num, where, at_once ? ", to land at once" : "", rest);
     app_note_gm(a, msg);
-    app_agent_start(a, &a->jobs[slot]);      /* :agent command: someone to do it */
+    app_agent_start(a, &a->world.jobs[slot]);      /* :agent command: someone to do it */
 }
 
 /* :jobs lists them on the status line; :jobs N shows one's history. */
@@ -457,7 +457,7 @@ void app_jobs_command(App *a, const char *rest)
     if (*rest) {
         int i = job_index(a, atoi(rest));
         if (i < 0) { snprintf(msg, sizeof msg, "no job #%.10s", rest); app_set_status_gm(a, msg); return; }
-        const Job *j = &a->jobs[i];
+        const Job *j = &a->world.jobs[i];
         int off = 0;
         for (int t = 0; t < j->nthread && off < (int)sizeof msg - 8; t++)
             off += snprintf(msg + off, sizeof msg - (size_t)off, "%s%s%s", t ? "\n" : "",
@@ -470,7 +470,7 @@ void app_jobs_command(App *a, const char *rest)
     }
     int off = 0, any = 0;
     for (int i = 0; i < JOB_MAX && off < (int)sizeof msg - 40; i++) {
-        const Job *j = &a->jobs[i];
+        const Job *j = &a->world.jobs[i];
         if (!j->used) continue;
         char where[2 * MAP_COORD_MAX + 4] = "";
         if (j->has_box) { where[0] = ' '; cs_box_name(&j->box, where + 1, sizeof where - 1); }
@@ -490,7 +490,7 @@ void app_review_command(App *a, const char *rest)
     if (*rest) {
         slot = job_index(a, atoi(rest));
         if (slot < 0) { snprintf(msg, sizeof msg, "no job #%.10s", rest); app_set_status_gm(a, msg); return; }
-        Job *j = &a->jobs[slot];
+        Job *j = &a->world.jobs[slot];
         /* Scrapped, or accepted and then taken back with u: its set is still
          * here. (A part accepted by box left the set; undone, it is gone.) */
         if ((j->state == JOB_SCRAPPED || j->state == JOB_ACCEPTED) && j->has_cs && !cs_empty(&j->cs)) {
@@ -513,7 +513,7 @@ void app_review_command(App *a, const char *rest)
 /* After a : command typed over a review, back to it if it is still there. */
 void app_review_resume(App *a)
 {
-    if (a->review >= 0 && a->jobs[a->review].used && a->jobs[a->review].state == JOB_READY &&
+    if (a->review >= 0 && a->world.jobs[a->review].used && a->world.jobs[a->review].state == JOB_READY &&
         a->screen == SCREEN_EDITOR && a->ed.mode == ED_NORMAL)
         a->ed.mode = ED_REVIEW;
     else if (a->ed.mode != ED_REVIEW)               /* the command went elsewhere: :play, :stamp */
@@ -527,7 +527,7 @@ void app_review_resume(App *a)
 int app_jobs_shown(const App *a)
 {
     for (int i = 0; i < JOB_MAX; i++) {
-        const Job *j = &a->jobs[i];
+        const Job *j = &a->world.jobs[i];
         if (!j->used) continue;
         if ((j->state == JOB_ASKED || j->state == JOB_WORKING) && (j->has_box || j->has_area)) return 1;
         if (j->state == JOB_READY && j->has_cs) return 1;
@@ -592,7 +592,7 @@ static void app_jobs_overlay(void *ctx, Renderer *r, const Map *m, const GridVie
     int vx0, vy0, vx1, vy1;
     grid_visible_tiles(g, m, &vx0, &vy0, &vx1, &vy1);
     for (int i = 0; i < JOB_MAX; i++) {
-        const Job *j = &a->jobs[i];
+        const Job *j = &a->world.jobs[i];
         if (!j->used) continue;
         if (j->state == JOB_ASKED || j->state == JOB_WORKING) {
             if (j->has_box)  tint_box(r, g, &j->box, vx0, vy0, vx1, vy1, th->job_work_bg);
@@ -624,13 +624,13 @@ static int job_corner(const Job *j, int *x, int *y)
  * the overlay set. Never inside a preview's show and unshow. */
 void app_jobs_prepare(App *a)
 {
-    int any = a->view == VIEW_GM && a->map && app_jobs_shown(a);
+    int any = a->view == VIEW_GM && a->world.map && app_jobs_shown(a);
     a->ed.overlay     = any ? app_jobs_overlay : NULL;
     a->ed.overlay_ctx = a;
     if (!any) return;
     for (int i = 0; i < JOB_MAX; i++)
-        if (a->jobs[i].used && a->jobs[i].state == JOB_READY && a->jobs[i].has_cs)
-            cs_check(&a->jobs[i].cs, a->map);
+        if (a->world.jobs[i].used && a->world.jobs[i].state == JOB_READY && a->world.jobs[i].has_cs)
+            cs_check(&a->world.jobs[i].cs, a->world.map);
 }
 
 /* The review's preview, swapped in around the grid's draw (counter-
@@ -638,17 +638,17 @@ void app_jobs_prepare(App *a)
 int app_review_show(App *a)
 {
     if (a->ed.mode != ED_REVIEW || a->review < 0) return 0;
-    Job *j = &a->jobs[a->review];
-    if (!j->has_cs || j->cs.w != a->map->w || j->cs.h != a->map->h) return 0;
+    Job *j = &a->world.jobs[a->review];
+    if (!j->has_cs || j->cs.w != a->world.map->w || j->cs.h != a->world.map->h) return 0;
     int vx0, vy0, vx1, vy1;
-    grid_visible_tiles(&a->ed.view, a->map, &vx0, &vy0, &vx1, &vy1);
-    cs_show(&j->cs, a->map, vx0, vy0, vx1, vy1);
+    grid_visible_tiles(&a->ed.view, a->world.map, &vx0, &vy0, &vx1, &vy1);
+    cs_show(&j->cs, a->world.map, vx0, vy0, vx1, vy1);
     return 1;
 }
 
 void app_review_unshow(App *a)
 {
-    cs_unshow(&a->jobs[a->review].cs, a->map);
+    cs_unshow(&a->world.jobs[a->review].cs, a->world.map);
 }
 
 /* The #N labels, on top of everything on the map. */
@@ -658,10 +658,10 @@ void app_jobs_labels(App *a)
     Renderer *r = a->rnd;
     const GridView *g = &a->ed.view;
     int vx0, vy0, vx1, vy1;
-    grid_visible_tiles(g, a->map, &vx0, &vy0, &vx1, &vy1);
-    ClipRect saved = grid_clip_push(r, g, a->map);
+    grid_visible_tiles(g, a->world.map, &vx0, &vy0, &vx1, &vy1);
+    ClipRect saved = grid_clip_push(r, g, a->world.map);
     for (int i = 0; i < JOB_MAX; i++) {
-        const Job *j = &a->jobs[i];
+        const Job *j = &a->world.jobs[i];
         int x, y;
         if (!j->used || !job_corner(j, &x, &y)) continue;
         if (x < vx0 || x > vx1 || y < vy0 || y > vy1) continue;

@@ -17,8 +17,8 @@
 
 void app_event(App *a, int kind, int job, const char *fmt, ...)
 {
-    AgentEvent *e = &a->events[++a->event_seq % EVENT_MAX];
-    e->seq = a->event_seq;
+    AgentEvent *e = &a->world.events[++a->world.event_seq % EVENT_MAX];
+    e->seq = a->world.event_seq;
     memset(&e->where, 0, sizeof e->where);
     e->other = 0;
     e->gone = kind == CTL_EV_CLOSED;
@@ -37,19 +37,19 @@ void app_event(App *a, int kind, int job, const char *fmt, ...)
 /* The oldest event still kept. */
 static unsigned oldest(const App *a)
 {
-    return a->event_seq > EVENT_MAX ? a->event_seq - EVENT_MAX + 1 : 1;
+    return a->world.event_seq > EVENT_MAX ? a->world.event_seq - EVENT_MAX + 1 : 1;
 }
 
 void app_event_where(App *a, const CsWhere *where, int other)
 {
-    AgentEvent *e = &a->events[a->event_seq % EVENT_MAX];
+    AgentEvent *e = &a->world.events[a->world.event_seq % EVENT_MAX];
     e->where = *where;
     e->other = other != 0;
 }
 
 void app_event_by(App *a, const char *who)
 {
-    str_lcpy(a->events[a->event_seq % EVENT_MAX].by, who, sizeof a->events[0].by);
+    str_lcpy(a->world.events[a->world.event_seq % EVENT_MAX].by, who, sizeof a->world.events[0].by);
 }
 
 /* Is event e one `who` is told of? Not its own. */
@@ -62,14 +62,14 @@ int app_events_where(const App *a, unsigned after, CsWhere *where, int *other, c
 {
     memset(where, 0, sizeof *where);
     *other = 0;
-    if (after > a->event_seq) after = 0;             /* another vtt's number: everything kept */
+    if (after > a->world.event_seq) after = 0;             /* another vtt's number: everything kept */
     if (after + 1 < oldest(a)) return 0;
-    for (unsigned s = after + 1; s <= a->event_seq && s > after; s++) {
+    for (unsigned s = after + 1; s <= a->world.event_seq && s > after; s++) {
         /* Another map since: the pieces before it were that map's. */
-        if (a->events[s % EVENT_MAX].gone) return 0;
-        if (!heard(&a->events[s % EVENT_MAX], who)) continue;
-        for (size_t i = 0; i < sizeof where->b / sizeof *where->b; i++) where->b[i] |= a->events[s % EVENT_MAX].where.b[i];
-        *other |= a->events[s % EVENT_MAX].other;
+        if (a->world.events[s % EVENT_MAX].gone) return 0;
+        if (!heard(&a->world.events[s % EVENT_MAX], who)) continue;
+        for (size_t i = 0; i < sizeof where->b / sizeof *where->b; i++) where->b[i] |= a->world.events[s % EVENT_MAX].where.b[i];
+        *other |= a->world.events[s % EVENT_MAX].other;
     }
     return 1;
 }
@@ -78,17 +78,17 @@ int app_events_where(const App *a, unsigned after, CsWhere *where, int *other, c
  * since): there is something to say at once -- that, and everything kept. */
 int app_events_after(const App *a, unsigned after, const char *who)
 {
-    if (after > a->event_seq) return 1;
+    if (after > a->world.event_seq) return 1;
     if (after + 1 < oldest(a)) return 1;             /* `lost` is something to say */
     int n = 0;
-    for (unsigned s = after + 1; s <= a->event_seq && s > after; s++) n += heard(&a->events[s % EVENT_MAX], who);
+    for (unsigned s = after + 1; s <= a->world.event_seq && s > after; s++) n += heard(&a->world.events[s % EVENT_MAX], who);
     return n;
 }
 
 void app_events_write(const App *a, FILE *out, unsigned after, const char *who)
 {
-    fprintf(out, "seq %u\n", a->event_seq);
-    if (after > a->event_seq) {
+    fprintf(out, "seq %u\n", a->world.event_seq);
+    if (after > a->world.event_seq) {
         fprintf(out, "reset %u: that number is not this vtt's (it was started since) - "
                      "everything kept follows; read jobs and the map again\n", after);
         after = 0;
@@ -98,8 +98,8 @@ void app_events_write(const App *a, FILE *out, unsigned after, const char *who)
         fprintf(out, "lost %u-%u: more happened than is kept - read jobs and the map again\n", from, oldest(a) - 1);
         from = oldest(a);
     }
-    for (unsigned s = from; s <= a->event_seq && s >= from; s++)
-        if (heard(&a->events[s % EVENT_MAX], who)) fprintf(out, "%u %s\n", s, a->events[s % EVENT_MAX].text);
+    for (unsigned s = from; s <= a->world.event_seq && s >= from; s++)
+        if (heard(&a->world.events[s % EVENT_MAX], who)) fprintf(out, "%u %s\n", s, a->world.events[s % EVENT_MAX].text);
 }
 
 /* --------------------------------------------------------- the map changed */
@@ -107,25 +107,25 @@ void app_events_write(const App *a, FILE *out, unsigned after, const char *who)
 static int listening(const App *a, uint64_t now_ms)
 {
     /* The channel off: a wait still hears of jobs, but nothing of the map. */
-    if (ctl_active(&a->ctl) && !a->agent_on) return 0;
+    if (ctl_active(&a->ctl) && !a->world.agent_on) return 0;
     if (ctl_waiters(&a->ctl)) return 1;
     for (int i = 0; i < JOB_MAX; i++)
         /* Not the file's: nobody waits to hear of that one but the GM. */
-        if (a->jobs[i].used && a->jobs[i].state <= JOB_READY && a->jobs[i].from != JOB_FROM_DISK) return 1;
-    return a->agent_seen_ms && now_ms - a->agent_seen_ms < (uint64_t)CTL_WAIT_MAX_S * 1000;
+        if (a->world.jobs[i].used && a->world.jobs[i].state <= JOB_READY && a->world.jobs[i].from != JOB_FROM_DISK) return 1;
+    return a->world.agent_seen_ms && now_ms - a->world.agent_seen_ms < (uint64_t)CTL_WAIT_MAX_S * 1000;
 }
 
 void app_events_map_restart(App *a)
 {
-    if (!a->map || !a->map->cp) return;
-    checkpoint_start(a->map);
-    a->cp_gen = a->map->gen;
+    if (!a->world.map || !a->world.map->cp) return;
+    checkpoint_start(a->world.map);
+    a->world.cp_gen = a->world.map->gen;
 }
 
 void app_events_map_flush(App *a)
 {
-    Map *m = a->map;
-    if (!m || !m->cp || m->gen == a->cp_gen) return;
+    Map *m = a->world.map;
+    if (!m || !m->cp || m->gen == a->world.cp_gen) return;
     ChangeSet cs;
     cs_init(&cs);
     if (checkpoint_changes(m, &cs)) {
@@ -143,7 +143,7 @@ void app_events_map_flush(App *a)
 
 void app_event_of_change(App *a, int kind, int job, const char *who, const char *text)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     ChangeSet cs;
     cs_init(&cs);
     int     other = 0, known = m->cp && checkpoint_changes(m, &cs);
@@ -161,9 +161,9 @@ void app_event_of_change(App *a, int kind, int job, const char *who, const char 
  * change first (`seen_gen`), or `change_ms` is an older change's. */
 static int map_due(const App *a, uint64_t now_ms)
 {
-    const Map *m = a->map;
-    if (!m || !m->cp || m->gen == a->cp_gen || m->gen != a->seen_gen) return -1;
-    uint64_t at = a->change_ms + AUTOSAVE_QUIET_MS;
+    const Map *m = a->world.map;
+    if (!m || !m->cp || m->gen == a->world.cp_gen || m->gen != a->world.seen_gen) return -1;
+    uint64_t at = a->world.change_ms + AUTOSAVE_QUIET_MS;
     return now_ms >= at ? 0 : (int)(at - now_ms);
 }
 
@@ -171,37 +171,37 @@ int app_events_due(const App *a, uint64_t now_ms)
 {
     /* A change the tick has not stamped yet: wake for it, so the quiet time
      * is counted from now and not from whatever else wakes the loop. */
-    const Map *m = a->map;
-    if (m && m->cp && m->gen != a->cp_gen && m->gen != a->seen_gen) return 0;
+    const Map *m = a->world.map;
+    if (m && m->cp && m->gen != a->world.cp_gen && m->gen != a->world.seen_gen) return 0;
     return map_due(a, now_ms);          /* a held wait's deadline is ctl_due's */
 }
 
 void app_events_hear(App *a)
 {
-    if (!a->map || a->map->cp) return;
-    if (ctl_active(&a->ctl) && !a->agent_on) return;      /* off: nothing of the map is told (listening) */
+    if (!a->world.map || a->world.map->cp) return;
+    if (ctl_active(&a->ctl) && !a->world.agent_on) return;      /* off: nothing of the map is told (listening) */
     /* Changed while nobody listened: nobody knows where, and an agent back
      * with an old number must not be told "nothing". */
-    if (a->cp_off_map == a->map && a->cp_off_gen != a->map->gen) {
+    if (a->world.cp_off_map == a->world.map && a->world.cp_off_gen != a->world.map->gen) {
         CsWhere all;
         memset(&all, 0xff, sizeof all);
         app_event(a, CTL_EV_CHANGED, 0, "while no agent was listening - read the map again");
         app_event_where(a, &all, 1);
     }
-    a->cp_off_map = NULL;
-    checkpoint_start(a->map);
-    a->cp_gen = a->map->gen;
+    a->world.cp_off_map = NULL;
+    checkpoint_start(a->world.map);
+    a->world.cp_gen = a->world.map->gen;
 }
 
 void app_events_flush(App *a, uint64_t now_ms)
 {
-    if (a->map) {
+    if (a->world.map) {
         int want = listening(a, now_ms);
         if (want) app_events_hear(a);
-        else if (a->map->cp) {
-            checkpoint_stop(a->map);
-            a->cp_off_map = a->map;
-            a->cp_off_gen = a->map->gen;
+        else if (a->world.map->cp) {
+            checkpoint_stop(a->world.map);
+            a->world.cp_off_map = a->world.map;
+            a->world.cp_off_gen = a->world.map->gen;
         }
         if (map_due(a, now_ms) == 0) app_events_map_flush(a);
     }

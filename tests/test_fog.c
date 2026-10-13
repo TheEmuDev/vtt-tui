@@ -42,7 +42,7 @@ void test_fog(void)
     rnd_resize(&r, 64, 14);
     app_init(&a, NULL, &r);
     CHECK_EQ(app_open_map(&a, path), 0);
-    Map *m = a.map;
+    Map *m = a.world.map;
 
     CASE("no fog to begin with: nothing hides, and the frames cannot differ for it");
     CHECK_EQ(fog_any(m), 0);
@@ -718,13 +718,13 @@ static void fd_press(App *a, const char *keys, int op, int kind)
 {
     static uint8_t seen[64 * 64];
     for (const char *k = keys; *k; k++) {
-        Map *m = a->map;
+        Map *m = a->world.map;
         int  w = m->w, h = m->h;
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++) seen[y * w + x] = !!(fog_at(m, x, y) & FOG_SEEN);
         char one[2] = { *k, 0 };
         press(a, one);
-        m = a->map;
+        m = a->world.map;
         const char *what = "";
         int bad = fd_check(m, m->w == w && m->h == h ? seen : NULL, 1, &what);
         if (bad && g_fd_fails < 3) {
@@ -807,7 +807,7 @@ void test_fog_diff(void)
             open = 1;
             maps++;
         }
-        Map *m = a.map;
+        Map *m = a.world.map;
         FdSnap before;
         fd_snap(m, &before);
 
@@ -846,7 +846,7 @@ void test_fog_diff(void)
                 else {
                     Token nt = *t;
                     nt.kind = nt.kind == TOKEN_PLAYER ? TOKEN_ENEMY : TOKEN_PLAYER;
-                    undo_begin(&a.undo); undo_edit_token(&a.undo, m, idx, nt); undo_end(&a.undo);
+                    undo_begin(&a.world.undo); undo_edit_token(&a.world.undo, m, idx, nt); undo_end(&a.world.undo);
                     app_fog_sync(&a);
                 }
             }
@@ -916,31 +916,31 @@ void test_fog_diff(void)
                 int nx = iclamp(t->x + (int)fd_rand(3) - 1, 0, m->w - t->size);
                 int ny = iclamp(t->y + (int)fd_rand(3) - 1, 0, m->h - t->size);
                 int ex = (int)fd_rand((unsigned)m->w + 1), ey = (int)fd_rand((unsigned)m->h);
-                undo_begin(&a.undo);
+                undo_begin(&a.world.undo);
                 if (v == 0) {                                /* a move and a wall */
-                    undo_move_token(&a.undo, m, idx, nx, ny);
-                    undo_set_vedge(&a.undo, m, ex, ey, map_vedge(m, ex, ey) ? EDGE_NONE : EDGE_WALL);
+                    undo_move_token(&a.world.undo, m, idx, nx, ny);
+                    undo_set_vedge(&a.world.undo, m, ex, ey, map_vedge(m, ex, ey) ? EDGE_NONE : EDGE_WALL);
                 } else if (v == 1) {                         /* a move and a stroke of paint */
-                    undo_move_token(&a.undo, m, idx, nx, ny);
-                    fog_paint(m, &a.undo, (int)fd_rand((unsigned)m->w), (int)fd_rand((unsigned)m->h),
+                    undo_move_token(&a.world.undo, m, idx, nx, ny);
+                    fog_paint(m, &a.world.undo, (int)fd_rand((unsigned)m->w), (int)fd_rand((unsigned)m->h),
                               (int)fd_rand(4));
                 } else if (v == 2 && n >= 2) {               /* a wall, a delete, an add: indices shift */
                     Token nt = m->tokens.v[n - 1];
                     nt.x = (int16_t)nx; nt.y = (int16_t)ny;
-                    undo_set_vedge(&a.undo, m, ex, ey, map_vedge(m, ex, ey) ? EDGE_NONE : EDGE_WALL);
-                    undo_del_token(&a.undo, m, idx);
-                    undo_add_token(&a.undo, m, nt);
+                    undo_set_vedge(&a.world.undo, m, ex, ey, map_vedge(m, ex, ey) ? EDGE_NONE : EDGE_WALL);
+                    undo_del_token(&a.world.undo, m, idx);
+                    undo_add_token(&a.world.undo, m, nt);
                 } else if (v == 3 && n >= 2) {               /* two creatures swap places */
                     int j = (idx + 1) % n;
                     int ax = m->tokens.v[idx].x, ay = m->tokens.v[idx].y;
-                    undo_move_token(&a.undo, m, idx, m->tokens.v[j].x, m->tokens.v[j].y);
-                    undo_move_token(&a.undo, m, j, ax, ay);
+                    undo_move_token(&a.world.undo, m, idx, m->tokens.v[j].x, m->tokens.v[j].y);
+                    undo_move_token(&a.world.undo, m, j, ax, ay);
                 } else {                                     /* there and back */
                     int ox = t->x, oy = t->y;
-                    undo_move_token(&a.undo, m, idx, nx, ny);
-                    undo_move_token(&a.undo, m, idx, ox, oy);
+                    undo_move_token(&a.world.undo, m, idx, nx, ny);
+                    undo_move_token(&a.world.undo, m, idx, ox, oy);
                 }
-                undo_end(&a.undo);
+                undo_end(&a.world.undo);
                 app_fog_sync(&a);
             }
             break;
@@ -950,7 +950,7 @@ void test_fog_diff(void)
             press(&a, "\x1b");
             break;
         }
-        m = a.map;
+        m = a.world.map;
 
         FdSnap after;
         fd_snap(m, &after);
@@ -1016,7 +1016,7 @@ void test_fog_edge(void)
     rnd_resize(&r, 80, 16);
     app_init(&a, NULL, &r);
     CHECK_EQ(app_open_map(&a, path), 0);
-    Map *m = a.map;
+    Map *m = a.world.map;
     Key f2 = { KEY_F2, 0, 0 };
     app_key(&a, f2);
     m->tiles[(size_t)2 * (size_t)m->w + 1] = TILE_WATER;    /* on the rim, west */
@@ -1169,7 +1169,7 @@ void test_fog_edge(void)
     app_free(&a);
     app_init(&a, NULL, &r);
     CHECK_EQ(app_open_map(&a, path), 0);
-    m = a.map;
+    m = a.world.map;
     CHECK_EQ(m->fog_soft_edge, 0);
     CHECK_EQ(fog_patch_soft(m, 1), 1);
 
@@ -1194,7 +1194,7 @@ void test_fog_sight(void)
     rnd_resize(&r, 80, 16);
     app_init(&a, NULL, &r);
     CHECK_EQ(app_open_map(&a, path), 0);
-    Map *m = a.map;
+    Map *m = a.world.map;
     Key f2 = { KEY_F2, 0, 0 };
     app_key(&a, f2);
 
@@ -1320,7 +1320,7 @@ void test_fog_sight(void)
     app_free(&a);
     app_init(&a, NULL, &r);
     CHECK_EQ(app_open_map(&a, path), 0);
-    m = a.map;
+    m = a.world.map;
     CHECK(fog_at(m, 0, 0) & FOG_LIT);
 
     CASE("memory off: the dark closes behind");
@@ -1329,7 +1329,7 @@ void test_fog_sight(void)
     snprintf(path, sizeof path, "%s/l.vtt", sb.dir);
     app_init(&a, NULL, &r);
     CHECK_EQ(app_open_map(&a, path), 0);
-    m = a.map;
+    m = a.world.map;
     app_key(&a, f2);
     a.ed.cx = 1; a.ed.cy = 1;
     press(&a, "ipAria\r");

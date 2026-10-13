@@ -156,7 +156,7 @@ void test_loop(void)
     CASE("an agent's held wait is answered in the turn of the key that made the event");
     type(&g, ":agent on\r");
     turn(&g, 1200);
-    CHECK_EQ(g.a.agent_on, 1);
+    CHECK_EQ(g.a.world.agent_on, 1);
     loop_wait(&g.l, 1200);
     CHECK_EQ(loop_nfds(&g.l), LOOP_FIXED + 1);                /* the channel's listener beside the two */
     uint64_t now = 1300;

@@ -81,7 +81,7 @@ static UiPickItem *pick_items(const App *a, PickWhat what, int *count)
     if (what == PICK_HANDOUT) return app_handout_items(count);
     if (what == PICK_ENV)     return app_env_items(count);
     if (what == PICK_SCENE) {
-        const Map *m = a->map;
+        const Map *m = a->world.map;
         *count = m ? m->nscenes : 0;
         if (!*count) return NULL;
         UiPickItem *items = xmalloc(sizeof *items * (size_t)*count);
@@ -155,9 +155,9 @@ void app_pick_key(App *a, Key k)
     if (r < 0) { app_set_status(a, "canceled"); return; }
 
     if (a->pick_what == PICK_STAMP) app_stamp_command(a, name);
-    else if (a->pick_what == PICK_SCENE) { if (a->map) app_scene_restore(a, name); }
+    else if (a->pick_what == PICK_SCENE) { if (a->world.map) app_scene_restore(a, name); }
     else if (a->pick_what == PICK_HANDOUT) app_handout_show(a, name);
-    else if (a->pick_what == PICK_ENV) { if (a->map) app_env_name(a, name); }
-    else if (a->map && a->screen == SCREEN_PLAY) app_character_place(a, name, a->pick_kind);
+    else if (a->pick_what == PICK_ENV) { if (a->world.map) app_env_name(a, name); }
+    else if (a->world.map && a->screen == SCREEN_PLAY) app_character_place(a, name, a->pick_kind);
 }
 

@@ -181,8 +181,8 @@ void test_characters(void)
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
     CHECK(ctl_blank_map(&a, sb.dir, 12, 8));
-    if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
-    Map *m = a.map;
+    if (!a.world.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    Map *m = a.world.map;
     Key f2 = { KEY_F2, 0, 0 };
     char err[160];
 
@@ -260,7 +260,7 @@ void test_characters(void)
     memset(m->rolls, 0, sizeof m->rolls);
     set_roll(m, 0, "claw", "1d8+2");                /* the same; bite is missing */
     a.ed.cx = 5; a.ed.cy = 3;
-    int depth = a.undo.depth;
+    int depth = a.world.undo.depth;
     press(&a, "it");
     CHECK_EQ(a.pending, PENDING_IT);
     CHECK(strstr(a.status, "p as a player") != NULL);
@@ -283,14 +283,14 @@ void test_characters(void)
     CHECK(strstr(a.status, "placed enemy Crypt Ghoul (2x2) at F4 from ghoul") != NULL);
     CHECK_EQ(a.status_gm, 1);                          /* the template's name is the GM's */
     CHECK(!strcmp(m->rolls[1].name, "bite") && !strcmp(m->rolls[1].expr, "2d6"));
-    CHECK_EQ(a.undo.depth, depth + 1);
+    CHECK_EQ(a.world.undo.depth, depth + 1);
 
     CASE("u takes back the creature and the roll it added; redo puts both back");
     press(&a, "u");
     CHECK_EQ(m->tokens.n, 1);
     CHECK(!m->rolls[1].name[0]);
     CHECK(!strcmp(m->rolls[0].name, "claw"));
-    undo_redo(&a.undo, m);
+    undo_redo(&a.world.undo, m);
     CHECK_EQ(m->tokens.n, 2);
     CHECK(!strcmp(m->rolls[1].name, "bite"));
 
@@ -419,8 +419,8 @@ void test_scene_keys(void)
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
     CHECK(ctl_blank_map(&a, sb.dir, 12, 8));
-    if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
-    Map *m = a.map;
+    if (!a.world.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    Map *m = a.world.map;
     Key f2 = { KEY_F2, 0, 0 };
     app_key(&a, f2);
     a.ed.cx = 1; a.ed.cy = 1; press(&a, "ipAria\r");
@@ -545,7 +545,7 @@ void test_handout_keys(void)
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
     CHECK(ctl_blank_map(&a, sb.dir, 12, 8));
-    if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    if (!a.world.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
     app_key(&a, (Key){ KEY_F2, 0, 0 });
     char dir[MAP_PATH_MAX], path[MAP_PATH_MAX + 32];
     store_dir("handouts", dir, sizeof dir);
@@ -682,7 +682,7 @@ void test_handout_keys(void)
     CASE("closing the map takes the handout down and forgets it");
     CHECK(a.handout_up);
     press(&a, ":q!\r");
-    CHECK(a.map == NULL);
+    CHECK(a.world.map == NULL);
     CHECK(!a.handout_up && !a.handout_body[0] && a.net.handout_len == 0);
 
     app_free(&a);
@@ -714,8 +714,8 @@ void test_summon(void)
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
     CHECK(ctl_blank_map(&a, sb.dir, 30, 20));
-    if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
-    Map  *m  = a.map;
+    if (!a.world.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    Map  *m  = a.world.map;
     Play *pl = &a.play;
     Key f1 = { KEY_F1, 0, 0 }, f2 = { KEY_F2, 0, 0 };
     char err[160];
@@ -794,7 +794,7 @@ void test_summon(void)
     free(pf);
 
     CASE("enter is refused on a creature, outside the range, and says which");
-    int n0 = m->tokens.n, d0 = a.undo.depth;
+    int n0 = m->tokens.n, d0 = a.world.undo.depth;
     press(&a, "\r");                                  /* on Korr */
     CHECK(strstr(a.status, "a creature is in the way") != NULL);
     a.ed.cx = 0; a.ed.cy = 0;
@@ -804,13 +804,13 @@ void test_summon(void)
     press(&a, "\r");
     CHECK(strstr(a.status, "outside the range") != NULL);
     CHECK_EQ(m->tokens.n, n0);
-    CHECK_EQ(a.undo.depth, d0);
+    CHECK_EQ(a.world.undo.depth, d0);
 
     CASE("enter places one where the GM points: one undo step, numbered, nobody selected");
     a.ed.cx = 15 + 6; a.ed.cy = 10;
     press(&a, "\r");
     CHECK_EQ(m->tokens.n, n0 + 1);
-    CHECK_EQ(a.undo.depth, d0 + 1);
+    CHECK_EQ(a.world.undo.depth, d0 + 1);
     CHECK(!strcmp(m->tokens.v[n0].label, "Lackey") && m->tokens.v[n0].x == 21 && m->tokens.v[n0].y == 10);
     CHECK(m->tokens.v[n0].kind == TOKEN_ENEMY && !m->tokens.v[n0].hidden);
     CHECK(strstr(a.status, "summoned enemy Lackey at V11") != NULL);
@@ -829,7 +829,7 @@ void test_summon(void)
     press(&a, "u");
     CHECK(strstr(a.status, "nothing of this summon") != NULL);
     CHECK_EQ(m->tokens.n, n0);
-    CHECK_EQ(a.undo.depth, d0);
+    CHECK_EQ(a.world.undo.depth, d0);
     CHECK(app_summoning(&a) && pl->range.active && pl->range.token == korr);
 
     CASE("the mode owns the keys: no command line, no other floor, a hint for the rest");
@@ -853,7 +853,7 @@ void test_summon(void)
     CHECK(!app_summoning(&a) && !pl->range.active);
     CHECK_EQ(m->tokens.n, n0 + 3);
     CHECK(!strcmp(m->tokens.v[n0 + 2].label, "Lackey 3"));
-    CHECK_EQ(a.undo.depth, d0 + 3);
+    CHECK_EQ(a.world.undo.depth, d0 + 3);
     CHECK_EQ(app_keymap_id(&a), KEYS_PLAY);
     press(&a, "uuu");
     CHECK_EQ(m->tokens.n, n0);
@@ -910,7 +910,7 @@ void test_summon(void)
     CHECK(map_area_remove(m, "Upper"));
     app_creatures_renumbered(&a);
     CHECK(!app_summoning(&a) && !pl->range.active);
-    CHECK(undo_balanced(&a.undo));
+    CHECK(undo_balanced(&a.world.undo));
 
     CASE("a 2x2 half out of the range, or over the map's edge, is refused");
     a.ed.cx = 15; a.ed.cy = 10;
@@ -965,7 +965,7 @@ void test_summon(void)
     a.ed.cx = 15 + 6; a.ed.cy = 10; press(&a, "\r");
     CHECK_EQ(m->tokens.n, n0 + 1);
     CHECK(!app_summoning(&a));
-    CHECK(undo_balanced(&a.undo));
+    CHECK(undo_balanced(&a.world.undo));
 
     app_free(&a);
     rnd_free(&r);

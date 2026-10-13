@@ -46,7 +46,7 @@ void app_agent_prompt(const App *a, const Job *j, FILE *out)
     fprintf(out, "Job #%d: %s\n", j->num, j->text);
     if (where[0]) fprintf(out, "Where: %s (the box the GM drew)\n", where);
     else          fputs("Where: the GM drew no box - `marked` says what they are pointing at\n", out);
-    if (a->map)   fprintf(out, "Map: %s, %dx%d squares (A1 is the top left)\n", a->map->name, a->map->w, a->map->h);
+    if (a->world.map)   fprintf(out, "Map: %s, %dx%d squares (A1 is the top left)\n", a->world.map->name, a->world.map->w, a->world.map->h);
     if (j->nthread > 1) {
         fputs("\nThe job so far (the last gm: line is what to do now):\n", out);
         for (int t = 0; t < j->nthread; t++)
@@ -103,7 +103,7 @@ void app_agent_heard(App *a, const char *who)
     int num = 0;
     if (!a->nagents || sscanf(who, AGENT_NAME_FMT, &num) != 1 || num < 1) return;
     AgentRun *r = run_of(a, num);
-    if (r && !r->stopping && r->heard_ms) r->heard_ms = a->now_ms ? a->now_ms : 1;
+    if (r && !r->stopping && r->heard_ms) r->heard_ms = a->world.now_ms ? a->world.now_ms : 1;
 }
 
 int app_agents_due(const App *a, uint64_t now_ms)
@@ -138,7 +138,7 @@ static void run_ended(App *a, AgentRun r, int status)
 {
     int slot = r.job ? app_job_find(a, r.job) : -1;
     if (slot < 0) return;
-    Job *j = &a->jobs[slot];
+    Job *j = &a->world.jobs[slot];
     /* A job done meanwhile (the old run proposed late and the GM took it,
      * or scrapped it) wants nobody. */
     if (j->state != JOB_ASKED && j->state != JOB_WORKING) return;
@@ -224,13 +224,13 @@ int app_agent_start(App *a, const Job *j)
         return -1;
     }
     /* The command answers over the channel: on, for it -- and said. */
-    if (!a->agent_on) {
+    if (!a->world.agent_on) {
         if (ctl_start(&a->ctl, err, sizeof err) < 0) {
             snprintf(msg, sizeof msg, "#%d: the agent was not started - %.150s", j->num, err);
             app_note_gm(a, msg);
             return -1;
         }
-        a->agent_on = 1;
+        a->world.agent_on = 1;
         turned_on = 1;
     }
 

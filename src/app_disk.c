@@ -32,7 +32,7 @@ void app_disk_reset(App *a)
 static int disk_slot(const App *a)
 {
     int slot = a->disk_job ? app_job_find(a, a->disk_job) : -1;
-    if (slot < 0 || a->jobs[slot].from != JOB_FROM_DISK || a->jobs[slot].state != JOB_READY) return -1;
+    if (slot < 0 || a->world.jobs[slot].from != JOB_FROM_DISK || a->world.jobs[slot].state != JOB_READY) return -1;
     return slot;
 }
 
@@ -40,7 +40,7 @@ static int disk_slot(const App *a)
  * written over. */
 static void adopt(App *a)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     if (m && a->disk_new) {
         free(m->base);
         m->base     = a->disk_new;
@@ -66,7 +66,7 @@ static void stuck(App *a, const char *why)
 static void disk_read(App *a)
 {
     PROF_ZONE("disk.reload");
-    Map *m = a->map;
+    Map *m = a->world.map;
     char err[MAPIO_ERR_MAX];
     /* Gone since it was noticed: nobody's work is there to review or to
      * write over. Its identity is kept, so a file put back is seen. */
@@ -111,7 +111,7 @@ static void disk_read(App *a)
                 a->disk_new_len = now->base_len;
                 now->base = NULL;
                 a->disk_state = DISK_PROPOSED;
-                a->disk_job = a->jobs[slot].num;
+                a->disk_job = a->world.jobs[slot].num;
                 app_job_set_proposal(a, slot, &cs, NULL);
             }
         }
@@ -123,7 +123,7 @@ static void disk_read(App *a)
 
 void app_disk_check(App *a, int now_too)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     if (!m || !m->path[0] || !m->disk.known) return;
     /* A change reviewed, scrapped or sent away: the file is the base now. */
     if (a->disk_state == DISK_PROPOSED && disk_slot(a) < 0) adopt(a);
@@ -131,15 +131,15 @@ void app_disk_check(App *a, int now_too)
      * a save would write over what it holds. */
     if (a->disk_state == DISK_NONE)
         for (int i = 0; i < JOB_MAX; i++)
-            if (a->jobs[i].used && a->jobs[i].from == JOB_FROM_DISK && a->jobs[i].state == JOB_READY) {
+            if (a->world.jobs[i].used && a->world.jobs[i].from == JOB_FROM_DISK && a->world.jobs[i].state == JOB_READY) {
                 a->disk_state = DISK_PROPOSED;
-                a->disk_job   = a->jobs[i].num;
+                a->disk_job   = a->world.jobs[i].num;
                 a->disk_seen  = m->disk;
             }
     /* Stuck only for want of room, and a job has gone since: read again. */
     if (a->disk_state == DISK_STUCK && a->disk_full)
         for (int i = 0; i < JOB_MAX; i++)
-            if (!a->jobs[i].used || a->jobs[i].state > JOB_READY) { a->disk_reread = 1; a->disk_full = 0; break; }
+            if (!a->world.jobs[i].used || a->world.jobs[i].state > JOB_READY) { a->disk_reread = 1; a->disk_full = 0; break; }
     {
         PROF_ZONE("disk.check");
         MapDisk cur;
@@ -165,18 +165,18 @@ void app_disk_check(App *a, int now_too)
 
 void app_disk_key(App *a)
 {
-    a->disk_key_ms = a->now_ms;
-    if (!a->map) return;
+    a->disk_key_ms = a->world.now_ms;
+    if (!a->world.map) return;
     /* At most once a second, and never on a clock that is not running (the
      * bench's, the tests'): a stat is a syscall a key. */
-    if (a->now_ms - a->disk_checked_ms < 1000) return;
-    a->disk_checked_ms = a->now_ms;
+    if (a->world.now_ms - a->disk_checked_ms < 1000) return;
+    a->disk_checked_ms = a->world.now_ms;
     app_disk_check(a, 0);
 }
 
 int app_disk_due(const App *a, uint64_t now_ms)
 {
-    if (!a->map || !a->disk_reread) return -1;
+    if (!a->world.map || !a->disk_reread) return -1;
     uint64_t at = a->disk_key_ms + AUTOSAVE_QUIET_MS;
     return now_ms >= at ? 0 : (int)(at - now_ms);
 }
@@ -207,8 +207,8 @@ void app_disk_saved(App *a, int over)
     int slot = a->disk_state == DISK_PROPOSED ? disk_slot(a) : -1;
     if (slot >= 0) {
         if (a->review == slot) app_review_leave(a);
-        a->jobs[slot].state = JOB_SCRAPPED;
-        app_job_thread_add(&a->jobs[slot], '-', over ? "written over by :w!"
+        a->world.jobs[slot].state = JOB_SCRAPPED;
+        app_job_thread_add(&a->world.jobs[slot], '-', over ? "written over by :w!"
                                                      : "left behind: the map was saved as another file");
     }
     app_disk_reset(a);

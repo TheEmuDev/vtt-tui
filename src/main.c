@@ -391,25 +391,25 @@ static int run_headless(const Options *o)
             int big = 0;
             ctl_req = file_read(o->bench_ctl, CTL_REQ_CAP, &ctl_len, &big);
             if (!ctl_req) die(big ? "%s is over 64 KB" : "cannot read %s", o->bench_ctl);
-            a.ctl_auto = !o->bench_review;
+            a.world.ctl_auto = !o->bench_review;
         }
 
         /* What the loops find already there: a proposal waiting, then a
          * change landed under it, so a request about its conflicts has some. */
         for (int k = 0; k < 2; k++) {
             if (!o->bench_pre[k]) continue;
-            int    big = 0, was = a.ctl_auto;
+            int    big = 0, was = a.world.ctl_auto;
             size_t len = 0;
             char  *req = file_read(o->bench_pre[k], CTL_REQ_CAP, &len, &big);
             if (!req) die(big ? "%s is over 64 KB" : "cannot read %s", o->bench_pre[k]);
-            a.ctl_auto = k;
+            a.world.ctl_auto = k;
             char *ans = app_ctl_exec(&a, req, &len);
             if (!ans || strncmp(ans, "ok\n", 3) != 0) die("--bench-pre: %.200s", ans ? ans : "out of memory");
             free(ans);
             free(req);
-            a.ctl_auto = was;
+            a.world.ctl_auto = was;
         }
-        int pre_jobs = a.job_last;
+        int pre_jobs = a.world.job_last;
 
         /* Another program writing the map's file (docs/CONFLICTS.md, step
          * 7): the same bytes each loop, which is a new file by its time. */
@@ -425,7 +425,7 @@ static int run_headless(const Options *o)
         for (int loop = 0; loop < o->bench_loops && a.running; loop++) {
             /* Every loop starts alike: its jobs are numbered from 1 again,
              * so a script's `:ask 1 remove` names the job it just made. */
-            a.job_last = pre_jobs;
+            a.world.job_last = pre_jobs;
             if (out_bytes) {
                 int fd = open(o->map_path, O_WRONLY | O_TRUNC);
                 if (fd < 0 || write(fd, out_bytes, out_len) != (ssize_t)out_len) die("--bench-outside: cannot write %s", o->map_path);
@@ -584,7 +584,7 @@ static int run_interactive(const Options *o)
         /* Said either way: with no socket, an --apply to this map cannot
          * find it open and writes the file. */
         if (ctl_start(&a.ctl, err, sizeof err) < 0) app_set_status_gm(&a, err);
-        else a.agent_on = o->agent;
+        else a.world.agent_on = o->agent;
         /* The agent a GM always uses, without typing it each session. */
         const char *cmd = getenv("VTT_AGENT_COMMAND");
         if (cmd && cmd[0] && strlen(cmd) < sizeof a.agent_cmd) str_lcpy(a.agent_cmd, cmd, sizeof a.agent_cmd);
@@ -687,7 +687,7 @@ static int run_apply(const Options *o)
     rnd_resize(&r, 80, 24);
     app_init(&a, NULL, &r);
     int rc = 2;
-    if (app_open_map(&a, o->map_path) != 0 || !a.map) {
+    if (app_open_map(&a, o->map_path) != 0 || !a.world.map) {
         fprintf(stderr, "vtt: cannot open %s\n", o->map_path);
     } else {
         /* An autosave newer than the map asks the GM, and there is none:
@@ -696,9 +696,9 @@ static int run_apply(const Options *o)
             a.modal = MODAL_NONE;
             fprintf(stderr, "vtt: %s has an autosave newer than it; applying to the file as saved\n", o->map_path);
         }
-        a.ctl_direct = 1;                   /* no GM: the plan is the file's */
+        a.world.ctl_direct = 1;                   /* no GM: the plan is the file's */
         /* A plan that only reads leaves the file as it was, byte for byte. */
-        unsigned gen = a.map->gen, sgen = a.map->scenes_gen, cgen = a.map->cards_gen;
+        unsigned gen = a.world.map->gen, sgen = a.world.map->scenes_gen, cgen = a.world.map->cards_gen;
         char *ans = app_ctl_exec(&a, req, &len);
         if (!ans) fputs("vtt: out of memory\n", stderr);
         else {
@@ -707,9 +707,9 @@ static int run_apply(const Options *o)
             if (strncmp(ans, "ok\n", 3) != 0) {
                 fprintf(stderr, "vtt: %.*s - nothing saved\n", (int)first, ans);
                 rc = 1;
-            } else if (a.map->gen == gen && a.map->scenes_gen == sgen && a.map->cards_gen == cgen) {
+            } else if (a.world.map->gen == gen && a.world.map->scenes_gen == sgen && a.world.map->cards_gen == cgen) {
                 rc = 0;
-            } else if (mapio_save(a.map, o->map_path, err, sizeof err) < 0) {
+            } else if (mapio_save(a.world.map, o->map_path, err, sizeof err) < 0) {
                 fprintf(stderr, "vtt: %s\n", err);
             } else rc = 0;
             free(ans);

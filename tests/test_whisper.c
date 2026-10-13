@@ -274,7 +274,7 @@ void test_whisper_app(void)
 
     /* With a creature hidden no status line reaches the players at all,
      * which would hide a whisper said on the wrong side. */
-    a.map->tokens.v[3].hidden = 0;
+    a.world.map->tokens.v[3].hidden = 0;
     CASE("a phone arriving by name is said on the GM's line");
     Phone p1, p2;
     phone_open(&p1, &a.net, "Crypt Ghoul");
@@ -328,7 +328,7 @@ void test_whisper_app(void)
     CASE("closing the map drops the whispers waiting, as it takes a handout down");
     CHECK(a.net.kept[0].len > 0);
     press(&a, ":q!\r");                                     /* the map put down */
-    CHECK(a.map == NULL);
+    CHECK(a.world.map == NULL);
     CHECK_EQ((int)a.net.kept[0].len, 0);
     CHECK(net_name_seen(&a.net, "Crypt Ghoul"));                 /* the people are still the people */
 

@@ -98,7 +98,7 @@ static int parse_amount(const char *s, const char **end)
 
 static void cmd_massive(App *a, const char *arg)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     if (strcmp(arg, "on") && strcmp(arg, "off") && *arg) {
         app_set_status(a, ":dmg massive on, or :dmg massive off");
         return;
@@ -240,7 +240,7 @@ static void skip_word(const Hit *h, char *buf, size_t sz)
 void app_damage_command(App *a, const char *rest)
 {
     PROF_ZONE("dmg.apply");
-    Map *m = a->map;
+    Map *m = a->world.map;
     if (!strncmp(rest, "massive", 7) && (!rest[7] || rest[7] == ' ')) {
         const char *arg = rest + 7;
         while (*arg == ' ') arg++;
@@ -304,15 +304,15 @@ void app_damage_command(App *a, const char *rest)
 
     /* One undo step for the lot, as one damage roll is one thing. */
     if (changed) {
-        undo_begin(&a->undo);
+        undo_begin(&a->world.undo);
         for (int k = 0; k < n; k++) {
             const Hit *h = &hits[k];
             if (h->why != HIT_OK || h->after == h->before) continue;
             Token t = m->tokens.v[h->idx];
             counter_set(&t, t.counters[h->hp].name, h->after, h->max);
-            undo_edit_token(&a->undo, m, h->idx, t);
+            undo_edit_token(&a->world.undo, m, h->idx, t);
         }
-        undo_end(&a->undo);
+        undo_end(&a->world.undo);
     }
 
     char msg[640];
@@ -345,7 +345,7 @@ void app_damage_command(App *a, const char *rest)
 
 int app_horde_note(const App *a, int idx, char *buf, size_t sz)
 {
-    const Map *m = a->map;
+    const Map *m = a->world.map;
     const Ruleset *rs = ruleset_by_name(m->ruleset);
     const Token *t = &m->tokens.v[idx];
     int value, max;

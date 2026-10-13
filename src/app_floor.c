@@ -16,23 +16,23 @@
 
 int app_floor_shown(const App *a)
 {
-    if (!a->map || !a->ed.floor[0]) return -1;
-    int i = map_area_find(a->map, a->ed.floor);
-    return i >= 0 && a->map->areas[i].floor ? i : -1;
+    if (!a->world.map || !a->ed.floor[0]) return -1;
+    int i = map_area_find(a->world.map, a->ed.floor);
+    return i >= 0 && a->world.map->areas[i].floor ? i : -1;
 }
 
 /* The square the cursor names: wall mode's corner is its south-east square. */
 static void cursor_square(const App *a, int *x, int *y)
 {
     ed_cursor_tile(&a->ed, x, y);
-    *x = iclamp(*x, 0, a->map->w - 1);
-    *y = iclamp(*y, 0, a->map->h - 1);
+    *x = iclamp(*x, 0, a->world.map->w - 1);
+    *y = iclamp(*y, 0, a->world.map->h - 1);
 }
 
 static void show(App *a, int f)
 {
     Editor *e = &a->ed;
-    Map    *m = a->map;
+    Map    *m = a->world.map;
     if (f >= 0) str_lcpy(e->floor, m->areas[f].name, sizeof e->floor);
     else        e->floor[0] = '\0';
     e->view.bounded = f >= 0;
@@ -42,9 +42,9 @@ static void show(App *a, int f)
 
 void app_floor_sync(App *a)
 {
-    if (!a->map) return;
+    if (!a->world.map) return;
     Editor *e = &a->ed;
-    Map    *m = a->map;
+    Map    *m = a->world.map;
     (void)app_players_floor(a);     /* a turn may have started; the party may have moved */
     int f = app_floor_shown(a);
     show(a, f);                     /* the box may have moved, or the floor gone */
@@ -68,7 +68,7 @@ void app_floor_sync(App *a)
 void app_floor_show(App *a, int f)
 {
     Editor *e = &a->ed;
-    Map    *m = a->map;
+    Map    *m = a->world.map;
     int from = app_floor_shown(a);
     if (f == from) return;
     PROF_ZONE("floor.switch");
@@ -93,7 +93,7 @@ void app_floor_show(App *a, int f)
 
 void app_floor_step(App *a, int dir)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     if (a->play.grabbed) { app_set_status(a, "put the creature down before changing floors"); return; }
     int order[MAP_AREAS_MAX];
     if (!floor_order(m, order)) {
@@ -115,7 +115,7 @@ void app_floor_step(App *a, int dir)
 
 static void list_floors(App *a)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     int  order[MAP_AREAS_MAX], n = floor_order(m, order);
     char msg[sizeof a->status];
     if (!n) { app_set_status_gm(a, "no floors - :floor NAME LEVEL makes a named area one"); return; }
@@ -130,7 +130,7 @@ static void list_floors(App *a)
 
 void app_floor_command(App *a, const char *verb, const char *rest)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     char msg[160];
     if (!strcmp(verb, "floors") || !*rest) { list_floors(a); return; }
 
@@ -163,9 +163,9 @@ void app_floor_command(App *a, const char *verb, const char *rest)
     }
     if (off) {
         if (!m->areas[ai].floor) { snprintf(msg, sizeof msg, "%.40s is not a floor", name); app_set_status_gm(a, msg); return; }
-        undo_begin(&a->undo);
-        undo_set_floor(&a->undo, m, m->areas[ai].name, 0, 0);
-        undo_end(&a->undo);
+        undo_begin(&a->world.undo);
+        undo_set_floor(&a->world.undo, m, m->areas[ai].name, 0, 0);
+        undo_end(&a->world.undo);
         snprintf(msg, sizeof msg, "%.40s is no longer a floor", m->areas[ai].name);
         app_note_gm(a, msg);
         app_floor_sync(a);
@@ -179,9 +179,9 @@ void app_floor_command(App *a, const char *verb, const char *rest)
         }
         const char *why = floor_problem(m, ai);
         if (why) { snprintf(msg, sizeof msg, "%.40s cannot be a floor: %s", name, why); app_set_status_gm(a, msg); return; }
-        undo_begin(&a->undo);
-        undo_set_floor(&a->undo, m, m->areas[ai].name, 1, level);
-        undo_end(&a->undo);
+        undo_begin(&a->world.undo);
+        undo_set_floor(&a->world.undo, m, m->areas[ai].name, 1, level);
+        undo_end(&a->world.undo);
         snprintf(msg, sizeof msg, "%.40s is a floor, level %d - [ and ] step between floors", m->areas[ai].name, level);
         app_note_gm(a, msg);
         return;
@@ -227,13 +227,13 @@ void app_floor_reset(App *a)
 void app_floor_note_move(App *a, const Token *t)
 {
     if (t->hidden) return;          /* the tie it would break is the players' to see */
-    int f = floor_of_token(a->map, t);
-    if (f >= 0) name_floor(a->map, f, a->side_floor[t->kind == TOKEN_ENEMY], sizeof a->side_floor[0]);
+    int f = floor_of_token(a->world.map, t);
+    if (f >= 0) name_floor(a->world.map, f, a->side_floor[t->kind == TOKEN_ENEMY], sizeof a->side_floor[0]);
 }
 
 int app_players_floor(App *a)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     if (!m) return -1;
     int stored = floor_named(m, a->pfloor);
 
@@ -266,16 +266,16 @@ int app_players_floor(App *a)
 
 int app_players_split(const App *a)
 {
-    if (!a->map || a->screen != SCREEN_PLAY) return 0;
-    int f = floor_named(a->map, a->pfloor);
+    if (!a->world.map || a->screen != SCREEN_PLAY) return 0;
+    int f = floor_named(a->world.map, a->pfloor);
     int order[MAP_AREAS_MAX];
-    if (!floor_order(a->map, order)) return 0;
+    if (!floor_order(a->world.map, order)) return 0;
     return f != app_floor_shown(a);
 }
 
 int app_players_own_camera(const App *a)
 {
-    if (!a->map || a->screen != SCREEN_PLAY) return 0;
+    if (!a->world.map || a->screen != SCREEN_PLAY) return 0;
     return a->pcam != PCAM_FOLLOW || app_players_split(a);
 }
 
@@ -314,7 +314,7 @@ static int party_box(const Map *m, int f, int *x0, int *y0, int *x1, int *y1)
 static void party_frame(App *a, int f)
 {
     PROF_ZONE("camera.party");
-    const Map *m = a->map;
+    const Map *m = a->world.map;
     GridView  *g = &a->pview;
     int x0, y0, x1, y1;
     if (!party_box(m, f, &x0, &y0, &x1, &y1)) {
@@ -366,7 +366,7 @@ static void party_frame(App *a, int f)
  * floor's middle. */
 static void center_on_party(App *a, int f)
 {
-    const Map *m = a->map;
+    const Map *m = a->world.map;
     GridView  *g = &a->pview;
     long sx = 0, sy = 0, n = 0;
     for (int i = 0; i < m->tokens.n; i++) {
@@ -380,7 +380,7 @@ static void center_on_party(App *a, int f)
 
 void app_players_camera(App *a)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     int  f = floor_named(m, a->pfloor);
     GridView *g = &a->pview;
     if (a->pcam == PCAM_FOLLOW) g->zoom = a->ed.view.zoom;    /* party picks its own; hold keeps it */
@@ -417,7 +417,7 @@ void app_players_camera(App *a)
 void app_players_camera_command(App *a, const char *rest)
 {
     static const char *const NAME[] = { "follow", "party", "hold" };
-    Map *m = a->map;
+    Map *m = a->world.map;
     int mode = -1;
     for (int k = 0; k < 3; k++) if (!strcmp(rest, NAME[k])) mode = k;
     if (mode < 0) {
@@ -451,7 +451,7 @@ void app_players_camera_command(App *a, const char *rest)
 
 void app_floor_spotlight(App *a)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     int  f;
     if (m->spotlight == SPOTLIGHT_PLAYERS) f = app_players_floor(a);
     else f = floor_pick(m, TOKEN_ENEMY, app_floor_shown(a), floor_named(m, a->side_floor[1]));
@@ -460,7 +460,7 @@ void app_floor_spotlight(App *a)
 
 void app_players_pin(App *a, const char *rest)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     char msg[96];
     a->pcam_pinned = 0;             /* the GM's own pin, now: it stays past hold */
     if (!strcmp(rest, "auto")) {

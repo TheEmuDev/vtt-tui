@@ -26,7 +26,7 @@
 static int status_msg_shown(const App *a)
 {
     return !(a->view == VIEW_PLAYERS && (a->status_gm || a->psplit ||
-                                         (a->map && (fog_any(a->map) || tokens_any_hidden(&a->map->tokens)))));
+                                         (a->world.map && (fog_any(a->world.map) || tokens_any_hidden(&a->world.map->tokens)))));
 }
 
 void app_draw_status_msg(App *a, int x, int y, int maxw)
@@ -158,11 +158,11 @@ static void draw_editor_body(App *a);
  * is up, with the clocks' rows and whether the turns want it. */
 static int editor_layout(App *a, int *clocks, int *turns)
 {
-    const Map *m = a->map;
+    const Map *m = a->world.map;
     *clocks = a->screen == SCREEN_PLAY ? clock_panel_rows(m) : 0;
     *turns  = a->screen == SCREEN_PLAY && turn_panel_wanted(m);
     int panel = a->play.panel && a->rnd->w >= 80 && (*turns || *clocks);
-    ed_layout(&a->ed, a->map, a->rnd->w - (panel ? TURN_PANEL_W : 0), a->rnd->h);
+    ed_layout(&a->ed, a->world.map, a->rnd->w - (panel ? TURN_PANEL_W : 0), a->rnd->h);
     return panel;
 }
 
@@ -195,7 +195,7 @@ static void draw_editor(App *a)
  * as tall as the card, the GM's alone. */
 static void draw_card_box(App *a, int i)
 {
-    const Map   *m = a->map;
+    const Map   *m = a->world.map;
     const Token *t = &m->tokens.v[i];
     Rect v = a->ed.view.view;
     int  w = imin(48, v.w / 2);
@@ -226,7 +226,7 @@ static void draw_editor_body(App *a)
 {
     Renderer    *r  = a->rnd;
     const Theme *th = a->th;
-    Map         *m  = a->map;
+    Map         *m  = a->world.map;
 
     int clocks, turns, panel = editor_layout(a, &clocks, &turns);
 
@@ -432,7 +432,7 @@ void app_draw_view(App *a, View view)
     case SCREEN_BROWSER: draw_browser(a); break;
     case SCREEN_EDITOR:
     case SCREEN_PLAY:
-        if (a->map) draw_editor(a);
+        if (a->world.map) draw_editor(a);
         else        draw_menu(a);
         break;
     }
@@ -448,7 +448,7 @@ void app_draw_view(App *a, View view)
     case MODAL_PROMPT:  ui_prompt_draw(a->rnd, a->th, &a->prompt, frame); break;
     case MODAL_PICKER:  ui_picker_draw(a->rnd, a->th, &a->picker, frame); break;
     case MODAL_CARD: {
-        const Map *m = a->map;
+        const Map *m = a->world.map;
         /* A creature's card, or a condition's text (:condition). */
         if (!a->card_text && (!m || a->card_token < 0 || a->card_token >= m->tokens.n)) break;
         const char *text  = a->card_text ? a->card_text : card_of(m, &m->tokens.v[a->card_token]);
@@ -514,7 +514,7 @@ void app_draw_view(App *a, View view)
 void app_current_counter(const App *a, char *buf, size_t bufsz)
 {
     if (a->play.counter[0]) { str_lcpy(buf, a->play.counter, bufsz); return; }
-    const Ruleset *rs = a->map ? ruleset_by_name(a->map->ruleset) : NULL;
+    const Ruleset *rs = a->world.map ? ruleset_by_name(a->world.map->ruleset) : NULL;
     counter_default(rs ? rs->counters : NULL, buf, bufsz);
 }
 
@@ -522,13 +522,13 @@ void app_current_counter(const App *a, char *buf, size_t bufsz)
  * under the cursor -- in play mode, the box on, a card to show. -1 for none. */
 int app_card_shown(const App *a)
 {
-    if (a->card_box_off || a->screen != SCREEN_PLAY || !a->map) return -1;
+    if (a->card_box_off || a->screen != SCREEN_PLAY || !a->world.map) return -1;
     int i = app_target_token(a);
     if (i < 0) return -1;
     /* A card, or a marker the ruleset has words for (docs/CONDITIONS.md).
      * app_view_differs reads this too: it is what keeps both off the phones. */
-    const Token *t = &a->map->tokens.v[i];
-    return card_of(a->map, t) || ruleset_has_condition(ruleset_by_name(a->map->ruleset), t) ? i : -1;
+    const Token *t = &a->world.map->tokens.v[i];
+    return card_of(a->world.map, t) || ruleset_has_condition(ruleset_by_name(a->world.map->ruleset), t) ? i : -1;
 }
 
 
@@ -538,14 +538,14 @@ int app_view_differs(const App *a)
     if (a->modal != MODAL_NONE) return 1;
     if (a->ed.mode == ED_COMMAND) return 1;       /* the : line being typed */
     if (a->status_gm && a->status[0]) return 1;
-    if (a->screen == SCREEN_PLAY && a->map && fog_any(a->map)) return 1;
+    if (a->screen == SCREEN_PLAY && a->world.map && fog_any(a->world.map)) return 1;
     if (prof_overlay_visible()) return 1;
     if (a->agent_ring.until_ms) return 1;       /* the GM's alone */
     if (app_jobs_shown(a)) return 1;            /* the jobs' tints, likewise */
     if (app_card_shown(a) >= 0) return 1;       /* the card box is the GM's */
     if (app_summoning(a)) return 1;             /* its status line names the template */
-    if (a->screen == SCREEN_PLAY && a->map) {
-        const Map  *m  = a->map;
+    if (a->screen == SCREEN_PLAY && a->world.map) {
+        const Map  *m  = a->world.map;
         const Play *pl = &a->play;
         if (pl->sel >= 0 && pl->sel < m->tokens.n) {
             const Token *t = &m->tokens.v[pl->sel];

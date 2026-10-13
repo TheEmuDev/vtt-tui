@@ -17,7 +17,7 @@
  * means none or several. */
 static int clock_named(App *a, const char *name)
 {
-    int idx = clock_find(a->map, name);
+    int idx = clock_find(a->world.map, name);
     if (idx == CLOCK_AMBIGUOUS) {
         char msg[96];
         snprintf(msg, sizeof msg, "\"%.20s\" could be more than one clock", name);
@@ -38,7 +38,7 @@ static int clock_named(App *a, const char *name)
  * :clock NAME remove     drop it */
 static void clock_command(App *a, const char *rest)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     char msg[200];
     if (!*rest) {
         int off = 0;
@@ -121,7 +121,7 @@ static void clock_command(App *a, const char *rest)
  * :tick NAME 2      two steps;  -1 one back;  =3 set outright;  reset to the start */
 static void tick_command(App *a, const char *rest)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     char name[CLOCK_NAME_MAX + 8] = { 0 }, arg[16] = { 0 };
     int  n = sscanf(rest, "%27s %15s", name, arg);
 
@@ -161,8 +161,8 @@ static void tick_command(App *a, const char *rest)
 
     char msg[96];
     int  before = c->value, want;
-    if (set >= 0) { want = set; if (want <= c->size) clock_set(m, &a->undo, idx, want); }
-    else            clock_tick(m, &a->undo, idx, delta, &want);
+    if (set >= 0) { want = set; if (want <= c->size) clock_set(m, &a->world.undo, idx, want); }
+    else            clock_tick(m, &a->world.undo, idx, delta, &want);
 
     if (want > c->size || want < 0) {
         if ((want < 0) == (c->down != 0)) snprintf(msg, sizeof msg, "%s is %s", c->name, c->down ? "done" : "full");
@@ -187,7 +187,7 @@ static void tick_command(App *a, const char *rest)
  * the complaint already on the status line. */
 static int roll_text(App *a, const char *p, char *msg, size_t msgsz, DualitySpans *sp)
 {
-    const Ruleset *rs = ruleset_by_name(a->map->ruleset);
+    const Ruleset *rs = ruleset_by_name(a->world.map->ruleset);
     int    mod = 0, bare = 0;
     size_t plen = strlen(p);
     if (plen >= 7 && !strncmp(p, "duality", 7) &&
@@ -249,9 +249,9 @@ static void rolls_list(App *a)
     char msg[200];
     int  off = 0;
     for (int i = 0; i < ROLL_MAX && off < (int)sizeof msg - 24; i++) {
-        if (!a->map->rolls[i].name[0]) continue;
+        if (!a->world.map->rolls[i].name[0]) continue;
         off += snprintf(msg + off, sizeof msg - (size_t)off, "%s%s = %s",
-                        off ? ", " : "", a->map->rolls[i].name, a->map->rolls[i].expr);
+                        off ? ", " : "", a->world.map->rolls[i].name, a->world.map->rolls[i].expr);
     }
     app_set_status(a, off ? msg : "no named rolls - :roll attack = 2d12+3 saves one");
 }
@@ -261,7 +261,7 @@ static void rolls_list(App *a)
  * :roll attack = 2d12+3  save one;  :roll attack remove  removes it */
 static void roll_command(App *a, const char *rest)
 {
-    Map  *m = a->map;
+    Map  *m = a->world.map;
     char  msg[160];
     const char *eq = strchr(rest, '=');
 
@@ -443,7 +443,7 @@ static void serve_command(App *a, const char *rest)
 
 static void fog_list(App *a)
 {
-    const Map *m = a->map;
+    const Map *m = a->world.map;
     char msg[200];
     int  off = snprintf(msg, sizeof msg, "fog %s", m->fog_on ? "on" : "off");
     int  n = 0;
@@ -476,7 +476,7 @@ static void fog_list(App *a)
  * :fog NAME remove           scrub it off the map for good */
 static void fog_command(App *a, const char *rest)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     char msg[160];
     if (!*rest) { fog_list(a); return; }
 
@@ -528,7 +528,7 @@ static void fog_command(App *a, const char *rest)
         char pname[FOG_NAME_MAX];
         str_lcpy(pname, p->name, sizeof pname);
         if (!strcmp(verb, "clear") || !strcmp(verb, "hide")) {
-            int n = fog_light_patch(m, &a->undo, id, !strcmp(verb, "clear"));
+            int n = fog_light_patch(m, &a->world.undo, id, !strcmp(verb, "clear"));
             snprintf(msg, sizeof msg, "%s %s - %d square%s", !strcmp(verb, "clear") ? "lit" : "darkened",
                      pname, n, n == 1 ? "" : "s");
         } else if (!strcmp(verb, "remove")) {
@@ -580,11 +580,11 @@ static void fog_command(App *a, const char *rest)
     a->ed.fog_patch = id;
 
     if (all) {
-        undo_begin(&a->undo);
+        undo_begin(&a->world.undo);
         for (int y = 0; y < m->h; y++)
             for (int x = 0; x < m->w; x++)
-                if ((fog_at(m, x, y) & FOG_ID) != (uint8_t)id) fog_paint(m, &a->undo, x, y, id);
-        undo_end(&a->undo);
+                if ((fog_at(m, x, y) & FOG_ID) != (uint8_t)id) fog_paint(m, &a->world.undo, x, y, id);
+        undo_end(&a->world.undo);
     }
     int switched = 0;
     if (created && !m->fog_on) { m->fog_on = 1; switched = 1; }
@@ -614,7 +614,7 @@ int app_cmd_vbox(App *a, int *x0, int *y0, int *x1, int *y1)
  * or jumps to the area of that name; :area NAME remove takes the name off. */
 static void area_command(App *a, const char *verb, const char *rest)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     char msg[256], b0[MAP_COORD_MAX], b1[MAP_COORD_MAX];
     if (!strcmp(verb, "areas") || !*rest) {
         if (!m->nareas) { app_set_status_gm(a, "no named areas - v a box, then :area NAME"); return; }
@@ -643,9 +643,9 @@ static void area_command(App *a, const char *verb, const char *rest)
     int ai = map_area_find(m, name);
     if (off) {
         if (ai < 0) { snprintf(msg, sizeof msg, "no area called %.40s", name); app_set_status_gm(a, msg); return; }
-        undo_begin(&a->undo);
-        undo_remove_area(&a->undo, m, name);
-        undo_end(&a->undo);
+        undo_begin(&a->world.undo);
+        undo_remove_area(&a->world.undo, m, name);
+        undo_end(&a->world.undo);
         snprintf(msg, sizeof msg, "%.40s is no longer named", name);
         app_note_gm(a, msg);
         return;
@@ -658,9 +658,9 @@ static void area_command(App *a, const char *verb, const char *rest)
             app_set_status_gm(a, msg);
             return;
         }
-        undo_begin(&a->undo);
-        int ok = undo_set_area(&a->undo, m, name, bx0, by0, bx1, by1);
-        undo_end(&a->undo);
+        undo_begin(&a->world.undo);
+        int ok = undo_set_area(&a->world.undo, m, name, bx0, by0, bx1, by1);
+        undo_end(&a->world.undo);
         if (!ok) { snprintf(msg, sizeof msg, "a map holds %d named areas", MAP_AREAS_MAX); app_set_status_gm(a, msg); return; }
         ai = map_area_find(m, name);
         map_coord_name(m->areas[ai].x0, m->areas[ai].y0, b0, sizeof b0);
@@ -686,7 +686,7 @@ static void area_command(App *a, const char *verb, const char *rest)
 
 static void cmd_w(App *a, const char *verb, const char *rest)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     char path[MAP_PATH_MAX];
     if (rest[0]) mapio_resolve_path(rest, path, sizeof path);
     else if (m->path[0]) str_lcpy(path, m->path, sizeof path);
@@ -698,7 +698,7 @@ static void cmd_w(App *a, const char *verb, const char *rest)
 
 static void cmd_wq(App *a, const char *verb, const char *rest)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     char path[MAP_PATH_MAX];
     if (m->path[0]) str_lcpy(path, m->path, sizeof path);
     else mapio_resolve_path(m->name, path, sizeof path);
@@ -722,8 +722,8 @@ static void cmd_e(App *a, const char *verb, const char *rest)
     /* Alone, it opens this map's file again: what is on the disk, in place
      * of what is here (asking first when there is unsaved work). */
     if (!rest[0]) {
-        if (!a->map->path[0]) { app_set_status(a, ":e alone reads this map's file again, and it has none - :e NAME opens one"); return; }
-        str_lcpy(path, a->map->path, sizeof path);
+        if (!a->world.map->path[0]) { app_set_status(a, ":e alone reads this map's file again, and it has none - :e NAME opens one"); return; }
+        str_lcpy(path, a->world.map->path, sizeof path);
     }
     else mapio_resolve_path(rest, path, sizeof path);
     app_leave_map_for(a, path);
@@ -741,7 +741,7 @@ static void cmd_build(App *a, const char *verb, const char *rest)
 
 static void cmd_name(App *a, const char *verb, const char *rest)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     if (!rest[0]) { app_set_status(a, ":name needs a value"); return; }
     str_lcpy(m->name, rest, sizeof m->name);
     map_touch(m);
@@ -750,7 +750,7 @@ static void cmd_name(App *a, const char *verb, const char *rest)
 
 static void cmd_resize(App *a, const char *verb, const char *rest)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     int w = 0, h = 0;
     if (sscanf(rest, "%dx%d", &w, &h) != 2 && sscanf(rest, "%d %d", &w, &h) != 2) {
         app_set_status(a, ":resize wants a width and a height");
@@ -761,7 +761,7 @@ static void cmd_resize(App *a, const char *verb, const char *rest)
         return;
     }
     /* The history describes cells that may no longer exist. */
-    undo_clear(&a->undo);
+    undo_clear(&a->world.undo);
     a->ed.cx = iclamp(a->ed.cx, 0, m->w - 1);
     a->ed.cy = iclamp(a->ed.cy, 0, m->h - 1);
     ed_layout(&a->ed, m, a->rnd->w, a->rnd->h);
@@ -773,7 +773,7 @@ static void cmd_resize(App *a, const char *verb, const char *rest)
 
 static void cmd_scale(App *a, const char *verb, const char *rest)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     double v = atof(rest);
     if (!(v > 0.0 && v < 100000.0)) {
         app_set_status(a, ":scale wants feet per tile, e.g. :scale 5");
@@ -788,7 +788,7 @@ static void cmd_scale(App *a, const char *verb, const char *rest)
 
 static void cmd_metric(App *a, const char *verb, const char *rest)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     int got = rest[0] ? dist_metric_from_name(rest) : -1;
     if (got < 0) {
         app_set_status(a, ":metric wants chebyshev, euclidean, alt or manhattan");
@@ -803,7 +803,7 @@ static void cmd_metric(App *a, const char *verb, const char *rest)
 
 static void cmd_ruleset(App *a, const char *verb, const char *rest)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     const Ruleset *rs = rest[0] ? ruleset_by_name(rest) : ruleset_by_name(m->ruleset);
     if (!rs) {
         char msg[128];
@@ -837,7 +837,7 @@ static void cmd_rolls(App *a, const char *verb, const char *rest)
 
 static void cmd_turns(App *a, const char *verb, const char *rest)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     /* Bare, it reads the order out; "end" ends the fight. */
     char msg[160];
     if (!*rest) {
@@ -847,14 +847,14 @@ static void cmd_turns(App *a, const char *verb, const char *rest)
     }
     if (strcmp(rest, "end") != 0) { app_set_status(a, ":turns lists the order, :turns end ends the fight"); return; }
     if (turn_count(m) == 0 && turn_acting(m) < 0) { app_set_status(a, "there is no fight to end"); return; }
-    int had = turn_clear(m, &a->undo);
+    int had = turn_clear(m, &a->world.undo);
     snprintf(msg, sizeof msg, "the fight is over - %d left the turn order", had);
     app_note(a, msg);
 }
 
 static void cmd_notes(App *a, const char *verb, const char *rest)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     /* Where the notes are, not what they say: this line is mirrored. */
     char msg[200];
     int  off = 0, n = 0;
@@ -994,7 +994,7 @@ static void cmd_panel(App *a, const char *verb, const char *rest)
  * :card off   the box does not; a setting, nothing is lost */
 static void cmd_card(App *a, const char *verb, const char *rest)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     if (!strcmp(rest, "on") || !strcmp(rest, "off")) {
         a->card_box_off = !strcmp(rest, "off");
         app_set_status(a, a->card_box_off ? "card box off - :card still shows a card whole"
@@ -1044,7 +1044,7 @@ static void cmd_dmg(App *a, const char *verb, const char *rest)
 
 static void cmd_log(App *a, const char *verb, const char *rest)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     /* :log toggles; on/off say which; anything else is a file. */
     SessionLog *l = &a->slog;
     int want;
@@ -1072,7 +1072,7 @@ static void cmd_log(App *a, const char *verb, const char *rest)
         app_set_status(a, err);
         return;
     }
-    a->ctl_refused = 0;                  /* a new log has been told of no refusal yet */
+    a->world.ctl_refused = 0;                  /* a new log has been told of no refusal yet */
     snprintf(msg, sizeof msg, "logging to %s", path);
     app_set_status(a, msg);
 }
@@ -1080,7 +1080,7 @@ static void cmd_log(App *a, const char *verb, const char *rest)
 static void cmd_hidden(App *a, const char *verb, const char *rest)
 {
     /* Who the players cannot see, and where: the GM's line alone. */
-    Map *m = a->map;
+    Map *m = a->world.map;
     char msg[sizeof a->status];
     int  off = 0, n = 0, shown = 0;
     for (int i = 0; i < m->tokens.n; i++) n += m->tokens.v[i].hidden;
@@ -1103,7 +1103,7 @@ static void cmd_hidden(App *a, const char *verb, const char *rest)
 
 static void cmd_zoom(App *a, const char *verb, const char *rest)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     int z = atoi(rest);
     ed_set_zoom(&a->ed, m, z);
 }
@@ -1193,9 +1193,9 @@ void app_exec_command(App *a, const char *line)
             app_set_status(a, "put the creature down before jumping");
             return;
         }
-        if (!map_in_bounds(a->map, jx, jy)) {
+        if (!map_in_bounds(a->world.map, jx, jy)) {
             char edge[MAP_COORD_MAX];
-            map_coord_name(a->map->w - 1, a->map->h - 1, edge, sizeof edge);
+            map_coord_name(a->world.map->w - 1, a->world.map->h - 1, edge, sizeof edge);
             snprintf(msg, sizeof msg, "off the map - it ends at %s", edge);
             app_set_status(a, msg);
             return;
@@ -1206,7 +1206,7 @@ void app_exec_command(App *a, const char *line)
         /* Centered rather than merely scrolled into view: a jump is for going
          * somewhere else, and arriving pinned against an edge shows half of
          * where you went. */
-        grid_center_on(&a->ed.view, a->map, jx, jy);
+        grid_center_on(&a->ed.view, a->world.map, jx, jy);
         if (a->ed.mode == ED_VISUAL) a->ed.mode = ED_NORMAL;
 
         char at[MAP_COORD_MAX];
@@ -1231,7 +1231,7 @@ void app_command_key(App *a, Key k)
     if (r == 1) app_exec_command(a, a->ed.cmd.buf);
     else        app_set_status(a, "");
     a->ed.cmd_from_visual = 0;
-    if (back && a->stamp && a->map && a->screen == SCREEN_EDITOR && a->ed.mode == ED_NORMAL)
+    if (back && a->stamp && a->world.map && a->screen == SCREEN_EDITOR && a->ed.mode == ED_NORMAL)
         a->ed.mode = ED_STAMP;
     if (review) app_review_resume(a);
 }

@@ -99,7 +99,7 @@ void test_notes(void)
     CHECK_EQ(app_open_map(&a, path), 0);
     Key f2 = { KEY_F2, 0, 0 };
     app_key(&a, f2);
-    Map *m = a.map;
+    Map *m = a.world.map;
     a.ed.cx = 0; a.ed.cy = 0;
     press(&a, "ipAria\r");
     CHECK_EQ(m->tokens.n, 1);
@@ -316,7 +316,7 @@ void test_counters(void)
     press(&a, ":ruleset daggerheart\r");
     a.ed.cx = a.ed.cy = 0;
     press(&a, "ieOgre\r");
-    Map *m = a.map;
+    Map *m = a.world.map;
 
     CASE("s v opens the prompt with the ruleset's counters offered");
     press(&a, "sv");
@@ -496,11 +496,11 @@ void test_hidden(void)
     rnd_init(&r);
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
-    a.ctl_auto = 1;                       /* edits land at once (decision 6) */
+    a.world.ctl_auto = 1;                       /* edits land at once (decision 6) */
     CHECK_EQ(app_open_map(&a, path), 0);
     Key f2 = { KEY_F2, 0, 0 };
     app_key(&a, f2);
-    Map *m = a.map;
+    Map *m = a.world.map;
 
     CASE("s h hides the creature under the cursor; the GM still sees it, dimmed");
     a.ed.cx = 6; a.ed.cy = 2;
@@ -714,7 +714,7 @@ void test_conditions(void)
     press(&a, "ieOgre\r");
     a.ed.cx = 1; a.ed.cy = 1;
     press(&a, "ipAria\r");
-    Map *m = a.map;
+    Map *m = a.world.map;
     const Ruleset *dh = ruleset_by_name("daggerheart");
     Token *ogre = &m->tokens.v[0], *aria = &m->tokens.v[1];
 
@@ -747,7 +747,7 @@ void test_conditions(void)
     CASE("the last Stress marked puts Vulnerable on, in the same undo step; an adversary as a PC");
     press(&a, "svstress 2/2\r");
     CHECK(!has_marker(ogre, "Vulnerable"));
-    int d0 = a.undo.depth;
+    int d0 = a.world.undo.depth;
     press(&a, "<");
     CHECK(!has_marker(ogre, "Vulnerable"));
     press(&a, "<");
@@ -756,7 +756,7 @@ void test_conditions(void)
     CHECK(ogre->nstatus > 0 && ogre->status[ogre->nstatus - 1].color == ruleset_condition(dh, "vulnerable")->color);
     CHECK(strstr(a.status, "Ogre Stress 0/2 - now Vulnerable") != NULL);
     CHECK_EQ(a.status_gm, 1);
-    CHECK_EQ(a.undo.depth, d0 + 2);
+    CHECK_EQ(a.world.undo.depth, d0 + 2);
     press(&a, "u");                                        /* the Stress and the marker, one step */
     CHECK_EQ(ogre->counters[0].value, 1);
     CHECK(!has_marker(ogre, "Vulnerable"));
@@ -904,7 +904,7 @@ void test_conditions(void)
     CHECK(!strcmp(ogre->status[ogre->nstatus - 1].label, "vulnerable") && ogre->status[ogre->nstatus - 1].color == 5);
     press(&a, ":condition\r");
     CHECK(strstr(a.status, "names no conditions") != NULL);
-    CHECK(undo_balanced(&a.undo));
+    CHECK(undo_balanced(&a.world.undo));
 
     app_free(&a);
     rnd_free(&r);

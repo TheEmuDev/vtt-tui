@@ -936,7 +936,7 @@ void test_serve_lifetime(void)
     }
 
     press(&a, ":q!\r");
-    CHECK_EQ(a.map, NULL);
+    CHECK_EQ(a.world.map, NULL);
     CHECK_EQ(net_active(&a.net), 0);
     /* Both pieces of news, neither eating the other. */
     CHECK(strstr(a.status, "closed without saving") != NULL);
@@ -965,7 +965,7 @@ void test_serve_lifetime(void)
     CHECK_EQ((int)a.net.port, (int)port);        /* the flag alone never restarts it */
     CHECK(strstr(a.status, "staying up when the map closes") != NULL);
     press(&a, ":q!\r");
-    CHECK_EQ(a.map, NULL);
+    CHECK_EQ(a.world.map, NULL);
     CHECK_EQ(net_active(&a.net), 1);
     CHECK(strstr(a.status, "remote view off") == NULL);
 
@@ -987,7 +987,7 @@ void test_serve_lifetime(void)
     CHECK_EQ((int)a.net.port, (int)port);
     CHECK(strstr(a.status, "staying up") == NULL);
     press(&a, "q");                               /* the plain close does it too */
-    CHECK_EQ(a.map, NULL);
+    CHECK_EQ(a.world.map, NULL);
     CHECK_EQ(net_active(&a.net), 0);
     CHECK(strstr(a.status, "remote view off") != NULL);
     close(w2);
@@ -996,7 +996,7 @@ void test_serve_lifetime(void)
     CHECK_EQ(app_open_map(&a, path), 0);                   /* build mode, where space edits ground */
     a.ed.cx = a.ed.cy = 0;
     press(&a, " ");                                        /* an unsaved change */
-    CHECK_EQ(a.map->modified, 1);
+    CHECK_EQ(a.world.map->modified, 1);
     char e_other[700];
     snprintf(e_other, sizeof e_other, ":e %s\r", other);
     press(&a, e_other);
@@ -1004,13 +1004,13 @@ void test_serve_lifetime(void)
     CHECK(strstr(a.modal_body, "open the other map") != NULL);
     press(&a, "n");
     CHECK_EQ(a.modal, MODAL_NONE);
-    CHECK_EQ(strcmp(a.map->path, path), 0);                /* still the first map, still unsaved */
-    CHECK_EQ(a.map->modified, 1);
+    CHECK_EQ(strcmp(a.world.map->path, path), 0);                /* still the first map, still unsaved */
+    CHECK_EQ(a.world.map->modified, 1);
     press(&a, e_other);
     press(&a, "y");
     CHECK_EQ(a.modal, MODAL_NONE);
-    CHECK_EQ(strcmp(a.map->path, other), 0);
-    CHECK_EQ(a.map->modified, 0);
+    CHECK_EQ(strcmp(a.world.map->path, other), 0);
+    CHECK_EQ(a.world.map->modified, 0);
     CHECK_EQ(a.screen, SCREEN_EDITOR);
     app_key(&a, f2);
     press(&a, ":q!\r");
@@ -1026,14 +1026,14 @@ void test_serve_lifetime(void)
     char open_other[700];
     snprintf(open_other, sizeof open_other, ":e %s\r", other);
     press(&a, open_other);
-    CHECK(a.map != NULL);
+    CHECK(a.world.map != NULL);
     CHECK_EQ(net_active(&a.net), 1);
     CHECK_EQ((int)a.net.port, (int)kept);
 
     CASE("a saved close says both what was written and what went down");
     app_key(&a, f2);
     press(&a, ":wq\r");
-    CHECK_EQ(a.map, NULL);
+    CHECK_EQ(a.world.map, NULL);
     CHECK_EQ(net_active(&a.net), 0);
     CHECK(strstr(a.status, "wrote") != NULL);
     CHECK(strstr(a.status, "remote view off") != NULL);
@@ -1175,7 +1175,7 @@ void test_players_frame(void)
     CHECK_EQ(app_view_differs(&a), 0);                /* both frames are the players' now */
     press(&a, "q");
     CHECK_EQ(a.preview, 0);
-    CHECK(a.map != NULL);
+    CHECK(a.world.map != NULL);
     rnd_begin(&r); app_draw(&a);
     CHECK_EQ(a.view, VIEW_GM);
     press(&a, ":player preview\r");
@@ -1235,7 +1235,7 @@ void test_pings(void)
     rnd_resize(&r, 80, 16);
     app_init(&a, NULL, &r);
     CHECK_EQ(app_open_map(&a, path), 0);
-    Map *m = a.map;
+    Map *m = a.world.map;
     Key f1 = { KEY_F1, 0, 0 }, f2 = { KEY_F2, 0, 0 };
     app_key(&a, f2);
     press(&a, ":fog off\r");
@@ -1423,9 +1423,9 @@ void test_pings(void)
     CASE("with every slot taken, a new source takes the ring closest to going");
     now += 10000;
     app_tick(&a, now);
-    for (uint32_t i = 1; i <= PING_MAX; i++) { a.now_ms = now + i; app_ping(&a, 100 + i, 1, 1, 1, 1); }
+    for (uint32_t i = 1; i <= PING_MAX; i++) { a.world.now_ms = now + i; app_ping(&a, 100 + i, 1, 1, 1, 1); }
     CHECK_EQ(a.npings, PING_MAX);
-    a.now_ms = now + 50;
+    a.world.now_ms = now + 50;
     app_ping(&a, 999, 2, 2, 2, 2);
     CHECK_EQ(a.npings, PING_MAX);
     int evicted = 1;
@@ -1434,7 +1434,7 @@ void test_pings(void)
 
     CASE("closing the map, or opening another, takes every ring down");
     press(&a, ":q!\r");                                    /* app_close_map */
-    CHECK(a.map == NULL);
+    CHECK(a.world.map == NULL);
     CHECK_EQ(a.npings, 0);
     CHECK_EQ(app_open_map(&a, path), 0);
     app_key(&a, f2);

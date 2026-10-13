@@ -164,7 +164,7 @@ void test_card_box(void)
     CHECK_EQ(app_open_map(&a, "tests/fixtures/everything.vtt"), 0);
     press(&a, ":play\r");
     int ogre = -1;
-    for (int i = 0; i < a.map->tokens.n; i++) if (!strcmp(a.map->tokens.v[i].label, "Ogre")) ogre = i;
+    for (int i = 0; i < a.world.map->tokens.n; i++) if (!strcmp(a.world.map->tokens.v[i].label, "Ogre")) ogre = i;
     CHECK(ogre >= 0);
 
     CASE("the selected creature's card shows beside the map, the GM's alone");
@@ -236,7 +236,7 @@ void test_card_box(void)
 
     CASE("_emphasis_ marks go, closing after punctuation too; snake_case stays");
     press(&a, "\x1b[12~");
-    card_set(a.map, "ogre", "Ogre\n_Mana Beam._ The snake_case stays.");
+    card_set(a.world.map, "ogre", "Ogre\n_Mana Beam._ The snake_case stays.");
     a.play.sel = ogre;
     rnd_begin(&r);
     app_draw_view(&a, VIEW_GM);
@@ -252,11 +252,11 @@ void test_card_box(void)
 
     CASE("the box never covers its creature");
     {
-        Token *t = &a.map->tokens.v[ogre];
+        Token *t = &a.world.map->tokens.v[ogre];
         int ox = t->x, oy = t->y;
-        t->x = (int16_t)(a.map->w - t->size);                       /* the top right corner */
+        t->x = (int16_t)(a.world.map->w - t->size);                       /* the top right corner */
         t->y = 0;
-        grid_center_on(&a.ed.view, a.map, t->x, t->y);
+        grid_center_on(&a.ed.view, a.world.map, t->x, t->y);
         rnd_begin(&r);
         app_draw_view(&a, VIEW_GM);
         Rect c;
@@ -276,7 +276,7 @@ void test_card_box(void)
         char longcard[3000];
         int n = 0;
         for (int i = 0; i < 60; i++) n += snprintf(longcard + n, sizeof longcard - (size_t)n, "line %d\n", i);
-        card_set(a.map, "ogre", longcard);
+        card_set(a.world.map, "ogre", longcard);
         a.play.sel = ogre;
         press(&a, ":card\r");
         rnd_begin(&r); app_draw(&a);
@@ -346,31 +346,31 @@ void test_card_edit(void)
     set_editor(sb.dir, "sed -i 's/Difficulty: 11/Difficulty: 14/' \"$1\"\n");
     a.ed.cx = 1; a.ed.cy = 1;
     press(&a, "sk");
-    int gi = card_find(a.map, "Goblin");
+    int gi = card_find(a.world.map, "Goblin");
     CHECK(gi >= 0);
     if (gi >= 0) {
-        const char *t = a.map->cards[gi].text;
+        const char *t = a.world.map->cards[gi].text;
         CHECK(!strncmp(t, "Goblin - Tier 1 Standard\n", 25));
         CHECK(strstr(t, "Difficulty: 14   Thresholds: 5/10") != NULL);
         CHECK(strchr(t, '#') == NULL);                          /* the help lines left out */
     }
-    CHECK_EQ(strcmp(a.map->tokens.v[0].card, "Goblin"), 0);
-    CHECK_EQ(strcmp(a.map->tokens.v[1].card, "Goblin"), 0);   /* Goblin 2 has it too */
-    CHECK_EQ(a.map->tokens.v[2].card[0], '\0');               /* Aria does not */
+    CHECK_EQ(strcmp(a.world.map->tokens.v[0].card, "Goblin"), 0);
+    CHECK_EQ(strcmp(a.world.map->tokens.v[1].card, "Goblin"), 0);   /* Goblin 2 has it too */
+    CHECK_EQ(a.world.map->tokens.v[2].card[0], '\0');               /* Aria does not */
     CHECK(strstr(a.status, "given to 1 more Goblin") != NULL);
-    CHECK_EQ(a.map->modified, 1);
+    CHECK_EQ(a.world.map->modified, 1);
     CHECK_EQ(leftover_card_files(sb.dir), 0);
 
     CASE("an existing card opens as it is; an addition is kept");
     set_editor(sb.dir, "sed -i '1a Motives: steal, run' \"$1\"\n");
     press(&a, "sk");
-    CHECK(strstr(a.map->cards[gi].text, "Standard\nMotives: steal, run\n") != NULL);
+    CHECK(strstr(a.world.map->cards[gi].text, "Standard\nMotives: steal, run\n") != NULL);
     CHECK(strstr(a.status, "card Goblin saved") != NULL);
 
     CASE("quitting untouched, emptying it, or the editor failing changes nothing");
     set_editor(sb.dir, "true\n");
     char before[CARD_TEXT_MAX];
-    str_lcpy(before, a.map->cards[gi].text, sizeof before);
+    str_lcpy(before, a.world.map->cards[gi].text, sizeof before);
     press(&a, "sk");
     CHECK(strstr(a.status, "card unchanged") != NULL);
     set_editor(sb.dir, ": > \"$1\"\n");
@@ -379,7 +379,7 @@ void test_card_edit(void)
     set_editor(sb.dir, "exit 3\n");
     press(&a, "sk");
     CHECK(strstr(a.status, "did not finish") != NULL);
-    CHECK_EQ(strcmp(a.map->cards[gi].text, before), 0);
+    CHECK_EQ(strcmp(a.world.map->cards[gi].text, before), 0);
     CHECK_EQ(leftover_card_files(sb.dir), 0);
 
     CASE("a new card left as it started is not written");
@@ -387,36 +387,36 @@ void test_card_edit(void)
     a.ed.cx = 5; a.ed.cy = 1;
     press(&a, "sk");
     CHECK(strstr(a.status, "no card written") != NULL);
-    CHECK_EQ(card_find(a.map, "Aria"), -1);
-    CHECK_EQ(a.map->tokens.v[2].card[0], '\0');
+    CHECK_EQ(card_find(a.world.map, "Aria"), -1);
+    CHECK_EQ(a.world.map->tokens.v[2].card[0], '\0');
 
     CASE("without a ruleset a new card starts with the label alone");
     press(&a, ":ruleset none\r");
     set_editor(sb.dir, "printf 'Aria\\nThe party\\x27s scout\\n' > \"$1\"\n");
     press(&a, "sk");
-    int ai = card_find(a.map, "Aria");
-    CHECK(ai >= 0 && !strcmp(a.map->cards[ai].text, "Aria\nThe party's scout"));
+    int ai = card_find(a.world.map, "Aria");
+    CHECK(ai >= 0 && !strcmp(a.world.map->cards[ai].text, "Aria\nThe party's scout"));
 
     CASE("an undo of an edit made before s k gave the card keeps the card");
     press(&a, ":ruleset daggerheart\r");
     a.ed.cx = 1; a.ed.cy = 1;
     press(&a, "\x1b");
-    a.map->tokens.v[0].card[0] = '\0';                        /* Goblin with no card yet */
+    a.world.map->tokens.v[0].card[0] = '\0';                        /* Goblin with no card yet */
     press(&a, "sh");                                          /* an edit, logged with no card */
-    CHECK(a.map->tokens.v[0].hidden);
+    CHECK(a.world.map->tokens.v[0].hidden);
     set_editor(sb.dir, "sed -i '1a Hides well.' \"$1\"\n");
     press(&a, "sk");                                          /* the card, given after it */
-    CHECK_EQ(strcmp(a.map->tokens.v[0].card, "Goblin"), 0);
+    CHECK_EQ(strcmp(a.world.map->tokens.v[0].card, "Goblin"), 0);
     press(&a, "u");                                           /* takes the hiding back */
-    CHECK(!a.map->tokens.v[0].hidden);
-    CHECK_EQ(strcmp(a.map->tokens.v[0].card, "Goblin"), 0);   /* not the card */
+    CHECK(!a.world.map->tokens.v[0].hidden);
+    CHECK_EQ(strcmp(a.world.map->tokens.v[0].card, "Goblin"), 0);   /* not the card */
 
     CASE("the card's own # lines are kept; only what is below the scissors goes");
-    card_set(a.map, "Goblin", "Goblin\n# Tactics\nhit and run");
+    card_set(a.world.map, "Goblin", "Goblin\n# Tactics\nhit and run");
     set_editor(sb.dir, "true\n");
     press(&a, "sk");
     CHECK(strstr(a.status, "card unchanged") != NULL);
-    CHECK_EQ(strcmp(a.map->cards[card_find(a.map, "Goblin")].text, "Goblin\n# Tactics\nhit and run"), 0);
+    CHECK_EQ(strcmp(a.world.map->cards[card_find(a.world.map, "Goblin")].text, "Goblin\n# Tactics\nhit and run"), 0);
 
     CASE("an editor that trims line ends leaves a new card's start unwritten");
     {
@@ -424,10 +424,10 @@ void test_card_edit(void)
         memset(&w, 0, sizeof w);
         w.x = 0; w.y = 3; w.size = 1; w.kind = TOKEN_ENEMY;
         str_lcpy(w.label, "Wight", sizeof w.label);
-        tokens_add(&a.map->tokens, w);
+        tokens_add(&a.world.map->tokens, w);
         w.x = 2;
         str_lcpy(w.label, "Bat", sizeof w.label);
-        tokens_add(&a.map->tokens, w);
+        tokens_add(&a.world.map->tokens, w);
     }
     a.play.sel = -1;
     a.ed.cx = 0; a.ed.cy = 3;
@@ -447,7 +447,7 @@ void test_card_edit(void)
         setenv("VISUAL", cmd, 1);
         a.ed.cx = 2; a.ed.cy = 3;                               /* Bat, no card yet */
         press(&a, "sk");
-        CHECK(card_find(a.map, "Bat") >= 0 && strstr(a.map->cards[card_find(a.map, "Bat")].text, "Difficulty: 12"));
+        CHECK(card_find(a.world.map, "Bat") >= 0 && strstr(a.world.map->cards[card_find(a.world.map, "Bat")].text, "Difficulty: 12"));
         unsetenv("VISUAL");
         setenv("EDITOR", "true", 1);
         press(&a, "sk");
@@ -464,17 +464,17 @@ void test_card_edit(void)
         memset(&pl, 0, sizeof pl);
         pl.x = 7; pl.y = 1; pl.size = 1; pl.kind = TOKEN_PLAYER;
         str_lcpy(pl.label, "Kobold", sizeof pl.label);
-        tokens_add(&a.map->tokens, pl);
+        tokens_add(&a.world.map->tokens, pl);
         Token en = pl;
         en.x = 8; en.kind = TOKEN_ENEMY;
         str_lcpy(en.label, "Kobold 2", sizeof en.label);
-        tokens_add(&a.map->tokens, en);
+        tokens_add(&a.world.map->tokens, en);
         set_editor(sb.dir, "sed -i '1a Sneaky.' \"$1\"\n");
         a.play.sel = -1;
         a.ed.cx = 8; a.ed.cy = 1;
         press(&a, "sk");
-        CHECK_EQ(strcmp(a.map->tokens.v[a.map->tokens.n - 1].card, "Kobold"), 0);
-        CHECK_EQ(a.map->tokens.v[a.map->tokens.n - 2].card[0], '\0');  /* the player Kobold */
+        CHECK_EQ(strcmp(a.world.map->tokens.v[a.world.map->tokens.n - 1].card, "Kobold"), 0);
+        CHECK_EQ(a.world.map->tokens.v[a.world.map->tokens.n - 2].card[0], '\0');  /* the player Kobold */
     }
 
     app_free(&a);
@@ -541,7 +541,7 @@ void test_card_templates(void)
         rnd_init(&r);
         rnd_resize(&r, 80, 24);
         app_init(&a, NULL, &r);
-        a.ctl_auto = 1;                       /* edits land at once (decision 6) */
+        a.world.ctl_auto = 1;                       /* edits land at once (decision 6) */
         char path[640];
         snprintf(path, sizeof path, "%s/d.vtt", sb.dir);
         CHECK_EQ(mapio_save(d, path, err, sizeof err), 0);
@@ -806,9 +806,9 @@ void test_env(void)
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
     CHECK(ctl_blank_map(&a, sb.dir, 20, 12));
-    if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
-    a.ctl_auto = 1;
-    Map *m = a.map;
+    if (!a.world.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    a.world.ctl_auto = 1;
+    Map *m = a.world.map;
     char err[160], path[700];
     snprintf(path, sizeof path, "%s/env.vtt", sb.dir);
     str_lcpy(m->ruleset, "daggerheart", sizeof m->ruleset);
@@ -828,12 +828,12 @@ void test_env(void)
     CHECK(strstr(a.status, ":env, :env NAME") != NULL);
 
     CASE(":env NAME goes to the smallest area under the cursor, one undo step; outside any, to the map");
-    int d0 = a.undo.depth;
+    int d0 = a.world.undo.depth;
     press(&a, ":env haunted-crypt\r");
     CHECK(!strcmp(crypt->env, "haunted-crypt") && !upper->env[0] && !m->env[0]);
     CHECK(strstr(a.status, "Crypt: environment haunted-crypt - no card of that name yet") != NULL);
     CHECK_EQ(a.status_gm, 1);
-    CHECK_EQ(a.undo.depth, d0 + 1);
+    CHECK_EQ(a.world.undo.depth, d0 + 1);
     press(&a, "u");
     CHECK(!crypt->env[0]);
     press(&a, "\x12");
@@ -1109,13 +1109,13 @@ void test_env(void)
     CHECK(strstr(a.status, "Crypt has no environment now") != NULL);
     press(&a, "u");
     CHECK(!strcmp(crypt->env, "haunted-crypt"));
-    undo_begin(&a.undo);
-    undo_remove_area(&a.undo, m, "Crypt");
-    undo_end(&a.undo);
+    undo_begin(&a.world.undo);
+    undo_remove_area(&a.world.undo, m, "Crypt");
+    undo_end(&a.world.undo);
     CHECK_EQ(map_area_find(m, "Crypt"), -1);
     press(&a, "u");
     CHECK(map_area_find(m, "Crypt") >= 0 && !strcmp(m->areas[map_area_find(m, "Crypt")].env, "haunted-crypt"));
-    CHECK(undo_balanced(&a.undo));
+    CHECK(undo_balanced(&a.world.undo));
 
     if (keep_visual[0]) setenv("VISUAL", keep_visual, 1); else unsetenv("VISUAL");
     if (keep_tmp[0])    setenv("TMPDIR", keep_tmp, 1);    else unsetenv("TMPDIR");
@@ -1152,8 +1152,8 @@ void test_env_import(void)
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
     CHECK(ctl_blank_map(&a, sb.dir, 12, 8));
-    if (!a.map) { app_free(&a); rnd_free(&r); fclose(out); sandbox_leave(&sb); return; }
-    Map *m = a.map;
+    if (!a.world.map) { app_free(&a); rnd_free(&r); fclose(out); sandbox_leave(&sb); return; }
+    Map *m = a.world.map;
     app_key(&a, (Key){ KEY_F2, 0, 0 });
 
     CASE("no environments kept yet: :env pick says how to get some");
@@ -1278,7 +1278,7 @@ void test_env_import(void)
     CHECK(card_find(m, "Empty-Hall") >= 0);
     press(&a, "u");                                        /* the area's name comes off; the card stays */
     CHECK(!m->areas[map_area_find(m, "Hall")].env[0] && card_find(m, "Empty-Hall") >= 0);
-    CHECK(undo_balanced(&a.undo));
+    CHECK(undo_balanced(&a.world.undo));
 
     app_free(&a);
     rnd_free(&r);

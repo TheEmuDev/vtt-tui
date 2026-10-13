@@ -245,7 +245,7 @@ void test_help_page(void)
 
     /* Carrying a creature changes enough of the keyboard to be its own page. */
     CASE("the page follows the mode, not just the screen");
-    tokens_add(&a.map->tokens, (Token){ 0, 0, 1, TOKEN_ENEMY, "Ogre", { { 0, "" } }, 0 });
+    tokens_add(&a.world.map->tokens, (Token){ 0, 0, 1, TOKEN_ENEMY, "Ogre", { { 0, "" } }, 0 });
     a.ed.cx = 0; a.ed.cy = 0;
     press(&a, "\r");
     CHECK_EQ(a.play.grabbed, 1);
@@ -264,7 +264,7 @@ void test_help_page(void)
     CASE("? on the command line is typed, not swallowed");
     press(&a, ":name a?b\r");
     CHECK_EQ(a.screen, SCREEN_EDITOR);
-    CHECK_EQ(strcmp(a.map->name, "a?b"), 0);
+    CHECK_EQ(strcmp(a.world.map->name, "a?b"), 0);
 
     CASE("the page lays out on a small terminal without crashing");
     press(&a, "?");
@@ -310,23 +310,23 @@ void test_play_remap(void)
     press(&a, "ip");
     CHECK_EQ(a.modal, MODAL_PROMPT);
     press(&a, "Aria\r");
-    CHECK_EQ(a.map->tokens.n, 1);
-    CHECK_EQ(a.map->tokens.v[0].kind, TOKEN_PLAYER);
+    CHECK_EQ(a.world.map->tokens.n, 1);
+    CHECK_EQ(a.world.map->tokens.v[0].kind, TOKEN_PLAYER);
 
     a.ed.cx = 1; a.ed.cy = 0;
     press(&a, "ieOgre\r");
-    CHECK_EQ(a.map->tokens.n, 2);
-    CHECK_EQ(a.map->tokens.v[1].kind, TOKEN_ENEMY);
+    CHECK_EQ(a.world.map->tokens.n, 2);
+    CHECK_EQ(a.world.map->tokens.v[1].kind, TOKEN_ENEMY);
 
     CASE("a bare i does nothing until the next key says what");
     press(&a, "i");
     CHECK_EQ(a.modal, MODAL_NONE);
     CHECK(strstr(a.status, "p player") != NULL);
-    CHECK_EQ(a.map->tokens.n, 2);
+    CHECK_EQ(a.world.map->tokens.n, 2);
 
     CASE("esc abandons a half-typed prefix");
     press(&a, "\x1b");
-    CHECK_EQ(a.map->tokens.n, 2);
+    CHECK_EQ(a.world.map->tokens.n, 2);
     CHECK(strstr(a.status, "canceled") != NULL);
 
     /* The prefix must swallow the next key rather than let it act: a
@@ -344,9 +344,9 @@ void test_play_remap(void)
     press(&a, "y");
     a.ed.cx = 1; a.ed.cy = 1;
     press(&a, "p");
-    CHECK_EQ(a.map->tokens.n, 3);
+    CHECK_EQ(a.world.map->tokens.n, 3);
     press(&a, "P");
-    CHECK_EQ(a.map->tokens.n, 3);
+    CHECK_EQ(a.world.map->tokens.n, 3);
     CHECK(strstr(a.status, "now p") != NULL);
 
     CASE("c changes the label, where r used to");
@@ -354,10 +354,10 @@ void test_play_remap(void)
     press(&a, "c");
     CHECK_EQ(a.modal, MODAL_PROMPT);
     press(&a, "\025Renamed\r");
-    CHECK_EQ(strcmp(a.map->tokens.v[a.play.sel].label, "Renamed"), 0);
+    CHECK_EQ(strcmp(a.world.map->tokens.v[a.play.sel].label, "Renamed"), 0);
 
     CASE("r cycles the range bands, where R used to");
-    str_lcpy(a.map->ruleset, "daggerheart", sizeof a.map->ruleset);
+    str_lcpy(a.world.map->ruleset, "daggerheart", sizeof a.world.map->ruleset);
     press(&a, "r");
     CHECK_EQ(a.play.range.active, 1);
     press(&a, "\x1b");
@@ -402,12 +402,12 @@ void test_play_remap(void)
     press(&a, "t");
     int sel = a.play.sel;
     press(&a, "saPoisoned\r");
-    CHECK_EQ(a.map->tokens.v[sel].nstatus, 1);
+    CHECK_EQ(a.world.map->tokens.v[sel].nstatus, 1);
     uint8_t before = a.play.status_color;
     press(&a, "sc");
     CHECK(a.play.status_color != before);
     press(&a, "sd");
-    CHECK_EQ(a.map->tokens.v[sel].nstatus, 0);
+    CHECK_EQ(a.world.map->tokens.v[sel].nstatus, 0);
 
     CASE("s with a key it does not know says what it wanted");
     press(&a, "sz");
@@ -595,9 +595,9 @@ void test_cycle_keys(void)
     Token p1 = { 0, 0, 1, TOKEN_PLAYER, "Aria", { { 0, "" } }, 0 };
     Token e1 = { 1, 0, 1, TOKEN_ENEMY,  "Ogre", { { 0, "" } }, 0 };
     Token p2 = { 0, 1, 1, TOKEN_PLAYER, "Bram", { { 0, "" } }, 0 };
-    tokens_add(&a.map->tokens, p1);
-    tokens_add(&a.map->tokens, e1);
-    tokens_add(&a.map->tokens, p2);
+    tokens_add(&a.world.map->tokens, p1);
+    tokens_add(&a.world.map->tokens, e1);
+    tokens_add(&a.world.map->tokens, p2);
 
     CASE("t walks every token, T walks back");
     press(&a, "t"); CHECK_EQ(a.play.sel, 0);
@@ -612,8 +612,8 @@ void test_cycle_keys(void)
     press(&a, "E"); CHECK_EQ(a.play.sel, 1);   /* only one enemy: back to itself */
 
     CASE("the cursor follows the selection so the creature can be seen");
-    CHECK_EQ(a.ed.cx, a.map->tokens.v[a.play.sel].x);
-    CHECK_EQ(a.ed.cy, a.map->tokens.v[a.play.sel].y);
+    CHECK_EQ(a.ed.cx, a.world.map->tokens.v[a.play.sel].x);
+    CHECK_EQ(a.ed.cy, a.world.map->tokens.v[a.play.sel].y);
 
     CASE("the status line names what was landed on");
     CHECK(strstr(a.status, "Ogre") != NULL);
@@ -683,15 +683,15 @@ void test_play_focus(void)
     app_init(&a, NULL, &r);
 
     CHECK_EQ(app_open_map(&a, path), 0);
-    str_lcpy(a.map->ruleset, "daggerheart", sizeof a.map->ruleset);
+    str_lcpy(a.world.map->ruleset, "daggerheart", sizeof a.world.map->ruleset);
     Key f2 = { KEY_F2, 0, 0 };
     app_key(&a, f2);
     CHECK_EQ(a.screen, SCREEN_PLAY);
 
     Token one = { 0, 0, 1, TOKEN_ENEMY, "One", { { 0, "" } }, 0 };
     Token two = { 1, 1, 1, TOKEN_ENEMY, "Two", { { 0, "" } }, 0 };
-    tokens_add(&a.map->tokens, one);
-    tokens_add(&a.map->tokens, two);
+    tokens_add(&a.world.map->tokens, one);
+    tokens_add(&a.world.map->tokens, two);
 
     press(&a, "\t");                        /* focus the first token */
     CHECK_EQ(a.play.sel, 0);
@@ -736,9 +736,9 @@ void test_play_focus(void)
 
     /* Held first, overlay second, selection last: esc unwinds one at a time. */
     CASE("esc puts a held creature down before touching the overlay");
-    a.ed.cx = a.map->tokens.v[0].x;
-    a.ed.cy = a.map->tokens.v[0].y;
-    play_select_at(&a.play, a.map, a.ed.cx, a.ed.cy, 1);
+    a.ed.cx = a.world.map->tokens.v[0].x;
+    a.ed.cy = a.world.map->tokens.v[0].y;
+    play_select_at(&a.play, a.world.map, a.ed.cx, a.ed.cy, 1);
     CHECK_EQ(a.play.sel, 0);
     press(&a, "r");
     CHECK_EQ(a.play.range.active, 1);
@@ -761,19 +761,19 @@ void test_play_focus(void)
     /* Steps used to be pushed with no mark closing them, so u reached past
      * them to the batch underneath and took the whole token off the map. */
     CASE("undo after a move takes back the step, not the creature");
-    int ntok = a.map->tokens.n;
-    a.ed.cx = a.map->tokens.v[0].x;
-    a.ed.cy = a.map->tokens.v[0].y;
-    play_select_at(&a.play, a.map, a.ed.cx, a.ed.cy, 1);
+    int ntok = a.world.map->tokens.n;
+    a.ed.cx = a.world.map->tokens.v[0].x;
+    a.ed.cy = a.world.map->tokens.v[0].y;
+    play_select_at(&a.play, a.world.map, a.ed.cx, a.ed.cy, 1);
     press(&a, "\r");
-    int ox = a.map->tokens.v[0].x;
+    int ox = a.world.map->tokens.v[0].x;
     int dir = ox > 0 ? -1 : 1;               /* the fixture map is only 2 wide */
     press(&a, dir < 0 ? "h" : "l");
-    CHECK_EQ(a.map->tokens.v[0].x, ox + dir);
+    CHECK_EQ(a.world.map->tokens.v[0].x, ox + dir);
     CHECK_EQ(a.play.steps, 1);
     press(&a, "u");
-    CHECK_EQ(a.map->tokens.n, ntok);
-    CHECK_EQ(a.map->tokens.v[0].x, ox);
+    CHECK_EQ(a.world.map->tokens.n, ntok);
+    CHECK_EQ(a.world.map->tokens.v[0].x, ox);
 
     CASE("and the trail retreats with it");
     CHECK_EQ(a.play.ntrail, 1);

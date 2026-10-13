@@ -672,7 +672,7 @@ void test_range_sight(void)
 static char *moving_line(App *a, int gm)
 {
     static char buf[256];
-    play_status(&a->play, a->map, &a->ed, gm, buf, sizeof buf);
+    play_status(&a->play, a->world.map, &a->ed, gm, buf, sizeof buf);
     return buf;
 }
 
@@ -735,7 +735,7 @@ void test_move_rules(void)
 static const char *burst_line(App *a)
 {
     static char buf[256];
-    range_status(&a->play.range, a->map, buf, sizeof buf);
+    range_status(&a->play.range, a->world.map, buf, sizeof buf);
     return buf;
 }
 
@@ -767,14 +767,14 @@ void test_group_effect(void)
     press(&a, "ge");
     CHECK(a.play.range.active && a.play.range.burst);
     CHECK(strstr(burst_line(&a), "Very Close burst at I6 (15 ft, 3 sq) - 2 caught: Ogre, Goblin") != NULL);
-    CHECK(range_contains(&a.play.range, a.map, 11, 5));
-    CHECK(!range_contains(&a.play.range, a.map, 12, 5));
+    CHECK(range_contains(&a.play.range, a.world.map, 11, 5));
+    CHECK(!range_contains(&a.play.range, a.world.map, 12, 5));
 
     CASE("it follows the cursor");
     press(&a, "lll");
     CHECK_EQ(a.play.range.ax, 11);
     CHECK(strstr(burst_line(&a), "burst at L6") != NULL);
-    CHECK(range_contains(&a.play.range, a.map, 14, 5) && !range_contains(&a.play.range, a.map, 7, 5));
+    CHECK(range_contains(&a.play.range, a.world.map, 14, 5) && !range_contains(&a.play.range, a.world.map, 7, 5));
 
     CASE("g e again takes it off; a count names another band");
     press(&a, "ge");
@@ -810,11 +810,11 @@ void test_group_effect(void)
     CASE("an undo forgets whose the burst was, rather than naming the wrong creature");
     press(&a, "\x1b");
     press(&a, ":B2\r\rl\r");                     /* Aria one step east: something to undo */
-    CHECK_EQ(a.map->tokens.v[0].x, 2);
+    CHECK_EQ(a.world.map->tokens.v[0].x, 2);
     press(&a, "ge");
     CHECK_EQ(a.play.range.from, 0);
     press(&a, "u");
-    CHECK_EQ(a.map->tokens.v[0].x, 1);
+    CHECK_EQ(a.world.map->tokens.v[0].x, 1);
     CHECK_EQ(a.play.range.from, -1);
     CHECK(a.play.range.active && a.play.range.burst);
 

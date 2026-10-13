@@ -124,7 +124,7 @@ void test_session_log(void)
     CHECK_EQ(slog_on(&a.slog), 0);
     a.ed.cx = 0; a.ed.cy = 0;
     press(&a, "ipAria\r");                    /* place a player at a1 */
-    CHECK_EQ(a.map->tokens.n, 1);
+    CHECK_EQ(a.world.map->tokens.n, 1);
     press(&a, "\rl\r");                       /* pick up, a step, drop */
     CHECK(strstr(a.status, "dropped after 1 step") != NULL);
     CHECK(slurp(logpath) == NULL);
@@ -138,7 +138,7 @@ void test_session_log(void)
     CHECK(text != NULL);
     if (text) {
         CHECK(strstr(text, "log on:") != NULL);
-        CHECK(strstr(text, a.map->name) != NULL);
+        CHECK(strstr(text, a.world.map->name) != NULL);
         free(text);
     }
 
@@ -237,7 +237,7 @@ void test_clocks(void)
     CHECK_EQ(app_open_map(&a, path), 0);
     Key f2 = { KEY_F2, 0, 0 };
     app_key(&a, f2);
-    Map *m = a.map;
+    Map *m = a.world.map;
 
     CASE("no clocks to begin with, and the panel stays away");
     CHECK_EQ(clock_count(m), 0);
@@ -536,7 +536,7 @@ void test_roll_command(void)
     CHECK(strstr(a.status, "Hope") == NULL);    /* plain dice carry no verdict */
 
     CASE("without a ruleset there is no action roll to be bare about");
-    a.map->ruleset[0] = '\0';
+    a.world.map->ruleset[0] = '\0';
     press(&a, ":roll\r");
     CHECK(strstr(a.status, "roll what") != NULL);
     press(&a, ":roll +2\r");
@@ -615,7 +615,7 @@ void test_roll_command(void)
     CHECK(strstr(a.status, "no named rolls") != NULL);
     press(&a, ":roll attack = 2d12+3\r");
     CHECK(strstr(a.status, "attack = 2d12+3") != NULL);
-    CHECK_EQ(a.map->modified, 1);
+    CHECK_EQ(a.world.map->modified, 1);
     press(&a, ":roll attack\r");
     CHECK(strstr(a.status, "attack: 2d12+3 = ") != NULL);
     press(&a, ":roll att\r");
@@ -656,7 +656,7 @@ void test_roll_command(void)
     CASE("named rolls are saved as version 5 and read back");
     {
         char err[128];
-        CHECK_EQ(mapio_save(a.map, path, err, sizeof err), 0);
+        CHECK_EQ(mapio_save(a.world.map, path, err, sizeof err), 0);
         char *text = slurp(path);
         if (text) {
             CHECK_EQ(strncmp(text, "VTT 5\n", 6), 0);
@@ -686,7 +686,7 @@ void test_roll_command(void)
     CHECK(strstr(a.status, "no roll called att") != NULL);
     {
         int kept = 0;
-        for (int i = 0; i < ROLL_MAX; i++) kept |= !strcmp(a.map->rolls[i].name, "attack");
+        for (int i = 0; i < ROLL_MAX; i++) kept |= !strcmp(a.world.map->rolls[i].name, "attack");
         CHECK(kept);
     }
 
@@ -1005,7 +1005,7 @@ void test_turn_keys(void)
     a.ed.cx = 0; a.ed.cy = 0; press(&a, "ipAria\r");    /* 0 */
     a.ed.cx = 1; a.ed.cy = 0; press(&a, "ieOgre\r");    /* 1 */
     a.ed.cx = 0; a.ed.cy = 1; press(&a, "ipBram\r");    /* 2 */
-    CHECK_EQ(a.map->tokens.n, 3);
+    CHECK_EQ(a.world.map->tokens.n, 3);
 
     CASE("a with no order says how to make one; a and A are no longer retired");
     press(&a, "a");
@@ -1019,14 +1019,14 @@ void test_turn_keys(void)
     CHECK_EQ(a.modal, MODAL_PROMPT);
     CHECK_EQ(a.prompt_what, PROMPT_INITIATIVE);
     press(&a, "9\r");
-    CHECK_EQ(a.map->tokens.v[2].turn, TURN_IN);
-    CHECK_EQ(a.map->tokens.v[2].init, 9);
+    CHECK_EQ(a.world.map->tokens.v[2].turn, TURN_IN);
+    CHECK_EQ(a.world.map->tokens.v[2].init, 9);
     CHECK(strstr(a.status, "Bram joins the turn order at 9") != NULL);
     play_focus(&a.play, 0); press(&a, "si18\r");
     play_focus(&a.play, 1); press(&a, "si12\r");
     press(&a, "sinope\r");
     CHECK(strstr(a.status, "initiative is a number") != NULL);
-    CHECK_EQ(a.map->tokens.v[1].init, 12);
+    CHECK_EQ(a.world.map->tokens.v[1].init, 12);
     press(&a, "si");                                     /* the prompt opens on the old number */
     CHECK_EQ(strcmp(a.prompt.buf, "12"), 0);
     press(&a, "\x1b");
@@ -1039,19 +1039,19 @@ void test_turn_keys(void)
     press(&a, "T"); CHECK_EQ(a.play.sel, 1);
     press(&a, "f"); CHECK_EQ(a.play.sel, 2);
     press(&a, "f"); CHECK_EQ(a.play.sel, 0);
-    CHECK_EQ(turn_acting(a.map), -1);                    /* looking is free: nobody's turn yet */
+    CHECK_EQ(turn_acting(a.world.map), -1);                    /* looking is free: nobody's turn yet */
 
     CASE("a moves the fight on, selects whoever is up, and says so up top");
     press(&a, "a");
-    CHECK_EQ(turn_acting(a.map), 0);
+    CHECK_EQ(turn_acting(a.world.map), 0);
     CHECK_EQ(a.play.sel, 0);
-    CHECK_EQ(a.map->round, 1);
+    CHECK_EQ(a.world.map->round, 1);
     CHECK(strstr(a.status, "round 1 - Aria's turn") != NULL);
     press(&a, "2a");
-    CHECK_EQ(turn_acting(a.map), 2);
+    CHECK_EQ(turn_acting(a.world.map), 2);
     CHECK_EQ(a.play.sel, 2);
     press(&a, "a");
-    CHECK_EQ(a.map->round, 2);
+    CHECK_EQ(a.world.map->round, 2);
     rnd_begin(&r);
     app_draw(&a);
     ByteBuf frame;
@@ -1069,20 +1069,20 @@ void test_turn_keys(void)
 
     CASE("A steps back, u takes an advance back, and the start is the start");
     press(&a, "A");
-    CHECK_EQ(turn_acting(a.map), 2);
-    CHECK_EQ(a.map->round, 1);
+    CHECK_EQ(turn_acting(a.world.map), 2);
+    CHECK_EQ(a.world.map->round, 1);
     press(&a, "a");
     press(&a, "u");
-    CHECK_EQ(turn_acting(a.map), 2);
-    CHECK_EQ(a.map->round, 1);
+    CHECK_EQ(turn_acting(a.world.map), 2);
+    CHECK_EQ(a.world.map->round, 1);
     press(&a, "9A");
     CHECK(strstr(a.status, "start of the fight") != NULL);
-    CHECK_EQ(turn_acting(a.map), 2);
+    CHECK_EQ(turn_acting(a.world.map), 2);
 
     CASE("s t hands the turn over out of order");
     play_focus(&a.play, 1);
     press(&a, "st");
-    CHECK_EQ(turn_acting(a.map), 1);
+    CHECK_EQ(turn_acting(a.world.map), 1);
     CHECK(strstr(a.status, "Ogre takes the turn") != NULL);
 
     CASE("the turn cannot move while a creature is in hand");
@@ -1092,18 +1092,18 @@ void test_turn_keys(void)
     CHECK_EQ(a.play.grabbed, 1);
     press(&a, "a");
     CHECK(strstr(a.status, "put it down first") != NULL);
-    CHECK_EQ(turn_acting(a.map), 1);
+    CHECK_EQ(turn_acting(a.world.map), 1);
     press(&a, "\x1b");
 
     CASE("removing the actor passes the turn; u brings both back");
     press(&a, "d");
-    CHECK_EQ(a.map->tokens.n, 2);
-    CHECK_EQ(turn_acting(a.map), 1);                     /* Bram, who was next, now index 1 */
-    CHECK_EQ(strcmp(a.map->tokens.v[1].label, "Bram"), 0);
+    CHECK_EQ(a.world.map->tokens.n, 2);
+    CHECK_EQ(turn_acting(a.world.map), 1);                     /* Bram, who was next, now index 1 */
+    CHECK_EQ(strcmp(a.world.map->tokens.v[1].label, "Bram"), 0);
     press(&a, "u");
-    CHECK_EQ(a.map->tokens.n, 3);
-    CHECK_EQ(turn_acting(a.map), 1);
-    CHECK_EQ(strcmp(a.map->tokens.v[1].label, "Ogre"), 0);
+    CHECK_EQ(a.world.map->tokens.n, 3);
+    CHECK_EQ(turn_acting(a.world.map), 1);
+    CHECK_EQ(strcmp(a.world.map->tokens.v[1].label, "Ogre"), 0);
 
     CASE("a copy keeps its number and never the turn");
     a.ed.cx = 1; a.ed.cy = 0;
@@ -1111,42 +1111,42 @@ void test_turn_keys(void)
     press(&a, "y");
     a.ed.cx = 1; a.ed.cy = 1;
     press(&a, "p");
-    CHECK_EQ(a.map->tokens.n, 4);
-    CHECK_EQ(a.map->tokens.v[3].turn, TURN_IN);
-    CHECK_EQ(a.map->tokens.v[3].init, 12);
+    CHECK_EQ(a.world.map->tokens.n, 4);
+    CHECK_EQ(a.world.map->tokens.v[3].turn, TURN_IN);
+    CHECK_EQ(a.world.map->tokens.v[3].init, 12);
     int actors = 0;
-    for (int i = 0; i < a.map->tokens.n; i++) if (a.map->tokens.v[i].turn & TURN_ACTING) actors++;
+    for (int i = 0; i < a.world.map->tokens.n; i++) if (a.world.map->tokens.v[i].turn & TURN_ACTING) actors++;
     CHECK_EQ(actors, 1);
 
     CASE("a blank answer to s i leaves the order");
     play_focus(&a.play, 3);
     press(&a, "si\025\r");                               /* ctrl-u clears the old number */
-    CHECK_EQ(a.map->tokens.v[3].turn, 0);
+    CHECK_EQ(a.world.map->tokens.v[3].turn, 0);
     CHECK(strstr(a.status, "leaves the turn order") != NULL);
 
     CASE(":turns reads the order out, :turns end ends the fight, u undoes that too");
     press(&a, ":turns\r");
     CHECK(strstr(a.status, "Aria 18, Ogre 12*, Bram 9") != NULL);
     press(&a, ":turns off\r");                           /* the old word ends nothing */
-    CHECK(turn_count(a.map) > 0);
+    CHECK(turn_count(a.world.map) > 0);
     CHECK(strstr(a.status, ":turns end ends the fight") != NULL);
     press(&a, ":turns end\r");
-    CHECK_EQ(turn_count(a.map), 0);
-    CHECK_EQ(a.map->round, 0);
+    CHECK_EQ(turn_count(a.world.map), 0);
+    CHECK_EQ(a.world.map->round, 0);
     CHECK(strstr(a.status, "the fight is over") != NULL);
     press(&a, ":turns end\r");
     CHECK(strstr(a.status, "no fight to end") != NULL);
     press(&a, ":turns\r");
     CHECK(strstr(a.status, "no turn order") != NULL);
     press(&a, "u");
-    CHECK_EQ(turn_count(a.map), 3);
-    CHECK_EQ(turn_acting(a.map), 1);
+    CHECK_EQ(turn_count(a.world.map), 3);
+    CHECK_EQ(turn_acting(a.world.map), 1);
 
     CASE("the panel appears with the fight, takes its width from the map, and can be turned off");
     press(&a, ":turns end\r");                           /* a known fight: Aria 18, Ogre 12 */
     play_focus(&a.play, 0); press(&a, "si18\r");
     play_focus(&a.play, 1); press(&a, "si12\r");
-    CHECK_EQ(a.map->tokens.n, 4);
+    CHECK_EQ(a.world.map->tokens.n, 4);
     press(&a, "a");
     rnd_begin(&r);
     app_draw(&a);
@@ -1189,13 +1189,13 @@ void test_turn_keys(void)
     CHECK(strstr(frame.data, "Players' spotlight") != NULL);   /* the title bar too */
     bb_free(&frame);
     press(&a, "a");
-    CHECK_EQ(a.map->spotlight, SPOTLIGHT_GM);
+    CHECK_EQ(a.world.map->spotlight, SPOTLIGHT_GM);
     CHECK(strstr(a.status, "GM has the spotlight") != NULL);
     press(&a, "3A");                                     /* a count means nothing here */
-    CHECK_EQ(a.map->spotlight, SPOTLIGHT_PLAYERS);
+    CHECK_EQ(a.world.map->spotlight, SPOTLIGHT_PLAYERS);
     play_focus(&a.play, 1);                              /* the ogre */
     press(&a, "st");
-    CHECK_EQ(a.map->spotlight, SPOTLIGHT_GM);
+    CHECK_EQ(a.world.map->spotlight, SPOTLIGHT_GM);
     rnd_begin(&r);
     app_draw(&a);
     bb_init(&frame, 32768);
@@ -1206,7 +1206,7 @@ void test_turn_keys(void)
     CHECK(strstr(frame.data, "GM spotlight - Ogre") != NULL);
     bb_free(&frame);
     press(&a, "u");
-    CHECK_EQ(a.map->spotlight, SPOTLIGHT_PLAYERS);
+    CHECK_EQ(a.world.map->spotlight, SPOTLIGHT_PLAYERS);
     press(&a, ":ruleset none\r");
 
     CASE("the s prefix lists its new members");

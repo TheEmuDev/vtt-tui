@@ -19,12 +19,12 @@ void app_character_place(App *a, const char *name, int kind)
     char err[160], said[160], msg[320], at[MAP_COORD_MAX];
     Map *c = character_load(name, err, sizeof err);
     if (!c) { app_set_status(a, err); return; }
-    int idx = character_place(a->map, &a->undo, c, kind, a->ed.cx, a->ed.cy, 0,
+    int idx = character_place(a->world.map, &a->world.undo, c, kind, a->ed.cx, a->ed.cy, 0,
                               said, sizeof said, err, sizeof err);
     map_free(c);
     if (idx < 0) { app_set_status(a, err); return; }
     play_focus(&a->play, idx);
-    const Token *t = &a->map->tokens.v[idx];
+    const Token *t = &a->world.map->tokens.v[idx];
     map_coord_name(t->x, t->y, at, sizeof at);
     snprintf(msg, sizeof msg, "placed %s %.30s (%dx%d) at %s from %.40s%s%s",
              token_kind_name(t->kind), t->label[0] ? t->label : "unlabeled",
@@ -41,7 +41,7 @@ static int target(App *a)
     int i = app_target_token_under(a);
     if (i >= 0) return i;
     Play *pl = &a->play;
-    return pl->sel >= 0 && pl->sel < a->map->tokens.n ? pl->sel : -1;
+    return pl->sel >= 0 && pl->sel < a->world.map->tokens.n ? pl->sel : -1;
 }
 
 /* :character save [NAME [ROLL...]]  keep the creature under the cursor
@@ -49,7 +49,7 @@ static int target(App *a)
 void app_character_command(App *a, const char *rest)
 {
     char msg[256], err[160];
-    if (a->screen != SCREEN_PLAY || !a->map) { app_set_status(a, "characters are play mode's - F2 first"); return; }
+    if (a->screen != SCREEN_PLAY || !a->world.map) { app_set_status(a, "characters are play mode's - F2 first"); return; }
 
     char w[10][MAP_NAME_MAX + 8];
     int  nw = 0;
@@ -74,16 +74,16 @@ void app_character_command(App *a, const char *rest)
             return;
         }
         if (nw >= 2) str_lcpy(name, w[1], sizeof name);
-        else character_name_from_label(a->map->tokens.v[idx].label, name, sizeof name);
+        else character_name_from_label(a->world.map->tokens.v[idx].label, name, sizeof name);
         if (!name[0]) { app_set_status(a, "it has no label to name it by - :character save NAME"); return; }
         const char *rolls[8];
         for (int i = 2; i < nw; i++) rolls[i - 2] = w[i];
-        if (character_save(a->map, idx, name, rolls, nw > 2 ? nw - 2 : 0, err, sizeof err) < 0) {
+        if (character_save(a->world.map, idx, name, rolls, nw > 2 ? nw - 2 : 0, err, sizeof err) < 0) {
             app_set_status(a, err);
             return;
         }
         snprintf(msg, sizeof msg, "saved %.30s as character %s%s - i t e places it",
-                 a->map->tokens.v[idx].label[0] ? a->map->tokens.v[idx].label : "the creature",
+                 a->world.map->tokens.v[idx].label[0] ? a->world.map->tokens.v[idx].label : "the creature",
                  name, nw > 2 ? " with its rolls" : "");
         app_note(a, msg);
         return;
@@ -142,8 +142,8 @@ void app_summon_status(const App *a, char *buf, size_t bufsz)
     const Summon *s  = &a->summon;
     const Play   *pl = &a->play;
     const Token  *t  = character_token(s->tpl);
-    const Token  *from = pl->range.token >= 0 && pl->range.token < a->map->tokens.n
-                       ? &a->map->tokens.v[pl->range.token] : NULL;
+    const Token  *from = pl->range.token >= 0 && pl->range.token < a->world.map->tokens.n
+                       ? &a->world.map->tokens.v[pl->range.token] : NULL;
     char count[48];
     if (s->any) snprintf(count, sizeof count, "%d placed", s->placed);
     else        snprintf(count, sizeof count, "%d of %d to place", s->left, s->left + s->placed);
@@ -159,8 +159,8 @@ void app_summon_command(App *a, const char *rest)
 {
     static const char USAGE[] = ":summon [hidden] [N|any] TEMPLATE [BAND] - :summon 3 lackey far";
     char msg[256], err[160];
-    if (a->screen != SCREEN_PLAY || !a->map) { app_set_status(a, "summoning is play mode's - F2 first"); return; }
-    Map  *m  = a->map;
+    if (a->screen != SCREEN_PLAY || !a->world.map) { app_set_status(a, "summoning is play mode's - F2 first"); return; }
+    Map  *m  = a->world.map;
     Play *pl = &a->play;
     if (app_summoning(a)) { app_set_status(a, "already summoning - esc stops it"); return; }
     if (pl->grabbed || pl->visual || a->ruler.active) {
@@ -242,7 +242,7 @@ void app_summon_command(App *a, const char *rest)
     s->left   = any ? 0 : count;
     s->any    = any;
     s->hidden = hidden;
-    s->stamp  = a->undo.stamp;
+    s->stamp  = a->world.undo.stamp;
     s->saved_size  = pl->next_size;
     s->saved_range = pl->range;
     pl->next_size  = character_token(tpl)->size;
@@ -253,7 +253,7 @@ void app_summon_command(App *a, const char *rest)
 /* Why the template may not go down at the cursor, or NULL when it may. */
 static const char *summon_blocked(const App *a)
 {
-    const Map   *m    = a->map;
+    const Map   *m    = a->world.map;
     const Play  *pl   = &a->play;
     int          size = character_token(a->summon.tpl)->size;
     const Token *from = &m->tokens.v[pl->range.token];
@@ -273,7 +273,7 @@ static void summon_place(App *a)
 {
     PROF_ZONE("summon.place");
     Summon *s = &a->summon;
-    Map    *m = a->map;
+    Map    *m = a->world.map;
     char msg[320], said[160], err[160], at[MAP_COORD_MAX];
 
     const char *why = summon_blocked(a);
@@ -282,10 +282,10 @@ static void summon_place(App *a)
         app_set_status_gm(a, msg);      /* where the GM is trying is the GM's */
         return;
     }
-    int idx = character_place(m, &a->undo, s->tpl, -1, a->ed.cx, a->ed.cy, s->hidden,
+    int idx = character_place(m, &a->world.undo, s->tpl, -1, a->ed.cx, a->ed.cy, s->hidden,
                               said, sizeof said, err, sizeof err);
     if (idx < 0) { app_set_status_gm(a, err); return; }
-    s->stamp = a->undo.stamp;
+    s->stamp = a->world.undo.stamp;
     s->placed++;
     if (!s->any) s->left--;
 
@@ -313,11 +313,11 @@ void app_summon_key(App *a, Key k)
     }
     if (k.kind == KEY_CHAR && k.mods == 0 && k.ch == 'u') {
         /* Only the summon's own: the log must be as the last placement left it. */
-        if (!s->placed || a->undo.stamp != s->stamp || !undo_undo(&a->undo, a->map)) {
+        if (!s->placed || a->world.undo.stamp != s->stamp || !undo_undo(&a->world.undo, a->world.map)) {
             app_set_status_gm(a, "nothing of this summon to take back");
             return;
         }
-        s->stamp = a->undo.stamp;
+        s->stamp = a->world.undo.stamp;
         s->placed--;
         if (!s->any) s->left++;
         app_note_gm(a, "took one back");

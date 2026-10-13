@@ -29,14 +29,14 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
         rnd_init(&rnd);
         rnd_resize(&rnd, 80, 24);
         app_init(&app, NULL, &rnd);
-        if (app_open_map(&app, "tests/fixtures/kinds.vtt") != 0 || !app.map) abort();
-        app.ctl_auto = 1;           /* else every input leaves a job, and 16 fill the table */
+        if (app_open_map(&app, "tests/fixtures/kinds.vtt") != 0 || !app.world.map) abort();
+        app.world.ctl_auto = 1;           /* else every input leaves a job, and 16 fill the table */
         CsBox box = { 1, 1, 4, 4 };
         app_job_new(&app, JOB_FROM_GM, "a crypt", &box, 0);
         /* Stamps from a folder of the fuzzer's own, never the user's, with
          * one in it to put down. */
         setenv("XDG_DATA_HOME", "/tmp/vtt-fuzz-ctl-data", 1);
-        Map *st = stamp_copy(app.map, 0, 0, 3, 2);
+        Map *st = stamp_copy(app.world.map, 0, 0, 3, 2);
         char err[160];
         if (!st || stamp_save(st, "Piece", err, sizeof err) != 0) abort();
         map_free(st);
@@ -63,14 +63,14 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     free(ans);
     free(req);
 
-    while (undo_undo(&app.undo, app.map)) { }
-    undo_clear(&app.undo);
-    app.undo.ntags = 0;
+    while (undo_undo(&app.world.undo, app.world.map)) { }
+    undo_clear(&app.world.undo);
+    app.world.undo.ntags = 0;
     app_jobs_clear(&app);
     /* A job asked by the GM, so `job 1 ...` reaches past "no job #1". */
     CsBox box = { 1, 1, 4, 4 };
     app_job_new(&app, JOB_FROM_GM, "a crypt", &box, 0);
     /* Saving a scene is no edit, so the log does not take it back. */
-    while (app.map->nscenes > 0) scene_remove(app.map, app.map->nscenes - 1);
+    while (app.world.map->nscenes > 0) scene_remove(app.world.map, app.world.map->nscenes - 1);
     return 0;
 }

@@ -36,8 +36,8 @@ void app_init(App *a, Term *t, Renderer *r)
     a->pending_token = -1;
     a->last_acting   = -1;
     a->review        = -1;
-    undo_init(&a->undo);
-    undo_init(&a->ctl_sundo);
+    undo_init(&a->world.undo);
+    undo_init(&a->world.ctl_sundo);
     slog_init(&a->slog);
     net_init(&a->net);
     ctl_init(&a->ctl);
@@ -53,23 +53,23 @@ void app_creatures_renumbered(App *a)
     play_focus(&a->play, -1);
     a->play.visual = 0;
     range_clear(&a->play.range);
-    a->last_acting = turn_acting(a->map);
+    a->last_acting = turn_acting(a->world.map);
 }
 
 void app_free(App *a)
 {
     app_summon_end(a);
     app_card_box_forget(a);
-    map_free(a->map);
-    a->map = NULL;
+    map_free(a->world.map);
+    a->world.map = NULL;
     free(a->entries);
     a->entries = NULL;
-    undo_free(&a->undo);
+    undo_free(&a->world.undo);
     app_disk_reset(a);
     app_jobs_clear(a);
-    map_free(a->ctl_scratch);
-    a->ctl_scratch = NULL;
-    undo_free(&a->ctl_sundo);
+    map_free(a->world.ctl_scratch);
+    a->world.ctl_scratch = NULL;
+    undo_free(&a->world.ctl_sundo);
     slog_close(&a->slog);
     net_stop(&a->net);
     ctl_stop(&a->ctl);
@@ -89,7 +89,7 @@ void app_set_status(App *a, const char *msg)
     /* A message made while anything was hidden is the GM's, even when the
      * key that made it took the last hidden creature away: "removed
      * Zorkmid" would name it. */
-    a->status_gm    = a->key_saw_hidden || (a->map && tokens_any_hidden(&a->map->tokens));
+    a->status_gm    = a->key_saw_hidden || (a->world.map && tokens_any_hidden(&a->world.map->tokens));
     a->dirty = 1;
 }
 
@@ -188,13 +188,13 @@ int app_open_map(App *a, const char *path)
     slog_close(&a->slog);
     /* :e over a map in hand puts that one down: its jobs are its own (a
      * change set applies to the map it was made on), and an agent is told. */
-    if (a->map) {
-        app_event(a, CTL_EV_CLOSED, 0, "%s - the GM opened %s, and its jobs went with it", a->map->name, m->name);
+    if (a->world.map) {
+        app_event(a, CTL_EV_CLOSED, 0, "%s - the GM opened %s, and its jobs went with it", a->world.map->name, m->name);
         app_jobs_clear(a);
     }
-    map_free(a->map);
-    a->map = m;
-    undo_clear(&a->undo);          /* history does not survive a new map */
+    map_free(a->world.map);
+    a->world.map = m;
+    undo_clear(&a->world.undo);          /* history does not survive a new map */
     play_init(&a->play);
     ed_init(&a->ed, m);
     app_floor_reset(a);
@@ -202,7 +202,7 @@ int app_open_map(App *a, const char *path)
     grid_center_on(&a->ed.view, m, a->ed.cx, a->ed.cy);
 
     a->screen = SCREEN_EDITOR;
-    a->autosave_gen = a->seen_gen = m->gen;
+    a->autosave_gen = a->world.seen_gen = m->gen;
     a->npings = 0;                 /* squares of the old map mean nothing here */
     a->npinged = 0;
     a->agent_ring.until_ms = 0;
@@ -228,16 +228,16 @@ void app_travel_to(App *a, Map *m)
 {
     app_summon_end(a);
     app_card_box_forget(a);
-    if (a->handout_up) net_set_handout(&a->net, "", 0, a->now_ms);
+    if (a->handout_up) net_set_handout(&a->net, "", 0, a->world.now_ms);
     a->handout_up = 0;
     a->handout_title[0] = a->handout_body[0] = '\0';
     net_clear_kept(&a->net);             /* whispers waiting were the encounter's too */
     drop_autosave(a);
-    app_event(a, CTL_EV_CLOSED, 0, "%s - the GM went to %s, and its jobs went with it", a->map->name, m->name);
+    app_event(a, CTL_EV_CLOSED, 0, "%s - the GM went to %s, and its jobs went with it", a->world.map->name, m->name);
     app_disk_reset(a);
-    map_free(a->map);
-    a->map = m;
-    undo_clear(&a->undo);
+    map_free(a->world.map);
+    a->world.map = m;
+    undo_clear(&a->world.undo);
     play_focus(&a->play, -1);
     a->play.visual = 0;
     a->play.clock  = -1;
@@ -247,7 +247,7 @@ void app_travel_to(App *a, Map *m)
     app_floor_reset(a);
     ed_layout(&a->ed, m, a->rnd->w, a->rnd->h);
     a->screen = SCREEN_PLAY;
-    a->autosave_gen = a->seen_gen = m->gen;
+    a->autosave_gen = a->world.seen_gen = m->gen;
     a->npings = a->npinged = 0;
     a->agent_ring.until_ms = 0;
     app_jobs_clear(a);              /* jobs are the map's */
@@ -260,9 +260,9 @@ void app_travel_to(App *a, Map *m)
 static void offer_recovery(App *a)
 {
     char autosave[MAP_PATH_MAX + 16];
-    mapio_autosave_path(a->map, autosave, sizeof autosave);
+    mapio_autosave_path(a->world.map, autosave, sizeof autosave);
     long when = 0;
-    if (!mapio_autosave_newer(a->map->path, autosave, &when)) return;
+    if (!mapio_autosave_newer(a->world.map->path, autosave, &when)) return;
 
     char stamp[32] = "";
     struct tm tmv;
@@ -274,7 +274,7 @@ static void offer_recovery(App *a)
     str_lcpy(a->modal_title, "Unsaved work found", sizeof a->modal_title);
     snprintf(a->modal_body, sizeof a->modal_body,
              "%.40s was still being edited at %s when it was last open, and those changes were never saved. Recover them?",
-             a->map->name, stamp);
+             a->world.map->name, stamp);
 }
 
 /* Whether the copy is whole: an autosave ends with an `end` line, and a
@@ -311,22 +311,22 @@ static void recover_autosave(App *a)
 
     /* It stands in for the map, under the map's own path, and counts as
      * unsaved: the file on disk is still the older one until :w. */
-    str_lcpy(m->path, a->map->path, sizeof m->path);
+    str_lcpy(m->path, a->world.map->path, sizeof m->path);
     /* ... and the file's base and identity are the file's still. */
-    m->base = a->map->base;
-    m->base_len = a->map->base_len;
-    m->disk = a->map->disk;
-    a->map->base = NULL;
-    map_free(a->map);
-    a->map = m;
-    undo_clear(&a->undo);
+    m->base = a->world.map->base;
+    m->base_len = a->world.map->base_len;
+    m->disk = a->world.map->disk;
+    a->world.map->base = NULL;
+    map_free(a->world.map);
+    a->world.map = m;
+    undo_clear(&a->world.undo);
     play_init(&a->play);
     ed_init(&a->ed, m);
     app_floor_reset(a);
     ed_layout(&a->ed, m, a->rnd->w, a->rnd->h);
     grid_center_on(&a->ed.view, m, a->ed.cx, a->ed.cy);
     m->modified = 1;
-    a->autosave_gen = a->seen_gen = m->gen;
+    a->autosave_gen = a->world.seen_gen = m->gen;
     fog_recompute(m);
     app_set_status(a, "recovered - :w keeps it, :q! lets it go");
 }
@@ -335,9 +335,9 @@ static void recover_autosave(App *a)
  * save or the decision to discard; only a crash leaves it behind. */
 static void drop_autosave(const App *a)
 {
-    if (!a->map) return;
+    if (!a->world.map) return;
     char autosave[MAP_PATH_MAX + 16];
-    mapio_autosave_path(a->map, autosave, sizeof autosave);
+    mapio_autosave_path(a->world.map, autosave, sizeof autosave);
     unlink(autosave);
 }
 
@@ -358,8 +358,8 @@ static Ping *ping_slot(Ping *v, int *n, uint32_t who)
 
 void app_ping(App *a, uint32_t who, int x0, int y0, int x1, int y1)
 {
-    if (!a->map) return;
-    Map *m = a->map;
+    if (!a->world.map) return;
+    Map *m = a->world.map;
     x0 = iclamp(x0, 0, m->w - 1); x1 = iclamp(x1, x0, m->w - 1);
     y0 = iclamp(y0, 0, m->h - 1); y1 = iclamp(y1, y0, m->h - 1);
 
@@ -368,12 +368,12 @@ void app_ping(App *a, uint32_t who, int x0, int y0, int x1, int y1)
     Ping *p = ping_slot(a->pings, &a->npings, who);
     p->who = who;
     p->x0 = x0; p->y0 = y0; p->x1 = x1; p->y1 = y1;
-    p->until_ms = a->now_ms + PING_SHOW_MS;
+    p->until_ms = a->world.now_ms + PING_SHOW_MS;
 
     /* And the record `marked` reads, kept after the ring comes down. */
     Ping *rec = ping_slot(a->pinged, &a->npinged, who);
     *rec = *p;
-    rec->until_ms = a->now_ms;
+    rec->until_ms = a->world.now_ms;
 
     /* On the status line, not in the log: a gesture, not something that
      * happened to the encounter. Over fog the players' frame shows no
@@ -392,19 +392,19 @@ int app_ping_cell(App *a, uint32_t who, int sx, int sy)
      * frame is: out of play, or on the gutter, the bars or the panel, a tap
      * names nothing. A question box on the GM's screen is the GM's alone;
      * the table's board under it still takes a tap. */
-    if (!a->map || a->screen != SCREEN_PLAY) return 0;
+    if (!a->world.map || a->screen != SCREEN_PLAY) return 0;
     /* Through the camera their frame was drawn with: their own, when they
      * are on a floor the GM is not showing. */
     const GridView *g = app_players_own_camera(a) ? &a->pview : &a->ed.view;
     if (!rect_contains(g->view, sx, sy)) return 0;
     int tx, ty;
-    if (!grid_screen_to_tile(g, a->map, sx, sy, &tx, &ty)) return 0;
+    if (!grid_screen_to_tile(g, a->world.map, sx, sy, &tx, &ty)) return 0;
     app_ping(a, who, tx, ty, tx, ty);
-    int f = floor_at(a->map, tx, ty);
+    int f = floor_at(a->world.map, tx, ty);
     if (who != PING_GM && f >= 0 && f != app_floor_shown(a)) {
         char at[MAP_COORD_MAX], msg[96];
         map_coord_name(tx, ty, at, sizeof at);
-        snprintf(msg, sizeof msg, "ping on %s at %s", a->map->areas[f].name, at);
+        snprintf(msg, sizeof msg, "ping on %s at %s", a->world.map->areas[f].name, at);
         app_set_status_gm(a, msg);
     }
     return 1;
@@ -421,7 +421,7 @@ int app_ping_due(const App *a, uint64_t now_ms)
 
 void app_tick(App *a, uint64_t now_ms)
 {
-    a->now_ms = now_ms;
+    a->world.now_ms = now_ms;
     if (net_active(&a->net)) {
         /* A phone that just joined was sent the last players' frame; draw
          * a current one. */
@@ -442,10 +442,10 @@ void app_tick(App *a, uint64_t now_ms)
         int      ran = 0;
         while ((!ran || prof_now_ns() - t0 < a->ctl_turn_ns) && (i = ctl_next(&a->ctl, &req, &len)) >= 0) {
             ran = 1;
-            a->ctl_can_hold = 1;                 /* there is a socket to hold a wait on */
-            a->ctl_held = 0;
+            a->world.ctl_can_hold = 1;                 /* there is a socket to hold a wait on */
+            a->world.ctl_held = 0;
             char *ans = app_ctl_exec(a, req, &len);
-            a->ctl_can_hold = 0;
+            a->world.ctl_can_hold = 0;
             /* The same name's older wait is answered as it is taken over:
              * with every event since the number it waited from, so one made
              * by a request earlier in this very turn is not lost between
@@ -453,22 +453,22 @@ void app_tick(App *a, uint64_t now_ms)
             char    *older = NULL;
             size_t   olen = 0;
             unsigned oseq;
-            if (a->ctl_held && ctl_waiter_of(&a->ctl, a->ctl_who, &oseq) >= 0) {
+            if (a->world.ctl_held && ctl_waiter_of(&a->ctl, a->world.ctl_who, &oseq) >= 0) {
                 FILE *of = open_memstream(&older, &olen);
                 if (of) {
                     fputs("ok\n", of);
-                    app_events_write(a, of, oseq, a->ctl_who);
-                    fprintf(of, "superseded: a newer wait from %s took this one's place\n", a->ctl_who);
+                    app_events_write(a, of, oseq, a->world.ctl_who);
+                    fprintf(of, "superseded: a newer wait from %s took this one's place\n", a->world.ctl_who);
                     fclose(of);
                 }
             }
-            int held = a->ctl_held ? ctl_hold(&a->ctl, i, a->ctl_hold_seq, now_ms + (uint64_t)a->ctl_hold_ms, a->ctl_who, older) : -1;
+            int held = a->world.ctl_held ? ctl_hold(&a->ctl, i, a->world.ctl_hold_seq, now_ms + (uint64_t)a->world.ctl_hold_ms, a->world.ctl_who, older) : -1;
             free(older);
-            if (a->ctl_held && held == 0) {
+            if (a->world.ctl_held && held == 0) {
                 free(ans);
                 continue;
             }
-            if (a->ctl_held) {
+            if (a->world.ctl_held) {
                 free(ans);
                 char full[96];
                 snprintf(full, sizeof full, "error %s: as many agents as there is room for are waiting already\n",
@@ -487,38 +487,38 @@ void app_tick(App *a, uint64_t now_ms)
         a->agent_ring.until_ms = 0;
         a->dirty = 1;
     }
-    if (a->map && a->map->gen != a->seen_gen) {
-        a->seen_gen  = a->map->gen;
-        a->change_ms = now_ms;
+    if (a->world.map && a->world.map->gen != a->world.seen_gen) {
+        a->world.seen_gen  = a->world.map->gen;
+        a->world.change_ms = now_ms;
     }
     app_agents_tick(a, now_ms);
     app_events_flush(a, now_ms);
-    if (!a->map) return;
+    if (!a->world.map) return;
     app_disk_tick(a, now_ms);
     if (app_autosave_due(a, now_ms) == 0) app_autosave(a);
 }
 
 int app_autosave_due(const App *a, uint64_t now_ms)
 {
-    if (!a->autosave_on || !a->map || !a->map->modified) return -1;
-    if (a->map->gen == a->autosave_gen) return -1;
-    uint64_t at = a->change_ms + AUTOSAVE_QUIET_MS;
+    if (!a->autosave_on || !a->world.map || !a->world.map->modified) return -1;
+    if (a->world.map->gen == a->autosave_gen) return -1;
+    uint64_t at = a->world.change_ms + AUTOSAVE_QUIET_MS;
     return now_ms >= at ? 0 : (int)(at - now_ms);
 }
 
 int app_autosave(App *a)
 {
-    if (!a->map) return -1;
+    if (!a->world.map) return -1;
     PROF_ZONE("autosave");
     char autosave[MAP_PATH_MAX + 16], err[MAPIO_ERR_MAX];
-    mapio_autosave_path(a->map, autosave, sizeof autosave);
+    mapio_autosave_path(a->world.map, autosave, sizeof autosave);
     /* The directory may not exist yet for a map that was never saved; one
      * failure is not worth a message, the next save will say. Either way
      * this generation counts as attempted: a failure that stayed "owed"
      * would be retried on every turn of the loop, with poll told not to
      * wait, which is a spinning process for as long as the map is unsaved. */
-    int rc = mapio_write_unflushed(a->map, autosave, err, sizeof err);
-    a->autosave_gen = a->map->gen;
+    int rc = mapio_write_unflushed(a->world.map, autosave, err, sizeof err);
+    a->autosave_gen = a->world.map->gen;
     return rc == 0 ? 0 : -1;
 }
 
@@ -537,9 +537,9 @@ static void app_new_map(App *a, const char *name, int w, int h)
     str_lcpy(m->path, path, sizeof m->path);
 
     slog_close(&a->slog);
-    map_free(a->map);
-    a->map = m;
-    undo_clear(&a->undo);
+    map_free(a->world.map);
+    a->world.map = m;
+    undo_clear(&a->world.undo);
     play_init(&a->play);
     ed_init(&a->ed, m);
     app_floor_reset(a);
@@ -554,17 +554,17 @@ static void app_new_map(App *a, const char *name, int w, int h)
     snprintf(msg, sizeof msg, "new map %.40s (%dx%d) - :w saves to %.100s",
              name, w, h, path);
     app_set_status(a, msg);
-    a->autosave_gen = a->seen_gen = m->gen;
+    a->autosave_gen = a->world.seen_gen = m->gen;
     offer_recovery(a);
 }
 
 int app_save_map(App *a, const char *path)
 {
-    if (!a->map) return -1;
+    if (!a->world.map) return -1;
 
     /* Over the map's own file: not while someone else's change to it has
      * not been looked at. Looked for now, not at the last key. */
-    int own = a->map->path[0] && !strcmp(path, a->map->path);
+    int own = a->world.map->path[0] && !strcmp(path, a->world.map->path);
     if (own && !a->save_force) {
         app_disk_check(a, 1);
         const char *why = app_disk_blocks(a);
@@ -589,13 +589,13 @@ int app_save_map(App *a, const char *path)
     /* The autosave is named from the path the map had; find it before the
      * save moves the map to a new one. */
     char autosave[MAP_PATH_MAX + 16];
-    mapio_autosave_path(a->map, autosave, sizeof autosave);
-    if (mapio_save(a->map, path, err, sizeof err) != 0) {
+    mapio_autosave_path(a->world.map, autosave, sizeof autosave);
+    if (mapio_save(a->world.map, path, err, sizeof err) != 0) {
         app_show_message(a, "Cannot save map", err);
         return -1;
     }
     unlink(autosave);
-    a->autosave_gen = a->map->gen;
+    a->autosave_gen = a->world.map->gen;
     /* Written over, or the map is another file's now: a change waiting from
      * the old one is of a file that no longer matters. */
     app_disk_saved(a, own);
@@ -623,8 +623,8 @@ void app_note_prompt(App *a, int idx, int x, int y)
 {
     char title[64];
     const char *had;
-    if (idx >= 0 && idx < a->map->tokens.n) {
-        const Token *t = &a->map->tokens.v[idx];
+    if (idx >= 0 && idx < a->world.map->tokens.n) {
+        const Token *t = &a->world.map->tokens.v[idx];
         a->pending_token = idx;
         snprintf(title, sizeof title, "note on %.20s", token_name(t));
         had = t->note;
@@ -635,7 +635,7 @@ void app_note_prompt(App *a, int idx, int x, int y)
         char at[MAP_COORD_MAX];
         map_coord_name(x, y, at, sizeof at);
         snprintf(title, sizeof title, "note on %s", at);
-        had = map_note_at(a->map, x, y);
+        had = map_note_at(a->world.map, x, y);
     }
     app_open_prompt(a, PROMPT_NOTE, title, "enter keeps it, ctrl-u then enter takes it away", had ? had : "");
     a->prompt.max = TOKEN_NOTE_MAX;   /* the field is the limit, so nothing typed is lost */
@@ -647,11 +647,11 @@ void app_note_prompt(App *a, int idx, int x, int y)
 void app_follow_selection(App *a)
 {
     Play *pl = &a->play;
-    if (pl->sel < 0 || pl->sel >= a->map->tokens.n) return;
+    if (pl->sel < 0 || pl->sel >= a->world.map->tokens.n) return;
 
-    a->ed.cx = a->map->tokens.v[pl->sel].x;
-    a->ed.cy = a->map->tokens.v[pl->sel].y;
-    grid_ensure_visible(&a->ed.view, a->map, a->ed.cx, a->ed.cy, ED_SCROLLOFF);
+    a->ed.cx = a->world.map->tokens.v[pl->sel].x;
+    a->ed.cy = a->world.map->tokens.v[pl->sel].y;
+    grid_ensure_visible(&a->ed.view, a->world.map, a->ed.cx, a->ed.cy, ED_SCROLLOFF);
 }
 
 /* Says which creature the selection landed on, since cycling and searching
@@ -659,9 +659,9 @@ void app_follow_selection(App *a)
 void app_report_selection(App *a)
 {
     Play *pl = &a->play;
-    if (pl->sel < 0 || pl->sel >= a->map->tokens.n) return;
+    if (pl->sel < 0 || pl->sel >= a->world.map->tokens.n) return;
 
-    const Token *t = &a->map->tokens.v[pl->sel];
+    const Token *t = &a->world.map->tokens.v[pl->sel];
     char msg[128];
     char at[MAP_COORD_MAX];
     map_coord_name(t->x, t->y, at, sizeof at);
@@ -711,9 +711,9 @@ static void prompt_accept(App *a)
         t.size = a->pending_size;
         str_lcpy(t.label, text, sizeof t.label);
 
-        undo_begin(&a->undo);
-        int placed = undo_add_token(&a->undo, a->map, t);
-        undo_end(&a->undo);
+        undo_begin(&a->world.undo);
+        int placed = undo_add_token(&a->world.undo, a->world.map, t);
+        undo_end(&a->world.undo);
         play_focus(&a->play, placed);
 
         char msg[160];
@@ -727,16 +727,16 @@ static void prompt_accept(App *a)
     }
     case PROMPT_RELABEL: {
         Play *pl = &a->play;
-        if (pl->sel < 0 || pl->sel >= a->map->tokens.n) return;
+        if (pl->sel < 0 || pl->sel >= a->world.map->tokens.n) return;
 
         /* Through the undo log, so a mistyped name is one u away. */
-        Token t = a->map->tokens.v[pl->sel];
+        Token t = a->world.map->tokens.v[pl->sel];
         char was[TOKEN_LABEL_MAX];
         str_lcpy(was, t.label, sizeof was);
         str_lcpy(t.label, text, sizeof t.label);
-        undo_begin(&a->undo);
-        undo_edit_token(&a->undo, a->map, pl->sel, t);
-        undo_end(&a->undo);
+        undo_begin(&a->world.undo);
+        undo_edit_token(&a->world.undo, a->world.map, pl->sel, t);
+        undo_end(&a->world.undo);
         char msg[96];
         snprintf(msg, sizeof msg, "relabeled %.30s to %.30s",
                  was[0] ? was : token_kind_name(t.kind), t.label);
@@ -746,9 +746,9 @@ static void prompt_accept(App *a)
     case PROMPT_INITIATIVE: {
         int idx = a->pending_token;
         a->pending_token = -1;
-        if (idx < 0 || idx >= a->map->tokens.n) return;
+        if (idx < 0 || idx >= a->world.map->tokens.n) return;
 
-        const Token *t   = &a->map->tokens.v[idx];
+        const Token *t   = &a->world.map->tokens.v[idx];
         const char  *who = token_name(t);
         char msg[96];
 
@@ -758,7 +758,7 @@ static void prompt_accept(App *a)
         if (!*p) {
             if (!(t->turn & TURN_IN)) { app_set_status(a, "canceled: it was not in the turn order"); return; }
             snprintf(msg, sizeof msg, "%.30s leaves the turn order", who);
-            turn_leave(a->map, &a->undo, idx);
+            turn_leave(a->world.map, &a->world.undo, idx);
             app_note(a, msg);
             return;
         }
@@ -771,21 +771,21 @@ static void prompt_accept(App *a)
         }
         snprintf(msg, sizeof msg, "%.30s %s the turn order at %ld", who,
                  (t->turn & TURN_IN) ? "moves in" : "joins", v);
-        turn_join(a->map, &a->undo, idx, (int)v);
+        turn_join(a->world.map, &a->world.undo, idx, (int)v);
         app_note(a, msg);
         return;
     }
     case PROMPT_STATUS_LABEL: {
         int idx = a->pending_token;
         a->pending_token = -1;
-        if (idx < 0 || idx >= a->map->tokens.n) return;
+        if (idx < 0 || idx >= a->world.map->tokens.n) return;
         if (!text[0]) { app_set_status(a, "canceled: a marker needs a word"); return; }
 
-        Token t = a->map->tokens.v[idx];
+        Token t = a->world.map->tokens.v[idx];
         /* A word the ruleset knows takes its spelling and its color, and
          * goes on once (docs/CONDITIONS.md). Only the whole word: a start of
          * one is the GM's own marker. */
-        const Condition *known = ruleset_condition(ruleset_by_name(a->map->ruleset), text);
+        const Condition *known = ruleset_condition(ruleset_by_name(a->world.map->ruleset), text);
         uint8_t color = known ? known->color : a->play.status_color;
         if (known) {
             text = known->name;
@@ -803,9 +803,9 @@ static void prompt_accept(App *a)
             return;
         }
 
-        undo_begin(&a->undo);
-        undo_edit_token(&a->undo, a->map, idx, t);
-        undo_end(&a->undo);
+        undo_begin(&a->world.undo);
+        undo_edit_token(&a->world.undo, a->world.map, idx, t);
+        undo_end(&a->world.undo);
 
         char msg[96];
         snprintf(msg, sizeof msg, "%s marker on %.24s: %.30s",
@@ -817,10 +817,10 @@ static void prompt_accept(App *a)
     case PROMPT_COUNTERS: {
         int idx = a->pending_token;
         a->pending_token = -1;
-        if (idx < 0 || idx >= a->map->tokens.n) return;
+        if (idx < 0 || idx >= a->world.map->tokens.n) return;
 
-        const Ruleset *rs = ruleset_by_name(a->map->ruleset);
-        Token t = a->map->tokens.v[idx];
+        const Ruleset *rs = ruleset_by_name(a->world.map->ruleset);
+        Token t = a->world.map->tokens.v[idx];
         char  cur[COUNTER_NAME_MAX], msg[160], out[200];
         app_current_counter(a, cur, sizeof cur);
         /* Every message here is about a creature's numbers, the ones that
@@ -831,13 +831,13 @@ static void prompt_accept(App *a)
             return;
         }
         str_lcpy(a->play.counter, cur, sizeof a->play.counter);
-        const Token *was = &a->map->tokens.v[idx];
+        const Token *was = &a->world.map->tokens.v[idx];
         if (token_equal(was, &t)) { app_set_status_gm(a, msg); return; }
         const char *cond = NULL;
         CondChange cc = ruleset_counter_changed(rs, was, &t, &cond);
-        undo_begin(&a->undo);
-        undo_edit_token(&a->undo, a->map, idx, t);
-        undo_end(&a->undo);
+        undo_begin(&a->world.undo);
+        undo_edit_token(&a->world.undo, a->world.map, idx, t);
+        undo_end(&a->world.undo);
         snprintf(out, sizeof out, "%.24s: %.100s%s%s", token_name(&t), msg,
                  app_condition_said(cc), cc != COND_SAME ? cond : "");
         app_note_gm(a, out);
@@ -855,27 +855,27 @@ static void prompt_accept(App *a)
         while (*text == ' ') text++;
         char msg[96];
         if (idx >= 0) {
-            if (idx >= a->map->tokens.n) return;
-            Token t = a->map->tokens.v[idx];
+            if (idx >= a->world.map->tokens.n) return;
+            Token t = a->world.map->tokens.v[idx];
             const char *who = token_name(&t);
             int had = t.note[0] != '\0';
             if (!*text && !had) { app_set_status(a, "nothing noted"); return; }
             str_lcpy(t.note, text, sizeof t.note);
-            undo_begin(&a->undo);
-            undo_edit_token(&a->undo, a->map, idx, t);
-            undo_end(&a->undo);
+            undo_begin(&a->world.undo);
+            undo_edit_token(&a->world.undo, a->world.map, idx, t);
+            undo_end(&a->world.undo);
             snprintf(msg, sizeof msg, *text ? "noted on %.30s" : "note taken off %.30s", who);
             app_note(a, msg);
             return;
         }
         char at[MAP_COORD_MAX];
         map_coord_name(a->pending_tx, a->pending_ty, at, sizeof at);
-        int had = map_note_at(a->map, a->pending_tx, a->pending_ty) != NULL;
+        int had = map_note_at(a->world.map, a->pending_tx, a->pending_ty) != NULL;
         if (!*text && !had) { app_set_status(a, "nothing noted"); return; }
         /* Through the log, like a creature's note: u takes it back. */
-        undo_begin(&a->undo);
-        int noted = undo_set_note(&a->undo, a->map, a->pending_tx, a->pending_ty, text);
-        undo_end(&a->undo);
+        undo_begin(&a->world.undo);
+        int noted = undo_set_note(&a->world.undo, a->world.map, a->pending_tx, a->pending_ty, text);
+        undo_end(&a->world.undo);
         if (!noted) {
             snprintf(msg, sizeof msg, "no room: a map holds %d notes on squares", MAP_NOTES_MAX);
             app_set_status(a, msg);
@@ -888,7 +888,7 @@ static void prompt_accept(App *a)
     case PROMPT_TOKEN_SEARCH: {
         Play *pl = &a->play;
         /* An empty line repeats the last search, the way : and / do in vim. */
-        if (!play_find(pl, a->map, text, 1)) {
+        if (!play_find(pl, a->world.map, text, 1)) {
             char msg[96];
             if (!pl->search[0]) app_set_status(a, "nothing to search for");
             else {
@@ -933,10 +933,10 @@ static void prompt_accept(App *a)
  * here so neither can act on a token the other did not see. */
 const Token *app_clear_status_target(const App *a)
 {
-    if (!a->map) return NULL;
-    if (a->pending_token < 0 || a->pending_token >= a->map->tokens.n) return NULL;
+    if (!a->world.map) return NULL;
+    if (a->pending_token < 0 || a->pending_token >= a->world.map->tokens.n) return NULL;
 
-    const Token *t = &a->map->tokens.v[a->pending_token];
+    const Token *t = &a->world.map->tokens.v[a->pending_token];
     return t->nstatus ? t : NULL;
 }
 
@@ -944,7 +944,7 @@ const Token *app_clear_status_target(const App *a)
  * through the undo log, so a marker cleared in error is one u away. */
 void app_clear_token_status(App *a, int idx, int which)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     if (idx < 0 || idx >= m->tokens.n) return;
 
     Token t = m->tokens.v[idx];
@@ -963,9 +963,9 @@ void app_clear_token_status(App *a, int idx, int which)
         token_remove_status(&t, which);
     }
 
-    undo_begin(&a->undo);
-    undo_edit_token(&a->undo, m, idx, t);
-    undo_end(&a->undo);
+    undo_begin(&a->world.undo);
+    undo_edit_token(&a->world.undo, m, idx, t);
+    undo_end(&a->world.undo);
     app_note(a, msg);
 }
 
@@ -1308,7 +1308,7 @@ void app_close_map(App *a)
     a->preview = 0;
     /* A handout is the encounter's: it comes down with the map, before a
      * server kept alive carries on to the next one. */
-    if (a->handout_up) net_set_handout(&a->net, "", 0, a->now_ms);
+    if (a->handout_up) net_set_handout(&a->net, "", 0, a->world.now_ms);
     a->handout_up = 0;
     a->handout_title[0] = a->handout_body[0] = '\0';
     net_clear_kept(&a->net);             /* whispers waiting were the encounter's too */
@@ -1316,14 +1316,14 @@ void app_close_map(App *a)
     close_server_with_map(a);
     slog_close(&a->slog);
     /* Jobs are their map's: an agent is told, not left to time out. */
-    if (a->map) app_event(a, CTL_EV_CLOSED, 0, "%s - its jobs went with it", a->map->name);
+    if (a->world.map) app_event(a, CTL_EV_CLOSED, 0, "%s - its jobs went with it", a->world.map->name);
     app_disk_reset(a);
-    map_free(a->map);
-    a->map = NULL;
+    map_free(a->world.map);
+    a->world.map = NULL;
     a->npings = a->npinged = 0;
     a->agent_ring.until_ms = 0;
     app_jobs_clear(a);
-    undo_clear(&a->undo);
+    undo_clear(&a->world.undo);
     a->screen = SCREEN_MENU;
 }
 
@@ -1332,12 +1332,12 @@ void app_close_map(App *a)
  * throwing the work away in silence; NULL just closes. */
 void app_leave_map_for(App *a, const char *next)
 {
-    if (a->map && a->map->modified) {
+    if (a->world.map && a->world.map->modified) {
         a->modal = MODAL_CONFIRM_DISCARD;
         str_lcpy(a->modal_title, "Unsaved changes", sizeof a->modal_title);
         snprintf(a->modal_body, sizeof a->modal_body,
                  next ? "%.40s has unsaved changes. Discard them and open the other map?"
-                      : "%.40s has unsaved changes. Discard them?", a->map->name);
+                      : "%.40s has unsaved changes. Discard them?", a->world.map->name);
         str_lcpy(a->pending_file, next ? next : "", sizeof a->pending_file);
         return;
     }
@@ -1350,11 +1350,11 @@ void app_leave_map(App *a) { app_leave_map_for(a, NULL); }
 
 void app_request_quit(App *a)
 {
-    if (a->map && a->map->modified) {
+    if (a->world.map && a->world.map->modified) {
         a->modal = MODAL_CONFIRM_QUIT;
         str_lcpy(a->modal_title, "Quit without saving?", sizeof a->modal_title);
         snprintf(a->modal_body, sizeof a->modal_body,
-                 "%s has unsaved changes.", a->map->name);
+                 "%s has unsaved changes.", a->world.map->name);
         return;
     }
     a->running = 0;
@@ -1368,14 +1368,14 @@ void app_request_quit(App *a)
  * what the cursor draws. */
 int app_target_token_under(const App *a)
 {
-    return tokens_covered_next(&a->map->tokens, a->ed.cx, a->ed.cy,
-                               play_cursor_size(&a->play, a->map), -1);
+    return tokens_covered_next(&a->world.map->tokens, a->ed.cx, a->ed.cy,
+                               play_cursor_size(&a->play, a->world.map), -1);
 }
 
 int app_target_token(const App *a)
 {
     const Play *pl = &a->play;
-    if (pl->sel >= 0 && pl->sel < a->map->tokens.n) return pl->sel;
+    if (pl->sel >= 0 && pl->sel < a->world.map->tokens.n) return pl->sel;
     return app_target_token_under(a);
 }
 
@@ -1389,8 +1389,8 @@ void app_ruler_begin(App *a)
     if (a->screen == SCREEN_PLAY) {
         int idx = app_target_token_under(a);
         if (idx >= 0) {
-            x = a->map->tokens.v[idx].x;
-            y = a->map->tokens.v[idx].y;
+            x = a->world.map->tokens.v[idx].x;
+            y = a->world.map->tokens.v[idx].y;
         }
     }
     ruler_start(&a->ruler, x, y);
@@ -1404,7 +1404,7 @@ int app_ruler_key(App *a, Key k)
     if (!a->ruler.active) return 0;
 
     Editor *e = &a->ed;
-    Map    *m = a->map;
+    Map    *m = a->world.map;
 
     if (e->mode == ED_COMMAND) return 0;      /* the command line has priority */
 
@@ -1480,19 +1480,19 @@ static void app_key_dispatch(App *a, Key k);
 
 void app_fog_sync(App *a)
 {
-    if (!a->map) return;
+    if (!a->world.map) return;
     /* Sight's cache records the generation it was worked out for. */
-    if (a->map->sight.valid && a->map->gen == a->map->sight.gen) return;
-    fog_recompute(a->map);
+    if (a->world.map->sight.valid && a->world.map->gen == a->world.map->sight.gen) return;
+    fog_recompute(a->world.map);
 }
 
 void app_key(App *a, Key k)
 {
-    a->key_saw_hidden = a->map && tokens_any_hidden(&a->map->tokens);
+    a->key_saw_hidden = a->world.map && tokens_any_hidden(&a->world.map->tokens);
     app_key_dispatch(a, k);
     /* The range template and a burst point at the cursor, wherever the key
      * left it -- [ and ], a detour through build mode and :play included. */
-    if (a->map && a->screen == SCREEN_PLAY) range_set_aim(&a->play.range, a->ed.cx, a->ed.cy);
+    if (a->world.map && a->screen == SCREEN_PLAY) range_set_aim(&a->play.range, a->ed.cx, a->ed.cy);
     app_floor_sync(a);
     app_fog_sync(a);
     app_jobs_land_waiting(a);       /* :ask! results that came while landing could not */
@@ -1533,16 +1533,16 @@ static void app_key_dispatch(App *a, Key k)
 
     /* Global like ?, so no mode can be the one without it. The command line
      * keeps its own # -- it is a character somebody might want to type. */
-    if (k.kind == KEY_CHAR && k.mods == 0 && k.ch == '#' && a->map &&
+    if (k.kind == KEY_CHAR && k.mods == 0 && k.ch == '#' && a->world.map &&
         a->ed.mode != ED_COMMAND && !a->pending) {
         a->ed.labels = !a->ed.labels;
-        ed_layout(&a->ed, a->map, a->rnd->w, a->rnd->h);
+        ed_layout(&a->ed, a->world.map, a->rnd->w, a->rnd->h);
         app_set_status(a, a->ed.labels ? "labels on" : "labels off");
         return;
     }
 
     /* [ and ] step between floors, in every mode on the map, the same way. */
-    if (k.kind == KEY_CHAR && k.mods == 0 && (k.ch == '[' || k.ch == ']') && a->map &&
+    if (k.kind == KEY_CHAR && k.mods == 0 && (k.ch == '[' || k.ch == ']') && a->world.map &&
         (a->screen == SCREEN_EDITOR || a->screen == SCREEN_PLAY) &&
         a->ed.mode != ED_COMMAND && !a->pending && !a->ed.pending_g) {
         a->ed.count = 0;
@@ -1561,13 +1561,13 @@ static void app_key_dispatch(App *a, Key k)
     }
 
     /* F1/F2 switch between building the map and running the fight on it. */
-    if (a->map && (k.kind == KEY_F1 || k.kind == KEY_F2)) {
+    if (a->world.map && (k.kind == KEY_F1 || k.kind == KEY_F2)) {
         int to_play = (k.kind == KEY_F2);
         if (!to_play) app_summon_end(a);     /* a summon is play mode's */
         a->screen   = to_play ? SCREEN_PLAY : SCREEN_EDITOR;
         /* Leaving wall mode lifts the pen, as esc does: the stroke is one
          * step, and the next run is another. */
-        undo_stroke_end(&a->undo);
+        undo_stroke_end(&a->world.undo);
         a->ed.pen   = a->ed.erase = 0;
         app_review_leave(a);                 /* a review is build mode's */
         a->ed.mode  = ED_NORMAL;

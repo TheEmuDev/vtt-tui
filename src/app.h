@@ -6,6 +6,7 @@
 #include "editor.h"
 #include "input.h"
 #include "job.h"
+#include "world.h"
 #include "map.h"
 #include "mapio.h"
 #include "net.h"
@@ -101,16 +102,6 @@ typedef struct {
     uint8_t  again;         /* feedback came while it ran: start the job's agent again when it stops */
     uint8_t  stopping;      /* past its deadline: SIGTERM sent at heard_ms */
 } AgentRun;
-#define EVENT_MAX      32
-#define EVENT_TEXT_MAX 240
-typedef struct {
-    unsigned seq;
-    char     text[EVENT_TEXT_MAX];
-    CsWhere  where;         /* the pieces of the map it changed (cs_where), for `changes` */
-    uint8_t  other;         /* and something on no square */
-    uint8_t  gone;          /* the map itself went (closed): nothing before this says where anything is */
-    char     by[CTL_NAME_MAX];  /* the agent whose doing it was, who is not told of it; "" the GM's, told to all */
-} AgentEvent;
 
 #define PING_SHOW_MS 2000
 #define PING_GM      0u                     /* phones are 1 and up */
@@ -137,6 +128,9 @@ typedef struct {
 } Summon;
 
 typedef struct {
+    /* The map, its log, the jobs, the events and the request being run: what
+     * a request handler is given (world.h). */
+    World    world;
     Term        *term;
     Renderer    *rnd;
     const Theme *th;
@@ -167,7 +161,6 @@ typedef struct {
     int       nentries;
     ListState browser;
 
-    Map    *map;
     Editor  ed;
     Play    play;
 
@@ -196,7 +189,6 @@ typedef struct {
 
     /* One log for the whole session: token moves in play mode undo through
      * the same history as wall edits in build mode. */
-    Undo    undo;
 
     /* The session log, off until :log. */
     SessionLog slog;
@@ -215,9 +207,6 @@ typedef struct {
      * terminal. Off for headless runs, which would litter. */
     int      autosave_on;
     unsigned autosave_gen;   /* the map generation the autosave holds */
-    unsigned seen_gen;       /* the last generation app_tick saw */
-    uint64_t change_ms;      /* when seen_gen last moved */
-    uint64_t now_ms;         /* the time app_tick was last given */
 
     /* Pings: rings on the table for PING_SHOW_MS, one per source -- the
      * GM (PING_GM) or a phone, by its connection id -- a newer one from the
@@ -238,11 +227,8 @@ typedef struct {
     /* Jobs (docs/CONFLICTS.md, app_job.c): asked of agents or offered by
      * them, kept with the map. `review` is the one ED_REVIEW shows, and the
      * review's own box (v) is held here, not in the editor's visual mode. */
-    Job      jobs[JOB_MAX];
     int      review;
     int      rv_box, rv_ax, rv_ay;
-    unsigned ctl_refused;       /* the last refusal logged, hashed: a caller repeating itself is one line */
-    char     ctl_who[CTL_NAME_MAX];       /* the name of the request being run (`agent NAME`, or cli) */
     /* A request's edits run on a copy of the map, never the live one, and
      * become a proposal (docs/CONFLICTS.md); the copy and its log are kept
      * for their buffers. `ctl_auto` (:agent accept auto) lands each one at
@@ -257,7 +243,6 @@ typedef struct {
     int      disk_state;        /* DiskState */
     int      disk_reread;       /* the file moved again: read it when the keys go quiet */
     int      disk_job;
-    int      job_last;          /* the last job number given out; the next is after it */
     int      disk_full;         /* DISK_STUCK only for want of a job slot: read again once one is free */
     MapDisk  disk_seen;
     char    *disk_new;
@@ -272,29 +257,15 @@ typedef struct {
      * between an agent's waits. `ctl_can_hold` is set round a request the
      * socket can hold (app_tick); a `wait` with nothing to say then sets
      * `ctl_held` and what it waits for, instead of answering. */
-    AgentEvent events[EVENT_MAX];
-    unsigned event_seq;
-    unsigned cp_gen;
     /* The checkpoint stops when no agent listens (app_event.c). What the map
      * was then, so that a change nobody was told of is said when one comes
      * back: `changes` must never answer "nothing" for a map that moved. */
-    const Map *cp_off_map;
-    unsigned   cp_off_gen;
-    uint64_t agent_seen_ms;
-    int      ctl_can_hold, ctl_held;
     uint64_t ctl_turn_ns;       /* CTL_TURN_NS; a test sets 0 for one request a turn */
-    unsigned ctl_hold_seq;
-    int      ctl_hold_ms;
-    Map     *ctl_scratch;
-    Undo     ctl_sundo;
-    int      ctl_auto;
-    int      ctl_direct;
     /* :agent on. The socket listens whenever vtt runs interactively, so
      * --apply can find a map that is open; off, a request over it is refused
      * with a line saying to turn it on (docs/V2.md, ruling 9), all but
      * --apply's `holds`. Requests not from the socket (the tests, the bench)
      * are not asked. */
-    int      agent_on;
     /* :agent command (app_agent.c): what vtt starts for each :ask and each
      * job sent back, the job on its stdin. Empty: none. */
     AgentRun agents[JOB_MAX];

@@ -32,7 +32,7 @@ void app_stamp_yank(App *a)
     Editor *e = &a->ed;
     int x0 = e->cx, y0 = e->cy, x1 = e->cx + e->brush - 1, y1 = e->cy + e->brush - 1;
     int bx0, by0, bx1, by1;                            /* not past the floor's edge */
-    grid_bounds(&e->view, a->map, &bx0, &by0, &bx1, &by1);
+    grid_bounds(&e->view, a->world.map, &bx0, &by0, &bx1, &by1);
     x1 = imin(x1, bx1); y1 = imin(y1, by1);
     int circle = 0;
     if (e->mode == ED_VISUAL) {
@@ -43,7 +43,7 @@ void app_stamp_yank(App *a)
         x0 = sh.x0; y0 = sh.y0; x1 = sh.x1; y1 = sh.y1;
         e->mode = ED_NORMAL;
     }
-    Map *s = stamp_copy(a->map, x0, y0, x1, y1);
+    Map *s = stamp_copy(a->world.map, x0, y0, x1, y1);
     if (!s) { app_set_status(a, "nothing to copy there"); return; }
     hold(a, s, NULL);
     char msg[96];
@@ -68,12 +68,12 @@ static void place(App *a)
 {
     char err[160], what[96], at[MAP_COORD_MAX], msg[200];
     int bx0, by0, bx1, by1;
-    grid_bounds(&a->ed.view, a->map, &bx0, &by0, &bx1, &by1);
+    grid_bounds(&a->ed.view, a->world.map, &bx0, &by0, &bx1, &by1);
     if (a->ed.view.bounded && (a->ed.cx + a->stamp->w - 1 > bx1 || a->ed.cy + a->stamp->h - 1 > by1)) {
         app_set_status(a, "the stamp runs off the floor - move it, or :floor all");
         return;
     }
-    if (!stamp_place(a->map, &a->undo, a->stamp, a->ed.cx, a->ed.cy, NULL, err, sizeof err)) {
+    if (!stamp_place(a->world.map, &a->world.undo, a->stamp, a->ed.cx, a->ed.cy, NULL, err, sizeof err)) {
         app_set_status(a, err);
         return;
     }
@@ -104,7 +104,7 @@ static void turn(App *a, int quarters)
 void app_stamp_key(App *a, Key k)
 {
     Editor *e = &a->ed;
-    Map    *m = a->map;
+    Map    *m = a->world.map;
     if (!a->stamp) { e->mode = ED_NORMAL; return; }
 
     if (k.kind == KEY_ESC)   { e->mode = ED_NORMAL; e->count = 0; app_set_status(a, "stamp put away"); return; }

@@ -289,7 +289,7 @@ void test_brush(void)
         return;
     }
 
-    Map    *m = a.map;
+    Map    *m = a.world.map;
     Editor *e = &a.ed;
 
     #define K(c) do { Key k = { KEY_CHAR, 0, (uint32_t)(c) }; app_key(&a, k); } while (0)
@@ -699,7 +699,7 @@ void test_shape_keys(void)
     a.ed.anchor_x = 0; a.ed.anchor_y = 0;
     a.ed.cx = 1; a.ed.cy = 0;
     char st[256];
-    ed_status(&a.ed, a.map, st, sizeof st);
+    ed_status(&a.ed, a.world.map, st, sizeof st);
     CHECK(strstr(st, "circle r1") != NULL);
     press(&a, "\x1b");
 
@@ -1026,10 +1026,10 @@ void test_stamp_keys(void)
     rnd_init(&r);
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
-    a.ctl_auto = 1;                       /* edits land at once (decision 6) */
+    a.world.ctl_auto = 1;                       /* edits land at once (decision 6) */
     CHECK(ctl_blank_map(&a, sb.dir, 12, 8));
-    if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
-    Map *m = a.map;
+    if (!a.world.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    Map *m = a.world.map;
 
     CASE("p with nothing in hand says how to get something");
     press(&a, "p");
@@ -1044,7 +1044,7 @@ void test_stamp_keys(void)
     CHECK_EQ(a.ed.mode, ED_NORMAL);
     CHECK(a.stamp && a.stamp->w == 2 && a.stamp->h == 1);
     CHECK(strstr(a.status, "copied 2x1") != NULL);
-    int depth = a.undo.depth;
+    int depth = a.world.undo.depth;
     unsigned gen = m->gen;
     press(&a, "p5l3j");
     CHECK_EQ(a.ed.mode, ED_STAMP);
@@ -1053,12 +1053,12 @@ void test_stamp_keys(void)
     app_draw(&a);                                   /* the preview draws, and goes */
     CHECK_EQ(map_tile(m, 7, 4), TILE_FLOOR);
     CHECK_EQ(m->gen, gen);
-    CHECK_EQ(a.undo.depth, depth);
+    CHECK_EQ(a.world.undo.depth, depth);
     press(&a, "p");
     CHECK_EQ(a.ed.mode, ED_NORMAL);
     CHECK_EQ(map_tile(m, 7, 4), TILE_WATER);
     CHECK_EQ(map_vedge(m, 7, 4), EDGE_WALL);
-    CHECK_EQ(a.undo.depth, depth + 1);
+    CHECK_EQ(a.world.undo.depth, depth + 1);
     CHECK(strstr(a.status, "stamped the copy 2x1 at H5") != NULL);
     press(&a, "u");
     CHECK_EQ(map_tile(m, 7, 4), TILE_FLOOR);
@@ -1073,11 +1073,11 @@ void test_stamp_keys(void)
     CHECK(a.stamp->w == 2 && a.stamp->h == 1);
     press(&a, "\r");
     CHECK_EQ(a.ed.mode, ED_NORMAL);
-    CHECK_EQ(a.undo.depth, depth + 1);
-    depth = a.undo.depth;
+    CHECK_EQ(a.world.undo.depth, depth + 1);
+    depth = a.world.undo.depth;
     press(&a, "p\x1b");
     CHECK_EQ(a.ed.mode, ED_NORMAL);
-    CHECK_EQ(a.undo.depth, depth);
+    CHECK_EQ(a.world.undo.depth, depth);
 
     CASE("the readout is turned-then-mirrored whatever order the keys came in, as the channel applies it");
     {
@@ -1152,11 +1152,11 @@ void test_stamp_keys(void)
     char *t = ctl_ask(&a, "stamps\n");
     CHECK_EQ(strcmp(t, "ok\nPool  2x1\n"), 0);
     free(t);
-    depth = a.undo.depth;
+    depth = a.world.undo.depth;
     t = ctl_ask(&a, "stamp Pool J2 rotate 90\nstamp Pool A8 mirror\n");
     CHECK(strncmp(t, "ok\n", 3) == 0 && strstr(t, "\nchanged "));
     free(t);
-    CHECK_EQ(a.undo.depth, depth + 1);
+    CHECK_EQ(a.world.undo.depth, depth + 1);
     CHECK_EQ(map_tile(m, 9, 1), TILE_WATER);          /* turned: the water on top */
     CHECK_EQ(map_hedge(m, 9, 1), EDGE_WALL);           /* its west wall is now its top */
     CHECK_EQ(map_tile(m, 1, 7), TILE_WATER);           /* mirrored: the water on the right */

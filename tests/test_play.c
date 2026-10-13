@@ -398,13 +398,13 @@ void test_clear_status_keys(void)
     token_add_status(&g, 0, "Poisoned");
     token_add_status(&g, 3, "Marked");
     token_add_status(&g, 5, "Burning");
-    int idx = tokens_add(&a.map->tokens, g);
+    int idx = tokens_add(&a.world.map->tokens, g);
     a.ed.cx = 0; a.ed.cy = 0;
 
     CASE("s d on a token wearing several markers asks which one");
     press(&a, "sd");
     CHECK_EQ(a.modal, MODAL_CLEAR_STATUS);
-    CHECK_EQ(a.map->tokens.v[idx].nstatus, 3);
+    CHECK_EQ(a.world.map->tokens.v[idx].nstatus, 3);
 
     /* The map only ever shows initials, and two conditions can share one, so
      * the question has to spell the words out. */
@@ -425,33 +425,33 @@ void test_clear_status_keys(void)
     CASE("esc leaves every marker where it was");
     press(&a, "\x1b");
     CHECK_EQ(a.modal, MODAL_NONE);
-    CHECK_EQ(a.map->tokens.v[idx].nstatus, 3);
+    CHECK_EQ(a.world.map->tokens.v[idx].nstatus, 3);
 
     CASE("a number takes off that marker and only that one");
     press(&a, "sd2");
     CHECK_EQ(a.modal, MODAL_NONE);
-    CHECK_EQ(a.map->tokens.v[idx].nstatus, 2);
-    CHECK_EQ(strcmp(a.map->tokens.v[idx].status[0].label, "Poisoned"), 0);
-    CHECK_EQ(strcmp(a.map->tokens.v[idx].status[1].label, "Burning"), 0);
+    CHECK_EQ(a.world.map->tokens.v[idx].nstatus, 2);
+    CHECK_EQ(strcmp(a.world.map->tokens.v[idx].status[0].label, "Poisoned"), 0);
+    CHECK_EQ(strcmp(a.world.map->tokens.v[idx].status[1].label, "Burning"), 0);
     CHECK(strstr(a.status, "Marked") != NULL);
 
     CASE("clearing one marker undoes");
     press(&a, "u");
-    CHECK_EQ(a.map->tokens.v[idx].nstatus, 3);
-    CHECK_EQ(strcmp(a.map->tokens.v[idx].status[1].label, "Marked"), 0);
+    CHECK_EQ(a.world.map->tokens.v[idx].nstatus, 3);
+    CHECK_EQ(strcmp(a.world.map->tokens.v[idx].status[1].label, "Marked"), 0);
 
     CASE("a number past the last row is ignored, and the question stays up");
     press(&a, "sd4");
     CHECK_EQ(a.modal, MODAL_CLEAR_STATUS);
-    CHECK_EQ(a.map->tokens.v[idx].nstatus, 3);
+    CHECK_EQ(a.world.map->tokens.v[idx].nstatus, 3);
 
     CASE("a clears them all at once");
     press(&a, "a");
     CHECK_EQ(a.modal, MODAL_NONE);
-    CHECK_EQ(a.map->tokens.v[idx].nstatus, 0);
+    CHECK_EQ(a.world.map->tokens.v[idx].nstatus, 0);
     CHECK(strstr(a.status, "3 markers") != NULL);
     press(&a, "u");
-    CHECK_EQ(a.map->tokens.v[idx].nstatus, 3);
+    CHECK_EQ(a.world.map->tokens.v[idx].nstatus, 3);
 
     /* A chooser with one row is a keystroke that asks nothing. */
     CASE("a single marker clears without a question");
@@ -459,10 +459,10 @@ void test_clear_status_keys(void)
     press(&a, "sa");
     CHECK_EQ(a.modal, MODAL_PROMPT);
     press(&a, "Stunned\r");
-    CHECK_EQ(a.map->tokens.v[idx].nstatus, 1);
+    CHECK_EQ(a.world.map->tokens.v[idx].nstatus, 1);
     press(&a, "sd");
     CHECK_EQ(a.modal, MODAL_NONE);
-    CHECK_EQ(a.map->tokens.v[idx].nstatus, 0);
+    CHECK_EQ(a.world.map->tokens.v[idx].nstatus, 0);
     CHECK(strstr(a.status, "Stunned") != NULL);
 
     CASE("s d on a bare token says so rather than opening an empty question");
@@ -804,7 +804,7 @@ void test_choosing(void)
         return;
     }
 
-    Map  *m = a.map;
+    Map  *m = a.world.map;
     Play *p = &a.play;
     int   ai = 0, bi = 1, ci = 2;      /* Aria, Bram, Cara, in file order */
 
@@ -937,7 +937,7 @@ void test_size_keys(void)
         return;
     }
 
-    Map  *m  = a.map;
+    Map  *m  = a.world.map;
     Play *p  = &a.play;
     int   di = 4;                  /* Dax, alone at (9,2) with room to grow */
     int   oi = 3;                  /* the 2x2 Ogre spanning (4..5, 6..7)   */
@@ -1140,7 +1140,7 @@ void test_group(void)
         return;
     }
 
-    Map  *m = a.map;
+    Map  *m = a.world.map;
     Play *p = &a.play;
 
     #define K(c)   do { Key k = { KEY_CHAR,  0, (uint32_t)(c) }; app_key(&a, k); } while (0)
@@ -1250,7 +1250,7 @@ void test_group_yank(void)
         return;
     }
 
-    Map  *m = a.map;
+    Map  *m = a.world.map;
     Play *p = &a.play;
 
     #define K(c)   do { Key k = { KEY_CHAR,  0, (uint32_t)(c) }; app_key(&a, k); } while (0)
@@ -1612,27 +1612,27 @@ void test_occupancy_keys(void)
     CHECK_EQ(app_open_map(&a, path), 0);
     Key f2 = { KEY_F2, 0, 0 };
     app_key(&a, f2);
-    CHECK_EQ(a.map->tokens.n, 3);
+    CHECK_EQ(a.world.map->tokens.n, 3);
 
     CASE("a copy cannot be pasted onto a creature");
     press(&a, "f");                        /* Aria */
     press(&a, "y");
     press(&a, ":f3\r");                    /* Bram's square */
     press(&a, "p");
-    CHECK_EQ(a.map->tokens.n, 3);
+    CHECK_EQ(a.world.map->tokens.n, 3);
     CHECK(strstr(a.status, "already here") != NULL);
 
     CASE("and lands on the next square over");
     press(&a, ":g3\r");
     press(&a, "p");
-    CHECK_EQ(a.map->tokens.n, 4);
+    CHECK_EQ(a.world.map->tokens.n, 4);
 
     CASE("a new creature cannot be placed onto one either");
     press(&a, ":f3\r");
     press(&a, "ip");
     CHECK_EQ(a.modal, MODAL_NONE);         /* no label prompt: it never got that far */
     CHECK(strstr(a.status, "something is on it") != NULL);
-    CHECK_EQ(a.map->tokens.n, 4);
+    CHECK_EQ(a.world.map->tokens.n, 4);
 
     /* Passing over is fine; sharing a square is not. */
     CASE("a creature may be carried over its own side");
@@ -1640,7 +1640,7 @@ void test_occupancy_keys(void)
     press(&a, "\r");
     CHECK_EQ(a.play.grabbed, 1);
     press(&a, "lll");
-    CHECK_EQ(a.map->tokens.v[a.play.sel].x, 5);   /* standing on Bram */
+    CHECK_EQ(a.world.map->tokens.v[a.play.sel].x, 5);   /* standing on Bram */
 
     CASE("but not put down on it");
     press(&a, "\r");
@@ -1654,7 +1654,7 @@ void test_occupancy_keys(void)
     int sel = a.play.sel;
     press(&a, "\x1b");
     CHECK_EQ(a.play.grabbed, 0);
-    CHECK_EQ(a.map->tokens.v[sel].x, 2);        /* back on C3 */
+    CHECK_EQ(a.world.map->tokens.v[sel].x, 2);        /* back on C3 */
     CHECK(strstr(a.status, "canceled") != NULL);
 
     /* G3 holds the copy pasted above, so the first clear square is the one
@@ -1666,13 +1666,13 @@ void test_occupancy_keys(void)
     CHECK_EQ(a.play.grabbed, 1);                /* on Bram, refused */
     press(&a, "ll\r");
     CHECK_EQ(a.play.grabbed, 0);
-    CHECK_EQ(a.map->tokens.v[sel].x, 7);
+    CHECK_EQ(a.world.map->tokens.v[sel].x, 7);
 
     /* Ctrl-w is the GM overruling the map, and it overrules this too. */
     CASE("with blocking off a creature can be put down anywhere");
     press(&a, "\r");
     press(&a, "h");
-    CHECK_EQ(a.map->tokens.v[a.play.sel].x, 6);
+    CHECK_EQ(a.world.map->tokens.v[a.play.sel].x, 6);
     press(&a, "\r");
     CHECK_EQ(a.play.grabbed, 1);           /* refused, as before */
     press(&a, "\x17");                     /* ctrl-w */
@@ -1853,12 +1853,12 @@ void test_cancel_move(void)
     CASE("esc puts a carried creature back where it set out from");
     press(&a, "\r");
     press(&a, "lllj");
-    CHECK_EQ(a.map->tokens.v[sel].x, 5);
-    CHECK_EQ(a.map->tokens.v[sel].y, 3);
+    CHECK_EQ(a.world.map->tokens.v[sel].x, 5);
+    CHECK_EQ(a.world.map->tokens.v[sel].y, 3);
     press(&a, "\x1b");
     CHECK_EQ(a.play.grabbed, 0);
-    CHECK_EQ(a.map->tokens.v[sel].x, 2);
-    CHECK_EQ(a.map->tokens.v[sel].y, 2);
+    CHECK_EQ(a.world.map->tokens.v[sel].x, 2);
+    CHECK_EQ(a.world.map->tokens.v[sel].y, 2);
     CHECK(strstr(a.status, "C3") != NULL);
 
     CASE("the cursor comes back with it");
@@ -1868,7 +1868,7 @@ void test_cancel_move(void)
     /* The whole point of unwinding rather than stepping back: a canceled
      * move is not in the history at all. */
     CASE("and the walk leaves no trace behind it");
-    CHECK_EQ(undo_can_undo(&a.undo), 0);
+    CHECK_EQ(undo_can_undo(&a.world.undo), 0);
 
     CASE("the selection survives a cancel; only the carry ends");
     CHECK_EQ(a.play.sel, sel);
@@ -1879,10 +1879,10 @@ void test_cancel_move(void)
     press(&a, "ll");
     press(&a, "\r");
     CHECK_EQ(a.play.grabbed, 0);
-    CHECK_EQ(a.map->tokens.v[sel].x, 4);
-    CHECK_EQ(undo_can_undo(&a.undo), 1);
+    CHECK_EQ(a.world.map->tokens.v[sel].x, 4);
+    CHECK_EQ(undo_can_undo(&a.world.undo), 1);
     press(&a, "u");
-    CHECK_EQ(a.map->tokens.v[sel].x, 3);
+    CHECK_EQ(a.world.map->tokens.v[sel].x, 3);
 
     /* An edit made part way through the walk is not part of the walk, so a
      * cancel must not swallow it. */
@@ -1891,23 +1891,23 @@ void test_cancel_move(void)
     press(&a, "\r");
     press(&a, "ll");
     press(&a, "saPoisoned\r");
-    CHECK_EQ(a.map->tokens.v[sel].nstatus, 1);
+    CHECK_EQ(a.world.map->tokens.v[sel].nstatus, 1);
     press(&a, "ll");
     press(&a, "\x1b");
-    CHECK_EQ(a.map->tokens.v[sel].nstatus, 1);
+    CHECK_EQ(a.world.map->tokens.v[sel].nstatus, 1);
 
     /* Only the steps after the marker unwind -- the ones before it are behind
      * an edit the rewind will not cross, so the creature stops there. */
     CASE("it stops unwinding at the edit rather than crossing it");
-    CHECK(a.map->tokens.v[sel].x > 3);
+    CHECK(a.world.map->tokens.v[sel].x > 3);
 
     CASE("canceling without having moved just lets go");
     press(&a, "\r");
     CHECK_EQ(a.play.grabbed, 1);
-    int x = a.map->tokens.v[sel].x;
+    int x = a.world.map->tokens.v[sel].x;
     press(&a, "\x1b");
     CHECK_EQ(a.play.grabbed, 0);
-    CHECK_EQ(a.map->tokens.v[sel].x, x);
+    CHECK_EQ(a.world.map->tokens.v[sel].x, x);
     CHECK(strstr(a.status, "put down") != NULL);
 
     app_free(&a);
@@ -1948,25 +1948,25 @@ void test_delete_yanks(void)
     CASE("a delete fills the yank buffer");
     press(&a, "e");
     press(&a, "d");
-    CHECK_EQ(a.map->tokens.n, 0);
+    CHECK_EQ(a.world.map->tokens.n, 0);
     CHECK_EQ(a.play.nyank, 1);
     CHECK(strstr(a.status, "p puts it back") != NULL);
 
     CASE("and the name comes back with it, not a numbered copy");
     press(&a, ":h4\r");
     press(&a, "p");
-    CHECK_EQ(a.map->tokens.n, 1);
-    CHECK_EQ(strcmp(a.map->tokens.v[0].label, "Goblin"), 0);
-    CHECK_EQ(a.map->tokens.v[0].x, 7);
-    CHECK_EQ(a.map->tokens.v[0].y, 3);
+    CHECK_EQ(a.world.map->tokens.n, 1);
+    CHECK_EQ(strcmp(a.world.map->tokens.v[0].label, "Goblin"), 0);
+    CHECK_EQ(a.world.map->tokens.v[0].x, 7);
+    CHECK_EQ(a.world.map->tokens.v[0].y, 3);
 
     /* Pasting a second time is a copy of something that is now on the map
      * again, so this one does get numbered. */
     CASE("a second paste is a copy and is numbered");
     press(&a, ":b2\r");
     press(&a, "p");
-    CHECK_EQ(a.map->tokens.n, 2);
-    CHECK_EQ(strcmp(a.map->tokens.v[1].label, "Goblin 2"), 0);
+    CHECK_EQ(a.world.map->tokens.n, 2);
+    CHECK_EQ(strcmp(a.world.map->tokens.v[1].label, "Goblin 2"), 0);
 
     CASE("deleting nothing yanks nothing");
     press(&a, ":j5\r");
@@ -2197,14 +2197,14 @@ void test_jump(void)
     CHECK(strstr(a.status, "unknown") == NULL);    /* it is a jump, not an edit */
     CHECK_EQ(a.ed.cx, 4);
     CHECK_EQ(a.ed.cy, 5);
-    CHECK_EQ(strcmp(a.map->name, "Jump"), 0);      /* no file was opened */
+    CHECK_EQ(strcmp(a.world.map->name, "Jump"), 0);      /* no file was opened */
 
     press(&a, ":w\r");
     CHECK(strstr(a.status, "wrote") != NULL);
     press(&a, ":zoom 2\r");
     CHECK_EQ(a.ed.view.zoom, 2);
     press(&a, ":name Renamed\r");
-    CHECK_EQ(strcmp(a.map->name, "Renamed"), 0);
+    CHECK_EQ(strcmp(a.world.map->name, "Renamed"), 0);
 
     CASE("a bare column letter is still its command");
     press(&a, ":d\r");
@@ -2213,7 +2213,7 @@ void test_jump(void)
     CASE("the readouts name squares the same way the jump does");
     press(&a, ":c4\r");
     char st[256];
-    ed_status(&a.ed, a.map, st, sizeof st);
+    ed_status(&a.ed, a.world.map, st, sizeof st);
     CHECK(strstr(st, "C4") != NULL);
     CHECK(strstr(st, "2,3") == NULL);              /* the old x,y is gone */
 
@@ -2222,7 +2222,7 @@ void test_jump(void)
     CASE("a jump waits while a creature is being carried");
     Key f2 = { KEY_F2, 0, 0 };
     app_key(&a, f2);
-    tokens_add(&a.map->tokens, (Token){ 2, 3, 1, TOKEN_ENEMY, "Ogre", { { 0, "" } }, 0 });
+    tokens_add(&a.world.map->tokens, (Token){ 2, 3, 1, TOKEN_ENEMY, "Ogre", { { 0, "" } }, 0 });
     a.ed.cx = 2; a.ed.cy = 3;
     press(&a, "\r");
     CHECK_EQ(a.play.grabbed, 1);
@@ -2327,7 +2327,7 @@ void test_labels(void)
     Key f1 = { KEY_F1, 0, 0 };
     app_key(&a, f1);
     press(&a, ":name a#b\r");
-    CHECK_EQ(strcmp(a.map->name, "a#b"), 0);
+    CHECK_EQ(strcmp(a.world.map->name, "a#b"), 0);
     CHECK_EQ(a.ed.labels, 1);
 
     CASE("every zoom lays labels out without crashing");
@@ -2337,7 +2337,7 @@ void test_labels(void)
         press(&a, cmd);
         for (int w = 24; w <= 120; w += 8) {
             rnd_resize(&r, w, 20);
-            ed_layout(&a.ed, a.map, r.w, r.h);
+            ed_layout(&a.ed, a.world.map, r.w, r.h);
             rnd_begin(&r);
             app_draw(&a);
             rnd_flush(&r, NULL);
@@ -2469,7 +2469,7 @@ void test_play_box(void)
         for (int x = 0; x < r.w; x++) {
             if (r.back[y * r.w + x].bg != a.th->sel_bg) continue;
             int tx, ty;
-            if (grid_screen_to_tile(&a.ed.view, a.map, x, y, &tx, &ty) &&
+            if (grid_screen_to_tile(&a.ed.view, a.world.map, x, y, &tx, &ty) &&
                 tx >= 2 && tx <= 5 && ty >= 2 && ty <= 4) inside++;
             else outside++;
         }

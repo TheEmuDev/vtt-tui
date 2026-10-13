@@ -46,7 +46,7 @@ static void key_then_quiet(App *a, uint64_t *now)
 static int disk_job(const App *a)
 {
     for (int i = 0; i < JOB_MAX; i++)
-        if (a->jobs[i].used && a->jobs[i].from == JOB_FROM_DISK) return i;
+        if (a->world.jobs[i].used && a->world.jobs[i].from == JOB_FROM_DISK) return i;
     return -1;
 }
 
@@ -59,8 +59,8 @@ void test_disk(void)
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
     CHECK(ctl_blank_map(&a, sb.dir, 20, 12));
-    if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
-    Map *m = a.map;
+    if (!a.world.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    Map *m = a.world.map;
     char path[700];
     str_lcpy(path, m->path, sizeof path);
     uint64_t now = 10000;
@@ -75,9 +75,9 @@ void test_disk(void)
     free(bytes);
 
     CASE("saved: the base is what was written, the identity the new file's; a key then finds nothing changed");
-    undo_begin(&a.undo);
-    undo_set_tile(&a.undo, m, 1, 1, TILE_WATER);
-    undo_end(&a.undo);
+    undo_begin(&a.world.undo);
+    undo_set_tile(&a.world.undo, m, 1, 1, TILE_WATER);
+    undo_end(&a.world.undo);
     press(&a, ":w\r");
     CHECK(strstr(a.status, "wrote ") != NULL);
     bytes = file_bytes(path, &n);
@@ -104,16 +104,16 @@ void test_disk(void)
     int dj = disk_job(&a);
     CHECK(dj >= 0);
     if (dj < 0) goto out;
-    CHECK_EQ(a.jobs[dj].state, JOB_READY);
+    CHECK_EQ(a.world.jobs[dj].state, JOB_READY);
     CHECK_EQ(a.disk_state, DISK_PROPOSED);
     CHECK(strstr(a.status, "ready: ground in F6") != NULL);
     CHECK_EQ(map_tile(m, 5, 5), TILE_FLOOR);               /* nothing lands by itself */
     CHECK_EQ(app_disk_due(&a, now), -1);
 
     CASE(":w is refused while the file's change has not been looked at; a trip would be too");
-    undo_begin(&a.undo);
-    undo_set_tile(&a.undo, m, 2, 2, TILE_ROUGH);            /* the GM's own, unsaved */
-    undo_end(&a.undo);
+    undo_begin(&a.world.undo);
+    undo_set_tile(&a.world.undo, m, 2, 2, TILE_ROUGH);            /* the GM's own, unsaved */
+    undo_end(&a.world.undo);
     press(&a, ":w\r");
     CHECK(strstr(a.status, "not saved - the file changed on disk: :review") != NULL);
     CHECK(strstr(a.status, ":w! writes yours over it") != NULL);
@@ -133,12 +133,12 @@ void test_disk(void)
     CHECK(strstr(a.status, "a file cannot be asked") != NULL);
 
     CASE("accepted: their change and the GM's are both here, one undo step; :w passes, and the file has both");
-    int depth = a.undo.depth;
+    int depth = a.world.undo.depth;
     press(&a, "\r");
     CHECK_EQ(map_tile(m, 5, 5), TILE_HAZARD);
     CHECK_EQ(map_tile(m, 2, 2), TILE_ROUGH);
-    CHECK_EQ(a.undo.depth, depth + 1);
-    CHECK(undo_tag_top(&a.undo) == NULL);                           /* not the agent's to take back */
+    CHECK_EQ(a.world.undo.depth, depth + 1);
+    CHECK(undo_tag_top(&a.world.undo) == NULL);                           /* not the agent's to take back */
     press(&a, ":w\r");
     CHECK(strstr(a.status, "wrote ") != NULL);
     CHECK_EQ(a.disk_state, DISK_NONE);
@@ -151,19 +151,19 @@ void test_disk(void)
     jobs_reset(&a);
 
     CASE("their change where the GM has changed too is a conflict, shown as one");
-    undo_begin(&a.undo);
-    undo_set_tile(&a.undo, m, 7, 7, TILE_WATER);
-    undo_end(&a.undo);
+    undo_begin(&a.world.undo);
+    undo_set_tile(&a.world.undo, m, 7, 7, TILE_WATER);
+    undo_end(&a.world.undo);
     outside_edit(path, 7, 7, TILE_BRUSH);
     key_then_quiet(&a, &now);
     dj = disk_job(&a);
     CHECK(dj >= 0);
     if (dj < 0) goto out;
-    CHECK_EQ(cs_check(&a.jobs[dj].cs, m), 1);
+    CHECK_EQ(cs_check(&a.world.jobs[dj].cs, m), 1);
 
     CASE("scrapped: the file's change is left out, and :w then writes over it on purpose");
     press(&a, ":review\rd");
-    CHECK_EQ(a.jobs[dj].state, JOB_SCRAPPED);
+    CHECK_EQ(a.world.jobs[dj].state, JOB_SCRAPPED);
     press(&a, ":w\r");
     CHECK(strstr(a.status, "wrote ") != NULL);
     {
@@ -178,13 +178,13 @@ void test_disk(void)
     outside_edit(path, 8, 8, TILE_BRUSH);
     key_then_quiet(&a, &now);
     dj = disk_job(&a);
-    CHECK(dj >= 0 && a.jobs[dj].state == JOB_READY);
-    undo_begin(&a.undo);
-    undo_set_tile(&a.undo, m, 9, 9, TILE_WATER);
-    undo_end(&a.undo);
+    CHECK(dj >= 0 && a.world.jobs[dj].state == JOB_READY);
+    undo_begin(&a.world.undo);
+    undo_set_tile(&a.world.undo, m, 9, 9, TILE_WATER);
+    undo_end(&a.world.undo);
     press(&a, ":w!\r");
     CHECK(strstr(a.status, "wrote ") != NULL);
-    CHECK(dj >= 0 && a.jobs[dj].state == JOB_SCRAPPED);
+    CHECK(dj >= 0 && a.world.jobs[dj].state == JOB_SCRAPPED);
     CHECK_EQ(a.disk_state, DISK_NONE);
     {
         char err[MAPIO_ERR_MAX];
@@ -260,13 +260,13 @@ void test_disk(void)
     CHECK_EQ(disk_job(&a), -1);
 
     CASE("bare :e reads the file again, asking first when there is unsaved work");
-    undo_begin(&a.undo);
-    undo_set_tile(&a.undo, m, 4, 4, TILE_WATER);
-    undo_end(&a.undo);
+    undo_begin(&a.world.undo);
+    undo_set_tile(&a.world.undo, m, 4, 4, TILE_WATER);
+    undo_end(&a.world.undo);
     press(&a, ":e\r");
     CHECK_EQ(a.modal, MODAL_CONFIRM_DISCARD);
     press(&a, "y");
-    m = a.map;
+    m = a.world.map;
     CHECK(m && m->w == 22 && map_tile(m, 4, 4) == TILE_FLOOR);
     CHECK_EQ(a.disk_state, DISK_NONE);
     CHECK(m && m->base != NULL);
@@ -310,18 +310,18 @@ void test_disk(void)
     CHECK(dj >= 0);
     if (dj >= 0) {
         char rm[32];
-        int num = a.jobs[dj].num;
+        int num = a.world.jobs[dj].num;
         snprintf(rm, sizeof rm, ":ask %d remove\r", num);
-        a.disk_checked_ms = a.now_ms;                       /* no look between: the same second */
+        a.disk_checked_ms = a.world.now_ms;                       /* no look between: the same second */
         press(&a, rm);
-        a.job_last = num - 1;                               /* as after the numbers have gone round */
+        a.world.job_last = num - 1;                               /* as after the numbers have gone round */
         char *t = ctl_ask(&a, "tile A12 water\n");          /* an agent's, taking the number */
         free(t);
         int aj = -1;
-        for (int i = 0; i < JOB_MAX; i++) if (a.jobs[i].used && a.jobs[i].num == num) aj = i;
-        CHECK(aj >= 0 && a.jobs[aj].from == JOB_FROM_AGENT);
+        for (int i = 0; i < JOB_MAX; i++) if (a.world.jobs[i].used && a.world.jobs[i].num == num) aj = i;
+        CHECK(aj >= 0 && a.world.jobs[aj].from == JOB_FROM_AGENT);
         press(&a, ":w!\r");
-        CHECK(aj >= 0 && a.jobs[aj].state == JOB_READY);    /* not scrapped as the file's */
+        CHECK(aj >= 0 && a.world.jobs[aj].state == JOB_READY);    /* not scrapped as the file's */
     }
     jobs_reset(&a);
     key_then_quiet(&a, &now);
@@ -361,8 +361,8 @@ void test_disk(void)
         snprintf(other, sizeof other, ":w %s/other.vtt\r", sb.dir);
         press(&a, other);
         CHECK(strstr(a.status, "wrote ") != NULL);
-        CHECK(dj >= 0 && a.jobs[dj].state == JOB_SCRAPPED);
-        CHECK(dj >= 0 && strstr(a.jobs[dj].thread[a.jobs[dj].nthread - 1].text, "written over") == NULL);
+        CHECK(dj >= 0 && a.world.jobs[dj].state == JOB_SCRAPPED);
+        CHECK(dj >= 0 && strstr(a.world.jobs[dj].thread[a.world.jobs[dj].nthread - 1].text, "written over") == NULL);
         snprintf(other, sizeof other, ":w %s\r", path);     /* and back to the first file */
         press(&a, other);
     }
@@ -379,9 +379,9 @@ void test_disk(void)
         char rv[32];
         press(&a, ":review\rd");
         key_then_quiet(&a, &now);                           /* adopted: the file is the base */
-        snprintf(rv, sizeof rv, ":review %d\r", a.jobs[dj].num);
+        snprintf(rv, sizeof rv, ":review %d\r", a.world.jobs[dj].num);
         press(&a, rv);
-        CHECK_EQ(a.jobs[dj].state, JOB_READY);
+        CHECK_EQ(a.world.jobs[dj].state, JOB_READY);
         press(&a, "\x1b");
         press(&a, ":w\r");
         CHECK(strstr(a.status, "not saved - ") != NULL);
@@ -395,23 +395,23 @@ void test_disk(void)
     outside_edit(path, 6, 1, TILE_BRUSH);
     key_then_quiet(&a, &now);
     int njobs = 0;
-    for (int i = 0; i < JOB_MAX; i++) njobs += a.jobs[i].used && a.jobs[i].from == JOB_FROM_DISK;
+    for (int i = 0; i < JOB_MAX; i++) njobs += a.world.jobs[i].used && a.world.jobs[i].from == JOB_FROM_DISK;
     CHECK_EQ(njobs, 1);
     dj = disk_job(&a);
-    CHECK(dj >= 0 && a.jobs[dj].cs.ncells == 2);
+    CHECK(dj >= 0 && a.world.jobs[dj].cs.ncells == 2);
     press(&a, ":wq\r");
-    CHECK(a.map != NULL && a.screen == SCREEN_EDITOR);
+    CHECK(a.world.map != NULL && a.screen == SCREEN_EDITOR);
     CHECK(strstr(a.status, "not saved - ") != NULL);
     a.ed.cx = 5; a.ed.cy = 1;
     press(&a, ":review\rv\r");                             /* the box is F2 alone */
-    CHECK_EQ(map_tile(a.map, 5, 1), TILE_BRUSH);
-    CHECK_EQ(map_tile(a.map, 6, 1), TILE_FLOOR);
+    CHECK_EQ(map_tile(a.world.map, 5, 1), TILE_BRUSH);
+    CHECK_EQ(map_tile(a.world.map, 6, 1), TILE_FLOOR);
     press(&a, "\x1b");
     press(&a, ":w\r");
     CHECK(strstr(a.status, "not saved - ") != NULL);        /* the rest still waits */
     press(&a, ":w!\r");
     jobs_reset(&a);
-    m = a.map;
+    m = a.world.map;
 
     CASE("a map another vtt has open: asked first; y opens it here too, n leaves it");
     {
@@ -436,9 +436,9 @@ void test_disk(void)
                 app_init(&c, NULL, &rc);
                 c.ask_holders = 1;
                 app_open_map(&c, path);
-                int asked = c.modal == MODAL_CONFIRM_HELD && !c.map && strstr(c.modal_body, "is open in another vtt") != NULL;
+                int asked = c.modal == MODAL_CONFIRM_HELD && !c.world.map && strstr(c.modal_body, "is open in another vtt") != NULL;
                 press(&c, yes ? "y" : "n");
-                int opened = c.map != NULL && c.modal == MODAL_NONE;
+                int opened = c.world.map != NULL && c.modal == MODAL_NONE;
                 _exit(asked ? (opened ? 8 : 7) : 1);
             }
             int st = 0, done = 0;
@@ -465,9 +465,9 @@ void test_disk(void)
             app_init(&c, NULL, &rc);
             c.ask_holders = 1;
             app_open_map(&c, path);
-            int asked = c.modal == MODAL_CONFIRM_HELD && !c.map && strstr(c.modal_body, "did not say whether it has") != NULL;
+            int asked = c.modal == MODAL_CONFIRM_HELD && !c.world.map && strstr(c.modal_body, "did not say whether it has") != NULL;
             press(&c, "y");
-            _exit(asked && c.map ? 9 : 1);
+            _exit(asked && c.world.map ? 9 : 1);
         }
         int st = 0;
         waitpid(pid, &st, 0);
@@ -485,7 +485,7 @@ out:
 static int jobs_used(const App *a)
 {
     int n = 0;
-    for (int i = 0; i < JOB_MAX; i++) n += a->jobs[i].used;
+    for (int i = 0; i < JOB_MAX; i++) n += a->world.jobs[i].used;
     return n;
 }
 
@@ -500,9 +500,9 @@ void test_disk_whole(void)
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
     CHECK(ctl_blank_map(&a, sb.dir, 20, 12));
-    if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    if (!a.world.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
     char path[700], other[700], cmd[800];
-    str_lcpy(path, a.map->path, sizeof path);
+    str_lcpy(path, a.world.map->path, sizeof path);
     write_map_file(sb.dir, "other.vtt");
     snprintf(other, sizeof other, "%s/other.vtt", sb.dir);
     uint64_t now = 10000;
@@ -514,24 +514,24 @@ void test_disk_whole(void)
     CHECK_EQ(jobs_used(&a), 1);
     press(&a, ":review\r");
     CHECK_EQ(a.ed.mode, ED_REVIEW);
-    unsigned seq = a.event_seq;
+    unsigned seq = a.world.event_seq;
     snprintf(cmd, sizeof cmd, ":e %s\r", other);
     press(&a, cmd);
-    CHECK(a.map && a.map->w == 2);
+    CHECK(a.world.map && a.world.map->w == 2);
     CHECK_EQ(jobs_used(&a), 0);
     CHECK_EQ(a.review, -1);
     CHECK(a.ed.mode != ED_REVIEW);
-    CHECK(a.event_seq > seq && strstr(a.events[a.event_seq % EVENT_MAX].text, "map closed: ") != NULL);
+    CHECK(a.world.event_seq > seq && strstr(a.world.events[a.world.event_seq % EVENT_MAX].text, "map closed: ") != NULL);
     snprintf(cmd, sizeof cmd, ":e %s\r", path);
     press(&a, cmd);
-    CHECK(a.map && a.map->w == 20);
+    CHECK(a.world.map && a.world.map->w == 20);
 
     CASE("bare :e over the file's change: the file is the map now, its job is gone, and :w passes");
     outside_edit(path, 5, 5, TILE_HAZARD);
     key_then_quiet(&a, &now);
     CHECK(disk_job(&a) >= 0);
     press(&a, ":e\r");
-    CHECK(a.map && map_tile(a.map, 5, 5) == TILE_HAZARD);
+    CHECK(a.world.map && map_tile(a.world.map, 5, 5) == TILE_HAZARD);
     CHECK_EQ(jobs_used(&a), 0);
     key_then_quiet(&a, &now);
     CHECK_EQ(a.disk_state, DISK_NONE);
@@ -545,9 +545,9 @@ void test_disk_whole(void)
     int dj = disk_job(&a);
     CHECK(dj >= 0);
     if (dj >= 0) {
-        int num = a.jobs[dj].num;
-        char sum[sizeof a.jobs[0].summary];
-        str_lcpy(sum, a.jobs[dj].summary, sizeof sum);
+        int num = a.world.jobs[dj].num;
+        char sum[sizeof a.world.jobs[0].summary];
+        str_lcpy(sum, a.world.jobs[dj].summary, sizeof sum);
         static const char *const TRY[] = { "job %d propose \"mine\"\ntile B2 water\n", "job %d take\n", "job %d area B2:C3\n",
                                            "job %d say \"hello\"\n", "job %d drop\n" };
         for (int i = 0; i < 5; i++) {
@@ -556,17 +556,17 @@ void test_disk_whole(void)
             CHECK(t && ctl_refused(t, "state", 1) && strstr(t, "the GM's to decide") != NULL);
             free(t);
         }
-        CHECK(a.jobs[dj].used && a.jobs[dj].state == JOB_READY && a.jobs[dj].from == JOB_FROM_DISK);
-        CHECK(!strcmp(a.jobs[dj].summary, sum));
+        CHECK(a.world.jobs[dj].used && a.world.jobs[dj].state == JOB_READY && a.world.jobs[dj].from == JOB_FROM_DISK);
+        CHECK(!strcmp(a.world.jobs[dj].summary, sum));
         snprintf(cmd, sizeof cmd, "job %d dump\n", num);
         t = ctl_ask(&a, cmd);
         CHECK(t && !strncmp(t, "ok\n", 3));
         free(t);
         CHECK_EQ(a.disk_state, DISK_PROPOSED);
         /* The file's job alone is no agent listening: no checkpoint runs for it. */
-        a.agent_seen_ms = 0;
+        a.world.agent_seen_ms = 0;
         app_events_flush(&a, now);
-        CHECK(a.map->cp == NULL);
+        CHECK(a.world.map->cp == NULL);
     }
     press(&a, ":w!\r");
     jobs_reset(&a);
@@ -579,7 +579,7 @@ void test_disk_whole(void)
     key_then_quiet(&a, &now);
     CHECK_EQ(a.disk_state, DISK_STUCK);
     CHECK_EQ(disk_job(&a), -1);
-    snprintf(cmd, sizeof cmd, ":ask %d remove\r", a.jobs[0].num);
+    snprintf(cmd, sizeof cmd, ":ask %d remove\r", a.world.jobs[0].num);
     press(&a, cmd);
     key_then_quiet(&a, &now);
     CHECK(disk_job(&a) >= 0);
@@ -590,11 +590,11 @@ void test_disk_whole(void)
     CASE("a job's number is not given out again while another is free: a run started for the old job cannot take the new");
     press(&a, ":ask a crypt\r");
     int first = -1, second = -1;
-    for (int i = 0; i < JOB_MAX; i++) if (a.jobs[i].used) first = a.jobs[i].num;
+    for (int i = 0; i < JOB_MAX; i++) if (a.world.jobs[i].used) first = a.world.jobs[i].num;
     snprintf(cmd, sizeof cmd, ":ask %d remove\r", first);
     press(&a, cmd);
     press(&a, ":ask a tavern\r");
-    for (int i = 0; i < JOB_MAX; i++) if (a.jobs[i].used) second = a.jobs[i].num;
+    for (int i = 0; i < JOB_MAX; i++) if (a.world.jobs[i].used) second = a.world.jobs[i].num;
     CHECK(first > 0 && second > 0 && second != first);
     snprintf(cmd, sizeof cmd, "job %d take\n", first);
     t = ctl_ask(&a, cmd);

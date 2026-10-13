@@ -66,7 +66,7 @@ static void shape_squares(const Map *m, const EdShape *sh, Marked *mk)
 
 static void gather_marked(const App *a, Marked *mk)
 {
-    const Map    *m = a->map;
+    const Map    *m = a->world.map;
     const Editor *e = &a->ed;
     memset(mk, 0, sizeof *mk);
     int b = a->screen == SCREEN_EDITOR ? e->brush : 1, tx, ty;
@@ -111,12 +111,12 @@ static const char *ping_source(uint32_t who, char *buf, size_t sz)
 /* A record's until_ms is when it was made. */
 static uint64_t ping_age_ms(const App *a, const Ping *p)
 {
-    return a->now_ms > p->until_ms ? a->now_ms - p->until_ms : 0;
+    return a->world.now_ms > p->until_ms ? a->world.now_ms - p->until_ms : 0;
 }
 
 void app_ctl_marked(App *a, FILE *out, int json)
 {
-    const Map *m = a->map;
+    const Map *m = a->world.map;
     Marked mk;
     gather_marked(a, &mk);
     const char *screen = app_ctl_screen_name(a->screen);

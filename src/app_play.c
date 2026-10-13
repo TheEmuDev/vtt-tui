@@ -22,9 +22,9 @@ static void play_cancel_move(App *a)
 {
     Play *pl = &a->play;
 
-    int back = undo_rewind_moves(&a->undo, a->map, pl->grab_depth,
+    int back = undo_rewind_moves(&a->world.undo, a->world.map, pl->grab_depth,
                                  pl->group, pl->ngroup);
-    play_trail_sync(pl, a->map);
+    play_trail_sync(pl, a->world.map);
 
     pl->grabbed = 0;
     pl->ntrail  = 0;
@@ -45,7 +45,7 @@ static void play_cancel_move(App *a)
 static int play_put_down(App *a, const char *how)
 {
     Play  *pl = &a->play;
-    Map   *m  = a->map;
+    Map   *m  = a->world.map;
 
     /* Every creature in hand has to have somewhere to land, and they are
      * transparent to each other: a formation is put down as it stands. */
@@ -81,9 +81,9 @@ static int play_put_down(App *a, const char *how)
 static void report_choice(App *a)
 {
     Play *pl = &a->play;
-    if (pl->sel < 0 || pl->sel >= a->map->tokens.n) return;
+    if (pl->sel < 0 || pl->sel >= a->world.map->tokens.n) return;
 
-    const Token *t = &a->map->tokens.v[pl->sel];
+    const Token *t = &a->world.map->tokens.v[pl->sel];
     char at[MAP_COORD_MAX];
     map_coord_name(t->x, t->y, at, sizeof at);
 
@@ -97,7 +97,7 @@ static void report_choice(App *a)
  * runs it backwards. */
 static void cycle_track(App *a, int kind, int delta)
 {
-    if (!play_cycle(&a->play, a->map, delta, kind)) {
+    if (!play_cycle(&a->play, a->world.map, delta, kind)) {
         const char *what = kind == TOKEN_PLAYER ? "players"
                          : kind == TOKEN_ENEMY  ? "enemies"
                                                 : "tokens";
@@ -118,7 +118,7 @@ static int play_action_group(App *a, int *out, int max)
     Play *pl = &a->play;
 
     if (pl->visual)
-        return play_box_tokens(a->map, pl->anchor_x, pl->anchor_y,
+        return play_box_tokens(a->world.map, pl->anchor_x, pl->anchor_y,
                                a->ed.cx, a->ed.cy, out, max);
 
     if (pl->ngroup > 0) {
@@ -142,7 +142,7 @@ static void yank_group(App *a, const int *idx, int n)
     if (n > PLAY_GROUP_MAX) n = PLAY_GROUP_MAX;
 
     for (int i = 0; i < n; i++) {
-        pl->yank[i] = a->map->tokens.v[idx[i]];
+        pl->yank[i] = a->world.map->tokens.v[idx[i]];
         /* A copy keeps its place in the order but never the turn itself:
          * there is one turn, and the original has it. */
         pl->yank[i].turn &= (uint8_t)~TURN_ACTING;
@@ -170,7 +170,7 @@ static void group_name(const Map *m, const int *idx, int n, char *buf, size_t bu
 static void fog_hand(App *a, int on)
 {
     PROF_ZONE("fog.reveal");
-    Map  *m  = a->map;
+    Map  *m  = a->world.map;
     Play *pl = &a->play;
     int x0 = a->ed.cx, y0 = a->ed.cy, x1, y1;
     if (pl->visual) {
@@ -183,16 +183,16 @@ static void fog_hand(App *a, int on)
         y1 = y0 + size - 1;
     }
     int changed = 0, painted = 0;
-    undo_begin(&a->undo);
+    undo_begin(&a->world.undo);
     for (int y = y0; y <= y1; y++)
         for (int x = x0; x <= x1; x++) {
             uint8_t was = fog_at(m, x, y);
             if (!(was & FOG_ID)) continue;
             painted++;
-            fog_light(m, &a->undo, x, y, on);
+            fog_light(m, &a->world.undo, x, y, on);
             changed += fog_at(m, x, y) != was;
         }
-    undo_end(&a->undo);
+    undo_end(&a->world.undo);
     char msg[80];
     if (!painted) { app_set_status(a, "no fog here - build mode paints it: g f"); return; }
     if (!changed) { app_set_status(a, on ? "already lit" : "already dark"); return; }
@@ -212,9 +212,9 @@ static void ping_here(App *a)
         y0 = imin(pl->anchor_y, a->ed.cy); y1 = imax(pl->anchor_y, a->ed.cy);
         pl->visual = 0;
     } else {
-        int size = play_cursor_size(pl, a->map);
+        int size = play_cursor_size(pl, a->world.map);
         /* Carrying a hidden creature, the ring would be its size. */
-        if (pl->grabbed && pl->sel >= 0 && pl->sel < a->map->tokens.n && a->map->tokens.v[pl->sel].hidden)
+        if (pl->grabbed && pl->sel >= 0 && pl->sel < a->world.map->tokens.n && a->world.map->tokens.v[pl->sel].hidden)
             size = 1;
         x1 = x0 + size - 1;
         y1 = y0 + size - 1;
@@ -226,10 +226,10 @@ static void ping_here(App *a)
 static void fog_hand_patch(App *a, int on)
 {
     PROF_ZONE("fog.reveal");
-    Map *m  = a->map;
+    Map *m  = a->world.map;
     int  id = fog_at(m, a->ed.cx, a->ed.cy) & FOG_ID;
     if (!id || !m->fog_patches[id - 1].name[0]) { app_set_status(a, "no fog patch here"); return; }
-    int n = fog_light_patch(m, &a->undo, id, on);
+    int n = fog_light_patch(m, &a->world.undo, id, on);
     char msg[80];
     snprintf(msg, sizeof msg, "%s %s - %d square%s", on ? "lit" : "darkened",
              m->fog_patches[id - 1].name, n, n == 1 ? "" : "s");
@@ -241,7 +241,7 @@ static void counters_prompt(App *a)
 {
     int idx = app_target_token(a);
     if (idx < 0) { app_set_status(a, "no creature here to count"); return; }
-    const Token *t = &a->map->tokens.v[idx];
+    const Token *t = &a->world.map->tokens.v[idx];
     a->pending_token = idx;
 
     char title[64], hint[96], have[80];
@@ -250,7 +250,7 @@ static void counters_prompt(App *a)
     if (have[0]) {
         snprintf(hint, sizeof hint, "%.60s  -  hp -2, hp 4/6, -hp", have);
     } else {
-        const Ruleset *rs = ruleset_by_name(a->map->ruleset);
+        const Ruleset *rs = ruleset_by_name(a->world.map->ruleset);
         char first[COUNTER_NAME_MAX];
         counter_default(rs ? rs->counters : NULL, first, sizeof first);
         if (rs && rs->counters) snprintf(hint, sizeof hint, "%s  -  e.g. %s 6", rs->counters, first);
@@ -266,7 +266,7 @@ static void counter_step(App *a, int delta)
     PROF_ZONE("counter.step");
     int idx = app_target_token(a);
     if (idx < 0) { app_set_status(a, "no creature here - < and > step its counter"); return; }
-    Token t = a->map->tokens.v[idx];
+    Token t = a->world.map->tokens.v[idx];
     const char *who = token_name(&t);
 
     char cur[COUNTER_NAME_MAX], msg[96];
@@ -285,10 +285,10 @@ static void counter_step(App *a, int delta)
         return;
     }
     const char *cond = NULL;
-    CondChange cc = ruleset_counter_changed(ruleset_by_name(a->map->ruleset), &a->map->tokens.v[idx], &t, &cond);
-    undo_begin(&a->undo);
-    undo_edit_token(&a->undo, a->map, idx, t);
-    undo_end(&a->undo);
+    CondChange cc = ruleset_counter_changed(ruleset_by_name(a->world.map->ruleset), &a->world.map->tokens.v[idx], &t, &cond);
+    undo_begin(&a->world.undo);
+    undo_edit_token(&a->world.undo, a->world.map, idx, t);
+    undo_end(&a->world.undo);
     snprintf(msg, sizeof msg, "%.24s %s %d/%d%s%s", who, t.counters[i].name,
              t.counters[i].value, t.counters[i].max,
              app_condition_said(cc), cc != COND_SAME ? cond : "");
@@ -300,11 +300,11 @@ static void place_token(App *a, uint8_t kind)
     Editor *e = &a->ed;
     Play   *pl = &a->play;
 
-    if (!play_can_place(a->map, e->cx, e->cy, pl->next_size, -1)) {
+    if (!play_can_place(a->world.map, e->cx, e->cy, pl->next_size, -1)) {
         char msg[96];
         snprintf(msg, sizeof msg, "no room for a %dx%d here%s",
                  pl->next_size, pl->next_size,
-                 tokens_overlapping(&a->map->tokens, e->cx, e->cy,
+                 tokens_overlapping(&a->world.map->tokens, e->cx, e->cy,
                                     pl->next_size, -1, TOKEN_ANY_KIND) >= 0
                      ? " - something is on it" : "");
         app_set_status(a, msg);
@@ -330,7 +330,7 @@ static void status_add(App *a)
     int idx = app_target_token(a);
     if (idx < 0) { app_set_status(a, "no token here to mark"); return; }
 
-    const Token *t = &a->map->tokens.v[idx];
+    const Token *t = &a->world.map->tokens.v[idx];
     a->pending_token = idx;
 
     char title[64];
@@ -352,7 +352,7 @@ static void status_color(App *a)
 
 static void status_drop(App *a)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     int idx = app_target_token(a);
     if (idx < 0) { app_set_status(a, "no token here"); return; }
 
@@ -381,7 +381,7 @@ static void turn_prompt(App *a)
     int idx = app_target_token(a);
     if (idx < 0) { app_set_status(a, "no token here to put in the turn order"); return; }
 
-    const Token *t = &a->map->tokens.v[idx];
+    const Token *t = &a->world.map->tokens.v[idx];
     a->pending_token = idx;
 
     char title[64], initial[16] = "";
@@ -397,20 +397,20 @@ static void turn_prompt(App *a)
  * One u puts it back. The words are the GM's alone. */
 static void hide_toggle(App *a)
 {
-    Map *m = a->map;
+    Map *m = a->world.map;
     int  idx[PLAY_GROUP_MAX];
     int  n = play_action_group(a, idx, PLAY_GROUP_MAX);
     if (n <= 0) { app_set_status(a, "no creature here to hide"); return; }
     if (n > PLAY_GROUP_MAX) { app_set_status(a, "too many creatures in the box to hide at once"); return; }
     int hide = 0;
     for (int i = 0; i < n; i++) hide |= !m->tokens.v[idx[i]].hidden;
-    undo_begin(&a->undo);
+    undo_begin(&a->world.undo);
     for (int i = 0; i < n; i++) {
         Token t = m->tokens.v[idx[i]];
         t.hidden = (uint8_t)hide;
-        undo_edit_token(&a->undo, m, idx[i], t);
+        undo_edit_token(&a->world.undo, m, idx[i], t);
     }
-    undo_end(&a->undo);
+    undo_end(&a->world.undo);
     a->play.visual = 0;
     char who[48], msg[112];
     group_name(m, idx, n, who, sizeof who);
@@ -427,13 +427,13 @@ static void turn_hand_over(App *a)
     int idx = app_target_token(a);
     if (idx < 0) { app_set_status(a, "no token here to hand the turn to"); return; }
 
-    turn_take(a->map, &a->undo, idx);
+    turn_take(a->world.map, &a->world.undo, idx);
     a->play.visual = 0;
     /* The view goes to whoever has the turn, as it does for a. */
     play_focus(&a->play, idx);
     app_follow_selection(a);
 
-    const Token *t = &a->map->tokens.v[idx];
+    const Token *t = &a->world.map->tokens.v[idx];
     char msg[96];
     snprintf(msg, sizeof msg, "%.30s takes the turn",
              token_name(t));
@@ -446,9 +446,9 @@ static int group_stays_on_floor(const App *a, int dx, int dy)
 {
     if (!a->ed.view.bounded) return 1;
     int x0, y0, x1, y1;
-    grid_bounds(&a->ed.view, a->map, &x0, &y0, &x1, &y1);
+    grid_bounds(&a->ed.view, a->world.map, &x0, &y0, &x1, &y1);
     for (int i = 0; i < a->play.ngroup; i++) {
-        const Token *t = &a->map->tokens.v[a->play.group[i]];
+        const Token *t = &a->world.map->tokens.v[a->play.group[i]];
         int nx = t->x + dx, ny = t->y + dy;
         if (nx < x0 || ny < y0 || nx + t->size - 1 > x1 || ny + t->size - 1 > y1) return 0;
     }
@@ -463,7 +463,7 @@ static void link_here(App *a)
 {
     Play   *pl = &a->play;
     Editor *e  = &a->ed;
-    Map    *m  = a->map;
+    Map    *m  = a->world.map;
 
     if (pl->grabbed && pl->choosing) { pl->grabbed = 0; pl->choosing = 0; }
     if (pl->grabbed && !play_put_down(a, "put down")) return;
@@ -527,8 +527,8 @@ static int pending_key(App *a, Key k)
             /* A group effect lands at the cursor; the selected creature is
              * whose it is, for the band from it to where it lands. */
             Play *pl = &a->play;
-            int from = pl->sel >= 0 && pl->sel < a->map->tokens.n ? pl->sel : -1;
-            if (range_burst(&pl->range, a->map, from, a->ed.cx, a->ed.cy, take_count_raw(&a->ed)) < 0)
+            int from = pl->sel >= 0 && pl->sel < a->world.map->tokens.n ? pl->sel : -1;
+            if (range_burst(&pl->range, a->world.map, from, a->ed.cx, a->ed.cy, take_count_raw(&a->ed)) < 0)
                 app_set_status(a, "group effect off");
             else
                 a->status[0] = '\0';
@@ -571,7 +571,7 @@ void app_play_key(App *a, Key k)
 {
     Editor *e  = &a->ed;
     Play   *pl = &a->play;
-    Map    *m  = a->map;
+    Map    *m  = a->world.map;
     if (!m) { a->screen = SCREEN_MENU; return; }
 
     if (e->mode == ED_COMMAND) { app_command_key(a, k); return; }
@@ -610,14 +610,14 @@ void app_play_key(App *a, Key k)
              * the steps were pushed with no mark closing them, so they were
              * not merely un-undoable: the next u reached straight past them
              * to the batch underneath and took the whole token off the map. */
-            undo_begin(&a->undo);
+            undo_begin(&a->world.undo);
             int moved = 0, edge = 0;
             for (int i = 0; i < times; i++) {
                 if (!group_stays_on_floor(a, dx, dy)) { edge = 1; break; }
-                if (!play_step(m, &a->undo, pl, dx, dy)) break;
+                if (!play_step(m, &a->world.undo, pl, dx, dy)) break;
                 moved++;
             }
-            undo_end(&a->undo);
+            undo_end(&a->world.undo);
             if (moved) app_floor_note_move(a, &m->tokens.v[pl->group[0]]);
             /* Being blocked is the more urgent news, so it wins. Otherwise
              * the message goes -- the pick-up hint and the offer to walk the
@@ -684,7 +684,7 @@ void app_play_key(App *a, Key k)
             }
 
             play_focus_group(pl, idx, n);
-            play_grab(pl, m, a->undo.depth);
+            play_grab(pl, m, a->world.undo.depth);
             pl->visual = 0;
             app_follow_selection(a);
 
@@ -705,7 +705,7 @@ void app_play_key(App *a, Key k)
                                            pl->sel);
             if (next >= 0 && next != pl->sel) {
                 play_focus(pl, next);
-                play_grab(pl, m, a->undo.depth);
+                play_grab(pl, m, a->world.undo.depth);
                 pl->choosing = 1;
             }
             report_choice(a);
@@ -724,7 +724,7 @@ void app_play_key(App *a, Key k)
         if (first < 0) { app_set_status(a, "no token here"); return; }
 
         play_focus(pl, first);
-        play_grab(pl, m, a->undo.depth);
+        play_grab(pl, m, a->world.undo.depth);
 
         /* One candidate is not a choice, so a plain cursor over a plain
          * creature behaves exactly as it always did: picked up, cursor on it.
@@ -743,7 +743,7 @@ void app_play_key(App *a, Key k)
 
     if (k.kind == KEY_CHAR && (k.mods & MOD_CTRL)) {
         if (k.ch == 'r') {
-            if (undo_redo(&a->undo, m)) {
+            if (undo_redo(&a->world.undo, m)) {
                 if (pl->sel >= m->tokens.n) play_focus(pl, -1);
                 play_trail_sync(pl, m);
                 range_history_changed(&pl->range, m);
@@ -789,9 +789,9 @@ void app_play_key(App *a, Key k)
                 return;
             }
             t.size = size;
-            undo_begin(&a->undo);
-            undo_edit_token(&a->undo, m, idx, t);
-            undo_end(&a->undo);
+            undo_begin(&a->world.undo);
+            undo_edit_token(&a->world.undo, m, idx, t);
+            undo_end(&a->world.undo);
         }
 
         pl->next_size = size;
@@ -942,7 +942,7 @@ void app_play_key(App *a, Key k)
             goto paste_done;
         }
 
-        undo_begin(&a->undo);
+        undo_begin(&a->world.undo);
         int pasted = -1;
         for (int i = 0; i < pl->nyank; i++) {
             Token t = pl->yank[i];
@@ -954,9 +954,9 @@ void app_play_key(App *a, Key k)
              * to a particular creature right now, not part of what it is, so
              * stamping out five goblins should not give five poisoned ones. */
             token_clear_status(&t);
-            pasted = undo_add_token(&a->undo, m, t);
+            pasted = undo_add_token(&a->world.undo, m, t);
         }
-        undo_end(&a->undo);
+        undo_end(&a->world.undo);
 
         /* The copies are the new selection, so a formation can be stamped
          * down and walked straight off without re-boxing it. */
@@ -983,7 +983,7 @@ void app_play_key(App *a, Key k)
 
     case 'o': case 'O': {
         int secret = (k.ch == 'O');
-        int n = ed_toggle_doors(e, m, &a->undo, secret);
+        int n = ed_toggle_doors(e, m, &a->world.undo, secret);
         char msg[80];
         if (n) snprintf(msg, sizeof msg, "%s %d %s%s", secret ? "revealed" : "toggled",
                         n, secret ? "secret door" : "door", n == 1 ? "" : "s");
@@ -1016,7 +1016,7 @@ void app_play_key(App *a, Key k)
          * across. A count is meaningless here and is dropped. */
         if (turn_count(m) == 0 && turn_spotlight_ruleset(m)) {
             take_count_raw(e);
-            turn_flip_spotlight(m, &a->undo);
+            turn_flip_spotlight(m, &a->world.undo);
             app_floor_spotlight(a);
             app_note(a, m->spotlight == SPOTLIGHT_GM ? "the GM has the spotlight"
                                                      : "the players have the spotlight");
@@ -1024,7 +1024,7 @@ void app_play_key(App *a, Key k)
         }
 
         int n   = take_count(e);
-        int got = turn_advance(m, &a->undo, k.ch == 'a' ? n : -n);
+        int got = turn_advance(m, &a->world.undo, k.ch == 'a' ? n : -n);
         if (got == TURN_NO_ORDER) {
             app_set_status(a, "no turn order - s i gives the selected creature a place in it");
             break;
@@ -1078,15 +1078,15 @@ void app_play_key(App *a, Key k)
 
         /* Highest index first: the list is an array, so removing a low index
          * would shift every one still to go out from under the loop. */
-        undo_begin(&a->undo);
+        undo_begin(&a->world.undo);
         for (int i = n - 1; i >= 0; i--) {
             int rx = m->tokens.v[idx[i]].x, ry = m->tokens.v[idx[i]].y;
-            turn_before_remove(m, &a->undo, idx[i]);   /* its turn passes on first */
-            undo_del_token(&a->undo, m, idx[i]);
+            turn_before_remove(m, &a->world.undo, idx[i]);   /* its turn passes on first */
+            undo_del_token(&a->world.undo, m, idx[i]);
             range_token_removed(&pl->range, idx[i], rx, ry);
         }
-        turn_settle(m, &a->undo);
-        undo_end(&a->undo);
+        turn_settle(m, &a->world.undo);
+        undo_end(&a->world.undo);
 
         play_focus(pl, -1);
         pl->visual = 0;
@@ -1109,7 +1109,7 @@ void app_play_key(App *a, Key k)
     }
 
     case 'u':
-        if (undo_undo(&a->undo, m)) {
+        if (undo_undo(&a->world.undo, m)) {
             /* The history can add or remove tokens, which shifts every later
              * index; anything still pointing into the list stops following a
              * particular creature rather than following the wrong one. */

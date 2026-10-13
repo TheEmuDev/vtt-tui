@@ -18,7 +18,7 @@
  * text differs. */
 static void sync_offer(App *a)
 {
-    const Map *m = a->map;
+    const Map *m = a->world.map;
     if (m == a->offer_map && m && m->gen == a->offer_gen) return;
     a->offer_map = m;
     a->offer_gen = m ? m->gen : 0;
@@ -41,7 +41,7 @@ static void sync_offer(App *a)
         memcpy(text + len, name, nl);
         len += nl;
     }
-    net_set_offer(&a->net, text, len, a->now_ms);
+    net_set_offer(&a->net, text, len, a->world.now_ms);
 }
 
 void app_whisper_tick(App *a)
@@ -104,7 +104,7 @@ void app_whisper_command(App *a, const char *rest)
     }
     size_t len = strlen(text);
     if (len > WIRE_TEXT_MAX) len = WIRE_TEXT_MAX;
-    int got = net_whisper(n, name, text, len, 1, a->now_ms);
+    int got = net_whisper(n, name, text, len, 1, a->world.now_ms);
     /* The whole text, for the session log; the status line shows what fits. */
     if (got) snprintf(msg, sizeof msg, "whispered to %s (%d phone%s): %s", name, got, got == 1 ? "" : "s", text);
     else     snprintf(msg, sizeof msg, "%s's phone is not here - it gets this when it comes back: %s", name, text);

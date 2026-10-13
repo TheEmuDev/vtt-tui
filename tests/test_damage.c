@@ -44,14 +44,14 @@ static void count_w029(void *ctx, int line, int col, const char *code, const cha
 
 static int find(const App *a, const char *label)
 {
-    for (int i = 0; i < a->map->tokens.n; i++)
-        if (!strcmp(a->map->tokens.v[i].label, label)) return i;
+    for (int i = 0; i < a->world.map->tokens.n; i++)
+        if (!strcmp(a->world.map->tokens.v[i].label, label)) return i;
     return -1;
 }
 
 static int hp(const App *a, const char *label)
 {
-    const Token *t = &a->map->tokens.v[find(a, label)];
+    const Token *t = &a->world.map->tokens.v[find(a, label)];
     int c = counter_find(t, "HP");
     return c < 0 ? -1 : t->counters[c].value;
 }
@@ -213,21 +213,21 @@ void test_damage(void)
     dmg_on(&a, "Goblin", ":dmg 20\r");
     CHECK_EQ(hp(&a, "Goblin"), 0);
     CHECK(strstr(a.status, "2 HP marked, defeated (0/5)") != NULL);
-    int stamp = (int)a.undo.stamp;
+    int stamp = (int)a.world.undo.stamp;
     dmg_on(&a, "Goblin", ":dmg 20\r");
     CHECK(strstr(a.status, "Goblin is already defeated (HP 0/5)") != NULL);
-    CHECK_EQ((int)a.undo.stamp, stamp);
+    CHECK_EQ((int)a.world.undo.stamp, stamp);
     press(&a, "uu");
     CHECK_EQ(hp(&a, "Goblin"), 5);
 
     CASE("massive damage: off by default, :dmg massive on makes twice Severe 4 HP, saved with the map");
-    CHECK_EQ(a.map->massive, 0);
+    CHECK_EQ(a.world.map->massive, 0);
     dmg_on(&a, "Goblin", ":dmg 30\r");
     CHECK_EQ(hp(&a, "Goblin"), 2);
     press(&a, "u");
     press(&a, ":dmg massive on\r");
-    CHECK_EQ(a.map->massive, 1);
-    CHECK(a.map->modified);
+    CHECK_EQ(a.world.map->massive, 1);
+    CHECK(a.world.map->modified);
     dmg_on(&a, "Goblin", ":dmg 30\r");
     CHECK_EQ(hp(&a, "Goblin"), 1);
     CHECK(strstr(a.status, "30 is twice Severe (8/15) - 4 HP marked") != NULL);
@@ -262,7 +262,7 @@ void test_damage(void)
     CHECK(strstr(pf, "massive") == NULL);
     free(pf);
     press(&a, ":dmg massive off\r");
-    CHECK_EQ(a.map->massive, 0);
+    CHECK_EQ(a.world.map->massive, 0);
     press(&a, ":dmg massive maybe\r");
     CHECK(strstr(a.status, ":dmg massive on, or :dmg massive off") != NULL);
 
@@ -304,7 +304,7 @@ void test_damage(void)
     CHECK_EQ(hp(&a, "Raiders"), 4);
 
     CASE("what is missing says how to add it, and changes nothing");
-    stamp = (int)a.undo.stamp;
+    stamp = (int)a.world.undo.stamp;
     dmg_on(&a, "Blank", ":dmg 5\r");
     CHECK(strstr(a.status, "no HP on Blank - s v sets it") != NULL);
     dmg_on(&a, "Nocard", ":dmg 5\r");
@@ -312,7 +312,7 @@ void test_damage(void)
     dmg_on(&a, "Plain", ":dmg 5\r");
     CHECK(strstr(a.status, "no thresholds on Plain's card - s k adds them") != NULL);
     CHECK(a.status_gm);
-    CHECK_EQ((int)a.undo.stamp, stamp);
+    CHECK_EQ((int)a.world.undo.stamp, stamp);
     CHECK_EQ(hp(&a, "Plain"), 3);
 
     CASE("words it does not know are refused with the forms it takes");
@@ -322,7 +322,7 @@ void test_damage(void)
         dmg_on(&a, "Goblin", bad[i]);
         CHECK(strstr(a.status, ":dmg 11, :dmg 6+4") != NULL);
     }
-    CHECK_EQ((int)a.undo.stamp, stamp);
+    CHECK_EQ((int)a.world.undo.stamp, stamp);
     dmg_on(&a, "Goblin", ":damage 8\r");
     CHECK_EQ(hp(&a, "Goblin"), 3);
     press(&a, "u");
@@ -381,7 +381,7 @@ void test_damage(void)
     press(&a, "\x1b");
 
     CASE("the SRD's 4/None on a card: never Severe, and the message says None");
-    card_set(a.map, "plain", "Tiny Ooze\n**Difficulty:** 8 | **Thresholds:** 4/None | **HP:** 2");
+    card_set(a.world.map, "plain", "Tiny Ooze\n**Difficulty:** 8 | **Thresholds:** 4/None | **HP:** 2");
     dmg_on(&a, "Plain", ":dmg 30\r");
     CHECK_EQ(hp(&a, "Plain"), 1);
     CHECK(strstr(a.status, "Plain: 30 is Major (4/None) - 2 HP marked, 1/3 left") != NULL);

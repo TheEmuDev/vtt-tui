@@ -50,7 +50,7 @@ static int players_see(App *a, Renderer *r, int x0, int y0, int x1, int y1)
     app_draw(a);
     free(players_text(a, r));
     int vx0, vy0, vx1, vy1;
-    grid_visible_tiles(&a->pview, a->map, &vx0, &vy0, &vx1, &vy1);
+    grid_visible_tiles(&a->pview, a->world.map, &vx0, &vy0, &vx1, &vy1);
     return vx0 <= x0 && vy0 <= y0 && vx1 >= x1 && vy1 >= y1;
 }
 
@@ -73,7 +73,7 @@ void test_camera(void)
     CHECK_EQ(app_open_map(&a, path), 0);
     Key f2 = { KEY_F2, 0, 0 };
     app_key(&a, f2);
-    Map *m = a.map;
+    Map *m = a.world.map;
     int aria = token_at(m, "Aria"), bram = token_at(m, "Bram");
 
     CASE("follow, the default: their frame is the GM's, and the title says nothing");
@@ -366,7 +366,7 @@ void test_camera_floors(void)
     CHECK_EQ(app_open_map(&a, path), 0);
     Key f2 = { KEY_F2, 0, 0 };
     app_key(&a, f2);
-    Map *m = a.map;
+    Map *m = a.world.map;
     int ground = map_area_find(m, "Ground"), upper = map_area_find(m, "Upper");
     CHECK_EQ(app_players_floor(&a), ground);
 

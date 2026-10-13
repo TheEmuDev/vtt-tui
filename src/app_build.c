@@ -14,11 +14,11 @@
 static void app_wall_key(App *a, Key k)
 {
     Editor *e = &a->ed;
-    Map    *m = a->map;
+    Map    *m = a->world.map;
 
     if (k.kind == KEY_ESC) {
         if (e->has_anchor) { e->has_anchor = 0; app_set_status(a, "anchor cleared"); return; }
-        undo_stroke_end(&a->undo);     /* close any stroke still in progress */
+        undo_stroke_end(&a->world.undo);     /* close any stroke still in progress */
         e->mode = ED_NORMAL;
         e->pen = e->erase = 0;
         /* The corner's square, kept on the floor shown: the far edge's
@@ -35,8 +35,8 @@ static void app_wall_key(App *a, Key k)
         if (!e->has_anchor) { app_set_status(a, "set an anchor with v or V first"); return; }
 
         EdShape s = ed_shape(e->shape, e->ax, e->ay, e->wx, e->wy, 1);
-        undo_stroke_end(&a->undo);     /* the shape is its own step */
-        ed_wall_shape(m, &a->undo, &s, e->erase ? EDGE_NONE : EDGE_WALL);
+        undo_stroke_end(&a->world.undo);     /* the shape is its own step */
+        ed_wall_shape(m, &a->world.undo, &s, e->erase ? EDGE_NONE : EDGE_WALL);
         e->has_anchor = 0;
 
         const char *what = (e->shape == ED_SHAPE_CIRCLE) ? "circle" : "rectangle";
@@ -46,13 +46,13 @@ static void app_wall_key(App *a, Key k)
         return;
     }
 
-    if (k.kind == KEY_LEFT)  { ed_wall_step(e, m, &a->undo, -1, 0, take_count(e)); return; }
-    if (k.kind == KEY_RIGHT) { ed_wall_step(e, m, &a->undo,  1, 0, take_count(e)); return; }
-    if (k.kind == KEY_UP)    { ed_wall_step(e, m, &a->undo,  0, -1, take_count(e)); return; }
-    if (k.kind == KEY_DOWN)  { ed_wall_step(e, m, &a->undo,  0,  1, take_count(e)); return; }
+    if (k.kind == KEY_LEFT)  { ed_wall_step(e, m, &a->world.undo, -1, 0, take_count(e)); return; }
+    if (k.kind == KEY_RIGHT) { ed_wall_step(e, m, &a->world.undo,  1, 0, take_count(e)); return; }
+    if (k.kind == KEY_UP)    { ed_wall_step(e, m, &a->world.undo,  0, -1, take_count(e)); return; }
+    if (k.kind == KEY_DOWN)  { ed_wall_step(e, m, &a->world.undo,  0,  1, take_count(e)); return; }
 
     if (k.kind == KEY_CHAR && (k.mods & MOD_CTRL) && k.ch == 'r') {
-        if (undo_redo(&a->undo, m)) app_set_status(a, "redo");
+        if (undo_redo(&a->world.undo, m)) app_set_status(a, "redo");
         return;
     }
     if (k.kind != KEY_CHAR || k.mods != 0) return;
@@ -60,16 +60,16 @@ static void app_wall_key(App *a, Key k)
     if (k.ch >= '1' && k.ch <= '9') { count_digit(e, k.ch); return; }
 
     switch (k.ch) {
-    case 'h': ed_wall_step(e, m, &a->undo, -1,  0, take_count(e)); break;
-    case 'l': ed_wall_step(e, m, &a->undo,  1,  0, take_count(e)); break;
-    case 'k': ed_wall_step(e, m, &a->undo,  0, -1, take_count(e)); break;
-    case 'j': ed_wall_step(e, m, &a->undo,  0,  1, take_count(e)); break;
+    case 'h': ed_wall_step(e, m, &a->world.undo, -1,  0, take_count(e)); break;
+    case 'l': ed_wall_step(e, m, &a->world.undo,  1,  0, take_count(e)); break;
+    case 'k': ed_wall_step(e, m, &a->world.undo,  0, -1, take_count(e)); break;
+    case 'j': ed_wall_step(e, m, &a->world.undo,  0,  1, take_count(e)); break;
 
     case ' ':
         e->pen = !e->pen;
         /* Lifting the pen ends the stroke, which is what makes the whole run
          * a single undo step. */
-        if (!e->pen) undo_stroke_end(&a->undo);
+        if (!e->pen) undo_stroke_end(&a->world.undo);
         app_set_status(a, e->pen ? "pen down - movement lays wall" : "pen up");
         break;
 
@@ -77,7 +77,7 @@ static void app_wall_key(App *a, Key k)
         /* Erasing is the same tool with the sign flipped, so the pen comes
          * down with it rather than making the user press two keys. Switching
          * direction starts a new stroke. */
-        undo_stroke_end(&a->undo);
+        undo_stroke_end(&a->world.undo);
         e->erase = !e->erase;
         if (e->erase) e->pen = 1;
         app_set_status(a, e->erase ? "erasing - movement clears wall" : "laying wall");
@@ -106,7 +106,7 @@ static void app_wall_key(App *a, Key k)
 
     case 't': {
         /* Changing what the pen lays starts a new stroke. */
-        undo_stroke_end(&a->undo);
+        undo_stroke_end(&a->world.undo);
         ed_cycle_material(e);
         char msg[64];
         snprintf(msg, sizeof msg, "pen lays: %s", edge_name(e->material));
@@ -114,7 +114,7 @@ static void app_wall_key(App *a, Key k)
         break;
     }
 
-    case 'u': if (undo_undo(&a->undo, m)) app_set_status(a, "undo"); break;
+    case 'u': if (undo_undo(&a->world.undo, m)) app_set_status(a, "undo"); break;
 
     case '+': case '=': ed_set_zoom(e, m, e->view.zoom + 1); break;
     case '-': case '_': ed_set_zoom(e, m, e->view.zoom - 1); break;
@@ -129,7 +129,7 @@ static void app_wall_key(App *a, Key k)
 void app_editor_key(App *a, Key k)
 {
     Editor *e = &a->ed;
-    Map    *m = a->map;
+    Map    *m = a->world.map;
     if (!m) { a->screen = SCREEN_MENU; return; }
 
     if (e->mode == ED_COMMAND) { app_command_key(a, k); return; }
@@ -157,7 +157,7 @@ void app_editor_key(App *a, Key k)
         if (k.ch == 'd') { ed_move(e, m, 0,  1, page); return; }
         if (k.ch == 'u') { ed_move(e, m, 0, -1, page); return; }
         if (k.ch == 'r') {
-            if (undo_redo(&a->undo, m)) app_set_status(a, "redo");
+            if (undo_redo(&a->world.undo, m)) app_set_status(a, "redo");
             return;
         }
         return;
@@ -186,7 +186,7 @@ void app_editor_key(App *a, Key k)
                 app_set_status(a, "no fog patch to paint - :fog NAME makes one");
                 return;
             }
-            int n = ed_apply_fog(e, m, &a->undo, id);
+            int n = ed_apply_fog(e, m, &a->world.undo, id);
             if (e->mode == ED_VISUAL) e->mode = ED_NORMAL;
             char msg[96];
             if (k.ch == 'f') snprintf(msg, sizeof msg, "fog %s over %d square%s",
@@ -212,10 +212,10 @@ void app_editor_key(App *a, Key k)
 
     /* Shift-HJKL toggles the wall on that face of the cursor tile: the fast
      * way to close a single gap without entering the tracing mode. */
-    case 'H': ed_toggle_edge(e, m, &a->undo, -1,  0); break;
-    case 'L': ed_toggle_edge(e, m, &a->undo,  1,  0); break;
-    case 'K': ed_toggle_edge(e, m, &a->undo,  0, -1); break;
-    case 'J': ed_toggle_edge(e, m, &a->undo,  0,  1); break;
+    case 'H': ed_toggle_edge(e, m, &a->world.undo, -1,  0); break;
+    case 'L': ed_toggle_edge(e, m, &a->world.undo,  1,  0); break;
+    case 'K': ed_toggle_edge(e, m, &a->world.undo,  0, -1); break;
+    case 'J': ed_toggle_edge(e, m, &a->world.undo,  0,  1); break;
 
     case 'b': case 'B': {
         e->brush = size_key(take_count_raw(e), e->brush, k.ch == 'b' ? 1 : -1);
@@ -252,7 +252,7 @@ void app_editor_key(App *a, Key k)
     }
 
     case 'f': {
-        ed_apply_tiles(e, m, &a->undo, e->terrain);
+        ed_apply_tiles(e, m, &a->world.undo, e->terrain);
         char msg[64];
         snprintf(msg, sizeof msg, "painted %s", tile_name(e->terrain));
         if (e->mode == ED_VISUAL) e->mode = ED_NORMAL;
@@ -283,7 +283,7 @@ void app_editor_key(App *a, Key k)
 
     case 'o': case 'O': {
         int secret = (k.ch == 'O');
-        int n = ed_toggle_doors(e, m, &a->undo, secret);
+        int n = ed_toggle_doors(e, m, &a->world.undo, secret);
         char msg[80];
         if (n) snprintf(msg, sizeof msg, "toggled %d %s%s", n,
                         secret ? "secret door" : "door", n == 1 ? "" : "s");
@@ -294,14 +294,14 @@ void app_editor_key(App *a, Key k)
     }
 
     case 'x':
-        ed_apply_tiles(e, m, &a->undo, TILE_VOID);
+        ed_apply_tiles(e, m, &a->world.undo, TILE_VOID);
         if (e->mode == ED_VISUAL) { e->mode = ED_NORMAL; app_set_status(a, "cleared to void"); }
         break;
 
-    case ' ': ed_toggle_tile(e, m, &a->undo); break;
+    case ' ': ed_toggle_tile(e, m, &a->world.undo); break;
 
     case 'u':
-        if (undo_undo(&a->undo, m)) app_set_status(a, "undo");
+        if (undo_undo(&a->world.undo, m)) app_set_status(a, "undo");
         else                        app_set_status(a, "nothing to undo");
         break;
 

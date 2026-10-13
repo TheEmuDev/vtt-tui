@@ -2303,7 +2303,7 @@ void test_autosave(void)
 
     CASE("a change starts the clock; the copy is written once the changes go quiet");
     press(&a, "x");                                         /* a tile to void */
-    CHECK_EQ(a.map->modified, 1);
+    CHECK_EQ(a.world.map->modified, 1);
     app_tick(&a, 2000);
     CHECK_EQ(app_autosave_due(&a, 2000), AUTOSAVE_QUIET_MS);
     app_tick(&a, 2000 + AUTOSAVE_QUIET_MS - 1);
@@ -2315,8 +2315,8 @@ void test_autosave(void)
     CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1);
     CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave.tmp"), 0); /* renamed, unflushed or not */
     CHECK_EQ(app_autosave_due(&a, 9000), -1);              /* nothing more owed */
-    CHECK_EQ(a.map->modified, 1);                           /* it is not a save */
-    CHECK_EQ(strcmp(a.map->path, path), 0);
+    CHECK_EQ(a.world.map->modified, 1);                           /* it is not a save */
+    CHECK_EQ(strcmp(a.world.map->path, path), 0);
 
     CASE("the copy holds the changes");
     {
@@ -2337,7 +2337,7 @@ void test_autosave(void)
     app_tick(&a, 30000 + AUTOSAVE_QUIET_MS);
     CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1);
     press(&a, ":q!\r");
-    CHECK_EQ(a.map, NULL);
+    CHECK_EQ(a.world.map, NULL);
     CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
 
     CASE("after a crash the next open offers the copy, and y takes it");
@@ -2347,19 +2347,19 @@ void test_autosave(void)
     app_tick(&a, 40000);
     app_tick(&a, 40000 + AUTOSAVE_QUIET_MS);
     CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1);
-    map_free(a.map);                                        /* the crash: no close, no save */
-    a.map = NULL;
-    undo_clear(&a.undo);
+    map_free(a.world.map);                                        /* the crash: no close, no save */
+    a.world.map = NULL;
+    undo_clear(&a.world.undo);
     CHECK_EQ(app_open_map(&a, path), 0);
     a.ed.cx = a.ed.cy = 0;
     CHECK_EQ(a.modal, MODAL_CONFIRM_RECOVER);
     CHECK(strstr(a.modal_body, "never saved") != NULL);
-    CHECK_EQ(map_tile(a.map, 0, 1), TILE_FLOOR);            /* the file as saved, until answered */
+    CHECK_EQ(map_tile(a.world.map, 0, 1), TILE_FLOOR);            /* the file as saved, until answered */
     press(&a, "y");
     CHECK_EQ(a.modal, MODAL_NONE);
-    CHECK_EQ(map_tile(a.map, 0, 1), TILE_VOID);
-    CHECK_EQ(a.map->modified, 1);
-    CHECK_EQ(strcmp(a.map->path, path), 0);
+    CHECK_EQ(map_tile(a.world.map, 0, 1), TILE_VOID);
+    CHECK_EQ(a.world.map->modified, 1);
+    CHECK_EQ(strcmp(a.world.map->path, path), 0);
     CHECK(strstr(a.status, "recovered") != NULL);
     CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1); /* kept until the save */
     press(&a, ":w\r");
@@ -2375,17 +2375,17 @@ void test_autosave(void)
     press(&a, "lx");
     app_tick(&a, 50000);
     app_tick(&a, 50000 + AUTOSAVE_QUIET_MS);
-    map_free(a.map);
-    a.map = NULL;
-    undo_clear(&a.undo);
+    map_free(a.world.map);
+    a.world.map = NULL;
+    undo_clear(&a.world.undo);
     CHECK_EQ(app_open_map(&a, path), 0);
     a.ed.cx = a.ed.cy = 0;
     CHECK_EQ(a.modal, MODAL_CONFIRM_RECOVER);
     press(&a, "n");
     CHECK_EQ(a.modal, MODAL_NONE);
     CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
-    CHECK_EQ(map_tile(a.map, 1, 1), TILE_FLOOR);
-    map_free(a.map); a.map = NULL; undo_clear(&a.undo);
+    CHECK_EQ(map_tile(a.world.map, 1, 1), TILE_FLOOR);
+    map_free(a.world.map); a.world.map = NULL; undo_clear(&a.world.undo);
     CHECK_EQ(app_open_map(&a, path), 0);
     a.ed.cx = a.ed.cy = 0;
     CHECK_EQ(a.modal, MODAL_NONE);
@@ -2424,19 +2424,19 @@ void test_autosave(void)
         if (cut) fclose(cut);
         free(whole);
     }
-    map_free(a.map); a.map = NULL; undo_clear(&a.undo);
+    map_free(a.world.map); a.world.map = NULL; undo_clear(&a.world.undo);
     CHECK_EQ(app_open_map(&a, path), 0);
     CHECK_EQ(a.modal, MODAL_CONFIRM_RECOVER);
     press(&a, "y");
     CHECK(strstr(a.modal_title, "incomplete") != NULL);
     CHECK(strncmp(a.modal_body, "Kept as fight.vtt.autosave.damaged.", 35) == 0);  /* the name first */
-    CHECK_EQ(a.map->modified, 0);                           /* the file as saved */
+    CHECK_EQ(a.world.map->modified, 0);                           /* the file as saved */
     CHECK_EQ(a.pending_file[0], '\0');
     CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
     CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave.damaged"), 1);
     press(&a, "\r");
     CHECK_EQ(a.modal, MODAL_NONE);
-    map_free(a.map); a.map = NULL; undo_clear(&a.undo);
+    map_free(a.world.map); a.world.map = NULL; undo_clear(&a.world.undo);
     CHECK_EQ(app_open_map(&a, path), 0);
     CHECK_EQ(a.modal, MODAL_NONE);                          /* asked once */
     {
@@ -2450,9 +2450,9 @@ void test_autosave(void)
     app_tick(&a, 60000);
     app_tick(&a, 60000 + AUTOSAVE_QUIET_MS);
     CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1);
-    a.map->modified = 0;                                    /* pretend it was saved elsewhere... */
+    a.world.map->modified = 0;                                    /* pretend it was saved elsewhere... */
     write_map_file(sb.dir, "fight.vtt");                    /* ...and the file rewritten since */
-    map_free(a.map); a.map = NULL; undo_clear(&a.undo);
+    map_free(a.world.map); a.world.map = NULL; undo_clear(&a.world.undo);
     CHECK_EQ(app_open_map(&a, path), 0);
     a.ed.cx = a.ed.cy = 0;
     CHECK_EQ(a.modal, MODAL_NONE);
@@ -2460,8 +2460,8 @@ void test_autosave(void)
 
     CASE("a write that fails is not owed again until the next change");
     char real_path[MAP_PATH_MAX];
-    str_lcpy(real_path, a.map->path, sizeof real_path);
-    str_lcpy(a.map->path, "/nonexistent/dir/t.vtt", sizeof a.map->path);
+    str_lcpy(real_path, a.world.map->path, sizeof real_path);
+    str_lcpy(a.world.map->path, "/nonexistent/dir/t.vtt", sizeof a.world.map->path);
     press(&a, " ");
     app_tick(&a, 65000);
     app_tick(&a, 65000 + AUTOSAVE_QUIET_MS);              /* the attempt, which fails */
@@ -2470,7 +2470,7 @@ void test_autosave(void)
     press(&a, " ");                                        /* a change owes one again */
     app_tick(&a, 99000);
     CHECK(app_autosave_due(&a, 99000) >= 0);
-    str_lcpy(a.map->path, real_path, sizeof a.map->path);
+    str_lcpy(a.world.map->path, real_path, sizeof a.world.map->path);
     app_tick(&a, 99000 + AUTOSAVE_QUIET_MS);
     CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1);
 
@@ -2483,7 +2483,7 @@ void test_autosave(void)
     CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
     a.running = 1;
     a.screen = SCREEN_EDITOR;
-    a.map->modified = 0;
+    a.world.map->modified = 0;
 
     CASE("headless runs never write one");
     a.autosave_on = 0;
