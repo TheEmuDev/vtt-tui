@@ -1078,7 +1078,7 @@ void test_agent_command(void)
         fprintf(f, "cat >> '%s'\n"
                    "\"$VTT\" --ctl-pid \"$VTT_PID\" --ctl \"job $VTT_JOB take\" > /dev/null\n"
                    "printf 'job %%s propose \"from the script\"\\ntile A1 water\\n' \"$VTT_JOB\" | \"$VTT\" --ctl-pid \"$VTT_PID\" --ctl > /dev/null\n"
-                   "echo \"done job=$VTT_JOB pid=$VTT_PID\" >> '%s'\n", out, out);
+                   "echo \"done job=$VTT_JOB pid=$VTT_PID agent=$VTT_AGENT\" >> '%s'\n", out, out);
         fclose(f);
     }
     snprintf(cmd, sizeof cmd, ":agent command sh %s\r", script);
@@ -1102,7 +1102,7 @@ void test_agent_command(void)
     CHECK_EQ(a.agent_on, 1);
     CHECK_EQ(ctl_active(&a.ctl), 1);
     char want[64];
-    snprintf(want, sizeof want, "done job=1 pid=%ld", (long)getpid());
+    snprintf(want, sizeof want, "done job=1 pid=%ld agent=job-1", (long)getpid());   /* its name is its job's */
     CHECK(pump_until_file(&a, out, want));
     CHECK(file_has(out, "Job #1: a flooded crypt\n"));
     CHECK(file_has(out, "Where: B2:E5 (the box the GM drew)\n"));
@@ -1115,6 +1115,7 @@ void test_agent_command(void)
     CASE("the started agent answered like any other: the job is ready, with its line");
     CHECK_EQ(a.jobs[0].state, JOB_READY);
     CHECK(a.jobs[0].has_cs && a.jobs[0].cs.ncells == 1);
+    CHECK(!strcmp(a.jobs[0].taker, "job-1"));               /* taken and proposed under the name vtt gave it */
     CHECK(strstr(a.status, "#1 ready: ") && strstr(a.status, "from the script"));
     CHECK_EQ(map_tile(a.map, 0, 0), TILE_FLOOR);           /* a proposal, as ever */
 

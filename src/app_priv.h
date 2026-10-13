@@ -307,6 +307,12 @@ void app_agent_command(App *a, const char *rest);
 int  app_ctl_region(const Map *m, const char *w, int *x0, int *y0, int *x1, int *y1,
                     char *err, size_t errsz);
 int  app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, size_t errsz);
+/* Whether the request's name may act on a job: nobody has it, or it has. 0
+ * with why in err (class `state`) when it is another's. */
+int  app_ctl_job_mine(App *a, const Job *j, char *err, size_t errsz);
+/* The request's name takes a job nobody has: the one rule for `take`, `area`
+ * and a proposal. */
+void app_ctl_job_claim(App *a, Job *j);
 /* `dump`'s words after the verb, for the live map and a job's alike: none
  * (the whole map, refused above CTL_DUMP_SQUARES: an agent that forgot the
  * region should not be sent half a megabyte), `all`, or a region. 0 with why

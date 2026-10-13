@@ -1541,13 +1541,15 @@ void test_ctl_live(void)
         close(r2.fd);
     }
 
-    CASE("a waiter that hangs up frees its place; four wait while four more are served; a fifth is told");
+    CASE("a waiter that hangs up frees its place; eight wait while four more are served; a ninth is told");
     {
         int w[CTL_MAX_WAIT + 1];
         for (int i = 0; i < CTL_MAX_WAIT; i++) {
             w[i] = ctl_raw_connect(a.ctl.path);
             CHECK(write(w[i], "wait for 600\n", 13) == 13);
             shutdown(w[i], SHUT_WR);
+            /* Four are read at a time: the rest come once those are held. */
+            if (i % CTL_MAX_CONN == CTL_MAX_CONN - 1) ctl_pump(&a, waiters_are, &(WaitersAre){ &a, i + 1 });
         }
         ctl_pump(&a, waiters_are, &(WaitersAre){ &a, CTL_MAX_WAIT });
         CHECK_EQ(ctl_waiters(&a.ctl), CTL_MAX_WAIT);
@@ -1557,7 +1559,7 @@ void test_ctl_live(void)
         ctl_pump(&a, ctl_read_some, &rd);
         CHECK(rd.done && !strncmp(rd.buf, "ok\nmap ", 7));
         close(rd.fd);
-        CtlReader r5 = { ctl_raw_connect(a.ctl.path), "", 0, 0 };   /* a fifth waiter */
+        CtlReader r5 = { ctl_raw_connect(a.ctl.path), "", 0, 0 };   /* one waiter too many */
         CHECK(write(r5.fd, "wait for 600\n", 13) == 13);
         shutdown(r5.fd, SHUT_WR);
         ctl_pump(&a, ctl_read_some, &r5);
@@ -1572,6 +1574,113 @@ void test_ctl_live(void)
         CHECK_EQ(a.ctl.nc, 0);
     }
     jobs_reset(&a);
+
+    CASE("one wait a name: a newer one from the same name is held and the older answered superseded; no name is nobody's");
+    {
+        CtlReader w1 = { ctl_raw_connect(a.ctl.path), "", 0, 0 };
+        CHECK(write(w1.fd, "agent scout\nwait for 600\n", 25) == 25);
+        shutdown(w1.fd, SHUT_WR);
+        ctl_pump(&a, waiters_are, &(WaitersAre){ &a, 1 });
+        CHECK_EQ(ctl_read_some(&w1), 0);
+        CtlReader w2 = { ctl_raw_connect(a.ctl.path), "", 0, 0 };
+        CHECK(write(w2.fd, "agent scout\nwait for 600\n", 25) == 25);
+        shutdown(w2.fd, SHUT_WR);
+        ctl_pump(&a, ctl_read_some, &w1);                      /* the older is answered at once */
+        char want1[120];
+        snprintf(want1, sizeof want1, "ok\nseq %u\nsuperseded: a newer wait from scout took this one's place\n", a.event_seq);
+        CHECK(w1.done && !strcmp(w1.buf, want1));
+        CHECK_EQ(ctl_waiters(&a.ctl), 1);                      /* and the newer is the one held */
+        CHECK_EQ(ctl_read_some(&w2), 0);
+        close(w1.fd);
+        /* Another name's wait, and two with no name, are each their own. */
+        CtlReader w3 = { ctl_raw_connect(a.ctl.path), "", 0, 0 }, w4 = { ctl_raw_connect(a.ctl.path), "", 0, 0 },
+                  w5 = { ctl_raw_connect(a.ctl.path), "", 0, 0 };
+        CHECK(write(w3.fd, "agent other\nwait for 600\n", 25) == 25);
+        CHECK(write(w4.fd, "wait for 600\n", 13) == 13);
+        CHECK(write(w5.fd, "wait for 600\n", 13) == 13);
+        shutdown(w3.fd, SHUT_WR); shutdown(w4.fd, SHUT_WR); shutdown(w5.fd, SHUT_WR);
+        ctl_pump(&a, waiters_are, &(WaitersAre){ &a, 4 });
+        CHECK_EQ(ctl_waiters(&a.ctl), 4);
+        CHECK(!ctl_read_some(&w2) && !ctl_read_some(&w3) && !ctl_read_some(&w4) && !ctl_read_some(&w5));
+        /* With every slot held, a name's own newer wait is still taken: it cannot lock itself out. */
+        int fill[CTL_MAX_WAIT];
+        for (int k = 4; k < CTL_MAX_WAIT; k++) {
+            fill[k] = ctl_raw_connect(a.ctl.path);
+            CHECK(write(fill[k], "wait for 600\n", 13) == 13);
+            shutdown(fill[k], SHUT_WR);
+        }
+        ctl_pump(&a, waiters_are, &(WaitersAre){ &a, CTL_MAX_WAIT });
+        CtlReader w6 = { ctl_raw_connect(a.ctl.path), "", 0, 0 };
+        CHECK(write(w6.fd, "agent scout\nwait for 600\n", 25) == 25);
+        shutdown(w6.fd, SHUT_WR);
+        ctl_pump(&a, ctl_read_some, &w2);
+        CHECK(w2.done && strstr(w2.buf, "\nsuperseded: "));
+        CHECK_EQ(ctl_read_some(&w6), 0);
+        close(w2.fd); close(w3.fd); close(w4.fd); close(w5.fd); close(w6.fd);
+        for (int k = 4; k < CTL_MAX_WAIT; k++) close(fill[k]);
+        ctl_pump(&a, waiters_are, &(WaitersAre){ &a, 0 });
+        CHECK_EQ(a.ctl.nc, 0);
+
+        /* An event made by a request in the very turn that supersedes: the older wait is answered
+         * with it, or nobody would hear it (the newer one waits from after it). */
+        CtlReader o1 = { ctl_raw_connect(a.ctl.path), "", 0, 0 };
+        CHECK(write(o1.fd, "agent scout\nwait for 600\n", 25) == 25);
+        shutdown(o1.fd, SHUT_WR);
+        ctl_pump(&a, waiters_are, &(WaitersAre){ &a, 1 });
+        unsigned before = a.event_seq;
+        a.ctl_auto = 1;
+        CtlReader e1 = { ctl_raw_connect(a.ctl.path), "", 0, 0 }, o2 = { ctl_raw_connect(a.ctl.path), "", 0, 0 };
+        CHECK(write(e1.fd, "agent other\ntile B2 hazard\n", 27) == 27);
+        CHECK(write(o2.fd, "agent scout\nwait for 600\n", 25) == 25);
+        shutdown(e1.fd, SHUT_WR); shutdown(o2.fd, SHUT_WR);
+        poll(NULL, 0, 20);                                     /* both in the socket before a turn reads either */
+        ctl_pump(&a, ctl_read_some, &o1);
+        a.ctl_auto = 0;
+        CHECK_EQ(a.event_seq, before + 1);
+        char ev[64];
+        snprintf(ev, sizeof ev, "\n%u job ", before + 1);
+        CHECK(o1.done && strstr(o1.buf, ev) && strstr(o1.buf, " accepted: ") && strstr(o1.buf, "\nsuperseded: "));
+        close(o1.fd); close(e1.fd); close(o2.fd);
+        ctl_pump(&a, waiters_are, &(WaitersAre){ &a, 0 });
+        press(&a, "u");
+        jobs_reset(&a);
+    }
+
+    CASE("vtt --ctl writes the caller's name from VTT_AGENT, and refuses one that is no name");
+    {
+        char outf[700];
+        snprintf(outf, sizeof outf, "%s/named-out.txt", sb.dir);
+        static const struct { const char *name, *req; int rc; const char *says; } N[] = {
+            { "tester", "status", 0, "\nyou tester\n" },
+            { "tester", "agent other\nstatus", 0, "\nyou other\n" },      /* a request's own line wins */
+            { "tester", "# mine\n\n  agent other\nstatus", 0, "\nyou other\n" },   /* wherever the server would find it */
+            { "no good", "status", 2, "" },
+            { "", "status", 0, "\nyou cli\n" },
+        };
+        for (size_t k = 0; k < sizeof N / sizeof *N; k++) {
+            fflush(stdout);
+            pid_t pid = fork();
+            if (pid == 0) {
+                int o = open(outf, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+                dup2(o, 1);
+                int e = open("/dev/null", O_WRONLY);
+                dup2(e, 2);
+                setenv("VTT_AGENT", N[k].name, 1);
+                int rc = ctl_client_main(N[k].req, 0);
+                fflush(stdout);
+                _exit(rc);
+            }
+            int stc[3] = { (int)pid, 0, 0 };
+            ctl_pump(&a, ctl_child_done, stc);
+            CHECK(stc[1] && WIFEXITED(stc[2]) && WEXITSTATUS(stc[2]) == N[k].rc);
+            FILE *f = fopen(outf, "r");
+            char  text[700] = "";
+            size_t n = f ? fread(text, 1, sizeof text - 1, f) : 0;
+            text[n] = '\0';
+            if (f) fclose(f);
+            CHECK(strstr(text, N[k].says) != NULL);
+        }
+    }
 
     CASE(":agent off: the socket stays (an --apply must find the map), a held wait stays, the checkpoint stops");
     CtlReader held = { ctl_raw_connect(a.ctl.path), "", 0, 0 };
@@ -2208,7 +2317,7 @@ void test_ctl_table(void)
             if ((fl & CTL_RQ_OFF) && !(fl & CTL_RQ_EDIT)) { strcat(off, v); strcat(off, " "); }
         }
         CHECK(!strcmp(alone, "wait undo "));
-        CHECK(!strcmp(nomap, "status wait holds help "));
+        CHECK(!strcmp(nomap, "agent status wait holds help "));
         CHECK(!strcmp(off, "holds "));         /* --apply's own question, and nothing else */
     }
 
@@ -2770,6 +2879,205 @@ void test_ctl_reads(void)
         CHECK(t && strstr(t, "\nchanged A1:E4\n"));
         free(t);
     }
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
+/* ------------------------------------------------------------ agents' names */
+
+/* docs/V2.md, D8: a request says who is asking; a job is its taker's. */
+void test_ctl_names(void)
+{
+    Sandbox sb = sandbox_enter("ctlnames");
+    Renderer r;
+    App a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK(ctl_blank_map(&a, sb.dir, 20, 12));
+    if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    char *t;
+
+    CASE("status says who vtt took the caller for: the name on the request's first line, or cli");
+    t = ctl_ask(&a, "status");
+    CHECK(t && strstr(t, "\nyou cli\n"));
+    free(t);
+    t = ctl_ask(&a, "agent mapper\nstatus");
+    CHECK(t && !strncmp(t, "ok\n", 3) && strstr(t, "\nyou mapper\n"));
+    free(t);
+    t = ctl_ask(&a, "# a comment first\n\nagent mapper-2\nstatus");   /* comments and blanks are not lines */
+    CHECK(t && strstr(t, "\nyou mapper-2\n"));
+    free(t);
+    t = ctl_ask(&a, "status");                               /* a name is its request's, never the next one's */
+    CHECK(t && strstr(t, "\nyou cli\n"));
+    free(t);
+
+    CASE("a name written wrong, twice, or below another line is refused: nothing is credited to a guess");
+    static const char *const BAD[] = { "agent\nstatus", "agent two words\nstatus", "agent b@d\nstatus",
+                                       "agent abcdefghijabcdefghijabcdefghij12\nstatus" };
+    for (size_t k = 0; k < sizeof BAD / sizeof *BAD; k++) {
+        t = ctl_ask(&a, BAD[k]);
+        CHECK(ctl_refused(t, "usage", 1) && strstr(t, "agent NAME: a name is 1-31 letters"));
+        free(t);
+    }
+    t = ctl_ask(&a, "status\nagent mapper");
+    CHECK(ctl_refused(t, "usage", 2) && strstr(t, "goes first in a request"));
+    free(t);
+    t = ctl_ask(&a, "agent mapper\nagent other\nstatus");   /* lines are counted from under the name */
+    CHECK(ctl_refused(t, "usage", 1));
+    free(t);
+    t = ctl_ask(&a, "agent abcdefghijabcdefghijabcdefghij1\nstatus");   /* 31: the longest */
+    CHECK(t && strstr(t, "\nyou abcdefghijabcdefghijabcdefghij1\n"));
+    free(t);
+
+    CASE("the name's line is not one of the request's: a wait or an undo under it still goes alone");
+    t = ctl_ask(&a, "agent mapper\nwait 0");
+    CHECK(t && !strncmp(t, "ok\nseq ", 7));
+    free(t);
+    t = ctl_ask(&a, "agent mapper\nwait 0\nstatus");
+    CHECK(t && strstr(t, "wait goes in a request of its own"));
+    free(t);
+    t = ctl_ask(&a, "agent\nundo");                          /* a name written wrong is what is wrong, not the undo under it */
+    CHECK(ctl_refused(t, "usage", 1) && strstr(t, "agent NAME: a name is"));
+    free(t);
+    t = ctl_ask(&a, "agent two words\nwait");
+    CHECK(ctl_refused(t, "usage", 1) && strstr(t, "agent NAME: a name is"));
+    free(t);
+    CHECK_EQ(ctl_held_ms("# c\n\n  agent mapper\nwait 5 for 30\n"), 30000);
+    CHECK(ctl_name_line("# c\n\n agent x\nstatus") && !ctl_name_line("status\nagent x") && !ctl_name_line("agents\n") &&
+          ctl_name_line("agent") && !ctl_name_line(""));
+    CHECK_EQ(ctl_held_ms("agent mapper\nwait 5 for 30\n"), 30000);
+    CHECK_EQ(ctl_held_ms("agent mapper\nstatus\n"), 0);
+    CHECK(ctl_name_ok("job-12") && ctl_name_ok("A_b-9") && !ctl_name_ok("") && !ctl_name_ok("a b") && !ctl_name_ok("a/b"));
+
+    CASE("a job is its taker's: another name may read it and nothing else, and jobs says whose it is");
+    press(&a, ":ask a well\r");
+    int num = 0;
+    for (int i = 0; i < JOB_MAX; i++) if (a.jobs[i].used) num = a.jobs[i].num;
+    char q[160];
+    snprintf(q, sizeof q, "agent mapper\njob %d take", num);
+    t = ctl_ask(&a, q);
+    CHECK(t && !strncmp(t, "ok\n", 3) && strstr(t, ", taken by mapper"));
+    free(t);
+    CHECK(strstr(a.status, "taken by mapper") != NULL);
+    t = ctl_ask(&a, "jobs json");
+    CHECK(t && json_valid(t + 3) && strstr(t, "\"taker\":\"mapper\""));
+    free(t);
+    static const char *const ACT[] = { "take", "area B2:C3", "say \"mine now\"", "drop", "propose\ntile B2 water" };
+    for (size_t k = 0; k < sizeof ACT / sizeof *ACT; k++) {
+        snprintf(q, sizeof q, "agent other\njob %d %s", num, ACT[k]);
+        t = ctl_ask(&a, q);
+        CHECK(ctl_refused(t, "state", 1) && strstr(t, "is mapper's, and you are other"));
+        free(t);
+        snprintf(q, sizeof q, "job %d %s", num, ACT[k]);      /* nor the caller with no name */
+        t = ctl_ask(&a, q);
+        CHECK(ctl_refused(t, "state", 1) && strstr(t, "and you are cli"));
+        free(t);
+    }
+    snprintf(q, sizeof q, "agent mapper\njob %d say \"digging\"", num);
+    t = ctl_ask(&a, q);
+    CHECK(t && !strncmp(t, "ok\n", 3));
+    free(t);
+
+    CASE("saying where it will work is having the job: area claims it as take does");
+    {
+        press(&a, ":ask a moat\r");
+        int n2 = 0;
+        for (int i = 0; i < JOB_MAX; i++) if (a.jobs[i].used && a.jobs[i].num > n2) n2 = a.jobs[i].num;
+        snprintf(q, sizeof q, "agent mapper\njob %d area B2:C3", n2);
+        t = ctl_ask(&a, q);
+        CHECK(t && !strncmp(t, "ok\n", 3));
+        free(t);
+        snprintf(q, sizeof q, "agent other\njob %d propose\ntile B2 water", n2);
+        t = ctl_ask(&a, q);
+        CHECK(ctl_refused(t, "state", 1) && strstr(t, "is mapper's"));
+        free(t);
+        snprintf(q, sizeof q, "agent other\njob %d take", n2);
+        t = ctl_ask(&a, q);
+        CHECK(ctl_refused(t, "state", 1));
+        free(t);
+        snprintf(q, sizeof q, ":ask %d remove\r", n2);
+        press(&a, q);
+    }
+
+    CASE("given back, a job is anyone's again; a proposal of one's own is one's own");
+    snprintf(q, sizeof q, "agent mapper\njob %d drop", num);
+    t = ctl_ask(&a, q);
+    CHECK(t && !strncmp(t, "ok\n", 3));
+    free(t);
+    snprintf(q, sizeof q, "agent other\njob %d propose\ntile B2 water", num);   /* propose takes it */
+    t = ctl_ask(&a, q);
+    CHECK(t && !strncmp(t, "ok\n", 3));
+    free(t);
+    snprintf(q, sizeof q, "agent mapper\njob %d drop", num);
+    t = ctl_ask(&a, q);
+    CHECK(ctl_refused(t, "state", 1) && strstr(t, "is other's"));
+    free(t);
+    t = ctl_ask(&a, "agent mapper\npropose \"a pool\"\ntile D4 water");
+    const char *hash = t ? strstr(t, "proposal #") : NULL;
+    int mine = hash ? atoi(hash + 10) : 0;
+    CHECK(mine > 0 && mine != num);
+    free(t);
+    snprintf(q, sizeof q, "agent other\njob %d drop", mine);
+    t = ctl_ask(&a, q);
+    CHECK(ctl_refused(t, "state", 1) && strstr(t, "is mapper's"));
+    free(t);
+    snprintf(q, sizeof q, "agent other\njob %d dump D4", mine);   /* reading it is anyone's */
+    t = ctl_ask(&a, q);
+    CHECK(t && !strncmp(t, "ok\n", 3));
+    free(t);
+
+    CASE("feedback on a job another name took goes to that name: no second agent is started to be refused");
+    {
+        char mark[700], cmdline[900];
+        snprintf(mark, sizeof mark, "%s/started", sb.dir);
+        snprintf(cmdline, sizeof cmdline, ":agent command cat > /dev/null; touch %s\r", mark);
+        press(&a, cmdline);
+        snprintf(q, sizeof q, ":review %d\r", num);         /* other's proposal on the GM's job */
+        press(&a, q);
+        press(&a, "c");
+        press(&a, "deeper\r");
+        /* (The GM's line said "back to other", and the review moved on to the next ready job.) */
+        int slot = -1;
+        for (int i = 0; i < JOB_MAX; i++) if (a.jobs[i].used && a.jobs[i].num == num) slot = i;
+        CHECK(slot >= 0 && a.jobs[slot].state == JOB_WORKING && !strcmp(a.jobs[slot].taker, "other"));
+        poll(NULL, 0, 150);                                  /* a started command would have touched it by now */
+        CHECK(access(mark, F_OK) != 0);
+        snprintf(q, sizeof q, "agent other\njob %d propose\ntile B3 water", num);   /* and other answers it */
+        t = ctl_ask(&a, q);
+        CHECK(t && !strncmp(t, "ok\n", 3));
+        free(t);
+        press(&a, ":agent command off\r");
+    }
+
+    CASE("undo is the caller's own: the last change to land is its maker's to take back");
+    a.ctl_auto = 1;
+    t = ctl_ask(&a, "agent mapper\ntile F6 water");
+    CHECK(t && !strncmp(t, "ok\n", 3));
+    free(t);
+    CHECK_EQ(map_tile(a.map, 5, 5), TILE_WATER);
+    t = ctl_ask(&a, "agent other\nundo");
+    CHECK(ctl_refused(t, "state", 1) && strstr(t, "is mapper's, and you are other"));
+    free(t);
+    t = ctl_ask(&a, "undo");
+    CHECK(ctl_refused(t, "state", 1) && strstr(t, "and you are cli"));
+    free(t);
+    CHECK_EQ(map_tile(a.map, 5, 5), TILE_WATER);
+    t = ctl_ask(&a, "agent mapper\nundo");
+    CHECK(t && !strncmp(t, "ok\n", 3));
+    free(t);
+    CHECK(map_tile(a.map, 5, 5) != TILE_WATER);
+    a.ctl_auto = 0;
+
+    CASE("with the channel off the name is taken and the refusal is the channel's");
+    a.ctl_can_hold = 1;
+    a.agent_on = 0;
+    t = ctl_ask(&a, "agent mapper\nstatus");
+    CHECK(ctl_refused(t, "state", 1) && strstr(t, "the agent channel is off"));
+    free(t);
+    a.ctl_can_hold = 0;
 
     app_free(&a);
     rnd_free(&r);

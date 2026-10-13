@@ -44,6 +44,7 @@ typedef struct {
     uint8_t  from;                 /* JobFrom */
     uint8_t  at_once;              /* :ask! -- the result lands when it comes */
     int      num;                  /* 1..JOB_NUM_MAX, the next after the last given (App.job_last) */
+    char     taker[32];            /* the agent that has it (CTL_NAME_MAX): only that name acts on it; "" nobody yet */
     char     text[JOB_TEXT_MAX];   /* what was asked */
     int      has_box;              /* the GM's v box when asked */
     CsBox    box;

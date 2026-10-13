@@ -198,6 +198,8 @@ static void do_status(App *a, FILE *out, int own)
     else if (!a->ctl_auto) fputs("edits proposed, for the GM to review\n", out);
     else if (busy)         fprintf(out, "edits proposed, landing when the GM is back: %s\n", busy);
     else                   fputs("edits land at once (:agent accept auto)\n", out);
+    /* The caller's name as vtt took it: a mistyped one shows here, not in whose job a change became. */
+    fprintf(out, "you %s\n", a->ctl_who[0] ? a->ctl_who : CTL_NAME_NONE);
     fprintf(out, "agent %s\n", a->agent_on ? "on" : "off");
     /* The newest event's number: what a first `wait` is given. */
     fprintf(out, "seq %u\n", a->event_seq);
@@ -1109,6 +1111,7 @@ static int finish_proposal(App *a, Edits *ed, FILE *out, char *err, size_t errsz
             return -1;
         }
         Job *j = &a->jobs[slot];
+        if (j->from != JOB_FROM_APPLY) app_ctl_job_claim(a, j);    /* --apply's is nobody's: the GM's alone to decide */
         if (at_once) j->at_once = 1;               /* everything that comes in */
         app_job_set_proposal(a, slot, &cs, ed->job >= 0 ? ed->say : NULL);
     }
@@ -1204,6 +1207,7 @@ static int rq_propose(RQ_ARGS)
                      j->from == JOB_FROM_DISK ? "what another program wrote to the file" : "an --apply's");
             return -1;
         }
+        if (!app_ctl_job_mine(a, j, err, errsz)) return -1;
     }
     ed->header = 1;
     ed->job = slot;
@@ -1256,6 +1260,11 @@ static int rq_undo(RQ_ARGS)
     if (n > 1) { snprintf(err, errsz, "undo takes nothing after it"); return -1; }
     if (ed->lines) { snprintf(err, errsz, "undo comes before any edit in a request"); return -1; }
     if (!a->ctl_undoable) { rq_class(CTL_E_STATE), snprintf(err, errsz, "there is no change of the agent's to take back"); return -1; }
+    if (strcmp(a->ctl_undo_who, a->ctl_who) != 0) {
+        rq_class(CTL_E_STATE);
+        snprintf(err, errsz, "the last change to land is %s's, and you are %s - undo takes back your own", a->ctl_undo_who, a->ctl_who);
+        return -1;
+    }
     /* The log as the edit left it, and the map: a note or a fog setting
      * the GM changes outside the log still moves Map.gen. */
     if (a->undo.stamp != a->ctl_stamp || m->gen != a->ctl_gen) {
@@ -1629,6 +1638,14 @@ static int rq_job_any(RQ_ARGS)
     return rq_job(RQ_PASS);
 }
 
+static int rq_agent(RQ_ARGS)
+{
+    RQ_LOCALS;
+    /* The first line's is taken where requests are run; this is one further down. */
+    snprintf(err, errsz, "agent NAME goes first in a request, and once");
+    return -1;
+}
+
 static int rq_help(RQ_ARGS);
 
 /* Every request the channel takes, one row each: the one place a verb is
@@ -1676,6 +1693,7 @@ static const Request REQUESTS[] = {
     { "scenes",     0, rq_scenes, "scenes", "the map's scenes" },
     { "links",      0, rq_links, "links [json]", "every link: number, kind, ends, size, one-way, secret" },
     { "floors",     0, rq_floors, "floors", "the floors, top first, and which the GM is looking at" },
+    { "agent",      CTL_RQ_NOMAP, rq_agent, "agent NAME", "who is asking, as a request's first line (vtt --ctl writes it from $VTT_AGENT): a job is its taker's, and undo is your own" },
     { "status",     CTL_RQ_LIVE | CTL_RQ_NOMAP, rq_status, "status", "the map, the GM's screen and floor, whether edits are taken now" },
     { "marked",     CTL_RQ_LIVE, rq_marked, "marked [json]", "what the GM is pointing at: cursor, box, selection, ruler, pings" },
 
@@ -1791,7 +1809,7 @@ static int run_line(RQ_ARGS)
  * line; NULL when it is fine. */
 static const char *not_alone(const char *p)
 {
-    int lines = 0;
+    int lines = 0, named = 0;                /* the first line met, when it is the name's, is not one of the request's */
     const char *verb = NULL;
     while (*p) {
         const char *end = strchr(p, '\n');
@@ -1803,8 +1821,8 @@ static const char *not_alone(const char *p)
             line[ll] = '\0';
             n = is_comment(line) ? 0 : split_words(line, w, e, sizeof e);
         }
-        if (n != 0 && !(n > 0 && w[0][0] == '#')) {
-            lines++;
+        if (n != 0 && !(n > 0 && w[0][0] == '#') && !(n > 0 && !lines && !named++ && !strcmp(w[0], "agent"))) {
+            lines++;                                   /* the name above a request is not a line of it */
             if (n > 0 && !verb) verb = lonely(w, n);
         }
         p = end ? end + 1 : p + ll;
@@ -1824,6 +1842,7 @@ static void finish_edits(App *a, Edits *ed, FILE *out)
     a->ctl_stamp    = a->undo.stamp;
     a->ctl_gen      = a->map->gen;
     a->ctl_undoable = 1;
+    str_lcpy(a->ctl_undo_who, a->ctl_who, sizeof a->ctl_undo_who);
     say_changed(a, ed, out);
     char msg[160];
     if (ed->lines == 1) snprintf(msg, sizeof msg, "agent: %s - u takes it back", ed->first);
@@ -1858,6 +1877,8 @@ char *app_ctl_exec(App *a, const char *req, size_t *len)
     int   lineno = 0;
     g_read = g_cover = 0;
     g_changes = 0;
+    int ran = 0;                         /* a line has been met: the name's must be the first */
+    str_lcpy(a->ctl_who, CTL_NAME_NONE, sizeof a->ctl_who);
     Edits ed;
     memset(&ed, 0, sizeof ed);
     ed.x1 = -1;
@@ -1894,9 +1915,20 @@ char *app_ctl_exec(App *a, const char *req, size_t *len)
         p = end ? end + 1 : p + ll;
 
         if (n == 0 || (n > 0 && w[0][0] == '#')) continue;
+        /* `agent NAME`, above everything: who is asking. Taken before the
+         * channel's state is, so a refusal can still say whose it was. */
+        if (n > 0 && !strcmp(w[0], "agent") && !ran) {
+            ran = 1;
+            /* Lines are numbered from the one after it: `vtt --ctl` wrote
+             * it, and the agent counts its own. */
+            if (n == 2 && ctl_name_ok(w[1])) { str_lcpy(a->ctl_who, w[1], sizeof a->ctl_who); lineno--; continue; }
+            snprintf(err, sizeof err, "agent NAME: a name is 1-%d letters, digits, - or _", CTL_NAME_MAX - 1);
+        }
+        ran = 1;
         /* With no map: what the table says needs none (a wait among them --
          * the map closing is an event). */
-        if (n > 0 && !a->map && !(rq_find(w[0]) && (rq_find(w[0])->flags & CTL_RQ_NOMAP)))
+        if (err[0]) { }                 /* the name's line, written wrong: said as it is */
+        else if (n > 0 && !a->map && !(rq_find(w[0]) && (rq_find(w[0])->flags & CTL_RQ_NOMAP)))
             rq_class(CTL_E_STATE), snprintf(err, sizeof err, "no map is open");
         /* The channel off: over the socket, nothing is taken. The map is
          * named so that a caller with several vtts open knows which. */

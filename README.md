@@ -1380,8 +1380,12 @@ stops it being started and `:agent command on` brings it back, and the `VTT_AGEN
 environment variable sets it at startup. Only a job you asked for starts it: not an agent's
 own idea, an `--apply`, or a change from the file. Each `:ask` and each `c` starts one run,
 with no limit on how many run at once. A command that cannot run (a name mistyped) says so
-only in what it prints, so switch `:log` on when trying a new one. The command also finds `$VTT` (this vtt's own path), `$VTT_PID` and
-`$VTT_JOB` in its environment.
+only in what it prints, so switch `:log` on when trying a new one. The command also finds `$VTT` (this vtt's own path), `$VTT_PID`,
+`$VTT_JOB` and `$VTT_AGENT` in its environment. The last is the agent's name on the channel,
+`job-N` for job N: `vtt --ctl` sends it with every request, so the job the agent takes is
+its own and no other agent can answer, drop or undo it. If another agent (or you, from a
+shell, with `vtt --ctl`) has taken a job, feedback on it goes to that taker and the command
+is not started for it: `:jobs N` says who has a job.
 
 | command | does |
 |---|---|
@@ -1506,7 +1510,8 @@ answer names the map and says to type `:agent on` in that vtt, and nothing is ch
 read; a `wait` already held when you switch it off is still answered when its time is up. (`--apply` is still told that the map is open, so it never writes the file under you.)
 
 `vtt --ctl REQUEST` sends a request and prints the answer; with no request it reads one from
-stdin. It exits 0 on success, 1 on an error (the reason is printed on stderr, after a word
+stdin. Set `VTT_AGENT` to a name (letters, digits, `-`, `_`) and it is sent with every request:
+jobs are then their taker's, and `undo` takes back only your own change. It exits 0 on success, 1 on an error (the reason is printed on stderr, after a word
 for its kind: `usage`, `missing`, `conflict`, `state`, `limit` or `internal`), and 2 when no
 vtt is listening; it then lists each running vtt whose channel is off, by pid and map. With several vtts listening, `--ctl-pid N` chooses
 one. `vtt --ctl help` lists every request with a line each, and `vtt --ctl 'help token'` says

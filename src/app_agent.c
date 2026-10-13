@@ -139,6 +139,11 @@ int app_agent_start(App *a, const Job *j)
         for (int fd = 3; fd < 256; fd++) close(fd);        /* the terminal, the sockets, the log */
         signal(SIGPIPE, SIG_DFL);       /* ignored here (term.c): a pipeline in the command must end quietly */
         setenv("VTT_JOB", job, 1);
+        /* Its name on the channel (docs/V2.md, D8): the job's own, so two
+         * agents started for two jobs cannot take each other's. */
+        char who[CTL_NAME_MAX];
+        snprintf(who, sizeof who, "job-%s", job);
+        setenv("VTT_AGENT", who, 1);
         setenv("VTT_PID", pidv, 1);
         if (app_self_path) setenv("VTT", app_self_path, 1);
         execl("/bin/sh", "sh", "-c", a->agent_cmd, (char *)NULL);

@@ -19,7 +19,8 @@ static void job_text(App *a, Job *j, FILE *out)
     if (j->has_box)  { strcpy(where, " in ");   cs_box_name(&j->box, where + 4, sizeof where - 4); }
     else if (j->has_area) { strcpy(where, " area "); cs_box_name(&j->area, where + 6, sizeof where - 6); }
     static const char *const FROM[] = { "asked by the GM", "an agent's own", "from --apply", "the file on disk" };
-    fprintf(out, "#%d %s%s, %s%s%s%s\n", j->num, app_job_state_name(j->state), where, FROM[j->from],
+    fprintf(out, "#%d %s%s, %s%s%s%s%s%s\n", j->num, app_job_state_name(j->state), where, FROM[j->from],
+            j->taker[0] ? ", taken by " : "", j->taker,
             j->at_once ? ", to land at once" : "", j->text[0] ? ": " : "", j->text);
     for (int t = 0; t < j->nthread; t++)
         fprintf(out, "  %s: %s\n", app_job_who_name(j->thread[t].who), j->thread[t].text);
@@ -46,6 +47,7 @@ static void job_json(App *a, Job *j, Json *js)
     json_kint(js, "num", j->num);
     json_kstr(js, "state", app_job_state_name(j->state));
     json_kstr(js, "from", app_job_from_name(j->from));
+    json_key(js, "taker"); if (j->taker[0]) json_str(js, j->taker); else json_null(js);
     json_key(js, "at_once"); json_bool(js, j->at_once);
     json_kstr(js, "text", j->text);
     json_box(js, "box", j->has_box, &j->box);
@@ -65,6 +67,21 @@ static void job_json(App *a, Job *j, Json *js)
     json_kint(js, "conflicts", ready ? cs_check(&j->cs, a->map) : 0);
     json_close(js, '}');
 }
+
+int app_ctl_job_mine(App *a, const Job *j, char *err, size_t errsz)
+{
+    if (!j->taker[0] || !strcmp(j->taker, a->ctl_who)) return 1;
+    app_ctl_class(CTL_E_STATE);
+    snprintf(err, errsz, "#%d is %s's, and you are %s - jobs says who has what", j->num, j->taker, a->ctl_who);
+    return 0;
+}
+
+void app_ctl_job_claim(App *a, Job *j)
+{
+    if (!j->taker[0]) str_lcpy(j->taker, a->ctl_who, sizeof j->taker);
+}
+
+_Static_assert(sizeof ((Job *)0)->taker == CTL_NAME_MAX, "a job's taker is an agent's name");
 
 int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, size_t errsz)
 {
@@ -135,11 +152,16 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
         return -1;
     }
 
+    /* From here every word acts on the job: its taker's alone. */
+    if (!app_ctl_job_mine(a, j, err, errsz)) return -1;
+
     if (!strcmp(verb, "take")) {
         if (n != 3) { snprintf(err, errsz, "job N take takes nothing after it"); return -1; }
+        app_ctl_job_claim(a, j);
         if (j->state == JOB_ASKED) {
             j->state = JOB_WORKING;
-            snprintf(msg, sizeof msg, "#%d taken by an agent", num);
+            if (strcmp(a->ctl_who, CTL_NAME_NONE) != 0) snprintf(msg, sizeof msg, "#%d taken by %s", num, a->ctl_who);
+            else snprintf(msg, sizeof msg, "#%d taken by an agent", num);
             app_note_gm(a, msg);
             a->dirty = 1;
         }
@@ -151,6 +173,7 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
         if (j->state == JOB_READY) { app_ctl_class(CTL_E_STATE), snprintf(err, errsz, "#%d has a proposal waiting - its squares are what the GM sees", num); return -1; }
         int x0, y0, x1, y1;
         if (!app_ctl_region(a->map, w[3], &x0, &y0, &x1, &y1, err, errsz)) return -1;
+        app_ctl_job_claim(a, j);               /* working on it is having it */
         j->state = JOB_WORKING;
         j->has_area = 1;
         j->area = (CsBox){ x0, y0, x1, y1 };
@@ -186,6 +209,7 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
         } else {
             if (j->has_cs) { cs_free(&j->cs); j->has_cs = 0; }
             j->state = JOB_ASKED;
+            j->taker[0] = '\0';               /* anyone's to take again */
             j->has_area = 0;
             j->summary[0] = '\0';
             app_job_thread_add(j, '-', "given back");

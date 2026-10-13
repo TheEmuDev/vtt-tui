@@ -318,5 +318,6 @@ void test_ctl_live(void);
 void test_loop(void);
 void test_ctl_table(void);
 void test_ctl_reads(void);
+void test_ctl_names(void);
 
 #endif /* VTT_TEST_HARNESS_H */

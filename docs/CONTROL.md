@@ -42,7 +42,7 @@ the agent's; this page is why it is the way it is.
   vtt that is there and silent for two seconds (stopped, its GM in `$EDITOR`) is passed
   over by `--ctl`, and makes `--apply` do nothing: it may have the map open.
 - **Bounded.** A request is at most 64 KB and four connections are held at once, with four
-  more for agents holding a `wait`; one that has not finished its request, or not taken its
+  more (eight since 2.0, one a name: docs/V2.md, D8) for agents holding a `wait`; one that has not finished its request, or not taken its
   answer, in ten seconds is dropped (a held `wait` has its own time, which it names).
   An answer is written without blocking, so a stuck caller never stalls the GM's
   screen. Idle, on or off, it costs one more descriptor in `poll` (the socket listens

@@ -181,6 +181,7 @@ can take back, so each goes in a request of its own.
 | `scene diff "Before"` | what changed since: `moved "Ghoul" C3 -> D5`, `gone`, `new`, `changed "Aria": HP 4/6 (was 6/6), ...`, the round; `no changes` |
 | `links [json]` | every link: its number, kind, ends, size, one-way and secret |
 | `floors` | the floors, top first, with their levels and extents, and which the GM is looking at |
+| `agent NAME` | who you are, as a request's **first line**: `vtt --ctl` writes it for you when `VTT_AGENT` is set in your environment, so set that once and never type it. A job is its taker's and `undo` is your own; with no name you are `cli` |
 | `status` | live only: the map, the floor on the GM's screen, whether edits are taken now, and `seq`, the newest event's number, to give your first `wait` |
 | `marked [json]` | live only: what the GM is pointing at -- the cursor (and the area it is in, and the floor on screen), a `v` box, selected creatures, the ruler, recent pings |
 | `help`, `help token`, `help json` | every request with a line each; how one is written; or all of it as JSON. The list vtt itself works from: if this page and `help` ever disagree, `help` is right |
@@ -248,7 +249,7 @@ can take back, so each goes in a request of its own.
 
 **If vtt started you** (`:agent command`): your standard input is one job -- what the GM
 asked, the box they drew, the job's history with any feedback last -- and the `vtt --ctl`
-lines to use, with this vtt's path and pid filled in. `$VTT`, `$VTT_PID` and `$VTT_JOB` hold
+lines to use, with this vtt's path and pid filled in. `$VTT`, `$VTT_PID`, `$VTT_JOB` and `$VTT_AGENT` (your name, below) hold
 the same. Take the job, read the map, propose once, read your proposal back, and exit; you
 are started again if the GM sends it back. You need no `wait` loop: one run is one attempt.
 What you print goes to the GM's session log.
@@ -372,6 +373,27 @@ feedback. Nothing you send changes the GM's map until then, unless the GM has ty
 10. If the GM does not like a change you made that was accepted, and nothing has happened
     since, `vtt --ctl undo` (on its own) takes it back; otherwise ask them to press `u`.
     Never repair a change by undoing the GM's own work.
+
+**Who you are.** Set `VTT_AGENT` to a name of your own (letters, digits, `-`, `_`; 31 at
+most) and `vtt --ctl` sends it with every request; an agent the GM's `:agent command`
+started has it set already, to `job-N`. `status` shows the name vtt took you for (`you
+NAME`; `cli` with none). It matters in three places. **A job is its taker's:** once you
+`take` a job, or propose one of your own, only your name may `take`, `area`, `say`,
+`propose` to or `drop` it, and another's answers `state: #N is NAME's`; anyone may read one
+(`job N dump`, `check`, `describe`), and `jobs` says who has what. **`undo` is your own:** it
+takes back the last change to land only if it was yours. **One `wait` a name:** a second
+`wait` from your name takes the first one's place, and the first is answered `superseded`,
+so an agent that was stopped and starts again is never locked out by its own old wait; the
+answer it gets carries every event since the number it waited from, so nothing is lost
+between the two. **Never run two `wait`s under one name at once:** each would answer the
+other for ever. A line's number in a refusal counts from your first line, not from the
+name's.
+
+A name is not a password: vtt takes the one it is given, from anyone who can reach the
+socket, which is you. It keeps agents out of each other's way; it does not keep one out.
+If the GM sends your job back, the `feedback` event is yours to answer (`job N propose`):
+vtt starts an agent of its own again only for a job its own agent (`job-N`) has, or nobody.
+A plan sent with `--apply` carries no name and its job is the GM's alone to decide.
 
 **One request reads at most 300,000 squares of map** (the GM's screen waits on it). A
 `dump` counts its region's squares; `describe`, `check` and a `job N` read back count the

@@ -444,7 +444,25 @@ void app_tick(App *a, uint64_t now_ms)
             a->ctl_held = 0;
             char *ans = app_ctl_exec(a, req, &len);
             a->ctl_can_hold = 0;
-            if (a->ctl_held && ctl_hold(&a->ctl, i, a->ctl_hold_seq, now_ms + (uint64_t)a->ctl_hold_ms) == 0) {
+            /* The same name's older wait is answered as it is taken over:
+             * with every event since the number it waited from, so one made
+             * by a request earlier in this very turn is not lost between
+             * the two. */
+            char    *older = NULL;
+            size_t   olen = 0;
+            unsigned oseq;
+            if (a->ctl_held && ctl_waiter_of(&a->ctl, a->ctl_who, &oseq) >= 0) {
+                FILE *of = open_memstream(&older, &olen);
+                if (of) {
+                    fputs("ok\n", of);
+                    app_events_write(a, of, oseq);
+                    fprintf(of, "superseded: a newer wait from %s took this one's place\n", a->ctl_who);
+                    fclose(of);
+                }
+            }
+            int held = a->ctl_held ? ctl_hold(&a->ctl, i, a->ctl_hold_seq, now_ms + (uint64_t)a->ctl_hold_ms, a->ctl_who, older) : -1;
+            free(older);
+            if (a->ctl_held && held == 0) {
                 free(ans);
                 continue;
             }

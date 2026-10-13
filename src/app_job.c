@@ -126,6 +126,7 @@ static void land(App *a, Job *j, const CsBox *box)
             a->ctl_stamp    = a->undo.stamp;
             a->ctl_gen      = a->map->gen;
             a->ctl_undoable = 1;
+            str_lcpy(a->ctl_undo_who, j->taker[0] ? j->taker : CTL_NAME_NONE, sizeof a->ctl_undo_who);
         }
     }
     if (box) {
@@ -383,9 +384,16 @@ void app_job_feedback(App *a, const char *text)
     j->summary[0] = '\0';
     char msg[220];
     app_event(a, CTL_EV_FEEDBACK, j->num, "%s", text);
-    snprintf(msg, sizeof msg, "#%d back to the agent: %.150s", j->num, text);
+    /* A job an agent of the GM's own has (or nobody: `job-N` is the name vtt
+     * gives the one it starts) is started again with the thread, feedback
+     * last. One another name took is that name's to answer: it hears the
+     * event, and a second agent started for it would only be refused. */
+    char own[CTL_NAME_MAX];
+    snprintf(own, sizeof own, "job-%d", j->num);
+    int theirs = j->taker[0] && strcmp(j->taker, own) != 0;
+    snprintf(msg, sizeof msg, "#%d back to %s: %.150s", j->num, theirs ? j->taker : "the agent", text);
     app_note_gm(a, msg);
-    app_agent_start(a, j);                   /* :agent command: with the thread, feedback last */
+    if (!theirs) app_agent_start(a, j);
     review_next_or_close(a);
 }
 
@@ -445,8 +453,8 @@ void app_jobs_command(App *a, const char *rest)
             off += snprintf(msg + off, sizeof msg - (size_t)off, "%s%s%s", t ? "\n" : "",
                             j->thread[t].who == 'G' ? "you: " : j->thread[t].who == 'A' ? "agent: " : "",
                             j->thread[t].text);
-        char title[64];
-        snprintf(title, sizeof title, "Job #%d, %s", j->num, STATE_NAME[j->state]);
+        char title[96];
+        snprintf(title, sizeof title, "Job #%d, %s%s%s", j->num, STATE_NAME[j->state], j->taker[0] ? ", taken by " : "", j->taker);
         app_show_message(a, title, j->nthread ? msg : "(nothing yet)");
         return;
     }

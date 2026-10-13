@@ -332,17 +332,55 @@ int ctl_waiters(const Ctl *c)
     return n;
 }
 
-int ctl_hold(Ctl *c, int i, unsigned seq, uint64_t until_ms)
+int ctl_name_ok(const char *name)
 {
-    if (ctl_waiters(c) == CTL_MAX_WAIT) return -1;
+    size_t n = strlen(name);
+    if (!n || n >= CTL_NAME_MAX) return 0;
+    for (const char *p = name; *p; p++)
+        if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') || *p == '-' || *p == '_')) return 0;
+    return 1;
+}
+
+int ctl_waiter_of(const Ctl *c, const char *who, unsigned *seq)
+{
+    /* Callers with no name are not told apart, so theirs are never taken
+     * for the same caller's (two `--apply --wait`s would answer each other
+     * for ever). */
+    if (!strcmp(who, CTL_NAME_NONE)) return -1;
+    for (int j = 0; j < c->nc; j++)
+        if (c->c[j].state == CTL_WAITING && !strcmp(c->c[j].who, who)) { *seq = c->c[j].wait_seq; return j; }
+    return -1;
+}
+
+int ctl_hold(Ctl *c, int i, unsigned seq, uint64_t until_ms, const char *who, const char *older)
+{
+    /* One wait a name: an agent that was killed and asks again must not be
+     * locked out by its own old wait, nor fill every slot with them. */
+    unsigned was;
+    int old = ctl_waiter_of(c, who, &was);
+    if (old < 0 && ctl_waiters(c) == CTL_MAX_WAIT) return -1;
     CtlConn *k = &c->c[i];
     free(k->in);                       /* 64 KB nobody reads again, for up to ten minutes */
     k->in            = NULL;
     k->state         = CTL_WAITING;
     k->wait_seq      = seq;
     k->wait_until_ms = until_ms;
+    str_lcpy(k->who, who, sizeof k->who);
     c->requests++;
+    /* Last: answering can close the old one, and the ones after it shift. */
+    if (old >= 0 && old != i) ctl_answer_text(c, old, older ? older : "ok\nsuperseded\n");
     return 0;
+}
+
+const char *ctl_name_line(const char *req)
+{
+    /* Past what the server skips: blank lines and comments. */
+    for (;;) {
+        while (*req == ' ' || *req == '\t' || *req == '\n' || *req == '\r') req++;
+        if (*req != '#') break;
+        req += strcspn(req, "\n");
+    }
+    return !strncmp(req, "agent", 5) && (!req[5] || strchr(" \t\r\n", req[5])) ? req : NULL;
 }
 
 int ctl_waiter(const Ctl *c, int i, unsigned *seq, uint64_t *until_ms)
@@ -377,6 +415,9 @@ static int ctl_connect(const char *path)
  * else is answered at once. */
 int ctl_held_ms(const char *req)
 {
+    /* Under the caller's name, when the request has one. */
+    const char *named = ctl_name_line(req);
+    if (named) req = named + strcspn(named, "\n");
     /* Past what the server skips: blank lines and comments. */
     for (;;) {
         while (*req == ' ' || *req == '\t' || *req == '\n' || *req == '\r') req++;
@@ -608,6 +649,28 @@ int ctl_client_main(const char *req, long pid)
         req = mine;
     }
     else len = strlen(req);
+
+    /* The caller's name, from the environment, so an agent never types it:
+     * a line above the request, unless the request brings its own. */
+    const char *name = getenv("VTT_AGENT");
+    if (name && *name && !ctl_name_line(req)) {
+        if (!ctl_name_ok(name)) {
+            close(fd);
+            free(mine);
+            fprintf(stderr, "vtt: VTT_AGENT is %.40s - a name is 1-%d letters, digits, - or _\n", name, CTL_NAME_MAX - 1);
+            return 2;
+        }
+        size_t hl = strlen(name) + 7;
+        char  *named = malloc(hl + len + 1);
+        if (!named) { close(fd); free(mine); fputs("vtt: out of memory\n", stderr); return 2; }
+        snprintf(named, hl + 1, "agent %s\n", name);
+        memcpy(named + hl, req, len);
+        named[hl + len] = '\0';
+        free(mine);
+        mine = named;
+        req  = named;
+        len += hl;
+    }
 
     size_t alen;
     char  *ans = exchange(fd, req, len, &alen, ctl_held_ms(req) + CTL_TIMEOUT_MS + 5000);

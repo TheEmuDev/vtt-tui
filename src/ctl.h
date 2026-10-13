@@ -15,10 +15,16 @@
  * events. docs/CONTROL.md. */
 
 #define CTL_MAX_CONN   4            /* requests being read or answered */
-#define CTL_MAX_WAIT   4            /* and `wait`s held beside them, so a waiting
+#define CTL_MAX_WAIT   8            /* and `wait`s held beside them, so a waiting
                                        agent never locks a request out */
 #define CTL_SLOTS      (CTL_MAX_CONN + CTL_MAX_WAIT)
 #define CTL_REQ_CAP    (64 * 1024)
+/* An agent's name (docs/V2.md, D8): the request's first line may be `agent
+ * NAME`, which `vtt --ctl` writes from $VTT_AGENT so an agent never types
+ * it; with none the caller is `cli`. Letters, digits, - and _. */
+#define CTL_NAME_MAX   32
+#define CTL_NAME_NONE  "cli"
+int  ctl_name_ok(const char *name);
 /* A `dump` that names no region is taken up to this many squares (16 KB of
  * lattice; a map that full of creatures and notes was measured at 40 KB);
  * past it the caller says `dump all` or names a region. And what `changes`
@@ -82,6 +88,7 @@ typedef struct {
     uint64_t  since_ms;         /* connected; the deadline runs from here */
     unsigned  wait_seq;         /* WAITING: events after this one answer it, */
     uint64_t  wait_until_ms;    /* or this moment does */
+    char      who[CTL_NAME_MAX];  /* whose wait it is: a newer one from the same name takes its place */
 } CtlConn;
 
 typedef struct {
@@ -125,11 +132,21 @@ int  ctl_next(Ctl *c, const char **req, size_t *len);
  * connection closes once it is written. */
 void ctl_answer(Ctl *c, int i, char *out, size_t len);
 
-/* Holds connection i's request (a `wait`) instead of answering it: until
- * ctl_answer, or the caller hanging up. 0, or -1 when CTL_MAX_WAIT are held
- * already (the caller answers it then). A held connection is outside the
- * ten-second deadline, and ctl_due counts only its own. */
-int  ctl_hold(Ctl *c, int i, unsigned seq, uint64_t until_ms);
+/* Holds connection i's request (a `wait`) for `who` instead of answering
+ * it: until ctl_answer, or the caller hanging up. 0, or -1 when CTL_MAX_WAIT
+ * are held already (the caller answers it then). A held connection is
+ * outside the ten-second deadline, and ctl_due counts only its own.
+ * One wait a name: when `who` (not `cli`) holds one already, that one is
+ * answered with `older` (its events and why, written by the app; copied)
+ * and this one takes its place, whatever the count. ctl_waiter_of finds it:
+ * its index and the number it waits from, or -1. */
+int  ctl_hold(Ctl *c, int i, unsigned seq, uint64_t until_ms, const char *who, const char *older);
+int  ctl_waiter_of(const Ctl *c, const char *who, unsigned *seq);
+/* The line that names the caller, when a request has one where the server
+ * looks for it (its first line that is not blank or a comment): where it
+ * starts, or NULL. The one reading of that for the client and ctl_held_ms. */
+const char *ctl_name_line(const char *req);
+
 int  ctl_waiters(const Ctl *c);
 /* 1 when connection i (0..nc-1) is a held wait, with what it waits for. */
 int  ctl_waiter(const Ctl *c, int i, unsigned *seq, uint64_t *until_ms);

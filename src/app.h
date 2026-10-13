@@ -228,6 +228,8 @@ typedef struct {
     unsigned ctl_gen;           /* Map.gen then, for changes outside the log */
     unsigned ctl_refused;       /* the last refusal logged, hashed: a caller repeating itself is one line */
     int      ctl_undoable;
+    char     ctl_who[CTL_NAME_MAX];       /* the name of the request being run (`agent NAME`, or cli) */
+    char     ctl_undo_who[CTL_NAME_MAX];  /* whose landing `undo` would take back */
     /* A request's edits run on a copy of the map, never the live one, and
      * become a proposal (docs/CONFLICTS.md); the copy and its log are kept
      * for their buffers. `ctl_auto` (:agent accept auto) lands each one at
