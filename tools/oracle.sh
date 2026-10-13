@@ -75,6 +75,8 @@ done
             cp "$q" "../work/$(basename "$q").req"
             ( cd ../work && run req.vtt --apply "$(basename "$q").req" && echo "   (on $base)" && run req.vtt --dump-map \
                          && run req.vtt --check )          # the file the request left is a sound one
+            # A plan that changed nothing leaves the file's bytes (HEALTH 60).
+            if cmp -s "$base.vtt" ../work/req.vtt; then echo "   file: as it was"; else echo "   file: written"; fi
         done
     done
     # A map made from nothing.

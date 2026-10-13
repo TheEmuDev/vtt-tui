@@ -15,13 +15,18 @@
 #include "checkpoint.h"
 #include "prof.h"
 
-void app_event(App *a, const char *fmt, ...)
+void app_event(App *a, int kind, int job, const char *fmt, ...)
 {
     AgentEvent *e = &a->events[++a->event_seq % EVENT_MAX];
     e->seq = a->event_seq;
+    int k = job ? snprintf(e->text, sizeof e->text, "job %d %s", job, ctl_event_name(kind))
+                : snprintf(e->text, sizeof e->text, "map %s", ctl_event_name(kind));
+    if (!fmt || k >= (int)sizeof e->text - 3) return;
+    e->text[k++] = ':';
+    e->text[k++] = ' ';
     va_list ap;
     va_start(ap, fmt);
-    vsnprintf(e->text, sizeof e->text, fmt, ap);
+    vsnprintf(e->text + k, sizeof e->text - (size_t)k, fmt, ap);
     va_end(ap);
 }
 
@@ -85,7 +90,7 @@ void app_events_map_flush(App *a)
     if (checkpoint_changes(m, &cs)) {
         char what[EVENT_TEXT_MAX - 32];
         cs_summary(&cs, NULL, what, sizeof what);
-        app_event(a, "map changed: %s", what);
+        app_event(a, CTL_EV_CHANGED, 0, "%s", what);
     }
     cs_free(&cs);
     app_events_map_restart(a);

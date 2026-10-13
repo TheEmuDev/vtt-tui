@@ -1137,7 +1137,8 @@ its whispers. The join code is the only gate: this is for a table of friends.
 
 `:log` starts a plain-text record of what happens at the table; `:log` again stops it. `:log
 on`, `:log off` and `:log path/to/file.log` are also accepted. The log is written next to the
-map as `name.log` by default.
+map as `name.log` by default. A request an agent sent that vtt refused is written too, as
+`agent refused: ...` with the reason, once for each different refusal.
 
 ```
 --- 2026-09-16 19:02:11  log on: Crypt ---
@@ -1505,8 +1506,9 @@ answer names the map and says to type `:agent on` in that vtt, and nothing is ch
 read; a `wait` already held when you switch it off is still answered when its time is up. (`--apply` is still told that the map is open, so it never writes the file under you.)
 
 `vtt --ctl REQUEST` sends a request and prints the answer; with no request it reads one from
-stdin. It exits 0 on success, 1 on an error (the reason is printed on stderr), and 2 when no
-vtt is listening. With several vtts listening, `--ctl-pid N` chooses
+stdin. It exits 0 on success, 1 on an error (the reason is printed on stderr, after a word
+for its kind: `usage`, `missing`, `conflict`, `state`, `limit` or `internal`), and 2 when no
+vtt is listening; it then lists each running vtt whose channel is off, by pid and map. With several vtts listening, `--ctl-pid N` chooses
 one. `vtt --ctl help` lists every request with a line each, and `vtt --ctl 'help token'` says
 how one is written.
 
@@ -1521,7 +1523,9 @@ waiting for the GM's review - :review 1
 ```
 
 `vtt map.vtt --apply plan.txt` runs the same requests against a map file without a live
-session and saves it; `--new WxH` creates an empty map first if the file does not exist.
+session and saves it (a plan that only reads, such as `dump`, leaves the file untouched);
+`--new WxH` creates an empty map first if the file does not exist. A plan is at most 64,896
+bytes.
 If the map is open in a running vtt, the plan goes there instead, as a proposal for you to
 `:review`, and the file is not touched. With the channel off it is refused instead, and says so. `--wait
 SECONDS` then waits for your verdict: it exits 0 when you accept, 3 when the time runs out,

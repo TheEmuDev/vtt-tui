@@ -1042,7 +1042,7 @@ static void check_map(const Map *m, Findings *fs)
     for (int i = 0; i < m->nlinks; i++) {
         const Link *l = &m->links[i];
         char why[200];
-        if (!l->to_map[0] || !link_map_check(m, l->to_map, l->to_place, why, sizeof why)) continue;
+        if (!l->to_map[0] || !link_map_check(m, l->to_map, l->to_place, why, sizeof why, NULL)) continue;
         char name[32];
         link_name(l, name, sizeof name);
         map_coord_name(l->x[0], l->y[0], where, sizeof where);

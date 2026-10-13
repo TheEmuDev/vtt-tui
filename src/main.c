@@ -624,8 +624,12 @@ static int run_apply(const Options *o)
     char err[256];
     size_t len = 0;
     int    big = 0;
-    char  *req = file_read(o->apply, CTL_REQ_CAP, &len, &big);
-    if (!req) { fprintf(stderr, big ? "vtt: %s is over 64 KB\n" : "vtt: cannot read %s\n", o->apply); return 2; }
+    char  *req = file_read(o->apply, CTL_PLAN_CAP, &len, &big);
+    if (!req) {
+        if (big) fprintf(stderr, "vtt: %s is over %d bytes, the most a plan may be - split it\n", o->apply, CTL_PLAN_CAP);
+        else fprintf(stderr, "vtt: cannot read %s\n", o->apply);
+        return 2;
+    }
 
     /* Open in a running vtt: the plan is a proposal there, for its GM to
      * review, and the file is left alone -- the GM's next :w would have
@@ -667,6 +671,8 @@ static int run_apply(const Options *o)
             fprintf(stderr, "vtt: %s has an autosave newer than it; applying to the file as saved\n", o->map_path);
         }
         a.ctl_direct = 1;                   /* no GM: the plan is the file's */
+        /* A plan that only reads leaves the file as it was, byte for byte. */
+        unsigned gen = a.map->gen, sgen = a.map->scenes_gen, cgen = a.map->cards_gen;
         char *ans = app_ctl_exec(&a, req, &len);
         if (!ans) fputs("vtt: out of memory\n", stderr);
         else {
@@ -675,6 +681,8 @@ static int run_apply(const Options *o)
             if (strncmp(ans, "ok\n", 3) != 0) {
                 fprintf(stderr, "vtt: %.*s - nothing saved\n", (int)first, ans);
                 rc = 1;
+            } else if (a.map->gen == gen && a.map->scenes_gen == sgen && a.map->cards_gen == cgen) {
+                rc = 0;
             } else if (mapio_save(a.map, o->map_path, err, sizeof err) < 0) {
                 fprintf(stderr, "vtt: %s\n", err);
             } else rc = 0;

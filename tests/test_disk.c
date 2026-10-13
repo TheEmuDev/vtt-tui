@@ -553,7 +553,7 @@ void test_disk_whole(void)
         for (int i = 0; i < 5; i++) {
             snprintf(cmd, sizeof cmd, TRY[i], num);
             t = ctl_ask(&a, cmd);
-            CHECK(t && !strncmp(t, "error", 5) && strstr(t, "the GM's to decide") != NULL);
+            CHECK(t && ctl_refused(t, "state", 1) && strstr(t, "the GM's to decide") != NULL);
             free(t);
         }
         CHECK(a.jobs[dj].used && a.jobs[dj].state == JOB_READY && a.jobs[dj].from == JOB_FROM_DISK);
@@ -598,7 +598,7 @@ void test_disk_whole(void)
     CHECK(first > 0 && second > 0 && second != first);
     snprintf(cmd, sizeof cmd, "job %d take\n", first);
     t = ctl_ask(&a, cmd);
-    CHECK(t && !strncmp(t, "error", 5));
+    CHECK(t && ctl_refused(t, "missing", 1));
     free(t);
 
     app_free(&a);

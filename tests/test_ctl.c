@@ -1,5 +1,6 @@
 /* Tests: the control channel, the room language, corridors, --apply. */
 
+#include "link.h"
 #include "harness.h"
 #include "app_priv.h"
 
@@ -18,7 +19,7 @@ void test_ctl(void)
     CHECK(strstr(t, "edits not now: no map is open") != NULL);
     free(t);
     t = ctl_ask(&a, "dump\n");
-    CHECK_EQ(strcmp(t, "error: line 1: no map is open\n"), 0);
+    CHECK_EQ(strcmp(t, "error state: line 1: no map is open\n"), 0);
     free(t);
 
     app_open_map(&a, "tests/fixtures/two-rooms.vtt");
@@ -87,17 +88,17 @@ void test_ctl(void)
 
     CASE("an error names its line and sends nothing else");
     t = ctl_ask(&a, "status\ndump B2:ZZ99:4\n");
-    CHECK(strncmp(t, "error: line 2: ZZ99:4 is not a square", 37) == 0);
+    CHECK(strncmp(t, "error usage: line 2: ZZ99:4 is not a square", 43) == 0);
     CHECK(strchr(t, '\n') == t + strlen(t) - 1);
     free(t);
     t = ctl_ask(&a, "describe yaml\n");
-    CHECK_EQ(strcmp(t, "error: line 1: describe takes nothing but json after it\n"), 0);
+    CHECK_EQ(strcmp(t, "error usage: line 1: describe takes nothing but json after it\n"), 0);
     free(t);
     t = ctl_ask(&a, "frobnicate\n");
-    CHECK_EQ(strcmp(t, "error: line 1: unknown request frobnicate\n"), 0);
+    CHECK_EQ(strcmp(t, "error usage: line 1: unknown request frobnicate\n"), 0);
     free(t);
     t = ctl_ask(&a, "status now\n");
-    CHECK(strncmp(t, "error: line 1: status takes nothing", 35) == 0);
+    CHECK(strncmp(t, "error usage: line 1: status takes nothing", 41) == 0);
     free(t);
 
     CASE("words: quotes, escapes, and the mistakes a quote can make");
@@ -135,7 +136,7 @@ void test_ctl(void)
         const char req[] = "status\0dump\n";
         size_t len = sizeof req - 1;
         t = app_ctl_exec(&a, req, &len);
-        CHECK(t && strcmp(t, "error: a nul byte in the request\n") == 0);
+        CHECK(t && strcmp(t, "error usage: a nul byte in the request\n") == 0);
         free(t);
     }
 
@@ -475,7 +476,7 @@ void test_ctl_edits(void)
     depth = a.undo.depth;
     int nmarks = a.undo.nmarks;
     t = ctl_ask(&a, "tile A1:L8 hazard\ntoken del Ghoul\nnote A1 \"x\"\ntoken add enemy B7 \"Aria\"\n");
-    CHECK_EQ(strcmp(t, "error: line 4: there is already a creature called Aria\n"), 0);
+    CHECK_EQ(strcmp(t, "error conflict: line 4: there is already a creature called Aria\n"), 0);
     free(t);
     after = ctl_snapshot(m);
     CHECK_EQ(strcmp(before, after), 0);
@@ -489,7 +490,7 @@ void test_ctl_edits(void)
     CASE("a room, drawn through the editor's own helper, is rolled back with the rest");
     before = ctl_snapshot(m);
     t = ctl_ask(&a, "room A6:C8\nwall E6:F7 door\ntoken move Nobody A1\n");
-    CHECK(strncmp(t, "error: line 3:", 14) == 0);
+    CHECK(ctl_refused(t, "missing", 3));
     free(t);
     after = ctl_snapshot(m);
     CHECK_EQ(strcmp(before, after), 0);
@@ -500,36 +501,36 @@ void test_ctl_edits(void)
 
     CASE("the mistakes an edit can make, each named");
     {
-        static const struct { const char *req, *err; } bad[] = {
-            { "room B2:Z99\n",              "Z99 is not a square on this map (A1 to L8)" },
-            { "room\n",                     "room REGION" },
-            { "tile B2 lava\n",             "lava: a tile is void, floor" },
-            { "wall B2:C3 portcullis\n",    "portcullis: a boundary is none, wall" },
-            { "edge C3|E3 door\n",          "the squares are not side by side" },
-            { "edge C3/D3 door\n",          "the squares are not side by side" },
-            { "edge -|- door\n",            "a boundary needs a square on one side" },
-            { "edge C3 door\n",             "is not a boundary" },
-            { "edge -|B1 door\n",           "the squares are not side by side" },
-            { "token add dragon C3 \"X\"\n", "a creature is a player or an enemy" },
-            { "token add enemy C3 size 4 \"X\"\n", "size is 1, 2 or 3" },
-            { "token add enemy L8 size 2 \"X\"\n", "hangs off the map" },
-            { "token add enemy J5 \"X\"\n", "J5 is taken by Ghoul" },
-            { "token add enemy C3 \"\"\n",  "a creature needs a label" },
-            { "token add enemy C3 \"abcdefghijabcdefghijabcdefghij12\"\n", "the label is over 31 characters" },
-            { "token move Nobody C3\n",     "no creature called Nobody" },
-            { "token move A1 C3\n",         "no creature stands on A1" },
-            { "token move Ghoul G5\n",      "G5 is taken by Aria" },
-            { "token set Ghoul color red\n", "token set changes a label, a size, a note or hidden" },
-            { "token fly Ghoul\n",          "token fly: add, move, del or set" },
-            { "note Z1 \"x\"\n",            "is not a square" },
-            { "fog paint B2:C3 1\n",        "there is no fog patch 1" },
-            { "fog paint B2:C3 16\n",       "a fog patch is 1 to 15" },
-            { "fog B2:C3 1\n",              "fog paint REGION N" },
+        static const struct { const char *req, *cls, *err; } bad[] = {
+            { "room B2:Z99\n", "usage",              "Z99 is not a square on this map (A1 to L8)" },
+            { "room\n", "usage",                     "room REGION" },
+            { "tile B2 lava\n", "usage",             "lava: a tile is void, floor" },
+            { "wall B2:C3 portcullis\n", "usage",    "portcullis: a boundary is none, wall" },
+            { "edge C3|E3 door\n", "usage",          "the squares are not side by side" },
+            { "edge C3/D3 door\n", "usage",          "the squares are not side by side" },
+            { "edge -|- door\n", "usage",            "a boundary needs a square on one side" },
+            { "edge C3 door\n", "usage",             "is not a boundary" },
+            { "edge -|B1 door\n", "usage",           "the squares are not side by side" },
+            { "token add dragon C3 \"X\"\n", "usage", "a creature is a player or an enemy" },
+            { "token add enemy C3 size 4 \"X\"\n", "usage", "size is 1, 2 or 3" },
+            { "token add enemy L8 size 2 \"X\"\n", "conflict", "hangs off the map" },
+            { "token add enemy J5 \"X\"\n", "conflict", "J5 is taken by Ghoul" },
+            { "token add enemy C3 \"\"\n", "usage",  "a creature needs a label" },
+            { "token add enemy C3 \"abcdefghijabcdefghijabcdefghij12\"\n", "limit", "the label is over 31 characters" },
+            { "token move Nobody C3\n", "missing",     "no creature called Nobody" },
+            { "token move A1 C3\n", "missing",         "no creature stands on A1" },
+            { "token move Ghoul G5\n", "conflict",      "G5 is taken by Aria" },
+            { "token set Ghoul color red\n", "usage", "token set changes a label, a size, a note or hidden" },
+            { "token fly Ghoul\n", "usage",          "token fly: add, move, del or set" },
+            { "note Z1 \"x\"\n", "usage",            "is not a square" },
+            { "fog paint B2:C3 1\n", "missing",        "there is no fog patch 1" },
+            { "fog paint B2:C3 16\n", "usage",       "a fog patch is 1 to 15" },
+            { "fog B2:C3 1\n", "usage",              "fog paint REGION N" },
         };
         before = ctl_snapshot(m);
         for (size_t i = 0; i < sizeof bad / sizeof *bad; i++) {
             t = ctl_ask(&a, bad[i].req);
-            CHECK(strncmp(t, "error: line 1: ", 15) == 0 && strstr(t, bad[i].err) != NULL);
+            CHECK(ctl_refused(t, bad[i].cls, 1) && strstr(t, bad[i].err) != NULL);
             if (!strstr(t, bad[i].err)) fprintf(stderr, "    got: %s", t);
             free(t);
         }
@@ -656,13 +657,13 @@ void test_ctl_edits(void)
     free(t);
     CHECK_EQ(map_tile(m, 1, 1), TILE_WATER);
     t = ctl_ask(&a, "tile B3 water\nundo\n");
-    CHECK_EQ(strcmp(t, "error: undo goes in a request of its own\n"), 0);
+    CHECK_EQ(strcmp(t, "error usage: undo goes in a request of its own\n"), 0);
     free(t);
     CHECK_EQ(map_tile(m, 1, 2), TILE_FLOOR);           /* nothing ran */
     t = ctl_ask(&a, "tile B3 water\n");
     free(t);
     t = ctl_ask(&a, "# first\nundo\nundo\n");
-    CHECK_EQ(strcmp(t, "error: undo goes in a request of its own\n"), 0);
+    CHECK_EQ(strcmp(t, "error usage: undo goes in a request of its own\n"), 0);
     free(t);
     CHECK_EQ(map_tile(m, 1, 2), TILE_WATER);           /* not taken back half way */
     CASE("the agent's undo also stops at a change the GM made outside the log");
@@ -779,7 +780,7 @@ void test_ctl_cap(void)
     free(t);
     snprintf(req, sizeof req, "tile A1:%s water\ntile A1:%s floor\ntile A1 hazard\n", last, last);
     t = ctl_ask(&a, req);
-    CHECK(strstr(t, "error: line 3: the request changes more than 524288 things at once") != NULL);
+    CHECK(strstr(t, "error limit: line 3: the request changes more than 524288 things at once") != NULL);
     free(t);
     CHECK_EQ(map_tile(a.map, 0, 0), TILE_FLOOR);
     CHECK_EQ(map_tile(a.map, 5, 5), TILE_FLOOR);
@@ -881,7 +882,7 @@ void test_room_language(void)
     CHECK(m->tokens.v[0].x == 4 && m->tokens.v[0].y == 3);  /* 8x6 at B2: E4 */
     CHECK(m->tokens.v[1].x >= 1 && m->tokens.v[1].x <= 7 && m->tokens.v[1].y >= 1 && m->tokens.v[1].y <= 5);
     t = ctl_ask(&a, "tile J18 floor\narea Closet J18:J18\ntoken add enemy Closet \"A\"\ntoken add enemy Closet \"B\"\n");
-    CHECK(strstr(t, "error: line 4: no room in Closet for a 1x1 creature") != NULL);
+    CHECK(strstr(t, "error conflict: line 4: no room in Closet for a 1x1 creature") != NULL);
     free(t);
     CHECK_EQ(map_area_find(m, "Closet"), -1);               /* rolled back with it */
 
@@ -1039,7 +1040,7 @@ void test_corridors(void)
     CASE("refused whole: through ground, through a named room, too little shared, overlapping");
     char *before = ctl_snapshot(m);
     t = ctl_ask(&a, "room G S2 2x2\nroom K 2x2 south of G gap 6\ntile S5:T6 floor\ncorridor G K\n");
-    CHECK(strstr(t, "error: line 4: it would cross ground already at") != NULL);
+    CHECK(strstr(t, "error conflict: line 4: it would cross ground already at") != NULL);
     free(t);
     t = ctl_ask(&a, "room G S2 2x2\nroom K 2x2 south of G gap 6\narea Pit S5:T6\ncorridor G K\n");
     CHECK(strstr(t, "it would cut through Pit at") != NULL);
@@ -1344,7 +1345,7 @@ void test_ctl_live(void)
         shutdown(rd.fd, SHUT_WR);
         fcntl(rd.fd, F_SETFL, fcntl(rd.fd, F_GETFL) & ~O_NONBLOCK);
         ctl_pump(&a, ctl_read_some, &rd);
-        CHECK_EQ(strcmp(rd.buf, "error: the request is over 64 KB\n"), 0);
+        CHECK_EQ(strcmp(rd.buf, "error limit: the request is over 64 KB\n"), 0);
         CHECK_EQ(rd.reset, 0);
         close(rd.fd);
     }
@@ -1396,7 +1397,7 @@ void test_ctl_live(void)
             text[k] = '\0';
             if (f) fclose(f);
             if (!round) CHECK(strncmp(text, "map Two Rooms", 13) == 0);
-            else        CHECK(strstr(text, "vtt: error: line 1: unknown request bogus") != NULL);
+            else        CHECK(strstr(text, "vtt: error usage: line 1: unknown request bogus") != NULL);
         }
         unlink(out);
     }
@@ -1517,7 +1518,7 @@ void test_ctl_live(void)
         CHECK(write(r5.fd, "wait for 600\n", 13) == 13);
         shutdown(r5.fd, SHUT_WR);
         ctl_pump(&a, ctl_read_some, &r5);
-        CHECK(r5.done && !strncmp(r5.buf, "error: as many agents", 21));
+        CHECK(r5.done && !strncmp(r5.buf, "error limit: as many agents", 27));
         close(r5.fd);
         close(w[0]);                                       /* one hangs up */
         ctl_pump(&a, waiters_are, &(WaitersAre){ &a, CTL_MAX_WAIT - 1 });
@@ -1551,7 +1552,7 @@ void test_ctl_live(void)
      * then (docs/CONFLICTS.md, decision 5) proposals, status and wait were taken. */
     CASE("off, over the socket: every request is refused with the map's name and what to type; only holds is answered");
     {
-        const char *off = "error: line 1: the agent channel is off in the vtt with Two Rooms - type :agent on in that vtt, then ask again\n";
+        const char *off = "error state: line 1: the agent channel is off in the vtt with Two Rooms - type :agent on in that vtt, then ask again\n";
         static const char *const REFUSED[] = { "dump\n", "status\n", "help\n", "wait 0\n", "wait for 0\n", "jobs\n", "marked\n",
                                                "describe\n", "undo\n", "job 1 take\n", "scene save Now\n", "scene Nope\n",
                                                "tile A1 water\n", "propose \"a well\"\ntile B2 water\n",
@@ -1583,18 +1584,28 @@ void test_ctl_live(void)
         free(t);
     }
 
-    CASE("--ctl finds no vtt with its channel on, though one listens (exit 2)");
+    CASE("--ctl finds no vtt with its channel on, though one listens (exit 2): it says which vtt holds which map");
     {
+        char errf[700];
+        snprintf(errf, sizeof errf, "%s/ctl-off-err.txt", sb.dir);
         fflush(stdout);
         pid_t pid = fork();
         if (pid == 0) {
-            int o = open("/dev/null", O_WRONLY);
+            int o = open(errf, O_WRONLY | O_CREAT | O_TRUNC, 0600);
             dup2(o, 2);
             _exit(ctl_client_main("status", 0));
         }
         int stc[3] = { (int)pid, 0, 0 };
         ctl_pump(&a, ctl_child_done, stc);
         CHECK(stc[1] && WIFEXITED(stc[2]) && WEXITSTATUS(stc[2]) == 2);
+        FILE *f = fopen(errf, "r");
+        char  text[700] = "", wantoff[200];
+        size_t n = f ? fread(text, 1, sizeof text - 1, f) : 0;
+        text[n] = '\0';
+        if (f) fclose(f);
+        snprintf(wantoff, sizeof wantoff, "vtt: no vtt is taking requests - type :agent on in the one you mean\n"
+                                    "  pid %ld: error state: line 1: the agent channel is off in the vtt with Two Rooms - ", (long)getpid());
+        CHECK(!strncmp(text, wantoff, strlen(wantoff)));
     }
     close(held.fd);
     ctl_pump(&a, waiters_are, &(WaitersAre){ &a, 0 });
@@ -1687,6 +1698,37 @@ void test_ctl_live(void)
         CHECK(f0.st_mtime == f1.st_mtime && f0.st_size == f1.st_size && f0.st_ino == f1.st_ino);
         jobs_reset(&a);
 
+        CASE("the largest plan --apply reads, under the longest name a file can have, is taken by an open map too (HEALTH 14)");
+        {
+            unsigned dropped0 = a.ctl.dropped;
+            char *plan = malloc(CTL_PLAN_CAP + 1), name[256];
+            size_t k = (size_t)snprintf(plan, CTL_PLAN_CAP + 1, "tile B6 hazard\n");
+            while (k < CTL_PLAN_CAP) {                     /* comment lines to the last byte */
+                size_t line = CTL_PLAN_CAP - k > 1000 ? 1000 : CTL_PLAN_CAP - k;
+                memset(plan + k, '#', line - 1);
+                plan[k + line - 1] = '\n';
+                k += line;
+            }
+            memset(name, '"', sizeof name - 1);            /* every byte of it escaped */
+            name[sizeof name - 1] = '\0';
+            fflush(stdout);
+            pid_t pid = fork();
+            if (pid == 0) {
+                int o = open("/dev/null", O_WRONLY);
+                dup2(o, 1);
+                dup2(o, 2);
+                int rc = ctl_apply_open(file, name, plan, CTL_PLAN_CAP, -1);
+                _exit(rc < 0 ? 99 : rc);
+            }
+            int stc[3] = { (int)pid, 0, 0 };
+            ctl_pump(&a, ctl_child_done, stc);
+            CHECK(stc[1] && WIFEXITED(stc[2]) && WEXITSTATUS(stc[2]) == 0);
+            CHECK_EQ(a.jobs[0].state, JOB_READY);
+            CHECK_EQ(a.ctl.dropped, dropped0);
+            free(plan);
+            jobs_reset(&a);
+        }
+
         CASE("--apply to a file no vtt has open is the file's, as before: nobody holds it");
         fflush(stdout);
         pid_t pid = fork();
@@ -1695,7 +1737,26 @@ void test_ctl_live(void)
         ctl_pump(&a, ctl_child_done, stc);
         CHECK(stc[1] && WIFEXITED(stc[2]) && WEXITSTATUS(stc[2]) == 0);
     }
-    ctl_stop(&a.ctl);                                  /* the cases below want nobody listening */
+    CASE("--apply --wait when the vtt goes before a verdict: exit 2, not a verdict (HEALTH 12)");
+    {
+        fflush(stdout);
+        pid_t pid = fork();
+        if (pid == 0) {
+            int o = open("/dev/null", O_WRONLY);
+            dup2(o, 1);
+            dup2(o, 2);
+            int rc = ctl_apply_open("tests/fixtures/two-rooms.vtt", "plan.txt", "tile B7 hazard\n", 15, 20);
+            _exit(rc < 0 ? 99 : rc);
+        }
+        ctl_pump(&a, waiters_are, &(WaitersAre){ &a, 1 });
+        CHECK_EQ(a.jobs[0].state, JOB_READY);
+        ctl_stop(&a.ctl);                              /* as quitting does: the held wait is closed with nothing said */
+        int stc = 0;
+        waitpid(pid, &stc, 0);
+        CHECK(WIFEXITED(stc) && WEXITSTATUS(stc) == 2);
+        jobs_reset(&a);
+    }
+    /* The cases below want nobody listening, and nobody is. */
     CHECK(access(want, F_OK) != 0);
 
     CASE("a vtt that is there and does not answer may have the map open: --apply does nothing (exit 2)");
@@ -1732,13 +1793,31 @@ void test_ctl_live(void)
         CHECK_EQ(seq, 9u);
         CHECK_EQ(ctl_verdict_in("ok\nseq 9\n8 job 12 accepted: ground in B2\n", 12, &seq, line, sizeof line), 0);
         CHECK(!strcmp(line, "job 12 accepted: ground in B2"));
-        CHECK_EQ(ctl_verdict_in("ok\nseq 3\n3 job 1 accepted in part, B2: ground in B2 - the rest waits\n", 1, &seq, line, sizeof line), 0);
+        CHECK_EQ(ctl_verdict_in("ok\nseq 3\n3 job 1 part: B2: ground in B2 - the rest waits\n", 1, &seq, line, sizeof line), 0);
         CHECK_EQ(ctl_verdict_in("ok\nseq 3\n3 job 1 feedback: like job 1 scrapped, but better\n", 1, &seq, line, sizeof line), 5);
         CHECK(!strcmp(line, "like job 1 scrapped, but better"));
         CHECK_EQ(ctl_verdict_in("ok\nseq 3\n3 job 1 scrapped\n", 1, &seq, line, sizeof line), 4);
-        CHECK_EQ(ctl_verdict_in("ok\nseq 3\n3 job 1 removed by the GM\n", 1, &seq, line, sizeof line), 4);
+        CHECK_EQ(ctl_verdict_in("ok\nseq 3\n3 job 1 removed\n", 1, &seq, line, sizeof line), 4);
         CHECK_EQ(ctl_verdict_in("ok\nseq 3\n3 map closed: Blank - its jobs went with it\n", 1, &seq, line, sizeof line), 4);
         CHECK_EQ(ctl_verdict_in("ok\nseq 3\n", 1, &seq, line, sizeof line), -1);
+        /* Not events: a kind nobody sends, two words for one, no subject, job 0, a number alone. */
+        static const char *const NOT[] = { "3 job 1 pondered", "3 job 1 accepted in part: x", "3 accepted: x", "3 job 0 scrapped",
+                                           "3 job scrapped", "3", "seq 3", "lost 1-2: more happened", "3 mapclosed: x", "3 job 1scrapped" };
+        for (size_t k = 0; k < sizeof NOT / sizeof *NOT; k++) {
+            const char *text;
+            size_t tl;
+            int num;
+            CHECK_EQ(ctl_event_parse(NOT[k], strlen(NOT[k]), &num, &text, &tl), -1);
+        }
+        const char *text;
+        size_t tl;
+        int num;
+        CHECK_EQ(ctl_event_parse("12 job 34 feedback: a: b", 24, &num, &text, &tl), CTL_EV_FEEDBACK);
+        CHECK(num == 34 && tl == 4 && !strncmp(text, "a: b", 4));
+        CHECK_EQ(ctl_event_parse("12 map closed: Blank", 20, &num, &text, &tl), CTL_EV_CLOSED);
+        CHECK(num == 0 && tl == 5);
+        CHECK_EQ(ctl_event_parse("12 job 3 scrapped", 17, &num, &text, &tl), CTL_EV_SCRAPPED);
+        CHECK(num == 3 && tl == 0);
     }
 
     CASE("a socket file nobody answers on is a crashed vtt's, and --ctl removes it");
@@ -1840,20 +1919,20 @@ void test_ctl_characters(void)
 
     CASE("a request that fails later takes back the creature and its roll");
     t = ctl_ask(&a, "token add enemy B2 from wight\ntile Z99 water");
-    CHECK(t && strncmp(t, "error: line 2", 13) == 0);
+    CHECK(t && ctl_refused(t, "usage", 2));
     free(t);
     CHECK_EQ(m->tokens.n, 1);
     CHECK(!m->rolls[0].name[0]);
 
     CASE("refusals: no such character, no label, no room, a bad word");
     t = ctl_ask(&a, "token add enemy B2 from ghast");
-    CHECK(t && strstr(t, "no character called ghast") != NULL);
+    CHECK(t && ctl_refused(t, "missing", 1) && strstr(t, "no character called ghast") != NULL);
     free(t);
     t = ctl_ask(&a, "token add enemy B2 from nameless");
-    CHECK(t && strstr(t, "has no label") != NULL);
+    CHECK(t && ctl_refused(t, "state", 1) && strstr(t, "has no label") != NULL);
     free(t);
     t = ctl_ask(&a, "token add enemy L8 from wight");
-    CHECK(t && strncmp(t, "error:", 6) == 0 && strstr(t, "L8") != NULL);
+    CHECK(t && ctl_refused(t, "conflict", 1) && strstr(t, "L8") != NULL);
     free(t);
     t = ctl_ask(&a, "token add enemy B2 from wight loud");
     CHECK(t && strstr(t, "from NAME [hidden]") != NULL);
@@ -1898,7 +1977,7 @@ void test_ctl_scenes(void)
     CHECK(t && strstr(t, "ok\nsaved scene \"Start\": 2 creatures\n") == t);
     free(t);
     t = ctl_ask(&a, "area Den E5:H8\nscene save Den Den");
-    CHECK(t && strstr(t, "error: scene save goes in a request of its own") != NULL);
+    CHECK(t && strstr(t, "error usage: scene save goes in a request of its own") != NULL);
     free(t);
     t = ctl_ask(&a, "area Den E5:H8");
     free(t);
@@ -1922,7 +2001,7 @@ void test_ctl_scenes(void)
 
     CASE("scene NAME puts it back as an edit, all or nothing with the request");
     t = ctl_ask(&a, "scene Start\ntile Z99 water");
-    CHECK(t && strncmp(t, "error: line 2", 13) == 0);
+    CHECK(t && ctl_refused(t, "usage", 2));
     free(t);
     CHECK_EQ(m->tokens.v[0].x, 3);                         /* rolled back: Aria still at D4 */
     t = ctl_ask(&a, "scene Start");
@@ -1953,6 +2032,30 @@ void test_ctl_scenes(void)
     t = ctl_ask(&a, "scene diff");
     CHECK(t && strstr(t, "scene diff NAME") != NULL);
     free(t);
+
+    CASE("a scene's two refusals have their classes: a bad name is usage, a full table is limit");
+    {
+        int had = m->nscenes;
+        t = ctl_ask(&a, "scene save \"save me\"");
+        CHECK(t && ctl_refused(t, "usage", 1));
+        free(t);
+        for (int k = m->nscenes; k < MAP_SCENES_MAX; k++) {
+            char rq[40];
+            snprintf(rq, sizeof rq, "scene save Fill%d", k);
+            t = ctl_ask(&a, rq);
+            CHECK(t && !strncmp(t, "ok\n", 3));
+            free(t);
+        }
+        t = ctl_ask(&a, "scene save OneMore");
+        CHECK(t && ctl_refused(t, "limit", 1) && strstr(t, "a map holds"));
+        free(t);
+        while (m->nscenes > had) {
+            char rq[40];
+            snprintf(rq, sizeof rq, "scene %s remove", m->scenes[m->nscenes - 1].name);
+            free(ctl_ask(&a, rq));
+        }
+        CHECK_EQ(m->nscenes, had);
+    }
 
     CASE("in play mode: reads work, saving is refused, putting back waits as any edit does");
     app_key(&a, (Key){ KEY_F2, 0, 0 });
@@ -2018,7 +2121,6 @@ void test_ctl_table(void)
         rows++;
     }
     CHECK(rows > 30);
-    free(doc);
 
     CASE("help lists every request; help VERB says how one is written; an unknown one is refused");
     char *h = ctl_ask(&a, "help");
@@ -2036,7 +2138,7 @@ void test_ctl_table(void)
     CHECK(strstr(h, "alone in its request") && strstr(h, "of a running vtt only"));
     free(h);
     h = ctl_ask(&a, "help frobnicate");
-    CHECK(!strncmp(h, "error: line 1: no request called frobnicate", 43));
+    CHECK(!strncmp(h, "error missing: line 1: no request called frobnicate", 51));
     free(h);
 
     CASE("help json is one array with a row a request, and reads back");
@@ -2078,7 +2180,7 @@ void test_ctl_table(void)
         CHECK(!strncmp(h, "ok\nwait [SEQ]", 13));
         free(h);
         h = ctl_ask(&b, "dump");
-        CHECK(!strcmp(h, "error: line 1: no map is open\n"));
+        CHECK(!strcmp(h, "error state: line 1: no map is open\n"));
         free(h);
         app_free(&b);
         rnd_free(&r2);
@@ -2088,8 +2190,61 @@ void test_ctl_table(void)
     h = ctl_ask(&a, "help job");
     CHECK(strstr(h, "job N area REGION") && strstr(h, "job N say ") && !strstr(h, "job N\n"));
     free(h);
+    CASE("a link to another map: each refusal has the class its reason asks for");
+    {
+        char *t = ctl_ask(&a, "link B2 to ../x Hall");
+        CHECK(t && ctl_refused(t, "usage", 1));
+        free(t);
+        t = ctl_ask(&a, "link B2 to nowhere Hall");
+        CHECK(t && ctl_refused(t, "missing", 1) && strstr(t, "no map nowhere beside this one"));
+        free(t);
+        t = ctl_ask(&a, "link B2 to kinds Nowhere");
+        CHECK(t && ctl_refused(t, "missing", 1) && strstr(t, "has no area or square called"));
+        free(t);
+        char why[200], kept[sizeof a.map->path];
+        int  kind = -1;
+        strcpy(kept, a.map->path);
+        a.map->path[0] = '\0';                             /* never saved: nothing to be beside */
+        t = ctl_ask(&a, "link B2 to kinds A1");
+        CHECK(t && ctl_refused(t, "state", 1) && strstr(t, "save this map first"));
+        free(t);
+        strcpy(a.map->path, kept);
+        /* A void square there is in the way, not missing: the first void square of the map beside. */
+        Map *k = mapio_load("tests/fixtures/links.vtt", why, sizeof why);
+        CHECK(k != NULL);
+        int vx = -1, vy = -1;
+        for (int y = 0; k && y < k->h && vx < 0; y++)
+            for (int x = 0; x < k->w && vx < 0; x++)
+                if (map_tile(k, x, y) == TILE_VOID) { vx = x; vy = y; }
+        if (k) map_free(k);
+        if (vx >= 0) {
+            char at[MAP_COORD_MAX], rq[64];
+            map_coord_name(vx, vy, at, sizeof at);
+            CHECK(link_map_check(a.map, "links", at, why, sizeof why, &kind) != NULL && kind == LINK_MAP_VOID);
+            snprintf(rq, sizeof rq, "link B2 to links %s", at);
+            t = ctl_ask(&a, rq);
+            CHECK(t && ctl_refused(t, "conflict", 1) && strstr(t, "is void"));
+            free(t);
+        }
+        CHECK(vx >= 0);                                    /* or the void class went unchecked */
+    }
+
+    {
+        /* The words are the wire: an agent's instructions name them. */
+        static const char *const CLS[CTL_E_COUNT] = { "usage", "missing", "conflict", "state", "limit", "internal" };
+        static const char *const EV[CTL_EV_COUNT] = { "asked", "accepted", "part", "feedback", "scrapped", "removed", "back", "changed", "closed" };
+        char row[48];
+        for (int k = 0; k < CTL_E_COUNT; k++) {
+            snprintf(row, sizeof row, "\n| `%s` |", CLS[k]);
+            CHECK(!strcmp(ctl_class_name(k), CLS[k]) && strstr(doc, row));
+        }
+        for (int k = 0; k < CTL_EV_COUNT; k++) {
+            snprintf(row, sizeof row, " %s` |", EV[k]);         /* `job N asked` | ... */
+            CHECK(!strcmp(ctl_event_name(k), EV[k]) && strstr(doc, row));
+        }
+    }
     h = ctl_ask(&a, "job 1");
-    CHECK(!strncmp(h, "error: line 1: ", 15));          /* bare `job N` is no request, and help does not offer it */
+    CHECK(ctl_refused(h, "usage", 1));                  /* bare `job N` is no request, and help does not offer it */
     free(h);
 
     CASE("status ends with seq, the number a first wait is given");
@@ -2101,6 +2256,7 @@ void test_ctl_table(void)
     CHECK_EQ(a.undo.depth, 0);
     CHECK_EQ(app_job_find(&a, 1), -1);
 
+    free(doc);
     app_free(&a);
     rnd_free(&r);
 }

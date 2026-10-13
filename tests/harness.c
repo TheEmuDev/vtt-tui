@@ -415,6 +415,13 @@ void write_sight_map(const char *dir, const char *name, int reveal, int memory)
 /* ----------------------------------------------------- the control channel */
 
 /* One request through app_ctl_exec, the answer as a string. */
+int ctl_refused(const char *ans, const char *cls, int line)
+{
+    char head[64];
+    int  k = snprintf(head, sizeof head, "error %s: line %d: ", cls, line);
+    return ans && !strncmp(ans, head, (size_t)k);
+}
+
 char *ctl_ask(App *a, const char *req)
 {
     size_t len = strlen(req);

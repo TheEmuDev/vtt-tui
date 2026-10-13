@@ -186,7 +186,7 @@ int app_open_map(App *a, const char *path)
     /* :e over a map in hand puts that one down: its jobs are its own (a
      * change set applies to the map it was made on), and an agent is told. */
     if (a->map) {
-        app_event(a, "map closed: %s - the GM opened %s, and its jobs went with it", a->map->name, m->name);
+        app_event(a, CTL_EV_CLOSED, 0, "%s - the GM opened %s, and its jobs went with it", a->map->name, m->name);
         app_jobs_clear(a);
     }
     map_free(a->map);
@@ -230,7 +230,7 @@ void app_travel_to(App *a, Map *m)
     a->handout_title[0] = a->handout_body[0] = '\0';
     net_clear_kept(&a->net);             /* whispers waiting were the encounter's too */
     drop_autosave(a);
-    app_event(a, "map closed: %s - the GM went to %s, and its jobs went with it", a->map->name, m->name);
+    app_event(a, CTL_EV_CLOSED, 0, "%s - the GM went to %s, and its jobs went with it", a->map->name, m->name);
     app_disk_reset(a);
     map_free(a->map);
     a->map = m;
@@ -443,7 +443,10 @@ void app_tick(App *a, uint64_t now_ms)
             }
             if (a->ctl_held) {
                 free(ans);
-                ctl_answer_text(&a->ctl, i, "error: as many agents as there is room for are waiting already\n");
+                char full[96];
+                snprintf(full, sizeof full, "error %s: as many agents as there is room for are waiting already\n",
+                         ctl_class_name(CTL_E_LIMIT));
+                ctl_answer_text(&a->ctl, i, full);
                 continue;
             }
             ctl_answer(&a->ctl, i, ans, ans ? len : 0);     /* none: out of memory, just close */
@@ -1285,7 +1288,7 @@ void app_close_map(App *a)
     close_server_with_map(a);
     slog_close(&a->slog);
     /* Jobs are their map's: an agent is told, not left to time out. */
-    if (a->map) app_event(a, "map closed: %s - its jobs went with it", a->map->name);
+    if (a->map) app_event(a, CTL_EV_CLOSED, 0, "%s - its jobs went with it", a->map->name);
     app_disk_reset(a);
     map_free(a->map);
     a->map = NULL;

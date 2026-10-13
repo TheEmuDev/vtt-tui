@@ -191,8 +191,10 @@ void app_stamp_key(App *a, Key k);
  * whoever holds the turn now started no turn. */
 void app_creatures_renumbered(App *a);
 
-/* Events for agents (app_event.c). */
-void app_event(App *a, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
+/* Events for agents (app_event.c): `job N KIND[: text]`, or `map KIND[:
+ * text]` with job 0; a NULL fmt for a kind that says it all. The kinds are
+ * ctl.h's, where --wait reads them back. */
+void app_event(App *a, int kind, int job, const char *fmt, ...) __attribute__((format(printf, 4, 5)));
 int  app_events_after(const App *a, unsigned after);
 /* "seq N", then every event after `after`, one a line. */
 void app_events_write(const App *a, FILE *out, unsigned after);
@@ -294,6 +296,9 @@ void app_agent_command(App *a, const char *rest);
 int  app_ctl_region(const Map *m, const char *w, int *x0, int *y0, int *x1, int *y1,
                     char *err, size_t errsz);
 int  app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, size_t errsz);
+/* The class of the refusal being written (ctl.h's CTL_E_*; `usage` unless
+ * said). Returns -1, to be returned with it. */
+int  app_ctl_class(int cls);
 /* The scratch map (App.ctl_scratch) as a fresh copy of the live map, its log
  * (ctl_sundo) cleared: a proposal is made in it, and a job's result read. */
 Map *app_scratch_copy(App *a);

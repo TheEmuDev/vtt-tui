@@ -94,7 +94,7 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
     if (*end || v < 1 || v > JOB_NUM_MAX) { snprintf(err, errsz, "%.20s: a job's number, from jobs", w[1]); return -1; }
     num = (int)v;
     int slot = app_job_find(a, num);
-    if (slot < 0) { snprintf(err, errsz, "no job #%d - jobs lists them", num); return -1; }
+    if (slot < 0) { app_ctl_class(CTL_E_MISSING), snprintf(err, errsz, "no job #%d - jobs lists them", num); return -1; }
     Job *j = &a->jobs[slot];
     const char *verb = w[2];
     int open = j->state == JOB_ASKED || j->state == JOB_WORKING || j->state == JOB_READY;
@@ -105,11 +105,11 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
         /* A ready one: an accepted set applied again would double what it
          * adds. */
         if (j->state != JOB_READY || !j->has_cs || cs_empty(&j->cs)) {
-            snprintf(err, errsz, "#%d has no proposal waiting", num);
+            app_ctl_class(CTL_E_STATE), snprintf(err, errsz, "#%d has no proposal waiting", num);
             return -1;
         }
         Map *m = app_job_result(a, slot);
-        if (!m) { snprintf(err, errsz, "#%d was made before the map was resized - propose it again", num); return -1; }
+        if (!m) { app_ctl_class(CTL_E_STATE), snprintf(err, errsz, "#%d was made before the map was resized - propose it again", num); return -1; }
         if (!strcmp(verb, "dump")) {
             int x0 = 0, y0 = 0, x1 = m->w - 1, y1 = m->h - 1;
             if (n > 4) { snprintf(err, errsz, "job N dump takes one region, like B2:K12"); return -1; }
@@ -126,13 +126,13 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
     }
 
     if (!open) {
-        snprintf(err, errsz, "#%d was %s%s", num, app_job_state_name(j->state),
+        app_ctl_class(CTL_E_STATE), snprintf(err, errsz, "#%d was %s%s", num, app_job_state_name(j->state),
                  j->state == JOB_SCRAPPED ? " - :review N is the GM's way to bring it back" : "");
         return -1;
     }
 
     if (app_job_gm_only(j)) {
-        snprintf(err, errsz, "#%d is %s: the GM's to decide - you may dump, check and describe it", num,
+        app_ctl_class(CTL_E_STATE), snprintf(err, errsz, "#%d is %s: the GM's to decide - you may dump, check and describe it", num,
                  j->from == JOB_FROM_DISK ? "what another program wrote to the file" : "an --apply's");
         return -1;
     }
@@ -150,7 +150,7 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
     }
     if (!strcmp(verb, "area")) {
         if (n != 4) { snprintf(err, errsz, "job N area REGION, like B2:K12 or an area's name"); return -1; }
-        if (j->state == JOB_READY) { snprintf(err, errsz, "#%d has a proposal waiting - its squares are what the GM sees", num); return -1; }
+        if (j->state == JOB_READY) { app_ctl_class(CTL_E_STATE), snprintf(err, errsz, "#%d has a proposal waiting - its squares are what the GM sees", num); return -1; }
         int x0, y0, x1, y1;
         if (!app_ctl_region(a->map, w[3], &x0, &y0, &x1, &y1, err, errsz)) return -1;
         j->state = JOB_WORKING;

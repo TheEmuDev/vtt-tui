@@ -223,6 +223,7 @@ typedef struct {
     int      rv_box, rv_ax, rv_ay;
     unsigned ctl_stamp;
     unsigned ctl_gen;           /* Map.gen then, for changes outside the log */
+    unsigned ctl_refused;       /* the last refusal logged, hashed: a caller repeating itself is one line */
     int      ctl_undoable;
     /* A request's edits run on a copy of the map, never the live one, and
      * become a proposal (docs/CONFLICTS.md); the copy and its log are kept

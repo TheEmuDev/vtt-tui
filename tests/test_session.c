@@ -156,6 +156,23 @@ void test_session_log(void)
         free(text);
     }
 
+    CASE("a request refused is written, with its class; the same refusal again is not (HEALTH 55)");
+    {
+        char *t = ctl_ask(&a, "token move Nobody C3");
+        CHECK(t && ctl_refused(t, "missing", 1));
+        free(t);
+        for (int k = 0; k < 3; k++) free(ctl_ask(&a, "token move Nobody C3"));
+        text = slurp(logpath);
+        CHECK(text && strstr(text, "] agent refused: error missing: line 1: no creature called Nobody\n") != NULL);
+        if (text) { CHECK_EQ(count_lines(text), 4); free(text); }
+        free(ctl_ask(&a, "frobnicate"));                /* another, then the first again: each is news */
+        free(ctl_ask(&a, "token move Nobody C3"));
+        free(ctl_ask(&a, "status"));                    /* and a request taken writes nothing */
+        text = slurp(logpath);
+        CHECK(text && strstr(text, "] agent refused: error usage: line 1: unknown request frobnicate\n") != NULL);
+        if (text) { CHECK_EQ(count_lines(text), 6); free(text); }
+    }
+
     CASE("hints and errors stay off the log");
     press(&a, ":roll nonsense\r");
     CHECK(strstr(a.status, "no roll called nonsense") != NULL);
@@ -164,7 +181,7 @@ void test_session_log(void)
     press(&a, "i");                             /* a prefix waiting: a hint */
     press(&a, "\x1b");
     text = slurp(logpath);
-    if (text) { CHECK_EQ(count_lines(text), 3); free(text); }
+    if (text) { CHECK_EQ(count_lines(text), 6); free(text); }
 
     CASE("a second :log turns it off and says where the file is");
     press(&a, ":log\r");
@@ -174,7 +191,7 @@ void test_session_log(void)
     if (text) { CHECK(strstr(text, "log off ---") != NULL); free(text); }
     press(&a, ":roll d6\r");
     text = slurp(logpath);
-    if (text) { CHECK_EQ(count_lines(text), 4); free(text); }   /* nothing after the footer */
+    if (text) { CHECK_EQ(count_lines(text), 7); free(text); }   /* nothing after the footer */
 
     CASE(":log on/off and :log path are explicit");
     press(&a, ":log off\r");

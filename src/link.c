@@ -305,26 +305,31 @@ int link_map_path(const Map *m, const char *to_map, char *buf, size_t sz)
 
 /* Checks a link to another map could be made: the file there, and the place
  * in it an area or a square on ground. NULL, or why not in buf. */
-const char *link_map_check(const Map *m, const char *to_map, const char *place, char *buf, size_t sz)
+const char *link_map_check(const Map *m, const char *to_map, const char *place, char *buf, size_t sz, int *kind)
 {
     char path[MAP_PATH_MAX + 32], err[MAPIO_ERR_MAX];
+    int  none;
+    if (!kind) kind = &none;
+    *kind = LINK_MAP_FINE;
     if (!link_map_name_ok(to_map)) {
         snprintf(buf, sz, "%.30s: a map's name is its file's without .vtt, under %d characters", to_map, LINK_MAP_MAX);
+        *kind = LINK_MAP_NAME;
         return buf;
     }
     if (!link_map_path(m, to_map, path, sizeof path)) {
         snprintf(buf, sz, "save this map first (:w NAME) - the other map is found beside it");
+        *kind = LINK_MAP_UNSAVED;
         return buf;
     }
     Map *d = mapio_load(path, err, sizeof err);
-    if (!d) { snprintf(buf, sz, "no map %.30s beside this one", to_map); return buf; }
+    if (!d) { snprintf(buf, sz, "no map %.30s beside this one", to_map); *kind = LINK_MAP_NO_MAP; return buf; }
     const char *why = NULL;
     int x, y, ai = map_area_find(d, place);
     if (ai < 0) {
         if (!map_coord_parse(place, &x, &y) || !map_in_bounds(d, x, y))
-            { snprintf(buf, sz, "%.30s has no area or square called %.31s", to_map, place); why = buf; }
+            { snprintf(buf, sz, "%.30s has no area or square called %.31s", to_map, place); why = buf; *kind = LINK_MAP_NO_PLACE; }
         else if (map_tile(d, x, y) == TILE_VOID)
-            { snprintf(buf, sz, "%.31s in %.30s is void", place, to_map); why = buf; }
+            { snprintf(buf, sz, "%.31s in %.30s is void", place, to_map); why = buf; *kind = LINK_MAP_VOID; }
     }
     map_free(d);
     return why;

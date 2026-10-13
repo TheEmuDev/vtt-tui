@@ -301,7 +301,7 @@ void app_link_command(App *a, const char *rest)
         str_lcpy(place, p, sizeof place);
         if (!to_map[0] || !place[0]) { app_set_status_gm(a, ":link to MAP PLACE - PLACE an area or a square in MAP"); return; }
         if (strlen(place) >= AREA_NAME_MAX) { app_set_status_gm(a, "no area has a name that long"); return; }
-        if (link_map_check(m, to_map, place, why, sizeof why)) { app_set_status_gm(a, why); return; }
+        if (link_map_check(m, to_map, place, why, sizeof why, NULL)) { app_set_status_gm(a, why); return; }
         Link nl;
         memset(&nl, 0, sizeof nl);
         nl.num  = (uint8_t)link_free_num(m);

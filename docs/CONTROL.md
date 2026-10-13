@@ -33,7 +33,7 @@ the agent's; this page is why it is the way it is.
   Nothing but the same user can connect.
 - **One connection, one request.** The client writes the request and shuts its side;
   vtt reads to the end, runs it between keystrokes, queues the answer and closes. The
-  answer's first line is `ok`, `error: ...` or `busy: ...`; the rest is what the request
+  answer's first line is `ok`, `error: ...` or `busy: ...` (since 2.0 an error names its class, `error CLASS: ...`: docs/AGENTS.md, *Refusals*); the rest is what the request
   printed. `vtt --ctl` prints the answer and exits 0 on `ok`, 1 otherwise, 2 when there
   is no vtt to talk to.
 - **Finding the vtt.** Every interactive vtt listens; `vtt --ctl` asks each `status` and

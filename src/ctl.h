@@ -19,6 +19,11 @@
                                        agent never locks a request out */
 #define CTL_SLOTS      (CTL_MAX_CONN + CTL_MAX_WAIT)
 #define CTL_REQ_CAP    (64 * 1024)
+/* What `--apply` takes: the cap less the `propose apply "NAME"` line it
+ * writes above a plan sent to an open map (a file's name twice over, each
+ * byte escaped), so the same plans are taken on a file and on an open map. */
+#define CTL_APPLY_HEAD 640
+#define CTL_PLAN_CAP   (CTL_REQ_CAP - CTL_APPLY_HEAD)
 #define CTL_TIMEOUT_MS 10000
 #define CTL_PATH_MAX   108          /* sun_path */
 #define CTL_WAIT_DEFAULT_S 60       /* `wait` with no time named */
@@ -107,7 +112,26 @@ int  ctl_held_ms(const char *req);
  * it waits that long for the GM's verdict: 0 accepted, 3 none in time, 4
  * scrapped, 5 sent back (the feedback on stdout). */
 int  ctl_apply_open(const char *map_path, const char *plan_name, const char *plan, size_t len, int wait_s);
-/* --wait's reading of an events answer (app_event.c's text) for job `num`:
+/* A refusal's class: the word after `error`, one for each thing a caller
+ * should do next (docs/V2.md, D6; docs/AGENTS.md, *Refusals*). USAGE is the
+ * default: a site names its class only when it is another. */
+enum { CTL_E_USAGE, CTL_E_MISSING, CTL_E_CONFLICT, CTL_E_STATE, CTL_E_LIMIT, CTL_E_INTERNAL, CTL_E_COUNT };
+const char *ctl_class_name(int cls);
+
+/* An event's kind: the word after its subject (`job N` or `map`), ended by
+ * a colon or the line. Emitters (app_event) and --wait read the one table. */
+enum {
+    CTL_EV_ASKED, CTL_EV_ACCEPTED, CTL_EV_PART, CTL_EV_FEEDBACK, CTL_EV_SCRAPPED,
+    CTL_EV_REMOVED, CTL_EV_BACK, CTL_EV_CHANGED, CTL_EV_CLOSED, CTL_EV_COUNT
+};
+const char *ctl_event_name(int kind);
+/* One line of an events answer, `SEQ job N KIND[: text]` or `SEQ map
+ * KIND[: text]`: the kind, with *num the job's number (0 for the map) and
+ * *text the words after the colon ("" for none; it points into `line`).
+ * -1 for a line that is not an event (`seq`, `lost`, `reset`). */
+int  ctl_event_parse(const char *line, size_t len, int *num, const char **text, size_t *tlen);
+
+/* --wait's reading of an events answer for job `num`:
  * 0 accepted, whole or in part, 4 scrapped, removed or the map closed, 5
  * sent back (the line, or the feedback, into `line`); -1 nothing of it
  * yet. *seq is the answer's "seq N". */

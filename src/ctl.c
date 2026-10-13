@@ -198,7 +198,9 @@ static int conn_read(Ctl *c, int i)
             if (r < 0) { conn_close(c, i); return -1; }
             if (!k->over) break;               /* exactly the cap: a request */
             c->dropped++;
-            ctl_answer_text(c, i, "error: the request is over 64 KB\n");
+            char full[64];
+            snprintf(full, sizeof full, "error %s: the request is over 64 KB\n", ctl_class_name(CTL_E_LIMIT));
+            ctl_answer_text(c, i, full);
             return 0;
         }
         ssize_t r = recv(k->fd, k->in + k->in_len, CTL_REQ_CAP - k->in_len, 0);
@@ -539,12 +541,22 @@ static void find_holders(const char *dir, const struct stat *st, Holders *h)
 }
 
 /* `--ctl`'s: the vtts whose channel is on, each with its map's line. */
-typedef struct { long on[CTL_LIST_MAX]; char lines[CTL_LIST_MAX][160]; int n; } ChannelsOn;
+typedef struct {
+    long on[CTL_LIST_MAX];
+    char lines[CTL_LIST_MAX][160];
+    int  n;
+    char off[CTL_LIST_MAX][240];        /* an off channel's refusal: it names its map */
+    int  noff;
+} ChannelsOn;
 
 static void on_each(void *ctx, long pid, const char *ans)
 {
     ChannelsOn *c = ctx;
     if (!ans) { fprintf(stderr, "vtt: the vtt with pid %ld is not answering - passed over\n", pid); return; }
+    if (strncmp(ans, "ok\n", 3) != 0) {
+        if (c->noff < CTL_LIST_MAX) snprintf(c->off[c->noff++], sizeof c->off[0], "%ld: %.*s", pid, (int)strcspn(ans, "\n"), ans);
+        return;
+    }
     if (!strstr(ans, "\nagent on\n") || c->n == CTL_LIST_MAX) return;
     const char *nl = strchr(ans, '\n');                /* the line after "ok" is the map's */
     size_t k = strcspn(nl + 1, "\n");
@@ -565,10 +577,11 @@ int ctl_client_main(const char *req, long pid)
         /* Every interactive vtt listens (for --apply); --ctl talks to the
          * one whose GM typed :agent on. Each says which it is in status. */
         ChannelsOn c;
-        c.n = 0;
+        c.n = c.noff = 0;
         ask_each(dir, "status\n", 7, on_each, &c);
         if (c.n == 0) {
             fputs("vtt: no vtt is taking requests - type :agent on in the one you mean\n", stderr);
+            for (int i = 0; i < c.noff; i++) fprintf(stderr, "  pid %s\n", c.off[i]);
             return 2;
         }
         if (c.n > 1) {
@@ -616,27 +629,67 @@ int ctl_client_main(const char *req, long pid)
 
 /* ---------------------------------------------------- --apply to an open map */
 
+static const char *const CLASS_NAMES[CTL_E_COUNT] = { "usage", "missing", "conflict", "state", "limit", "internal" };
+static const char *const EVENT_NAMES[CTL_EV_COUNT] = {
+    "asked", "accepted", "part", "feedback", "scrapped", "removed", "back", "changed", "closed"
+};
+
+const char *ctl_class_name(int cls) { return cls >= 0 && cls < CTL_E_COUNT ? CLASS_NAMES[cls] : CLASS_NAMES[CTL_E_INTERNAL]; }
+const char *ctl_event_name(int kind) { return kind >= 0 && kind < CTL_EV_COUNT ? EVENT_NAMES[kind] : "?"; }
+
+int ctl_event_parse(const char *line, size_t len, int *num, const char **text, size_t *tlen)
+{
+    const char *p = line, *end = line + len;
+    while (p < end && *p >= '0' && *p <= '9') p++;
+    if (p == line || p == end || *p != ' ') return -1;         /* no number: seq, lost, reset */
+    p++;
+    *num = 0;
+    if (end - p > 4 && !strncmp(p, "job ", 4)) {
+        const char *d = p += 4;
+        while (p < end && *p >= '0' && *p <= '9' && *num < 100000) *num = *num * 10 + (*p++ - '0');
+        if (p == d || !*num) return -1;
+    }
+    else if (end - p > 3 && !strncmp(p, "map", 3)) p += 3;
+    else return -1;
+    if (p == end || *p != ' ') return -1;
+    const char *k = ++p;
+    while (p < end && *p != ':' && *p != ' ') p++;
+    if (p < end && *p == ' ') return -1;                       /* a kind is one word */
+    for (int i = 0; i < CTL_EV_COUNT; i++) {
+        if (strlen(EVENT_NAMES[i]) != (size_t)(p - k) || strncmp(k, EVENT_NAMES[i], (size_t)(p - k)) != 0) continue;
+        if (p < end) p++;                                      /* the colon */
+        if (p < end && *p == ' ') p++;
+        *text = p;
+        *tlen = (size_t)(end - p);
+        return i;
+    }
+    return -1;
+}
+
 /* The lines of an events answer that are about job `num`: 0 accepted (the
  * line into *line), 4 scrapped or gone, 5 sent back with feedback (its text
  * into *line), -1 none of them yet. *seq is the answer's "seq N". */
 int ctl_verdict_in(const char *ans, int num, unsigned *seq, char *line, size_t sz)
 {
-    char acc[32], scr[32], fb[32], rm[48];
-    snprintf(acc, sizeof acc, " job %d accepted", num);
-    snprintf(scr, sizeof scr, " job %d scrapped", num);
-    snprintf(fb,  sizeof fb,  " job %d feedback: ", num);
-    snprintf(rm,  sizeof rm,  " job %d removed by the GM", num);
     for (const char *p = ans; *p; ) {
         size_t      ll = strcspn(p, "\n");
-        const char *sp = memchr(p, ' ', ll);
+        const char *sp = memchr(p, ' ', ll), *text;
+        size_t      tl;
+        int         n, kind = ctl_event_parse(p, ll, &n, &text, &tl);
         if (!strncmp(p, "seq ", 4)) *seq = (unsigned)strtoul(p + 4, NULL, 10);
-        else if (sp) {
-            size_t rest = ll - (size_t)(sp - p);
-            if (!strncmp(sp, acc, strlen(acc)))    { snprintf(line, sz, "%.*s", (int)rest - 1, sp + 1); return 0; }
-            if (!strncmp(sp, fb, strlen(fb)))      { snprintf(line, sz, "%.*s", (int)(rest - strlen(fb)), sp + strlen(fb)); return 5; }
-            if (!strncmp(sp, scr, strlen(scr)) || !strncmp(sp, rm, strlen(rm)) || !strncmp(sp, " map closed", 11)) {
-                snprintf(line, sz, "%.*s", (int)rest - 1, sp + 1);
+        else if (kind >= 0 && (n == num || kind == CTL_EV_CLOSED)) {
+            int whole = (int)(ll - (size_t)(sp + 1 - p));      /* the line less its number */
+            switch (kind) {
+            case CTL_EV_ACCEPTED: case CTL_EV_PART:
+                snprintf(line, sz, "%.*s", whole, sp + 1);
+                return 0;
+            case CTL_EV_FEEDBACK:
+                snprintf(line, sz, "%.*s", (int)tl, text);
+                return 5;
+            case CTL_EV_SCRAPPED: case CTL_EV_REMOVED: case CTL_EV_CLOSED:
+                snprintf(line, sz, "%.*s", whole, sp + 1);
                 return 4;
+            default: break;
             }
         }
         p += ll + (p[ll] == '\n');
@@ -688,7 +741,7 @@ int ctl_apply_open(const char *map_path, const char *plan_name, const char *plan
     char  *req = malloc(cap);
     if (!req) { fputs("vtt: out of memory\n", stderr); return 2; }
     k += (size_t)snprintf(req, cap, "propose apply \"");
-    for (const char *p = plan_name; *p; p++) {
+    for (const char *p = plan_name; *p && k + 4 < CTL_APPLY_HEAD; p++) {     /* the head keeps to its room */
         if (*p == '"' || *p == '\\') req[k++] = '\\';
         req[k++] = *p == '\n' ? ' ' : *p;
     }

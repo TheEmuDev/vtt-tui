@@ -146,6 +146,9 @@ void net_pump(Net *n, uint64_t now_ms);
 void front_text(const Renderer *r, ByteBuf *out);
 void write_sight_map(const char *dir, const char *name, int reveal, int memory);
 char *ctl_ask(App *a, const char *req);
+/* Whether an answer is a refusal of line `line` with class `cls` ("usage",
+ * "missing", ...): `error CLS: line N: ...`. */
+int   ctl_refused(const char *ans, const char *cls, int line);
 int ctl_blank_map(App *a, const char *dir, int w, int h);
 
 /* ------------------------------------------------------------ suites */

@@ -1,6 +1,7 @@
 /* Jobs and the review (docs/CONFLICTS.md, step 3): :ask over a box, the
  * tints, a proposal handed in, :review with the change drawn in place, accept
  * whole or by box, scrap, feedback, :ask!, and none of it on the phones. */
+#include <sys/stat.h>
 #include "harness.h"
 
 #include <errno.h>
@@ -356,16 +357,16 @@ void test_jobs_ctl(void)
     CHECK(t && !strcmp(t, "ok\nno jobs\n"));
     free(t);
     t = ctl_ask(&a, "job 4 take");
-    CHECK(t && strstr(t, "error: line 1: no job #4 - jobs lists them"));
+    CHECK(t && strstr(t, "error missing: line 1: no job #4 - jobs lists them"));
     free(t);
     t = ctl_ask(&a, "propose");
-    CHECK(t && !strcmp(t, "error: propose wants edit lines after it\n"));
+    CHECK(t && !strcmp(t, "error usage: propose wants edit lines after it\n"));
     free(t);
     t = ctl_ask(&a, "tile A1 water\npropose");
-    CHECK(t && strstr(t, "error: line 2: propose comes once, before the request's edits"));
+    CHECK(t && strstr(t, "error usage: line 2: propose comes once, before the request's edits"));
     free(t);
     t = ctl_ask(&a, "tile A1 water\njobs");
-    CHECK(t && strstr(t, "error: line 2: jobs comes before the request's propose line and edits"));
+    CHECK(t && strstr(t, "error usage: line 2: jobs comes before the request's propose line and edits"));
     free(t);
     CHECK_EQ(map_tile(m, 0, 0), TILE_FLOOR);          /* all or nothing, as ever */
 
@@ -390,7 +391,7 @@ void test_jobs_ctl(void)
     free(t);
     CHECK(strstr(a.status, "#1: the agent is working in C3:D4") != NULL);
     t = ctl_ask(&a, "job 1 area Z99");
-    CHECK(t && !strncmp(t, "error: line 1: ", 15));
+    CHECK(t && ctl_refused(t, "usage", 1));
     free(t);
     t = ctl_ask(&a, "job 1 say \"two ghouls coming\"");
     CHECK(t && !strcmp(t, "ok\n"));
@@ -421,8 +422,43 @@ void test_jobs_ctl(void)
     CHECK(t && !strstr(t, "conflict"));
     free(t);
     t = ctl_ask(&a, "job 1 area C3");
-    CHECK(t && strstr(t, "has a proposal waiting"));
+    CHECK(t && ctl_refused(t, "state", 1) && strstr(t, "has a proposal waiting"));
     free(t);
+
+    CASE("jobs json with a proposal, a thread of several lines and a conflict: still one valid document (HEALTH 3)");
+    {
+        uint8_t  was = map_tile(m, 2, 3);
+        unsigned gen0 = m->gen;                            /* the cases after this count from it */
+        map_set_tile(m, 2, 3, TILE_ROUGH);                 /* the GM changes C4 under the proposal */
+        t = ctl_ask(&a, "jobs json");
+        CHECK(t && !strncmp(t, "ok\n", 3) && json_valid(t + 3));
+        CHECK(t && strstr(t, "\"state\":\"ready\"") && strstr(t, "\"conflicts\":1"));
+        CHECK(t && strstr(t, "{\"who\":\"gm\",\"text\":\"a crypt\"}") && strstr(t, "two ghouls coming") && strstr(t, "the crypt, walled"));
+        free(t);
+        t = ctl_ask(&a, "jobs");
+        CHECK(t && strstr(t, "(1 conflict: changed since)"));
+        free(t);
+        map_set_tile(m, 2, 3, was);
+        m->gen = gen0;
+    }
+
+    CASE("job N say with the wrong number of words, and :agent accept with no word, say how (HEALTH 4)");
+    t = ctl_ask(&a, "job 1 say");
+    CHECK(t && ctl_refused(t, "usage", 1) && strstr(t, "job N say \"a line for the GM\""));
+    free(t);
+    t = ctl_ask(&a, "job 1");
+    CHECK(t && ctl_refused(t, "usage", 1) && strstr(t, "job N take, area REGION, say"));
+    free(t);
+    t = ctl_ask(&a, "job 1 say two words");
+    CHECK(t && ctl_refused(t, "usage", 1) && strstr(t, "job N say \"a line for the GM\""));
+    free(t);
+    {
+        int was = a.ctl_auto;
+        press(&a, ":agent accept\r");
+        CHECK(strstr(a.status, ":agent accept auto lands an agent's changes at once") != NULL);
+        CHECK(a.status_gm);
+        CHECK_EQ(a.ctl_auto, was);
+    }
 
     CASE("job N dump, check, describe: the map as accepting it would make it; the live map untouched");
     t = ctl_ask(&a, "job 1 dump B2:E5");
@@ -435,7 +471,7 @@ void test_jobs_ctl(void)
     CHECK(t && !strncmp(t, "ok\n", 3));
     free(t);
     t = ctl_ask(&a, "job 1 dump Q1:Z99");
-    CHECK(t && !strncmp(t, "error: ", 7));
+    CHECK(t && ctl_refused(t, "usage", 1));
     free(t);
     CHECK_EQ(map_tile(m, 2, 3), TILE_FLOOR);
     CHECK_EQ(m->tokens.n, 0);
@@ -541,7 +577,7 @@ void test_jobs_ctl(void)
         free(t);
     }
     t = ctl_ask(&a, "tile A11 water\n");
-    CHECK(t && strstr(t, "error: 16 changes are waiting for the GM"));
+    CHECK(t && strstr(t, "error limit: 16 changes are waiting for the GM"));
     free(t);
     CHECK_EQ(map_tile(m, 0, 10), TILE_FLOOR);
 
@@ -587,7 +623,7 @@ void test_jobs_ctl(void)
     CASE("job lines after a propose line are refused: the job it names cannot go from under it");
     press(&a, ":ask a well\r");
     t = ctl_ask(&a, "job 1 propose\njob 1 drop\ntile H9 water");
-    CHECK(t && strstr(t, "error: line 2: job comes before the request's propose line and edits"));
+    CHECK(t && strstr(t, "error usage: line 2: job comes before the request's propose line and edits"));
     free(t);
 
     CASE("a proposal for the job under review never lands under the GM's eyes, even at once");
@@ -625,6 +661,16 @@ out:
     sandbox_leave(&sb);
 }
 
+/* The slot of the job made `back` jobs before the newest (0: the newest). */
+static int job_slot_last(const App *a, int back)
+{
+    int nums[JOB_MAX], n = 0;
+    for (int i = 0; i < JOB_MAX; i++) if (a->jobs[i].used) nums[n++] = a->jobs[i].num;
+    for (int i = 0; i < n; i++) for (int j = i + 1; j < n; j++) if (nums[j] > nums[i]) { int t = nums[i]; nums[i] = nums[j]; nums[j] = t; }
+    for (int i = 0; i < JOB_MAX; i++) if (back < n && a->jobs[i].used && a->jobs[i].num == nums[back]) return i;
+    return 0;
+}
+
 /* Events and wait (step 5), without a socket: here `wait` is answered at
  * once, as --apply, the bench and the fuzzer get it. The held wait is
  * test_ctl_live's. */
@@ -652,22 +698,46 @@ void test_events(void)
     if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
     Map *m = a.map;
 
+    CASE("a map never saved is no file's: holds answers no, whatever the numbers (HEALTH 13)");
+    {
+        struct stat st;
+        char req[96], kept[sizeof m->path];
+        CHECK(stat(m->path, &st) == 0);
+        snprintf(req, sizeof req, "holds %llu %llu", (unsigned long long)st.st_dev, (unsigned long long)st.st_ino);
+        t = ctl_ask(&a, req);
+        CHECK(t && !strcmp(t, "ok\nholds\n"));
+        free(t);
+        strcpy(kept, m->path);
+        m->path[0] = '\0';
+        t = ctl_ask(&a, req);
+        CHECK(t && !strcmp(t, "ok\nno\n"));
+        free(t);
+        strcpy(m->path, kept);
+    }
+
     CASE("wait's words: a number, for SECONDS, alone in its request");
     t = ctl_ask(&a, "wait soon");
     CHECK(t && strstr(t, "is not an event's number"));
     free(t);
     t = ctl_ask(&a, "wait 0 for 601");
-    CHECK(t && strstr(t, "at most 600 seconds"));
+    CHECK(t && ctl_refused(t, "limit", 1) && strstr(t, "at most 600 seconds"));
     free(t);
+    /* Only a time too long is a limit; a clause written wrong is usage. */
+    static const char *const WRONG[] = { "wait for abc", "wait 0 fro 5", "wait for", "wait 0 for 5 more", "wait soon" };
+    for (size_t k = 0; k < sizeof WRONG / sizeof *WRONG; k++) {
+        t = ctl_ask(&a, WRONG[k]);
+        CHECK(t && ctl_refused(t, "usage", 1));
+        free(t);
+    }
     t = ctl_ask(&a, "wait\nstatus");
-    CHECK(t && !strcmp(t, "error: wait goes in a request of its own\n"));
+    CHECK(t && !strcmp(t, "error usage: wait goes in a request of its own\n"));
     free(t);
 
     CASE("each turn of a job is an event, numbered in order: asked, accepted in part, scrapped, feedback, removed");
     a.ed.cx = 1; a.ed.cy = 1;
     press(&a, "v3l3j:ask a crypt\r");
     t = ctl_ask(&a, "wait 0");
-    CHECK(t && !strcmp(t, "ok\nseq 1\n1 job 1 asked in B2:E5: a crypt\n"));
+    CHECK(t && !strcmp(t, "ok\nseq 1\n1 job 1 asked: in B2:E5: a crypt\n"));
     free(t);
     t = ctl_ask(&a, "wait");                               /* from now: nothing yet */
     CHECK(t && !strcmp(t, "ok\nseq 1\n"));
@@ -678,12 +748,20 @@ void test_events(void)
     press(&a, ":review 1\rv\r");                           /* the box is B2 alone */
     CHECK_EQ(map_tile(m, 1, 1), TILE_WATER);
     t = ctl_ask(&a, "wait 1");
-    CHECK(t && strstr(t, "ok\nseq 2\n2 job 1 accepted in part, B2: ground in B2 - the rest waits\n") == t);
+    CHECK(t && strstr(t, "ok\nseq 2\n2 job 1 part: B2: ground in B2 - the rest waits\n") == t);
+    /* What --wait makes of the words as they are really sent (HEALTH 16). */
+    unsigned vseq = 0;
+    char     vline[200];
+    CHECK_EQ(ctl_verdict_in(t, 1, &vseq, vline, sizeof vline), 0);
+    CHECK(!strcmp(vline, "job 1 part: B2: ground in B2 - the rest waits") && vseq == 2);
+    CHECK_EQ(ctl_verdict_in(t, 2, &vseq, vline, sizeof vline), -1);
     free(t);
     press(&a, "c");
     press(&a, "deeper\r");
     t = ctl_ask(&a, "wait 2");
     CHECK(t && !strcmp(t, "ok\nseq 3\n3 job 1 feedback: deeper\n"));
+    CHECK_EQ(ctl_verdict_in(t, 1, &vseq, vline, sizeof vline), 5);
+    CHECK(!strcmp(vline, "deeper"));
     free(t);
     t = ctl_ask(&a, "job 1 propose\ntile C2 hazard\n");
     free(t);
@@ -693,14 +771,59 @@ void test_events(void)
     press(&a, ":ask 1 remove\r");
     a.job_last = 0;
     t = ctl_ask(&a, "wait 3");
-    CHECK(t && strstr(t, "4 job 1 scrapped\n5 job 1 brought back for review\n6 job 1 accepted: ground in C2\n"
-                         "7 job 1 removed by the GM\n"));
+    CHECK(t && strstr(t, "4 job 1 scrapped\n5 job 1 back: for review\n6 job 1 accepted: ground in C2\n"
+                         "7 job 1 removed\n"));
+    CHECK_EQ(ctl_verdict_in(t, 1, &vseq, vline, sizeof vline), 4);
+    CHECK(!strcmp(vline, "job 1 scrapped"));
+    CHECK_EQ(ctl_verdict_in(strstr(t, "5 job 1"), 1, &vseq, vline, sizeof vline), 0);      /* back is no verdict; accepted is */
+    CHECK(!strcmp(vline, "job 1 accepted: ground in C2"));
+    CHECK_EQ(ctl_verdict_in(strstr(t, "7 job 1"), 1, &vseq, vline, sizeof vline), 4);
     free(t);
+
+    CASE("asked, in its four forms: with a box or none, to land at once or not");
+    {
+        unsigned s0 = a.event_seq;
+        char want[200];
+        int last0 = a.job_last;
+        press(&a, ":ask a well\r");
+        press(&a, ":ask! a pit\r");
+        a.ed.cx = 1; a.ed.cy = 1;
+        press(&a, "v2l:ask! a moat\r");
+        int n1 = a.jobs[job_slot_last(&a, 2)].num, n2 = a.jobs[job_slot_last(&a, 1)].num, n3 = a.jobs[job_slot_last(&a, 0)].num;
+        snprintf(want, sizeof want, "%u job %d asked: a well\n%u job %d asked: to land at once: a pit\n"
+                                    "%u job %d asked: in B2:D2, to land at once: a moat\n", s0 + 1, n1, s0 + 2, n2, s0 + 3, n3);
+        char req[32];
+        snprintf(req, sizeof req, "wait %u", s0);
+        t = ctl_ask(&a, req);
+        CHECK(t && strstr(t, want));
+        if (t && !strstr(t, want)) printf("    got: %s    want: %s", t, want);
+        free(t);
+        for (int k = 0; k < 3; k++) { char c[40]; snprintf(c, sizeof c, ":ask %d remove\r", k == 0 ? n1 : k == 1 ? n2 : n3); press(&a, c); }
+        a.job_last = last0;                                /* the cases after this count jobs from where they were */
+        CHECK_EQ(a.event_seq, s0 + 6);                     /* three asked, three removed */
+        for (unsigned q = a.event_seq; q > s0; q--) a.events[q % EVENT_MAX].text[0] = '\0';
+        a.event_seq = s0;
+    }
 
     CASE("a number past the newest event is another vtt's: answered at once, with everything kept");
     t = ctl_ask(&a, "wait 99");
-    CHECK(t && strstr(t, "ok\nseq 7\nreset 99: ") == t && strstr(t, "\n1 job 1 asked in B2:E5: a crypt\n")
-            && strstr(t, "\n7 job 1 removed by the GM\n"));
+    CHECK(t && strstr(t, "ok\nseq 7\nreset 99: ") == t && strstr(t, "\n1 job 1 asked: in B2:E5: a crypt\n")
+            && strstr(t, "\n7 job 1 removed\n"));
+    /* Every event sent has a kind the one table knows, and names its job. */
+    {
+        int seen = 0, kinds = 0;
+        for (const char *p = t; p && *p; ) {
+            size_t ll = strcspn(p, "\n"), tl;
+            const char *text;
+            int num = -1, k = ctl_event_parse(p, ll, &num, &text, &tl);
+            if (*p >= '0' && *p <= '9') { seen++; CHECK(k >= 0 && num == 1); kinds |= 1 << k; }
+            else CHECK_EQ(k, -1);
+            p += ll + (p[ll] == '\n');
+        }
+        CHECK_EQ(seen, 7);
+        CHECK_EQ(kinds, 1 << CTL_EV_ASKED | 1 << CTL_EV_PART | 1 << CTL_EV_FEEDBACK | 1 << CTL_EV_SCRAPPED |
+                        1 << CTL_EV_BACK | 1 << CTL_EV_ACCEPTED | 1 << CTL_EV_REMOVED);
+    }
     free(t);
     CHECK_EQ(app_events_after(&a, 99), 1);                 /* so a socket never holds it */
 
@@ -771,10 +894,10 @@ void test_events(void)
     free(t);
 
     CASE("more events than the ring keeps: the gap is said");
-    for (int k = 0; k < EVENT_MAX + 5; k++) app_event(&a, "test %d", k);
+    for (int k = 0; k < EVENT_MAX + 5; k++) app_event(&a, CTL_EV_CHANGED, 0, "test %d", k);
     t = ctl_ask(&a, "wait 0");
     snprintf(want, sizeof want, "lost 1-%u: ", a.event_seq - EVENT_MAX);
-    CHECK(t && strstr(t, want) && strstr(t, " test 4\n") == NULL && strstr(t, " test 36\n"));
+    CHECK(t && strstr(t, want) && strstr(t, ": test 4\n") == NULL && strstr(t, " map changed: test 36\n"));
     free(t);
 
     CASE("closing the map is an event; wait hears it with no map open");

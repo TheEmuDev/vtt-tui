@@ -2,6 +2,7 @@
  * GM has open. ctl.c moves the bytes; this reads the lines and runs them
  * against the App. The language and its rules are docs/CONTROL.md's. */
 
+#include <stdarg.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,6 +24,34 @@
 #include "stamp.h"
 #include "util.h"
 
+/* ------------------------------------------------------- a refusal's class */
+
+/* The class of the line being run (ctl.h's CTL_E_*): `usage` until a site
+ * says another, since most refusals are a line written wrong. One a
+ * request at a time, and the helpers that refuse (`square`, `fits`) take a
+ * map, not the app, so it is kept here and not handed down to each. */
+static int g_class;
+
+/* Returns -1, so a site passing on a lower module's refusal can return it. */
+static int rq_class(int cls)
+{
+    g_class = cls;
+    return -1;
+}
+
+int app_ctl_class(int cls) { return rq_class(cls); }
+
+/* The one place a refusal's first line is written: `error CLASS: why`. */
+static void refuse(char *verdict, size_t sz, int cls, const char *fmt, ...) __attribute__((format(printf, 4, 5)));
+static void refuse(char *verdict, size_t sz, int cls, const char *fmt, ...)
+{
+    int k = snprintf(verdict, sz, "error %s: ", ctl_class_name(cls));
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(verdict + k, sz - (size_t)k, fmt, ap);
+    va_end(ap);
+}
+
 /* ----------------------------------------------------------------- words */
 
 /* A line split into words: spaces between, "..." one word with \" and \\
@@ -34,13 +63,13 @@ static int split_words(const char *line, char w[CTL_WORDS][CTL_WORD_MAX], char *
     for (;;) {
         while (*p == ' ' || *p == '\t' || *p == '\r') p++;
         if (!*p) break;
-        if (n == CTL_WORDS) { snprintf(err, errsz, "more than %d words", CTL_WORDS); return -1; }
+        if (n == CTL_WORDS) { rq_class(CTL_E_LIMIT), snprintf(err, errsz, "more than %d words", CTL_WORDS); return -1; }
         size_t k = 0;
         if (*p == '"') {
             p++;
             while (*p && *p != '"') {
                 if (*p == '\\' && (p[1] == '"' || p[1] == '\\')) p++;
-                if (k + 1 == CTL_WORD_MAX) { snprintf(err, errsz, "a word over %d characters", CTL_WORD_MAX - 1); return -1; }
+                if (k + 1 == CTL_WORD_MAX) { rq_class(CTL_E_LIMIT), snprintf(err, errsz, "a word over %d characters", CTL_WORD_MAX - 1); return -1; }
                 w[n][k++] = *p++;
             }
             if (*p != '"') { snprintf(err, errsz, "a quote is not closed"); return -1; }
@@ -52,7 +81,7 @@ static int split_words(const char *line, char w[CTL_WORDS][CTL_WORD_MAX], char *
         } else {
             while (*p && *p != ' ' && *p != '\t' && *p != '\r') {
                 if (*p == '"') { snprintf(err, errsz, "a quote in the middle of a word"); return -1; }
-                if (k + 1 == CTL_WORD_MAX) { snprintf(err, errsz, "a word over %d characters", CTL_WORD_MAX - 1); return -1; }
+                if (k + 1 == CTL_WORD_MAX) { rq_class(CTL_E_LIMIT), snprintf(err, errsz, "a word over %d characters", CTL_WORD_MAX - 1); return -1; }
                 w[n][k++] = *p++;
             }
         }
@@ -314,10 +343,10 @@ static int who(const Map *m, const char *w, char *err, size_t errsz)
     int x, y;
     if (map_coord_parse(w, &x, &y) && map_in_bounds(m, x, y)) {
         int i = tokens_at(&m->tokens, x, y);
-        if (i < 0) snprintf(err, errsz, "no creature stands on %.40s", w);
+        if (i < 0) rq_class(CTL_E_MISSING), snprintf(err, errsz, "no creature stands on %.40s", w);
         return i;
     }
-    snprintf(err, errsz, nloose > 1 ? "more than one creature is called %.40s" : "no creature called %.40s", w);
+    rq_class(nloose > 1 ? CTL_E_USAGE : CTL_E_MISSING), snprintf(err, errsz, nloose > 1 ? "more than one creature is called %.40s" : "no creature called %.40s", w);
     return -1;
 }
 
@@ -328,7 +357,7 @@ static int fits(const Map *m, int x, int y, int size, int skip, char *err, size_
     char at[MAP_COORD_MAX];
     map_coord_name(x, y, at, sizeof at);
     if (x + size > m->w || y + size > m->h) {
-        snprintf(err, errsz, "%dx%d at %s hangs off the map", size, size, at);
+        rq_class(CTL_E_CONFLICT), snprintf(err, errsz, "%dx%d at %s hangs off the map", size, size, at);
         return 0;
     }
     for (int yy = y; yy < y + size; yy++)
@@ -336,13 +365,13 @@ static int fits(const Map *m, int x, int y, int size, int skip, char *err, size_
             if (!map_walkable(m, xx, yy)) {
                 char v[MAP_COORD_MAX];
                 map_coord_name(xx, yy, v, sizeof v);
-                snprintf(err, errsz, "%s is void - a creature needs ground", v);
+                rq_class(CTL_E_CONFLICT), snprintf(err, errsz, "%s is void - a creature needs ground", v);
                 return 0;
             }
     int other = tokens_overlapping(&m->tokens, x, y, size, skip, TOKEN_ANY_KIND);
     if (other >= 0) {
         const Token *t = &m->tokens.v[other];
-        snprintf(err, errsz, "%s is taken by %.30s", at, t->label[0] ? t->label : "a creature");
+        rq_class(CTL_E_CONFLICT), snprintf(err, errsz, "%s is taken by %.30s", at, t->label[0] ? t->label : "a creature");
         return 0;
     }
     return 1;
@@ -352,11 +381,11 @@ static int label_ok(const Map *m, const char *label, int skip, char *err, size_t
 {
     if (!label[0]) { snprintf(err, errsz, "a creature needs a label"); return 0; }
     if (strlen(label) >= TOKEN_LABEL_MAX) {
-        snprintf(err, errsz, "the label is over %d characters", TOKEN_LABEL_MAX - 1);
+        rq_class(CTL_E_LIMIT), snprintf(err, errsz, "the label is over %d characters", TOKEN_LABEL_MAX - 1);
         return 0;
     }
     if (tokens_find_label(&m->tokens, label, skip) >= 0) {
-        snprintf(err, errsz, "there is already a creature called %.30s", label);
+        rq_class(CTL_E_CONFLICT), snprintf(err, errsz, "there is already a creature called %.30s", label);
         return 0;
     }
     return 1;
@@ -373,6 +402,7 @@ static int spot(const Map *m, const char *w, int size, int skip, int *x, int *y,
     /* Twice the middle, so a box of even width has a middle between squares. */
     long mx = ar->x0 + ar->x1 + 1 - size, my = ar->y0 + ar->y1 + 1 - size, best = -1;
     char e2[160];
+    int  cls = g_class;                 /* `fits` classes each square it turns down: none of them is the answer */
     for (int yy = ar->y0; yy + size - 1 <= ar->y1; yy++)
         for (int xx = ar->x0; xx + size - 1 <= ar->x1; xx++) {
             long d = (2L * xx - mx) * (2L * xx - mx) + (2L * yy - my) * (2L * yy - my);
@@ -380,7 +410,8 @@ static int spot(const Map *m, const char *w, int size, int skip, int *x, int *y,
             if (!fits(m, xx, yy, size, skip, e2, sizeof e2)) continue;
             best = d; *x = xx; *y = yy;
         }
-    if (best < 0) snprintf(err, errsz, "no room in %.30s for a %dx%d creature", ar->name, size, size);
+    g_class = cls;
+    if (best < 0) rq_class(CTL_E_CONFLICT), snprintf(err, errsz, "no room in %.30s for a %dx%d creature", ar->name, size, size);
     return best >= 0;
 }
 
@@ -405,7 +436,7 @@ static int link_spot(const Map *m, const char *w, int size, int ox, int oy, int 
             if (ox >= 0 && xx < ox + size && ox < xx + size && yy < oy + size && oy < yy + size) continue;
             best = d; *x = xx; *y = yy;
         }
-    if (best < 0) snprintf(err, errsz, "no room in %.30s for a %dx%d link end", ar->name, size, size);
+    if (best < 0) rq_class(CTL_E_CONFLICT), snprintf(err, errsz, "no room in %.30s for a %dx%d link end", ar->name, size, size);
     return best >= 0;
 }
 
@@ -435,6 +466,7 @@ static int size_word(const char *w, int *sw, int *sh)
 }
 
 #define BAD(...) do { snprintf(err, errsz, __VA_ARGS__); return -1; } while (0)
+#define BADC(c, ...) do { rq_class(c); snprintf(err, errsz, __VA_ARGS__); return -1; } while (0)
 
 /* A room's box, from any of its forms:
  *   room REGION
@@ -465,7 +497,7 @@ static int room_box(const Map *m, char w[][CTL_WORD_MAX], int n, const char **na
         int side = side_word(w[3]), oi = map_area_find(m, w[5]), gap = 0;
         const char *align = "middle";
         if (side < 0) { snprintf(err, errsz, "%.20s: a side is north, south, east or west", w[3]); return 0; }
-        if (oi < 0) { snprintf(err, errsz, "no room called %.40s", w[5]); return 0; }
+        if (oi < 0) { rq_class(CTL_E_MISSING), snprintf(err, errsz, "no room called %.40s", w[5]); return 0; }
         for (int i = 6; i < n; i++) {
             if (!strcmp(w[i], "gap") && i + 1 < n && word_int(w[i + 1], 0, MAP_MAX_DIM, &gap)) i++;
             else if (!strcmp(w[i], "top") || !strcmp(w[i], "bottom") || !strcmp(w[i], "left") ||
@@ -499,7 +531,7 @@ static int room_box(const Map *m, char w[][CTL_WORD_MAX], int n, const char **na
     else { snprintf(err, errsz, "%s", USE); return 0; }
 
     if (*x0 < 0 || *y0 < 0 || *x1 >= m->w || *y1 >= m->h) {
-        snprintf(err, errsz, "%.30s, %dx%d, would run off the %s side of the map", *name,
+        rq_class(CTL_E_CONFLICT), snprintf(err, errsz, "%.30s, %dx%d, would run off the %s side of the map", *name,
                  *x1 - *x0 + 1, *y1 - *y0 + 1,
                  *x0 < 0 ? "west" : *y0 < 0 ? "north" : *x1 >= m->w ? "east" : "south");
         return 0;
@@ -524,14 +556,15 @@ static int token_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *er
         if (n > 7 || (n == 7 && strcmp(w[6], "hidden") != 0))
             BAD("token add player|enemy SQUARE from NAME [hidden]");
         Map *c = character_load(w[5], err, errsz);
-        if (!c) return -1;
+        if (!c) return rq_class(CTL_E_MISSING);
         const Token *ct = character_token(c);
         char label[TOKEN_LABEL_MAX], said[160];
         tokens_unique_label(&m->tokens, ct->label, label, sizeof label);
         int x, y, idx = -1;
-        if (!label[0]) snprintf(err, errsz, "%.40s has no label, and the channel names creatures by label", w[5]);
-        else if (spot(m, w[3], ct->size, -1, &x, &y, err, errsz))
-            idx = character_place(m, u, c, kind, x, y, n == 7, said, sizeof said, err, errsz);
+        if (!label[0]) rq_class(CTL_E_STATE), snprintf(err, errsz, "%.40s has no label, and the channel names creatures by label", w[5]);
+        else if (spot(m, w[3], ct->size, -1, &x, &y, err, errsz) &&
+                 (idx = character_place(m, u, c, kind, x, y, n == 7, said, sizeof said, err, errsz)) < 0)
+            rq_class(CTL_E_CONFLICT);
         map_free(c);
         if (idx < 0) return -1;
         const Token *t = &m->tokens.v[idx];
@@ -591,7 +624,7 @@ static int token_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *er
         if (n != 3) BAD("token del WHO");
         /* Passing the turn on moves the fight, and the fight is the GM's:
          * an edit to the map must not advance it as a side effect. */
-        if (t.turn & TURN_ACTING) BAD("%.30s holds the turn - the GM passes it on first", t.label);
+        if (t.turn & TURN_ACTING) BADC(CTL_E_STATE, "%.30s holds the turn - the GM passes it on first", t.label);
         undo_del_token(u, m, i);
         turn_settle(m, u);
         if (!ed->proposal) {                 /* the live map's: an accept does this */
@@ -616,7 +649,7 @@ static int token_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *er
             touched(ed, t.x, t.y, t.x + size - 1, t.y + size - 1);
         }
         else if (!strcmp(w[3], "note")) {
-            if (strlen(w[4]) >= TOKEN_NOTE_MAX) BAD("the note is over %d characters", TOKEN_NOTE_MAX - 1);
+            if (strlen(w[4]) >= TOKEN_NOTE_MAX) BADC(CTL_E_LIMIT, "the note is over %d characters", TOKEN_NOTE_MAX - 1);
             str_lcpy(t.note, w[4], sizeof t.note);
         }
         else if (!strcmp(w[3], "hidden")) {
@@ -644,10 +677,10 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
         for (int y = y0; y <= y1; y++)
             for (int x = x0; x <= x1; x++) undo_set_tile(u, m, x, y, TILE_FLOOR);
         const char *fwhy = name ? floor_problem_box(m, map_area_find(m, name), x0, y0, x1, y1) : NULL;
-        if (fwhy) BAD("%.40s is a floor, and %s", name, fwhy);
+        if (fwhy) BADC(CTL_E_CONFLICT, "%.40s is a floor, and %s", name, fwhy);
         outline(u, m, x0, y0, x1, y1, EDGE_WALL);
         if (name && !undo_set_area(u, m, name, x0, y0, x1, y1))
-            BAD("the map holds %d named areas", MAP_AREAS_MAX);
+            BADC(CTL_E_LIMIT, "the map holds %d named areas", MAP_AREAS_MAX);
     }
     else if (!strcmp(v, "area")) {
         /* area NAME REGION, area NAME remove: a name, nothing drawn. */
@@ -658,15 +691,15 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
                 w[1], AREA_NAME_MAX - 1);
         if (!strcmp(w[2], "remove")) {
             int ai = map_area_find(m, w[1]);
-            if (ai < 0) BAD("no area called %.40s", w[1]);
+            if (ai < 0) BADC(CTL_E_MISSING, "no area called %.40s", w[1]);
             const Area *ar = &m->areas[ai];
             x0 = ar->x0; y0 = ar->y0; x1 = ar->x1; y1 = ar->y1;
             undo_remove_area(u, m, w[1]);
         } else {
             if (!region(m, w[2], &x0, &y0, &x1, &y1, err, errsz)) return -1;
             const char *fwhy = floor_problem_box(m, map_area_find(m, w[1]), x0, y0, x1, y1);
-            if (fwhy) BAD("%.40s is a floor, and %s", w[1], fwhy);
-            if (!undo_set_area(u, m, w[1], x0, y0, x1, y1)) BAD("the map holds %d named areas", MAP_AREAS_MAX);
+            if (fwhy) BADC(CTL_E_CONFLICT, "%.40s is a floor, and %s", w[1], fwhy);
+            if (!undo_set_area(u, m, w[1], x0, y0, x1, y1)) BADC(CTL_E_LIMIT, "the map holds %d named areas", MAP_AREAS_MAX);
         }
     }
     else if (!strcmp(v, "corridor")) {
@@ -676,8 +709,8 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
         int width = 1, k = -1;
         if (n < 3) BAD("corridor ROOM ROOM [width 1-3] [KIND]");
         int ia = map_area_find(m, w[1]), ib = map_area_find(m, w[2]);
-        if (ia < 0) BAD("no room called %.40s", w[1]);
-        if (ib < 0) BAD("no room called %.40s", w[2]);
+        if (ia < 0) BADC(CTL_E_MISSING, "no room called %.40s", w[1]);
+        if (ib < 0) BADC(CTL_E_MISSING, "no room called %.40s", w[2]);
         if (ia == ib) BAD("a corridor joins two rooms");
         for (int i = 3; i < n; i++) {
             if (!strcmp(w[i], "width") && i + 1 < n && word_int(w[i + 1], 1, 3, &width)) i++;
@@ -685,7 +718,7 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
         }
         if (k < 0) k = width == 1 ? EDGE_DOOR_CLOSED : EDGE_NONE;
         Corridor c;
-        if (corridor_plan(m, &m->areas[ia], &m->areas[ib], width, &c, err, errsz) < 0) return -1;
+        if (corridor_plan(m, &m->areas[ia], &m->areas[ib], width, &c, err, errsz) < 0) return rq_class(CTL_E_CONFLICT);
         corridor_dig(m, u, &c, (uint8_t)k);
         /* What changed: the legs, and the doors at their ends. */
         x1 = -1; x0 = y0 = y1 = 0;
@@ -700,7 +733,7 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
         int side, at = -1, k = EDGE_DOOR_CLOSED;
         if (n < 3 || n > 5) BAD("door ROOM north|south|east|west [N|middle] [KIND]");
         int ai = map_area_find(m, w[1]);
-        if (ai < 0) BAD("no room called %.40s - room NAME ... names one", w[1]);
+        if (ai < 0) BADC(CTL_E_MISSING, "no room called %.40s - room NAME ... names one", w[1]);
         const Area *ar = &m->areas[ai];
         if ((side = side_word(w[2])) < 0) BAD("%.20s: a side is north, south, east or west", w[2]);
         int along = side == SIDE_EAST || side == SIDE_WEST ? ar->y1 - ar->y0 + 1 : ar->x1 - ar->x0 + 1;
@@ -761,8 +794,8 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
         }
         else if (!square(m, w[1], &x, &y, err, errsz)) return -1;
         const char *text = n == 3 ? w[2] : "";
-        if (strlen(text) >= NOTE_MAX) BAD("the note is over %d characters", NOTE_MAX - 1);
-        if (!undo_set_note(u, m, x, y, text)) BAD("no room: a map holds %d notes on squares", MAP_NOTES_MAX);
+        if (strlen(text) >= NOTE_MAX) BADC(CTL_E_LIMIT, "the note is over %d characters", NOTE_MAX - 1);
+        if (!undo_set_note(u, m, x, y, text)) BADC(CTL_E_LIMIT, "no room: a map holds %d notes on squares", MAP_NOTES_MAX);
         x0 = x1 = x; y0 = y1 = y;
     }
     else if (!strcmp(v, "fog")) {
@@ -771,7 +804,7 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
         if (!region(m, w[2], &x0, &y0, &x1, &y1, err, errsz)) return -1;
         if (!word_int(w[3], 0, FOG_PATCH_MAX, &id)) BAD("a fog patch is 1 to %d, or 0 to scrub", FOG_PATCH_MAX);
         if (id && (!m->fog_patches[id - 1].name[0] || m->fog_patches[id - 1].dead))
-            BAD("there is no fog patch %d - :fog makes one", id);
+            BADC(CTL_E_MISSING, "there is no fog patch %d - :fog makes one", id);
         for (int y = y0; y <= y1; y++)
             for (int x = x0; x <= x1; x++) fog_paint(m, u, x, y, id);
     }
@@ -779,17 +812,17 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
         /* floor NAME LEVEL, floor NAME off */
         if (n != 3) BAD("floor NAME LEVEL, or floor NAME off");
         int ai = map_area_find(m, w[1]);
-        if (ai < 0) BAD("no area called %.40s - area NAME REGION names one", w[1]);
+        if (ai < 0) BADC(CTL_E_MISSING, "no area called %.40s - area NAME REGION names one", w[1]);
         const Area *ar = &m->areas[ai];
         if (!strcmp(w[2], "off")) {
-            if (!ar->floor) BAD("%.40s is not a floor", w[1]);
+            if (!ar->floor) BADC(CTL_E_STATE, "%.40s is not a floor", w[1]);
             undo_set_floor(u, m, ar->name, 0, 0);
         } else {
             int level;
             if (!word_int(w[2], FLOOR_LEVEL_MIN, FLOOR_LEVEL_MAX, &level))
                 BAD("%.20s: a level is %d to %d, or off", w[2], FLOOR_LEVEL_MIN, FLOOR_LEVEL_MAX);
             const char *why = floor_problem(m, ai);
-            if (why) BAD("%.40s cannot be a floor: %s", w[1], why);
+            if (why) BADC(CTL_E_CONFLICT, "%.40s cannot be a floor: %s", w[1], why);
             undo_set_floor(u, m, ar->name, 1, level);
         }
         x0 = ar->x0; y0 = ar->y0; x1 = ar->x1; y1 = ar->y1;
@@ -799,10 +832,10 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
          * name (docs/ENVIRONMENTS.md). The map's own is the GM's (:env map). */
         if (n != 3) BAD("env AREA CARD, or env AREA remove");
         int ai = map_area_find(m, w[1]);
-        if (ai < 0) BAD("no area called %.40s - area NAME REGION names one", w[1]);
+        if (ai < 0) BADC(CTL_E_MISSING, "no area called %.40s - area NAME REGION names one", w[1]);
         const Area *ar = &m->areas[ai];
         if (!strcmp(w[2], "remove")) {
-            if (!ar->env[0]) BAD("%.40s has no environment", w[1]);
+            if (!ar->env[0]) BADC(CTL_E_STATE, "%.40s has no environment", w[1]);
             undo_set_area_env(u, m, ar->name, "");
         } else {
             if (!card_name_ok(w[2])) BAD("%.40s: a card's name is letters, digits, - and _", w[2]);
@@ -821,7 +854,7 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
         if (isnum) {
             int num, li;
             if (!word_int(w[1], 1, LINK_NUM_MAX, &num) || (li = link_find(m, num)) < 0)
-                BAD("there is no link %.10s", w[1]);
+                BADC(CTL_E_MISSING, "there is no link %.10s", w[1]);
             l = m->links[li];
             if (n == 3 && !strcmp(w[2], "off")) BAD("link %d remove takes a link away", num);
             if (n == 3 && !strcmp(w[2], "remove")) {
@@ -833,7 +866,7 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
         } else if (n >= 4 && !strcmp(w[2], "to")) {
             /* link A to MAP PLACE [KIND] [size N] [secret]: to another map. */
             l.num = (uint8_t)link_free_num(m);
-            if (!l.num) BAD("the map holds %d links", MAP_LINKS_MAX);
+            if (!l.num) BADC(CTL_E_LIMIT, "the map holds %d links", MAP_LINKS_MAX);
             if (n < 5) BAD("link SQUARE to MAP PLACE [KIND] [size N] [secret] - PLACE an area or a square in MAP");
             l.size = 1;
             for (int i = 5; i < n; i++) {
@@ -843,9 +876,12 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
                 else if (!strcmp(w[i], "size") && i + 1 < n && word_int(w[i + 1], 1, LINK_SIZE_MAX, &sz)) { l.size = (uint8_t)sz; i++; }
                 else BAD("%.20s: after the place goes a kind, size N or secret", w[i]);
             }
-            if (strlen(w[4]) >= AREA_NAME_MAX) BAD("no area has a name that long");
+            if (strlen(w[4]) >= AREA_NAME_MAX) BADC(CTL_E_LIMIT, "no area has a name that long");
             char why[200];
-            if (link_map_check(m, w[3], w[4], why, sizeof why)) BAD("%s", why);
+            int  kind;
+            if (link_map_check(m, w[3], w[4], why, sizeof why, &kind))
+                BADC(kind == LINK_MAP_NAME ? CTL_E_USAGE : kind == LINK_MAP_UNSAVED ? CTL_E_STATE :
+                     kind == LINK_MAP_VOID ? CTL_E_CONFLICT : CTL_E_MISSING, "%s", why);
             str_lcpy(l.to_map, w[3], sizeof l.to_map);
             str_lcpy(l.to_place, w[4], sizeof l.to_place);
             int ax, ay;
@@ -854,7 +890,7 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
             first = n;
         } else {
             l.num = (uint8_t)link_free_num(m);
-            if (!l.num) BAD("the map holds %d links", MAP_LINKS_MAX);
+            if (!l.num) BADC(CTL_E_LIMIT, "the map holds %d links", MAP_LINKS_MAX);
             l.size = 1;
             /* The size first: where an end goes in a named area depends on it. */
             for (int i = 3; i < n; i++) {
@@ -873,7 +909,7 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
         for (int i = first; i < n; i++) {
             int k = link_kind_from_name(w[i]);
             if (l.to_map[0] && (!strcmp(w[i], "oneway") || !strcmp(w[i], "twoway") || !strcmp(w[i], "reverse")))
-                BAD("link %d leads to another map: it has one end here, and goes one way", l.num);
+                BADC(CTL_E_STATE, "link %d leads to another map: it has one end here, and goes one way", l.num);
             if (k >= 0)                                l.kind = (uint8_t)k;
             else if (!strcmp(w[i], "oneway"))          l.oneway = 1;
             else if (!strcmp(w[i], "twoway"))          l.oneway = 0;
@@ -888,7 +924,7 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
                      w[i], isnum ? ", reverse or remove" : " or size N");
         }
         const char *why = link_problem(m, &l);
-        if (why) BAD("%s", why);
+        if (why) BADC(CTL_E_CONFLICT, "%s", why);
         (void)undo_set_link(u, m, &l);
         for (int e = 0; e < link_ends(&l); e++) touched(ed, l.x[e], l.y[e], l.x[e] + l.size - 1, l.y[e] + l.size - 1);
         return 0;
@@ -908,19 +944,19 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
             else BAD("stamp NAME SQUARE [rotate 90|180|270] [mirror]");
         }
         Map *st = stamp_load(w[1], err, errsz);
-        if (!st) return -1;
+        if (!st) return rq_class(CTL_E_MISSING);
         if (quarters) { Map *t = stamp_turned(st, quarters); map_free(st); st = t; }
         if (mirror)   { Map *t = stamp_mirrored(st); map_free(st); st = t; }
         int ok = stamp_place(m, u, st, x, y, err, errsz);
         x0 = x; y0 = y; x1 = x + st->w - 1; y1 = y + st->h - 1;
         map_free(st);
-        if (!ok) return -1;
+        if (!ok) return rq_class(CTL_E_CONFLICT);
     }
     else if (!strcmp(v, "scene")) {
         /* scene NAME: put it back, one step with the rest of the request. */
         int i = scene_find(m, w[1]);
-        if (i < 0) BAD("no scene called %.31s", w[1]);
-        if (scene_restore(m, u, i, err, errsz) < 0) return -1;
+        if (i < 0) BADC(CTL_E_MISSING, "no scene called %.31s", w[1]);
+        if (scene_restore(m, u, i, err, errsz) < 0) return rq_class(CTL_E_CONFLICT);
         const Scene *sc = &m->scenes[i];
         if (sc->boxed) {
             /* The box, and any creature of the scene hanging over its edge. */
@@ -1030,7 +1066,7 @@ static int finish_proposal(App *a, Edits *ed, FILE *out, char *err, size_t errsz
         if (slot < 0) slot = app_job_new(a, ed->from, ed->say, NULL, at_once);
         if (slot < 0) {
             cs_free(&cs);
-            snprintf(err, errsz, "%d changes are waiting for the GM - nothing more until some are reviewed", JOB_MAX);
+            rq_class(CTL_E_LIMIT), snprintf(err, errsz, "%d changes are waiting for the GM - nothing more until some are reviewed", JOB_MAX);
             return -1;
         }
         Job *j = &a->jobs[slot];
@@ -1065,7 +1101,7 @@ static int rq_scene_other(RQ_ARGS)
     }
     if (n == 3 && !strcmp(w[1], "diff")) {
         int i = scene_find(m, w[2]);
-        if (i < 0) { snprintf(err, errsz, "no scene called %.31s", w[2]); return -1; }
+        if (i < 0) { rq_class(CTL_E_MISSING), snprintf(err, errsz, "no scene called %.31s", w[2]); return -1; }
         if (!scene_diff(out, m, i)) fputs("no changes\n", out);
         return 0;
     }
@@ -1082,14 +1118,14 @@ static int rq_scene_other(RQ_ARGS)
         int box[4], boxed = n == 4;
         if (boxed && !region(m, w[3], &box[0], &box[1], &box[2], &box[3], err, errsz)) return -1;
         int i = scene_save(m, w[2], boxed ? box : NULL, err, errsz);
-        if (i < 0) return -1;
+        if (i < 0) return rq_class(scene_name_ok(w[2]) ? CTL_E_LIMIT : CTL_E_USAGE);     /* its two refusals: the name, or no room */
         char what[64];
         scene_describe(m, i, what, sizeof what);
         fprintf(out, "saved scene \"%s\": %s\n", m->scenes[i].name, what);
         snprintf(msg, sizeof msg, "agent: saved scene %.31s (%s)", m->scenes[i].name, what);
     } else {
         int i = scene_find(m, w[1]);
-        if (i < 0) { snprintf(err, errsz, "no scene called %.31s", w[1]); return -1; }
+        if (i < 0) { rq_class(CTL_E_MISSING), snprintf(err, errsz, "no scene called %.31s", w[1]); return -1; }
         snprintf(msg, sizeof msg, "agent: removed scene %.31s", m->scenes[i].name);
         fprintf(out, "removed scene \"%s\"\n", m->scenes[i].name);
         scene_remove(m, i);
@@ -1111,19 +1147,19 @@ static int rq_propose(RQ_ARGS)
     if (from_apply) at = 2;
     if (n > at + 1) { snprintf(err, errsz, "%s takes one line for the GM after it, in quotes", at == 1 ? "propose" : "job N propose"); return -1; }
     if (ed->header || ed->lines) { snprintf(err, errsz, "propose comes once, before the request's edits"); return -1; }
-    if (a->ctl_direct) { snprintf(err, errsz, "there is no GM to propose to: --apply changes the file"); return -1; }
+    if (a->ctl_direct) { rq_class(CTL_E_STATE), snprintf(err, errsz, "there is no GM to propose to: --apply changes the file"); return -1; }
     if (at == 3) {
         if (!word_int(w[1], 1, JOB_NUM_MAX, &num) || (slot = app_job_find(a, num)) < 0) {
-            snprintf(err, errsz, "no job #%.10s - jobs lists them", w[1]);
+            rq_class(CTL_E_MISSING), snprintf(err, errsz, "no job #%.10s - jobs lists them", w[1]);
             return -1;
         }
         const Job *j = &a->jobs[slot];
         if (j->state == JOB_ACCEPTED || j->state == JOB_SCRAPPED) {
-            snprintf(err, errsz, "#%d was %s - propose alone offers a new change", j->num, app_job_state_name(j->state));
+            rq_class(CTL_E_STATE), snprintf(err, errsz, "#%d was %s - propose alone offers a new change", j->num, app_job_state_name(j->state));
             return -1;
         }
         if (app_job_gm_only(j)) {
-            snprintf(err, errsz, "#%d is %s: the GM's to decide - propose alone offers a change of your own", j->num,
+            rq_class(CTL_E_STATE), snprintf(err, errsz, "#%d is %s: the GM's to decide - propose alone offers a change of your own", j->num,
                      j->from == JOB_FROM_DISK ? "what another program wrote to the file" : "an --apply's");
             return -1;
         }
@@ -1167,7 +1203,7 @@ static int rq_edit(RQ_ARGS)
     ed->out = out;
     if (edit_line(a, w, n, ed, err, errsz) < 0) return -1;
     if ((unsigned long)(a->undo.stamp - ed->ops0) > CTL_OPS_MAX) {
-        snprintf(err, errsz, "the request changes more than %lu things at once", CTL_OPS_MAX);
+        rq_class(CTL_E_LIMIT), snprintf(err, errsz, "the request changes more than %lu things at once", CTL_OPS_MAX);
         return -1;
     }
     return 0;
@@ -1178,11 +1214,11 @@ static int rq_undo(RQ_ARGS)
     RQ_LOCALS;
     if (n > 1) { snprintf(err, errsz, "undo takes nothing after it"); return -1; }
     if (ed->lines) { snprintf(err, errsz, "undo comes before any edit in a request"); return -1; }
-    if (!a->ctl_undoable) { snprintf(err, errsz, "there is no change of the agent's to take back"); return -1; }
+    if (!a->ctl_undoable) { rq_class(CTL_E_STATE), snprintf(err, errsz, "there is no change of the agent's to take back"); return -1; }
     /* The log as the edit left it, and the map: a note or a fog setting
      * the GM changes outside the log still moves Map.gen. */
     if (a->undo.stamp != a->ctl_stamp || m->gen != a->ctl_gen) {
-        snprintf(err, errsz, "something has happened since the agent's last change - only the GM's u takes it back now");
+        rq_class(CTL_E_STATE), snprintf(err, errsz, "something has happened since the agent's last change - only the GM's u takes it back now");
         return -1;
     }
     const char *busy = app_ctl_busy(a);
@@ -1231,8 +1267,12 @@ static int rq_wait(RQ_ARGS)
     }
     int timed = at < n;
     if (at < n) {
-        if (at + 2 != n || strcmp(w[at], "for") != 0 || !word_int(w[at + 1], 0, CTL_WAIT_MAX_S, &secs)) {
+        if (at + 2 != n || strcmp(w[at], "for") != 0 || !word_int(w[at + 1], 0, 0x7fffffff, &secs)) {
             snprintf(err, errsz, "wait [SEQ] [for SECONDS], at most %d seconds", CTL_WAIT_MAX_S);
+            return -1;
+        }
+        if (secs > CTL_WAIT_MAX_S) {
+            rq_class(CTL_E_LIMIT), snprintf(err, errsz, "wait [SEQ] [for SECONDS], at most %d seconds", CTL_WAIT_MAX_S);
             return -1;
         }
     }
@@ -1543,7 +1583,7 @@ static int rq_help(RQ_ARGS)
     }
     if (n == 2) {
         const Request *r = rq_find(w[1]);
-        if (!r) { snprintf(err, errsz, "no request called %.40s - help lists them", w[1]); return -1; }
+        if (!r) { rq_class(CTL_E_MISSING), snprintf(err, errsz, "no request called %.40s - help lists them", w[1]); return -1; }
         fprintf(out, "%s\n  %s%s%s\n", r->use, r->doc,
                 r->flags & CTL_RQ_ALONE ? "; alone in its request" : "",
                 r->flags & CTL_RQ_LIVE ? "; of a running vtt only" : "");
@@ -1633,6 +1673,21 @@ static void finish_edits(App *a, Edits *ed, FILE *out)
     app_note_gm(a, msg);
 }
 
+/* A refusal goes to the session log too, or the log cannot say why an agent
+ * stopped. The same one again is not written: a caller that keeps asking
+ * what was refused would otherwise write the log as fast as it can ask. */
+static void log_refusal(App *a, const char *verdict)
+{
+    if (!slog_on(&a->slog)) return;
+    unsigned h = 2166136261u;
+    for (const char *p = verdict; *p; p++) h = (h ^ (unsigned char)*p) * 16777619u;
+    if (h == a->ctl_refused) return;
+    a->ctl_refused = h;
+    char msg[360];
+    snprintf(msg, sizeof msg, "agent refused: %s", verdict);
+    slog_write(&a->slog, msg);
+}
+
 char *app_ctl_exec(App *a, const char *req, size_t *len)
 {
     PROF_ZONE("ctl");
@@ -1650,14 +1705,14 @@ char *app_ctl_exec(App *a, const char *req, size_t *len)
     ed.from = JOB_FROM_AGENT;
     const char *p = req;
     if (strlen(req) != *len) {
-        snprintf(verdict, sizeof verdict, "error: a nul byte in the request");
+        refuse(verdict, sizeof verdict, CTL_E_USAGE, "a nul byte in the request");
         p = "";
     }
     /* `undo`, and saving or removing a scene, go alone: they cannot be
      * rolled back with the lines around them, so a request that holds one
      * holds nothing else. */
     const char *lone = strcmp(verdict, "ok") == 0 ? not_alone(p) : NULL;
-    if (lone) snprintf(verdict, sizeof verdict, "error: %s goes in a request of its own", lone);
+    if (lone) refuse(verdict, sizeof verdict, CTL_E_USAGE, "%s goes in a request of its own", lone);
     if (strcmp(verdict, "ok") != 0) p = "";
     while (*p) {
         const char *end = strchr(p, '\n');
@@ -1667,7 +1722,8 @@ char *app_ctl_exec(App *a, const char *req, size_t *len)
         char line[1024], err[200] = "";
         char w[CTL_WORDS][CTL_WORD_MAX];
         int  n = -1;
-        if (ll >= sizeof line) snprintf(err, sizeof err, "the line is over %zu characters", sizeof line - 1);
+        g_class = CTL_E_USAGE;
+        if (ll >= sizeof line) rq_class(CTL_E_LIMIT), snprintf(err, sizeof err, "the line is over %zu characters", sizeof line - 1);
         else {
             memcpy(line, p, ll);
             line[ll] = '\0';
@@ -1681,16 +1737,16 @@ char *app_ctl_exec(App *a, const char *req, size_t *len)
         /* With no map: what the table says needs none (a wait among them --
          * the map closing is an event). */
         if (n > 0 && !a->map && !(rq_find(w[0]) && (rq_find(w[0])->flags & CTL_RQ_NOMAP)))
-            snprintf(err, sizeof err, "no map is open");
+            rq_class(CTL_E_STATE), snprintf(err, sizeof err, "no map is open");
         /* The channel off: over the socket, nothing is taken. The map is
          * named so that a caller with several vtts open knows which. */
         else if (n > 0 && a->ctl_can_hold && !a->agent_on && !off_takes(w, n))
-            snprintf(err, sizeof err, "the agent channel is off%s%.63s - type :agent on in that vtt, then ask again",
+            rq_class(CTL_E_STATE), snprintf(err, sizeof err, "the agent channel is off%s%.63s - type :agent on in that vtt, then ask again",
                      a->map ? " in the vtt with " : "", a->map ? a->map->name : "");
         int rc = err[0] ? -1 : run_line(a, line, w, n, out, &ed, err, sizeof err);
         if (rc == 0) continue;
         if (rc == -2) snprintf(verdict, sizeof verdict, "busy: %s", err);
-        else          snprintf(verdict, sizeof verdict, "error: line %d: %s", lineno, err);
+        else          refuse(verdict, sizeof verdict, g_class, "line %d: %s", lineno, err);
         break;
     }
 
@@ -1699,11 +1755,11 @@ char *app_ctl_exec(App *a, const char *req, size_t *len)
         proposal_end(a, &ed);
         char err[200];
         if (!strcmp(verdict, "ok") && finish_proposal(a, &ed, out, err, sizeof err) < 0)
-            snprintf(verdict, sizeof verdict, "error: %s", err);
+            refuse(verdict, sizeof verdict, CTL_E_LIMIT, "%s", err);
         a->dirty = 1;
     }
     else if (ed.header && !strcmp(verdict, "ok"))
-        snprintf(verdict, sizeof verdict, "error: propose wants edit lines after it");
+        refuse(verdict, sizeof verdict, CTL_E_USAGE, "propose wants edit lines after it");
     else if (ed.lines) {
         if (strcmp(verdict, "ok") != 0) {
             undo_abort(&a->undo, a->map);                 /* all or nothing */
@@ -1718,6 +1774,7 @@ char *app_ctl_exec(App *a, const char *req, size_t *len)
 
     /* The verdict, then the report; an error sends only what it says. */
     int    ok = !strcmp(verdict, "ok");
+    if (!ok) log_refusal(a, verdict);
     size_t vl = strlen(verdict);
     size_t total = vl + 1 + (ok ? blen : 0);
     char  *ans = malloc(total + 1);

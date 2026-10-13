@@ -72,7 +72,10 @@ int  link_map_path(const Map *m, const char *to_map, char *buf, size_t sz);
 /* Could a link from m lead to PLACE in TO_MAP: the file there, and the place
  * in it an area or a square on ground? NULL, or why not in buf. It reads the
  * other file. */
-const char *link_map_check(const Map *m, const char *to_map, const char *place, char *buf, size_t sz);
+const char *link_map_check(const Map *m, const char *to_map, const char *place, char *buf, size_t sz, int *kind);
+/* Which of its refusals that was, for a caller that must tell them apart
+ * (the channel's class); `kind` may be NULL. */
+enum { LINK_MAP_FINE, LINK_MAP_NAME, LINK_MAP_UNSAVED, LINK_MAP_NO_MAP, LINK_MAP_NO_PLACE, LINK_MAP_VOID };
 
 /* Where a party arriving through a link to another map lands in `dst`. The
  * party is n creatures at offsets (their x, y) from the near end's top-left,

@@ -27,6 +27,19 @@ A plan and a live session speak the same language, the one below, and follow the
 **a request is all or nothing** (if any line fails, nothing changed, and the answer names
 the line and why), and **one request is one undo step** for the GM, once accepted.
 
+**Refusals.** The answer's first line is the verdict: `ok`, `busy: WHY` (the GM is part way
+through something: ask again shortly), or `error CLASS: line N: WHY`. The class is one of
+six words, and says what to do next; the sentence after it says which square or which name.
+
+| class | what to do next |
+|---|---|
+| `usage` | the line is written wrong: `help VERB` shows its form |
+| `missing` | a name in it names nothing: list them (`jobs`, `scenes`, `stamps`, `characters`, `links`, `floors`, `describe`) |
+| `conflict` | what is on the map is in the way (a square taken, a room over another, a label in use, a box off the map): `dump REGION`, then other squares or another name |
+| `state` | the line is fine, but not now or not yours (the channel off, no map open, a job the GM is deciding, nothing to undo): read `status` and `jobs`; do not send it again unchanged |
+| `limit` | over a fixed size (a request over 64 KB, a line over 1023 characters, sixteen proposals waiting): split it, or wait for the GM |
+| `internal` | vtt's own failure: tell the GM |
+
 **Which way.** Either works at any time. `vtt map.vtt --apply plan.txt` asks every running
 vtt whether it has that file open. If one does, the plan goes to it as a **proposal** for its
 GM to review and the file is not touched (stderr says so); if none does, the plan is run on
@@ -35,7 +48,7 @@ the file and saved, as always. So `--apply` is safe on a map the GM has open, wi
 
 | exit | means | stdout |
 |---|---|---|
-| 0 | accepted, whole or in part (or run on the file, with no vtt holding it) | `job N accepted: ..., not saved` -- saving is the GM's |
+| 0 | accepted, whole or in part (or run on the file, with no vtt holding it) | the event (`job N accepted: ...` or `job N part: ...`), then `, not saved` -- saving is the GM's |
 | 1 | the plan failed: nothing proposed, nothing saved | |
 | 2 | nothing done: the file could not be read, or a running vtt did not say whether it has the map open (stopped, or its GM is in an editor) -- try again; or the vtt quit before a verdict | |
 | 3 | no verdict in that time; the proposal still waits | `no verdict in N seconds ...` |
@@ -46,8 +59,9 @@ Writing the map's file yourself (by hand, below) while a vtt has it open is safe
 notices, and offers what you changed to its GM as a change to review. Until the GM has
 looked, their `:w` is refused rather than written over yours.
 
-A plan for `--apply` has no `propose` line of its own, and is at most 64 KB less a line. To do more than propose (read the map
-as it is in memory, answer the GM's jobs, hear events), the GM types `:agent on` and you
+A plan for `--apply` has no `propose` line of its own, and is at most 64,896 bytes, whether
+it goes to a file or to an open map. A plan that only reads leaves the file as it was. To do
+more than propose (read the map as it is in memory, answer the GM's jobs, hear events), the GM types `:agent on` and you
 use `vtt --ctl`; it exits 2 when no vtt has its channel on.
 
 **Where the GM's maps are.** The GM's menu lists the maps in the directory vtt was started
@@ -275,7 +289,7 @@ feedback. Nothing you send changes the GM's map until then, unless the GM has ty
    seq 44
    42 job 3 feedback: no water in the east half
    43 map changed: walls and doors in F2:F9
-   44 job 5 asked in M3:Q8: a guard room
+   44 job 5 asked: in M3:Q8: a guard room
    ```
    Pass the `seq` it gave you to the next `wait`, so nothing is missed between two waits.
    `wait` alone hears only what happens from now; `wait 0` answers at once with everything
@@ -283,18 +297,21 @@ feedback. Nothing you send changes the GM's map until then, unless the GM has ty
    give a time, with the `seq` you were last given (`status` has it too), 0 included; `wait 41 for 300` waits up to 300 seconds (60 unsaid, 600 at most) and then answers
    with `seq` alone. A `lost A-B` line means more happened than is kept, and a `reset N`
    line that the vtt was started again since your number (it is followed by everything
-   kept): either way read `jobs` and the map again. The events:
+   kept): either way read `jobs` and the map again. An event is its number, its subject
+   (`job N` or `map`), then **one word that says what happened**, ended by a colon or the
+   line; match on that word, never on the words after it. The events:
 
    | event | means |
    |---|---|
-   | `job N asked [in REGION][, to land at once]: TEXT` | the GM asked for a change: take it |
-   | `job N accepted: ...` | it landed, as one undo step |
-   | `job N accepted in part, REGION: ... [- the rest waits]` | the part in the GM's box landed |
+   | `job N asked` | `: [in REGION, ][to land at once: ]TEXT` -- the GM asked for a change: take it |
+   | `job N accepted` | `: WHAT` -- it landed, as one undo step |
+   | `job N part` | `: REGION: WHAT [- the rest waits]` -- the part in the GM's box landed |
    | `job N scrapped` | the GM threw the proposal away |
-   | `job N feedback: TEXT` | the job is yours again, with what to do instead: `job N propose` |
-   | `job N brought back for review`, `job N removed by the GM` | |
-   | `map changed: ...` | the GM changed the map (told once it has been quiet 1.5 s): what you read may be stale |
-   | `map closed: NAME ...` | the map, and every job on it, is gone |
+   | `job N feedback` | `: TEXT` -- the job is yours again, with what to do instead: `job N propose` |
+   | `job N back` | `: for review` -- the GM brought a scrapped or undone proposal back |
+   | `job N removed` | the GM removed the job: its number answers `no job #N` now |
+   | `map changed` | `: WHAT` -- the GM changed the map (told once it has been quiet 1.5 s): what you read may be stale |
+   | `map closed` | `: NAME ...` -- the map, and every job on it, is gone |
 
    `jobs` shows the same state at any time, and counts a ready proposal's **conflicts**:
    squares the GM changed since you looked, which accepting would overwrite. A part accepted
@@ -337,8 +354,8 @@ may read before its edits (`jobs` and `job N ...` lines come first, before `prop
 after them: `dump`, `describe` and `check` after an edit see your proposal; `status` and
 `marked` always describe the GM's side.
 
-Exit status: 0 done; 1 an error or `busy:` (the reason on stderr); 2 no vtt is listening --
-ask the GM to type `:agent on`. Proposals are never refused for the GM being busy: under
+Exit status: 0 done; 1 an error or `busy:` (the verdict on stderr); 2 no vtt is listening --
+ask the GM to type `:agent on` (stderr lists each vtt whose channel is off, by pid and map). Proposals are never refused for the GM being busy: under
 `accept auto` one waits and lands at the GM's next key. Only `undo`, `scene save` and `scene
 NAME remove` still answer `busy:` when the GM is part way through something.
 

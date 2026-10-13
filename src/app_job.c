@@ -137,7 +137,7 @@ static void land(App *a, Job *j, const CsBox *box)
         snprintf(msg, sizeof msg, "accepted the part in %s: %s", where, what);
         app_job_thread_add(j, '-', msg);
         if (cs_empty(&j->cs)) j->state = JOB_ACCEPTED;
-        if (n) app_event(a, "job %d accepted in part, %s: %.120s%s", j->num, where, what,
+        if (n) app_event(a, CTL_EV_PART, j->num, "%s: %.120s%s", where, what,
                          j->state == JOB_READY ? " - the rest waits" : "");
         if (!n) snprintf(msg, sizeof msg, "#%d: nothing of it is in %s - the box takes what lies wholly inside", j->num, where);
         else snprintf(msg, sizeof msg, "#%d: accepted %s (%d)%s%.120s - u takes it back%s", j->num, where, n,
@@ -146,7 +146,7 @@ static void land(App *a, Job *j, const CsBox *box)
         j->state = JOB_ACCEPTED;
         snprintf(msg, sizeof msg, "accepted: %s", what);
         app_job_thread_add(j, '-', msg);
-        app_event(a, "job %d accepted: %.150s%s%.50s", j->num, what, left[0] ? "; " : "", left);
+        app_event(a, CTL_EV_ACCEPTED, j->num, "%.150s%s%.50s", what, left[0] ? "; " : "", left);
         snprintf(msg, sizeof msg, "#%d accepted: %.120s%s%.80s - u takes it back", j->num, what,
                  left[0] ? "; " : "", left);
     }
@@ -325,7 +325,7 @@ void app_review_key(App *a, Key k)
     case 'd':
         j->state = JOB_SCRAPPED;
         app_job_thread_add(j, '-', "scrapped");
-        app_event(a, "job %d scrapped", j->num);
+        app_event(a, CTL_EV_SCRAPPED, j->num, NULL);
         snprintf(msg, sizeof msg, "#%d scrapped - :review %d brings it back", j->num, j->num);
         app_note_gm(a, msg);
         review_next_or_close(a);
@@ -372,7 +372,7 @@ void app_job_feedback(App *a, const char *text)
     j->state = JOB_WORKING;
     j->summary[0] = '\0';
     char msg[220];
-    app_event(a, "job %d feedback: %s", j->num, text);
+    app_event(a, CTL_EV_FEEDBACK, j->num, "%s", text);
     snprintf(msg, sizeof msg, "#%d back to the agent: %.150s", j->num, text);
     app_note_gm(a, msg);
     app_agent_start(a, j);                   /* :agent command: with the thread, feedback last */
@@ -396,7 +396,7 @@ void app_ask_command(App *a, const char *verb, const char *rest)
             if (i < 0) { snprintf(msg, sizeof msg, "no job #%d", num); app_set_status_gm(a, msg); return; }
             if (a->review == i) review_close(a, "");
             job_clear(&a->jobs[i]);
-            app_event(a, "job %d removed by the GM", num);
+            app_event(a, CTL_EV_REMOVED, num, NULL);
             snprintf(msg, sizeof msg, "#%d removed", num);
             app_note_gm(a, msg);
             return;
@@ -415,7 +415,8 @@ void app_ask_command(App *a, const char *verb, const char *rest)
     if (slot < 0) { snprintf(msg, sizeof msg, "%d jobs are open - :jobs, :ask N remove", JOB_MAX); app_set_status_gm(a, msg); return; }
     char where[2 * MAP_COORD_MAX + 8] = "";
     if (bp) { strcpy(where, " in "); cs_box_name(bp, where + 4, sizeof where - 4); }
-    app_event(a, "job %d asked%s%s: %s", a->jobs[slot].num, where, at_once ? ", to land at once" : "", rest);
+    app_event(a, CTL_EV_ASKED, a->jobs[slot].num, "%s%s%s%s", bp ? where + 1 : "", at_once ? (bp ? ", to land at once" : "to land at once") : "",
+              bp || at_once ? ": " : "", rest);
     snprintf(msg, sizeof msg, "#%d asked%s%s: %.150s", a->jobs[slot].num, where, at_once ? ", to land at once" : "", rest);
     app_note_gm(a, msg);
     app_agent_start(a, &a->jobs[slot]);      /* :agent command: someone to do it */
@@ -467,7 +468,7 @@ void app_review_command(App *a, const char *rest)
         if ((j->state == JOB_SCRAPPED || j->state == JOB_ACCEPTED) && j->has_cs && !cs_empty(&j->cs)) {
             j->state = JOB_READY;
             app_job_thread_add(j, '-', "brought back");
-            app_event(a, "job %d brought back for review", j->num);
+            app_event(a, CTL_EV_BACK, j->num, "for review");
         }
         if (j->state != JOB_READY) {
             snprintf(msg, sizeof msg, "#%d is %s, with nothing to review", j->num, STATE_NAME[j->state]);

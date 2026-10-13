@@ -50,7 +50,16 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     size_t len = size;
     char  *ans = app_ctl_exec(&app, req, &len);
     /* The verdict is always the first line, and says what it is. */
-    if (ans && strncmp(ans, "ok\n", 3) && strncmp(ans, "error: ", 7) && strncmp(ans, "busy: ", 6)) abort();
+    if (ans && strncmp(ans, "ok\n", 3) && strncmp(ans, "busy: ", 6)) {
+        /* A refusal carries one of the six classes, never another word. */
+        int known = 0;
+        for (int c = 0; c < CTL_E_COUNT && !known; c++) {
+            char head[32];
+            int  k = snprintf(head, sizeof head, "error %s: ", ctl_class_name(c));
+            known = !strncmp(ans, head, (size_t)k);
+        }
+        if (!known) abort();
+    }
     free(ans);
     free(req);
 

@@ -559,10 +559,10 @@ void test_link_keys(void)
         CHECK(ans && strstr(ans, "portal 3     A1 -> B1  one-way"));
         free(ans);
         ans = ctl_ask(&a, "link A1 H1\n");
-        CHECK(ans && strstr(ans, "error: line 1: another link is already there"));
+        CHECK(ans && strstr(ans, "error conflict: line 1: another link is already there"));
         free(ans);
         ans = ctl_ask(&a, "link C1 F1\n");
-        CHECK(ans && strstr(ans, "error: line 1: an end is on void"));
+        CHECK(ans && strstr(ans, "error conflict: line 1: an end is on void"));
         free(ans);
         ans = ctl_ask(&a, "link C1 H4 rope\n");
         CHECK(ans && strstr(ans, "rope: a link is stairs"));
