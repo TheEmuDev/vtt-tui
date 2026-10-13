@@ -371,6 +371,12 @@ run "agent, room + 12"     "$VOIDY"  80x24  'u' "--bench-ctl $DIR/room.ctl"
 run "agent, plan of rooms" "$VOIDMAP" 80x24  'u' "--bench-ctl $DIR/plan.ctl"
 run "agent, dump 512x512"  "$HUGE"   80x24  'lh' "--bench-ctl $DIR/dump.ctl"
 run "agent, dump a region" "$HUGE"   80x24  'lh' "--bench-ctl $DIR/dumpregion.ctl"
+# The other two whole reads of the largest map (docs/V2.md, D5): each is what
+# one request may read, so each is the most a request holds a turn for.
+echo 'describe' > "$DIR/describe.ctl"
+echo 'check' > "$DIR/check.ctl"
+run "agent, describe 512x512" "$HUGE" 80x24 'lh' "--bench-ctl $DIR/describe.ctl"
+run "agent, check 512x512" "$HUGE"   80x24  'lh' "--bench-ctl $DIR/check.ctl"
 # A proposal (docs/CONFLICTS.md, step 4): the plan of rooms on a copy of the
 # largest map, then reviewed and scrapped, or accepted and undone. Each loop's
 # request is a new job; finished ones make room for the next.

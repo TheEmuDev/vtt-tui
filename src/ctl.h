@@ -35,14 +35,24 @@
  *  - the squares its edits cover, whether or not they change them (a fill of
  *    what is already there records nothing, so the cap on recorded changes
  *    never sees it): the largest map twice, as that cap is;
- *  - a file read from the GM's stamps or characters counts as squares read:
- *    one for a `stamp` or a `from NAME`, a third of the request's reads for a
- *    listing, which opens every one of them. */
+ *  - work that is no square of map counts as squares read: a file opened
+ *    for a `stamp` or a `from NAME`, a `stat` for `holds`, a line written to
+ *    the session log by `job N say`, each CTL_FILE_CHARGE; a listing of the
+ *    stamps or characters, which opens every one, a third of the request's
+ *    reads; a `scene diff` its creatures against the map's. `changes`, which
+ *    writes its regions aside, is asked three times a request at most. */
 #define CTL_TURN_NS       2000000
 #define CTL_READ_SQUARES  300000
 #define CTL_EDIT_SQUARES  (2 * 512 * 512)
 #define CTL_FILE_CHARGE   500
 #define CTL_LIST_CHARGE   (CTL_READ_SQUARES / 3)
+/* And by what it answers: a read that walks no map and opens no file can
+ * still be written 12,800 times in 64 KB (`help` so was 43 ms and tens of
+ * megabytes). Once the answer is past this, no further line is run. A
+ * single line's answer is never refused for its size: a whole dump of the
+ * largest map crowded with creatures was counted at 2.7 MB, and is what was
+ * asked. */
+#define CTL_ANSWER_CAP    (2 * 1024 * 1024)
 #define CTL_CHANGES_BYTES (16 * 1024)
 /* What `--apply` takes: the cap less the `propose apply "NAME"` line it
  * writes above a plan sent to an open map (a file's name twice over, each

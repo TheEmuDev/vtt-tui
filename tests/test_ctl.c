@@ -2503,6 +2503,96 @@ void test_ctl_reads(void)
             u = ctl_ask(&b, "describe\nscene diff None");
             CHECK(ctl_refused(u, "missing", 2));
             free(u);
+            /* A read that walks nothing is bounded by what is piled up: help 12,800 times is not 43 ms. */
+            {
+                char *many = malloc(60001);
+                size_t ml = 0;
+                while (ml + 5 <= 60000) { memcpy(many + ml, "help\n", 5); ml += 5; }
+                many[ml] = '\0';
+                u = ctl_ask(&b, many);
+                CHECK(u && !strncmp(u, "error limit: line ", 18) && strstr(u, "the answer was over 2 MB before this line"));
+                int at = u ? atoi(u + 18) : 0;
+                char *one = ctl_ask(&b, "help");
+                size_t page = one ? strlen(one) - 3 : 1;
+                CHECK_EQ(at, (int)(CTL_ANSWER_CAP / page) + 2);   /* the first line run with the cap already passed */
+                CHECK(u && strlen(u) < 200);                   /* and the megabytes are not sent */
+                free(one);
+                free(u);
+                ml = 0;
+                while (ml + 7 <= 60000) { memcpy(many + ml, "floors\n", 7); ml += 7; }
+                many[ml] = '\0';
+                u = ctl_ask(&b, many);                         /* small answers: 64 KB of them fit */
+                CHECK(u && !strncmp(u, "ok\n", 3) && strlen(u) < CTL_ANSWER_CAP / 4);
+                free(u);
+                b.ctl_direct = 1;
+                ml = 0;
+                while (ml + 5 <= 60000) { memcpy(many + ml, "help\n", 5); ml += 5; }
+                many[ml] = '\0';
+                u = ctl_ask(&b, many);                         /* --apply on a file: its own to take */
+                CHECK(u && !strncmp(u, "ok\n", 3));
+                free(u);
+                b.ctl_direct = 0;
+                free(many);
+            }
+            /* One line's answer is never refused for its size: a crowd dumped whole is what was asked.
+             * Only a line after it is. */
+            {
+                Sandbox sb3 = sandbox_enter("ctlreads3");
+                Renderer r3;
+                App c;
+                rnd_init(&r3);
+                rnd_resize(&r3, 100, 30);
+                app_init(&c, NULL, &r3);
+                CHECK(ctl_blank_map(&c, sb3.dir, 512, 512));
+                if (c.map) {
+                    for (int y = 0; y < 512; y += 4)             /* 16,384 creatures, each with a note */
+                        for (int x = 0; x < 512; x += 4) {
+                            Token tk;
+                            memset(&tk, 0, sizeof tk);
+                            tk.kind = TOKEN_ENEMY; tk.size = 1; tk.x = (int16_t)x; tk.y = (int16_t)y;
+                            snprintf(tk.label, sizeof tk.label, "G%d", y * 512 + x);
+                            snprintf(tk.note, sizeof tk.note, "%060d", 7);
+                            tokens_add(&c.map->tokens, tk);
+                        }
+                    char *v = ctl_ask(&c, "dump all");
+                    CHECK(v && !strncmp(v, "ok\n", 3) && strlen(v) > CTL_ANSWER_CAP);
+                    free(v);
+                    v = ctl_ask(&c, "dump all\nstatus");
+                    CHECK(ctl_refused(v, "limit", 2) && strstr(v, "send the rest in another request"));
+                    free(v);
+                }
+                app_free(&c);
+                rnd_free(&r3);
+                sandbox_leave(&sb3);
+            }
+            /* Work that is no square of map is counted as one: a scene's creatures against the map's,
+             * a line for the session log, a stat; and changes is asked three times at most. */
+            {
+                char *many = malloc(60001);
+                size_t ml = 0;
+                while (ml + 10 <= 60000) { memcpy(many + ml, "holds 1 2\n", 10); ml += 10; }
+                many[ml] = '\0';
+                u = ctl_ask(&b, many);
+                CHECK(u && !strncmp(u, "error limit: line ", 18) && atoi(u + 18) == CTL_READ_SQUARES / CTL_FILE_CHARGE + 1);
+                free(u);
+                free(many);
+                many = malloc(60001);
+                ml = 0;
+                for (int k = 0; k < CTL_READ_SQUARES / CTL_FILE_CHARGE + 5; k++) ml += (size_t)snprintf(many + ml, 60000 - ml, "job %d say \"x\"\n", n2);
+                u = ctl_ask(&b, many);                           /* a line to the GM and the log each */
+                CHECK(u && !strncmp(u, "error limit: line ", 18) && atoi(u + 18) == CTL_READ_SQUARES / CTL_FILE_CHARGE + 1);
+                free(u);
+                free(many);
+                char q4[96];
+                snprintf(q4, sizeof q4, "changes %u\nchanges %u\nchanges %u", b.event_seq, b.event_seq, b.event_seq);
+                u = ctl_ask(&b, q4);
+                CHECK(u && !strncmp(u, "ok\n", 3));
+                free(u);
+                snprintf(q4, sizeof q4, "changes %u\nchanges %u\nchanges %u\nchanges %u", b.event_seq, b.event_seq, b.event_seq, b.event_seq);
+                u = ctl_ask(&b, q4);
+                CHECK(ctl_refused(u, "limit", 4) && strstr(u, "at most three times"));
+                free(u);
+            }
             /* changes never refuses for it: what it may not read it lists. */
             CsWhere all;
             memset(&all, 0xff, sizeof all);

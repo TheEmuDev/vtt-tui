@@ -164,6 +164,8 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
     }
     if (!strcmp(verb, "say")) {
         if (n != 4) { snprintf(err, errsz, "job N say \"a line for the GM\""); return -1; }
+        /* A line on the GM's status and one written to the session log: counted as a file is. */
+        if (!app_ctl_read(a, CTL_FILE_CHARGE, err, errsz)) return -1;
         app_job_thread_add(j, 'A', w[3]);
         snprintf(msg, sizeof msg, "#%d, the agent: %.200s", num, w[3]);
         app_note_gm(a, msg);

@@ -44,6 +44,7 @@ int app_ctl_class(int cls) { return rq_class(cls); }
 /* The squares of map this request's reads have walked, and its edits have
  * covered (ctl.h, the budget). */
 static long g_read, g_cover;
+static int  g_changes;                 /* `changes` lines so far */
 
 /* An edit is about to cover this many squares: 0, with why in err, past
  * CTL_EDIT_SQUARES. */
@@ -1140,6 +1141,8 @@ static int rq_scene_other(RQ_ARGS)
     if (n == 3 && !strcmp(w[1], "diff")) {
         int i = scene_find(m, w[2]);
         if (i < 0) { rq_class(CTL_E_MISSING), snprintf(err, errsz, "no scene called %.31s", w[2]); return -1; }
+        /* Every creature of the scene against every one of the map's. */
+        if (!app_ctl_read(a, (long)m->scenes[i].tokens.n * m->tokens.n / 8 + 1, err, errsz)) return -1;
         if (!scene_diff(out, m, i)) fputs("no changes\n", out);
         return 0;
     }
@@ -1283,6 +1286,7 @@ static int rq_holds(RQ_ARGS)
     char *e1, *e2;
     unsigned long long dev = n == 3 ? strtoull(w[1], &e1, 10) : 0, ino = n == 3 ? strtoull(w[2], &e2, 10) : 0;
     if (n != 3 || *e1 || *e2) { snprintf(err, errsz, "holds DEVICE INODE, as stat gives them"); return -1; }
+    if (!app_ctl_read(a, CTL_FILE_CHARGE, err, errsz)) return -1;          /* a stat a line */
     struct stat st;
     int same = m && m->path[0] && stat(m->path, &st) == 0 &&
                (unsigned long long)st.st_dev == dev && (unsigned long long)st.st_ino == ino;
@@ -1401,6 +1405,10 @@ static int rq_changes(RQ_ARGS)
      * now" would be the proposal, where dump means that and this does not. */
     if (ed->lines || ed->header) { snprintf(err, errsz, "changes comes before the request's propose line and edits"); return -1; }
     if (n == 3 && !region(m, w[2], &box[0], &box[1], &box[2], &box[3], err, errsz)) return -1;
+    /* Each writes its regions aside before it sends them, and one tells
+     * all there is to tell: three a request is two to spare. Its own count,
+     * since the squares it may not read it lists and does not refuse. */
+    if (!a->ctl_direct && ++g_changes > 3) BADC(CTL_E_LIMIT, "changes is asked at most three times in a request");
     a->agent_seen_ms = a->now_ms ? a->now_ms : 1;       /* someone is listening: the checkpoint stays */
     app_events_hear(a);                                 /* and a change nobody heard of is said first */
     app_events_write(a, out, (unsigned)k);
@@ -1849,6 +1857,7 @@ char *app_ctl_exec(App *a, const char *req, size_t *len)
     char  verdict[320] = "ok";
     int   lineno = 0;
     g_read = g_cover = 0;
+    g_changes = 0;
     Edits ed;
     memset(&ed, 0, sizeof ed);
     ed.x1 = -1;
@@ -1894,6 +1903,16 @@ char *app_ctl_exec(App *a, const char *req, size_t *len)
         else if (n > 0 && a->ctl_can_hold && !a->agent_on && !off_takes(w, n))
             rq_class(CTL_E_STATE), snprintf(err, sizeof err, "the agent channel is off%s%.63s - type :agent on in that vtt, then ask again",
                      a->map ? " in the vtt with " : "", a->map ? a->map->name : "");
+        /* The answer so far (ctl.h, the budget): once it is past the cap no
+         * further line is run. One line's answer is never refused for its
+         * size -- a whole read of a crowded map is what was asked, and its
+         * squares were counted -- only what is piled on top of it. Not under
+         * --apply on a file, whose answer is a terminal's or a pipe's. */
+        if (n > 0 && !err[0] && !a->ctl_direct && (fflush(out), blen > CTL_ANSWER_CAP)) {
+            rq_class(CTL_E_LIMIT);
+            snprintf(err, sizeof err, "the answer was over %d MB before this line: send the rest in another request",
+                     CTL_ANSWER_CAP >> 20);
+        }
         int rc = err[0] ? -1 : run_line(a, line, w, n, out, &ed, err, sizeof err);
         if (rc == 0) continue;
         if (rc == -2) snprintf(verdict, sizeof verdict, "busy: %s", err);
