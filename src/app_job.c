@@ -52,7 +52,7 @@ int app_job_gm_only(const Job *j) { return j->from == JOB_FROM_DISK || j->from =
  * that the log still holds keeps its author and not the number. */
 static void job_clear(App *a, Job *j)
 {
-    if (j->used) undo_tag_forget(&a->undo, j->num);
+    if (j->used) { undo_tag_forget(&a->undo, j->num); app_agent_forget(a, j->num); }
     if (j->has_cs) cs_free(&j->cs);
     memset(j, 0, sizeof *j);
 }
@@ -399,7 +399,7 @@ void app_job_feedback(App *a, const char *text)
      * last. One another name took is that name's to answer: it hears the
      * event, and a second agent started for it would only be refused. */
     char own[CTL_NAME_MAX];
-    snprintf(own, sizeof own, "job-%d", j->num);
+    snprintf(own, sizeof own, AGENT_NAME_FMT, j->num);
     int theirs = j->taker[0] && strcmp(j->taker, own) != 0;
     snprintf(msg, sizeof msg, "#%d back to %s: %.150s", j->num, theirs ? j->taker : "the agent", text);
     app_note_gm(a, msg);

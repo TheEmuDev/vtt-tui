@@ -254,7 +254,11 @@ asked, the box they drew, the job's history with any feedback last -- and the `v
 lines to use, with this vtt's path and pid filled in. `$VTT`, `$VTT_PID`, `$VTT_JOB` and `$VTT_AGENT` (your name, below) hold
 the same. Take the job, read the map, propose once, read your proposal back, and exit; you
 are started again if the GM sends it back. You need no `wait` loop: one run is one attempt.
-What you print goes to the GM's session log.
+What you print goes to the GM's session log. **Exit when you are done, and say something
+while you work:** if you exit with the job taken and nothing proposed, it goes back to
+`asked` and the GM is told your exit status; if vtt hears no request from you for ten
+minutes (a held `wait` counts as one), it stops you and everything you started, and the job
+goes back the same way.
 
 The GM has the map open in `vtt` and has typed `:agent on`. Send requests with `vtt --ctl`
 (requests on stdin, or one as an argument). **Your edits are proposals:** they run on a copy

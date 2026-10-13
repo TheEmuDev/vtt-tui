@@ -2,8 +2,10 @@
  * each job the GM asks for (:ask) and each one sent back with feedback, so
  * asking works with no agent already waiting. The command gets the job and
  * its thread on stdin, with how to answer; it reports back through the
- * channel like any agent (docs/AGENTS.md). It runs detached -- nobody's
- * child, no terminal -- with its output in the session log when one is on.
+ * channel like any agent (docs/AGENTS.md). It runs cut from the terminal, in
+ * a session of its own, with its output in the session log when one is on;
+ * vtt is its parent (docs/V2.md, D8): the tick reaps it, says how it ended
+ * when it left its job undone, and stops one that has gone silent.
  * Every message is the GM's alone. */
 
 #include <errno.h>
@@ -83,6 +85,113 @@ void app_agent_prompt(const App *a, const Job *j, FILE *out)
           "Propose once, read it back, then stop. The verdict is the GM's; feedback starts you again with this job.\n", out);
 }
 
+static AgentRun *run_of(App *a, int job)
+{
+    for (int i = 0; i < a->nagents; i++)
+        if (a->agents[i].job == job) return &a->agents[i];
+    return NULL;
+}
+
+void app_agent_forget(App *a, int num)
+{
+    AgentRun *r = run_of(a, num);
+    if (r) { r->job = 0; r->again = 0; }
+}
+
+void app_agent_heard(App *a, const char *who)
+{
+    int num = 0;
+    if (!a->nagents || sscanf(who, AGENT_NAME_FMT, &num) != 1 || num < 1) return;
+    AgentRun *r = run_of(a, num);
+    if (r && !r->stopping && r->heard_ms) r->heard_ms = a->now_ms ? a->now_ms : 1;
+}
+
+int app_agents_due(const App *a, uint64_t now_ms)
+{
+    int due = -1;
+    for (int i = 0; i < a->nagents; i++) {
+        const AgentRun *r = &a->agents[i];
+        if (!r->heard_ms) return 0;                           /* not yet seen by a tick */
+        /* Told to stop and then made to: nothing more to do at any time. Its
+         * end wakes the loop (SIGCHLD); one that cannot die must not spin it. */
+        if (r->stopping == 2) continue;
+        uint64_t at = r->heard_ms + (uint64_t)(r->stopping ? a->agent_grace_ms : a->agent_deadline_ms);
+        int      d  = now_ms >= at ? 0 : (int)(at - now_ms);
+        if (due < 0 || d < due) due = d;
+    }
+    return due;
+}
+
+/* How a run ended, as the GM reads it. */
+static void ended_how(const AgentRun *r, int status, int deadline_ms, char *buf, size_t sz)
+{
+    if (r->stopping) snprintf(buf, sz, "stopped by vtt after %d minutes without a word", deadline_ms / 60000);
+    else if (WIFSIGNALED(status)) snprintf(buf, sz, "killed by signal %d", WTERMSIG(status));
+    else if (WEXITSTATUS(status) == 127) snprintf(buf, sz, "exit 127: the command could not be run");
+    else if (WEXITSTATUS(status) == 126) snprintf(buf, sz, "exit 126: the command is not a program that can be run");
+    else snprintf(buf, sz, "exit %d", WEXITSTATUS(status));
+}
+
+/* A run is over. A job it left undone -- asked or working, and nobody
+ * else's -- waits as asked again, said to the GM and to the agents. */
+static void run_ended(App *a, AgentRun r, int status)
+{
+    int slot = r.job ? app_job_find(a, r.job) : -1;
+    if (slot < 0) return;
+    Job *j = &a->jobs[slot];
+    /* A job done meanwhile (the old run proposed late and the GM took it,
+     * or scrapped it) wants nobody. */
+    if (j->state != JOB_ASKED && j->state != JOB_WORKING) return;
+    if (r.again) { app_agent_start(a, j); return; }         /* the feedback that came while it ran */
+    char own[CTL_NAME_MAX], how[80], msg[320];
+    snprintf(own, sizeof own, AGENT_NAME_FMT, j->num);
+    if (j->taker[0] && strcmp(j->taker, own) != 0) return;
+    ended_how(&r, status, a->agent_deadline_ms, how, sizeof how);
+    j->state    = JOB_ASKED;
+    j->taker[0] = '\0';
+    j->has_area = 0;
+    snprintf(msg, sizeof msg, "its agent stopped (%s)", how);
+    app_job_thread_add(j, '-', msg);
+    app_event(a, CTL_EV_ASKED, j->num, "its agent stopped (%s): %.120s", how, j->text);
+    snprintf(msg, sizeof msg, "#%d: its agent stopped with nothing proposed (%s) - the job waits as asked%s", j->num, how,
+             slog_on(&a->slog) ? "; the session log has what it printed" : "; :log on shows what the next one prints");
+    app_note_gm(a, msg);
+    a->dirty = 1;
+}
+
+void app_agents_tick(App *a, uint64_t now_ms)
+{
+    if (!a->nagents) return;
+    PROF_ZONE("agent.reap");
+    for (int i = 0; i < a->nagents; ) {
+        AgentRun *r = &a->agents[i];
+        int   status = 0;
+        pid_t got = waitpid((pid_t)r->pid, &status, WNOHANG);
+        if (got == (pid_t)r->pid || (got < 0 && errno == ECHILD)) {
+            AgentRun done = *r;
+            *r = a->agents[--a->nagents];
+            run_ended(a, done, got < 0 ? 0 : status);        /* may start another: the slot is free first */
+            continue;
+        }
+        if (!r->heard_ms) r->heard_ms = now_ms ? now_ms : 1;
+        /* One holding a wait is listening, not silent. */
+        char     own[CTL_NAME_MAX];
+        unsigned seq;
+        snprintf(own, sizeof own, AGENT_NAME_FMT, r->job);
+        if (!r->stopping && r->job && ctl_waiter_of(&a->ctl, own, &seq) >= 0) r->heard_ms = now_ms;
+        /* Its group: the shell and whatever it started that did not leave it. */
+        if (!r->stopping && now_ms - r->heard_ms >= (uint64_t)a->agent_deadline_ms) {
+            kill((pid_t)-r->pid, SIGTERM);
+            r->stopping = 1;
+            r->heard_ms = now_ms;
+        } else if (r->stopping == 1 && now_ms - r->heard_ms >= (uint64_t)a->agent_grace_ms) {
+            kill((pid_t)-r->pid, SIGKILL);
+            r->stopping = 2;
+        }
+        i++;
+    }
+}
+
 int app_agent_start(App *a, const Job *j)
 {
     /* For what the GM asked for, and nothing else (decision 1b: "for each
@@ -92,6 +201,28 @@ int app_agent_start(App *a, const Job *j)
     PROF_ZONE("agent.spawn");
     char msg[AGENT_CMD_MAX + 160], err[CTL_PATH_MAX + 64];
     int  turned_on = 0;
+    /* One agent a job: a second would collide with the first on the same
+     * squares. It is started when the one running stops. */
+    AgentRun *running = run_of(a, j->num);
+    if (running) {
+        running->again = 1;
+        snprintf(msg, sizeof msg, "#%d: its agent is still running - it is started again when that one stops", j->num);
+        app_note_gm(a, msg);
+        return 0;
+    }
+    /* Full: runs whose job is gone and which have stopped make room here,
+     * since nothing of theirs is left to say (a vtt that never ticks -- the
+     * bench's key path -- would otherwise fill up on jobs asked and removed).
+     * Never reached from inside the tick: it frees a slot before it starts. */
+    for (int i = 0; a->nagents == JOB_MAX && i < a->nagents; ) {
+        if (!a->agents[i].job && waitpid((pid_t)a->agents[i].pid, NULL, WNOHANG) != 0) a->agents[i] = a->agents[--a->nagents];
+        else i++;
+    }
+    if (a->nagents == JOB_MAX) {
+        snprintf(msg, sizeof msg, "#%d: %d agents are running already - none started; :ask again when one stops", j->num, JOB_MAX);
+        app_note_gm(a, msg);
+        return -1;
+    }
     /* The command answers over the channel: on, for it -- and said. */
     if (!a->agent_on) {
         if (ctl_start(&a->ctl, err, sizeof err) < 0) {
@@ -127,10 +258,9 @@ int app_agent_start(App *a, const Job *j)
         return -1;
     }
     if (pid == 0) {
-        /* Twice, so the agent is nobody's child (no zombie to reap) and our
-         * terminal is not its controlling one. */
+        /* A session of its own: our terminal is not its controlling one,
+         * and it leads a group that can be stopped whole. */
         setsid();
-        if (fork() != 0) _exit(0);
         close(in[1]);
         dup2(in[0], 0);
         int out = slog_on(&a->slog) ? open(a->slog.path, O_WRONLY | O_APPEND) : -1;
@@ -142,7 +272,7 @@ int app_agent_start(App *a, const Job *j)
         /* Its name on the channel (docs/V2.md, D8): the job's own, so two
          * agents started for two jobs cannot take each other's. */
         char who[CTL_NAME_MAX];
-        snprintf(who, sizeof who, "job-%s", job);
+        snprintf(who, sizeof who, AGENT_NAME_FMT, j->num);
         setenv("VTT_AGENT", who, 1);
         setenv("VTT_PID", pidv, 1);
         if (app_self_path) setenv("VTT", app_self_path, 1);
@@ -150,7 +280,12 @@ int app_agent_start(App *a, const Job *j)
         _exit(127);
     }
     close(in[0]);
-    while (waitpid(pid, NULL, 0) < 0 && errno == EINTR) { }
+    AgentRun *run = &a->agents[a->nagents++];
+    memset(run, 0, sizeof *run);
+    run->pid      = (long)pid;
+    run->job      = j->num;
+    /* heard_ms stays 0 until the tick sees it: the deadline is counted on
+     * the tick's clock, from the tick's own first look. */
     /* The prompt is a few KB: it fits the pipe, so this never waits on the
      * agent reading it. A command that exits without reading it must not
      * take vtt with it: SIGPIPE is ignored for the write. */

@@ -84,6 +84,23 @@ typedef enum {
 } DiskState;
 
 #define AGENT_CMD_MAX 256
+/* An agent vtt started (app_agent.c; docs/V2.md, D8): its child, cut from
+ * the terminal and reaped by the tick. One a job: a second start of a job
+ * whose agent still runs waits for it (`again`). Silent for
+ * AGENT_DEADLINE_MS -- no request under its name -- it is told to stop, and
+ * AGENT_GRACE_MS later made to. */
+#define AGENT_DEADLINE_MS (10 * 60 * 1000)
+#define AGENT_GRACE_MS    5000
+/* The name vtt gives the agent it starts for job N, and so the name such a
+ * job's taker has: the one place it is written. */
+#define AGENT_NAME_FMT    "job-%d"
+typedef struct {
+    long     pid;
+    int      job;           /* its job's number; 0 once that job is gone */
+    uint64_t heard_ms;      /* first seen by a tick, or last heard from on the channel; 0 not yet seen */
+    uint8_t  again;         /* feedback came while it ran: start the job's agent again when it stops */
+    uint8_t  stopping;      /* past its deadline: SIGTERM sent at heard_ms */
+} AgentRun;
 #define EVENT_MAX      32
 #define EVENT_TEXT_MAX 240
 typedef struct {
@@ -280,6 +297,10 @@ typedef struct {
     int      agent_on;
     /* :agent command (app_agent.c): what vtt starts for each :ask and each
      * job sent back, the job on its stdin. Empty: none. */
+    AgentRun agents[JOB_MAX];
+    int      nagents;
+    int      agent_deadline_ms; /* AGENT_DEADLINE_MS; a test sets less */
+    int      agent_grace_ms;    /* AGENT_GRACE_MS; likewise */
     char     agent_cmd[AGENT_CMD_MAX];
     int      agent_cmd_off;     /* :agent command off: kept, not started */
 
@@ -466,6 +487,10 @@ int  app_autosave_due(const App *a, uint64_t now_ms);
  * milliseconds until a flush has something to do, -1 for nothing owed. */
 void app_events_flush(App *a, uint64_t now_ms);
 int  app_events_due(const App *a, uint64_t now_ms);
+/* The agents vtt started (app_agent.c): app_tick reaps the ones that
+ * stopped and stops the ones past their deadline; this is when the next
+ * deadline falls, -1 with none running. */
+int  app_agents_due(const App *a, uint64_t now_ms);
 
 /* Another writer of the file (app_disk.c): app_disk_due is the milliseconds
  * until a changed file is read (once the keys are quiet), -1 for none. */

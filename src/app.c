@@ -27,6 +27,8 @@ void app_init(App *a, Term *t, Renderer *r)
     a->term    = t;
     a->rnd     = r;
     a->ctl_turn_ns = CTL_TURN_NS;
+    a->agent_deadline_ms = AGENT_DEADLINE_MS;
+    a->agent_grace_ms    = AGENT_GRACE_MS;
     a->th      = &THEME_DARK;
     a->screen  = SCREEN_MENU;
     a->running = 1;
@@ -489,6 +491,7 @@ void app_tick(App *a, uint64_t now_ms)
         a->seen_gen  = a->map->gen;
         a->change_ms = now_ms;
     }
+    app_agents_tick(a, now_ms);
     app_events_flush(a, now_ms);
     if (!a->map) return;
     app_disk_tick(a, now_ms);

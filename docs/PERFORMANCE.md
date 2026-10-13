@@ -1173,7 +1173,9 @@ on 40×25), once an `:ask`. The frame after it is an ordinary one, 22.5 µs. The
 started, some tens of microseconds with `posix_spawn`; this forks twice and waits for the
 first child, so the agent is nobody's child and leaves no zombie -- the other way to that is
 `SIGCHLD` ignored, which would break the `waitpid` the card editor and `:mirror` rely on. It
-is on a key the GM presses to hand work to a program that will take seconds.
+is on a key the GM presses to hand work to a program that will take seconds. (2.0 forks
+once and reaps the agent in the tick, docs/V2.md D8; the row above is 1.x's two forks and
+a wait, and is remeasured at the next regeneration of the tables: HEALTH 76.)
 
 **`--apply` finding the map's holder** (step 6; the desktop, 300 runs a figure, the median of
 five): a failing plan on a file nobody has open takes 1.06 ms with no vtt running and 1.17 ms

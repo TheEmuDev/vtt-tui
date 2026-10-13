@@ -50,6 +50,7 @@ int loop_wait(Loop *l, uint64_t now_ms)
     sooner(&timeout, app_autosave_due(a, now_ms));   /* unsaved work not yet copied */
     sooner(&timeout, app_ping_due(a, now_ms));       /* a ping's ring coming down */
     sooner(&timeout, app_events_due(a, now_ms));     /* the map's changes, told to an agent */
+    sooner(&timeout, app_agents_due(a, now_ms));     /* a started agent gone silent */
     sooner(&timeout, app_disk_due(a, now_ms));       /* a file someone else wrote */
     l->nctl = ctl_pollfds(&a->ctl, l->fds + LOOP_FIXED + l->nnet, 1 + CTL_SLOTS);
     sooner(&timeout, ctl_due(&a->ctl, now_ms));      /* an agent's connection gone quiet */

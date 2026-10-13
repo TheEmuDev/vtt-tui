@@ -177,6 +177,10 @@ int term_init(Term *t)
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;
     sigaction(SIGWINCH, &sa, NULL);
+    /* A started agent that stops (app_agent.c) wakes the loop the same way:
+     * the tick reaps it. The pipe has no lost wake-up to race with poll. */
+    sa.sa_flags = SA_RESTART | SA_NOCLDSTOP;
+    sigaction(SIGCHLD, &sa, NULL);
 
     sa.sa_handler = on_fatal;
     sa.sa_flags   = 0;

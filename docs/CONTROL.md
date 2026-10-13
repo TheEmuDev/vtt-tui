@@ -193,6 +193,8 @@ never move.
     (`:ask`) and for one sent back (`c`), never for an agent's own job, an `--apply` or a
     change from the file. The job is on its stdin (`app_agent_prompt`: self-contained, with
     the path and pid written in), and `VTT`, `VTT_PID`, `VTT_JOB` in its environment.
+  - *(2.0, docs/V2.md D8: vtt is the agent's parent now, forks once and reaps it in the
+    tick; what follows is 1.x.)*
   - **Detached by forking twice** (as `:mirror` does): the agent is nobody's child, so
     there is no zombie and no `SIGCHLD` to handle, and it has no terminal. Its descriptors
     past 2 are closed. Output goes to the session log's file when one is on, else nowhere.

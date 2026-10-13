@@ -1378,9 +1378,13 @@ It answers over the agent channel, so the first job switches the channel on if i
 and the status line says so. `:agent command` alone shows the command, `:agent command off`
 stops it being started and `:agent command on` brings it back, and the `VTT_AGENT_COMMAND`
 environment variable sets it at startup. Only a job you asked for starts it: not an agent's
-own idea, an `--apply`, or a change from the file. Each `:ask` and each `c` starts one run,
-with no limit on how many run at once. A command that cannot run (a name mistyped) says so
-only in what it prints, so switch `:log` on when trying a new one. The command also finds `$VTT` (this vtt's own path), `$VTT_PID`,
+own idea, an `--apply`, or a change from the file. Each job has one run at a time: send a
+job back while its agent is still running and the next run starts when that one stops. If a
+run ends with nothing proposed, the status line says how (`exit 127: the command could not
+be run` for a name mistyped) and the job waits as asked again; what the command printed is
+in the session log, so switch `:log` on when trying a new one. An agent that makes no
+request for ten minutes is stopped the same way. Quitting vtt does not stop an agent that
+is still running: its next request finds no vtt and fails. The command also finds `$VTT` (this vtt's own path), `$VTT_PID`,
 `$VTT_JOB` and `$VTT_AGENT` in its environment. The last is the agent's name on the channel,
 `job-N` for job N: `vtt --ctl` sends it with every request, so the job the agent takes is
 its own and no other agent can answer, drop or undo it. If another agent (or you, from a

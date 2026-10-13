@@ -1945,7 +1945,12 @@ char *app_ctl_exec(App *a, const char *req, size_t *len)
             ran = 1;
             /* Lines are numbered from the one after it: `vtt --ctl` wrote
              * it, and the agent counts its own. */
-            if (n == 2 && ctl_name_ok(w[1])) { str_lcpy(a->ctl_who, w[1], sizeof a->ctl_who); lineno--; continue; }
+            if (n == 2 && ctl_name_ok(w[1])) {
+                str_lcpy(a->ctl_who, w[1], sizeof a->ctl_who);
+                app_agent_heard(a, a->ctl_who);           /* one vtt started is alive */
+                lineno--;
+                continue;
+            }
             snprintf(err, sizeof err, "agent NAME: a name is 1-%d letters, digits, - or _", CTL_NAME_MAX - 1);
         }
         ran = 1;

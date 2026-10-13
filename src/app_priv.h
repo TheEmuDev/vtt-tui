@@ -243,6 +243,13 @@ void app_disk_saved(App *a, int over);
  * for or sends back (1 started, 0 none set, -1 could not), what it reads on
  * stdin, and the `:agent command ...` words. */
 int  app_agent_start(App *a, const Job *j);
+/* The tick's: reap what stopped (its job back to asked if it left it
+ * undone, with its exit on the GM's line), stop what is past its deadline. */
+void app_agents_tick(App *a, uint64_t now_ms);
+/* A request came in under `who`: an agent vtt started is alive. */
+void app_agent_heard(App *a, const char *who);
+/* Job `num` is gone: an agent still running for it answers to no job. */
+void app_agent_forget(App *a, int num);
 void app_agent_prompt(const App *a, const Job *j, FILE *out);
 void app_agent_command_cmd(App *a, const char *rest);
 

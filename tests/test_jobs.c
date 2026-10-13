@@ -1061,6 +1061,20 @@ static int pump_until_file(App *a, const char *path, const char *needle)
     return file_has(path, needle);
 }
 
+/* Turns of the loop until no started agent is left to reap, or two seconds. */
+static int pump_until_reaped(App *a)
+{
+    for (int spin = 0; spin < 400 && a->nagents; spin++) {
+        struct pollfd fds[1 + CTL_SLOTS];
+        int n = ctl_pollfds(&a->ctl, fds, 1 + CTL_SLOTS);
+        poll(fds, (nfds_t)n, 5);
+        uint64_t now = prof_now_ns() / 1000000u;
+        ctl_service(&a->ctl, fds, n, now);
+        app_tick(a, now);
+    }
+    return a->nagents == 0;
+}
+
 void test_agent_command(void)
 {
     Sandbox sb = sandbox_enter("agentcmd");
@@ -1127,9 +1141,12 @@ void test_agent_command(void)
     CHECK(strstr(a.status, "#1 ready: ") && strstr(a.status, "from the script"));
     CHECK_EQ(map_tile(a.map, 0, 0), TILE_FLOOR);           /* a proposal, as ever */
 
-    CASE("nobody's child: the command leaves no zombie behind");
+    CASE("vtt's child, reaped by the tick: the command leaves no zombie behind, and a job done is left as it is");
+    CHECK(pump_until_reaped(&a));
     errno = 0;
     CHECK(waitpid(-1, NULL, WNOHANG) == -1 && errno == ECHILD);
+    CHECK_EQ(a.jobs[0].state, JOB_READY);
+    CHECK(strstr(a.status, "its agent stopped") == NULL);
 
     CASE("sent back with feedback: started again, the thread on its stdin with the feedback last");
     press(&a, ":review 1\rc");
@@ -1262,6 +1279,198 @@ void test_agent_command(void)
         app_agent_command_cmd(&a, big);
         CHECK(strstr(a.status, "put it in a script") != NULL);
         CHECK(!strcmp(a.agent_cmd, had));                   /* what was there is left */
+    }
+
+    CASE("a command that cannot run: its job waits as asked again, and the GM's line says exit 127");
+    {
+        jobs_reset(&a);
+        CHECK(pump_until_reaped(&a));                        /* the cases above left runs of their own */
+        press(&a, ":agent command no-such-command-anywhere-xyz\r");
+        unsigned s0 = a.event_seq;
+        press(&a, ":ask a moat\r");
+        CHECK_EQ(a.nagents, 1);
+        CHECK(a.jobs[0].used && a.jobs[0].state == JOB_ASKED);
+        CHECK(pump_until_reaped(&a));
+        CHECK_EQ(a.jobs[0].state, JOB_ASKED);
+        CHECK(strstr(a.status, "#1: its agent stopped with nothing proposed (exit 127: the command could not be run)") && a.status_gm);
+        CHECK(strstr(a.events[a.event_seq % EVENT_MAX].text, "job 1 asked: its agent stopped (exit 127") != NULL);
+        CHECK_EQ(a.event_seq, s0 + 2);                       /* asked, and asked again: nothing starts it a second time */
+        CHECK(!strcmp(a.jobs[0].thread[a.jobs[0].nthread - 1].text, "its agent stopped (exit 127: the command could not be run)"));
+        CHECK_EQ(a.nagents, 0);
+    }
+
+    CASE("an agent that takes its job and dies gives it back: asked, nobody's, with its exit status");
+    {
+        jobs_reset(&a);
+        press(&a, ":agent command cat > /dev/null; \"$VTT\" --ctl-pid \"$VTT_PID\" --ctl \"job $VTT_JOB area B2:C3\" > /dev/null; exit 3\r");
+        press(&a, ":ask a keep\r");
+        for (int spin = 0; spin < 400 && a.jobs[0].state != JOB_WORKING && a.nagents; spin++) {
+            struct pollfd fds[1 + CTL_SLOTS];
+            int n = ctl_pollfds(&a.ctl, fds, 1 + CTL_SLOTS);
+            poll(fds, (nfds_t)n, 5);
+            ctl_service(&a.ctl, fds, n, prof_now_ns() / 1000000u);
+            app_tick(&a, prof_now_ns() / 1000000u);
+        }
+        CHECK(pump_until_reaped(&a));
+        CHECK(a.jobs[0].state == JOB_ASKED && !a.jobs[0].taker[0] && !a.jobs[0].has_area);
+        CHECK(strstr(a.status, "(exit 3)") != NULL);
+        /* One another name took is that name's: its agent's end changes nothing. */
+        jobs_reset(&a);
+        press(&a, ":agent command cat > /dev/null; sleep 0.2; exit 4\r");
+        press(&a, ":ask a wall\r");
+        char *t = ctl_ask(&a, "agent scout\njob 1 take");
+        free(t);
+        CHECK(pump_until_reaped(&a));
+        CHECK(a.jobs[0].state == JOB_WORKING && !strcmp(a.jobs[0].taker, "scout"));
+        CHECK(strstr(a.status, "exit 4") == NULL);
+    }
+
+    CASE("an agent silent past its deadline is stopped, its whole session, and the job waits as asked");
+    {
+        jobs_reset(&a);
+        char mark[720], c3[900];
+        snprintf(mark, sizeof mark, "%s/late", sb.dir);
+        snprintf(c3, sizeof c3, ":agent command cat > /dev/null; sleep 30; touch %s\r", mark);
+        press(&a, c3);
+        a.agent_deadline_ms = 60;
+        press(&a, ":ask a tower\r");
+        CHECK_EQ(a.nagents, 1);
+        long pid = a.agents[0].pid;
+        CHECK_EQ(app_agents_due(&a, 5), 0);                    /* not yet seen by a tick: due at once, to be */
+        app_tick(&a, prof_now_ns() / 1000000u);
+        CHECK_EQ(app_agents_due(&a, a.agents[0].heard_ms), 60);
+        CHECK_EQ(app_agents_due(&a, a.agents[0].heard_ms + 100), 0);
+        CHECK(pump_until_reaped(&a));
+        a.agent_deadline_ms = AGENT_DEADLINE_MS;
+        CHECK_EQ(app_agents_due(&a, 0), -1);
+        CHECK(pid > 0 && kill((pid_t)pid, 0) < 0);            /* gone, and reaped */
+        int group_gone = 0;                                   /* and the sleep it started with it (init reaps that one: a moment) */
+        for (int spin = 0; spin < 200 && !(group_gone = kill((pid_t)-pid, 0) < 0); spin++) poll(NULL, 0, 5);
+        CHECK(group_gone);
+        CHECK(a.jobs[0].state == JOB_ASKED && strstr(a.status, "stopped by vtt after") != NULL);
+        CHECK(access(mark, F_OK) != 0);
+    }
+
+    CASE("the deadline is silence: a request under its name, or a wait it holds, keeps an agent; one deaf to TERM is killed");
+    {
+        char alive[720], c5[1100];
+        snprintf(alive, sizeof alive, "%s/alive", sb.dir);
+        /* Three times the deadline, a request every 20 ms. */
+        jobs_reset(&a);
+        snprintf(c5, sizeof c5, ":agent command cat > /dev/null; for i in 1 2 3 4 5 6 7 8 9 10 11 12; do \"$VTT\" --ctl-pid \"$VTT_PID\" "
+                                "--ctl status > /dev/null; sleep 0.02; done; echo talked >> %s\r", alive);
+        press(&a, c5);
+        a.agent_deadline_ms = 120;
+        press(&a, ":ask a bridge\r");
+        CHECK(pump_until_reaped(&a));
+        CHECK(file_has(alive, "talked") && strstr(a.status, "stopped by vtt") == NULL && strstr(a.status, "(exit 0)") != NULL);
+        /* Silent but for one held wait, three times the deadline long. */
+        jobs_reset(&a);
+        snprintf(c5, sizeof c5, ":agent command cat > /dev/null; \"$VTT\" --ctl-pid \"$VTT_PID\" --ctl 'wait for 1' > /dev/null; "
+                                "echo waited >> %s\r", alive);
+        press(&a, c5);
+        a.agent_deadline_ms = 300;
+        press(&a, ":ask a gate\r");
+        CHECK(pump_until_reaped(&a));
+        CHECK(file_has(alive, "waited") && strstr(a.status, "stopped by vtt") == NULL);
+        /* Deaf to TERM: told, then made to, and until then nothing is due but the grace. */
+        jobs_reset(&a);
+        press(&a, ":agent command trap '' TERM; cat > /dev/null; sleep 30\r");
+        a.agent_deadline_ms = 40;
+        a.agent_grace_ms = 150;
+        press(&a, ":ask a wall\r");
+        long pid = a.agents[0].pid;
+        uint64_t t0 = prof_now_ns() / 1000000u;
+        app_tick(&a, t0);
+        app_tick(&a, t0 + 50);                               /* past the deadline: TERM, which it does not hear */
+        CHECK(a.nagents == 1 && a.agents[0].stopping == 1);
+        CHECK_EQ(app_agents_due(&a, t0 + 60), 140);           /* the grace, from when it was told */
+        poll(NULL, 0, 30);
+        app_tick(&a, t0 + 100);
+        CHECK(a.nagents == 1 && kill((pid_t)pid, 0) == 0);    /* still there */
+        app_tick(&a, t0 + 250);                              /* KILL */
+        CHECK_EQ(a.agents[0].stopping, 2);
+        CHECK_EQ(app_agents_due(&a, t0 + 9999), -1);          /* nothing more to do: its end wakes the loop */
+        for (int spin = 0; spin < 400 && a.nagents; spin++) { poll(NULL, 0, 5); app_tick(&a, t0 + 260); }
+        CHECK(a.nagents == 0 && strstr(a.status, "stopped by vtt after") != NULL);
+        a.agent_grace_ms = AGENT_GRACE_MS;
+
+        /* Sixteen runs at most: jobs asked and removed leave runs with no job, which make room once they stop. */
+        jobs_reset(&a);
+        press(&a, ":agent command cat > /dev/null; sleep 5\r");
+        a.agent_deadline_ms = AGENT_DEADLINE_MS;
+        for (int k = 0; k < JOB_MAX; k++) {
+            press(&a, ":ask more\r");
+            char rm[40];
+            snprintf(rm, sizeof rm, ":ask %d remove\r", a.job_last);
+            press(&a, rm);
+        }
+        CHECK_EQ(a.nagents, JOB_MAX);
+        press(&a, ":ask one too many\r");
+        CHECK(a.nagents == JOB_MAX && strstr(a.status, "16 agents are running already") != NULL);
+        a.agent_deadline_ms = 20;                            /* and they are stopped, all of them */
+        CHECK(pump_until_reaped(&a));
+        a.agent_deadline_ms = AGENT_DEADLINE_MS;
+        errno = 0;
+        CHECK(waitpid(-1, NULL, WNOHANG) == -1 && errno == ECHILD);
+    }
+
+    CASE("one agent a job: feedback while its agent still runs starts the next one only when that one stops");
+    {
+        jobs_reset(&a);
+        char runs[720], sc[720], c4[900];
+        snprintf(runs, sizeof runs, "%s/held.out", sb.dir);
+        snprintf(sc, sizeof sc, "%s/slow.sh", sb.dir);
+        FILE *f = fopen(sc, "w");
+        fprintf(f, "cat > /dev/null\n"
+                   "printf 'job %%s propose \"slow\"\ntile C1 water\n' \"$VTT_JOB\" | \"$VTT\" --ctl-pid \"$VTT_PID\" --ctl > /dev/null\n"
+                   "echo started >> '%s'\nsleep 0.4\necho stopped >> '%s'\n", runs, runs);
+        fclose(f);
+        snprintf(c4, sizeof c4, ":agent command sh %s\r", sc);
+        press(&a, c4);
+        press(&a, ":ask a pool\r");
+        CHECK(pump_until_file(&a, runs, "started"));
+        CHECK(a.jobs[0].state == JOB_READY && a.nagents == 1);
+        press(&a, ":review 1\rc");
+        press(&a, "deeper\r");                               /* the first is still asleep */
+        CHECK(a.nagents == 1 && a.agents[0].again);
+        CHECK(strstr(a.status, "its agent is still running") != NULL);
+        CHECK(!file_has(runs, "stopped"));
+        CHECK(pump_until_file(&a, runs, "stopped\nstarted"));  /* the second starts after the first has stopped */
+        CHECK(pump_until_reaped(&a));
+        char *t = slurp(runs);
+        CHECK(t && !strcmp(t, "started\nstopped\nstarted\nstopped\n"));
+        free(t);
+        CHECK_EQ(a.jobs[0].state, JOB_READY);
+        /* Held, and the job done before the first run stops: nobody is started for it. */
+        press(&a, ":review 1\rc");
+        press(&a, "wider\r");                                /* a third run, */
+        CHECK(pump_until_file(&a, runs, "stopped\nstarted\nstopped\nstarted"));
+        press(&a, ":review 1\rc");
+        press(&a, "wider still\r");                          /* and feedback on its proposal while it is still asleep */
+        CHECK(a.nagents == 1 && a.agents[0].again);
+        char *p2 = ctl_ask(&a, "agent job-1\njob 1 propose\ntile C2 water");   /* it proposes late, */
+        free(p2);
+        press(&a, ":review 1\r");
+        press(&a, "\r");                                     /* and the GM takes that */
+        press(&a, "\x1b");
+        CHECK_EQ(a.jobs[0].state, JOB_ACCEPTED);
+        CHECK(pump_until_reaped(&a));
+        t = slurp(runs);
+        CHECK(t && !strcmp(t, "started\nstopped\nstarted\nstopped\nstarted\nstopped\n"));   /* no fourth */
+        free(t);
+        /* A job removed while its agent runs: the run answers to no job, and is still reaped. */
+        jobs_reset(&a);
+        press(&a, ":agent command cat > /dev/null; sleep 0.2; exit 9\r");
+        press(&a, ":ask a ditch\r");
+        press(&a, ":ask 1 remove\r");
+        CHECK(a.nagents == 1 && a.agents[0].job == 0);
+        unsigned s9 = a.event_seq;
+        CHECK(pump_until_reaped(&a));
+        CHECK(strstr(a.status, "its agent stopped") == NULL && a.event_seq == s9);
+        errno = 0;
+        CHECK(waitpid(-1, NULL, WNOHANG) == -1 && errno == ECHILD);
+        press(&a, ":agent command off\r");
     }
 
     app_self_path = self_was;
