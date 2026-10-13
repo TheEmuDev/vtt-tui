@@ -966,25 +966,53 @@ static void cs_where_pieces(void)
     CHECK_EQ(other, 0);
 
     CASE("random changes: every changed cell's piece is marked, and on a small map nothing else is");
+    /* Squares, and boundaries out to the map's far edge (x == w, y == h),
+     * few and many, on maps whose pieces are one square and several: the
+     * walk skips a cell in the last cell's piece, and must skip no other. */
     unsigned seed = 7;
-    for (int round = 0; round < 40; round++) {
-        Map *c = map_copy(a);
-        int nchg = 1 + (int)(seed % 9);
-        CsWhere exact = { { 0 } }, got = { { 0 } };
-        for (int k = 0; k < nchg; k++) {
+    static const int SIZE[][2] = { { 64, 40 }, { 7, 3 }, { 20, 12 }, { 16, 16 }, { 255, 33 }, { 1, 1 } };
+    long skipped = 0, far_edge = 0;
+    for (size_t d = 0; d < sizeof SIZE / sizeof *SIZE; d++) {
+        int mw = SIZE[d][0], mh = SIZE[d][1];
+        Map *base = map_new(mw, mh, "r");
+        for (int y = 0; y < mh; y++) for (int x = 0; x < mw; x++) map_set_tile(base, x, y, TILE_FLOOR);
+        for (int round = 0; round < 40; round++) {
+            Map *c = map_copy(base);
             seed = seed * 1103515245u + 12345u;
-            int x = (int)(seed >> 8) % 64, y = (int)(seed >> 16) % 40;
-            map_set_tile(c, x, y, TILE_ROUGH);
-            cs_pieces(64, 40, x, y, x, y, &exact);
+            int nchg = round % 4 == 3 ? 40 + (int)(seed >> 8) % 80 : 1 + (int)(seed >> 8) % 9;
+            CsWhere exact = { { 0 } }, got = { { 0 } };
+            for (int k = 0; k < nchg; k++) {
+                seed = seed * 1103515245u + 12345u;
+                int kind = (int)(seed >> 4) % 3;
+                /* Every third change sits beside the one before: a run inside a piece. */
+                static int lx, ly;
+                int x = k % 3 == 2 ? lx : (int)(seed >> 8) % (mw + (kind == 1)), y = k % 3 == 2 ? ly : (int)(seed >> 16) % (mh + (kind == 2));
+                if (kind == 1 && x > mw) x = mw;
+                if (kind == 2 && y > mh) y = mh;
+                if (kind != 1 && x >= mw) x = mw - 1;
+                if (kind != 2 && y >= mh) y = mh - 1;
+                lx = x < mw ? x : mw - 1; ly = y < mh ? y : mh - 1;
+                if (kind == 0)      map_set_tile(c, x, y, TILE_ROUGH);
+                else if (kind == 1) map_set_vedge(c, x, y, EDGE_WALL);
+                else                map_set_hedge(c, x, y, EDGE_WALL);
+                far_edge += (kind == 1 && x == mw) || (kind == 2 && y == mh);
+                cs_pieces(mw, mh, x, y, x, y, &exact);              /* clamps, as the walk must */
+            }
+            ChangeSet rs;
+            cs_init(&rs);
+            cs_diff(&rs, base, c, NULL);
+            cs_where(&rs, &got, &other);
+            CHECK(where_same(&got, &exact));
+            int pieces = 0;
+            for (int r = 0; r < CS_GRID; r++) for (int cc = 0; cc < CS_GRID; cc++) pieces += cs_where_has(&got, cc, r);
+            skipped += rs.ncells - pieces;                          /* cells that shared a piece with another */
+            cs_free(&rs);
+            map_free(c);
         }
-        ChangeSet rs;
-        cs_init(&rs);
-        cs_diff(&rs, a, c, NULL);
-        cs_where(&rs, &got, &other);
-        CHECK(where_same(&got, &exact));
-        cs_free(&rs);
-        map_free(c);
+        map_free(base);
     }
+    CHECK(skipped > 500);                                           /* the skip is walked, not just the first cell */
+    CHECK(far_edge > 50);                                           /* and so is the far boundary */
     CASE("on a map of 256 squares and more a block is marked, not each cell: nothing missed, nothing past the block");
     {
         Map *big = map_new(512, 300, "big"), *chg = map_copy(big);

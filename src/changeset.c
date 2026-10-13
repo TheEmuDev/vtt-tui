@@ -947,22 +947,23 @@ void cs_where(const ChangeSet *cs, CsWhere *m, int *other)
      * more each way): a set of half such a map's squares is a few hundred
      * blocks, not a hundred thousand cells. A smaller map's pieces are finer
      * than its blocks, and it has few cells: each is looked at. */
-    int coarse = piece_w(w) >= CS_BLOCK && piece_w(h) >= CS_BLOCK;
+    int pw = piece_w(w), ph = piece_w(h), coarse = pw >= CS_BLOCK && ph >= CS_BLOCK;
     for (int b = 0; b < cs->bw * cs->bh; b++) {
         if (cs->block_start[b] == cs->block_start[b + 1]) continue;
         int bx = b % cs->bw * CS_BLOCK, by = b / cs->bw * CS_BLOCK;
         if (coarse) { cs_pieces(w, h, bx, by, bx + CS_BLOCK - 1, by + CS_BLOCK - 1, m); continue; }
         /* One cell after another is nearly always in the piece of the one
-         * before: its box is kept, and a cell inside it costs four
-         * compares. (A room of 1,700 cells was 11 us when each was divided
-         * out afresh.) A boundary on the map's far edge is its square's. */
+         * before: its box is kept, and a cell inside it is not divided out
+         * again. A cell is on the map or on its far boundary (x == w, y ==
+         * h), which is its square's: never below 0, so only the top is
+         * clamped. */
         CsBox in = { 0, 0, -1, -1 };
         for (int i = cs->block_start[b]; i < cs->block_start[b + 1]; i++) {
             int x = imin(cs->cells[i].x, w - 1), y = imin(cs->cells[i].y, h - 1);
             if (x >= in.x0 && x <= in.x1 && y >= in.y0 && y <= in.y1) continue;
-            int pw = piece_w(w), ph = piece_w(h);
-            cs_where_put(m, x / pw, y / ph, 1);
-            cs_piece_box(w, h, x / pw, y / ph, 1, 1, &in);
+            int col = x / pw, row = y / ph;
+            cs_where_put(m, col, row, 1);
+            cs_piece_box(w, h, col, row, 1, 1, &in);
         }
     }
     for (int i = 0; i < cs->ntoks; i++) {

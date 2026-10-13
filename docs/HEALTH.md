@@ -216,7 +216,7 @@ Rows move here when fixed, with the commit.
 
 ### Where the rows came from
 
-Thirty-four reviews, 2026-10-07 to 2026-10-13. The first seven predate this section: on 2026-10-09
+Thirty-five reviews, 2026-10-07 to 2026-10-13. The first seven predate this section: on 2026-10-09
 their reports were read back from the session's record and every item checked against the
 code as it stood (137 items: 117 fixed, 4 overtaken when the plan dropped "accept saves", 16
 open, none disproved). Steps 4-6 were entered from their reports as they came.
@@ -255,6 +255,7 @@ open, none disproved). Steps 4-6 were entered from their reports as they came.
 | 2026-10-12 | 2.0's step 4, the off channel, `seq` and `wait 0` (one high: `--apply --wait` on a vtt with no event yet asked `wait 0 for N` 97,000 times in three seconds, fixed; the file found safe on a live vtt; one medium and three low: two rows, the rest fixed) | 61 |
 | 2026-10-12 | 2.0's step 4, the codes on refusals and events (three medium: `wait`'s malformed clause, a seventeenth scene and a link to a void square in another map each had the wrong class; the class word written by hand in six verdicts; a class left set by the search for a free square; test gaps: all fixed but three rows. Rows 3, 4, 12, 13, 14, 16, 60 and 62 closed with it, each checked first) | 63-65 |
 | 2026-10-13 | 2.0's step 4, the reads: `dump`'s cap and key, `describe REGION`, `changes` (one high: a change made while no agent had been about for ten minutes was no event, so `changes` answered nothing for a map that had moved; three medium: a region's size was judged by its lattice where creatures and notes made it 2.6 times that, `changes` after another map was opened dumped the new map in the old one's pieces, the refusal's example region was off a short map; four low and the test gaps: all fixed) | none (61 gained a line) |
+| 2026-10-13 | `cs_where`'s walk of a small map's cells, after it was committed (a46d3c2: found equal to the old walk over two million sequences in the reviewer's harness; one medium: the suite's random case walked the skip three times in forty rounds and no far boundary, so the clamps could be deleted and it passed; the write-up said one division where there are two: both fixed, and the case now fails with the clamps out) | none |
 
 ## 2026-09-28, at 17e31e3
 
