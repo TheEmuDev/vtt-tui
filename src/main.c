@@ -53,6 +53,7 @@ typedef struct {
     long        ctl_pid;            /* --ctl-pid N: which vtt; 0 the only one */
     const char *bench_ctl;          /* --bench-ctl FILE: a request run each bench loop */
     int         bench_review;       /* --bench-review: its changes wait for review, not accept auto */
+    const char *bench_pre[2];       /* --bench-pre FILE, --bench-pre-land FILE: a request run once before the loops */
     const char *bench_outside;      /* --bench-outside FILE: written over the map's file each bench loop */
     const char *apply;              /* --apply FILE: run a request against the map, save it */
     int         apply_wait;         /* --wait SECONDS: for the GM's verdict, when the map is open in a vtt; -1 unsaid */
@@ -88,6 +89,8 @@ static void usage(void)
         "  --bench-record FILE  save the stream the first watcher is sent (tools/pagebench.sh)\n"
         "  --bench-pings      and have each of them ping every frame\n"
         "  --bench-ctl FILE   run a control-channel request at the top of every --bench loop\n"
+        "  --bench-pre FILE   run a request once before the loops, as a proposal that waits;\n"
+        "  --bench-pre-land FILE  and one after it that lands (what a waiting proposal conflicts with)\n"
         "                     (its changes land at once, as under :agent accept auto)\n"
         "  --bench-review     ... unless this is given: then they wait for :review\n"
         "  --bench-outside FILE  write FILE over the map's own file every --bench loop, as another program would\n"
@@ -147,6 +150,8 @@ static int parse_args(Options *o, int argc, char **argv)
         else if (!strcmp(a, "--agent"))      o->agent = 1;
         else if (!strcmp(a, "--bench-ctl") && i + 1 < argc) o->bench_ctl = argv[++i];
         else if (!strcmp(a, "--bench-review")) o->bench_review = 1;
+        else if (!strcmp(a, "--bench-pre") && i + 1 < argc) o->bench_pre[0] = argv[++i];
+        else if (!strcmp(a, "--bench-pre-land") && i + 1 < argc) o->bench_pre[1] = argv[++i];
         else if (!strcmp(a, "--bench-outside") && i + 1 < argc) o->bench_outside = argv[++i];
         else if (!strcmp(a, "--apply") && i + 1 < argc) o->apply = argv[++i];
         else if (!strcmp(a, "--wait") && i + 1 < argc) {
@@ -389,6 +394,23 @@ static int run_headless(const Options *o)
             a.ctl_auto = !o->bench_review;
         }
 
+        /* What the loops find already there: a proposal waiting, then a
+         * change landed under it, so a request about its conflicts has some. */
+        for (int k = 0; k < 2; k++) {
+            if (!o->bench_pre[k]) continue;
+            int    big = 0, was = a.ctl_auto;
+            size_t len = 0;
+            char  *req = file_read(o->bench_pre[k], CTL_REQ_CAP, &len, &big);
+            if (!req) die(big ? "%s is over 64 KB" : "cannot read %s", o->bench_pre[k]);
+            a.ctl_auto = k;
+            char *ans = app_ctl_exec(&a, req, &len);
+            if (!ans || strncmp(ans, "ok\n", 3) != 0) die("--bench-pre: %.200s", ans ? ans : "out of memory");
+            free(ans);
+            free(req);
+            a.ctl_auto = was;
+        }
+        int pre_jobs = a.job_last;
+
         /* Another program writing the map's file (docs/CONFLICTS.md, step
          * 7): the same bytes each loop, which is a new file by its time. */
         char  *out_bytes = NULL;
@@ -403,7 +425,7 @@ static int run_headless(const Options *o)
         for (int loop = 0; loop < o->bench_loops && a.running; loop++) {
             /* Every loop starts alike: its jobs are numbered from 1 again,
              * so a script's `:ask 1 remove` names the job it just made. */
-            a.job_last = 0;
+            a.job_last = pre_jobs;
             if (out_bytes) {
                 int fd = open(o->map_path, O_WRONLY | O_TRUNC);
                 if (fd < 0 || write(fd, out_bytes, out_len) != (ssize_t)out_len) die("--bench-outside: cannot write %s", o->map_path);
@@ -462,6 +484,10 @@ static int run_headless(const Options *o)
                     app_tick(&a, bench_clock_ms);
                 }
                 prof_frame_begin();
+                /* A started agent is the tick's to reap: with one running the
+                 * tick is in the frame, as the loop has it, or the runs would
+                 * pile up unreaped and `agent.reap` have no row. */
+                if (a.nagents) app_tick(&a, bench_clock_ms);
                 app_frame(&a, NULL, 0);
                 prof_frame_end();
                 prof_set_counters(r.cells_changed, r.bytes_written);

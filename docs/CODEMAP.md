@@ -100,6 +100,7 @@ tools/embed.sh  after editing web/index.html; tools/blit_wasm.py after editing t
 ./vtt map.vtt --bench keys --bench-loops 400 --trace t.json  headless timing + Chrome trace
 ./vtt map --bench keys --bench-outside new.vtt   new.vtt written over the map's file each loop, as another program would (the map is written on: use a copy)
 ./vtt map --bench keys --bench-ctl req [--bench-review]   a request each loop, landing at once (or waiting for :review); the tick runs after each loop on a clock that lets the map go quiet
+./vtt map --bench keys --bench-ctl req --bench-review --bench-pre a --bench-pre-land b   a proposal made once before the loops, then a change landed under it
 ```
 
 Perf runs want the machine to themselves: editing a file during a run lifted rows

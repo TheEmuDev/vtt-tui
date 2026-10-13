@@ -384,6 +384,13 @@ run "agent, proposal, review" "$VOID512" 80x24 ':review\rllllhhhhd' "--bench-ctl
 run "agent, proposal, accept" "$VOID512" 80x24 ':review\r\ru'      "--bench-ctl $DIR/plan.ctl --bench-review"
 # The map-changed event (step 5): an agent listening (its `wait`), a dozen of
 # the GM's edits on the largest map, then the map quiet: one event a loop.
+# What changed under a waiting proposal (docs/V2.md, D8): 1,024 squares
+# proposed, the same squares changed since, and the GM editing each loop so
+# the set is checked against the map afresh; 64 lines and a count come back.
+echo 'tile AA20:BF51 water' > "$DIR/pre.ctl"
+echo 'tile AA20:BF51 hazard' > "$DIR/preland.ctl"
+echo 'job 1 conflicts' > "$DIR/conflicts.ctl"
+run "agent, job conflicts" "$HUGE"   80x24 'xlxlxlxlxlxlfhfhfhfhfhfh' "--bench-ctl $DIR/conflicts.ctl --bench-review --bench-pre $DIR/pre.ctl --bench-pre-land $DIR/preland.ctl"
 echo 'wait for 0' > "$DIR/wait.ctl"
 run "agent, map changed event" "$HUGE" 80x24 'xlxlxlxlxlxlfhfhfhfhfhfh' "--bench-ctl $DIR/wait.ctl"
 # `changes` after the same edits (docs/V2.md, D7): the events kept, then the
