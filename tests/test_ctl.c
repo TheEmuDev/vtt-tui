@@ -816,9 +816,15 @@ void test_ctl_cap(void)
     CHECK(strncmp(t, "ok\n", 3) == 0);
     free(t);
     snprintf(req, sizeof req, "tile A1:%s water\ntile A1:%s floor\ntile A1 hazard\n", last, last);
+    t = ctl_ask(&a, req);                 /* over the socket's road the squares covered are counted first */
+    CHECK(strstr(t, "error limit: line 3: the request's edits cover more than 524288 squares") != NULL);
+    free(t);
+    CHECK_EQ(map_tile(a.map, 0, 0), TILE_FLOOR);
+    a.ctl_direct = 1;                     /* --apply on a file: only what is recorded is bounded, as ever */
     t = ctl_ask(&a, req);
     CHECK(strstr(t, "error limit: line 3: the request changes more than 524288 things at once") != NULL);
     free(t);
+    a.ctl_direct = 0;
     CHECK_EQ(map_tile(a.map, 0, 0), TILE_FLOOR);
     CHECK_EQ(map_tile(a.map, 5, 5), TILE_FLOOR);
 
@@ -2407,11 +2413,122 @@ void test_ctl_reads(void)
         size_t bl = 0;
         FILE *f = open_memstream(&body, &bl);
         strcpy(w[0], "dump");
-        CHECK_EQ(app_ctl_dump(thin, w, 1, 1, f, err, sizeof err), 0);
+        CHECK_EQ(app_ctl_dump(&a, thin, w, 1, 1, 1, f, err, sizeof err), 0);
         CHECK(strstr(err, "A1 to SR9") && strstr(err, "like A1:AF9,"));
         fclose(f);
         free(body);
         map_free(thin);
+    }
+
+    CASE("a request's reads are bounded by the squares of map they walk: one whole read of the largest, counted, not timed");
+    {
+        Sandbox sb2 = sandbox_enter("ctlreads2");
+        Renderer r2;
+        App b;
+        rnd_init(&r2);
+        rnd_resize(&r2, 100, 30);
+        app_init(&b, NULL, &r2);
+        CHECK(ctl_blank_map(&b, sb2.dir, 512, 400));        /* 204,800 squares: one whole read fits, two do not */
+        if (b.map) {
+            b.ctl_auto = 1;
+            char *u = ctl_ask(&b, "describe");
+            CHECK(u && !strncmp(u, "ok\n", 3));
+            free(u);
+            u = ctl_ask(&b, "check");                        /* each request counts from nothing */
+            CHECK(u && !strncmp(u, "ok\n", 3));
+            free(u);
+            u = ctl_ask(&b, "describe\ncheck");
+            CHECK(ctl_refused(u, "limit", 2) && strstr(u, "reads more than 300000 squares of map"));
+            free(u);
+            u = ctl_ask(&b, "dump all\ndump A1:D4\nscene diff None");
+            CHECK(ctl_refused(u, "missing", 3));              /* a region's squares are its own: 16 more is nothing */
+            free(u);
+            u = ctl_ask(&b, "dump A1:SR200\ndump A201:SR400");   /* two halves: the whole map, once */
+            CHECK(u && !strncmp(u, "ok\n", 3));
+            free(u);
+            u = ctl_ask(&b, "dump A1:SR200\ndump A201:SR400\ndump A1:SR200");
+            CHECK(ctl_refused(u, "limit", 3));
+            free(u);
+            /* All or nothing as ever: the edit before the read that is one too many is not kept. */
+            uint8_t was = map_tile(b.map, 0, 0);
+            u = ctl_ask(&b, "tile A1 water\ncheck\ndescribe");
+            CHECK(ctl_refused(u, "limit", 3));
+            CHECK_EQ(map_tile(b.map, 0, 0), was);
+            free(u);
+            /* A job read back is the map copied: counted once, whatever is read of it. */
+            b.ctl_auto = 0;
+            u = ctl_ask(&b, "propose\ntile B2 water");
+            const char *hash2 = u ? strstr(u, "proposal #") : NULL;
+            int n2 = hash2 ? atoi(hash2 + 10) : 0;
+            CHECK(n2 > 0);
+            free(u);
+            char q[96];
+            snprintf(q, sizeof q, "job %d dump all", n2);
+            u = ctl_ask(&b, q);
+            CHECK(u && !strncmp(u, "ok\n", 3));
+            free(u);
+            snprintf(q, sizeof q, "job %d dump B2\njob %d check", n2, n2);
+            u = ctl_ask(&b, q);
+            CHECK(ctl_refused(u, "limit", 2));
+            free(u);
+            /* Edits are bounded by the squares they cover, changed or not: a fill of what is there
+             * already records nothing, and was three seconds of one turn (the budget's review). */
+            b.ctl_auto = 1;
+            u = ctl_ask(&b, "tile A1:SR400 floor\ntile A1:SR400 floor");      /* 409,600: under twice the largest map */
+            CHECK(u && !strncmp(u, "ok\n", 3));
+            free(u);
+            u = ctl_ask(&b, "tile A1:SR400 floor\ntile A1:SR400 floor\ntile A1:SR400 floor");
+            CHECK(ctl_refused(u, "limit", 3) && strstr(u, "edits cover more than 524288 squares"));
+            free(u);
+            u = ctl_ask(&b, "fog paint A1:SR400 0\nfog paint A1:SR400 0\nfog paint A1:SR400 0");
+            CHECK(ctl_refused(u, "limit", 3));
+            free(u);
+            {
+                char many[4096] = "";                              /* a wall is its outline: 1,824 squares, hundreds fit */
+                for (int k = 0; k < 200; k++) strcat(many, "wall A1:SR400\n");
+                u = ctl_ask(&b, many);
+                CHECK(u && !strncmp(u, "ok\n", 3));
+                free(u);
+                press(&b, "u");
+            }
+            b.ctl_auto = 0;
+            /* A listing opens every saved file: three a request, not nine thousand. */
+            u = ctl_ask(&b, "stamps\ncharacters\nstamps");
+            CHECK(u && !strncmp(u, "ok\n", 3));
+            free(u);
+            u = ctl_ask(&b, "stamps\ncharacters\nstamps\ncharacters");
+            CHECK(ctl_refused(u, "limit", 4));
+            free(u);
+            /* scene diff walks creatures, not squares: it is not counted. */
+            u = ctl_ask(&b, "describe\nscene diff None");
+            CHECK(ctl_refused(u, "missing", 2));
+            free(u);
+            /* changes never refuses for it: what it may not read it lists. */
+            CsWhere all;
+            memset(&all, 0xff, sizeof all);
+            unsigned s9 = b.event_seq;
+            app_event(&b, CTL_EV_CHANGED, 0, "everything");
+            app_event_where(&b, &all, 0);
+            snprintf(q, sizeof q, "describe\nchanges %u", s9);   /* 204,800 read, then 95,200 to spare: more than its answer holds */
+            u = ctl_ask(&b, q);
+            CHECK(u && !strncmp(u, "ok\n", 3) && strstr(u, "\nchanged A1:") && strstr(u, "\nmore: "));
+            free(u);
+            /* Within one region of the bound: the squares, not the answer's bytes, turn the first away. */
+            snprintf(q, sizeof q, "describe\ndump A1:SR185\nchanges %u", s9);   /* 204,800 + 94,720 = 299,520 */
+            u = ctl_ask(&b, q);
+            const char *cm = u ? strstr(u, "\nseq ") : NULL;
+            CHECK(u && !strncmp(u, "ok\n", 3) && cm && !strstr(cm, "\nchanged ") && strstr(cm, "\nmore: A1:"));
+            free(u);
+            /* --apply on a file has no GM waiting on a frame: no bound. */
+            b.ctl_direct = 1;
+            u = ctl_ask(&b, "describe\ncheck\ndump all");
+            CHECK(u && !strncmp(u, "ok\n", 3));
+            free(u);
+            b.ctl_direct = 0;
+        }
+        app_free(&b);
+        rnd_free(&r2);
+        sandbox_leave(&sb2);
     }
 
     CASE("changes: its words");

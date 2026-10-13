@@ -24,6 +24,25 @@
  * past it the caller says `dump all` or names a region. And what `changes`
  * prints of the map, by the bytes really written, before it lists the rest. */
 #define CTL_DUMP_SQUARES  4096
+/* The budget (docs/V2.md, D5). A turn of the loop runs requests until this
+ * much time is spent, then goes on to the keys and the frame; what is ready
+ * waits a turn. A request is never cut short, so one must be bounded by
+ * itself, and by counts that do not depend on the machine as a time would:
+ *  - the squares of map its reads walk (a region's for a dump of one, the
+ *    map's for describe, check and a job read back, which is the map copied
+ *    and then read: up to two walks for the one count). One whole read of
+ *    the largest map, about 6 ms;
+ *  - the squares its edits cover, whether or not they change them (a fill of
+ *    what is already there records nothing, so the cap on recorded changes
+ *    never sees it): the largest map twice, as that cap is;
+ *  - a file read from the GM's stamps or characters counts as squares read:
+ *    one for a `stamp` or a `from NAME`, a third of the request's reads for a
+ *    listing, which opens every one of them. */
+#define CTL_TURN_NS       2000000
+#define CTL_READ_SQUARES  300000
+#define CTL_EDIT_SQUARES  (2 * 512 * 512)
+#define CTL_FILE_CHARGE   500
+#define CTL_LIST_CHARGE   (CTL_READ_SQUARES / 3)
 #define CTL_CHANGES_BYTES (16 * 1024)
 /* What `--apply` takes: the cap less the `propose apply "NAME"` line it
  * writes above a plan sent to an open map (a file's name twice over, each
@@ -83,7 +102,9 @@ int  ctl_dir(char *buf, size_t sz);
 int  ctl_pollfds(Ctl *c, struct pollfd *fds, int max);
 void ctl_service(Ctl *c, const struct pollfd *fds, int count, uint64_t now_ms);
 
-/* Milliseconds until the next deadline, or -1 with nothing open. */
+/* Milliseconds until the next deadline, or -1 with nothing open; 0 while a
+ * request is ready, which is what brings the loop straight back for the
+ * ones a turn's slice left waiting (app_tick). */
 int  ctl_due(const Ctl *c, uint64_t now_ms);
 
 /* The next request read to the end: its connection's index, the text in

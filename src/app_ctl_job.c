@@ -108,10 +108,12 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
             app_ctl_class(CTL_E_STATE), snprintf(err, errsz, "#%d has no proposal waiting", num);
             return -1;
         }
+        /* The result is the map copied and the set applied: every square, whatever is then read of it. */
+        if (!app_ctl_read(a, (long)a->map->w * a->map->h, err, errsz)) return -1;
         Map *m = app_job_result(a, slot);
         if (!m) { app_ctl_class(CTL_E_STATE), snprintf(err, errsz, "#%d was made before the map was resized - propose it again", num); return -1; }
         if (!strcmp(verb, "dump")) {
-            return app_ctl_dump(m, w, n, 3, out, err, errsz) ? 0 : -1;
+            return app_ctl_dump(a, m, w, n, 3, 0, out, err, errsz) ? 0 : -1;
         }
         int json = 0;
         if (n == 4 && !strcmp(w[3], "json")) json = 1;

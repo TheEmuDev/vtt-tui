@@ -311,7 +311,12 @@ int  app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, si
  * (the whole map, refused above CTL_DUMP_SQUARES: an agent that forgot the
  * region should not be sent half a megabyte), `all`, or a region. 0 with why
  * in err. */
-int  app_ctl_dump(const Map *m, char w[][CTL_WORD_MAX], int n, int at, FILE *out, char *err, size_t errsz);
+int  app_ctl_dump(const App *a, const Map *m, char w[][CTL_WORD_MAX], int n, int at, int count, FILE *out, char *err, size_t errsz);
+/* A read is about to walk this many squares of map: 0, with why in err,
+ * when the request has then read more than CTL_READ_SQUARES (`count` above
+ * is whether the dump counts its own: a job's result is counted where it is
+ * made). */
+int  app_ctl_read(const App *a, long squares, char *err, size_t errsz);
 /* The class of the refusal being written (ctl.h's CTL_E_*; `usage` unless
  * said). Returns -1, to be returned with it. */
 int  app_ctl_class(int cls);

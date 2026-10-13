@@ -204,6 +204,56 @@ void test_loop(void)
     CHECK(strstr(rd.buf, "job 1 asked: a well") != NULL);
     close(rd.fd);
 
+    CASE("requests ready together are not all run in one turn once the turn's slice is spent: the keys come between");
+    {
+        /* docs/V2.md, D5. A slice of nothing is one request a turn, whatever the machine. */
+        CtlReader q[3];
+        for (int k = 0; k < 3; k++) {
+            q[k] = (CtlReader){ ctl_raw_connect(g.a.ctl.path), "", 0, 0 };
+            CHECK(write(q[k].fd, "status\n", 7) == 7);
+            shutdown(q[k].fd, SHUT_WR);
+        }
+        poll(NULL, 0, 20);                              /* all three are in the socket */
+        g.a.ctl_turn_ns = 0;
+        unsigned ran = g.a.ctl.requests;
+        /* The turns that take the connections and read them, up to the one that answers the first. */
+        for (int spin = 0; spin < 50 && g.a.ctl.requests == ran; spin++) turn(&g, now++);
+        CHECK_EQ(g.a.ctl.requests, ran + 1);            /* one, though three were ready */
+        CHECK_EQ(loop_wait(&g.l, now), 0);              /* and the loop does not sleep on the other two */
+        int cx = g.a.ed.cx;
+        type(&g, "l");
+        turn(&g, now++);
+        CHECK_EQ(g.a.ctl.requests, ran + 2);
+        CHECK_EQ(g.a.ed.cx, cx + 1);                    /* the key was handled with a request still waiting */
+        CHECK_EQ(loop_wait(&g.l, now), 0);
+        turn(&g, now++);
+        CHECK_EQ(g.a.ctl.requests, ran + 3);
+        for (int k = 0; k < 3; k++) {
+            for (int spin = 0; spin < 200 && !ctl_read_some(&q[k]); spin++) { turn(&g, now++); poll(NULL, 0, 1); }
+            CHECK(q[k].done && !strncmp(q[k].buf, "ok\n", 3));
+            close(q[k].fd);
+        }
+        CHECK_EQ(g.a.ctl.requests, ran + 3);
+
+        /* With a slice no three small requests spend, they are one turn's. */
+        g.a.ctl_turn_ns = (uint64_t)3600 * 1000000000u;
+        for (int k = 0; k < 3; k++) {
+            q[k] = (CtlReader){ ctl_raw_connect(g.a.ctl.path), "", 0, 0 };
+            CHECK(write(q[k].fd, "status\n", 7) == 7);
+            shutdown(q[k].fd, SHUT_WR);
+        }
+        poll(NULL, 0, 20);
+        ran = g.a.ctl.requests;
+        for (int spin = 0; spin < 50 && g.a.ctl.requests == ran; spin++) turn(&g, now++);
+        CHECK_EQ(g.a.ctl.requests, ran + 3);            /* the first turn to answer any answers all */
+        for (int k = 0; k < 3; k++) {
+            for (int spin = 0; spin < 200 && !ctl_read_some(&q[k]); spin++) { turn(&g, now++); poll(NULL, 0, 1); }
+            CHECK(q[k].done);
+            close(q[k].fd);
+        }
+        g.a.ctl_turn_ns = CTL_TURN_NS;
+    }
+
     CASE("a held wait whose time runs out is answered by the turn its deadline wakes");
     {
         CtlReader rw = { ctl_raw_connect(g.a.ctl.path), "", 0, 0 };

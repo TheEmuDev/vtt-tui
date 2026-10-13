@@ -37,7 +37,7 @@ six words, and says what to do next; the sentence after it says which square or 
 | `missing` | a name in it names nothing: list them (`jobs`, `scenes`, `stamps`, `characters`, `links`, `floors`, `describe`) |
 | `conflict` | what is on the map is in the way (a square taken, a room over another, a label in use, a box off the map): `dump REGION`, then other squares or another name |
 | `state` | the line is fine, but not now or not yours (the channel off, no map open, a job the GM is deciding, nothing to undo): read `status` and `jobs`; do not send it again unchanged |
-| `limit` | over a fixed size (a request over 64 KB, a line over 1023 characters, sixteen proposals waiting): split it, or wait for the GM |
+| `limit` | over a fixed size (a request over 64 KB, a line over 1023 characters, sixteen proposals waiting, reads of more than 300,000 squares of map or edits over more than 524,288 in one request): split it, or wait for the GM |
 | `internal` | vtt's own failure: tell the GM |
 
 **Which way.** Either works at any time. `vtt map.vtt --apply plan.txt` asks every running
@@ -372,6 +372,15 @@ feedback. Nothing you send changes the GM's map until then, unless the GM has ty
 10. If the GM does not like a change you made that was accepted, and nothing has happened
     since, `vtt --ctl undo` (on its own) takes it back; otherwise ask them to press `u`.
     Never repair a change by undoing the GM's own work.
+
+**One request reads at most 300,000 squares of map** (the GM's screen waits on it). A
+`dump` counts its region's squares; `describe`, `check` and a `job N` read back count the
+whole map each. On most maps that is dozens of reads; on a 512×512 map it is one whole-map
+read a request, so send `describe` and `check` separately there and `dump` by region.
+`stamps` and `characters` open every saved file: three of them a request. **Its edits cover
+at most 524,288 squares**, whether or not they change them: a `tile` or `fog paint` counts
+its region, a `wall` its outline, a `room` its box, a `stamp` its size. A plan run on a
+file with `--apply` has neither bound.
 
 Each request is still all or nothing, and each accepted proposal is one undo step. A request
 may read before its edits (`jobs` and `job N ...` lines come first, before `propose`) and

@@ -41,6 +41,35 @@ static int rq_class(int cls)
 
 int app_ctl_class(int cls) { return rq_class(cls); }
 
+/* The squares of map this request's reads have walked, and its edits have
+ * covered (ctl.h, the budget). */
+static long g_read, g_cover;
+
+/* An edit is about to cover this many squares: 0, with why in err, past
+ * CTL_EDIT_SQUARES. */
+static int rq_cover(const App *a, long squares, char *err, size_t errsz)
+{
+    if (a->ctl_direct) return 1;
+    g_cover += squares;
+    if (g_cover <= CTL_EDIT_SQUARES) return 1;
+    rq_class(CTL_E_LIMIT);
+    snprintf(err, errsz, "the request's edits cover more than %d squares, the largest map twice over: send them in more requests",
+             CTL_EDIT_SQUARES);
+    return 0;
+}
+
+int app_ctl_read(const App *a, long squares, char *err, size_t errsz)
+{
+    /* --apply on a file has no GM waiting on a frame. */
+    if (a->ctl_direct) return 1;
+    g_read += squares;
+    if (g_read <= CTL_READ_SQUARES) return 1;
+    rq_class(CTL_E_LIMIT);
+    snprintf(err, errsz, "the request reads more than %d squares of map, which is one whole read of the largest: "
+                         "send its reads one a request, or by region", CTL_READ_SQUARES);
+    return 0;
+}
+
 /* The one place a refusal's first line is written: `error CLASS: why`. */
 static void refuse(char *verdict, size_t sz, int cls, const char *fmt, ...) __attribute__((format(printf, 4, 5)));
 static void refuse(char *verdict, size_t sz, int cls, const char *fmt, ...)
@@ -467,6 +496,7 @@ static int size_word(const char *w, int *sw, int *sh)
 
 #define BAD(...) do { snprintf(err, errsz, __VA_ARGS__); return -1; } while (0)
 #define BADC(c, ...) do { rq_class(c); snprintf(err, errsz, __VA_ARGS__); return -1; } while (0)
+#define COVER(sq) do { if (!rq_cover(a, (sq), err, errsz)) return -1; } while (0)
 
 /* A room's box, from any of its forms:
  *   room REGION
@@ -555,6 +585,7 @@ static int token_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *er
         else BAD("%.20s: a creature is a player or an enemy", w[2]);
         if (n > 7 || (n == 7 && strcmp(w[6], "hidden") != 0))
             BAD("token add player|enemy SQUARE from NAME [hidden]");
+        if (!app_ctl_read(a, CTL_FILE_CHARGE, err, errsz)) return -1;      /* a file read */
         Map *c = character_load(w[5], err, errsz);
         if (!c) return rq_class(CTL_E_MISSING);
         const Token *ct = character_token(c);
@@ -678,6 +709,7 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
             for (int x = x0; x <= x1; x++) undo_set_tile(u, m, x, y, TILE_FLOOR);
         const char *fwhy = name ? floor_problem_box(m, map_area_find(m, name), x0, y0, x1, y1) : NULL;
         if (fwhy) BADC(CTL_E_CONFLICT, "%.40s is a floor, and %s", name, fwhy);
+        COVER((long)(x1 - x0 + 1) * (y1 - y0 + 1));
         outline(u, m, x0, y0, x1, y1, EDGE_WALL);
         if (name && !undo_set_area(u, m, name, x0, y0, x1, y1))
             BADC(CTL_E_LIMIT, "the map holds %d named areas", MAP_AREAS_MAX);
@@ -719,6 +751,7 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
         if (k < 0) k = width == 1 ? EDGE_DOOR_CLOSED : EDGE_NONE;
         Corridor c;
         if (corridor_plan(m, &m->areas[ia], &m->areas[ib], width, &c, err, errsz) < 0) return rq_class(CTL_E_CONFLICT);
+        for (int i = 0; i < c.nleg; i++) COVER((long)(c.leg[i].x1 - c.leg[i].x0 + 1) * (c.leg[i].y1 - c.leg[i].y0 + 1));
         corridor_dig(m, u, &c, (uint8_t)k);
         /* What changed: the legs, and the doors at their ends. */
         x1 = -1; x0 = y0 = y1 = 0;
@@ -761,6 +794,7 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
         if (n != 3) BAD("tile REGION KIND");
         if (!region(m, w[1], &x0, &y0, &x1, &y1, err, errsz)) return -1;
         if ((k = tile_kind(w[2])) < 0) BAD("%.20s: a tile is void, floor, water, rough, brush, wood or hazard", w[2]);
+        COVER((long)(x1 - x0 + 1) * (y1 - y0 + 1));
         for (int y = y0; y <= y1; y++)
             for (int x = x0; x <= x1; x++) undo_set_tile(u, m, x, y, (uint8_t)k);
     }
@@ -770,6 +804,7 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
         if (!region(m, w[1], &x0, &y0, &x1, &y1, err, errsz)) return -1;
         if (n == 3 && (k = edge_kind(w[2])) < 0)
             BAD("%.20s: a boundary is none, wall, door, open, window, secret or opensecret", w[2]);
+        COVER(2L * (x1 - x0 + 1) + 2L * (y1 - y0 + 1));      /* its outline */
         outline(u, m, x0, y0, x1, y1, (uint8_t)k);
     }
     else if (!strcmp(v, "edge")) {
@@ -805,6 +840,7 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
         if (!word_int(w[3], 0, FOG_PATCH_MAX, &id)) BAD("a fog patch is 1 to %d, or 0 to scrub", FOG_PATCH_MAX);
         if (id && (!m->fog_patches[id - 1].name[0] || m->fog_patches[id - 1].dead))
             BADC(CTL_E_MISSING, "there is no fog patch %d - :fog makes one", id);
+        COVER((long)(x1 - x0 + 1) * (y1 - y0 + 1));
         for (int y = y0; y <= y1; y++)
             for (int x = x0; x <= x1; x++) fog_paint(m, u, x, y, id);
     }
@@ -943,8 +979,10 @@ static int edit_line(App *a, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err
             }
             else BAD("stamp NAME SQUARE [rotate 90|180|270] [mirror]");
         }
+        if (!app_ctl_read(a, CTL_FILE_CHARGE, err, errsz)) return -1;      /* a file read */
         Map *st = stamp_load(w[1], err, errsz);
         if (!st) return rq_class(CTL_E_MISSING);
+        if (!rq_cover(a, (long)st->w * st->h, err, errsz)) { map_free(st); return -1; }
         if (quarters) { Map *t = stamp_turned(st, quarters); map_free(st); st = t; }
         if (mirror)   { Map *t = stamp_mirrored(st); map_free(st); st = t; }
         int ok = stamp_place(m, u, st, x, y, err, errsz);
@@ -1304,7 +1342,7 @@ static int rq_status(RQ_ARGS)
     return 0;
 }
 
-int app_ctl_dump(const Map *m, char w[][CTL_WORD_MAX], int n, int at, FILE *out, char *err, size_t errsz)
+int app_ctl_dump(const App *a, const Map *m, char w[][CTL_WORD_MAX], int n, int at, int count, FILE *out, char *err, size_t errsz)
 {
     int x0 = 0, y0 = 0, x1 = m->w - 1, y1 = m->h - 1;
     if (n > at + 1) { snprintf(err, errsz, "dump takes one region, like B2:K12, or all, or key"); return 0; }
@@ -1323,6 +1361,7 @@ int app_ctl_dump(const Map *m, char w[][CTL_WORD_MAX], int n, int at, FILE *out,
     /* Refused off the map, as an edit is: clipped, a mistyped region
      * would quietly read the wrong squares. */
     if (n == at + 1 && !(word && !strcmp(w[at], "all")) && !region(m, w[at], &x0, &y0, &x1, &y1, err, errsz)) return 0;
+    if (count && !app_ctl_read(a, (long)(x1 - x0 + 1) * (y1 - y0 + 1), err, errsz)) return 0;
     maptools_dump_parts(out, m, x0, y0, x1, y1, DUMP_FOOT);
     return 1;
 }
@@ -1330,7 +1369,7 @@ int app_ctl_dump(const Map *m, char w[][CTL_WORD_MAX], int n, int at, FILE *out,
 static int rq_dump(RQ_ARGS)
 {
     RQ_LOCALS;
-    return app_ctl_dump(m, w, n, 1, out, err, errsz) ? 0 : -1;
+    return app_ctl_dump(a, m, w, n, 1, 1, out, err, errsz) ? 0 : -1;
 }
 
 static int rq_describe(RQ_ARGS)
@@ -1340,6 +1379,8 @@ static int rq_describe(RQ_ARGS)
     int json = n > 1 && !strcmp(w[n - 1], "json"), box[4];
     if (n - json > 2) { snprintf(err, errsz, "describe [REGION] [json]"); return -1; }
     if (n - json == 2 && !region(m, w[1], &box[0], &box[1], &box[2], &box[3], err, errsz)) return -1;
+    /* The rooms are found by walking every square, whatever region is told. */
+    if (!app_ctl_read(a, (long)m->w * m->h, err, errsz)) return -1;
     maptools_describe_in(out, m, json, n - json == 2 ? box : NULL);
     return 0;
 }
@@ -1402,6 +1443,10 @@ static int rq_changes(RQ_ARGS)
              * are listed unread, so at most one dump is thrown away. */
             char  *reg = NULL;
             size_t rl = 0;
+            /* A region's squares count toward the request's reads; past them it is listed too. */
+            char   e2[200];
+            int    cls = g_class;
+            if (!full && !app_ctl_read(a, (long)(b.x1 - b.x0 + 1) * (b.y1 - b.y0 + 1), e2, sizeof e2)) { full = 1; g_class = cls; }
             FILE  *rf = full ? NULL : open_memstream(&reg, &rl);
             if (rf) {
                 maptools_dump_parts(rf, m, b.x0, b.y0, b.x1, b.y1, 0);
@@ -1430,6 +1475,7 @@ static int rq_stamps(RQ_ARGS)
     RQ_LOCALS;
     /* The saved stamps, one a line with its size: what `stamp` can put down. */
     if (n > 1) { snprintf(err, errsz, "stamps takes nothing after it"); return -1; }
+    if (!app_ctl_read(a, CTL_LIST_CHARGE, err, errsz)) return -1;          /* every stamp's file is opened */
     char names[64][MAP_NAME_MAX], e2[160];
     int  k = stamp_list(names, 64);
     for (int i = 0; i < k && i < 64; i++) {
@@ -1462,6 +1508,7 @@ static int rq_characters(RQ_ARGS)
     RQ_LOCALS;
     /* The saved character templates: what `token add ... from NAME` places. */
     if (n > 1) { snprintf(err, errsz, "characters takes nothing after it"); return -1; }
+    if (!app_ctl_read(a, CTL_LIST_CHARGE, err, errsz)) return -1;          /* every character's file is opened */
     char names[64][MAP_NAME_MAX], e2[160];
     int  k = character_list(names, 64);
     for (int i = 0; i < k && i < 64; i++) {
@@ -1557,6 +1604,7 @@ static int rq_check(RQ_ARGS)
     RQ_LOCALS;
     int j = want_json(w, n, 1, err, errsz);
     if (j < 0) return -1;
+    if (!app_ctl_read(a, (long)m->w * m->h, err, errsz)) return -1;
     maptools_check_map(out, m, j);
     return 0;
 }
@@ -1800,6 +1848,7 @@ char *app_ctl_exec(App *a, const char *req, size_t *len)
 
     char  verdict[320] = "ok";
     int   lineno = 0;
+    g_read = g_cover = 0;
     Edits ed;
     memset(&ed, 0, sizeof ed);
     ed.x1 = -1;

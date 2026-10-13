@@ -267,6 +267,7 @@ typedef struct {
     unsigned   cp_off_gen;
     uint64_t agent_seen_ms;
     int      ctl_can_hold, ctl_held;
+    uint64_t ctl_turn_ns;       /* CTL_TURN_NS; a test sets 0 for one request a turn */
     unsigned ctl_hold_seq;
     int      ctl_hold_ms;
     Map     *ctl_scratch;

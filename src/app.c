@@ -26,6 +26,7 @@ void app_init(App *a, Term *t, Renderer *r)
     memset(a, 0, sizeof *a);
     a->term    = t;
     a->rnd     = r;
+    a->ctl_turn_ns = CTL_TURN_NS;
     a->th      = &THEME_DARK;
     a->screen  = SCREEN_MENU;
     a->running = 1;
@@ -432,7 +433,13 @@ void app_tick(App *a, uint64_t now_ms)
         const char *req;
         size_t      len;
         int         i;
-        while ((i = ctl_next(&a->ctl, &req, &len)) >= 0) {
+        /* The requests' slice of the turn (ctl.h): past it the rest wait
+         * for the next, which comes at once (ctl_due), after this turn's
+         * keys and frame. At least one runs, or none ever would. */
+        uint64_t t0 = prof_now_ns();
+        int      ran = 0;
+        while ((!ran || prof_now_ns() - t0 < a->ctl_turn_ns) && (i = ctl_next(&a->ctl, &req, &len)) >= 0) {
+            ran = 1;
             a->ctl_can_hold = 1;                 /* there is a socket to hold a wait on */
             a->ctl_held = 0;
             char *ans = app_ctl_exec(a, req, &len);
