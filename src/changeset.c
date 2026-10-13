@@ -952,8 +952,18 @@ void cs_where(const ChangeSet *cs, CsWhere *m, int *other)
         if (cs->block_start[b] == cs->block_start[b + 1]) continue;
         int bx = b % cs->bw * CS_BLOCK, by = b / cs->bw * CS_BLOCK;
         if (coarse) { cs_pieces(w, h, bx, by, bx + CS_BLOCK - 1, by + CS_BLOCK - 1, m); continue; }
-        for (int i = cs->block_start[b]; i < cs->block_start[b + 1]; i++)
-            cs_pieces(w, h, cs->cells[i].x, cs->cells[i].y, cs->cells[i].x, cs->cells[i].y, m);
+        /* One cell after another is nearly always in the piece of the one
+         * before: its box is kept, and a cell inside it costs four
+         * compares. (A room of 1,700 cells was 11 us when each was divided
+         * out afresh.) A boundary on the map's far edge is its square's. */
+        CsBox in = { 0, 0, -1, -1 };
+        for (int i = cs->block_start[b]; i < cs->block_start[b + 1]; i++) {
+            int x = imin(cs->cells[i].x, w - 1), y = imin(cs->cells[i].y, h - 1);
+            if (x >= in.x0 && x <= in.x1 && y >= in.y0 && y <= in.y1) continue;
+            int pw = piece_w(w), ph = piece_w(h);
+            cs_where_put(m, x / pw, y / ph, 1);
+            cs_piece_box(w, h, x / pw, y / ph, 1, 1, &in);
+        }
     }
     for (int i = 0; i < cs->ntoks; i++) {
         const CsToken *c = &cs->toks[i];
