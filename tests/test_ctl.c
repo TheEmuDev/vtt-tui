@@ -48,9 +48,46 @@ void test_ctl(void)
         maptools_dump(f, a.map, 1, 1, 6, 5);
         fclose(f);
         t = ctl_ask(&a, "dump B2:G6\n");
-        CHECK(strncmp(t, "ok\n", 3) == 0 && strcmp(t + 3, want) == 0);
+        /* The tool's report less its key: an agent reads the key once, with `dump key`. */
+        const char *key = strstr(want, "\nkey\n"), *foot = key ? strstr(key, "\nmap  ") : NULL;
+        CHECK(key && foot);
+        if (key && foot) {
+            CHECK(strncmp(t, "ok\n", 3) == 0 && !strncmp(t + 3, want, (size_t)(key - want)) &&
+                  !strcmp(t + 3 + (key - want), foot));
+            CHECK(strstr(t, "key") == NULL);
+            char *kt = ctl_ask(&a, "dump key");
+            CHECK(kt && !strncmp(kt, "ok\nkey\n  .  floor", 17) && strlen(kt + 3) == (size_t)(foot - key - 1));
+            CHECK(kt && !strncmp(kt + 3, key + 1, (size_t)(foot - key - 1)));
+            free(kt);
+        }
         free(t);
         free(want);
+        t = ctl_ask(&a, "dump all");                       /* the same as none, on a map this small */
+        char *t2 = ctl_ask(&a, "dump");
+        CHECK(t && t2 && !strcmp(t, t2) && !strncmp(t, "ok\n", 3));
+        free(t);
+        free(t2);
+        t = ctl_ask(&a, "dump B2:C3 D4");
+        CHECK(ctl_refused(t, "usage", 1) && strstr(t, "dump takes one region"));
+        free(t);
+
+        /* describe REGION: the rooms that meet it, whole; the map's lines always. */
+        f = open_memstream(&want, &wn);
+        maptools_describe(f, a.map, 0);
+        fclose(f);
+        t = ctl_ask(&a, "describe A1:P9");                 /* every room: the same report but for its region line */
+        CHECK(t && strstr(t, "  region A1:P9: ") && strlen(t + 3) > strlen(want));
+        free(t);
+        free(want);
+        t = ctl_ask(&a, "describe ZZ1");
+        CHECK(ctl_refused(t, "usage", 1));
+        free(t);
+        t = ctl_ask(&a, "describe B2 json extra");
+        CHECK(ctl_refused(t, "usage", 1) && strstr(t, "describe [REGION] [json]"));
+        free(t);
+        t = ctl_ask(&a, "describe B2 json");
+        CHECK(t && !strncmp(t, "ok\n", 3) && json_valid(t + 3) && strstr(t, "\"region\":\"B2\"") && strstr(t, "\"rooms_told\":"));
+        free(t);
 
         f = open_memstream(&want, &wn);
         maptools_describe(f, a.map, 1);
@@ -91,8 +128,8 @@ void test_ctl(void)
     CHECK(strncmp(t, "error usage: line 2: ZZ99:4 is not a square", 43) == 0);
     CHECK(strchr(t, '\n') == t + strlen(t) - 1);
     free(t);
-    t = ctl_ask(&a, "describe yaml\n");
-    CHECK_EQ(strcmp(t, "error usage: line 1: describe takes nothing but json after it\n"), 0);
+    t = ctl_ask(&a, "describe yaml\n");                    /* a word that is no region */
+    CHECK(ctl_refused(t, "usage", 1) && strstr(t, "yaml is not a square"));
     free(t);
     t = ctl_ask(&a, "frobnicate\n");
     CHECK_EQ(strcmp(t, "error usage: line 1: unknown request frobnicate\n"), 0);
@@ -1295,9 +1332,9 @@ void test_ctl_live(void)
     CASE("an answer too big for the socket's buffer goes out in pieces");
     {
         CtlReader rd = { ctl_raw_connect(a.ctl.path), "", 0, 0 };
-        /* Forty dumps of the whole map: far past what one send takes. */
+        /* Seventy dumps of the whole map: far past what one send takes. */
         char req[400] = "";
-        for (int i = 0; i < 40; i++) strcat(req, "dump\n");
+        for (int i = 0; i < 70; i++) strcat(req, "dump\n");
         CHECK(write(rd.fd, req, strlen(req)) == (ssize_t)strlen(req));
         shutdown(rd.fd, SHUT_WR);
         size_t total = 0;
@@ -2259,4 +2296,275 @@ void test_ctl_table(void)
     free(doc);
     app_free(&a);
     rnd_free(&r);
+}
+
+/* ------------------------------------------- reads that cost what was asked */
+
+/* docs/V2.md, D7: a whole-map dump of a big map is asked for by name,
+ * describe takes a region, and `changes` reads back where events were. */
+void test_ctl_reads(void)
+{
+    Sandbox sb = sandbox_enter("ctlreads");
+    Renderer r;
+    App a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK(ctl_blank_map(&a, sb.dir, 80, 60));               /* 4800 squares: past CTL_DUMP_SQUARES */
+    if (!a.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    char *t;
+
+    CASE("dump with no region on a big map is refused as a limit, naming the map's corners; all and a region are taken");
+    CHECK((long)a.map->w * a.map->h > CTL_DUMP_SQUARES);
+    t = ctl_ask(&a, "dump");
+    CHECK(ctl_refused(t, "limit", 1) && strstr(t, "the map is 80x60, A1 to CB60") && strstr(t, "dump all for its 4800 squares"));
+    free(t);
+    t = ctl_ask(&a, "dump all");
+    CHECK(t && !strncmp(t, "ok\n", 3) && strstr(t, "\n60 ") && !strstr(t, "\nregion "));
+    free(t);
+    t = ctl_ask(&a, "dump A1:D4");
+    CHECK(t && !strncmp(t, "ok\n", 3) && strstr(t, "\nregion A1:D4\n") && !strstr(t, "\n5 |"));
+    free(t);
+
+    CASE("describe REGION tells the rooms that meet it, whole, and says how many of how many");
+    a.ctl_auto = 1;
+    t = ctl_ask(&a, "tile A1:CB60 void\nroom West B2:F6\nroom East BT50:BX54\ntoken add enemy BU51 \"Ghoul\"\ntoken add player C3 \"Aria\"");
+    CHECK(t && !strncmp(t, "ok\n", 3));
+    free(t);
+    t = ctl_ask(&a, "describe");
+    CHECK(t && strstr(t, "B2:F6") && strstr(t, "BT50:BX54") && !strstr(t, "  region "));
+    free(t);
+    t = ctl_ask(&a, "describe A1:H8");
+    CHECK(t && strstr(t, "  region A1:H8: 1 of the 2 rooms\n") && strstr(t, "B2:F6") && strstr(t, "Aria"));
+    CHECK(t && !strstr(t, "BT50:BX54") && !strstr(t, "Ghoul"));
+    CHECK(t && strstr(t, "2 creatures, 2 rooms"));          /* the map's own line is the whole map's */
+    free(t);
+    t = ctl_ask(&a, "describe West");                      /* an area's name is a region */
+    CHECK(t && strstr(t, ": 1 of the 2 rooms\n") && !strstr(t, "Ghoul"));
+    free(t);
+    t = ctl_ask(&a, "describe D4");                        /* one square inside it: the room, whole */
+    CHECK(t && strstr(t, "B2:F6") && strstr(t, "Aria"));
+    free(t);
+    t = ctl_ask(&a, "describe AA30:AB31");
+    CHECK(t && strstr(t, ": 0 of the 2 rooms\n") && !strstr(t, "\nroom "));
+    free(t);
+    t = ctl_ask(&a, "describe A1:H8 json");
+    CHECK(t && json_valid(t + 3) && strstr(t, "\"rooms\":2") && strstr(t, "\"rooms_told\":1") && !strstr(t, "Ghoul"));
+    free(t);
+
+    CASE("a job's dump is held to the same: none refused on a big map, all and a region taken");
+    a.ctl_auto = 0;
+    t = ctl_ask(&a, "propose \"a pool\"\ntile C3:D4 water");
+    const char *hash = t ? strstr(t, "proposal #") : NULL;
+    int num = hash ? atoi(hash + 10) : 0;
+    CHECK(num > 0);
+    free(t);
+    char jq[64];
+    snprintf(jq, sizeof jq, "job %d dump", num);
+    t = ctl_ask(&a, jq);
+    CHECK(ctl_refused(t, "limit", 1));
+    free(t);
+    snprintf(jq, sizeof jq, "job %d dump all", num);
+    t = ctl_ask(&a, jq);
+    CHECK(t && !strncmp(t, "ok\n", 3) && !strstr(t, "\nkey\n"));
+    free(t);
+    snprintf(jq, sizeof jq, "job %d dump B2:F6", num);
+    t = ctl_ask(&a, jq);
+    CHECK(t && !strncmp(t, "ok\n", 3) && strstr(t, "~ ~"));
+    free(t);
+    snprintf(jq, sizeof jq, "job %d dump B2:F6 more", num);
+    t = ctl_ask(&a, jq);
+    CHECK(ctl_refused(t, "usage", 1));
+    free(t);
+
+    snprintf(jq, sizeof jq, "job %d dump key", num);
+    t = ctl_ask(&a, jq);
+    CHECK(t && !strncmp(t, "ok\nkey\n", 7));
+    free(t);
+
+    CASE("an area the GM called all or key is still an area: dump reads its squares");
+    a.ctl_auto = 1;
+    t = ctl_ask(&a, "area all H2:I3\narea key K2:L3");
+    CHECK(t && !strncmp(t, "ok\n", 3));
+    free(t);
+    t = ctl_ask(&a, "dump all");
+    CHECK(t && strstr(t, "\nregion H2:I3\n"));
+    free(t);
+    t = ctl_ask(&a, "dump key");
+    CHECK(t && strstr(t, "\nregion K2:L3\n"));
+    free(t);
+    t = ctl_ask(&a, "area all remove\narea key remove");
+    free(t);
+    a.ctl_auto = 0;
+    t = ctl_ask(&a, "dump key");
+    CHECK(t && !strncmp(t, "ok\nkey\n", 7));
+    free(t);
+
+    CASE("the refusal's example region is on the map, however short the map");
+    {
+        Map *thin = map_new(512, 9, "thin");
+        char *body = NULL, err[200] = "", w[CTL_WORDS][CTL_WORD_MAX];
+        size_t bl = 0;
+        FILE *f = open_memstream(&body, &bl);
+        strcpy(w[0], "dump");
+        CHECK_EQ(app_ctl_dump(thin, w, 1, 1, f, err, sizeof err), 0);
+        CHECK(strstr(err, "A1 to SR9") && strstr(err, "like A1:AF9,"));
+        fclose(f);
+        free(body);
+        map_free(thin);
+    }
+
+    CASE("changes: its words");
+    t = ctl_ask(&a, "changes");
+    CHECK(ctl_refused(t, "usage", 1) && strstr(t, "changes SEQ [REGION]"));
+    free(t);
+    t = ctl_ask(&a, "changes soon");
+    CHECK(ctl_refused(t, "usage", 1));
+    free(t);
+    t = ctl_ask(&a, "changes 0 ZZ99");
+    CHECK(ctl_refused(t, "usage", 1));
+    free(t);
+    t = ctl_ask(&a, "changes 0 A1 more");
+    CHECK(ctl_refused(t, "usage", 1));
+    free(t);
+
+    CASE("changes: nothing since SEQ is seq alone; an event that changed no square adds nothing");
+    char rq[64];
+    snprintf(rq, sizeof rq, "changes %u", a.event_seq);
+    t = ctl_ask(&a, rq);
+    snprintf(rq, sizeof rq, "ok\nseq %u\n", a.event_seq);
+    CHECK(t && !strcmp(t, rq));
+    free(t);
+    CHECK(a.agent_seen_ms != 0);                           /* a reader of changes is listening: the checkpoint stays */
+
+    CASE("changes: more than one answer holds is listed, not sent; every piece is in one or the other; a region asks for less");
+    ctl_blank_map(&a, sb.dir, 512, 400);                   /* pieces of 32x25 squares */
+    if (a.map) {
+        unsigned s0 = a.event_seq;
+        CsWhere w = { { 0 } };
+        static const int AT[][2] = { { 0, 0 }, { 2, 0 }, { 4, 2 }, { 6, 4 }, { 8, 6 }, { 10, 8 }, { 12, 10 }, { 15, 15 },
+                                     { 14, 0 }, { 0, 3 }, { 2, 5 }, { 4, 7 }, { 6, 9 }, { 8, 11 }, { 10, 13 }, { 12, 15 }, { 14, 2 }, { 0, 6 } };
+        int npieces = (int)(sizeof AT / sizeof *AT);
+        for (int k = 0; k < npieces; k++) cs_where_put(&w, AT[k][0], AT[k][1], 1);
+        app_event(&a, CTL_EV_CHANGED, 0, "walls in A1");
+        app_event_where(&a, &w, 0);
+        snprintf(rq, sizeof rq, "changes %u", s0);
+        t = ctl_ask(&a, rq);
+        const char *more = t ? strstr(t, "\nmore: ") : NULL;
+        int sent = 0, listed = 0;
+        for (int k = 0; k < npieces && t; k++) {
+            CsBox b;
+            char name[2 * MAP_COORD_MAX + 2], line[48];
+            cs_piece_box(512, 400, AT[k][0], AT[k][1], 1, 1, &b);
+            cs_box_name(&b, name, sizeof name);
+            snprintf(line, sizeof line, "\nchanged %s\n", name);
+            int s = strstr(t, line) != NULL;
+            snprintf(line, sizeof line, " %s ", name);
+            int l = more && strstr(more, line) != NULL;
+            CHECK(s != l);                                 /* sent or listed, never both, never neither */
+            sent += s; listed += l;
+        }
+        CHECK(sent >= 3 && listed >= 1);
+        CHECK(t && strstr(t, "\nchanged A1:AF25\n"));     /* the first is always sent */
+        CHECK(more && strstr(more, " - too much for one answer; dump each\n"));
+        CHECK(t && strlen(t) <= CTL_CHANGES_BYTES + 300);
+        CHECK(t && !strstr(t, "\nmap  ") && !strstr(t, "\nkey\n"));   /* no foot and no key a region */
+        free(t);
+        snprintf(rq, sizeof rq, "changes %u B2:C3", s0);    /* clipped to what was asked, inside a piece */
+        t = ctl_ask(&a, rq);
+        CHECK(t && strstr(t, "\nchanged B2:C3\n   B C\n") && !strstr(t, "more:"));
+        free(t);
+        snprintf(rq, sizeof rq, "changes %u AG1:AH2", s0);  /* a region nothing changed in */
+        t = ctl_ask(&a, rq);
+        CHECK(t && !strstr(t, "\nchanged "));
+        free(t);
+
+        CASE("changes: a change right across the largest map is cut into regions that each fit an answer");
+        s0 = a.event_seq;
+        memset(&w, 0xff, sizeof w);
+        app_event(&a, CTL_EV_CHANGED, 0, "everything");
+        app_event_where(&a, &w, 0);
+        snprintf(rq, sizeof rq, "changes %u", s0);
+        t = ctl_ask(&a, rq);
+        CHECK(t && strstr(t, "\nchanged A1:") && strstr(t, "\nmore: ") && strlen(t) <= CTL_CHANGES_BYTES + 300);
+        const char *m2 = t ? strstr(t, "\nmore: ") : NULL;
+        if (m2) {
+            char first[32];
+            sscanf(m2 + 7, "%31s", first);
+            snprintf(rq, sizeof rq, "changes %u %s", s0, first);
+            char *t3 = ctl_ask(&a, rq);
+            char line[48];
+            snprintf(line, sizeof line, "\nchanged %s\n", first);
+            CHECK(t3 && strstr(t3, line) && !strstr(t3, "more:"));
+            free(t3);
+        }
+        free(t);
+
+        CASE("changes: pieces side by side and one below are one region; an L is two; the budget is this line's own");
+        s0 = a.event_seq;
+        memset(&w, 0, sizeof w);
+        ctl_blank_map(&a, sb.dir, 64, 64);                 /* pieces of 4x4 */
+        s0 = a.event_seq;
+        cs_where_put(&w, 0, 0, 1); cs_where_put(&w, 1, 0, 1); cs_where_put(&w, 0, 1, 1); cs_where_put(&w, 1, 1, 1);   /* A1:H8 */
+        cs_where_put(&w, 4, 4, 1); cs_where_put(&w, 5, 4, 1); cs_where_put(&w, 4, 5, 1);                               /* Q17:X20, Q21:T24 */
+        app_event(&a, CTL_EV_CHANGED, 0, "walls");
+        app_event_where(&a, &w, 0);
+        snprintf(rq, sizeof rq, "changes %u", s0);
+        t = ctl_ask(&a, rq);
+        CHECK(t && strstr(t, "\nchanged A1:H8\n") && strstr(t, "\nchanged Q17:X20\n") && strstr(t, "\nchanged Q21:T24\n"));
+        int nreg = 0;
+        for (const char *p = t; p && (p = strstr(p, "\nchanged ")); p++) nreg++;
+        CHECK_EQ(nreg, 3);
+        free(t);
+
+        CASE("changes: a region's real bytes decide, not its squares: one full of creatures is listed, not sent past the answer");
+        a.ctl_auto = 1;
+        char *plan = malloc(60000);
+        size_t pl = 0;
+        for (int y = 0; y < 16; y++)
+            for (int x = 0; x < 16; x++)
+                pl += (size_t)snprintf(plan + pl, 60000 - pl, "token add enemy %c%d \"Ghoul %d\"\ntoken set \"Ghoul %d\" note \"%0*d\"\n",
+                                       'A' + x, y + 1, y * 16 + x, y * 16 + x, 40, 7);
+        t = ctl_ask(&a, plan);
+        CHECK(t && !strncmp(t, "ok\n", 3));
+        free(t);
+        free(plan);
+        a.ctl_auto = 0;
+        s0 = a.event_seq;
+        memset(&w, 0, sizeof w);
+        for (int pr = 0; pr < 4; pr++) for (int pc = 0; pc < 4; pc++) cs_where_put(&w, pc, pr, 1);    /* A1:P16, 256 creatures with notes */
+        cs_where_put(&w, 10, 10, 1);
+        app_event(&a, CTL_EV_CHANGED, 0, "a crowd");
+        app_event_where(&a, &w, 0);
+        snprintf(rq, sizeof rq, "changes %u", s0);
+        t = ctl_ask(&a, rq);
+        CHECK(t && strlen(t) <= CTL_CHANGES_BYTES + 300);
+        CHECK(t && strstr(t, "\nmore: A1:P16 ") && !strstr(t, "\nchanged A1:P16\n"));
+        free(t);
+        snprintf(rq, sizeof rq, "dump A1:D4\nchanges %u AO41", s0);   /* a dump before it does not eat its budget */
+        t = ctl_ask(&a, rq);
+        CHECK(t && strstr(t, "\nchanged AO41\n") && !strstr(t, "more:"));
+        free(t);
+
+        CASE("changes: after the map was closed and another opened, the old map's pieces are nobody's");
+        s0 = a.event_seq - 1;                              /* from before the crowd's event */
+        ctl_blank_map(&a, sb.dir, 80, 60);
+        snprintf(rq, sizeof rq, "changes %u", s0);
+        t = ctl_ask(&a, rq);
+        CHECK(t && strstr(t, " map closed: ") && !strstr(t, "\nchanged ") && !strstr(t, "more:"));
+        free(t);
+        s0 = a.event_seq;
+        memset(&w, 0, sizeof w);
+        cs_where_put(&w, 0, 0, 1);
+        app_event(&a, CTL_EV_CHANGED, 0, "walls in A1");   /* on the new map: said as ever */
+        app_event_where(&a, &w, 0);
+        snprintf(rq, sizeof rq, "changes %u", s0);
+        t = ctl_ask(&a, rq);
+        CHECK(t && strstr(t, "\nchanged A1:E4\n"));
+        free(t);
+    }
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
 }

@@ -1277,6 +1277,7 @@ static int rq_wait(RQ_ARGS)
         }
     }
     a->agent_seen_ms = a->now_ms ? a->now_ms : 1;
+    app_events_hear(a);
     /* Held only where there is a socket to hold it on (app_tick):
      * --apply, the bench and the fuzzer are answered at once. */
     /* `wait 0` alone asks for everything kept: an answer, not a wait, even
@@ -1303,24 +1304,124 @@ static int rq_status(RQ_ARGS)
     return 0;
 }
 
+int app_ctl_dump(const Map *m, char w[][CTL_WORD_MAX], int n, int at, FILE *out, char *err, size_t errsz)
+{
+    int x0 = 0, y0 = 0, x1 = m->w - 1, y1 = m->h - 1;
+    if (n > at + 1) { snprintf(err, errsz, "dump takes one region, like B2:K12, or all, or key"); return 0; }
+    /* An area the GM has called `all` or `key` is still an area. */
+    int word = n == at + 1 && map_area_find(m, w[at]) < 0;
+    if (word && !strcmp(w[at], "key")) { maptools_dump_key(out); return 1; }
+    if (n == at && (long)m->w * m->h > CTL_DUMP_SQUARES) {
+        char far[MAP_COORD_MAX], eg[MAP_COORD_MAX];
+        map_coord_name(m->w - 1, m->h - 1, far, sizeof far);
+        map_coord_name(imin(31, m->w - 1), imin(31, m->h - 1), eg, sizeof eg);
+        rq_class(CTL_E_LIMIT);
+        snprintf(err, errsz, "the map is %dx%d, A1 to %s: dump a region of it, like A1:%s, or dump all for its %ld squares",
+                 m->w, m->h, far, eg, (long)m->w * m->h);
+        return 0;
+    }
+    /* Refused off the map, as an edit is: clipped, a mistyped region
+     * would quietly read the wrong squares. */
+    if (n == at + 1 && !(word && !strcmp(w[at], "all")) && !region(m, w[at], &x0, &y0, &x1, &y1, err, errsz)) return 0;
+    maptools_dump_parts(out, m, x0, y0, x1, y1, DUMP_FOOT);
+    return 1;
+}
+
 static int rq_dump(RQ_ARGS)
 {
     RQ_LOCALS;
-    int x0 = 0, y0 = 0, x1 = m->w - 1, y1 = m->h - 1;
-    if (n > 2) { snprintf(err, errsz, "dump takes one region, like B2:K12"); return -1; }
-    /* Refused off the map, as an edit is: clipped, a mistyped region
-     * would quietly read the wrong squares. */
-    if (n == 2 && !region(m, w[1], &x0, &y0, &x1, &y1, err, errsz)) return -1;
-    maptools_dump(out, m, x0, y0, x1, y1);
-    return 0;
+    return app_ctl_dump(m, w, n, 1, out, err, errsz) ? 0 : -1;
 }
 
 static int rq_describe(RQ_ARGS)
 {
     RQ_LOCALS;
-    int j = want_json(w, n, 1, err, errsz);
-    if (j < 0) return -1;
-    maptools_describe(out, m, j);
+    /* describe [REGION] [json] */
+    int json = n > 1 && !strcmp(w[n - 1], "json"), box[4];
+    if (n - json > 2) { snprintf(err, errsz, "describe [REGION] [json]"); return -1; }
+    if (n - json == 2 && !region(m, w[1], &box[0], &box[1], &box[2], &box[3], err, errsz)) return -1;
+    maptools_describe_in(out, m, json, n - json == 2 ? box : NULL);
+    return 0;
+}
+
+/* changes SEQ [REGION]: the events after SEQ, as `wait` gives them, and then
+ * the map as it is now in the pieces they changed -- so an agent told the
+ * map changed reads those squares and not the map. Never a diff of two
+ * maps: each event kept where its change was when it was made. */
+static int rq_changes(RQ_ARGS)
+{
+    RQ_LOCALS;
+    int k, box[4] = { 0, 0, m->w - 1, m->h - 1 };
+    if (n < 2 || n > 3 || !word_int(w[1], 0, 0x7fffffff, &k)) {
+        snprintf(err, errsz, "changes SEQ [REGION], SEQ the number wait or status last gave");
+        return -1;
+    }
+    /* After an edit `a->map` is the request's own copy: "the map as it is
+     * now" would be the proposal, where dump means that and this does not. */
+    if (ed->lines || ed->header) { snprintf(err, errsz, "changes comes before the request's propose line and edits"); return -1; }
+    if (n == 3 && !region(m, w[2], &box[0], &box[1], &box[2], &box[3], err, errsz)) return -1;
+    a->agent_seen_ms = a->now_ms ? a->now_ms : 1;       /* someone is listening: the checkpoint stays */
+    app_events_hear(a);                                 /* and a change nobody heard of is said first */
+    app_events_write(a, out, (unsigned)k);
+    CsWhere where, asked = { { 0 } };
+    int     other;
+    if (!app_events_where(a, (unsigned)k, &where, &other)) return 0;   /* `lost` has said to read the map again */
+    cs_pieces(m->w, m->h, box[0], box[1], box[2], box[3], &asked);
+    char more[CS_GRID * CS_GRID * 16] = "";              /* room for every piece's name */
+    fflush(out);
+    long base = ftell(out);                              /* the budget is this line's, not the request's */
+    int  full = 0;
+    for (int r = 0; r < CS_GRID; r++)
+        for (int c = 0; c < CS_GRID; c++) {
+            if (!cs_where_has(&where, c, r) || !cs_where_has(&asked, c, r)) continue;
+            /* The widest run of pieces from here, then as far down as it
+             * goes whole: a wall across the map is one region, not sixteen.
+             * A region is never grown past half an answer, so each can be
+             * sent in one. */
+            CsBox b;
+            int nc = 1, nr = 1;
+#define COST(nc_, nr_) (cs_piece_box(m->w, m->h, c, r, (nc_), (nr_), &b), \
+                        (2L * (b.x1 - b.x0 + 1) + 8) * (2L * (b.y1 - b.y0 + 1) + 3))   /* a lattice: two characters a square each way */
+            while (c + nc < CS_GRID && cs_where_has(&where, c + nc, r) && cs_where_has(&asked, c + nc, r) &&
+                   COST(nc + 1, 1) <= CTL_CHANGES_BYTES / 2) nc++;
+            for (int whole = 1; r + nr < CS_GRID; nr++) {
+                for (int i = 0; i < nc && whole; i++)
+                    whole = cs_where_has(&where, c + i, r + nr) && cs_where_has(&asked, c + i, r + nr);
+                if (!whole || COST(nc, nr + 1) > CTL_CHANGES_BYTES / 2) break;
+            }
+            for (int j = 0; j < nr; j++)
+                for (int i = 0; i < nc; i++) cs_where_put(&where, c + i, r + j, 0);
+            (void)COST(nc, nr);
+#undef COST
+            b.x0 = imax(b.x0, box[0]); b.y0 = imax(b.y0, box[1]);
+            b.x1 = imin(b.x1, box[2]); b.y1 = imin(b.y1, box[3]);
+            char name[2 * MAP_COORD_MAX + 2];
+            cs_box_name(&b, name, sizeof name);
+            /* Its real bytes decide: the lattice is the least of a region
+             * full of creatures and fog. Once one is turned away the rest
+             * are listed unread, so at most one dump is thrown away. */
+            char  *reg = NULL;
+            size_t rl = 0;
+            FILE  *rf = full ? NULL : open_memstream(&reg, &rl);
+            if (rf) {
+                maptools_dump_parts(rf, m, b.x0, b.y0, b.x1, b.y1, 0);
+                fclose(rf);
+            }
+            fflush(out);
+            if (!rf || ftell(out) - base + (long)rl + 32 > CTL_CHANGES_BYTES) {
+                size_t ml = strlen(more);
+                if (ml + strlen(name) + 2 < sizeof more) snprintf(more + ml, sizeof more - ml, " %s", name);
+                free(reg);
+                full = 1;
+                continue;
+            }
+            fprintf(out, "changed %s\n", name);
+            fwrite(reg, 1, rl, out);
+            free(reg);
+        }
+    if (more[0]) fprintf(out, "more:%s - too much for one answer; dump each\n", more);
+    if (other) fputs("also: something on no square changed (rolls, cards, scenes, clocks, the fight, fog's settings, "
+                     "the map's size) - describe reads them\n", out);
     return 0;
 }
 
@@ -1510,8 +1611,9 @@ static const Request REQUESTS[] = {
     { "scene",    E, rq_scene, "scene \"NAME\"\nscene save \"NAME\" [REGION]\nscene \"NAME\" remove\nscene diff \"NAME\"",
       "put a saved scene's creatures back (an edit); save or remove one (alone in its request); or say what changed since" },
 
-    { "dump",       0, rq_dump, "dump [REGION]", "the map as text, with a legend" },
-    { "describe",   0, rq_describe, "describe [json]", "the rooms walls make, their doors and links, and what is in each" },
+    { "dump",       0, rq_dump, "dump [REGION|all|key]", "the map as text: a region of it, or all of it; key says what its characters mean" },
+    { "changes",    0, rq_changes, "changes SEQ [REGION]", "the events after SEQ, then the map as it is now where they changed it: read this, not the map again" },
+    { "describe",   0, rq_describe, "describe [REGION] [json]", "the rooms walls make, their doors and links, and what is in each" },
     { "check",      0, rq_check, "check [json]", "mistakes: loose doors, creatures on void, rooms nothing reaches" },
     { "stamps",     0, rq_stamps, "stamps", "the GM's saved stamps and their sizes" },
     { "characters", 0, rq_characters, "characters", "the GM's saved characters" },
@@ -1522,7 +1624,7 @@ static const Request REQUESTS[] = {
     { "marked",     CTL_RQ_LIVE, rq_marked, "marked [json]", "what the GM is pointing at: cursor, box, selection, ruler, pings" },
 
     { "propose",  CTL_RQ_LIVE, rq_propose, "propose [\"a line for the GM\"]", "first line of a request: its edits are a proposal for the GM to review" },
-    { "job",      0, rq_job_any, "job N take|drop\njob N area REGION\njob N say \"a line for the GM\"\njob N dump [REGION]|check|describe\njob N propose [\"a line for the GM\"]",
+    { "job",      0, rq_job_any, "job N take|drop\njob N area REGION\njob N say \"a line for the GM\"\njob N dump [REGION|all|key]|check|describe\njob N propose [\"a line for the GM\"]",
       "one job: take it or give it up, show the GM where you work, tell the GM a line, read its proposal back, or answer it with this request's edits" },
     { "jobs",     0, rq_job, "jobs [json]", "every job and where it stands" },
     { "wait",     CTL_RQ_ALONE | CTL_RQ_NOMAP, rq_wait, "wait [SEQ] [for SECONDS]", "every event after SEQ; a running vtt holds the answer until there is one or the time is up" },

@@ -913,6 +913,70 @@ int cs_bounds(const ChangeSet *cs, int *x0, int *y0, int *x1, int *y1)
     return 1;
 }
 
+/* -------------------------------------------------------------- where */
+
+/* A piece's width or height: the map in CS_GRID, rounded up. */
+static int piece_w(int w) { return (w + CS_GRID - 1) / CS_GRID; }
+
+void cs_pieces(int w, int h, int x0, int y0, int x1, int y1, CsWhere *where)
+{
+    if (w < 1 || h < 1) return;
+    int pw = piece_w(w), ph = piece_w(h);
+    x0 = iclamp(x0, 0, w - 1); x1 = iclamp(x1, x0, w - 1);
+    y0 = iclamp(y0, 0, h - 1); y1 = iclamp(y1, y0, h - 1);
+    for (int r = y0 / ph; r <= y1 / ph; r++)
+        for (int c = x0 / pw; c <= x1 / pw; c++) cs_where_put(where, c, r, 1);
+}
+
+void cs_piece_box(int w, int h, int col, int row, int ncols, int nrows, CsBox *b)
+{
+    int pw = piece_w(w), ph = piece_w(h);
+    b->x0 = col * pw;
+    b->y0 = row * ph;
+    b->x1 = imin((col + ncols) * pw, w) - 1;
+    b->y1 = imin((row + nrows) * ph, h) - 1;
+}
+
+void cs_where(const ChangeSet *cs, CsWhere *m, int *other)
+{
+    *other = cs->nrolls || cs->ncards || cs->round_changed || cs->spot_changed || cs->env_changed ||
+             cs->cards_changed || cs->scenes_changed || cs->clocks_changed || cs->fog_changed || cs->resized;
+    if (cs->resized) { memset(m, 0xff, sizeof *m); return; }      /* every square is somewhere else */
+    int w = cs->w, h = cs->h;
+    /* By block where a piece is no smaller than one (a map 256 squares or
+     * more each way): a set of half such a map's squares is a few hundred
+     * blocks, not a hundred thousand cells. A smaller map's pieces are finer
+     * than its blocks, and it has few cells: each is looked at. */
+    int coarse = piece_w(w) >= CS_BLOCK && piece_w(h) >= CS_BLOCK;
+    for (int b = 0; b < cs->bw * cs->bh; b++) {
+        if (cs->block_start[b] == cs->block_start[b + 1]) continue;
+        int bx = b % cs->bw * CS_BLOCK, by = b / cs->bw * CS_BLOCK;
+        if (coarse) { cs_pieces(w, h, bx, by, bx + CS_BLOCK - 1, by + CS_BLOCK - 1, m); continue; }
+        for (int i = cs->block_start[b]; i < cs->block_start[b + 1]; i++)
+            cs_pieces(w, h, cs->cells[i].x, cs->cells[i].y, cs->cells[i].x, cs->cells[i].y, m);
+    }
+    for (int i = 0; i < cs->ntoks; i++) {
+        const CsToken *c = &cs->toks[i];
+        if (c->had) cs_pieces(w, h, c->before.x, c->before.y, c->before.x + c->before.size - 1, c->before.y + c->before.size - 1, m);
+        if (c->has) cs_pieces(w, h, c->after.x, c->after.y, c->after.x + c->after.size - 1, c->after.y + c->after.size - 1, m);
+    }
+    for (int i = 0; i < cs->nnotes; i++) cs_pieces(w, h, cs->notes[i].x, cs->notes[i].y, cs->notes[i].x, cs->notes[i].y, m);
+    for (int i = 0; i < cs->nlinks; i++) {
+        const CsLink *c = &cs->links[i];
+        for (int k = 0; k < 2; k++) {
+            if (!(k ? c->has : c->had)) continue;
+            const Link *l = k ? &c->after : &c->before;
+            for (int e = 0; e < link_ends(l); e++)
+                cs_pieces(w, h, l->x[e], l->y[e], l->x[e] + l->size - 1, l->y[e] + l->size - 1, m);
+        }
+    }
+    for (int i = 0; i < cs->nareas; i++) {
+        const CsArea *c = &cs->areas[i];
+        if (c->had) cs_pieces(w, h, c->before.x0, c->before.y0, c->before.x1, c->before.y1, m);
+        if (c->has) cs_pieces(w, h, c->after.x0, c->after.y0, c->after.x1, c->after.y1, m);
+    }
+}
+
 /* ------------------------------------------------------------- preview */
 
 /* The live creatures, links and notes with the set applied, straight into

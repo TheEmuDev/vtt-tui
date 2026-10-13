@@ -19,6 +19,12 @@
                                        agent never locks a request out */
 #define CTL_SLOTS      (CTL_MAX_CONN + CTL_MAX_WAIT)
 #define CTL_REQ_CAP    (64 * 1024)
+/* A `dump` that names no region is taken up to this many squares (16 KB of
+ * lattice; a map that full of creatures and notes was measured at 40 KB);
+ * past it the caller says `dump all` or names a region. And what `changes`
+ * prints of the map, by the bytes really written, before it lists the rest. */
+#define CTL_DUMP_SQUARES  4096
+#define CTL_CHANGES_BYTES (16 * 1024)
 /* What `--apply` takes: the cap less the `propose apply "NAME"` line it
  * writes above a plan sent to an open map (a file's name twice over, each
  * byte escaped), so the same plans are taken on a file and on an open map. */

@@ -19,6 +19,9 @@ void app_event(App *a, int kind, int job, const char *fmt, ...)
 {
     AgentEvent *e = &a->events[++a->event_seq % EVENT_MAX];
     e->seq = a->event_seq;
+    memset(&e->where, 0, sizeof e->where);
+    e->other = 0;
+    e->gone = kind == CTL_EV_CLOSED;
     int k = job ? snprintf(e->text, sizeof e->text, "job %d %s", job, ctl_event_name(kind))
                 : snprintf(e->text, sizeof e->text, "map %s", ctl_event_name(kind));
     if (!fmt || k >= (int)sizeof e->text - 3) return;
@@ -34,6 +37,28 @@ void app_event(App *a, int kind, int job, const char *fmt, ...)
 static unsigned oldest(const App *a)
 {
     return a->event_seq > EVENT_MAX ? a->event_seq - EVENT_MAX + 1 : 1;
+}
+
+void app_event_where(App *a, const CsWhere *where, int other)
+{
+    AgentEvent *e = &a->events[a->event_seq % EVENT_MAX];
+    e->where = *where;
+    e->other = other != 0;
+}
+
+int app_events_where(const App *a, unsigned after, CsWhere *where, int *other)
+{
+    memset(where, 0, sizeof *where);
+    *other = 0;
+    if (after > a->event_seq) after = 0;             /* another vtt's number: everything kept */
+    if (after + 1 < oldest(a)) return 0;
+    for (unsigned s = after + 1; s <= a->event_seq && s > after; s++) {
+        /* Another map since: the pieces before it were that map's. */
+        if (a->events[s % EVENT_MAX].gone) return 0;
+        for (size_t i = 0; i < sizeof where->b / sizeof *where->b; i++) where->b[i] |= a->events[s % EVENT_MAX].where.b[i];
+        *other |= a->events[s % EVENT_MAX].other;
+    }
+    return 1;
 }
 
 /* A number past the newest event is another vtt's (this one was started
@@ -91,6 +116,10 @@ void app_events_map_flush(App *a)
         char what[EVENT_TEXT_MAX - 32];
         cs_summary(&cs, NULL, what, sizeof what);
         app_event(a, CTL_EV_CHANGED, 0, "%s", what);
+        int     other;
+        CsWhere where = { { 0 } };
+        cs_where(&cs, &where, &other);
+        app_event_where(a, &where, other);
     }
     cs_free(&cs);
     app_events_map_restart(a);
@@ -116,12 +145,33 @@ int app_events_due(const App *a, uint64_t now_ms)
     return map_due(a, now_ms);          /* a held wait's deadline is ctl_due's */
 }
 
+void app_events_hear(App *a)
+{
+    if (!a->map || a->map->cp) return;
+    if (ctl_active(&a->ctl) && !a->agent_on) return;      /* off: nothing of the map is told (listening) */
+    /* Changed while nobody listened: nobody knows where, and an agent back
+     * with an old number must not be told "nothing". */
+    if (a->cp_off_map == a->map && a->cp_off_gen != a->map->gen) {
+        CsWhere all;
+        memset(&all, 0xff, sizeof all);
+        app_event(a, CTL_EV_CHANGED, 0, "while no agent was listening - read the map again");
+        app_event_where(a, &all, 1);
+    }
+    a->cp_off_map = NULL;
+    checkpoint_start(a->map);
+    a->cp_gen = a->map->gen;
+}
+
 void app_events_flush(App *a, uint64_t now_ms)
 {
     if (a->map) {
         int want = listening(a, now_ms);
-        if (want && !a->map->cp) { checkpoint_start(a->map); a->cp_gen = a->map->gen; }
-        else if (!want && a->map->cp) checkpoint_stop(a->map);
+        if (want) app_events_hear(a);
+        else if (a->map->cp) {
+            checkpoint_stop(a->map);
+            a->cp_off_map = a->map;
+            a->cp_off_gen = a->map->gen;
+        }
         if (map_due(a, now_ms) == 0) app_events_map_flush(a);
     }
     if (!ctl_waiters(&a->ctl)) return;

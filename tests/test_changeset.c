@@ -903,8 +903,132 @@ static void cs_checkpoint_writers(void)
     undo_free(&u);
 }
 
+/* cs_where: the coarse account an event keeps of where a change was. */
+static int where_same(const CsWhere *a, const CsWhere *b) { return !memcmp(a, b, sizeof *a); }
+static int where_in(const CsWhere *part, const CsWhere *whole)
+{
+    for (size_t i = 0; i < sizeof part->b / sizeof *part->b; i++)
+        if (part->b[i] & ~whole->b[i]) return 0;
+    return 1;
+}
+
+static void cs_where_pieces(void)
+{
+    CASE("a piece's box and the pieces a box meets are each other's inverse, on maps of every awkward size");
+    static const int DIM[][2] = { { 1, 1 }, { 7, 3 }, { 16, 16 }, { 20, 12 }, { 65, 9 }, { 512, 512 }, { 511, 2 }, { 257, 300 } };
+    for (size_t d = 0; d < sizeof DIM / sizeof *DIM; d++) {
+        int w = DIM[d][0], h = DIM[d][1];
+        CsWhere all = { { 0 } }, seen = { { 0 } };
+        cs_pieces(w, h, 0, 0, w - 1, h - 1, &all);
+        long squares = 0;
+        for (int r = 0; r < CS_GRID; r++)
+            for (int c = 0; c < CS_GRID; c++) {
+                CsBox b;
+                cs_piece_box(w, h, c, r, 1, 1, &b);
+                if (b.x0 > b.x1 || b.y0 > b.y1) continue;              /* a piece past a small map's edge */
+                CsWhere one = { { 0 } }, got = { { 0 } };
+                cs_where_put(&one, c, r, 1);
+                cs_pieces(w, h, b.x0, b.y0, b.x1, b.y1, &got);
+                CHECK(where_same(&one, &got));
+                cs_where_put(&seen, c, r, 1);
+                squares += (long)(b.x1 - b.x0 + 1) * (b.y1 - b.y0 + 1);
+                CHECK(b.x1 - b.x0 < 32 && b.y1 - b.y0 < 32);          /* a piece is at most 32x32 */
+            }
+        CHECK(where_same(&seen, &all));                              /* every square is in a piece, */
+        CHECK_EQ(squares, (long)w * h);                              /* and in one only */
+    }
+    CsWhere in = { { 0 } }, clip = { { 0 } };
+    cs_pieces(20, 12, -5, -5, 99, 99, &clip);                        /* clipped, never out of range */
+    cs_pieces(20, 12, 0, 0, 19, 11, &in);
+    CHECK(where_same(&in, &clip));
+    cs_where_put(&in, 3, 2, 0);
+    CHECK(!cs_where_has(&in, 3, 2) && cs_where_has(&in, 4, 2) && cs_where_has(&in, 3, 3));
+
+    CASE("where a set's changes are: the pieces of its squares and of a creature before and after, and no other");
+    Map *a = map_new(64, 40, "w");                                   /* pieces of 4x3 */
+    for (int y = 0; y < 40; y++) for (int x = 0; x < 64; x++) map_set_tile(a, x, y, TILE_FLOOR);
+    tokens_add(&a->tokens, mk(TOKEN_ENEMY, 17, 11, 1, "Ghoul"));
+    Map *b = map_copy(a);
+    map_set_tile(b, 0, 0, TILE_WATER);
+    map_set_tile(b, 63, 39, TILE_WATER);
+    b->tokens.v[0].x = 33; b->tokens.v[0].y = 20;                    /* moved: both squares matter */
+    ChangeSet cs;
+    cs_init(&cs);
+    cs_diff(&cs, a, b, NULL);
+    int other = -1;
+    CsWhere where = { { 0 } }, want = { { 0 } };
+    cs_where(&cs, &where, &other);
+    cs_where_put(&want, 0, 0, 1);            /* A1 */
+    cs_where_put(&want, 15, 13, 1);          /* the far corner: 63/4, 39/3 */
+    cs_where_put(&want, 4, 3, 1);            /* where the Ghoul was: 17/4, 11/3 */
+    cs_where_put(&want, 8, 6, 1);            /* and is: 33/4, 20/3 */
+    CHECK(where_same(&where, &want));
+    CHECK_EQ(other, 0);
+
+    CASE("random changes: every changed cell's piece is marked, and on a small map nothing else is");
+    unsigned seed = 7;
+    for (int round = 0; round < 40; round++) {
+        Map *c = map_copy(a);
+        int nchg = 1 + (int)(seed % 9);
+        CsWhere exact = { { 0 } }, got = { { 0 } };
+        for (int k = 0; k < nchg; k++) {
+            seed = seed * 1103515245u + 12345u;
+            int x = (int)(seed >> 8) % 64, y = (int)(seed >> 16) % 40;
+            map_set_tile(c, x, y, TILE_ROUGH);
+            cs_pieces(64, 40, x, y, x, y, &exact);
+        }
+        ChangeSet rs;
+        cs_init(&rs);
+        cs_diff(&rs, a, c, NULL);
+        cs_where(&rs, &got, &other);
+        CHECK(where_same(&got, &exact));
+        cs_free(&rs);
+        map_free(c);
+    }
+    CASE("on a map of 256 squares and more a block is marked, not each cell: nothing missed, nothing past the block");
+    {
+        Map *big = map_new(512, 300, "big"), *chg = map_copy(big);
+        CsWhere exact = { { 0 } }, got = { { 0 } }, near = { { 0 } };
+        for (int k = 0; k < 30; k++) {
+            seed = seed * 1103515245u + 12345u;
+            int x = (int)(seed >> 8) % 512, y = (int)(seed >> 16) % 300;
+            map_set_tile(chg, x, y, TILE_ROUGH);
+            cs_pieces(512, 300, x, y, x, y, &exact);
+            int bx = x / CS_BLOCK * CS_BLOCK, by = y / CS_BLOCK * CS_BLOCK;
+            cs_pieces(512, 300, bx, by, bx + CS_BLOCK - 1, by + CS_BLOCK - 1, &near);
+        }
+        ChangeSet rs;
+        cs_init(&rs);
+        cs_diff(&rs, big, chg, NULL);
+        cs_where(&rs, &got, &other);
+        CHECK(where_in(&exact, &got) && where_in(&got, &near));
+        cs_free(&rs);
+        map_free(big);
+        map_free(chg);
+    }
+    CASE("something on no square is said apart: a roll, and a resize marks everything");
+    Map *c = map_copy(a);
+    str_lcpy(c->rolls[0].name, "attack", sizeof c->rolls[0].name);
+    str_lcpy(c->rolls[0].expr, "2d6", sizeof c->rolls[0].expr);
+    cs_free(&cs);
+    cs_init(&cs);
+    cs_diff(&cs, a, c, NULL);
+    CsWhere none = { { 0 } }, got = { { 0 } }, every;
+    memset(&every, 0xff, sizeof every);
+    cs_where(&cs, &got, &other);
+    CHECK(where_same(&got, &none) && other == 1);
+    cs.resized = 1;
+    cs_where(&cs, &got, &other);
+    CHECK(where_same(&got, &every) && other == 1);
+    cs_free(&cs);
+    map_free(a);
+    map_free(b);
+    map_free(c);
+}
+
 void test_changeset(void)
 {
+    cs_where_pieces();
     cs_drop_parts();
     cs_checkpoint_writers();
     cs_checkpoint();

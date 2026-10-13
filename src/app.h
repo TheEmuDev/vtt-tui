@@ -89,6 +89,9 @@ typedef enum {
 typedef struct {
     unsigned seq;
     char     text[EVENT_TEXT_MAX];
+    CsWhere  where;         /* the pieces of the map it changed (cs_where), for `changes` */
+    uint8_t  other;         /* and something on no square */
+    uint8_t  gone;          /* the map itself went (closed): nothing before this says where anything is */
 } AgentEvent;
 
 #define PING_SHOW_MS 2000
@@ -257,6 +260,11 @@ typedef struct {
     AgentEvent events[EVENT_MAX];
     unsigned event_seq;
     unsigned cp_gen;
+    /* The checkpoint stops when no agent listens (app_event.c). What the map
+     * was then, so that a change nobody was told of is said when one comes
+     * back: `changes` must never answer "nothing" for a map that moved. */
+    const Map *cp_off_map;
+    unsigned   cp_off_gen;
     uint64_t agent_seen_ms;
     int      ctl_can_hold, ctl_held;
     unsigned ctl_hold_seq;

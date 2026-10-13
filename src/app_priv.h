@@ -195,6 +195,17 @@ void app_creatures_renumbered(App *a);
  * text]` with job 0; a NULL fmt for a kind that says it all. The kinds are
  * ctl.h's, where --wait reads them back. */
 void app_event(App *a, int kind, int job, const char *fmt, ...) __attribute__((format(printf, 4, 5)));
+/* Where on the map the newest event's change is (cs_where's pieces), said
+ * straight after the app_event that made it. */
+void app_event_where(App *a, const CsWhere *where, int other);
+/* The pieces changed by every event after `after`, and whether something on
+ * no square changed. 0 when events older than are kept would be among them:
+ * then nobody knows. */
+int  app_events_where(const App *a, unsigned after, CsWhere *where, int *other);
+/* An agent is listening from now: the checkpoint starts if it was stopped,
+ * and a change made while it was is an event before anything is answered
+ * (`wait` and `changes` call it; the tick does for a held wait or a job). */
+void app_events_hear(App *a);
 int  app_events_after(const App *a, unsigned after);
 /* "seq N", then every event after `after`, one a line. */
 void app_events_write(const App *a, FILE *out, unsigned after);
@@ -296,6 +307,11 @@ void app_agent_command(App *a, const char *rest);
 int  app_ctl_region(const Map *m, const char *w, int *x0, int *y0, int *x1, int *y1,
                     char *err, size_t errsz);
 int  app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, size_t errsz);
+/* `dump`'s words after the verb, for the live map and a job's alike: none
+ * (the whole map, refused above CTL_DUMP_SQUARES: an agent that forgot the
+ * region should not be sent half a megabyte), `all`, or a region. 0 with why
+ * in err. */
+int  app_ctl_dump(const Map *m, char w[][CTL_WORD_MAX], int n, int at, FILE *out, char *err, size_t errsz);
 /* The class of the refusal being written (ctl.h's CTL_E_*; `usage` unless
  * said). Returns -1, to be returned with it. */
 int  app_ctl_class(int cls);

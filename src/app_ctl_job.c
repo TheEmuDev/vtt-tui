@@ -111,11 +111,7 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
         Map *m = app_job_result(a, slot);
         if (!m) { app_ctl_class(CTL_E_STATE), snprintf(err, errsz, "#%d was made before the map was resized - propose it again", num); return -1; }
         if (!strcmp(verb, "dump")) {
-            int x0 = 0, y0 = 0, x1 = m->w - 1, y1 = m->h - 1;
-            if (n > 4) { snprintf(err, errsz, "job N dump takes one region, like B2:K12"); return -1; }
-            if (n == 4 && !app_ctl_region(m, w[3], &x0, &y0, &x1, &y1, err, errsz)) return -1;
-            maptools_dump(out, m, x0, y0, x1, y1);
-            return 0;
+            return app_ctl_dump(m, w, n, 3, out, err, errsz) ? 0 : -1;
         }
         int json = 0;
         if (n == 4 && !strcmp(w[3], "json")) json = 1;

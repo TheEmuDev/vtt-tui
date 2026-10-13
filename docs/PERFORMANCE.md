@@ -190,9 +190,11 @@ Machine: Intel Core i7-8700K @ 3.70GHz (6 cores, 12 threads, 4.7 GHz max, powers
 | agent, room + 12     | 80x24  |    93.1us |   119.8us |    55 |   157 |
 | agent, plan of rooms | 80x24  |    70.4us |    76.4us |    55 |   157 |
 | agent, dump 512x512  | 80x24  |    22.5us |  5630.0us |     7 |   138 |
+| agent, dump a region | 80x24  |    23.5us |    54.8us |     7 |   138 |
 | agent, proposal, review | 80x24  |    16.8us |    70.0us |    26 |   264 |
 | agent, proposal, accept | 80x24  |    15.9us |    72.2us |    40 |   241 |
 | agent, map changed event | 80x24  |    22.2us |    24.8us |    36 |   279 |
+| agent, changes read | 80x24  |    23.7us |    47.6us |    36 |   279 |
 | build, outside change 512x512 | 80x24  |    19.6us |  5690.0us |    26 |   271 |
 | help page            | 80x24  |    37.3us |    54.2us |   542 |  2601 |
 | profiler overlay     | 80x24  |    28.5us |   125.5us |   174 |  1025 |
@@ -1055,6 +1057,31 @@ quiet: its frame (23.7 µs) is `build, open`'s (23.0), so the checkpoint running
 does not show on the frame. `ctl.wait`, the zone round answering waiters, has no row: the
 bench has no socket to hold one on; the live check above stands in for it, and is written
 out in docs/CONFLICTS.md's *Progress, step by step*.
+
+### Reads that cost what was asked
+
+2.0's step 4 (docs/V2.md, D7; 2026-10-12). An agent told "the map changed" used to read the
+map again: on the largest map that is `agent, dump 512x512`, 5.6 ms inside one turn of the
+loop and half a megabyte of answer (HEALTH 51). Three things now stand in its way. A `dump`
+that names no region is refused above 4,096 squares, so the whole map is asked for by name
+(`dump all`); `dump` no longer carries its 330-byte key (`dump key`); and `changes SEQ`
+answers with the map only where the events since `SEQ` changed it. An event keeps where its
+change was as a bit a piece of the map cut sixteen by sixteen (32 bytes, `cs_where`), so
+`changes` reads no change set and diffs nothing.
+
+The desktop (`Machine:` above), each the median of three runs of the row's own command,
+2026-10-12. The machine was not quiet (the whole-map dump ran 5.6 to 8.3 ms from one run
+to the next, on the previous commit's binary as well), so the p99s are upper bounds; the
+two new rows were added to *Frame times* by hand, and the tables are owed a `make perf`
+(HEALTH 66).
+
+| path | measured | speed of light | gap, and why |
+|---|---|---|---|
+| `dump` of 32×32 squares of the 512×512 map (`agent, dump a region`) | frame p99 55 µs against 24 with no request: about 30 µs | the 4.2 KB it writes, about 1 µs, and one allocation | the lattice is made a character at a time through `corner_char`, `hedge_char` and `vedge_char`, and the creature list is walked whole for a region of it. Left: 30 µs is a thousandth of the frame budget, and 190 times less than the dump it replaces |
+| `changes` after a dozen edits (`agent, changes read`) | frame p99 48 µs: about 25 µs | the events kept (32 lines) and one piece's lattice, about 4 KB | the same writer, so the same gap |
+| keeping where an event's change was (`cs_where`) | not a row: inside `checkpoint.read`'s 1.6 µs, and `agent, map changed event` reads 23.2 µs p50 against the previous commit's 23.0 to 23.9, run about | one bit a changed block | none seen |
+| a region `changes` lists and does not send | not timed: written aside and thrown away, at most one an answer (once one is listed the rest are, unread) | nothing | one region's dump, about 30 µs, for deciding on its real bytes and not an estimate that a crowd of creatures makes 2.6 times too small |
+| a whole-map `dump all` | unchanged, 5.6 ms | 530 KB written | as *Cost per call* has it; nothing asks for it by accident now, and the request budget (docs/V2.md, D5) is what will bound it |
 
 ### A terminal that stops reading
 

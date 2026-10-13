@@ -893,11 +893,124 @@ void test_events(void)
     CHECK_EQ(a.event_seq, seq0 + 3);
     free(t);
 
+    CASE("changes: the events after SEQ, then the map as it is now in the pieces they changed, and only those");
+    {
+        /* 20x12: pieces of 2x1 squares. J10 and L10 are in two side by side, sent as one region (I10:L10); A12 is A12:B12. */
+        char rq[48], all[400];
+        snprintf(rq, sizeof rq, "changes %u", seq0);
+        t = ctl_ask(&a, rq);
+        snprintf(all, sizeof all, "ok\nseq %u\n%u map changed: ground in J10\n%u map changed: ground in L10\n"
+                                    "%u job 1 accepted: ground in A12\n"
+                                    "changed I10:L10\n    I J K L\n\n10  . : . :\n\n"
+                                    "changed A12:B12\n    A B\n\n12  ~ .\n\n",
+                 seq0 + 3, seq0 + 1, seq0 + 2, seq0 + 3);
+        CHECK(t && !strcmp(t, all));
+        if (t && strcmp(t, all)) printf("    got:\n%s    want:\n%s", t, all);
+        free(t);
+        snprintf(rq, sizeof rq, "changes %u", seq0 + 2);    /* from later: the accept alone */
+        t = ctl_ask(&a, rq);
+        CHECK(t && strstr(t, "\nchanged A12:B12\n") && !strstr(t, "\nchanged I10"));
+        free(t);
+        snprintf(rq, sizeof rq, "changes %u A1:D12", seq0); /* a region: what changed inside it */
+        t = ctl_ask(&a, rq);
+        CHECK(t && strstr(t, "\nchanged A12:B12\n") && !strstr(t, "\nchanged I10"));
+        free(t);
+        snprintf(rq, sizeof rq, "changes %u J10", seq0);
+        t = ctl_ask(&a, rq);
+        CHECK(t && strstr(t, "\nchanged J10\n") && !strstr(t, "\nchanged A12"));
+        free(t);
+        /* Something on no square is said, not dumped. */
+        unsigned s1 = a.event_seq;
+        app_event(&a, CTL_EV_CHANGED, 0, "roll attack");
+        CsWhere nowhere = { { 0 } };
+        app_event_where(&a, &nowhere, 1);
+        snprintf(rq, sizeof rq, "changes %u", s1);
+        t = ctl_ask(&a, rq);
+        CHECK(t && !strstr(t, "\nchanged ") && strstr(t, "\nalso: something on no square changed"));
+        free(t);
+        /* A number that is another vtt's: everything kept, as wait gives it. */
+        t = ctl_ask(&a, "changes 9999");
+        CHECK(t && strstr(t, "reset 9999: ") && strstr(t, "\nchanged I10:L10\n") && strstr(t, "\nchanged A12:B12\n"));
+        free(t);
+    }
+
+    CASE("changes: a part accepted by box says its box; changes after an edit line is refused");
+    {
+        unsigned s2 = a.event_seq;
+        int last0 = a.job_last;
+        char rq[64];
+        t = ctl_ask(&a, "propose\ntile E2:F2 water\ntile Q2 water\n");
+        const char *hash = t ? strstr(t, "proposal #") : NULL;
+        int num = hash ? atoi(hash + 10) : 0;
+        CHECK(num > 0);
+        free(t);
+        a.ed.cx = 4; a.ed.cy = 1;
+        snprintf(rq, sizeof rq, ":review %d\rvl\r", num);    /* the box is E2:F2: Q2 waits */
+        press(&a, rq);
+        CHECK_EQ(map_tile(m, 4, 1), TILE_WATER);
+        CHECK(map_tile(m, 16, 1) != TILE_WATER);
+        snprintf(rq, sizeof rq, "changes %u", s2);
+        t = ctl_ask(&a, rq);
+        CHECK(t && strstr(t, " part: E2:F2: ") && strstr(t, "\nchanged E2:F2\n   E F\n\n2  ~ ~\n") && !strstr(t, "\nchanged Q2"));
+        free(t);
+        press(&a, "d");                                      /* the rest is scrapped */
+        press(&a, "\x1b");
+        t = ctl_ask(&a, "tile A1 water\nchanges 0");
+        CHECK(ctl_refused(t, "usage", 2) && strstr(t, "changes comes before"));
+        free(t);
+        snprintf(rq, sizeof rq, ":ask %d remove\r", num);
+        press(&a, rq);
+        a.job_last = last0;                                 /* the cases after this count jobs from where they were */
+    }
+
+    CASE("a change while no agent listened is not missed: back with an old number, an agent is told to read the map");
+    {
+        unsigned s3 = a.event_seq;
+        uint64_t later = 50000 + (uint64_t)CTL_WAIT_MAX_S * 1000 + 1000;
+        app_tick(&a, 50000);
+        CHECK(m->cp != NULL);
+        for (int i = 0; i < JOB_MAX; i++) if (a.jobs[i].used && a.jobs[i].state <= JOB_READY) a.jobs[i].state = JOB_SCRAPPED;
+        app_tick(&a, later);                                 /* ten minutes of nobody: the checkpoint stops */
+        CHECK(m->cp == NULL);
+        undo_begin(&a.undo);
+        undo_set_tile(&a.undo, m, 9, 4, TILE_HAZARD);         /* J5, with nobody to tell */
+        undo_end(&a.undo);
+        app_tick(&a, later + 1000);
+        app_tick(&a, later + 5000);
+        CHECK_EQ(a.event_seq, s3);
+        char rq[64];
+        a.now_ms = later + 6000;
+        snprintf(rq, sizeof rq, "changes %u J5", s3);
+        t = ctl_ask(&a, rq);
+        CHECK(t && strstr(t, " map changed: while no agent was listening - read the map again\n"));
+        CHECK(t && strstr(t, "\nchanged J5\n") && strstr(t, "\n5  ^\n") && strstr(t, "\nalso: "));
+                free(t);
+        CHECK(m->cp != NULL);
+        unsigned s4 = a.event_seq;
+        snprintf(rq, sizeof rq, "changes %u", s4);            /* told once */
+        t = ctl_ask(&a, rq);
+        CHECK(t && !strstr(t, "changed"));
+        free(t);
+        /* Nothing changed while nobody listened: nothing is said. */
+        app_tick(&a, later + 6000 + (uint64_t)CTL_WAIT_MAX_S * 1000 + 1000);
+        CHECK(m->cp == NULL);
+        a.now_ms = later + 6000 + (uint64_t)CTL_WAIT_MAX_S * 1000 + 2000;
+        t = ctl_ask(&a, "wait 0 for 0");
+        CHECK_EQ(a.event_seq, s4);
+        free(t);
+    }
+
     CASE("more events than the ring keeps: the gap is said");
     for (int k = 0; k < EVENT_MAX + 5; k++) app_event(&a, CTL_EV_CHANGED, 0, "test %d", k);
     t = ctl_ask(&a, "wait 0");
     snprintf(want, sizeof want, "lost 1-%u: ", a.event_seq - EVENT_MAX);
     CHECK(t && strstr(t, want) && strstr(t, ": test 4\n") == NULL && strstr(t, " map changed: test 36\n"));
+    free(t);
+    t = ctl_ask(&a, "changes 99999");                      /* another vtt's number, and more than is kept: no regions */
+    CHECK(t && strstr(t, "reset 99999: ") && strstr(t, "\nlost 1-") && !strstr(t, "\nchanged "));
+    free(t);
+    t = ctl_ask(&a, "changes 1");                          /* older than is kept: nobody knows where; read the map */
+    CHECK(t && strstr(t, "\nlost 2-") && !strstr(t, "\nchanged ") && !strstr(t, "also:"));
     free(t);
 
     CASE("closing the map is an event; wait hears it with no map open");

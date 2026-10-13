@@ -184,6 +184,31 @@ void cs_summary(const ChangeSet *cs, const CsBox *box, char *out, size_t outsz);
 
 /* The squares the set touches, as a bounding box; 0 when it touches none. */
 int  cs_bounds(const ChangeSet *cs, int *x0, int *y0, int *x1, int *y1);
+/* Where on the map a set's changes are, coarsely: the map cut sixteen by
+ * sixteen, a bit a piece -- what an event keeps of the change that made it,
+ * so `changes` can read back the pieces touched and not the map
+ * (docs/V2.md, D7). 32 bytes whatever the map's size; a piece is at most
+ * 32x32 squares. */
+#define CS_GRID 16
+typedef struct { uint64_t b[CS_GRID * CS_GRID / 64]; } CsWhere;
+
+static inline int  cs_where_has(const CsWhere *w, int col, int row) { int i = CS_GRID * row + col; return (int)(w->b[i / 64] >> (i % 64) & 1); }
+static inline void cs_where_put(CsWhere *w, int col, int row, int on)
+{
+    int i = CS_GRID * row + col;
+    if (on) w->b[i / 64] |= (uint64_t)1 << (i % 64);
+    else    w->b[i / 64] &= ~((uint64_t)1 << (i % 64));
+}
+
+/* Adds the pieces a set's changes fall in; *other is set when something on
+ * no square changed too (rolls, cards, scenes, clocks, the fight, the
+ * map's size -- which marks every piece). */
+void cs_where(const ChangeSet *cs, CsWhere *where, int *other);
+/* Adds the pieces a box of squares meets, on a map of w x h; and the box of
+ * a run of pieces. */
+void cs_pieces(int w, int h, int x0, int y0, int x1, int y1, CsWhere *where);
+void cs_piece_box(int w, int h, int col, int row, int ncols, int nrows, CsBox *b);
+
 /* A box as the GM reads it: "C3" or "B2:F6". */
 void cs_box_name(const CsBox *b, char *buf, size_t sz);
 

@@ -162,7 +162,7 @@ can take back, so each goes in a request of its own.
 | `job N take`, `job N drop` | the job is yours (the GM sees it taken), or you give it up |
 | `job N area REGION`, `job N say "..."` | show the GM where you will work, or put a line on the GM's status line |
 | `job N propose ["a line for the GM"]` | the first line of a request: its edits are your answer to job N |
-| `job N dump [REGION]`, `job N check`, `job N describe` | your proposal read back, as the map would be with it |
+| `job N dump [REGION\|all\|key]`, `job N check`, `job N describe` | your proposal read back, as the map would be with it |
 | `jobs [json]` | every job and where it stands, with what was said on each |
 | `wait [SEQ] [for SECONDS]` | alone in its request: every event after SEQ, held until there is one or the time is up |
 
@@ -170,8 +170,10 @@ can take back, so each goes in a request of its own.
 
 | line | answers |
 |---|---|
-| `dump [REGION]` | the map as text: squares in the file's characters, boundaries between, creatures as `1`-`9` `a`-`z` `A`-`Z`, a legend with creatures, notes and areas |
-| `describe [json]` | the rooms walls make, named by their areas, with doors and links and where they lead, and what is in each |
+| `dump [REGION]` | the map as text: squares in the file's characters, boundaries between, creatures as `1`-`9` `a`-`z` `A`-`Z`, then the creatures, notes, areas and links there. With no region it is the whole map, and refused (`limit`) on a map over 4,096 squares: name a region, or say `dump all`. An area the GM has named `all` or `key` is read as that area |
+| `dump key` | what the characters of a dump mean; read it once |
+| `changes SEQ [REGION]` | the events after `SEQ` (as `wait` gives them), then the map **as it is now, only where they changed it**: a `changed REGION` line and that region's dump for each. After an event, read this and not the map again |
+| `describe [REGION] [json]` | the rooms walls make, named by their areas, with doors and links and where they lead, and what is in each; with a region (or an area's name), only the rooms that meet it, each whole |
 | `check [json]` | mistakes: loose doors, creatures on void, rooms nothing reaches ([codes](../README.md#map-tools---dump-map---check---describe)) |
 | `stamps` | the GM's saved stamps and their sizes |
 | `characters` | the GM's saved characters: name, label, side, size, counters, rolls |
@@ -324,6 +326,28 @@ feedback. Nothing you send changes the GM's map until then, unless the GM has ty
 
    An event's text is cut at 240 characters; `jobs` has a job's whole text. The GM undoing
    an accepted change with `u` comes as `map changed`, not as a job event.
+
+   **After `map changed` or an accept, do not dump the map again.** `changes 41` gives the
+   events after 41 and then the map as it is now in the parts they touched:
+
+   ```
+   seq 43
+   42 map changed: walls and doors in F2:F9
+   43 job 3 accepted: ground in K4
+   changed F1:J8
+   (that region's dump)
+   ```
+   The regions are coarse (the map cut sixteen by sixteen), so a `changed` region holds the
+   change and some squares round it. `changes 41 B2:K12` keeps to a region of yours. When
+   more changed than one answer holds (16 KB as written, creatures and notes counted), the rest
+   is a `more: REGION REGION ...` line:
+   `dump` each. An `also:` line says something on no square changed (rolls, cards, scenes,
+   clocks, the fight): `describe` has those. A `lost` line means the events are too old to
+   say where, and `map closed` that it is another map now: then read the map. vtt follows
+   the map's changes only while an agent is about (a `wait` held, a job open, or a `wait`
+   or `changes` in the last ten minutes); come back later than that and a change in between
+   is one event, `map changed: while no agent was listening`, with every region on it.
+   `changes` goes before a request's edits, never after them.
 
    So an agent that serves a GM is a loop: `wait`, act on what came back (`take` a job that
    was asked, `propose`, answer feedback), `wait` again from the last `seq`.

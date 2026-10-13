@@ -112,7 +112,20 @@ static int token_touches(const Token *t, int x0, int y0, int x1, int y1)
     return t->x <= x1 && t->x + t->size - 1 >= x0 && t->y <= y1 && t->y + t->size - 1 >= y0;
 }
 
+void maptools_dump_key(FILE *out)
+{
+    fputs("key\n"
+          "  .  floor   ~  water   :  rough   \"  brush   =  wood   ^  hazard   (blank) void\n"
+          "  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door\n"
+          "  S and s are the GM's: the players see a wall and an open door\n", out);
+}
+
 void maptools_dump(FILE *out, const Map *m, int x0, int y0, int x1, int y1)
+{
+    maptools_dump_parts(out, m, x0, y0, x1, y1, DUMP_KEY | DUMP_FOOT);
+}
+
+void maptools_dump_parts(FILE *out, const Map *m, int x0, int y0, int x1, int y1, unsigned parts)
 {
     x0 = iclamp(x0, 0, m->w - 1); x1 = iclamp(x1, x0, m->w - 1);
     y0 = iclamp(y0, 0, m->h - 1); y1 = iclamp(y1, y0, m->h - 1);
@@ -214,10 +227,7 @@ void maptools_dump(FILE *out, const Map *m, int x0, int y0, int x1, int y1)
         fprintf(out, "  %s\n", line);
     }
 
-    fputs("\nkey\n"
-          "  .  floor   ~  water   :  rough   \"  brush   =  wood   ^  hazard   (blank) void\n"
-          "  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door\n"
-          "  S and s are the GM's: the players see a wall and an open door\n", out);
+    if (parts & DUMP_KEY) { fputc('\n', out); maptools_dump_key(out); }
 
     int patches = 0;
     for (int i = 0; i < FOG_PATCH_MAX; i++)
@@ -245,6 +255,7 @@ void maptools_dump(FILE *out, const Map *m, int x0, int y0, int x1, int y1)
         }
     }
 
+    if (!(parts & DUMP_FOOT)) return;
     fprintf(out, "\nmap  %s  %dx%d  scale %g ft  metric %s  ruleset %s\n", m->name, m->w, m->h,
             m->scale_ft, dist_metric_name((DistMetric)m->metric), m->ruleset[0] ? m->ruleset : "none");
     if (x0 > 0 || y0 > 0 || x1 < m->w - 1 || y1 < m->h - 1) {
@@ -493,8 +504,17 @@ static int room_openings(const Map *m, const Rooms *r, int room, Opening **buf, 
 
 void maptools_describe(FILE *out, const Map *m, int json)
 {
+    maptools_describe_in(out, m, json, NULL);
+}
+
+void maptools_describe_in(FILE *out, const Map *m, int json, const int *box)
+{
     Rooms r;
     rooms_build(m, &r);
+    /* IN(i): room i is told of. */
+#define IN(i) (!box || (r.v[i].x0 <= box[2] && r.v[i].x1 >= box[0] && r.v[i].y0 <= box[3] && r.v[i].y1 >= box[1]))
+    int told = 0;
+    for (int i = 0; i < r.n; i++) told += IN(i);
     char buf[64], buf2[64];
     int  unreachable = 0;
     for (int i = 0; i < r.n; i++) unreachable += !r.reach[i];
@@ -517,12 +537,18 @@ void maptools_describe(FILE *out, const Map *m, int json)
         json_key(&j, "fog"); json_bool(&j, m->fog_on);
         json_kint(&j, "creatures", m->tokens.n);
         json_kint(&j, "rooms", r.n);
+        if (box) {
+            map_region_name(box[0], box[1], box[2], box[3], buf, sizeof buf);
+            json_kstr(&j, "region", buf);
+            json_kint(&j, "rooms_told", told);
+        }
         json_key(&j, "start_room"); if (r.start >= 0) json_int(&j, r.start + 1); else json_null(&j);
         json_close(&j, '}');
 
         json_key(&j, "rooms");
         json_open(&j, '[');
         for (int i = 0; i < r.n; i++) {
+            if (!IN(i)) continue;
             const Room *rm = &r.v[i];
             json_open(&j, '{');
             json_kint(&j, "id", i + 1);
@@ -672,6 +698,7 @@ void maptools_describe(FILE *out, const Map *m, int json)
         for (int t = 0; t < m->tokens.n; t++) {
             const Token *tk = &m->tokens.v[t];
             if (rooms_at(&r, m, tk->x, tk->y) >= 0) continue;
+            if (box && (tk->x < box[0] || tk->x > box[2] || tk->y < box[1] || tk->y > box[3])) continue;
             json_open(&j, '{');
             json_kstr(&j, "label", tk->label);
             map_coord_name(tk->x, tk->y, buf, sizeof buf); json_kstr(&j, "at", buf);
@@ -710,8 +737,13 @@ void maptools_describe(FILE *out, const Map *m, int json)
             fprintf(out, "%s %s (level %d) %s", k ? "," : "  floors", fa->name, fa->level, buf2);
         }
         if (nf) fputc('\n', out);
+        if (box) {
+            map_region_name(box[0], box[1], box[2], box[3], buf, sizeof buf);
+            fprintf(out, "  region %s: %d of the %d room%s\n", buf, told, r.n, r.n == 1 ? "" : "s");
+        }
 
         for (int i = 0; i < r.n; i++) {
+            if (!IN(i)) continue;
             const Room *rm = &r.v[i];
             room_ref(m, &r, i, buf, sizeof buf);
             bounds_name(rm->x0, rm->y0, rm->x1, rm->y1, buf2, sizeof buf2);
@@ -794,6 +826,7 @@ void maptools_describe(FILE *out, const Map *m, int json)
         for (int t = 0; t < m->tokens.n; t++) {
             const Token *tk = &m->tokens.v[t];
             if (rooms_at(&r, m, tk->x, tk->y) >= 0) continue;
+            if (box && (tk->x < box[0] || tk->x > box[2] || tk->y < box[1] || tk->y > box[3])) continue;
             if (!outside++) fputs("\noutside any room\n", out);
             map_coord_name(tk->x, tk->y, buf, sizeof buf);
             fprintf(out, "  %-12s %-8s %s\n", token_kind_name(tk->kind), buf, tk->label);
@@ -801,6 +834,7 @@ void maptools_describe(FILE *out, const Map *m, int json)
     }
     free(op);
     rooms_free(&r);
+#undef IN
 }
 
 /* ----------------------------------------------------------------- check */

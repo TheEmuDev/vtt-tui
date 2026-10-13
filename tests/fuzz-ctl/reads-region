@@ -1,0 +1,6 @@
+dump key
+describe B2:D4
+describe K5 json
+changes 0
+changes 0 B2:C3
+dump all

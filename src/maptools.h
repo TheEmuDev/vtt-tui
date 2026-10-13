@@ -21,6 +21,13 @@
  * one a boundary, column letters and row numbers round it, then a legend
  * for creatures, notes and fog. */
 void maptools_dump(FILE *out, const Map *m, int x0, int y0, int x1, int y1);
+/* The same with parts left off: the channel's `dump` has no key (`dump key`
+ * is its own request: 330 bytes an agent needs once, not with every read),
+ * and `changes` prints several regions under its own headings, so each
+ * without the map's line and the region's. */
+enum { DUMP_KEY = 1, DUMP_FOOT = 2 };
+void maptools_dump_parts(FILE *out, const Map *m, int x0, int y0, int x1, int y1, unsigned parts);
+void maptools_dump_key(FILE *out);
 
 /* "B2:K12" (either order, case aside; one square alone is that square)
  * into squares. A row without a column -- "5:6" -- keeps every column, as
@@ -65,6 +72,10 @@ void maptools_edge_name(const Map *m, int vertical, int x, int y, char *buf, siz
  * extent, terrain, doors and where they lead, creatures, fog and notes;
  * text, or JSON with `json`. */
 void maptools_describe(FILE *out, const Map *m, int json);
+/* The same for the rooms that meet a box (x0, y0, x1, y1; NULL for all): the
+ * map's own lines are always there, and a line says how many rooms of how
+ * many. A room is whole or absent, never cut. */
+void maptools_describe_in(FILE *out, const Map *m, int json, const int *box);
 
 /* A linter. Loads `path` itself, so the file's own mistakes come with
  * their line numbers (mapio_load_diag), then checks the map: doors and

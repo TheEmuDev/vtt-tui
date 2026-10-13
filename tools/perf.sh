@@ -192,7 +192,8 @@ HUGE=$(genmap huge 512 512 0 0)
     echo 'room A1:AN40'
     for c in C D E F G H I J K L M N; do printf 'token add enemy %s5 "M%s"\n' "$c" "$c"; done
 } > "$DIR/room.ctl"
-echo 'dump' > "$DIR/dump.ctl"
+echo 'dump all' > "$DIR/dump.ctl"            # by name: a bare `dump` of a map this size is refused
+echo 'dump AA20:BF51' > "$DIR/dumpregion.ctl" # what an agent is told to ask instead: 32x32 squares of it
 # The room language: five named rooms placed by each other, five corridors
 # (one two wide), creatures by room, on a void canvas.
 VOIDMAP="$DIR/void.vtt"
@@ -369,6 +370,7 @@ run "play, handout typed, 4 watch" "$MOB"  80x24  ':play\r:handout say The door 
 run "agent, room + 12"     "$VOIDY"  80x24  'u' "--bench-ctl $DIR/room.ctl"
 run "agent, plan of rooms" "$VOIDMAP" 80x24  'u' "--bench-ctl $DIR/plan.ctl"
 run "agent, dump 512x512"  "$HUGE"   80x24  'lh' "--bench-ctl $DIR/dump.ctl"
+run "agent, dump a region" "$HUGE"   80x24  'lh' "--bench-ctl $DIR/dumpregion.ctl"
 # A proposal (docs/CONFLICTS.md, step 4): the plan of rooms on a copy of the
 # largest map, then reviewed and scrapped, or accepted and undone. Each loop's
 # request is a new job; finished ones make room for the next.
@@ -378,6 +380,11 @@ run "agent, proposal, accept" "$VOID512" 80x24 ':review\r\ru'      "--bench-ctl 
 # the GM's edits on the largest map, then the map quiet: one event a loop.
 echo 'wait for 0' > "$DIR/wait.ctl"
 run "agent, map changed event" "$HUGE" 80x24 'xlxlxlxlxlxlfhfhfhfhfhfh' "--bench-ctl $DIR/wait.ctl"
+# `changes` after the same edits (docs/V2.md, D7): the events kept, then the
+# map where they were -- the pieces the dozen edits fell in, never the map. A
+# number past the newest asks for everything kept, so each loop reads the same.
+echo 'changes 999999999' > "$DIR/changes.ctl"
+run "agent, changes read"  "$HUGE"   80x24 'xlxlxlxlxlxlfhfhfhfhfhfh' "--bench-ctl $DIR/changes.ctl"
 # Another program writes the open map's file (step 7): the plan of rooms
 # applied to a copy of the largest map, written over the map's own file every
 # loop. The first key notices; the read, the proposal and its tint follow once

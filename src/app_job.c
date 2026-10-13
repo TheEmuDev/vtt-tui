@@ -137,8 +137,14 @@ static void land(App *a, Job *j, const CsBox *box)
         snprintf(msg, sizeof msg, "accepted the part in %s: %s", where, what);
         app_job_thread_add(j, '-', msg);
         if (cs_empty(&j->cs)) j->state = JOB_ACCEPTED;
-        if (n) app_event(a, CTL_EV_PART, j->num, "%s: %.120s%s", where, what,
-                         j->state == JOB_READY ? " - the rest waits" : "");
+        if (n) {
+            app_event(a, CTL_EV_PART, j->num, "%s: %.120s%s", where, what,
+                      j->state == JOB_READY ? " - the rest waits" : "");
+            /* What landed lies wholly in the box. */
+            CsWhere in = { { 0 } };
+            cs_pieces(a->map->w, a->map->h, box->x0, box->y0, box->x1, box->y1, &in);
+            app_event_where(a, &in, 0);
+        }
         if (!n) snprintf(msg, sizeof msg, "#%d: nothing of it is in %s - the box takes what lies wholly inside", j->num, where);
         else snprintf(msg, sizeof msg, "#%d: accepted %s (%d)%s%.120s - u takes it back%s", j->num, where, n,
                       left[0] ? "; " : "", left, j->state == JOB_READY ? "; the rest waits" : "");
@@ -147,6 +153,10 @@ static void land(App *a, Job *j, const CsBox *box)
         snprintf(msg, sizeof msg, "accepted: %s", what);
         app_job_thread_add(j, '-', msg);
         app_event(a, CTL_EV_ACCEPTED, j->num, "%.150s%s%.50s", what, left[0] ? "; " : "", left);
+        int     other;
+        CsWhere pieces = { { 0 } };
+        cs_where(&j->cs, &pieces, &other);
+        app_event_where(a, &pieces, other);
         snprintf(msg, sizeof msg, "#%d accepted: %.120s%s%.80s - u takes it back", j->num, what,
                  left[0] ? "; " : "", left);
     }
