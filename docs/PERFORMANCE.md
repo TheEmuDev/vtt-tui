@@ -15,8 +15,10 @@ Both use gcc 16.2.1 with `-O2`. Absolute numbers belong to the machine they were
 Only rows from the same machine compare, and the ratios between rows are the part that
 carries over. Every table here before 2026-10-07 is the **laptop's**. On 2026-10-08 *Frame
 times* and *Cost per call* were regenerated on the **desktop**, so the figures quoted in the
-paragraphs under them, written earlier, are the laptop's: their ratios hold, but their
-absolute values don't match the tables any more. The save table, the phone page's and the
+paragraphs under them, written earlier, were the laptop's. On 2026-10-13 every figure there
+that sits beside a named row was brought to the desktop's tables (*Reading it* says how to
+read one); the before-and-after pairs, the A/Bs and the dated figures are still the
+laptop's: their ratios hold, their absolute values do not match the tables. The save table, the phone page's and the
 fog sight figures are still the laptop's. From then on, each
 table is published under the `Machine:` line that `tools/machine.sh` prints:
 - `perf.sh`, `saves.sh`, `pagebench.sh` and `sight.sh` print it above their tables;
@@ -48,8 +50,8 @@ Two properties matter more than any single figure:
 
 - **Cost follows the window, not the map.** A 200×200 map costs the same at 80×24 as a
   40×25 one does. Every drawing path culls to the visible tiles first, creatures included:
-  500 on a 200×200 map draw in 41µs against 33µs for 24 (they drew in 85µs before the
-  creatures were culled, A/B'd; the 8µs left is a handful of walks of the whole list --
+  500 on a 200×200 map draw in 27µs against 22µs for 24 (on the laptop they drew in 85µs
+  before the creatures were culled and 41 after, A/B'd; the 5µs left is a handful of walks of the whole list --
   `floor.pick`, `turn.status`, the panel, the cursor's size -- each a microsecond or two).
 - **Idle costs nothing.** `poll()` blocks until there is input; there is no frame loop.
 
@@ -303,6 +305,14 @@ Machine: Intel Core i7-8700K @ 3.70GHz (6 cores, 12 threads, 4.7 GHz max, powers
 
 A finding a paragraph for the most part, its bold lead the finding, in the groups headed below.
 
+**How to read a figure here** (reread against the tables 2026-10-13, HEALTH 67). A figure
+beside a named row or zone is that row's median in the tables above, brought up to them when
+they are regenerated. A pair with an arrow or a "was", a figure given as an A/B, and one
+with a date or a machine beside it are the finding's own measurements, as taken then. Most
+were read off the laptop's tables (the page's opening says which machine each table is), whose frame rows are about
+a third higher (`build, open` 31µs there, 23 here), so such a pair's ratio is what to read,
+not its numbers.
+
 #### The frame, what is layered on it, selecting several
 
 **The renderer stopped paying twice for the window.** Two changes to the flush, one
@@ -361,10 +371,10 @@ and the label are drawn once for the group rather than once each.
 **Undo is 20 bytes an op and bounded.** An op used to carry two whole tokens, 228 bytes,
 for a tile paint that needs two. The token payloads now live in a side array the log
 owns, and a full fill of the largest map (512×512, 262,144 ops) went from 60 MB to
-5 MB of history. Taking one back is `undo.step`: 181µs for the 40,000-op fill of a
-200×200 map, 4.5ns an op, all of it the tile writes. The log holds four such largest-map
-fills and then drops its oldest quarter in one memmove, `undo.trim`: about 5ms, once
-per 262,144 new ops, which is 19ns an op amortized and a thing that happens a handful
+5 MB of history. Taking one back is `undo.step`: 148µs for the 40,000-op fill of a
+200×200 map, 3.7ns an op, all of it the tile writes. The log holds four such largest-map
+fills and then drops its oldest quarter in one memmove, `undo.trim`: about 2.4ms, once
+per 262,144 new ops, which is 9ns an op amortized and a thing that happens a handful
 of times in a long session of painting. The scenario that measures it (`fill history`)
 paints and clears 200×200 without undoing so the log grows 80,000 ops a loop.
 
@@ -372,7 +382,7 @@ paints and clears 200×200 without undoing so the log grows 80,000 ops a loop.
 
 **The range highlight costs the window when it covers the window.** `play, range radius`
 holds a 100 ft reach over a 40×25 map, so every visible tile is in range and every one
-of them gets a line-of-sight trace: `range.draw` at 21µs is that, and `range.status` at
+of them gets a line-of-sight trace: `range.draw` at 17µs is that, and `range.status` at
 5µs is the same trace once per creature for the 24 named in the status line. The band
 scenario reads cheaper only because it spends most of its frames on the near bands; its
 *Very Far* frames cost the same. The radius itself is free, and `:scale` cannot make it
@@ -380,40 +390,40 @@ dearer -- reach is compared in feet, tiles are still counted in tiles.
 
 **A card beside the map costs its text, not the window.** `play, card box` walks the
 cursor with a creature selected whose card is a stat block's worth (about 700 bytes):
-43.2µs a frame against 30µs for the same crowd with no box. `card.draw` is 10.5µs of that:
+32.5µs a frame against 22.2µs for the same crowd with no box. `card.draw` is 8.2µs of that:
 the text cleaned of its marks, wrapped to measure and wrapped again to draw -- a cost that
 follows the card's length, at most 4 KB, and not the map's. Loading a map is unchanged by
 the card block's check on every line (a 512×512 map, A/B'd against the build before cards:
 342-348ms a run either way).
 
 **Damage is one command, not a frame.** `play, damage` puts a Far burst over 13 of a crowd
-of 24, each with a card, and marks 6 damage on them all, then `u`: `dmg.apply` is 18.9µs at the
-median and 32.3µs at p99 -- the burst's catch (`range_caught`, once over the creatures), each
-card's thresholds read, one undo batch. The frame around it, 43.7µs, is the card box and the
+of 24, each with a card, and marks 6 damage on them all, then `u`: `dmg.apply` is 12.5µs at the
+median and 15.4µs at p99 -- the burst's catch (`range_caught`, once over the creatures), each
+card's thresholds read, one undo batch. The frame around it, 32.3µs, is the card box and the
 burst's highlight; the Horde title the box asks for (`app_horde_note`) is a scan of one card.
 
 **A whisper is a few writes, and naming phones costs nothing per frame.** `play, whisper, 4
-named` whispers to one of four named phones every loop: `net.whisper` is 7.6 µs at the
-median, 58 µs at p99 (a socket write and flush per phone of the name). The names offered
-are rebuilt only when the map changes -- `names.sync`, 17 µs, ran once in the whole
+named` whispers to one of four named phones every loop: `net.whisper` is 4.8 µs at the
+median, 12.4 µs at p99 (a socket write and flush per phone of the name). The names offered
+are rebuilt only when the map changes -- `names.sync`, 4.8 µs, ran once in the whole
 `play, pings, 4 watchers` run -- and `net.names` sends them only when the text differs.
-The frame row sits with the other four-watcher rows (55 µs). (The run that first published
+The frame row sits with the other four-watcher rows (39 µs). (The run that first published
 it read the circle brush at 55 µs; an A/B against the previous build gave both 32 µs, and the
 next median of three agrees: the machine, not the code.)
 
 **A camera of the players' own costs a second draw, and sends less.** With `:player camera
 party` or `hold` the players' frame is always drawn apart, as it is with a creature hidden:
-`play, camera party, 4 watchers` (carrying a creature through the crowd) is 65.4 µs a frame
-and `play, camera hold, 4 watchers` (the GM's cursor walking) 57.0 µs, between `play, 4
-watchers` (51.9 µs) and `play, hidden, 4 watchers` (75.9 µs). What goes to the phones falls:
+`play, camera party, 4 watchers` (carrying a creature through the crowd) is 46.0 µs a frame
+and `play, camera hold, 4 watchers` (the GM's cursor walking) 40.5 µs, between `play, 4
+watchers` (38.9 µs) and `play, hidden, 4 watchers` (56.8 µs). What goes to the phones falls:
 held, the GM's cursor is not on their frame, so walking it sends them nothing; a party
 camera moves only when a creature nears its edge, so carrying one through the crowd sent
 125 bytes a frame to all four in a by-hand run, against 1,457 under follow, whose view
 moves with the GM's. `camera.party` works the framing out only when the map, their floor,
-the GM's zoom or the screen changed: 0.2 µs at the median, 1.4 µs at worst.
+the GM's zoom or the screen changed: 0.1 µs at the median, 0.3 µs at worst.
 
 **A group effect is the range highlight on a moving center.** `play, group effect` walks a
-Very Close burst across a crowd of 24: 40.7µs a frame against 30.4µs for the same map with
+Very Close burst across a crowd of 24: 26.0µs a frame against 22.2µs for the same map with
 no overlay (`play, 24 tokens`), the tint and a sight trace for the dozen or so squares it
 covers plus the status line's trace per creature. Moving it re-aims it and nothing else.
 The Daggerheart movement rule on the MOVING line is one lookup into the band table the
@@ -421,8 +431,9 @@ label beside the creature already made; the carry rows do not move.
 
 **A template costs less than the circle it is cut from.** Cone, line and square test the
 same visible tiles the circle does and then turn most of them away, so they shade fewer
-squares and trace fewer sight lines: 34-36µs a frame at six squares of reach against the
-circle's 38µs for its bands. The geometry is worked out once per frame -- origin, aim
+squares and trace fewer sight lines: 55 to 63 cells a frame at six squares of reach against
+129 for the circle's bands and 169 for a whole radius, and 24.6-25.1µs against 25.3 and
+42.8. The geometry is worked out once per frame -- origin, aim
 vector, the square's box -- and the per-tile test is a dot and a cross product. Aiming is
 free: the template reads the cursor after each key rather than owning any keys of its own.
 With the overlay off the whole path is one early return, which is why an A/B of `play, 24
@@ -432,12 +443,14 @@ tokens` against the binary from before templates reads 31.7µs on both.
 question asked of it -- who is next, who is after that, where does `t` go from here -- is
 "the smallest key greater than this one", which is one pass over the tokens with nothing
 allocated. `turn.advance` is that pass plus two token edits and a round op through the undo
-log: 0.9µs with 24 creatures in the fight. `turn.status` is the title bar's readout, the
-same pass three times a frame: 0.5µs. A fight costs the frame nothing that shows --
-`play, turn order` reads 31.4µs against 31.9µs for the same map with nobody fighting.
+log: 0.6µs with 24 creatures in the fight. `turn.status` is the title bar's readout, the
+same pass three times a frame: 0.7µs. A fight costs the frame about two microseconds,
+inside this page's noise -- `play, turn order` reads 24.2µs against 22.2µs for the same map
+with nobody fighting, and writes 49 cells against 19, the title bar's readout (31.4
+against 31.9 on the laptop: the two have not been profiled apart since).
 
-**The side panel is 24 columns of the frame, and costs like it.** `panel.draw` is 8.4µs at
-200×50 and under 3µs at 80×24: a fill, a separator down every row and a dozen short
+**The side panel is 24 columns of the frame, and costs like it.** `panel.draw` is about 6µs at
+80×24 (on the laptop 8.4µs at 200×50 and under 3 at 80×24): a fill, a separator down every row and a dozen short
 strings, redrawn each frame like everything else and diffed away by the renderer when
 nothing changed (`play, 24 tokens` writes 315 bytes a frame with the panel, 319 without).
 It takes its columns from the map view, so every play row on a Daggerheart map moved
@@ -458,9 +471,9 @@ for it, A/B'd against the previous binary in the same run; `play, 4
 watchers` did not move past noise, since the per-client writes dominate
 there. When the two views could differ -- a prompt or a modal up, the
 profiler on, a note in view -- the frame is drawn a second time instead:
-`net.players_frame` is 27.4µs typical, and `play, 4 watchers, differing`
-(a creature with a note selected, so every frame differs) reads 74.2µs
-against 51.1µs. That is the price the plan in `docs/FOG.md` accepted for a
+`net.players_frame` is 33.2µs typical, and `play, 4 watchers, differing`
+(a creature with a note selected, so every frame differs) reads 53.6µs
+against 38.9µs. That is the price the plan in `docs/FOG.md` accepted for a
 frame that is obviously correct at a privacy boundary.
 
 A win is on the table and is recorded here rather than taken: in the
@@ -473,12 +486,12 @@ one bit of state and a test for the transition. Worth doing when the
 watcher rows matter more than they do now.
 
 **A remote watcher costs one write.** `play, 1 watcher` is `play, 24 tokens` with a
-loopback client attached: 36.5µs against 30.2µs. Four watchers are 45.2µs, so each is
-about 3.7µs a frame, and `net.frame` -- encode once, then per client the palette check,
-a copy into its buffer and a `write` -- is 13.6µs with four. The encode is shared and the
-copy is a few hundred bytes, so nearly all of the 3.7µs is the syscall, which is the floor
+loopback client attached: 31.7µs against 22.2µs. Four watchers are 38.9µs, so each is
+about 4.2µs a frame, and `net.frame` -- encode once, then per client the palette check,
+a copy into its buffer and a `write` -- is 11.2µs with four. The encode is shared and the
+copy is a few hundred bytes, so nearly all of the 4.2µs is the syscall (3.8µs for a loopback write, *Speed of light*), which is the floor
 for a design that sends every frame the moment it exists rather than batching. The plan
-budgeted 2µs a client; it missed by the cost of a write on this kernel. With nothing
+budgeted 2µs a client; it missed by about the cost of a write on this kernel. With nothing
 changed nothing is sent, and with no client attached the whole path is one compare per
 changed cell. Bytes per frame to the clients, all of them together, are on the F12
 overlay and the bench summary.
@@ -492,7 +505,7 @@ measured no better than the JavaScript copies. The tile cache -- a glyph in its 
 rendered once -- is what makes the copies the only per-cell work; the first frame after a
 palette change or a resize pays for every tile again, about 15ms for a full screen.
 
-`play, fight cycling` is dearer at 42µs and 4.7KB a frame, and none of that is the turn
+`play, fight cycling` is dearer at 32.6µs and 4.6KB a frame, and none of that is the turn
 order: it is the first scenario that presses `t` at all, and `t` sends the view to a
 creature that is usually somewhere else, so most of the window repaints. Walking the
 tokens in list order scrolls exactly as far.
@@ -500,9 +513,9 @@ tokens in list order scrolls exactly as far.
 #### Clocks, notes, named rolls
 
 **Clocks cost a panel row each, and only when the panel is drawn.** `clock.draw` is
-1.6µs typical for two clocks: a fill of its rows, a name column, a dot per segment.
+1.2µs typical for two clocks: a fill of its rows, a name column, a dot per segment.
 `play, clocks` runs two `:clock` and two `:tick` commands a loop and its frame is the
-cost of typing them, 28.5µs against 30.2µs for the same map with no panel -- the panel
+cost of typing them, 20.7µs against 22.2µs for the same map with no panel -- the panel
 takes columns off the map, so the frame has fewer cells to diff. Ticks are one undo
 op of the tile kind. **Notes cost nothing per frame in play mode**, by design: the
 text is never drawn there. Build mode's `note.marks` walks the notes, not the tiles,
@@ -511,22 +524,22 @@ same as `play, rolling`.
 
 #### Fog and sight
 
-**Fog costs the GM 1.5µs a frame and a map without it nothing.** `grid_draw` decides once a
+**Fog costs the GM under a microsecond a frame and a map without it nothing.** `grid_draw` decides once a
 frame whether any patch is live; a map with none takes the path it always took, and
-`play, 24 tokens` sits where it did (31.0µs). With fog over the whole map, `play, fog` is
-32.2µs: one byte load and a mask a visible tile, writing the dim color into cells that were
+`play, 24 tokens` sits where it did (22.2µs). With fog over the whole map, `play, fog` is
+22.5µs (1.5µs over it when fog landed): one byte load and a mask a visible tile, writing the dim color into cells that were
 being written anyway. The players' frame over fog is cheaper to draw than the GM's -- a hidden
 tile is a `continue` with no writes, and walls between hidden tiles are never resolved -- so
-`play, fog all dark, 4 watch` at 60.3µs is the second draw the plan priced in, less than the
+`play, fog all dark, 4 watch` at 42.6µs is the second draw the plan priced in, less than the
 differing-frame row pays for a note. `fog.paint` is 0.2µs a brush stroke, a handful of 20-byte
-undo ops. `fog.reveal`, a `g r` or `g h`, is 6.1µs: a footprint of undo ops, or a
+undo ops. `fog.reveal`, a `g r` or `g h`, is 3.0µs: a footprint of undo ops, or a
 patch's extent for `g R`. `fog.blank`, the pass that takes the dark back out of a range wash or a trail in the
 players' frame, runs only while one of those is showing over fog.
 
 **Sight is a keystroke cost, not a frame cost, and follows the party's reach.** `fog.sight`
 runs after a keystroke that changed the map, never per frame, so it is not in the frame
 columns above: `play, fog sight` walks a creature through a map-wide patch at `reveal 6` and
-its frame reads 31.7µs, level with the rest. A full recompute is about 28µs on that bench map, which has twelve player creatures each
+its frame reads 22.2µs, level with the rest. A full recompute is about 28µs on that bench map, which has twelve player creatures each
 reaching 169 squares; a step, which relights only the creature that moved, is 6.0µs.
 It clears only where the creatures lit last time and tests each patch's extent before any
 square.
@@ -553,10 +566,10 @@ check is a compare inside the loop that already runs once a second with clients
 attached, and the bench's clients are watchers, which are unchanged.
 
 **A ping costs a tenth of a microsecond to read and half of one to draw.** `net.cmd`
-parses a tap in 0.1µs and `ping.draw` rings a square in 0.6µs. `play, pings, 4 watchers`
+parses a tap in 0.1µs and `ping.draw` rings a square in 0.5µs. `play, pings, 4 watchers`
 is the worst case on purpose: every one of four phones taps every frame, a second of
 synthetic time apart, so four rings are always up and moving and the status line changes
-every frame. It draws in 63.9µs against `play, 4 watchers`'s 52.1, and sends 978 bytes a
+every frame. It draws in 48.2µs against `play, 4 watchers`'s 38.9, and sends 978 bytes a
 frame to each client against 298 -- the rings' cells and the status line, as ordinary
 frame runs; a single tap at a real table is a few hundred bytes once. Over fog the
 players' frame is drawn apart from the GM's anyway, and pinging adds about the same.
@@ -627,18 +640,18 @@ set by the recompute whether or not any patch shows it, and drawing asks one mor
 only of a boundary the players' frame was about to leave blank -- a lookup of the two
 squares' bits and the patch's setting -- and of a creature it was about to skip. `play, fog
 soft edge, 4 watchers` walks the same creature as `play, fog sight, 4 watchers` with the
-edge shown: 83.1µs against 85.2µs, the difference inside the noise. `fog.sight`'s p99 of
-133µs comes from a watched scenario, which the table now has for the first time; the
-recompute's code is unchanged by this step and its typical figure did not move, so the tail
-is the four clients' encoding sharing the machine with it, not the edge.
+edge shown: 45.1µs against 45.8µs, the difference inside the noise. `fog.sight`'s p99
+(165µs, in `play, fog reveal 12`) is the full rebuilds and the step after one, as *Sight,
+scenario by scenario* says; the recompute's code is unchanged by this step and its typical
+figure did not move.
 
 #### Counters, the session log, the autosave and saves
 
 **A counter step is a token edit.** `counter.step` is 0.4µs typical: find the
 current counter, clamp, and one `undo_edit_token`, the same path a relabel takes.
 `play, counters` sets HP through the prompt and then steps it eight times a loop,
-and its frame reads 29.9µs, level with `play, 24 tokens`. The panel's counter is one
-`snprintf` on the actor's row, inside `panel.draw`'s existing 8µs. Counters are the
+and its frame reads 21.5µs, level with `play, 24 tokens`. The panel's counter is one
+`snprintf` on the actor's row, inside `panel.draw`'s existing 6µs. Counters are the
 GM's, so a selected creature carrying one makes the players' frame differ and draws it
 twice while serving -- the cost `net.players_frame` already measures, paid only then.
 
@@ -647,11 +660,11 @@ counter edit asks whether Stress reached or left 0 (`ruleset_counter_changed`: t
 among at most four counters, one among at most four markers) and adds or removes
 Vulnerable in the same edit. `play, stress to zero and back` marks a creature's last
 Stress and clears it, a marker on and off each loop: `counter.step` is 0.4µs typical and
-2.8µs at p99 there, where a plain step in `play, counters` was 0.2 and 2.3 before, and the
-frame is 22.2µs and 386 bytes. The plan estimated tens of nanoseconds over a step; the two
+2.7µs at p99 there, where a plain step in `play, counters` was 0.2 and 2.3 before, and the
+frame is 22.6µs and 376 bytes. The plan estimated tens of nanoseconds over a step; the two
 tenths of a microsecond are that and the longer message. The box beside the map builds a
 marked creature's text once and keeps it (`card.draw` is unchanged at 8.2µs in `play, card
-box`). Measured 2026-10-12 with every other row. Two fog rows read a tenth lower than the
+box`). First measured 2026-10-12 with every other row. Two fog rows read a tenth lower than the
 day before (`play, fog warren` 24.7 to 22.1µs, `play, fog reveal 12` 24.3 to 21.7): run
 against the commit before, three times each, both binaries read 21.5 to 22.5, so it was the
 earlier run that was high.
@@ -696,7 +709,7 @@ blocks in `poll` for ever; the only timer is the one write it is waiting to make
 #### Groups, selection and the cursor
 
 `group.move` is the whole formation's move: the check for every member, then the
-steps. **0.1us typical and 2.0us at p99** for the sizes a table plays at. It is
+steps. **0.2us typical and 2.6us at p99** for the sizes a table plays at. It is
 O(members x tokens x members), because each member asks the token list whether
 anything is in its way and each of those asks walks the group to see if the answer is
 one of its own. At the 32-creature cap on a crowded map that is tens of thousands of
@@ -728,6 +741,9 @@ because it paints a block rather than a square. It is opt-in -- the cost arrives
 the size key, and the default 1x1 cursor is unchanged -- but it is the only path here
 where choosing a setting more than doubles the bytes a frame writes.
 
+As measured when the cursor landed; the tables' `play, 3x3 cursor` row reads 24.9us, 37
+cells and 606 bytes now.
+
 | cursor footprint | frame p50 | cells | bytes |
 |---|---|---|---|
 | 1x1 | 25.1us | 20 | 326 |
@@ -743,8 +759,8 @@ third of them, at the cost of a second shape to keep in step with `grid_token_ar
 At 672 bytes -- a quarter of what the help page writes -- the simpler code is worth
 more than the bytes.
 
-**Choosing which creature to pick up is the cheapest thing in the table** -- 13 cells
-and 101 bytes a frame, less than half what an idle build frame writes -- for the reason
+**Choosing which creature to pick up is the cheapest thing in the table** -- 12 cells
+and 95 bytes a frame, less than half what an idle build frame writes -- for the reason
 that makes it worth having: the cursor holds still while enter walks the creatures it
 covers, so between one press and the next almost nothing on screen changes. Only the
 selection highlight moves, and that is two token bodies. The walk itself is a scan of
@@ -764,7 +780,7 @@ Measured on a 200×200 carry, 100 bench loops each way: **32.4µs → 1.4µs p50
 
 **`trail.path` is the only search in the app** — a breadth-first sweep from the held
 creature back to where it set out, and after the rework above its cost follows the
-route: about 2µs beside a short walk on any map size, with the long walks in the p99.
+route: about 3µs beside a short walk on any map size, with the long walks in the p99.
 It runs on a keystroke rather than a frame, so even its worst has hundredfold headroom.
 
 **`prof.overlay` is the most expensive thing here relative to its worth**, which is why
@@ -779,9 +795,9 @@ keystroke is 0.2µs.
 
 **Links cost their marks and nothing else.** `link.marks` walks the links rather than the
 tiles, culls each end to the window, and writes a glyph and a number into cells the grid
-already drew: 4.1µs a frame at p50 with all sixty-four a map can hold on screen (`build, 64
-links` 35.3µs against 30.4µs for `build, open`), and a map without links returns before the
-zone opens. Taking one is a few token moves in a batch: `play.link` is 0.4µs typical. The
+already drew: 4.0µs a frame at p50 with all sixty-four a map can hold on screen (`build, 64
+links` 26.9µs against 23.0µs for `build, open`), and a map without links returns before the
+zone opens. Taking one is a few token moves in a batch: `play.link` is 0.3µs typical. The
 trip's frame writes more (`play, link there+back`, 637 bytes) because the view recenters on
 the far end, which redraws the window; that is the cost of a jump, not of the link.
 
@@ -789,33 +805,35 @@ the far end, which redraws the window; that is the cost of a jump, not of the li
 culls to its box, so `build, one floor` draws fewer cells than the whole map (12 cells and
 176 bytes a frame, against 209). When the players are on a floor the GM is not showing,
 their frame cannot be copied from the GM's and is drawn again through its own camera:
-`play, other floor, 4 watchers` is 57.1µs against 52.0µs for `play, 4 watchers`, the same
-cost as any frame that differs (`play, 4 watchers, differing`). `floor.pick` runs after
+`play, other floor, 4 watchers` is 41.2µs against 38.9µs for `play, 4 watchers`, under
+what a frame that differs with a note to draw costs (`play, 4 watchers, differing`, 53.6µs). `floor.pick` runs after
 every key and before every draw to keep the players' floor current: 0.1µs for 24
-creatures, 1.3µs for 500, a walk of them all. `floor.switch` is under a microsecond.
+creatures, 0.7µs for 500, a walk of them all. `floor.switch` is under a microsecond.
 
 **A hidden creature costs the players' frame its copy.** With anything hidden the players'
-frame is drawn rather than copied from the GM's, so `play, hidden, 4 watchers` is 79.5µs against
-52.7µs for `play, 4 watchers` -- the same as any frame that differs (`play, 4 watchers,
-differing`, 78.7µs), and nothing more: the question each creature is asked,
+frame is drawn rather than copied from the GM's, so `play, hidden, 4 watchers` is 56.8µs against
+38.9µs for `play, 4 watchers` -- the same as any frame that differs (`play, 4 watchers,
+differing`, 53.6µs), and nothing more: the question each creature is asked,
 `fog_token_unseen`, is a flag test before any fog work. Bytes do not move (298), since the
 players are sent what changed on their screen and a hidden creature changes nothing there.
 
-**A trip to another map is two flushed saves, about 65 milliseconds.** `link.trip.map`
-(66ms at the median, 144ms at p99, 378ms at worst) reads the other map, finds the party
-room, and writes both maps -- the one left and the one arrived in -- for two 40×25 maps.
-Nearly all of it is the two flushes (`mapio.fsync`, 32ms each at the median; `mapio.write`
-round the whole write is half a millisecond more). That is kept on purpose: a trip is a
-deliberate change of map, like opening a file, and it is never half on disk. The frames
-right after a flush draw slower (`play, map trip there+back`, 50µs against 30µs with the
+**A trip to another map is two flushed saves: about 4 milliseconds on the desktop, 65 on
+the laptop.** `link.trip.map` (4.3ms at the median, 7.5ms at p99, 16.7ms at worst) reads the
+other map, finds the party room, and writes both maps -- the one left and the one arrived
+in -- for two 40×25 maps. Nearly all of it is the two flushes (`mapio.fsync`, 2.0ms each at
+the median; `mapio.write` round the whole write is a tenth of a millisecond more). That is
+kept on purpose: a trip is a deliberate change of map, like opening a file, and it is never
+half on disk. On the laptop, whose disk flushes about fifteen times slower, the same trip
+was 66ms at the median, 144 at p99 and 378 at worst, a flush 32ms; and there the frames
+right after a flush drew slower (`play, map trip there+back`, 50µs against 30µs with the
 same maps on tmpfs, A/B'd): the same code, run cold.
 
 #### Handouts, scenes, the character picker, stamps
 
 **Handouts cost a send, not a frame; and the players' frame stopped changing when only the
 GM's message does.** Putting a handout up is one `'H'` record to each client
-(`handout.send`, 16µs for four watchers); the frames around it are ordinary
-(`play, handout typed, 4 watch`, 59µs; mostly typing the `:handout say` line). The same commits made four rows 15-20% cheaper --
+(`handout.send`, 13µs for four watchers); the frames around it are ordinary
+(`play, handout typed, 4 watch`, 40µs; mostly typing the `:handout say` line). The same commits made four rows 15-20% cheaper --
 `play, fog all dark, 4 watch` 75.5µs to 62.9µs, fog sight 87.3 to 69.7, soft edge 82.7 to 67.3,
 other floor 80.1 to 66.3 -- A/B'd against 3c7cf55 over three runs each. It is the
 review fix for the players' status line: it was cut short by the width of the GM's
@@ -824,46 +842,47 @@ the GM's message changed the players' frame too, and was encoded and sent (216 b
 frame to four watchers over total fog, where they see nothing move; 0 now). `net.frame`
 in those scenarios went from 14.8µs at the median to nothing to do.
 
-**A scene of 500 creatures goes back in 40µs.** `scene.restore` removes every creature
+**A scene of 500 creatures goes back in 26µs.** `scene.restore` removes every creature
 from the end of the list (no memmove) and adds the scene's, each through the undo log, and
-sets the round and spotlight: 39.8µs at the median for 500, 53µs at p99. Saving the same
-500 (`scene.save`, a copy of the list) is 14µs. The frame around it, 38µs (83µs before
-creatures off the window were culled), is ordinary; both zones run once per `:scene`,
+sets the round and spotlight: 25.9µs at the median for 500, 56µs at p99. Saving the same
+500 (`scene.save`, a copy of the list) is 7.5µs. The frame around it, 28µs (on the laptop 83µs before
+creatures off the window were culled and 38 after), is ordinary; both zones run once per `:scene`,
 never per frame.
 
 **Opening the picker is its one dear moment: 3.2ms to read 500 saved characters.**
 `picker.open` reads every file in the directory once, for the label, side, size and
 counters the list shows, so it is the directory's size -- about 6.5µs a template since `file_read` reads a file in one piece (2026-10-10; 9 before, 4.7ms) -- and it
-is now the slowest keystroke there is (`input.key`'s p99 in `play, 500 characters`). Under a
+is the slowest keystroke there is but a trip to another map (`picker.open`; `input.key`'s
+worst is the trip's). Under a
 frame at that size, once, when the GM asks for the list; typing into it (`picker`, a ranked
-filter over the names in memory) is 23µs at the median, drawing it (`picker.draw`) 11µs, and
+filter over the names in memory) is 17µs at the median, drawing it (`picker.draw`) 9µs, and
 placing one
 (`character.place`) is a microsecond. A campaign with thousands of templates would want the
 details read lazily, for the rows on screen.
 
 **A summoned creature costs a microsecond to place, and the highlight is `r`'s.**
-`summon.place` is 1.0µs typical and 1.5µs at p99 (`play, summon`: two put down inside Far of
+`summon.place` is 0.9µs typical and 1.1µs at p99 (`play, summon`: two put down inside Far of
 a creature among 24, then taken back): the test of the square (its footprint against the
-range, the map, the floor and the creatures on it) and `character_place`, which is 0.8µs of
+range, the map, the floor and the creatures on it) and `character_place`, which is 0.6µs of
 it. The plan's estimate was a few bytes read for the test and one creature appended; what
 is over that is the scan of the creatures every placing makes and the line written to the
-log, both there before this. The frame is 19.6µs and 257 bytes, 36 cells: no drawing is
+log, both there before this. The frame is 18.6µs and 257 bytes, 36 cells: no drawing is
 new, the highlight is the range overlay's own (`range.draw`) and it does not move. The row reads the
 template's file once a loop, in the command, not once a creature. With phones watching, the
 mode's line is the GM's alone, so each frame while summoning draws the players' view apart
 (a second draw) where it would otherwise be copied: what every GM-only line costs, for as
-long as the summon is open. Measured 2026-10-12 with
+long as the summon is open. First measured 2026-10-12 with
 every other row; the one row that moved by more than a tenth, `build, outside change
 512x512` (22.2 to 28.5µs), was run three times against the commit before and reads 19 to 32
 on both, being the disk's.
 
 **The picker for an environment's adversaries costs the three it names, not the 500 saved.**
-`env.pick` is 25.6µs typical and 50.2µs at p99 (`play, env adversaries`: a card naming
+`env.pick` is 28.6µs typical and 57.6µs at p99 (`play, env adversaries`: a card naming
 three of 500 saved characters, one chosen and taken back): the card's line read and split,
 a file looked for a name, and three templates loaded, where `picker.open` reads the whole
 folder at 3.2ms. The plan's estimate was one file read a template named and a compare a
-name; about 8µs a template is what `character_load` costs here. The frame is 19.3µs and
-340 bytes. Measured 2026-10-12 with every other row. No frame row's typical figure moved
+name; about 8µs a template is what `character_load` costs here. The frame is 19.9µs and
+340 bytes. First measured 2026-10-12 with every other row. No frame row's typical figure moved
 by a tenth. In the table below fourteen paths name a different scenario than before
 (`app.draw`, `mapio.load`, `panel.draw`, `link.marks` among them): the table keeps each
 path's worst p99, and where two scenarios are close, which is worst changes from run to
@@ -874,7 +893,7 @@ that size a p99 is a handful of samples, and none of those paths was touched.
 **`stamp.show` is the preview of a stamp on the cursor**, and it is the stamp's size, not
 the map's: its squares, boundaries and creatures are swapped into the map for the one draw
 and swapped straight back, with nothing touched that sight or the autosave watch. A 20×20
-stamp is under 10µs a draw at the p99 and about 20µs at worst on a 200×200 map
+stamp is about 4µs a draw, at the median and the p99, and 6µs at worst on a 200×200 map
 (`build, stamp 20x20`); turning or mirroring one (`stamp.turn`) is a new stamp built once,
 on the key, never a frame's work; `stamp.place`, the
 real thing, is one batch of undo edits, a fill's cost.
@@ -885,11 +904,12 @@ real thing, is one batch of undo edits, a fill's cost.
 room over void with a dozen creatures in it -- 1,600 squares, the outline, twelve
 placements, one undo batch -- is tens of microseconds (`agent, room + 12`). A whole plan of
 five rooms placed by each other, five corridors and four creatures (`agent, plan of
-rooms`) is about 21µs: a corridor is planned as at most two boxes and checked square by
+rooms`) is about 21µs of edits (its frame is 73µs now that each request is a proposal made
+and accepted, as the paragraph's end says): a corridor is planned as at most two boxes and checked square by
 square before a square is dug, so its cost is its length. A `dump` of
-the whole 512×512 map writes about a megabyte of text and takes about 8ms; it is a
-one-off read an agent asks for, not a keystroke, and `dump B2:K12` makes it the size of
-the region. Nothing of the channel is on the frame path: off it costs nothing, on and
+the whole 512×512 map writes about half a megabyte of text and takes 5.3ms; it is a
+one-off read an agent asks for by name (`dump all`), not a keystroke, and `dump B2:K12`
+makes it the size of the region (*Reads that cost what was asked*, below). Nothing of the channel is on the frame path: off it costs nothing, on and
 idle one more descriptor in `poll`, and the GM's frame after a request is an ordinary
 frame (`agent, room + 12`'s frame row is the redraw of the changed squares). Since step 4 of
 docs/CONFLICTS.md these rows run under `:agent accept auto`, so each request is a proposal
@@ -898,8 +918,8 @@ made and accepted at once: *Proposals from the channel*, below, has what that co
 ## Proposals
 
 **Reading the figures in this section.** *Frame times* and *Cost per call* at the top are
-the latest run (2026-10-10, after step 9's review). The prose and floor tables below were
-read off them that day. Two limits: the microsecond rows move 5-10% run to run and their
+the latest run (2026-10-13). The floor tables below were read off the run of 2026-10-10,
+after step 9's review, and a figure beside a named row was brought to the tables since. Two limits: the microsecond rows move 5-10% run to run and their
 p99 can double on a busier machine, and *Cost per call* keeps only each zone's heaviest
 scenario, so a figure for a lighter one (a proposal's own `mapdiff`, now that an outside
 change's is the heavier) is from that scenario's own trace and is not in the table.
@@ -1001,7 +1021,7 @@ map's marks.
   filling an 80×24 window is about 135 visible squares, three cells each: about 405 stores,
   about 0.15 µs.
 - **Measured** (`build, a job's tint`, median of three on the desktop): `job.highlight` is
-  0.3 µs at p50 and 0.7 µs at p99, twice the floor; the gap is the walk over the change
+  0.3 µs at p50 and 0.4 µs at p99, twice the floor; the gap is the walk over the change
   set's blocks and the conflict pass. The frame is 22.5 µs at p50, no more than opening the
   map (23.0 µs); `editor.draw` measured 17.7 µs with the tint against 17.6 µs without.
 - **What changed it:** the tint first set each square's cells one at a time (0.9 µs);
@@ -1024,22 +1044,22 @@ then review and scrap it, or accept it and undo. Median of three, the desktop, 2
 
 | piece | measured p50 | speed of light | gap, and why |
 |---|---|---|---|
-| the copy (`map.copy`, 512×512) | 17.7 µs | about 22 µs (786 KB at 28 µs/MB) | none: at the floor |
+| the copy (`map.copy`, 512×512) | 17.6 µs | about 22 µs (786 KB at 28 µs/MB) | none: at the floor |
 | the diff (`mapdiff`, ~650 cells) | 13.7 µs (the scenario's own trace, 2026-10-09) | about 1.5 µs (two reads a cell) | about 17-20 ns a cell, the rate *Proposals* above measured (block sort, the dedupe hash); accepted there |
 | the summary and the `#N` corner | about 4.5 µs inside `job.propose` | well under 1 µs | each walks the set's cells once: two walks where one would do. A finding, not fixed: a proposal comes seconds apart |
 | a review frame (`job.preview`) | 0.6 µs | the cells in the window, swapped twice | none |
-| the accept (`job.accept`) | 12.1 µs for the heavier `agent, room + 12` | applying the cells through the log | none: one undo op a cell |
+| the accept (`job.accept`) | 11.5 µs for the heavier `agent, room + 12` | applying the cells through the log | none: one undo op a cell |
 
-**The whole request.** The plan of rooms costs about 25 µs a request more as a proposal
-accepted at once (`agent, plan of rooms`: 42 µs a frame before, 70 µs now), and the 40×40
-room with a dozen creatures about 41 µs more (53 to 96 µs; 1,760 cells, so its diff and
+**The whole request.** The plan of rooms costs about 30 µs a request more as a proposal
+accepted at once (`agent, plan of rooms`: 42 µs a frame before, 73 µs now), and the 40×40
+room with a dozen creatures about 46 µs more (53 to 99 µs; 1,760 cells, so its diff and
 accept are the larger). That is the price of one road in (decision 6): every change is made
 on the copy, compared, then applied, where it was once applied straight. Running a request
 straight onto the map when it would land at once anyway would save it, at the cost of a
 second road that no review ever sees; at under 0.1 ms a request, it stays.
 
 **Nothing on the frame path.** With a proposal waiting, a frame costs its tint (*The jobs'
-tints*); in review, the swap above. The rows' frames are 17-18 µs at p50.
+tints*); in review, the swap above. The rows' frames are 16-17 µs at p50.
 
 ### Events and `wait`
 
@@ -1055,7 +1075,7 @@ The desktop, median of three; the live checks 2026-10-09, the rows 2026-10-10.
 | the checkpoint starting again (`ctl.checkpoint`) | 0.1 µs | a byte a block | none |
 
 `agent, map changed event` is an agent listening, a dozen of the GM's edits, then the map
-quiet: its frame (23.7 µs) is `build, open`'s (23.0), so the checkpoint running under the GM's edits
+quiet: its frame (22.7 µs) is `build, open`'s (23.0), so the checkpoint running under the GM's edits
 does not show on the frame. `ctl.wait`, the zone round answering waiters, has no row: the
 bench has no socket to hold one on; the live check above stands in for it, and is written
 out in docs/CONFLICTS.md's *Progress, step by step*.
@@ -1063,7 +1083,7 @@ out in docs/CONFLICTS.md's *Progress, step by step*.
 ### Reads that cost what was asked
 
 2.0's step 4 (docs/V2.md, D7; 2026-10-12). An agent told "the map changed" used to read the
-map again: on the largest map that is `agent, dump 512x512`, 5.6 ms inside one turn of the
+map again: on the largest map that is `agent, dump 512x512`, 5.3 ms inside one turn of the
 loop and half a megabyte of answer (HEALTH 51). Three things now stand in its way. A `dump`
 that names no region is refused above 4,096 squares, so the whole map is asked for by name
 (`dump all`); `dump` no longer carries its 330-byte key (`dump key`); and `changes SEQ`
@@ -1076,12 +1096,12 @@ The desktop (`Machine:` above), the medians of three runs of `make perf` on a qu
 
 | path | measured | speed of light | gap, and why |
 |---|---|---|---|
-| `dump` of 32×32 squares of the 512×512 map (`agent, dump a region`) | frame p99 53 µs against 23 with no request: about 30 µs | the 4.2 KB it writes, about 1 µs, and one allocation | the lattice is made a character at a time through `corner_char`, `hedge_char` and `vedge_char`, and the creature list is walked whole for a region of it. Left: 30 µs is a thousandth of the frame budget, and 190 times less than the dump it replaces |
-| `changes` after a dozen edits (`agent, changes read`) | frame p99 52 µs: about 29 µs | the events kept (32 lines) and one piece's lattice, about 4 KB | the same writer, so the same gap |
-| keeping where an event's change was (`cs_where`), a dozen edits | inside `checkpoint.read`'s 1.5 µs: unmoved | one bit a changed block | none |
-| the same for a room of 40×40 and a dozen creatures landing (`agent, room + 12`: about 1,700 changed cells on a 200×200 map) | `job.propose` 40.7 µs where it was 37.3: about 3.4 µs, 2 ns a cell | reading the cells once, 13.6 KB: about 1 µs | a map under 256 squares a side has pieces finer than a change set's blocks, so each cell is looked at: two clamps and four compares against the last cell's piece, two divisions when it leaves it. Left: 3% of the row. **As first built it was 11 µs** (48.4): every cell was divided out and clamped afresh. Three runs of `make perf` showed it, and an A/B of five commits' binaries put it on the reads' commit (97 to 100 µs a frame on each before it, 109 to 111 on it, 101 to 103 with this) |
+| `dump` of 32×32 squares of the 512×512 map (`agent, dump a region`) | frame p99 51 µs against 22 with no request: about 29 µs | the 4.2 KB it writes, about 1 µs, and one allocation | the lattice is made a character at a time through `corner_char`, `hedge_char` and `vedge_char`, and the creature list is walked whole for a region of it. Left: 30 µs is a thousandth of the frame budget, and 190 times less than the dump it replaces |
+| `changes` after a dozen edits (`agent, changes read`) | frame p99 51 µs: about 29 µs | the events kept (32 lines) and one piece's lattice, about 4 KB | the same writer, so the same gap |
+| keeping where an event's change was (`cs_where`), a dozen edits | inside `checkpoint.read`'s 1.6 µs: unmoved | one bit a changed block | none |
+| the same for a room of 40×40 and a dozen creatures landing (`agent, room + 12`: about 1,700 changed cells on a 200×200 map) | `job.propose` 40.8 µs where it was 37.3: about 3.4 µs, 2 ns a cell | reading the cells once, 13.6 KB: about 1 µs | a map under 256 squares a side has pieces finer than a change set's blocks, so each cell is looked at: two clamps and four compares against the last cell's piece, two divisions when it leaves it. Left: 3% of the row. **As first built it was 11 µs** (48.4): every cell was divided out and clamped afresh. Three runs of `make perf` showed it, and an A/B of five commits' binaries put it on the reads' commit (97 to 100 µs a frame on each before it, 109 to 111 on it, 101 to 103 with this) |
 | a region `changes` lists and does not send | not timed: written aside and thrown away, at most one an answer (once one is listed the rest are, unread) | nothing | one region's dump, about 30 µs, for deciding on its real bytes and not an estimate that a crowd of creatures makes 2.6 times too small |
-| a whole-map `dump all` (`agent, dump 512x512`) | the request 5.3 ms at the median, its frame 5.7 at p99 | 530 KB written | as *Cost per call* has it; nothing asks for it by accident now. It is the most one request may read (`CTL_READ_SQUARES`, docs/V2.md, D5), and four ready together are four turns with the keys between, not one turn of 22 ms; the bench has no socket to show that on, so suite `loop` holds it (HEALTH 51) |
+| a whole-map `dump all` (`agent, dump 512x512`) | the request 5.3 ms at the median, its frame 5.7 at p99 | 530 KB written | (`ctl`, three runs of 100, as the row below; *Cost per call*'s `ctl` row is `describe`'s) nothing asks for it by accident now. It is the most one request may read (`CTL_READ_SQUARES`, docs/V2.md, D5), and four ready together are four turns with the keys between, not one turn of 22 ms; the bench has no socket to show that on, so suite `loop` holds it (HEALTH 51) |
 | a whole-map `describe`, and `check` (`agent, describe 512x512`, `agent, check 512x512`) | the request itself 10.9 and 9.2 ms at the median (`ctl`, three runs of 100), about 41 and 35 ns a square; the frame it lands in 11.6 and 9.8 ms at p99 (the rows) | the squares read once, 262,144 of them: under 1 ms | **a finding, not explained** (HEALTH 70). Each counts as one whole read, as the dump does, and costs twice it: most of the 16 ms a key has, in one turn. Both find the rooms by a flood over every square first (`rooms_build`), then walk each room's box again for terrain, creatures, notes and fog; nothing has been profiled inside them |
 | a read that walks nothing, written as often as 64 KB holds | `help` 12,800 times: 43 ms and tens of megabytes (one run of five, before the cap); `status` 6.0 ms, `marked` 3.6, `jobs` 3.1, `links` 2.1 | nothing asked for twice is needed twice | once an answer has passed 2 MB no further line is run (`CTL_ANSWER_CAP`), which stops `help` at its 847th line, about 3 ms by the same rate (not timed again); the others stay under it and under the budget, and are left. One line's answer is never refused for its size |
 
@@ -1125,9 +1145,9 @@ times the pieces (the desktop, 2026-10-10: the median of 51 in a run, and of thr
 | path | measured | speed of light | gap, and why |
 |---|---|---|---|
 | the look, on a key, at most once a second | 0.8 µs in a loop; 2.3-3.1 µs p50 as the bench meets it (`disk.check` in `build, outside change 512x512`: the file was just rewritten, so its entry is cold; 21-23 µs at p99) | one `stat`: 0.9 µs | none in the call; the bench's figure is the cache |
-| keeping the base at a load | nothing added: the file is read whole into the buffer that is kept, and parsed from it. An A/B of the two loaders on one 512×512 file, 51 loads each, three times: 3.0-3.2 ms before the step, 2.6-2.8 after | a copy of the bytes, 25 µs for 789 KB | none; under it, since the copy is the read. *Cost per call*'s `mapio.load` row is not this comparison: until 2026-10-10 it was one cold load at startup (3.3 ms before and after), and it is now the 799 loads of `build, outside change 512x512`, each into new pages (2.8 ms). (As first built it was 5% **slower**, 3.3 ms: `file_read` grew its buffer by doubling through stdio and copied the file three times. It sizes one buffer from the file and reads once now. The first figure published here, "3.2 to 2.7", had set a cold single load against a warm median, and was wrong when it was written.) |
+| keeping the base at a load | nothing added: the file is read whole into the buffer that is kept, and parsed from it. An A/B of the two loaders on one 512×512 file, 51 loads each, three times: 3.0-3.2 ms before the step, 2.6-2.8 after | a copy of the bytes, 25 µs for 789 KB | none; under it, since the copy is the read. *Cost per call*'s `mapio.load` row is not this comparison: until 2026-10-10 it was one cold load at startup (3.3 ms before and after), and it was then the 799 loads of `build, outside change 512x512`, each into new pages (2.8 ms). (As first built it was 5% **slower**, 3.3 ms: `file_read` grew its buffer by doubling through stdio and copied the file three times. It sizes one buffer from the file and reads once now. The first figure published here, "3.2 to 2.7", had set a cold single load against a warm median, and was wrong when it was written.) |
 | keeping the base at a save | nothing added: the text written is the buffer kept | the same | none |
-| an outside change, once, when the keys are quiet | 5.6-6.1 ms on the largest map by the tool; 6.0 ms p50, 7.7 ms p99 in the bench (`disk.reload`, the row `build, outside change 512x512`: another program rewrites the file every loop, no creatures). About 0.55 ms of it is new pages, below | the plan put it at two parses (about 8.4 ms by the laptop's loader) plus the compare | the two parses are all of it, and the loader's 3.4 ns a byte is the gap (*Known gaps*). Parsing the base again, where a parsed copy could be kept, is the plan's choice: a megabyte held all session to save 2.7 ms a change |
+| an outside change, once, when the keys are quiet | 5.6-6.1 ms on the largest map by the tool; 5.4 ms p50, 5.8 ms p99 in the bench (`disk.reload`, the row `build, outside change 512x512`: another program rewrites the file every loop, no creatures). About 0.55 ms of it is new pages, below | the plan put it at two parses (about 8.4 ms by the laptop's loader) plus the compare | the two parses are all of it, and the loader's 3.4 ns a byte is the gap (*Known gaps*). Parsing the base again, where a parsed copy could be kept, is the plan's choice: a megabyte held all session to save 2.7 ms a change |
 | the compare of two whole maps | 42-54 µs | 59 µs a MB estimated | none |
 
 **A reload pays for new pages, about 0.55 ms of its 5.9 (found 2026-10-10).** Each outside
