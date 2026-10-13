@@ -3,7 +3,7 @@
 
 /* Shared between app.c and the files split out of it: app_cmd.c holds the
  * : command line, app_play.c the play-mode key handler, app_draw.c the
- * frame and app_ctl.c the control channel's requests. Nothing here is
+ * frame and request.c the control channel's requests. Nothing here is
  * for main.c or the tests, which see app.h alone. */
 
 #include "app.h"
@@ -145,8 +145,10 @@ void app_whisper_tick(App *a);
 void app_damage_command(App *a, const char *rest);
 
 /* app_ctl_marked.c: the channel's `marked` read, as text or JSON; and
- * app_ctl.c's words for a screen and a build mode, as the channel says them. */
+ * request.c's words for a screen and a build mode, as the channel says them. */
 void app_ctl_marked(App *a, FILE *out, int json);
+/* request.c: the world's host, the one real one (world.h). */
+extern const WorldHost APP_WORLD_HOST;
 const char *app_ctl_screen_name(Screen s);
 const char *app_ctl_mode_name(EdMode m);
 
@@ -266,42 +268,9 @@ void app_players_pin(App *a, const char *rest);
 /* :player camera follow|party|hold (docs/CAMERA.md). */
 void app_players_camera_command(App *a, const char *rest);
 
-/* app_ctl.c: :agent on, :agent off, :agent accept auto|review, :agent to ask. */
+/* request.c: :agent on, :agent off, :agent accept auto|review, :agent to ask. */
 void app_agent_command(App *a, const char *rest);
 
-/* The channel's words (app_ctl.c splits a line into them), and what its
- * other files share: a region by name (an area's name, or B2:K12), refused
- * off the map; the requests about jobs (app_ctl_job.c): 0 done, -1 with why
- * in err, 1 not one of them. */
-#define CTL_WORDS    12
-#define CTL_WORD_MAX 256
-int  app_ctl_region(const Map *m, const char *w, int *x0, int *y0, int *x1, int *y1,
-                    char *err, size_t errsz);
-int  app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, size_t errsz);
-/* Whether the request's name may act on a job: nobody has it, or it has. 0
- * with why in err (class `state`) when it is another's. */
-int  app_ctl_job_mine(App *a, const Job *j, char *err, size_t errsz);
-/* The request's name takes a job nobody has: the one rule for `take`, `area`
- * and a proposal. 1 when it did (the job was nobody's). */
-int  app_ctl_job_claim(App *a, Job *j);
-/* The channel's step back, for `undo` and `job N undo` alike: the newest
- * `steps` batches, job `job`'s (0: a change that had none), told to the
- * other names as one event with where. 0 with why in err when the GM is
- * busy (app_ctl_busy, or reviewing that very job): nothing was done. */
-int  app_ctl_undo(App *a, int steps, int job, char *err, size_t errsz);
-/* `dump`'s words after the verb, for the live map and a job's alike: none
- * (the whole map, refused above CTL_DUMP_SQUARES: an agent that forgot the
- * region should not be sent half a megabyte), `all`, or a region. 0 with why
- * in err. */
-int  app_ctl_dump(const App *a, const Map *m, char w[][CTL_WORD_MAX], int n, int at, int count, FILE *out, char *err, size_t errsz);
-/* A read is about to walk this many squares of map: 0, with why in err,
- * when the request has then read more than CTL_READ_SQUARES (`count` above
- * is whether the dump counts its own: a job's result is counted where it is
- * made). */
-int  app_ctl_read(const App *a, long squares, char *err, size_t errsz);
-/* The class of the refusal being written (ctl.h's CTL_E_*; `usage` unless
- * said). Returns -1, to be returned with it. */
-int  app_ctl_class(int cls);
 
 /* app_play.c */
 void app_play_key(App *a, Key k);

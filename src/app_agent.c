@@ -78,7 +78,7 @@ void app_agent_prompt(const App *a, const Job *j, FILE *out)
     fputs("    your proposal read back, as the map would be with it.\n\n", out);
     fputs("A request is all or nothing: if a line fails, nothing changed and the answer names the line and why.\n"
           "The lines that change a map: ", out);
-    app_ctl_edit_verbs(out);            /* from the channel's own table: it cannot fall behind it */
+    request_edit_verbs(out);            /* from the channel's own table: it cannot fall behind it */
     fputs(".\n    ", out);
     sh_quote(out, vtt); fprintf(out, "%s 'help token'\n", call);
     fputs("    how one of them is written; help alone lists every request.\n"

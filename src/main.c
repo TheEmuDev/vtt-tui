@@ -403,7 +403,7 @@ static int run_headless(const Options *o)
             char  *req = file_read(o->bench_pre[k], CTL_REQ_CAP, &len, &big);
             if (!req) die(big ? "%s is over 64 KB" : "cannot read %s", o->bench_pre[k]);
             a.world.ctl_auto = k;
-            char *ans = app_ctl_exec(&a, req, &len);
+            char *ans = request_exec(&a.world, req, &len);
             if (!ans || strncmp(ans, "ok\n", 3) != 0) die("--bench-pre: %.200s", ans ? ans : "out of memory");
             free(ans);
             free(req);
@@ -440,7 +440,7 @@ static int run_headless(const Options *o)
                 bench_clock_ms += 2 * AUTOSAVE_QUIET_MS;
                 app_tick(&a, bench_clock_ms);
                 size_t len = ctl_len;
-                char  *ans = app_ctl_exec(&a, ctl_req, &len);
+                char  *ans = request_exec(&a.world, ctl_req, &len);
                 if (loop == 0 && ans && strncmp(ans, "ok\n", 3) != 0) die("--bench-ctl: %.200s", ans);
                 free(ans);
                 app_frame(&a, NULL, 0);
@@ -699,7 +699,7 @@ static int run_apply(const Options *o)
         a.world.ctl_direct = 1;                   /* no GM: the plan is the file's */
         /* A plan that only reads leaves the file as it was, byte for byte. */
         unsigned gen = a.world.map->gen, sgen = a.world.map->scenes_gen, cgen = a.world.map->cards_gen;
-        char *ans = app_ctl_exec(&a, req, &len);
+        char *ans = request_exec(&a.world, req, &len);
         if (!ans) fputs("vtt: out of memory\n", stderr);
         else {
             size_t first = strcspn(ans, "\n");

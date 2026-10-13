@@ -21,39 +21,12 @@ const char *const APP_MENU_ITEMS[APP_MENU_COUNT] = { "Open Map", "New Map", "Qui
 
 /* ------------------------------------------------------------ lifecycle */
 
-/* The GM's side of the world (world.h): what a job or a request asks of the
- * screen, the editor and the agent command. */
-static void host_note(void *gm, const char *text, int logged)
-{
-    if (logged) app_note_gm(gm, text);
-    else        app_set_status_gm(gm, text);
-}
-static const char *host_busy(void *gm) { return app_ctl_busy(gm); }
-static void host_landed(void *gm, int creatures)
-{
-    App *a = gm;
-    /* What the channel's edits did to the live App when they landed
-     * straight: the overlay and the selection name creatures by index. */
-    if (creatures) app_creatures_renumbered(a);
-    else a->last_acting = turn_acting(a->world.map);     /* an accept starts no turn */
-    app_fog_sync(a);
-    a->dirty = 1;
-}
-static int  host_reviewing(void *gm) { return ((App *)gm)->review; }
-static void host_review_leave(void *gm) { app_review_leave(gm); }
-static void host_job_gone(void *gm, int num) { app_agent_forget(gm, num); }
-static int  host_deaf(void *gm) { App *a = gm; return ctl_active(&a->ctl) && !a->world.agent_on; }
-
-static const WorldHost APP_HOST = {
-    host_note, host_busy, host_landed, host_reviewing, host_review_leave, host_job_gone, host_deaf,
-};
-
 void app_init(App *a, Term *t, Renderer *r)
 {
     memset(a, 0, sizeof *a);
     a->term    = t;
     a->rnd     = r;
-    a->world.host = &APP_HOST;
+    a->world.host = &APP_WORLD_HOST;
     a->world.gm   = a;
     a->ctl_turn_ns = CTL_TURN_NS;
     a->agent_deadline_ms = AGENT_DEADLINE_MS;
@@ -473,7 +446,7 @@ void app_tick(App *a, uint64_t now_ms)
             ran = 1;
             a->world.ctl_can_hold = 1;                 /* there is a socket to hold a wait on */
             a->world.ctl_held = 0;
-            char *ans = app_ctl_exec(a, req, &len);
+            char *ans = request_exec(&a->world, req, &len);
             a->world.ctl_can_hold = 0;
             /* The same name's older wait is answered as it is taken over:
              * with every event since the number it waited from, so one made

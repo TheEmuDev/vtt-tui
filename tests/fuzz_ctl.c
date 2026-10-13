@@ -48,7 +48,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     req[size] = '\0';
 
     size_t len = size;
-    char  *ans = app_ctl_exec(&app, req, &len);
+    char  *ans = request_exec(&app.world, req, &len);
     /* The verdict is always the first line, and says what it is. */
     if (ans && strncmp(ans, "ok\n", 3) && strncmp(ans, "busy: ", 6)) {
         /* A refusal carries one of the six classes, never another word. */

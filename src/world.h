@@ -48,10 +48,36 @@ typedef struct WorldHost {
     void (*job_gone)(void *gm, int num);
     /* Nothing of the map is told to agents now (the channel is up and off). */
     int  (*deaf)(void *gm);
+
+    /* What a request asks (request.c). The frame is owed a redraw. */
+    void (*redraw)(void *gm);
+    /* The live map changed under the screen in one of the WORLD_* ways below;
+     * i, x, y say which creature where one is meant. */
+    void (*changed)(void *gm, int what, int i, int x, int y);
+    /* A ring round a change that landed, for the GM to see where. */
+    void (*ring)(void *gm, int x0, int y0, int x1, int y1);
+    /* `status`'s lines about the screen (which, its mode, the floor on it);
+     * `marked`, whole; and the floor the GM is looking at (an area's index). */
+    void (*screen_lines)(void *gm, FILE *out);
+    void (*marked)(void *gm, FILE *out, int json);
+    int  (*floor_shown)(void *gm);
+    /* A request was refused with this verdict: for the session log. */
+    void (*refused)(void *gm, const char *verdict);
+    /* A request came in under this name: an agent the GM started is alive. */
+    void (*heard)(void *gm, const char *who);
 } WorldHost;
 
+/* WorldHost.changed's `what`. */
+enum {
+    WORLD_EDITED,       /* a request's edits landed straight (--apply): sight follows */
+    WORLD_UNDONE,       /* the channel stepped the log back */
+    WORLD_RENUMBERED,   /* the creature list was replaced: indices are void */
+    WORLD_TOKEN_GONE,   /* creature i, which stood at x,y, was deleted */
+    WORLD_ROLLED_BACK,  /* a request failed and its edits were taken back */
+};
+
 typedef struct World {
-    Map     *map;               /* the open map; during a request's edits, its scratch copy (app_ctl.c) */
+    Map     *map;               /* the open map; during a request's edits, its scratch copy (request.c) */
     /* One log for the whole session: token moves in play mode undo through
      * the same history as wall edits in build mode. A landing's batch says
      * whose it is (undo_tag). */
@@ -83,7 +109,6 @@ typedef struct World {
      * the live one, and become a proposal (docs/CONFLICTS.md); the copy and
      * its log are kept for their buffers. */
     char     ctl_who[CTL_NAME_MAX];   /* its name (`agent NAME`, or cli) */
-    unsigned ctl_refused;       /* the last refusal logged, hashed: a caller repeating itself is one line */
     Map     *ctl_scratch;
     Undo     ctl_sundo;
     int      ctl_auto;          /* :agent accept auto: each proposal lands at once */

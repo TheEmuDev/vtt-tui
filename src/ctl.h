@@ -9,7 +9,7 @@
  * one request a connection. The client writes its request and shuts its
  * side; the request is handed to the app whole, the answer queued, written
  * without blocking, and the connection closed. What a request says is
- * app_ctl.c's business: the server side here only moves bytes. The clients
+ * request.c's business: the server side here only moves bytes. The clients
  * (`vtt --ctl`, `vtt MAP --apply`) know the few words they must: `agent
  * on` in status, `holds`, a proposal's number, a job's verdict in the
  * events. docs/CONTROL.md. */

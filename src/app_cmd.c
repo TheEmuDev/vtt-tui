@@ -1072,7 +1072,7 @@ static void cmd_log(App *a, const char *verb, const char *rest)
         app_set_status(a, err);
         return;
     }
-    a->world.ctl_refused = 0;                  /* a new log has been told of no refusal yet */
+    a->ctl_refused = 0;                  /* a new log has been told of no refusal yet */
     snprintf(msg, sizeof msg, "logging to %s", path);
     app_set_status(a, msg);
 }

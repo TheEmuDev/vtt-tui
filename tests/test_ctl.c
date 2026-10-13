@@ -173,7 +173,7 @@ void test_ctl(void)
     {
         const char req[] = "status\0dump\n";
         size_t len = sizeof req - 1;
-        t = app_ctl_exec(&a, req, &len);
+        t = request_exec(&a.world, req, &len);
         CHECK(t && strcmp(t, "error usage: a nul byte in the request\n") == 0);
         free(t);
     }
@@ -2236,7 +2236,7 @@ void test_ctl_scenes(void)
     sandbox_leave(&sb);
 }
 
-/* The channel's table of requests (app_ctl.c) is the one list of verbs: help
+/* The channel's table of requests (request.c) is the one list of verbs: help
  * prints it, and docs/AGENTS.md may neither miss a verb nor name one that is
  * not there. */
 void test_ctl_table(void)
@@ -2257,7 +2257,7 @@ void test_ctl_table(void)
     CASE("every request in the table is in docs/AGENTS.md, written as code");
     int nverbs = 0;
     unsigned fl;
-    for (const char *v; (v = app_ctl_verb(nverbs, &fl)) != NULL; nverbs++) {
+    for (const char *v; (v = request_verb(nverbs, &fl)) != NULL; nverbs++) {
         if (!strcmp(v, "holds")) continue;          /* --apply's own question, not an agent's */
         char a1[48], a2[48];                        /* a table's row, not a mention in passing */
         snprintf(a1, sizeof a1, "\n| `%s ", v);
@@ -2278,7 +2278,7 @@ void test_ctl_table(void)
         memcpy(word, p + 4, k);
         word[k] = '\0';
         int known = 0;
-        for (int i = 0; app_ctl_verb(i, NULL); i++) known |= !strcmp(app_ctl_verb(i, NULL), word);
+        for (int i = 0; request_verb(i, NULL); i++) known |= !strcmp(request_verb(i, NULL), word);
         if (!known) { printf("    AGENTS.md has a row for `%s`, which is no request\n", word); CHECK(0); }
         rows++;
     }
@@ -2287,9 +2287,9 @@ void test_ctl_table(void)
     CASE("help lists every request; help VERB says how one is written; an unknown one is refused");
     char *h = ctl_ask(&a, "help");
     CHECK(!strncmp(h, "ok\n", 3));
-    for (int i = 0; app_ctl_verb(i, NULL); i++) {
+    for (int i = 0; request_verb(i, NULL); i++) {
         char at[48];
-        snprintf(at, sizeof at, "\n%s ", app_ctl_verb(i, NULL));
+        snprintf(at, sizeof at, "\n%s ", request_verb(i, NULL));
         CHECK(strstr(h, at) != NULL);
     }
     free(h);
@@ -2316,12 +2316,12 @@ void test_ctl_table(void)
     {
         char  got[512] = "";
         FILE *f = fmemopen(got, sizeof got - 1, "w");
-        app_ctl_edit_verbs(f);
+        request_edit_verbs(f);
         fclose(f);
         CHECK(!strcmp(got, "room, area, door, corridor, tile, wall, edge, stamp, note, fog, floor, env, link, token, scene"));
         char alone[64] = "", nomap[64] = "", off[64] = "";
         const char *v;
-        for (int i = 0; (v = app_ctl_verb(i, &fl)) != NULL; i++) {
+        for (int i = 0; (v = request_verb(i, &fl)) != NULL; i++) {
             if (fl & CTL_RQ_ALONE) { strcat(alone, v); strcat(alone, " "); }
             if (fl & CTL_RQ_NOMAP) { strcat(nomap, v); strcat(nomap, " "); }
             if ((fl & CTL_RQ_OFF) && !(fl & CTL_RQ_EDIT)) { strcat(off, v); strcat(off, " "); }
@@ -2533,7 +2533,7 @@ void test_ctl_reads(void)
         size_t bl = 0;
         FILE *f = open_memstream(&body, &bl);
         strcpy(w[0], "dump");
-        CHECK_EQ(app_ctl_dump(&a, thin, w, 1, 1, 1, f, err, sizeof err), 0);
+        CHECK_EQ(request_dump(&a.world, thin, w, 1, 1, 1, f, err, sizeof err), 0);
         CHECK(strstr(err, "A1 to SR9") && strstr(err, "like A1:AF9,"));
         fclose(f);
         free(body);

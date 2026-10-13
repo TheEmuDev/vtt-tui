@@ -7,6 +7,7 @@
 #include "input.h"
 #include "job.h"
 #include "world.h"
+#include "request.h"
 #include "map.h"
 #include "mapio.h"
 #include "net.h"
@@ -240,6 +241,7 @@ typedef struct {
     size_t   disk_new_len;
     char     disk_why[160];     /* DISK_STUCK: what cannot be made a proposal */
     uint64_t disk_checked_ms, disk_key_ms;
+    unsigned ctl_refused;       /* the last refusal logged, hashed: a caller repeating itself is one line */
     uint64_t ctl_turn_ns;       /* CTL_TURN_NS; a test sets 0 for one request a turn */
     /* :agent command (app_agent.c): what vtt starts for each :ask and each
      * job sent back, the job on its stdin. Empty: none. */
@@ -376,26 +378,10 @@ int  app_card_shown(const App *a);
 int  app_horde_note(const App *a, int idx, char *buf, size_t sz);
 int  app_view_differs(const App *a);
 
-/* The control channel (app_ctl.c). Runs one request against the app and
- * returns the answer, verdict line first, malloc'd, its length in *len.
- * app_tick hands it every request the socket has read. */
-char *app_ctl_exec(App *a, const char *req, size_t *len);
 /* Why an agent's edit would be refused right now, or NULL when it would
  * be taken. */
 const char *app_ctl_busy(const App *a);
 
-/* The channel's requests, from app_ctl.c's one table: the i-th's name (NULL
- * past the last) and what kind it is; and the edit verbs as "room, area, ..."
- * for the prompt an agent is started with. */
-enum {
-    CTL_RQ_EDIT  = 1,       /* changes the map: its request is a proposal */
-    CTL_RQ_OFF   = 2,       /* taken over the socket with the channel off */
-    CTL_RQ_ALONE = 4,       /* must be the only line of its request */
-    CTL_RQ_LIVE  = 8,       /* means something only to a running vtt */
-    CTL_RQ_NOMAP = 16,      /* answered with no map open */
-};
-const char *app_ctl_verb(int i, unsigned *flags);
-void        app_ctl_edit_verbs(FILE *out);
 void app_set_status(App *a, const char *msg);
 void app_note(App *a, const char *msg);     /* status line + session log */
 void app_note_gm(App *a, const char *msg);  /* the same, kept off the players' frame */
