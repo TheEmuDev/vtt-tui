@@ -177,7 +177,7 @@ enum { CTL_E_USAGE, CTL_E_MISSING, CTL_E_CONFLICT, CTL_E_STATE, CTL_E_LIMIT, CTL
 const char *ctl_class_name(int cls);
 
 /* An event's kind: the word after its subject (`job N` or `map`), ended by
- * a colon or the line. Emitters (app_event) and --wait read the one table. */
+ * a colon or the line. Emitters (world_event) and --wait read the one table. */
 enum {
     CTL_EV_ASKED, CTL_EV_ACCEPTED, CTL_EV_PART, CTL_EV_FEEDBACK, CTL_EV_SCRAPPED,
     CTL_EV_REMOVED, CTL_EV_BACK, CTL_EV_CHANGED, CTL_EV_CLOSED,

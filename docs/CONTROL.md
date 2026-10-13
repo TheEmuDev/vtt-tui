@@ -229,7 +229,7 @@ never move.
     woke every vtt twice an ask. A stale socket is removed when its connect is refused.
 - **Events and `wait` (2026-10-09, docs/CONFLICTS.md step 5).**
   - `World.events` is a ring of the last 32, numbered from 1 for the life of the vtt
-    (`app_event.c`). A `wait` behind the ring is told what it lost.
+    (`world.c` since 2.0). A `wait` behind the ring is told what it lost.
   - **A held `wait`** is a fourth connection state, `CTL_WAITING`: outside the ten-second
     sweep, outside the cap of four (four more may wait), polled for nothing but its hang-up
     (`POLLHUP`; `POLLIN` would be ready for ever, the caller having shut its writing side),
@@ -249,7 +249,7 @@ never move.
     again. The checkpoint runs only while an agent listens: a `wait` held, a job open, or a
     `wait` in the last ten minutes (so it survives the gap between an agent's waits). An
     accept and the agent's `undo` are not map changes to the agent: the GM's changes so far
-    are told first (`app_events_map_flush`), and the checkpoint starts again after.
+    are told first (`world_events_map_flush`), and the checkpoint starts again after.
   - **At once is fixed when a proposal arrives:** one that came in under `accept auto`
     while the GM was busy still lands at the next key if the GM switches to `accept
     review` meanwhile. A proposal for the job the GM is reviewing never lands by itself;

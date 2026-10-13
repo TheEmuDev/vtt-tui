@@ -6,22 +6,11 @@
  * (ctl.c's CTL_WAITING) once there is an event after the number each named,
  * or its time is up. */
 
-#include <stdarg.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 #include "app_priv.h"
 #include "checkpoint.h"
 #include "prof.h"
-
-
-
-
-
-
-
-
 
 /* --------------------------------------------------------- the map changed */
 
@@ -35,9 +24,6 @@ static int listening(const App *a, uint64_t now_ms)
         if (a->world.jobs[i].used && a->world.jobs[i].state <= JOB_READY && a->world.jobs[i].from != JOB_FROM_DISK) return 1;
     return a->world.agent_seen_ms && now_ms - a->world.agent_seen_ms < (uint64_t)CTL_WAIT_MAX_S * 1000;
 }
-
-
-
 
 /* When the map's changes become an event: once it has been quiet as long as
  * an autosave waits. -1 for nothing owed; the tick must have seen the
@@ -58,7 +44,6 @@ int app_events_due(const App *a, uint64_t now_ms)
     if (m && m->cp && m->gen != a->world.cp_gen && m->gen != a->world.seen_gen) return 0;
     return map_due(a, now_ms);          /* a held wait's deadline is ctl_due's */
 }
-
 
 void app_events_flush(App *a, uint64_t now_ms)
 {

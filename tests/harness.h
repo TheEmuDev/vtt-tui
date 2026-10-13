@@ -56,32 +56,7 @@
 #include "render.h"
 #include "util.h"
 
-extern int g_checks;
-extern int g_fails;
-extern const char *g_case;
-
-#define CHECK(cond)                                                            \
-    do {                                                                       \
-        g_checks++;                                                            \
-        if (!(cond)) {                                                         \
-            g_fails++;                                                         \
-            fprintf(stderr, "  FAIL %s:%d [%s] %s\n",                          \
-                    __FILE__, __LINE__, g_case, #cond);                        \
-        }                                                                      \
-    } while (0)
-
-#define CHECK_EQ(a, b)                                                         \
-    do {                                                                       \
-        long long va = (long long)(a), vb = (long long)(b);                    \
-        g_checks++;                                                            \
-        if (va != vb) {                                                        \
-            g_fails++;                                                         \
-            fprintf(stderr, "  FAIL %s:%d [%s] %s == %s (%lld vs %lld)\n",     \
-                    __FILE__, __LINE__, g_case, #a, #b, va, vb);               \
-        }                                                                      \
-    } while (0)
-
-#define CASE(name) do { g_case = (name); } while (0)
+#include "check.h"
 
 /* ------------------------------------------------------ shared types */
 
@@ -319,5 +294,6 @@ void test_loop(void);
 void test_ctl_table(void);
 void test_ctl_reads(void);
 void test_ctl_names(void);
+void test_protocol(void);
 
 #endif /* VTT_TEST_HARNESS_H */

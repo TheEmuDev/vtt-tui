@@ -78,6 +78,13 @@ test: all
 	    $(LIBSRCS) $(TESTSRCS) -o $(OBJDIR)/run-tests \
 	    -fsanitize=address,undefined $(LDLIBS)
 	@$(OBJDIR)/run-tests
+	@# The seam (docs/V2.md, D2): the protocol's suite again, built with no
+	@# src/app*.c and no loop: a request handler or world.c that reached for
+	@# the app would not link.
+	@$(CC) $(BASEFLAGS) $(DBGFLAGS) $(CFLAGS) -I$(TESTDIR) $(TESTWARN) -DPROTOCOL_MAIN \
+	    $(filter-out $(SRCDIR)/app%.c $(SRCDIR)/loop.c,$(LIBSRCS)) $(TESTDIR)/test_protocol.c \
+	    -o $(OBJDIR)/protocol -fsanitize=address,undefined $(LDLIBS)
+	@$(OBJDIR)/protocol
 	@./tools/oracle.sh check ./$(BIN)
 
 # What ./vtt prints for a fixed set of maps, keys and requests, against the

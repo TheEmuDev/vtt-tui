@@ -12,7 +12,6 @@
 #include "json.h"
 #include "maptools.h"
 
-
 /* One job as text: its line, its thread, its proposal. */
 static void job_text(World *world, Job *j, FILE *out)
 {

@@ -1,8 +1,8 @@
 /* Jobs and the review (docs/CONFLICTS.md): :ask, :ask!, :jobs, :review, the
- * review mode's keys, the tints and labels, and the seam where a proposal
- * comes in (world_job_set_proposal; the channel's requests, step 4). The jobs
- * themselves are job.h's; what a proposal is, and how it is drawn in place,
- * accepted and checked, is changeset.c's. Every message is the GM's alone. */
+ * review mode's keys, the tints and labels, and feedback. The jobs themselves
+ * are job.h's and their core world.c's (a new one, a proposal coming in, a
+ * landing); what a proposal is, and how it is drawn in place, accepted and
+ * checked, is changeset.c's. Every message is the GM's alone. */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,27 +11,6 @@
 #include "app_priv.h"
 #include "draw.h"
 #include "prof.h"
-
-
-/* ------------------------------------------------------------- the list */
-
-
-
-
-
-
-
-
-
-
-/* ------------------------------------------------------------ landing */
-
-
-
-
-
-
-
 
 /* ------------------------------------------------------------- review */
 

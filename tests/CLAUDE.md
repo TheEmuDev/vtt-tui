@@ -15,6 +15,10 @@ docs/CODEMAP.md; `tests/run.c` is the table of suites and `main`, nothing else.
 - A test that expects a channel request's edits to land sets `a.world.ctl_auto = 1` after
   `app_init`; otherwise they arrive as a proposal. Job numbers are not lowest-free
   (`World.job_last`): reset with `jobs_reset()`.
+- Suite `protocol` (test_protocol.c) runs the channel on a bare `World` with a recording
+  host and includes no app header (`check.h`, not `harness.h`); `make test` builds it a
+  second time as `build/protocol` with no `src/app*.c` linked. A new host call gets a
+  line in its `Rec` and a case; a protocol rule that needs no screen is tested there.
 - The interactive loop is `src/loop.c`, and suite `loop` (test_loop.c) drives it: a pipe
   for the keyboard, `turn()` for one pass, time as an argument. What is still untested is
   main.c's few lines round it (`poll` itself, start-up, `--serve`): a live vtt for those.

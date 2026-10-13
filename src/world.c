@@ -4,12 +4,10 @@
 
 #include <stdarg.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "world.h"
 #include "checkpoint.h"
-#include "prof.h"
 #include "util.h"
 
 /* ------------------------------------------------------------ the events */
@@ -172,7 +170,6 @@ int world_job_find(const World *w, int num)
     return -1;
 }
 
-
 const char *world_job_state_name(int state) { return STATE_NAME[state]; }
 
 const char *world_job_from_name(int from) { return FROM_NAME[from]; }
@@ -332,7 +329,7 @@ void world_job_set_proposal(World *w, int slot, ChangeSet *cs, const char *line)
     world_job_thread_add(j, '-', msg);
     if (line && line[0]) world_job_thread_add(j, 'A', line);
     /* News to every agent but the one that made it; the file's change is
-     * nobody's to hear of but the GM (world_event.c, `listening`). */
+     * nobody's to hear of but the GM (app_event.c, `listening`). */
     if (j->from != JOB_FROM_DISK) {
         world_event(w, CTL_EV_PROPOSED, j->num, "%s", j->summary);
         world_event_by(w, j->taker[0] ? j->taker : CTL_NAME_NONE);

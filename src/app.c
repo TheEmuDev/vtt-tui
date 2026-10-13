@@ -16,7 +16,6 @@
 #include "fog.h"
 #include "prof.h"
 
-
 const char *const APP_MENU_ITEMS[APP_MENU_COUNT] = { "Open Map", "New Map", "Quit" };
 
 /* ------------------------------------------------------------ lifecycle */

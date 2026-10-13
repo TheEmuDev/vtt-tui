@@ -88,6 +88,7 @@ int main(int argc, char **argv)
         { "ctltable", test_ctl_table },
         { "ctlreads", test_ctl_reads },
         { "ctlnames", test_ctl_names },
+        { "protocol", test_protocol },
         { "webpage", test_webpage },
         { "turns",  test_turns },
         { "turnkeys", test_turn_keys },

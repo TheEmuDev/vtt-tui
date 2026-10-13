@@ -83,12 +83,12 @@ typedef struct World {
      * whose it is (undo_tag). */
     Undo     undo;
 
-    /* Jobs (job.h, app_job.c): asked of agents or offered by them, kept
+    /* Jobs (job.h, world.c): asked of agents or offered by them, kept
      * with the map. */
     Job      jobs[JOB_MAX];
     int      job_last;          /* the last job number given out; the next is after it */
 
-    /* Events for agents (app_event.c): a numbered ring `wait` reads. The
+    /* Events for agents (world.c): a numbered ring `wait` reads. The
      * newest is `event_seq`, kept at seq % EVENT_MAX. `cp_gen` is Map.gen
      * when the map's checkpoint was started; the checkpoint stops when no
      * agent listens, and `cp_off_*` is what the map was then, so that a

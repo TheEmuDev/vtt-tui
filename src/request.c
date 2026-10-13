@@ -132,9 +132,6 @@ static int is_comment(const char *line)
     return *line == '#';
 }
 
-
-
-
 /* ----------------------------------------------------------------- reads */
 
 /* `own`: this request has edits of its own so far. Asked of the live map
@@ -1634,7 +1631,7 @@ static int rq_help(RQ_ARGS);
  * belongs here: the page is AGENTS.md. */
 typedef struct {
     const char *name;
-    unsigned    flags;          /* CTL_RQ_* (app.h) */
+    unsigned    flags;          /* CTL_RQ_* (request.h) */
     int       (*run)(RQ_ARGS);
     const char *use;
     const char *doc;
@@ -1825,7 +1822,6 @@ static void finish_edits(World *world, Edits *ed, FILE *out)
     else snprintf(msg, sizeof msg, "agent: %s and %d more - u takes them back", ed->first, ed->lines - 1);
     world->host->note(world->gm, msg, 1);
 }
-
 
 char *request_exec(World *world, const char *req, size_t *len)
 {
