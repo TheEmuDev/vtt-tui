@@ -31,7 +31,7 @@ void app_disk_reset(App *a)
  * the next one made, which may be an agent's. -1 for none. */
 static int disk_slot(const App *a)
 {
-    int slot = a->disk_job ? app_job_find(a, a->disk_job) : -1;
+    int slot = a->disk_job ? world_job_find(&a->world, a->disk_job) : -1;
     if (slot < 0 || a->world.jobs[slot].from != JOB_FROM_DISK || a->world.jobs[slot].state != JOB_READY) return -1;
     return slot;
 }
@@ -99,7 +99,7 @@ static void disk_read(App *a)
             adopt(a);
         } else {
             int slot = disk_slot(a);
-            if (slot < 0) slot = app_job_new(a, JOB_FROM_DISK, "changed by another program", NULL, 0);
+            if (slot < 0) slot = world_job_new(&a->world, JOB_FROM_DISK, "changed by another program", NULL, 0);
             if (slot < 0) {
                 cs_free(&cs);
                 stuck(a, "the file changed on disk, and there is no room for another change to review");
@@ -112,7 +112,7 @@ static void disk_read(App *a)
                 now->base = NULL;
                 a->disk_state = DISK_PROPOSED;
                 a->disk_job = a->world.jobs[slot].num;
-                app_job_set_proposal(a, slot, &cs, NULL);
+                world_job_set_proposal(&a->world, slot, &cs, NULL);
             }
         }
     }
@@ -208,7 +208,7 @@ void app_disk_saved(App *a, int over)
     if (slot >= 0) {
         if (a->review == slot) app_review_leave(a);
         a->world.jobs[slot].state = JOB_SCRAPPED;
-        app_job_thread_add(&a->world.jobs[slot], '-', over ? "written over by :w!"
+        world_job_thread_add(&a->world.jobs[slot], '-', over ? "written over by :w!"
                                                      : "left behind: the map was saved as another file");
     }
     app_disk_reset(a);

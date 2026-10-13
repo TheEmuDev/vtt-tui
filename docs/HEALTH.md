@@ -229,7 +229,7 @@ Rows move here when fixed, with the commit.
 
 ### Where the rows came from
 
-Forty-one reviews, 2026-10-07 to 2026-10-13. The first seven predate this section: on 2026-10-09
+Forty-two reviews, 2026-10-07 to 2026-10-13. The first seven predate this section: on 2026-10-09
 their reports were read back from the session's record and every item checked against the
 code as it stood (137 items: 117 fixed, 4 overtaken when the plan dropped "accept saves", 16
 open, none disproved). Steps 4-6 were entered from their reports as they came.

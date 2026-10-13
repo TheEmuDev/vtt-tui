@@ -19,11 +19,11 @@ static void job_text(App *a, Job *j, FILE *out)
     if (j->has_box)  { strcpy(where, " in ");   cs_box_name(&j->box, where + 4, sizeof where - 4); }
     else if (j->has_area) { strcpy(where, " area "); cs_box_name(&j->area, where + 6, sizeof where - 6); }
     static const char *const FROM[] = { "asked by the GM", "an agent's own", "from --apply", "the file on disk" };
-    fprintf(out, "#%d %s%s, %s%s%s%s%s%s\n", j->num, app_job_state_name(j->state), where, FROM[j->from],
+    fprintf(out, "#%d %s%s, %s%s%s%s%s%s\n", j->num, world_job_state_name(j->state), where, FROM[j->from],
             j->taker[0] ? ", taken by " : "", j->taker,
             j->at_once ? ", to land at once" : "", j->text[0] ? ": " : "", j->text);
     for (int t = 0; t < j->nthread; t++)
-        fprintf(out, "  %s: %s\n", app_job_who_name(j->thread[t].who), j->thread[t].text);
+        fprintf(out, "  %s: %s\n", world_job_who_name(j->thread[t].who), j->thread[t].text);
     if (j->has_cs && j->state == JOB_READY) {
         int c = cs_check(&j->cs, a->world.map);
         fprintf(out, "  proposal: %s", j->summary);
@@ -45,8 +45,8 @@ static void job_json(App *a, Job *j, Json *js)
 {
     json_open(js, '{');
     json_kint(js, "num", j->num);
-    json_kstr(js, "state", app_job_state_name(j->state));
-    json_kstr(js, "from", app_job_from_name(j->from));
+    json_kstr(js, "state", world_job_state_name(j->state));
+    json_kstr(js, "from", world_job_from_name(j->from));
     json_key(js, "taker"); if (j->taker[0]) json_str(js, j->taker); else json_null(js);
     json_key(js, "at_once"); json_bool(js, j->at_once);
     json_kstr(js, "text", j->text);
@@ -56,7 +56,7 @@ static void job_json(App *a, Job *j, Json *js)
     json_open(js, '[');
     for (int t = 0; t < j->nthread; t++) {
         json_open(js, '{');
-        json_kstr(js, "who", app_job_who_name(j->thread[t].who));
+        json_kstr(js, "who", world_job_who_name(j->thread[t].who));
         json_kstr(js, "text", j->thread[t].text);
         json_close(js, '}');
     }
@@ -87,8 +87,8 @@ int app_ctl_job_claim(App *a, Job *j)
  * refusal otherwise. */
 static void say_taken(App *a, const Job *j)
 {
-    app_event(a, CTL_EV_TAKEN, j->num, "by %s", a->world.ctl_who);
-    app_event_by(a, a->world.ctl_who);
+    world_event(&a->world, CTL_EV_TAKEN, j->num, "by %s", a->world.ctl_who);
+    world_event_by(&a->world, a->world.ctl_who);
 }
 
 /* job N undo: the job's landing taken back, while it is the last thing done
@@ -147,7 +147,7 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
     long v = strtol(w[1], &end, 10);
     if (*end || v < 1 || v > JOB_NUM_MAX) { snprintf(err, errsz, "%.20s: a job's number, from jobs", w[1]); return -1; }
     num = (int)v;
-    int slot = app_job_find(a, num);
+    int slot = world_job_find(&a->world, num);
     if (slot < 0) { app_ctl_class(CTL_E_MISSING), snprintf(err, errsz, "no job #%d - jobs lists them", num); return -1; }
     Job *j = &a->world.jobs[slot];
     const char *verb = w[2];
@@ -164,7 +164,7 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
         }
         /* The result is the map copied and the set applied: every square, whatever is then read of it. */
         if (!app_ctl_read(a, (long)a->world.map->w * a->world.map->h, err, errsz)) return -1;
-        Map *m = app_job_result(a, slot);
+        Map *m = world_job_result(&a->world, slot);
         if (!m) { app_ctl_class(CTL_E_STATE), snprintf(err, errsz, "#%d was made before the map was resized - propose it again", num); return -1; }
         if (!strcmp(verb, "dump")) {
             return app_ctl_dump(a, m, w, n, 3, 0, out, err, errsz) ? 0 : -1;
@@ -194,7 +194,7 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
      * job's state since (accepted, or ready again with a part landed). */
     if (!strcmp(verb, "undo")) {
         if (n != 3) { snprintf(err, errsz, "job N undo takes nothing after it"); return -1; }
-        if (app_job_gm_only(j)) {
+        if (world_job_gm_only(j)) {
             app_ctl_class(CTL_E_STATE), snprintf(err, errsz, "#%d is %s: the GM's to take back", num,
                      j->from == JOB_FROM_DISK ? "what another program wrote to the file" : "an --apply's");
             return -1;
@@ -204,12 +204,12 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
     }
 
     if (!open) {
-        app_ctl_class(CTL_E_STATE), snprintf(err, errsz, "#%d was %s%s", num, app_job_state_name(j->state),
+        app_ctl_class(CTL_E_STATE), snprintf(err, errsz, "#%d was %s%s", num, world_job_state_name(j->state),
                  j->state == JOB_SCRAPPED ? " - :review N is the GM's way to bring it back" : "");
         return -1;
     }
 
-    if (app_job_gm_only(j)) {
+    if (world_job_gm_only(j)) {
         app_ctl_class(CTL_E_STATE), snprintf(err, errsz, "#%d is %s: the GM's to decide - you may dump, check and describe it", num,
                  j->from == JOB_FROM_DISK ? "what another program wrote to the file" : "an --apply's");
         return -1;
@@ -253,7 +253,7 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
         if (n != 4) { snprintf(err, errsz, "job N say \"a line for the GM\""); return -1; }
         /* A line on the GM's status and one written to the session log: counted as a file is. */
         if (!app_ctl_read(a, CTL_FILE_CHARGE, err, errsz)) return -1;
-        app_job_thread_add(j, 'A', w[3]);
+        world_job_thread_add(j, 'A', w[3]);
         snprintf(msg, sizeof msg, "#%d, the agent: %.200s", num, w[3]);
         app_note_gm(a, msg);
         a->dirty = 1;
@@ -267,9 +267,9 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
              * destroyed (KEYS.md rule 9: only remove destroys), so :review N
              * brings it back; a finished job makes room when the table fills. */
             j->state = JOB_SCRAPPED;
-            app_job_thread_add(j, '-', "withdrawn by the agent");
-            app_event(a, CTL_EV_SCRAPPED, num, "withdrawn by %s", a->world.ctl_who);
-            app_event_by(a, a->world.ctl_who);
+            world_job_thread_add(j, '-', "withdrawn by the agent");
+            world_event(&a->world, CTL_EV_SCRAPPED, num, "withdrawn by %s", a->world.ctl_who);
+            world_event_by(&a->world, a->world.ctl_who);
             snprintf(msg, sizeof msg, "#%d withdrawn by the agent - :review %d brings it back", num, num);
             fprintf(out, "#%d withdrawn\n", num);
         } else {
@@ -278,10 +278,10 @@ int app_ctl_job(App *a, char w[][CTL_WORD_MAX], int n, FILE *out, char *err, siz
             j->taker[0] = '\0';               /* anyone's to take again */
             j->has_area = 0;
             j->summary[0] = '\0';
-            app_job_thread_add(j, '-', "given back");
+            world_job_thread_add(j, '-', "given back");
             /* Asked again: what an agent looking for work waits to hear. */
-            app_event(a, CTL_EV_ASKED, num, "given back by %s: %.150s", a->world.ctl_who, j->text);
-            app_event_by(a, a->world.ctl_who);
+            world_event(&a->world, CTL_EV_ASKED, num, "given back by %s: %.150s", a->world.ctl_who, j->text);
+            world_event_by(&a->world, a->world.ctl_who);
             snprintf(msg, sizeof msg, "#%d given back by the agent - it waits as asked", num);
             fprintf(out, "#%d given back, as asked\n", num);
         }

@@ -173,7 +173,7 @@ never move.
   - The App's side of a creature removed or a scene put back (the range overlay, the
     selection, the turn notice) happens when the change lands (`land` in app_job.c), not
     when the plan runs.
-  - `--apply`, with no GM, edits the map itself as before (`App.ctl_direct`); the
+  - `--apply`, with no GM, edits the map itself as before (`World.ctl_direct`); the
     `propose` line is refused there. `--bench-ctl` and the fuzzer run under accept auto.
   - Sixteen jobs at most; a finished one (accepted or scrapped) makes room for a new one.
   - A new job takes the number after the last one given (1 again after 99), never one just
@@ -212,8 +212,8 @@ never move.
     behind a `propose apply "NAME"` line. No holder: the file is the plan's, as before.
   - `--wait` reads the vtt's events: it takes `seq` before proposing, then `wait`s for the
     job's accepted, scrapped, feedback, removed or map-closed line.
-  - **The channel off** (`App.agent_on`): only requests over the socket are asked
-    (`App.ctl_can_hold`); the tests and the bench call `app_ctl_exec` straight. A held
+  - **The channel off** (`World.agent_on`): only requests over the socket are asked
+    (`World.ctl_can_hold`); the tests and the bench call `app_ctl_exec` straight. A held
     `wait` stays, and hears of jobs but not of the map (no checkpoint runs).
   - **`vtt --ctl` picks the vtt whose channel is on:** every vtt listens now, so it asks
     each `status` and takes the one that says `agent on`.
@@ -228,15 +228,15 @@ never move.
   - **No liveness probe.** Finding the sockets used to connect to each and close; that
     woke every vtt twice an ask. A stale socket is removed when its connect is refused.
 - **Events and `wait` (2026-10-09, docs/CONFLICTS.md step 5).**
-  - `App.events` is a ring of the last 32, numbered from 1 for the life of the vtt
+  - `World.events` is a ring of the last 32, numbered from 1 for the life of the vtt
     (`app_event.c`). A `wait` behind the ring is told what it lost.
   - **A held `wait`** is a fourth connection state, `CTL_WAITING`: outside the ten-second
     sweep, outside the cap of four (four more may wait), polled for nothing but its hang-up
     (`POLLHUP`; `POLLIN` would be ready for ever, the caller having shut its writing side),
     and counted by `ctl_due` only for its own deadline, so an idle vtt with a waiter still
     sleeps in `poll`.
-  - **`app_ctl_exec` has a third outcome, held:** `App.ctl_can_hold` is set round a request
-    that came over the socket; a `wait` with nothing to say sets `App.ctl_held`, and
+  - **`app_ctl_exec` has a third outcome, held:** `World.ctl_can_hold` is set round a request
+    that came over the socket; a `wait` with nothing to say sets `World.ctl_held`, and
     `app_tick` holds the connection (`ctl_hold`). Called any other way (`--apply`, the
     bench, the fuzzer, the tests), `wait` answers at once.
   - **Waiters are answered after the key that made the event:** the main loop calls

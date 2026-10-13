@@ -187,9 +187,6 @@ typedef struct {
     int      pcam_pinned;                     /* hold pinned their floor: undone when it ends */
     struct { const Map *map; unsigned gen; int floor, zoom; Rect view; } pcam_for;
 
-    /* One log for the whole session: token moves in play mode undo through
-     * the same history as wall edits in build mode. */
-
     /* The session log, off until :log. */
     SessionLog slog;
 
@@ -222,17 +219,11 @@ typedef struct {
      * seconds; the GM's screen alone (never the players' frame), and only
      * while until_ms is set. */
     Ping     agent_ring;
-    /* Whose a landing is, for the channel's `undo` and `job N undo`, is the
-     * undo log's own to say: its batch is tagged (undo_tag). */
-    /* Jobs (docs/CONFLICTS.md, app_job.c): asked of agents or offered by
-     * them, kept with the map. `review` is the one ED_REVIEW shows, and the
-     * review's own box (v) is held here, not in the editor's visual mode. */
+    /* The review (app_job.c): `review` is the job ED_REVIEW shows (a slot of
+     * World.jobs, -1 for none), and the review's own box (v) is held here,
+     * not in the editor's visual mode. */
     int      review;
     int      rv_box, rv_ax, rv_ay;
-    /* A request's edits run on a copy of the map, never the live one, and
-     * become a proposal (docs/CONFLICTS.md); the copy and its log are kept
-     * for their buffers. `ctl_auto` (:agent accept auto) lands each one at
-     * once; `ctl_direct` (--apply with no GM) edits the map itself. */
     /* Another writer of the map's file (app_disk.c): whether the file has
      * changed since vtt last read or wrote it (Map.disk), the change's
      * proposal (`disk_job`), and the file's bytes and identity as last seen,
@@ -249,23 +240,7 @@ typedef struct {
     size_t   disk_new_len;
     char     disk_why[160];     /* DISK_STUCK: what cannot be made a proposal */
     uint64_t disk_checked_ms, disk_key_ms;
-    /* Events for agents (app_event.c, docs/CONFLICTS.md): a numbered ring
-     * `wait` reads -- a job asked, accepted, scrapped, sent back; the map
-     * changed, closed. The newest is `event_seq`, kept at seq % EVENT_MAX.
-     * `cp_gen` is Map.gen when the map's checkpoint was started;
-     * `agent_seen_ms` the last `wait`, which keeps the checkpoint running
-     * between an agent's waits. `ctl_can_hold` is set round a request the
-     * socket can hold (app_tick); a `wait` with nothing to say then sets
-     * `ctl_held` and what it waits for, instead of answering. */
-    /* The checkpoint stops when no agent listens (app_event.c). What the map
-     * was then, so that a change nobody was told of is said when one comes
-     * back: `changes` must never answer "nothing" for a map that moved. */
     uint64_t ctl_turn_ns;       /* CTL_TURN_NS; a test sets 0 for one request a turn */
-    /* :agent on. The socket listens whenever vtt runs interactively, so
-     * --apply can find a map that is open; off, a request over it is refused
-     * with a line saying to turn it on (docs/V2.md, ruling 9), all but
-     * --apply's `holds`. Requests not from the socket (the tests, the bench)
-     * are not asked. */
     /* :agent command (app_agent.c): what vtt starts for each :ask and each
      * job sent back, the job on its stdin. Empty: none. */
     AgentRun agents[JOB_MAX];

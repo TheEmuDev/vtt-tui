@@ -113,14 +113,14 @@ The map, the log, the file
 - Edits to the live map go through the undo log; `undo_balanced` must hold between keys.
   **A writer of the map's squares round the log must call `cp_note`** (today: `fog_delete`).
   LIT/RIM fog bits are never recorded and never saved.
-- A request's edits are a proposal: they come in through `app_job_set_proposal`; anything
+- A request's edits are a proposal: they come in through `world_job_set_proposal`; anything
   an edit does to the live App is guarded by `!ed->proposal`. Only the GM decides a disk
-  job. **A new thing an agent should hear of calls `app_event`.**
+  job. **A new thing an agent should hear of calls `world_event`.**
 - The loader forgives damage silently: **every new silent-drop site calls `diag()`** with a
   stable code. The writer picks the lowest file version that says everything.
 - The map the app will hold opens with `mapio_load_base`; a read-only look is `mapio_load`.
   A save of the open map is `app_save_map`. A map is put down only by `app_close_map`;
-  each place a map leaves the app's hands sends `map closed` and calls `app_jobs_clear`;
+  each place a map leaves the app's hands sends `map closed` and calls `world_jobs_clear`;
   anything that might discard work asks through `app_leave_map_for`.
 - `client_flush` returns -1 when it closed the client (the next one shifts into the slot):
   every caller checks.

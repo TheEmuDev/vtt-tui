@@ -21,11 +21,40 @@ const char *const APP_MENU_ITEMS[APP_MENU_COUNT] = { "Open Map", "New Map", "Qui
 
 /* ------------------------------------------------------------ lifecycle */
 
+/* The GM's side of the world (world.h): what a job or a request asks of the
+ * screen, the editor and the agent command. */
+static void host_note(void *gm, const char *text, int logged)
+{
+    if (logged) app_note_gm(gm, text);
+    else        app_set_status_gm(gm, text);
+}
+static const char *host_busy(void *gm) { return app_ctl_busy(gm); }
+static void host_landed(void *gm, int creatures)
+{
+    App *a = gm;
+    /* What the channel's edits did to the live App when they landed
+     * straight: the overlay and the selection name creatures by index. */
+    if (creatures) app_creatures_renumbered(a);
+    else a->last_acting = turn_acting(a->world.map);     /* an accept starts no turn */
+    app_fog_sync(a);
+    a->dirty = 1;
+}
+static int  host_reviewing(void *gm) { return ((App *)gm)->review; }
+static void host_review_leave(void *gm) { app_review_leave(gm); }
+static void host_job_gone(void *gm, int num) { app_agent_forget(gm, num); }
+static int  host_deaf(void *gm) { App *a = gm; return ctl_active(&a->ctl) && !a->world.agent_on; }
+
+static const WorldHost APP_HOST = {
+    host_note, host_busy, host_landed, host_reviewing, host_review_leave, host_job_gone, host_deaf,
+};
+
 void app_init(App *a, Term *t, Renderer *r)
 {
     memset(a, 0, sizeof *a);
     a->term    = t;
     a->rnd     = r;
+    a->world.host = &APP_HOST;
+    a->world.gm   = a;
     a->ctl_turn_ns = CTL_TURN_NS;
     a->agent_deadline_ms = AGENT_DEADLINE_MS;
     a->agent_grace_ms    = AGENT_GRACE_MS;
@@ -66,7 +95,7 @@ void app_free(App *a)
     a->entries = NULL;
     undo_free(&a->world.undo);
     app_disk_reset(a);
-    app_jobs_clear(a);
+    world_jobs_clear(&a->world);
     map_free(a->world.ctl_scratch);
     a->world.ctl_scratch = NULL;
     undo_free(&a->world.ctl_sundo);
@@ -189,8 +218,8 @@ int app_open_map(App *a, const char *path)
     /* :e over a map in hand puts that one down: its jobs are its own (a
      * change set applies to the map it was made on), and an agent is told. */
     if (a->world.map) {
-        app_event(a, CTL_EV_CLOSED, 0, "%s - the GM opened %s, and its jobs went with it", a->world.map->name, m->name);
-        app_jobs_clear(a);
+        world_event(&a->world, CTL_EV_CLOSED, 0, "%s - the GM opened %s, and its jobs went with it", a->world.map->name, m->name);
+        world_jobs_clear(&a->world);
     }
     map_free(a->world.map);
     a->world.map = m;
@@ -233,7 +262,7 @@ void app_travel_to(App *a, Map *m)
     a->handout_title[0] = a->handout_body[0] = '\0';
     net_clear_kept(&a->net);             /* whispers waiting were the encounter's too */
     drop_autosave(a);
-    app_event(a, CTL_EV_CLOSED, 0, "%s - the GM went to %s, and its jobs went with it", a->world.map->name, m->name);
+    world_event(&a->world, CTL_EV_CLOSED, 0, "%s - the GM went to %s, and its jobs went with it", a->world.map->name, m->name);
     app_disk_reset(a);
     map_free(a->world.map);
     a->world.map = m;
@@ -250,7 +279,7 @@ void app_travel_to(App *a, Map *m)
     a->autosave_gen = a->world.seen_gen = m->gen;
     a->npings = a->npinged = 0;
     a->agent_ring.until_ms = 0;
-    app_jobs_clear(a);              /* jobs are the map's */
+    world_jobs_clear(&a->world);              /* jobs are the map's */
     a->dirty = 1;
 }
 
@@ -457,7 +486,7 @@ void app_tick(App *a, uint64_t now_ms)
                 FILE *of = open_memstream(&older, &olen);
                 if (of) {
                     fputs("ok\n", of);
-                    app_events_write(a, of, oseq, a->world.ctl_who);
+                    world_events_write(&a->world, of, oseq, a->world.ctl_who);
                     fprintf(of, "superseded: a newer wait from %s took this one's place\n", a->world.ctl_who);
                     fclose(of);
                 }
@@ -1316,13 +1345,13 @@ void app_close_map(App *a)
     close_server_with_map(a);
     slog_close(&a->slog);
     /* Jobs are their map's: an agent is told, not left to time out. */
-    if (a->world.map) app_event(a, CTL_EV_CLOSED, 0, "%s - its jobs went with it", a->world.map->name);
+    if (a->world.map) world_event(&a->world, CTL_EV_CLOSED, 0, "%s - its jobs went with it", a->world.map->name);
     app_disk_reset(a);
     map_free(a->world.map);
     a->world.map = NULL;
     a->npings = a->npinged = 0;
     a->agent_ring.until_ms = 0;
-    app_jobs_clear(a);
+    world_jobs_clear(&a->world);
     undo_clear(&a->world.undo);
     a->screen = SCREEN_MENU;
 }
@@ -1495,7 +1524,7 @@ void app_key(App *a, Key k)
     if (a->world.map && a->screen == SCREEN_PLAY) range_set_aim(&a->play.range, a->ed.cx, a->ed.cy);
     app_floor_sync(a);
     app_fog_sync(a);
-    app_jobs_land_waiting(a);       /* :ask! results that came while landing could not */
+    world_jobs_land_waiting(&a->world);       /* :ask! results that came while landing could not */
     app_disk_key(a);                /* has someone else written the file? */
 }
 

@@ -191,40 +191,6 @@ void app_stamp_key(App *a, Key k);
  * whoever holds the turn now started no turn. */
 void app_creatures_renumbered(App *a);
 
-/* Events for agents (app_event.c): `job N KIND[: text]`, or `map KIND[:
- * text]` with job 0; a NULL fmt for a kind that says it all. The kinds are
- * ctl.h's, where --wait reads them back. */
-void app_event(App *a, int kind, int job, const char *fmt, ...) __attribute__((format(printf, 4, 5)));
-/* Where on the map the newest event's change is (cs_where's pieces), said
- * straight after the app_event that made it. */
-void app_event_where(App *a, const CsWhere *where, int other);
-/* Whose doing the newest event is, said straight after it: that name is not
- * told of it (its own doing is no news to it), every other is. Callers with
- * no name are one name, `cli`, as everywhere. */
-void app_event_by(App *a, const char *who);
-/* In every reader below `who` is the name asking, whose own events are
- * passed over; NULL hears all. */
-/* The pieces changed by every event after `after`, and whether something on
- * no square changed. 0 when events older than are kept would be among them:
- * then nobody knows. */
-int  app_events_where(const App *a, unsigned after, CsWhere *where, int *other, const char *who);
-/* An agent is listening from now: the checkpoint starts if it was stopped,
- * and a change made while it was is an event before anything is answered
- * (`wait` and `changes` call it; the tick does for a held wait or a job). */
-void app_events_hear(App *a);
-int  app_events_after(const App *a, unsigned after, const char *who);
-/* "seq N", then every event after `after`, one a line. */
-void app_events_write(const App *a, FILE *out, unsigned after, const char *who);
-/* A change to the map that is an agent's own (its undo), made into one event
- * with where it was: called after the change, the caller having told the
- * GM's changes so far before it (app_events_map_flush). */
-void app_event_of_change(App *a, int kind, int job, const char *who, const char *text);
-/* app_events_flush and app_events_due are the main loop's too: app.h. */
-/* Round a change that is not the GM's (an accept, the agent's undo): the
- * GM's changes so far become their event first, and the checkpoint starts
- * again after, so the change is not told twice. */
-void app_events_map_flush(App *a);
-void app_events_map_restart(App *a);
 
 /* Another writer of the open map's file (app_disk.c). app_disk_key is the
  * stat a key may cost, at most once a second; app_disk_check the same
@@ -254,21 +220,9 @@ void app_agent_prompt(const App *a, const Job *j, FILE *out);
 void app_agent_command_cmd(App *a, const char *rest);
 
 /* Jobs and the review (app_job.c). */
-void app_jobs_clear(App *a);
-int  app_job_new(App *a, int from, const char *text, const CsBox *box, int at_once);
-void app_job_set_proposal(App *a, int slot, ChangeSet *cs, const char *line);
-void app_jobs_land_waiting(App *a);
 void app_review_key(App *a, Key k);
 void app_review_resume(App *a);
 void app_review_leave(App *a);
-/* For the channel's job requests (app_ctl_job.c). */
-int  app_job_find(const App *a, int num);
-int  app_job_gm_only(const Job *j);     /* the file's or an --apply's: not an agent's to take, replace, answer or drop */
-void app_job_thread_add(Job *j, char who, const char *text);
-const char *app_job_state_name(int state);
-const char *app_job_from_name(int from);
-/* A thread line's speaker as the channel and a started agent read it. */
-const char *app_job_who_name(char who);
 
 /* The v box a : command was typed over (build mode), into x0..y1, and back to
  * normal mode; 0 when there was none. :area, :scene save and :ask read it. */
@@ -348,13 +302,6 @@ int  app_ctl_read(const App *a, long squares, char *err, size_t errsz);
 /* The class of the refusal being written (ctl.h's CTL_E_*; `usage` unless
  * said). Returns -1, to be returned with it. */
 int  app_ctl_class(int cls);
-/* The scratch map (App.ctl_scratch) as a fresh copy of the live map, its log
- * (ctl_sundo) cleared: a proposal is made in it, and a job's result read. */
-Map *app_scratch_copy(App *a);
-/* The map a job's proposal would make, accepted now: the scratch map, valid
- * until the next request. NULL when the job has none, or one made for
- * another size of map. */
-Map *app_job_result(App *a, int slot);
 
 /* app_play.c */
 void app_play_key(App *a, Key k);

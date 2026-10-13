@@ -41,7 +41,7 @@ static void propose_water(App *a, int slot, int x0, int x1, int y, const char *l
     ChangeSet cs;
     cs_init(&cs);
     cs_diff(&cs, a->world.map, c, &u);
-    app_job_set_proposal(a, slot, &cs, line);
+    world_job_set_proposal(&a->world, slot, &cs, line);
     map_free(c);
     undo_free(&u);
 }
@@ -832,7 +832,7 @@ void test_events(void)
                         1 << CTL_EV_BACK | 1 << CTL_EV_ACCEPTED | 1 << CTL_EV_REMOVED);
     }
     free(t);
-    CHECK_EQ(app_events_after(&a, 99, NULL), 1);                 /* so a socket never holds it */
+    CHECK_EQ(world_events_after(&a.world, 99, NULL), 1);                 /* so a socket never holds it */
 
     CASE("the client reads how long a wait may be held: past comments, clamped, nothing else");
     CHECK_EQ(ctl_held_ms("status\n"), 0);
@@ -929,9 +929,9 @@ void test_events(void)
         free(t);
         /* Something on no square is said, not dumped. */
         unsigned s1 = a.world.event_seq;
-        app_event(&a, CTL_EV_CHANGED, 0, "roll attack");
+        world_event(&a.world, CTL_EV_CHANGED, 0, "roll attack");
         CsWhere nowhere = { { 0 } };
-        app_event_where(&a, &nowhere, 1);
+        world_event_where(&a.world, &nowhere, 1);
         snprintf(rq, sizeof rq, "changes %u", s1);
         t = ctl_ask(&a, rq);
         CHECK(t && !strstr(t, "\nchanged ") && strstr(t, "\nalso: something on no square changed"));
@@ -1009,7 +1009,7 @@ void test_events(void)
     }
 
     CASE("more events than the ring keeps: the gap is said");
-    for (int k = 0; k < EVENT_MAX + 5; k++) app_event(&a, CTL_EV_CHANGED, 0, "test %d", k);
+    for (int k = 0; k < EVENT_MAX + 5; k++) world_event(&a.world, CTL_EV_CHANGED, 0, "test %d", k);
     t = ctl_ask(&a, "wait 0");
     snprintf(want, sizeof want, "lost 1-%u: ", a.world.event_seq - EVENT_MAX);
     CHECK(t && strstr(t, want) && strstr(t, ": test 4\n") == NULL && strstr(t, " map changed: test 36\n"));

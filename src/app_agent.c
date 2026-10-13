@@ -50,7 +50,7 @@ void app_agent_prompt(const App *a, const Job *j, FILE *out)
     if (j->nthread > 1) {
         fputs("\nThe job so far (the last gm: line is what to do now):\n", out);
         for (int t = 0; t < j->nthread; t++)
-            fprintf(out, "  %s: %s\n", app_job_who_name(j->thread[t].who), j->thread[t].text);
+            fprintf(out, "  %s: %s\n", world_job_who_name(j->thread[t].who), j->thread[t].text);
     }
 
     /* Each line runs as printed: the path quoted, nothing indented that a
@@ -136,7 +136,7 @@ static void ended_how(const AgentRun *r, int status, int deadline_ms, char *buf,
  * else's -- waits as asked again, said to the GM and to the agents. */
 static void run_ended(App *a, AgentRun r, int status)
 {
-    int slot = r.job ? app_job_find(a, r.job) : -1;
+    int slot = r.job ? world_job_find(&a->world, r.job) : -1;
     if (slot < 0) return;
     Job *j = &a->world.jobs[slot];
     /* A job done meanwhile (the old run proposed late and the GM took it,
@@ -151,8 +151,8 @@ static void run_ended(App *a, AgentRun r, int status)
     j->taker[0] = '\0';
     j->has_area = 0;
     snprintf(msg, sizeof msg, "its agent stopped (%s)", how);
-    app_job_thread_add(j, '-', msg);
-    app_event(a, CTL_EV_ASKED, j->num, "its agent stopped (%s): %.120s", how, j->text);
+    world_job_thread_add(j, '-', msg);
+    world_event(&a->world, CTL_EV_ASKED, j->num, "its agent stopped (%s): %.120s", how, j->text);
     snprintf(msg, sizeof msg, "#%d: its agent stopped with nothing proposed (%s) - the job waits as asked%s", j->num, how,
              slog_on(&a->slog) ? "; the session log has what it printed" : "; :log on shows what the next one prints");
     app_note_gm(a, msg);

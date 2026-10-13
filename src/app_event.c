@@ -1,10 +1,10 @@
-/* Events for agents (docs/CONFLICTS.md, "Telling the agent"): a numbered
- * ring of what happened that an agent cares about, read by the channel's
- * `wait` -- a long poll the socket holds (ctl.c's CTL_WAITING) until there
- * is an event after the number the agent names, or its time is up. The
- * map-changed event comes from the map's checkpoint (checkpoint.c), which
+/* Events for agents, the loop's side (docs/CONFLICTS.md, "Telling the
+ * agent"): the ring itself and what makes an event are world.c's. Here is
+ * when the map's changes become one -- the map's checkpoint (checkpoint.c)
  * runs only while an agent is listening: a wait held, a job open, or a wait
- * in the last ten minutes. */
+ * in the last ten minutes -- and the answering of the waits the socket holds
+ * (ctl.c's CTL_WAITING) once there is an event after the number each named,
+ * or its time is up. */
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -15,92 +15,13 @@
 #include "checkpoint.h"
 #include "prof.h"
 
-void app_event(App *a, int kind, int job, const char *fmt, ...)
-{
-    AgentEvent *e = &a->world.events[++a->world.event_seq % EVENT_MAX];
-    e->seq = a->world.event_seq;
-    memset(&e->where, 0, sizeof e->where);
-    e->other = 0;
-    e->gone = kind == CTL_EV_CLOSED;
-    e->by[0] = '\0';
-    int k = job ? snprintf(e->text, sizeof e->text, "job %d %s", job, ctl_event_name(kind))
-                : snprintf(e->text, sizeof e->text, "map %s", ctl_event_name(kind));
-    if (!fmt || k >= (int)sizeof e->text - 3) return;
-    e->text[k++] = ':';
-    e->text[k++] = ' ';
-    va_list ap;
-    va_start(ap, fmt);
-    vsnprintf(e->text + k, sizeof e->text - (size_t)k, fmt, ap);
-    va_end(ap);
-}
 
-/* The oldest event still kept. */
-static unsigned oldest(const App *a)
-{
-    return a->world.event_seq > EVENT_MAX ? a->world.event_seq - EVENT_MAX + 1 : 1;
-}
 
-void app_event_where(App *a, const CsWhere *where, int other)
-{
-    AgentEvent *e = &a->world.events[a->world.event_seq % EVENT_MAX];
-    e->where = *where;
-    e->other = other != 0;
-}
 
-void app_event_by(App *a, const char *who)
-{
-    str_lcpy(a->world.events[a->world.event_seq % EVENT_MAX].by, who, sizeof a->world.events[0].by);
-}
 
-/* Is event e one `who` is told of? Not its own. */
-static int heard(const AgentEvent *e, const char *who)
-{
-    return !who || !e->by[0] || strcmp(e->by, who) != 0;
-}
 
-int app_events_where(const App *a, unsigned after, CsWhere *where, int *other, const char *who)
-{
-    memset(where, 0, sizeof *where);
-    *other = 0;
-    if (after > a->world.event_seq) after = 0;             /* another vtt's number: everything kept */
-    if (after + 1 < oldest(a)) return 0;
-    for (unsigned s = after + 1; s <= a->world.event_seq && s > after; s++) {
-        /* Another map since: the pieces before it were that map's. */
-        if (a->world.events[s % EVENT_MAX].gone) return 0;
-        if (!heard(&a->world.events[s % EVENT_MAX], who)) continue;
-        for (size_t i = 0; i < sizeof where->b / sizeof *where->b; i++) where->b[i] |= a->world.events[s % EVENT_MAX].where.b[i];
-        *other |= a->world.events[s % EVENT_MAX].other;
-    }
-    return 1;
-}
 
-/* A number past the newest event is another vtt's (this one was started
- * since): there is something to say at once -- that, and everything kept. */
-int app_events_after(const App *a, unsigned after, const char *who)
-{
-    if (after > a->world.event_seq) return 1;
-    if (after + 1 < oldest(a)) return 1;             /* `lost` is something to say */
-    int n = 0;
-    for (unsigned s = after + 1; s <= a->world.event_seq && s > after; s++) n += heard(&a->world.events[s % EVENT_MAX], who);
-    return n;
-}
 
-void app_events_write(const App *a, FILE *out, unsigned after, const char *who)
-{
-    fprintf(out, "seq %u\n", a->world.event_seq);
-    if (after > a->world.event_seq) {
-        fprintf(out, "reset %u: that number is not this vtt's (it was started since) - "
-                     "everything kept follows; read jobs and the map again\n", after);
-        after = 0;
-    }
-    unsigned from = after + 1;
-    if (from < oldest(a)) {
-        fprintf(out, "lost %u-%u: more happened than is kept - read jobs and the map again\n", from, oldest(a) - 1);
-        from = oldest(a);
-    }
-    for (unsigned s = from; s <= a->world.event_seq && s >= from; s++)
-        if (heard(&a->world.events[s % EVENT_MAX], who)) fprintf(out, "%u %s\n", s, a->world.events[s % EVENT_MAX].text);
-}
 
 /* --------------------------------------------------------- the map changed */
 
@@ -115,46 +36,8 @@ static int listening(const App *a, uint64_t now_ms)
     return a->world.agent_seen_ms && now_ms - a->world.agent_seen_ms < (uint64_t)CTL_WAIT_MAX_S * 1000;
 }
 
-void app_events_map_restart(App *a)
-{
-    if (!a->world.map || !a->world.map->cp) return;
-    checkpoint_start(a->world.map);
-    a->world.cp_gen = a->world.map->gen;
-}
 
-void app_events_map_flush(App *a)
-{
-    Map *m = a->world.map;
-    if (!m || !m->cp || m->gen == a->world.cp_gen) return;
-    ChangeSet cs;
-    cs_init(&cs);
-    if (checkpoint_changes(m, &cs)) {
-        char what[EVENT_TEXT_MAX - 32];
-        cs_summary(&cs, NULL, what, sizeof what);
-        app_event(a, CTL_EV_CHANGED, 0, "%s", what);
-        int     other;
-        CsWhere where = { { 0 } };
-        cs_where(&cs, &where, &other);
-        app_event_where(a, &where, other);
-    }
-    cs_free(&cs);
-    app_events_map_restart(a);
-}
 
-void app_event_of_change(App *a, int kind, int job, const char *who, const char *text)
-{
-    Map *m = a->world.map;
-    ChangeSet cs;
-    cs_init(&cs);
-    int     other = 0, known = m->cp && checkpoint_changes(m, &cs);
-    CsWhere where = { { 0 } };
-    if (known) cs_where(&cs, &where, &other);
-    cs_free(&cs);
-    app_event(a, kind, job, "%s", text);
-    app_event_where(a, &where, other);
-    app_event_by(a, who);
-    app_events_map_restart(a);
-}
 
 /* When the map's changes become an event: once it has been quiet as long as
  * an autosave waits. -1 for nothing owed; the tick must have seen the
@@ -176,34 +59,18 @@ int app_events_due(const App *a, uint64_t now_ms)
     return map_due(a, now_ms);          /* a held wait's deadline is ctl_due's */
 }
 
-void app_events_hear(App *a)
-{
-    if (!a->world.map || a->world.map->cp) return;
-    if (ctl_active(&a->ctl) && !a->world.agent_on) return;      /* off: nothing of the map is told (listening) */
-    /* Changed while nobody listened: nobody knows where, and an agent back
-     * with an old number must not be told "nothing". */
-    if (a->world.cp_off_map == a->world.map && a->world.cp_off_gen != a->world.map->gen) {
-        CsWhere all;
-        memset(&all, 0xff, sizeof all);
-        app_event(a, CTL_EV_CHANGED, 0, "while no agent was listening - read the map again");
-        app_event_where(a, &all, 1);
-    }
-    a->world.cp_off_map = NULL;
-    checkpoint_start(a->world.map);
-    a->world.cp_gen = a->world.map->gen;
-}
 
 void app_events_flush(App *a, uint64_t now_ms)
 {
     if (a->world.map) {
         int want = listening(a, now_ms);
-        if (want) app_events_hear(a);
+        if (want) world_events_hear(&a->world);
         else if (a->world.map->cp) {
             checkpoint_stop(a->world.map);
             a->world.cp_off_map = a->world.map;
             a->world.cp_off_gen = a->world.map->gen;
         }
-        if (map_due(a, now_ms) == 0) app_events_map_flush(a);
+        if (map_due(a, now_ms) == 0) world_events_map_flush(&a->world);
     }
     if (!ctl_waiters(&a->ctl)) return;
     PROF_ZONE("ctl.wait");
@@ -214,13 +81,13 @@ void app_events_flush(App *a, uint64_t now_ms)
         uint64_t    until;
         const char *who;
         if (!ctl_waiter(&a->ctl, i, &seq, &until, &who)) continue;
-        if (!app_events_after(a, seq, who) && now_ms < until) continue;
+        if (!world_events_after(&a->world, seq, who) && now_ms < until) continue;
         char  *body = NULL;
         size_t len = 0;
         FILE  *out = open_memstream(&body, &len);
         if (!out) continue;
         fputs("ok\n", out);
-        app_events_write(a, out, seq, who);
+        world_events_write(&a->world, out, seq, who);
         fclose(out);
         ctl_answer(&a->ctl, i, body, len);
     }

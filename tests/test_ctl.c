@@ -2417,7 +2417,7 @@ void test_ctl_table(void)
 
     CASE("help changes nothing and makes no proposal");
     CHECK_EQ(a.world.undo.depth, 0);
-    CHECK_EQ(app_job_find(&a, 1), -1);
+    CHECK_EQ(world_job_find(&a.world, 1), -1);
 
     free(doc);
     app_free(&a);
@@ -2717,8 +2717,8 @@ void test_ctl_reads(void)
             CsWhere all;
             memset(&all, 0xff, sizeof all);
             unsigned s9 = b.world.event_seq;
-            app_event(&b, CTL_EV_CHANGED, 0, "everything");
-            app_event_where(&b, &all, 0);
+            world_event(&b.world, CTL_EV_CHANGED, 0, "everything");
+            world_event_where(&b.world, &all, 0);
             snprintf(q, sizeof q, "describe\nchanges %u", s9);   /* 204,800 read, then 95,200 to spare: more than its answer holds */
             u = ctl_ask(&b, q);
             CHECK(u && !strncmp(u, "ok\n", 3) && strstr(u, "\nchanged A1:") && strstr(u, "\nmore: "));
@@ -2797,8 +2797,8 @@ void test_ctl_reads(void)
                                      { 14, 0 }, { 0, 3 }, { 2, 5 }, { 4, 7 }, { 6, 9 }, { 8, 11 }, { 10, 13 }, { 12, 15 }, { 14, 2 }, { 0, 6 } };
         int npieces = (int)(sizeof AT / sizeof *AT);
         for (int k = 0; k < npieces; k++) cs_where_put(&w, AT[k][0], AT[k][1], 1);
-        app_event(&a, CTL_EV_CHANGED, 0, "walls in A1");
-        app_event_where(&a, &w, 0);
+        world_event(&a.world, CTL_EV_CHANGED, 0, "walls in A1");
+        world_event_where(&a.world, &w, 0);
         snprintf(rq, sizeof rq, "changes %u", s0);
         t = ctl_ask(&a, rq);
         const char *more = t ? strstr(t, "\nmore: ") : NULL;
@@ -2833,8 +2833,8 @@ void test_ctl_reads(void)
         CASE("changes: a change right across the largest map is cut into regions that each fit an answer");
         s0 = a.world.event_seq;
         memset(&w, 0xff, sizeof w);
-        app_event(&a, CTL_EV_CHANGED, 0, "everything");
-        app_event_where(&a, &w, 0);
+        world_event(&a.world, CTL_EV_CHANGED, 0, "everything");
+        world_event_where(&a.world, &w, 0);
         snprintf(rq, sizeof rq, "changes %u", s0);
         t = ctl_ask(&a, rq);
         CHECK(t && strstr(t, "\nchanged A1:") && strstr(t, "\nmore: ") && strlen(t) <= CTL_CHANGES_BYTES + 300);
@@ -2858,8 +2858,8 @@ void test_ctl_reads(void)
         s0 = a.world.event_seq;
         cs_where_put(&w, 0, 0, 1); cs_where_put(&w, 1, 0, 1); cs_where_put(&w, 0, 1, 1); cs_where_put(&w, 1, 1, 1);   /* A1:H8 */
         cs_where_put(&w, 4, 4, 1); cs_where_put(&w, 5, 4, 1); cs_where_put(&w, 4, 5, 1);                               /* Q17:X20, Q21:T24 */
-        app_event(&a, CTL_EV_CHANGED, 0, "walls");
-        app_event_where(&a, &w, 0);
+        world_event(&a.world, CTL_EV_CHANGED, 0, "walls");
+        world_event_where(&a.world, &w, 0);
         snprintf(rq, sizeof rq, "changes %u", s0);
         t = ctl_ask(&a, rq);
         CHECK(t && strstr(t, "\nchanged A1:H8\n") && strstr(t, "\nchanged Q17:X20\n") && strstr(t, "\nchanged Q21:T24\n"));
@@ -2885,8 +2885,8 @@ void test_ctl_reads(void)
         memset(&w, 0, sizeof w);
         for (int pr = 0; pr < 4; pr++) for (int pc = 0; pc < 4; pc++) cs_where_put(&w, pc, pr, 1);    /* A1:P16, 256 creatures with notes */
         cs_where_put(&w, 10, 10, 1);
-        app_event(&a, CTL_EV_CHANGED, 0, "a crowd");
-        app_event_where(&a, &w, 0);
+        world_event(&a.world, CTL_EV_CHANGED, 0, "a crowd");
+        world_event_where(&a.world, &w, 0);
         snprintf(rq, sizeof rq, "changes %u", s0);
         t = ctl_ask(&a, rq);
         CHECK(t && strlen(t) <= CTL_CHANGES_BYTES + 300);
@@ -2907,8 +2907,8 @@ void test_ctl_reads(void)
         s0 = a.world.event_seq;
         memset(&w, 0, sizeof w);
         cs_where_put(&w, 0, 0, 1);
-        app_event(&a, CTL_EV_CHANGED, 0, "walls in A1");   /* on the new map: said as ever */
-        app_event_where(&a, &w, 0);
+        world_event(&a.world, CTL_EV_CHANGED, 0, "walls in A1");   /* on the new map: said as ever */
+        world_event_where(&a.world, &w, 0);
         snprintf(rq, sizeof rq, "changes %u", s0);
         t = ctl_ask(&a, rq);
         CHECK(t && strstr(t, "\nchanged A1:E4\n"));
@@ -3147,9 +3147,9 @@ void test_ctl_names(void)
         CHECK(t && !strncmp(t, "ok\n", 3));
         free(t);
         CHECK_EQ(a.world.event_seq, s0 + 3);
-        CHECK_EQ(app_events_after(&a, s0 + 2, "mapper"), 0);  /* a wait of its own stays held */
-        CHECK_EQ(app_events_after(&a, s0 + 2, "other"), 1);
-        CHECK_EQ(app_events_after(&a, s0 + 2, NULL), 1);
+        CHECK_EQ(world_events_after(&a.world, s0 + 2, "mapper"), 0);  /* a wait of its own stays held */
+        CHECK_EQ(world_events_after(&a.world, s0 + 2, "other"), 1);
+        CHECK_EQ(world_events_after(&a.world, s0 + 2, NULL), 1);
         snprintf(ev, sizeof ev, "\n%u job %d proposed: ground in H8\n", s0 + 3, n3);
         snprintf(q, sizeof q, "agent other\nwait %u", s0 + 2);
         t = ctl_ask(&a, q);
@@ -3409,16 +3409,16 @@ void test_ctl_names(void)
         undo_begin(&a.world.undo);
         undo_set_tile(&a.world.undo, a.world.map, 0, 0, TILE_ROUGH);
         undo_end(&a.world.undo);
-        Map      *sc = app_scratch_copy(&a);
+        Map      *sc = world_scratch_copy(&a.world);
         ChangeSet cs;
         cs_init(&cs);
         CHECK(card_set(sc, "Bog", "a bog") >= 0);
         CHECK(cs_diff(&cs, a.world.map, sc, NULL) > 0);
-        int cslot = app_job_new(&a, JOB_FROM_AGENT, "a card", NULL, 0);
+        int cslot = world_job_new(&a.world, JOB_FROM_AGENT, "a card", NULL, 0);
         CHECK(cslot >= 0);
         if (cslot >= 0) {
             str_lcpy(a.world.jobs[cslot].taker, "mapper", sizeof a.world.jobs[cslot].taker);
-            app_job_set_proposal(&a, cslot, &cs, NULL);
+            world_job_set_proposal(&a.world, cslot, &cs, NULL);
             snprintf(q, sizeof q, ":review %d\r", a.world.jobs[cslot].num);
             press(&a, q);
             press(&a, "\r");
@@ -3528,7 +3528,7 @@ void test_ctl_names(void)
         char longt[400];
         memset(longt, 'x', sizeof longt - 1);
         longt[sizeof longt - 1] = '\0';
-        app_event(&a, CTL_EV_FEEDBACK, 7, "%s", longt);
+        world_event(&a.world, CTL_EV_FEEDBACK, 7, "%s", longt);
         const AgentEvent *e = &a.world.events[a.world.event_seq % EVENT_MAX];
         CHECK_EQ((long)strlen(e->text), EVENT_TEXT_MAX - 1);
         CHECK(!strncmp(e->text, "job 7 feedback: xxx", 19));
@@ -3539,10 +3539,10 @@ void test_ctl_names(void)
         int         ll = snprintf(line, sizeof line, "%u %s", e->seq, e->text);
         CHECK(ctl_event_parse(line, (size_t)ll, &en, &text, &tl) == CTL_EV_FEEDBACK && en == 7);
         /* More of its own than the ring keeps: nothing for it to hear, but `lost` is something to say. */
-        for (int k = 0; k < EVENT_MAX + 4; k++) { app_event(&a, CTL_EV_TAKEN, 1, "x"); app_event_by(&a, "mapper"); }
-        CHECK_EQ(app_events_after(&a, a.world.event_seq - 3, "mapper"), 0);
-        CHECK(app_events_after(&a, a.world.event_seq - EVENT_MAX - 2, "mapper") > 0);
-        CHECK_EQ(app_events_after(&a, a.world.event_seq - 3, "other"), 3);
+        for (int k = 0; k < EVENT_MAX + 4; k++) { world_event(&a.world, CTL_EV_TAKEN, 1, "x"); world_event_by(&a.world, "mapper"); }
+        CHECK_EQ(world_events_after(&a.world, a.world.event_seq - 3, "mapper"), 0);
+        CHECK(world_events_after(&a.world, a.world.event_seq - EVENT_MAX - 2, "mapper") > 0);
+        CHECK_EQ(world_events_after(&a.world, a.world.event_seq - 3, "other"), 3);
     }
 
     CASE("with the channel off the name is taken and the refusal is the channel's");

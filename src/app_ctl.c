@@ -1046,7 +1046,7 @@ static int scene_is_edit(char w[][CTL_WORD_MAX], int n)
  * "Why not run it live and roll it back"). */
 static void proposal_begin(App *a, Edits *ed)
 {
-    app_scratch_copy(a);
+    world_scratch_copy(&a->world);
     ed->proposal  = 1;
     ed->live      = a->world.map;
     ed->live_undo = a->world.undo;
@@ -1105,7 +1105,7 @@ static int finish_proposal(App *a, Edits *ed, FILE *out, char *err, size_t errsz
         }
         /* At once is :agent on's (a request not from the socket is not asked). */
         int at_once = a->world.ctl_auto && (a->world.agent_on || !a->world.ctl_can_hold);
-        if (slot < 0) slot = app_job_new(a, ed->from, ed->say, NULL, at_once);
+        if (slot < 0) slot = world_job_new(&a->world, ed->from, ed->say, NULL, at_once);
         if (slot < 0) {
             cs_free(&cs);
             rq_class(CTL_E_LIMIT), snprintf(err, errsz, "%d changes are waiting for the GM - nothing more until some are reviewed", JOB_MAX);
@@ -1114,7 +1114,7 @@ static int finish_proposal(App *a, Edits *ed, FILE *out, char *err, size_t errsz
         Job *j = &a->world.jobs[slot];
         if (j->from != JOB_FROM_APPLY) app_ctl_job_claim(a, j);    /* --apply's is nobody's: the GM's alone to decide */
         if (at_once) j->at_once = 1;               /* everything that comes in */
-        app_job_set_proposal(a, slot, &cs, ed->job >= 0 ? ed->say : NULL);
+        world_job_set_proposal(&a->world, slot, &cs, ed->job >= 0 ? ed->say : NULL);
     }
     Job *j = &a->world.jobs[slot];
     fprintf(out, "proposal #%d: %s\n", j->num, j->summary);
@@ -1194,16 +1194,16 @@ static int rq_propose(RQ_ARGS)
     if (ed->header || ed->lines) { snprintf(err, errsz, "propose comes once, before the request's edits"); return -1; }
     if (a->world.ctl_direct) { rq_class(CTL_E_STATE), snprintf(err, errsz, "there is no GM to propose to: --apply changes the file"); return -1; }
     if (at == 3) {
-        if (!word_int(w[1], 1, JOB_NUM_MAX, &num) || (slot = app_job_find(a, num)) < 0) {
+        if (!word_int(w[1], 1, JOB_NUM_MAX, &num) || (slot = world_job_find(&a->world, num)) < 0) {
             rq_class(CTL_E_MISSING), snprintf(err, errsz, "no job #%.10s - jobs lists them", w[1]);
             return -1;
         }
         const Job *j = &a->world.jobs[slot];
         if (j->state == JOB_ACCEPTED || j->state == JOB_SCRAPPED) {
-            rq_class(CTL_E_STATE), snprintf(err, errsz, "#%d was %s - propose alone offers a new change", j->num, app_job_state_name(j->state));
+            rq_class(CTL_E_STATE), snprintf(err, errsz, "#%d was %s - propose alone offers a new change", j->num, world_job_state_name(j->state));
             return -1;
         }
-        if (app_job_gm_only(j)) {
+        if (world_job_gm_only(j)) {
             rq_class(CTL_E_STATE), snprintf(err, errsz, "#%d is %s: the GM's to decide - propose alone offers a change of your own", j->num,
                      j->from == JOB_FROM_DISK ? "what another program wrote to the file" : "an --apply's");
             return -1;
@@ -1291,20 +1291,20 @@ static int rq_undo(RQ_ARGS)
 
 int app_ctl_undo(App *a, int steps, int job, char *err, size_t errsz)
 {
-    int         slot = job ? app_job_find(a, job) : -1;
+    int         slot = job ? world_job_find(&a->world, job) : -1;
     const char *busy = app_ctl_busy(a);
     /* Not from under the GM's eyes: the rest of that job is on screen, and
      * what it shows was made against the map with the part landed. */
     if (!busy && slot >= 0 && a->review == slot) busy = "the GM is reviewing the rest of that job";
     if (busy) { str_lcpy(err, busy, errsz); return 0; }
     char msg[120];
-    app_events_map_flush(a);             /* the GM's changes so far are their own event */
+    world_events_map_flush(&a->world);             /* the GM's changes so far are their own event */
     for (int k = 0; k < steps; k++) undo_undo(&a->world.undo, a->world.map);
     /* News to every name but the caller's: a job's step, or a change that
      * had none (--apply on a file, where nobody listens). */
     snprintf(msg, sizeof msg, "taken back by %s", a->world.ctl_who);
-    app_event_of_change(a, job ? CTL_EV_UNDONE : CTL_EV_CHANGED, job, a->world.ctl_who, msg);
-    if (slot >= 0) app_job_thread_add(&a->world.jobs[slot], '-', msg);
+    world_event_of_change(&a->world, job ? CTL_EV_UNDONE : CTL_EV_CHANGED, job, a->world.ctl_who, msg);
+    if (slot >= 0) world_job_thread_add(&a->world.jobs[slot], '-', msg);
     range_history_changed(&a->play.range, a->world.map);
     app_fog_sync(a);
     a->dirty = 1;
@@ -1354,7 +1354,7 @@ static int rq_wait(RQ_ARGS)
         }
     }
     a->world.agent_seen_ms = a->world.now_ms ? a->world.now_ms : 1;
-    app_events_hear(a);
+    world_events_hear(&a->world);
     /* Held only where there is a socket to hold it on (app_tick):
      * --apply, the bench and the fuzzer are answered at once. */
     /* `wait 0` alone asks for everything kept: an answer, not a wait, even
@@ -1362,7 +1362,7 @@ static int rq_wait(RQ_ARGS)
      * --wait` asks `wait SEQ for N` with the SEQ it was given, 0 on a vtt
      * where nothing has happened yet, and must be held, not answered in a
      * loop. */
-    if (app_events_after(a, seq, a->world.ctl_who) || !a->world.ctl_can_hold || secs == 0 || (said && seq == 0 && !timed)) app_events_write(a, out, seq, a->world.ctl_who);
+    if (world_events_after(&a->world, seq, a->world.ctl_who) || !a->world.ctl_can_hold || secs == 0 || (said && seq == 0 && !timed)) world_events_write(&a->world, out, seq, a->world.ctl_who);
     else {
         a->world.ctl_held     = 1;
         a->world.ctl_hold_seq = seq;
@@ -1445,11 +1445,11 @@ static int rq_changes(RQ_ARGS)
      * since the squares it may not read it lists and does not refuse. */
     if (!a->world.ctl_direct && ++g_changes > 3) BADC(CTL_E_LIMIT, "changes is asked at most three times in a request");
     a->world.agent_seen_ms = a->world.now_ms ? a->world.now_ms : 1;       /* someone is listening: the checkpoint stays */
-    app_events_hear(a);                                 /* and a change nobody heard of is said first */
-    app_events_write(a, out, (unsigned)k, a->world.ctl_who);
+    world_events_hear(&a->world);                                 /* and a change nobody heard of is said first */
+    world_events_write(&a->world, out, (unsigned)k, a->world.ctl_who);
     CsWhere where, asked = { { 0 } };
     int     other;
-    if (!app_events_where(a, (unsigned)k, &where, &other, a->world.ctl_who)) return 0;   /* `lost` has said to read the map again */
+    if (!world_events_where(&a->world, (unsigned)k, &where, &other, a->world.ctl_who)) return 0;   /* `lost` has said to read the map again */
     cs_pieces(m->w, m->h, box[0], box[1], box[2], box[3], &asked);
     char more[CS_GRID * CS_GRID * 16] = "";              /* room for every piece's name */
     fflush(out);

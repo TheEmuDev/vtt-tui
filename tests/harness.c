@@ -463,7 +463,7 @@ char *players_text(App *a, Renderer *r)
  * carry on, so a number is not given out twice running). */
 void jobs_reset(App *a)
 {
-    app_jobs_clear(a);
+    world_jobs_clear(&a->world);
     a->world.job_last = 0;
 }
 

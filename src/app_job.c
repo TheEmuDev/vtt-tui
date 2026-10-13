@@ -1,6 +1,6 @@
 /* Jobs and the review (docs/CONFLICTS.md): :ask, :ask!, :jobs, :review, the
  * review mode's keys, the tints and labels, and the seam where a proposal
- * comes in (app_job_set_proposal; the channel's requests, step 4). The jobs
+ * comes in (world_job_set_proposal; the channel's requests, step 4). The jobs
  * themselves are job.h's; what a proposal is, and how it is drawn in place,
  * accepted and checked, is changeset.c's. Every message is the GM's alone. */
 
@@ -12,224 +12,26 @@
 #include "draw.h"
 #include "prof.h"
 
-static const char *const STATE_NAME[] = { "asked", "working", "ready", "accepted", "scrapped" };
 
 /* ------------------------------------------------------------- the list */
 
-static const char *const FROM_NAME[] = { "gm", "agent", "apply", "disk" };
 
-static int job_index(const App *a, int num)
-{
-    for (int i = 0; i < JOB_MAX; i++)
-        if (a->world.jobs[i].used && a->world.jobs[i].num == num) return i;
-    return -1;
-}
 
-int app_job_find(const App *a, int num) { return job_index(a, num); }
-const char *app_job_state_name(int state) { return STATE_NAME[state]; }
-const char *app_job_from_name(int from) { return FROM_NAME[from]; }
-const char *app_job_who_name(char who) { return who == 'G' ? "gm" : who == 'A' ? "agent" : "-"; }
 
-/* The next number after the last one given, round to 1 after the cap: a
- * number is not given out again while another is free. A program started
- * for a job (app_agent.c) or holding its number may outlive the job, and
- * must not find a different job under it. */
-static int job_free_num(App *a)
-{
-    for (int k = 1; k <= JOB_NUM_MAX; k++) {
-        int n = (a->world.job_last + k - 1) % JOB_NUM_MAX + 1;
-        if (job_index(a, n) < 0) return a->world.job_last = n;
-    }
-    return 0;
-}
 
-/* A job that is not an agent's to change: the file's (another program's
- * work, which only the GM may take or leave) and an --apply's (its sender
- * waits for the verdict on what it sent). */
-int app_job_gm_only(const Job *j) { return j->from == JOB_FROM_DISK || j->from == JOB_FROM_APPLY; }
 
-/* The job goes, and its number is free to be given again: a landing of its
- * that the log still holds keeps its author and not the number. */
-static void job_clear(App *a, Job *j)
-{
-    if (j->used) { undo_tag_forget(&a->world.undo, j->num); app_agent_forget(a, j->num); }
-    if (j->has_cs) cs_free(&j->cs);
-    memset(j, 0, sizeof *j);
-}
 
-void app_job_thread_add(Job *j, char who, const char *text)
-{
-    if (j->nthread == JOB_THREAD_MAX) {                    /* oldest goes */
-        memmove(&j->thread[0], &j->thread[1], (JOB_THREAD_MAX - 1) * sizeof j->thread[0]);
-        j->nthread--;
-    }
-    j->thread[j->nthread].who = who;
-    str_lcpy(j->thread[j->nthread].text, text, sizeof j->thread[0].text);
-    j->nthread++;
-}
 
-void app_jobs_clear(App *a)
-{
-    for (int i = 0; i < JOB_MAX; i++) job_clear(a, &a->world.jobs[i]);
-    app_review_leave(a);
-}
 
-int app_job_new(App *a, int from, const char *text, const CsBox *box, int at_once)
-{
-    int slot = -1;
-    for (int i = 0; i < JOB_MAX && slot < 0; i++)
-        if (!a->world.jobs[i].used) slot = i;
-    /* Full: the oldest finished job makes room, as a log would. */
-    for (int i = 0; i < JOB_MAX && slot < 0; i++)
-        if (a->world.jobs[i].state == JOB_ACCEPTED || a->world.jobs[i].state == JOB_SCRAPPED) slot = i;
-    if (slot < 0) return -1;
-    if (a->review == slot) app_review_leave(a);
-    Job *j = &a->world.jobs[slot];
-    job_clear(a, j);                   /* first: its number is free again */
-    int num = job_free_num(a);
-    if (!num) return -1;
-    j->used    = 1;
-    j->num     = num;
-    j->from    = (uint8_t)from;
-    j->state   = JOB_ASKED;
-    j->at_once = (uint8_t)(at_once != 0);
-    str_lcpy(j->text, text, sizeof j->text);
-    if (box) { j->has_box = 1; j->box = *box; }
-    if (text[0]) app_job_thread_add(j, from == JOB_FROM_GM ? 'G' : from == JOB_FROM_DISK ? '-' : 'A', text);
-    return slot;
-}
 
 /* ------------------------------------------------------------ landing */
 
-/* Where #N goes for a change set: the corner of what it touches, found once. */
-static void corner_from_set(Job *j)
-{
-    int x1, y1;
-    if (!cs_bounds(&j->cs, &j->cx, &j->cy, &x1, &y1)) j->cx = j->cy = -1;
-}
 
-/* Accepts job j's change set, or the part `box` holds, as one undo step. */
-static void land(App *a, Job *j, const CsBox *box)
-{
-    char left[160], msg[256], what[200];
-    cs_summary(&j->cs, box, what, sizeof what);
-    int creatures = j->cs.ntoks > 0;
-    app_events_map_flush(a);                 /* the GM's own changes so far, told apart */
-    unsigned logged = a->world.undo.stamp;
-    int n = cs_apply(&j->cs, a->world.map, &a->world.undo, box, left, sizeof left);
-    app_events_map_restart(a);               /* the accept is its own event, below */
-    if (n) {
-        /* What the channel's edits did to the live App when they landed
-         * straight: the overlay and the selection name creatures by index. */
-        if (creatures) app_creatures_renumbered(a);
-        else a->last_acting = turn_acting(a->world.map);     /* an accept starts no turn */
-        app_fog_sync(a);
-        a->dirty = 1;
-        /* Whose step it is, written on the step: the agent's `undo` and
-         * `job N undo` take it back while it is the last thing done. Not the
-         * file's nor an --apply's, the GM's alone to take back; and not a landing that
-         * wrote nothing to the log (cards alone), or the tag would fall on
-         * the GM's own step under it. */
-        if (!app_job_gm_only(j) && a->world.undo.stamp != logged)
-            undo_tag(&a->world.undo, j->num, j->taker[0] ? j->taker : CTL_NAME_NONE);
-    }
-    if (box) {
-        char where[2 * MAP_COORD_MAX + 2];
-        cs_box_name(box, where, sizeof where);
-        cs_drop(&j->cs, box);
-        cs_summary(&j->cs, NULL, j->summary, sizeof j->summary);
-        corner_from_set(j);
-        snprintf(msg, sizeof msg, "accepted the part in %s: %s", where, what);
-        app_job_thread_add(j, '-', msg);
-        if (cs_empty(&j->cs)) j->state = JOB_ACCEPTED;
-        if (n) {
-            app_event(a, CTL_EV_PART, j->num, "%s: %.120s%s", where, what,
-                      j->state == JOB_READY ? " - the rest waits" : "");
-            /* What landed lies wholly in the box. */
-            CsWhere in = { { 0 } };
-            cs_pieces(a->world.map->w, a->world.map->h, box->x0, box->y0, box->x1, box->y1, &in);
-            app_event_where(a, &in, 0);
-        }
-        if (!n) snprintf(msg, sizeof msg, "#%d: nothing of it is in %s - the box takes what lies wholly inside", j->num, where);
-        else snprintf(msg, sizeof msg, "#%d: accepted %s (%d)%s%.120s - u takes it back%s", j->num, where, n,
-                      left[0] ? "; " : "", left, j->state == JOB_READY ? "; the rest waits" : "");
-    } else {
-        j->state = JOB_ACCEPTED;
-        snprintf(msg, sizeof msg, "accepted: %s", what);
-        app_job_thread_add(j, '-', msg);
-        app_event(a, CTL_EV_ACCEPTED, j->num, "%.150s%s%.50s", what, left[0] ? "; " : "", left);
-        int     other;
-        CsWhere pieces = { { 0 } };
-        cs_where(&j->cs, &pieces, &other);
-        app_event_where(a, &pieces, other);
-        snprintf(msg, sizeof msg, "#%d accepted: %.120s%s%.80s - u takes it back", j->num, what,
-                 left[0] ? "; " : "", left);
-    }
-    app_note_gm(a, msg);
-}
 
-/* Can a change land now, at once? Not into a prompt, a stroke, play: the
- * same reasons the channel's edits wait (app_ctl_busy). */
-static int can_land(const App *a)
-{
-    return app_ctl_busy(a) == NULL;
-}
 
-void app_job_set_proposal(App *a, int slot, ChangeSet *cs, const char *line)
-{
-    Job *j = &a->world.jobs[slot];
-    if (j->has_cs) cs_free(&j->cs);
-    j->cs = *cs;                       /* the set is the job's now */
-    cs_init(cs);
-    j->has_cs = 1;
-    j->state  = JOB_READY;
-    cs_summary(&j->cs, NULL, j->summary, sizeof j->summary);
-    corner_from_set(j);
-    char msg[256];
-    snprintf(msg, sizeof msg, "proposed: %s", j->summary);
-    app_job_thread_add(j, '-', msg);
-    if (line && line[0]) app_job_thread_add(j, 'A', line);
-    /* News to every agent but the one that made it; the file's change is
-     * nobody's to hear of but the GM (app_event.c, `listening`). */
-    if (j->from != JOB_FROM_DISK) {
-        app_event(a, CTL_EV_PROPOSED, j->num, "%s", j->summary);
-        app_event_by(a, j->taker[0] ? j->taker : CTL_NAME_NONE);
-    }
-    /* Never under the GM's eyes: a job being reviewed waits for enter. */
-    if (j->at_once && can_land(a) && a->review != slot) { land(a, j, NULL); return; }
-    snprintf(msg, sizeof msg, "#%d ready: %.150s - :review %d%s%.60s", j->num, j->summary, j->num,
-             line && line[0] ? " -- " : "", line ? line : "");
-    app_note_gm(a, msg);
-}
 
-Map *app_scratch_copy(App *a)
-{
-    if (!a->world.ctl_scratch) a->world.ctl_scratch = map_new(1, 1, "scratch");
-    map_copy_into(a->world.ctl_scratch, a->world.map);
-    undo_clear(&a->world.ctl_sundo);
-    return a->world.ctl_scratch;
-}
 
-Map *app_job_result(App *a, int slot)
-{
-    Job *j = &a->world.jobs[slot];
-    /* A set made for another size of map would put its squares and
-     * creatures off this one: the review refuses to show it too. */
-    if (!j->has_cs || j->cs.w != a->world.map->w || j->cs.h != a->world.map->h) return NULL;
-    Map *m = app_scratch_copy(a);
-    cs_apply(&j->cs, m, &a->world.ctl_sundo, NULL, NULL, 0);
-    return m;
-}
 
-/* What waited to land at once, landed when the GM is back (after each key). */
-void app_jobs_land_waiting(App *a)
-{
-    if (!a->world.map || !can_land(a)) return;
-    for (int i = 0; i < JOB_MAX; i++) {
-        Job *j = &a->world.jobs[i];
-        if (j->used && j->at_once && j->state == JOB_READY && j->has_cs && a->review != i) land(a, j, NULL);
-    }
-}
 
 /* ------------------------------------------------------------- review */
 
@@ -311,7 +113,7 @@ void app_review_key(App *a, Key k)
     if (k.kind == KEY_ENTER) {
         e->count = 0;
         CsBox b = rv_box_now(a);
-        land(a, j, a->rv_box ? &b : NULL);
+        world_job_land(&a->world, j, a->rv_box ? &b : NULL);
         a->rv_box = 0;
         if (j->state != JOB_READY) review_next_or_close(a);
         else review_status(a);
@@ -345,8 +147,8 @@ void app_review_key(App *a, Key k)
         break;
     case 'd':
         j->state = JOB_SCRAPPED;
-        app_job_thread_add(j, '-', "scrapped");
-        app_event(a, CTL_EV_SCRAPPED, j->num, NULL);
+        world_job_thread_add(j, '-', "scrapped");
+        world_event(&a->world, CTL_EV_SCRAPPED, j->num, NULL);
         snprintf(msg, sizeof msg, "#%d scrapped - :review %d brings it back", j->num, j->num);
         app_note_gm(a, msg);
         review_next_or_close(a);
@@ -388,12 +190,12 @@ void app_job_feedback(App *a, const char *text)
     if (a->review < 0) return;
     Job *j = &a->world.jobs[a->review];
     if (!text[0]) { review_status(a); return; }
-    app_job_thread_add(j, 'G', text);
+    world_job_thread_add(j, 'G', text);
     if (j->has_cs) { cs_free(&j->cs); j->has_cs = 0; }
     j->state = JOB_WORKING;
     j->summary[0] = '\0';
     char msg[220];
-    app_event(a, CTL_EV_FEEDBACK, j->num, "%s", text);
+    world_event(&a->world, CTL_EV_FEEDBACK, j->num, "%s", text);
     /* A job an agent of the GM's own has (or nobody: `job-N` is the name vtt
      * gives the one it starts) is started again with the thread, feedback
      * last. One another name took is that name's to answer: it hears the
@@ -420,11 +222,11 @@ void app_ask_command(App *a, const char *verb, const char *rest)
     int num, used = 0;
     if (sscanf(rest, "%d %15s%n", &num, word, &used) == 2 && !rest[used]) {
         if (!strcmp(word, "remove")) {
-            int i = job_index(a, num);
+            int i = world_job_find(&a->world, num);
             if (i < 0) { snprintf(msg, sizeof msg, "no job #%d", num); app_set_status_gm(a, msg); return; }
             if (a->review == i) review_close(a, "");
-            job_clear(a, &a->world.jobs[i]);
-            app_event(a, CTL_EV_REMOVED, num, NULL);
+            world_job_clear(&a->world, &a->world.jobs[i]);
+            world_event(&a->world, CTL_EV_REMOVED, num, NULL);
             snprintf(msg, sizeof msg, "#%d removed", num);
             app_note_gm(a, msg);
             return;
@@ -439,11 +241,11 @@ void app_ask_command(App *a, const char *verb, const char *rest)
     CsBox box, *bp = NULL;
     if (app_cmd_vbox(a, &box.x0, &box.y0, &box.x1, &box.y1)) bp = &box;
     int at_once = verb[strlen(verb) - 1] == '!';
-    int slot = app_job_new(a, JOB_FROM_GM, rest, bp, at_once);
+    int slot = world_job_new(&a->world, JOB_FROM_GM, rest, bp, at_once);
     if (slot < 0) { snprintf(msg, sizeof msg, "%d jobs are open - :jobs, :ask N remove", JOB_MAX); app_set_status_gm(a, msg); return; }
     char where[2 * MAP_COORD_MAX + 8] = "";
     if (bp) { strcpy(where, " in "); cs_box_name(bp, where + 4, sizeof where - 4); }
-    app_event(a, CTL_EV_ASKED, a->world.jobs[slot].num, "%s%s%s%s", bp ? where + 1 : "", at_once ? (bp ? ", to land at once" : "to land at once") : "",
+    world_event(&a->world, CTL_EV_ASKED, a->world.jobs[slot].num, "%s%s%s%s", bp ? where + 1 : "", at_once ? (bp ? ", to land at once" : "to land at once") : "",
               bp || at_once ? ": " : "", rest);
     snprintf(msg, sizeof msg, "#%d asked%s%s: %.150s", a->world.jobs[slot].num, where, at_once ? ", to land at once" : "", rest);
     app_note_gm(a, msg);
@@ -455,7 +257,7 @@ void app_jobs_command(App *a, const char *rest)
 {
     char msg[512];
     if (*rest) {
-        int i = job_index(a, atoi(rest));
+        int i = world_job_find(&a->world, atoi(rest));
         if (i < 0) { snprintf(msg, sizeof msg, "no job #%.10s", rest); app_set_status_gm(a, msg); return; }
         const Job *j = &a->world.jobs[i];
         int off = 0;
@@ -464,7 +266,7 @@ void app_jobs_command(App *a, const char *rest)
                             j->thread[t].who == 'G' ? "you: " : j->thread[t].who == 'A' ? "agent: " : "",
                             j->thread[t].text);
         char title[96];
-        snprintf(title, sizeof title, "Job #%d, %s%s%s", j->num, STATE_NAME[j->state], j->taker[0] ? ", taken by " : "", j->taker);
+        snprintf(title, sizeof title, "Job #%d, %s%s%s", j->num, world_job_state_name(j->state), j->taker[0] ? ", taken by " : "", j->taker);
         app_show_message(a, title, j->nthread ? msg : "(nothing yet)");
         return;
     }
@@ -475,7 +277,7 @@ void app_jobs_command(App *a, const char *rest)
         char where[2 * MAP_COORD_MAX + 4] = "";
         if (j->has_box) { where[0] = ' '; cs_box_name(&j->box, where + 1, sizeof where - 1); }
         off += snprintf(msg + off, sizeof msg - (size_t)off, "%s#%d %s%s %.40s", any ? "; " : "jobs: ",
-                        j->num, STATE_NAME[j->state], where, j->text[0] ? j->text : j->summary);
+                        j->num, world_job_state_name(j->state), where, j->text[0] ? j->text : j->summary);
         any = 1;
     }
     app_set_status_gm(a, any ? msg : "no jobs - :ask TEXT over a v box asks an agent for a change");
@@ -488,18 +290,18 @@ void app_review_command(App *a, const char *rest)
     if (a->screen != SCREEN_EDITOR) { app_set_status_gm(a, "reviewing is build mode's - F1 first"); return; }
     int slot;
     if (*rest) {
-        slot = job_index(a, atoi(rest));
+        slot = world_job_find(&a->world, atoi(rest));
         if (slot < 0) { snprintf(msg, sizeof msg, "no job #%.10s", rest); app_set_status_gm(a, msg); return; }
         Job *j = &a->world.jobs[slot];
         /* Scrapped, or accepted and then taken back with u: its set is still
          * here. (A part accepted by box left the set; undone, it is gone.) */
         if ((j->state == JOB_SCRAPPED || j->state == JOB_ACCEPTED) && j->has_cs && !cs_empty(&j->cs)) {
             j->state = JOB_READY;
-            app_job_thread_add(j, '-', "brought back");
-            app_event(a, CTL_EV_BACK, j->num, "for review");
+            world_job_thread_add(j, '-', "brought back");
+            world_event(&a->world, CTL_EV_BACK, j->num, "for review");
         }
         if (j->state != JOB_READY) {
-            snprintf(msg, sizeof msg, "#%d is %s, with nothing to review", j->num, STATE_NAME[j->state]);
+            snprintf(msg, sizeof msg, "#%d is %s, with nothing to review", j->num, world_job_state_name(j->state));
             app_set_status_gm(a, msg);
             return;
         }
