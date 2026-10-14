@@ -213,7 +213,7 @@ never move.
   - `--wait` reads the vtt's events: it takes `seq` before proposing, then `wait`s for the
     job's accepted, scrapped, feedback, removed or map-closed line.
   - **The channel off** (`World.agent_on`): only requests over the socket are asked
-    (`World.ctl_can_hold`); the tests and the bench call `app_ctl_exec` straight. A held
+    (`World.ctl_can_hold`); the tests and the bench call `request_exec` straight. A held
     `wait` stays, and hears of jobs but not of the map (no checkpoint runs).
   - **`vtt --ctl` picks the vtt whose channel is on:** every vtt listens now, so it asks
     each `status` and takes the one that says `agent on`.
@@ -235,7 +235,7 @@ never move.
     (`POLLHUP`; `POLLIN` would be ready for ever, the caller having shut its writing side),
     and counted by `ctl_due` only for its own deadline, so an idle vtt with a waiter still
     sleeps in `poll`.
-  - **`app_ctl_exec` has a third outcome, held:** `World.ctl_can_hold` is set round a request
+  - **`request_exec` has a third outcome, held:** `World.ctl_can_hold` is set round a request
     that came over the socket; a `wait` with nothing to say sets `World.ctl_held`, and
     `app_tick` holds the connection (`ctl_hold`). Called any other way (`--apply`, the
     bench, the fuzzer, the tests), `wait` answers at once.

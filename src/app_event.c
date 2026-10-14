@@ -17,7 +17,7 @@
 static int listening(const App *a, uint64_t now_ms)
 {
     /* The channel off: a wait still hears of jobs, but nothing of the map. */
-    if (ctl_active(&a->ctl) && !a->world.agent_on) return 0;
+    if (a->world.host->deaf(a->world.gm)) return 0;
     if (ctl_waiters(&a->ctl)) return 1;
     for (int i = 0; i < JOB_MAX; i++)
         /* Not the file's: nobody waits to hear of that one but the GM. */

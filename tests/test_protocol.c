@@ -172,6 +172,7 @@ void test_protocol(void)
     CHECK(rec.landed == 1 && rec.landed_creatures == 0 && rec.tagged_at_landing == 0);
     CHECK(undo_tag_top(&w.undo) && undo_tag_top(&w.undo)->job == 1 && !strcmp(undo_tag_top(&w.undo)->who, "mapper"));
     CHECK(w.jobs[0].state == JOB_ACCEPTED && note_has(&rec, "#1 accepted: ", 1));
+    CHECK_EQ(rec.nnotes, 1);                             /* one line for one landing */
     CHECK(!strcmp(w.events[w.event_seq % EVENT_MAX].text, "job 1 accepted: ground in B2") && !w.events[w.event_seq % EVENT_MAX].by[0]);
 
     CASE("its taker takes it back: the host is told the log stepped back, the others are told who");
@@ -184,10 +185,16 @@ void test_protocol(void)
     CHECK(t && !strcmp(t, "busy: the GM is answering a prompt\n") && map_tile(live, 1, 1) == TILE_WATER);
     free(t);
     rec.busy = NULL;
+    rec.reviewing = 0;                                   /* the GM looking at that very job: not from under their eyes */
+    t = ask(&w, "agent mapper\njob 1 undo");
+    CHECK(t && !strcmp(t, "busy: the GM is reviewing the rest of that job\n") && map_tile(live, 1, 1) == TILE_WATER);
+    free(t);
+    rec.reviewing = -1;
     rec_reset(&rec);
     t = ask(&w, "agent mapper\njob 1 undo");
     CHECK(t && !strcmp(t, "ok\ntook back #1\n") && map_tile(live, 1, 1) == TILE_FLOOR);
     free(t);
+    CHECK_EQ(rec.nnotes, 1);
     CHECK(rec.nchanged == 1 && rec.changed[0][0] == WORLD_UNDONE && note_has(&rec, "#1 taken back by mapper", 1));
     CHECK(!strcmp(w.events[w.event_seq % EVENT_MAX].text, "job 1 undone: taken back by mapper"));
     CHECK_EQ(world_events_after(&w, w.event_seq - 1, "mapper"), 0);
@@ -199,7 +206,7 @@ void test_protocol(void)
     t = ask(&w, "agent mapper\ntoken add enemy D4 \"Ghoul\"");
     CHECK(t && strstr(t, "proposal #2: ") && strstr(t, "\nchanged D4: 1 line, one undo step\n"));
     free(t);
-    CHECK(rec.landed == 1 && rec.landed_creatures == 1 && live->tokens.n == 1);
+    CHECK(rec.landed == 1 && rec.landed_creatures == 1 && live->tokens.n == 1 && rec.nnotes == 1);
     CHECK(rec.rings == 1 && rec.ring[0] == 3 && rec.ring[1] == 3 && rec.ring[2] == 3 && rec.ring[3] == 3);
     rec_reset(&rec);
     rec.busy = "the GM is in play mode - edits are build mode's";
@@ -215,6 +222,19 @@ void test_protocol(void)
     rec.reviewing = -1;
     world_jobs_land_waiting(&w);
     CHECK(rec.landed == 1 && map_tile(live, 5, 5) == TILE_WATER);
+    /* And a proposal that comes in for the job on the GM's screen waits there, at once or not. */
+    rec_reset(&rec);
+    int s5 = world_job_new(&w, JOB_FROM_GM, "a pit", NULL, 1);
+    rec.reviewing = s5;
+    char pq[64];
+    snprintf(pq, sizeof pq, "agent mapper\njob %d propose\ntile J10 water", w.jobs[s5].num);
+    t = ask(&w, pq);
+    CHECK(t && !strncmp(t, "ok\n", 3));
+    free(t);
+    CHECK(rec.landed == 0 && map_tile(live, 9, 9) == TILE_FLOOR && w.jobs[s5].state == JOB_READY && rec.nnotes == 1);
+    rec.reviewing = -1;
+    world_job_clear(&w, &w.jobs[s5]);
+    w.job_last = 3;
     w.ctl_auto = 0;
 
     CASE("a job asked by the GM: taken, given back, and each a redraw and an event for the others");

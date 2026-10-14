@@ -28,7 +28,7 @@ typedef struct {
 } AgentEvent;
 
 /* The GM's side of the world, as the world needs it: a seam (docs/V2.md,
- * D2 and D3), one real implementation in app.c and a recording one in the
+ * D2 and D3), one real implementation in app_ctl.c and a recording one in the
  * tests. Every call is made for a request or a job, never for a frame. */
 typedef struct WorldHost {
     /* A line for the GM alone -- never the players -- on the status line;

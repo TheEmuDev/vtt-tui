@@ -145,9 +145,9 @@ void app_whisper_tick(App *a);
 void app_damage_command(App *a, const char *rest);
 
 /* app_ctl_marked.c: the channel's `marked` read, as text or JSON; and
- * request.c's words for a screen and a build mode, as the channel says them. */
+ * app_ctl.c's words for a screen and a build mode, as the channel says them. */
 void app_ctl_marked(App *a, FILE *out, int json);
-/* request.c: the world's host, the one real one (world.h). */
+/* app_ctl.c: the world's host, the one real one (world.h). */
 extern const WorldHost APP_WORLD_HOST;
 const char *app_ctl_screen_name(Screen s);
 const char *app_ctl_mode_name(EdMode m);
@@ -268,7 +268,7 @@ void app_players_pin(App *a, const char *rest);
 /* :player camera follow|party|hold (docs/CAMERA.md). */
 void app_players_camera_command(App *a, const char *rest);
 
-/* request.c: :agent on, :agent off, :agent accept auto|review, :agent to ask. */
+/* app_ctl.c: :agent on, :agent off, :agent accept auto|review, :agent to ask. */
 void app_agent_command(App *a, const char *rest);
 
 
