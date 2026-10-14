@@ -921,13 +921,13 @@ void test_map_fidelity(void)
     {
         Map *m = map_new(4, 2, "one");
         map_set_tile(m, 0, 0, TILE_FLOOR);
-        map_set_vedge(m, 0, 1, EDGE_WALL);
+        map_set_vedge(m, 4, 1, EDGE_WALL);                 /* the east boundary alone */
         map_set_hedge(m, 3, 2, EDGE_DOOR_CLOSED);
         CHECK_EQ(mapio_write(m, path, err, sizeof err), 0);
         char *f = slurp(path);
         char want[64];
         snprintf(want, sizeof want, "hedges\n\n\n   %c\n", edge_file_char(EDGE_DOOR_CLOSED));
-        CHECK(f && strstr(f, "tiles\n.   \n\nvedges\n\n|    \n") && strstr(f, want));
+        CHECK(f && strstr(f, "tiles\n.   \n\nvedges\n\n    |\n") && strstr(f, want));
         free(f);
         map_free(m);
     }

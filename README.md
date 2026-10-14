@@ -1643,7 +1643,9 @@ Sections are read by row count. A section with a missing row takes the next line
 row, and the sections after it shift; `vtt --check` reports this. Short rows are read as if
 padded with spaces. vtt writes a row with nothing in it (no terrain, no boundary, no fog) as an
 empty line, so the middle `hedges` row above is saved as an empty line; every other row is
-written whole.
+written whole. An extra empty line inside a section is read as a row and moves the rows below
+it down, and `vtt --check` cannot tell, so do not let an editor or tool add or squeeze blank lines
+in a map file.
 
 **Records.**
 

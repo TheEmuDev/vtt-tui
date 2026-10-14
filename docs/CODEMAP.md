@@ -167,6 +167,7 @@ full record of each check -- what it found, the evidence, what is still open.
 The 2026-09-28 check's open items are there, in a proposed order.
 
 - **The two importers are at two** (import.c): `import_environments` repeats `import_adversaries`' reading of the file, its loop over names (skipped, kept, cut to one name) and its summary line, and `env_text` repeats `card_text`'s first line and feature loop. A third import (items, a bestiary from another game) extracts the loop first.
+- **Write beside, then rename, is at two**: `write_map` (mapio.c, `PATH.PID.tmp`, flushed) and `import.c`'s card file (`PATH.tmp`). A third extracts one helper first, and with it one naming of the temporary file.
 - **Squares and regions are parsed in two places:** `maptools_region` (clips,
   takes a bare row `5:6`) and app_ctl.c's `region` (strict, refuses off-map).
   Two is within the rule of three; a third caller makes them one function
