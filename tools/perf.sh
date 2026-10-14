@@ -404,14 +404,22 @@ run "agent, changes read"  "$HUGE"   80x24 'xlxlxlxlxlxlfhfhfhfhfhfh' "--bench-c
 # Another program writes the open map's file (step 7): the plan of rooms
 # applied to a copy of the largest map, written over the map's own file every
 # loop. The first key notices; the read, the proposal and its tint follow once
-# the keys are quiet. Both files are vtt's own writing, every row whole (the
-# void map above is a header alone), so both parses are the largest map's.
+# the keys are quiet. Both files are vtt's own writing, so a row of nothing in
+# either is an empty line (docs/V2.md, step 5): the parses follow the rooms.
 OUTMAP="$DIR/outside.vtt"; OUTNEW="$DIR/outside-new.vtt"
 cp "$VOID512" "$OUTMAP"; cp "$VOID512" "$OUTNEW"
 echo 'room Z B2 4x4' > "$DIR/one.ctl"
 XDG_RUNTIME_DIR="$DIR/rt" "$BIN" "$OUTMAP" --apply "$DIR/one.ctl" > /dev/null
 XDG_RUNTIME_DIR="$DIR/rt" "$BIN" "$OUTNEW" --apply "$DIR/plan.ctl" > /dev/null
 run "build, outside change 512x512" "$OUTMAP" 80x24 'llhh' "--bench-outside $OUTNEW"
+# A save by the key (docs/V2.md, step 5): the largest map with nothing in it,
+# every row an empty line, and walled all over, every row whole. Each loop
+# writes the file again and flushes it: mapio.write and mapio.fsync.
+SAVEEMPTY="$DIR/save-empty.vtt"
+cp "$VOID512" "$SAVEEMPTY"
+SAVEFULL=$(genmap savefull 512 512 1 0)
+run "build, :w empty 512x512" "$SAVEEMPTY" 80x24 ':w\rlh'
+run "build, :w full 512x512"  "$SAVEFULL"  80x24 ':w\rlh'
 run "help page"            "$WALLED" 80x24  '?jjjj'
 run "profiler overlay"     "$WALLED" 80x24  '\e[24~jjll'
 

@@ -146,7 +146,7 @@ review and the next. The rules (the user, 2026-10-09):
 The reviewer of step 7 was asked to check every row against the code and rank it. All were
 still true. Its ranking, to work from:
 
-- **Do now:** B11 (a card does not save and load to the same bytes; root cause found: `card_clean`
+- **Do now:** B11 (closed 2026-10-13, 2.0's step 5, as proposed here; a card does not save and load to the same bytes; root cause found: `card_clean`
   (`card.c:31-40`) drops leading newlines only from the raw text, so a first line holding
   only control characters or spaces is cleaned to nothing and its newline kept; the loader's
   `card_take` never keeps a leading blank line. Fix: in the newline branch, drop a blank
@@ -173,7 +173,6 @@ still true. Its ranking, to work from:
 | ~~B8~~ | *closed, below* | | | | |
 | B9 | step 7, PERFORMANCE.md *Known gaps* | The map writer is 1.18 ms for the largest map against about 0.5: the text grows in a memory stream (a reallocation and a copy each doubling) and each row is a locked `fwrite`. | Left after the larger gap closed. | the writer sizes one buffer from the map and fills it | 2026-10-10 |
 | B10 | step 7, PERFORMANCE.md *Known gaps* | The loader finds a square's kind by searching a table a character (`tile_from_file_char`, `edge_from_file_char`) and reads a line at a time: 3.4 ns a byte, 2.7 ms for the largest map. An outside change pays it twice. | It predates the step; measured here because step 7 leans on it. | a 256-entry table each way, and the rows parsed in place | 2026-10-10 |
-| B11 | step 7: `make fuzz` (the loader), 2026-10-10 | **A bug, not from step 7** (the commit before it fails the same input): a card whose text starts with a line holding only a control character saves with two leading blank lines (`\| ` and `\|`), and loading that file drops them, so the map saved, loaded and saved again is not the same bytes. The fuzzer's round-trip check aborts on it. The input is kept: `tests/fuzz-found/card-leading-blank.vtt`. | Outside step 7 (cards, card.c's cleaning and the loader's `card_take`); found while fuzzing the loader this step changed. To be fixed with the review items. | the card's text is normalized the same way when it is read as when it is set (leading blank lines dropped after control characters are cleaned), the input joins the fixtures, and `make fuzz` passes on it | 2026-10-10. Met again 2026-10-12 fuzzing the loader for environment cards: a second input, `tests/fuzz-found/roundtrip-damaged.vtt` (a card whose first line starts with a control character, in a badly damaged file); the commit before that work fails it the same way |
 | B12 | the final review's fixes, 2026-10-10, PERFORMANCE.md *Other writers of the file* | Reading an outside change pays about 0.55 ms of its 5.9 for new pages: the two maps it parses are freed, the allocator hands the memory back, and the next reload faults it in again. | Outside changes are rare, and keeping two scratch maps would hold 2 MB for the session. | outside changes become frequent (an agent writing the file in a loop): keep the scratch maps | 2026-10-10 |
 
 ### Disproved
@@ -202,6 +201,7 @@ Rows move here when fixed, with the commit.
 | 48 | `wait 0` on a vtt with no event yet was held 60 s; `status` did not print `seq`. | 2.0's step 4 (2026-10-12): `wait 0` is an answer, not a wait (suite `loop` asks it over the socket); `status` ends with `seq N`. Left for the events' own piece: an agent's own proposal still makes no event. |
 | 15 | With the channel off a caller still learned the map's name and file and what a plan's lines said back. | 2.0's step 4 (2026-10-12), on the user's ruling (docs/V2.md, question 9): off refuses every request over the socket with one line naming the map and `:agent on`; only `--apply`'s `holds` is answered. Reverses docs/CONFLICTS.md's decision 5. The refusal still names the map, on purpose. |
 | 56 | The agent's prompt listed the edit verbs without `env`; the verb set was kept by hand in six lists. | 2.0's step 4, first piece (2026-10-12): `REQUESTS[]` in app_ctl.c is the one list; the prompt, `help`, the dispatcher and the off channel read it, and suite `ctltable` holds docs/AGENTS.md to it. Still by hand, each in one place: the README's prose and docs/CONTROL.md (a record). |
+| B11 | A card whose text began with a line blank only once its control characters were dropped saved with leading blank lines, and read back without them: saved, loaded and saved again, not the same bytes (`tests/fuzz-found/card-leading-blank.vtt`, `roundtrip-damaged.vtt`). | 2.0's step 5 (2026-10-13): `card_clean_cut` drops a line that is blank as kept, not only as given; suite `mapfile` round-trips both inputs and `test_cards` has the case; `make fuzz` seeds its corpus from `tests/fuzz-found` and runs clean on both. |
 | 50 | A terminal that stopped reading blocked the whole process in `term_write`. | 2.0's step 2 (2026-10-12): output through `term_async`'s non-blocking open, a queue of at most a frame, the loop flushing. A live vtt on an unread pty answers `--ctl status` in 0.00 s where it gave none in 2 s (PERFORMANCE.md, *A terminal that stops reading*); suite `loop` has the case. |
 | 9 | The main loop (`main.c`) had no test. | 0421c0a and the commit after it (2026-10-12): the loop is `src/loop.c`, suite `loop` drives `loop_once` through a pipe with time as an argument, and step 5's bug has a case (the reviewer's mutation that flushes before the drain fails it). What it does not reach is row 58. |
 | 3 | `jobs json` is checked for validity only with one asked job (test_jobs.c:375). Nothing checks it with a ready proposal, a thread of several lines, or a conflict count above 0. | 2.0's step 4, the codes (2026-10-12): a `jobsctl` case reads `jobs json` with a ready proposal, a thread of three lines and one conflict. |
@@ -302,7 +302,8 @@ before it was written down here. Nothing was changed by the check itself.
   `end` line (the loader stops there) and recovery refuses a copy without it, setting it
   aside as `.autosave.damaged` (the table is `tools/saves.sh`). `:w`, trips and other
   saves flush as before -- a trip stays at about 65 ms, two flushes, accepted as the cost
-  of a deliberate map change. `make perf` now works in the repo (`.perf.*`), `mapio.write`,
+  of a deliberate map change. (2.0's step 5, 2026-10-13, kept this: the flush stays on
+  the key; docs/V2.md, *Step 5*, part 3.) `make perf` now works in the repo (`.perf.*`), `mapio.write`,
   `mapio.fsync` and `mapio.load` are zones, and PERFORMANCE.md is regenerated there.
 
 ### 2. Test hygiene

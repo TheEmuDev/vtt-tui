@@ -54,7 +54,7 @@ void test_areas(void)
         undo_free(&u);
     }
 
-    CASE("the file: version 7 with areas, 6 or less without; read back the same");
+    CASE("the file: areas read back the same; version 14 with or without them");
     {
         Sandbox sb = sandbox_enter("areas");
         char path[600];
@@ -63,7 +63,7 @@ void test_areas(void)
         FILE *f = fopen(path, "r");
         char first[32] = "";
         if (f) { if (!fgets(first, sizeof first, f)) first[0] = 0; fclose(f); }
-        CHECK_EQ(strcmp(first, "VTT 7\n"), 0);
+        CHECK_EQ(strcmp(first, "VTT 14\n"), 0);
         Map *l = mapio_load(path, err, sizeof err);
         CHECK(l && l->nareas == m->nareas);
         if (l) {
@@ -76,7 +76,7 @@ void test_areas(void)
         CHECK_EQ(mapio_write(plain, path, err, sizeof err), 0);
         f = fopen(path, "r");
         if (f) { if (!fgets(first, sizeof first, f)) first[0] = 0; fclose(f); }
-        CHECK(strcmp(first, "VTT 7\n") != 0);
+        CHECK(!strcmp(first, "VTT 14\n"));
         map_free(plain);
         f = fopen(path, "w");
         fputs("VTT 7\nsize 4 4\ntiles\n....\n....\n....\n....\n"
@@ -163,7 +163,7 @@ void test_links(void)
         undo_free(&u);
     }
 
-    CASE("the file: version 8 with links, read back the same; a bad one dropped with a finding");
+    CASE("the file: links read back the same; a bad one dropped with a finding");
     {
         Sandbox sb = sandbox_enter("links");
         char path[600];
@@ -172,7 +172,7 @@ void test_links(void)
         FILE *f = fopen(path, "r");
         char first[32] = "";
         if (f) { if (!fgets(first, sizeof first, f)) first[0] = 0; fclose(f); }
-        CHECK_EQ(strcmp(first, "VTT 8\n"), 0);
+        CHECK_EQ(strcmp(first, "VTT 14\n"), 0);
         Map *back = mapio_load(path, err, sizeof err);
         CHECK(back && back->nlinks == m->nlinks);
         if (back) {
@@ -740,7 +740,7 @@ void test_floors(void)
         CHECK_EQ(floor_pick(m, TOKEN_PLAYER, 0, 0), -1);
     }
 
-    CASE("the file: version 9 with floors, read back; a bad floor line dropped with a finding");
+    CASE("the file: floors read back; a bad floor line dropped with a finding");
     {
         Sandbox sb = sandbox_enter("floors");
         char path[600];
@@ -749,7 +749,7 @@ void test_floors(void)
         FILE *f = fopen(path, "r");
         char first[32] = "";
         if (f) { if (!fgets(first, sizeof first, f)) first[0] = 0; fclose(f); }
-        CHECK_EQ(strcmp(first, "VTT 9\n"), 0);
+        CHECK_EQ(strcmp(first, "VTT 14\n"), 0);
         Map *back = mapio_load(path, err, sizeof err);
         CHECK(back != NULL);
         if (back) {
@@ -1190,7 +1190,7 @@ void test_map_links(void)
     if (!sb.ok) return;
     char err[256], path[700];
 
-    CASE("a link to another map: one end, one way; its file line round-trips at version 12");
+    CASE("a link to another map: one end, one way; its file line round-trips");
     Map *m = map_new(10, 8, "town");
     map_fill_tiles(m, 0, 0, 9, 7, TILE_FLOOR);
     Link l;
@@ -1209,7 +1209,7 @@ void test_map_links(void)
     snprintf(path, sizeof path, "%s/town.vtt", sb.dir);
     CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
     char *text = slurp(path);
-    CHECK(text && !strncmp(text, "VTT 12\n", 7));
+    CHECK(text && !strncmp(text, "VTT 14\n", 7));
     CHECK(text && strstr(text, "link 4 stairs 2 2 2 to \"crypt\" \"Lower hall\"\n") != NULL);
     free(text);
     Map *back = mapio_load(path, err, sizeof err);

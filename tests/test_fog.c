@@ -317,7 +317,7 @@ void test_fog(void)
     char *text = slurp(path);
     CHECK(text != NULL);
     if (text) {
-        CHECK_EQ(strncmp(text, "VTT 6\n", 6), 0);
+        CHECK_EQ(strncmp(text, "VTT 14\n", 7), 0);
         CHECK(strstr(text, "fog on\n") != NULL);
         CHECK(strstr(text, "fog soft-edge\n") != NULL);
         CHECK(strstr(text, "fogpatch 1 Crypt reveal manual memory off soft-edge on\n") != NULL);

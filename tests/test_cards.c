@@ -52,6 +52,8 @@ void test_cards(void)
     CHECK_EQ(card_set(m, "goblin", "Goblin - Tier 1 Minion\r\nDifficulty: 10\n\n\n"), 0);
     CHECK_EQ(card_find(m, "goblin"), 0);
     CHECK_EQ(strcmp(m->cards[0].text, "Goblin - Tier 1 Minion\nDifficulty: 10"), 0);   /* \r\n, trailing blanks */
+    CHECK_EQ(card_set(m, "goblin", "\x01\n \t\x02\r\n\nGoblin"), 0);   /* blank once its controls go (HEALTH B11) */
+    CHECK_EQ(strcmp(m->cards[0].text, "Goblin"), 0);
     CHECK_EQ(card_set(m, "goblin", "Goblin, again"), 0);                            /* replaced, not added */
     CHECK_EQ(m->ncards, 1);
     CHECK_EQ(card_set(m, "../x", "no"), -1);
@@ -77,7 +79,7 @@ void test_cards(void)
         CHECK(utf8_valid(b, strlen(b)));
     }
 
-    CASE("cards and a creature's card are saved as version 13, and read back whole");
+    CASE("cards and a creature's card are saved and read back whole");
     {
         /* A long line (split in the file), a UTF-8 one, pipes and quotes. */
         char text[1400];
@@ -89,7 +91,7 @@ void test_cards(void)
         tokens_add(&m->tokens, t);
         CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
         char *file = slurp(path);
-        CHECK(file && !strncmp(file, "VTT 13\n", 7));
+        CHECK(file && !strncmp(file, "VTT 14\n", 7));
         CHECK(file && strstr(file, "tokencard \"ogre\"\n") != NULL);
         CHECK(file && strstr(file, "\n+ ") != NULL);                     /* the long line went in pieces */
         int longest = 0, cur = 0;
@@ -108,12 +110,12 @@ void test_cards(void)
         }
     }
 
-    CASE("a map with no cards stays at its version");
+    CASE("a map with no cards is version 14 too: one version, always");
     {
         Map *plain = map_new(6, 4, "plain");
         CHECK_EQ(mapio_save(plain, path, err, sizeof err), 0);
         char *file = slurp(path);
-        CHECK(file && strncmp(file, "VTT 13", 6) != 0);
+        CHECK(file && !strncmp(file, "VTT 14\n", 7));
         free(file);
         map_free(plain);
     }
@@ -904,7 +906,7 @@ void test_env(void)
     press(&a, "\x1b");
     CHECK_EQ(a.modal, MODAL_NONE);
 
-    CASE("the file: version 14, both lines, and back again; without one it is written as before");
+    CASE("the file: both lines, and back again; without them still version 14");
     CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
     CHECK(first_line_is(path, "VTT 14\n"));
     Map *back = mapio_load(path, err, sizeof err);
@@ -919,7 +921,7 @@ void test_env(void)
         char p2[700];
         snprintf(p2, sizeof p2, "%s/plain.vtt", sb.dir);
         CHECK_EQ(mapio_save(back, p2, err, sizeof err), 0);
-        CHECK(first_line_is(p2, "VTT 13\n"));               /* a card is still there */
+        CHECK(first_line_is(p2, "VTT 14\n"));               /* one version, whatever the map holds */
         map_free(back);
     }
 

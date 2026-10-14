@@ -218,7 +218,7 @@ void test_session_log(void)
 }
 
 /* Clocks: named, sized, ticked through the undo log, drawn under the turn
- * order, and saved as version 5. */
+ * order, and saved. */
 void test_clocks(void)
 {
     Sandbox sb = sandbox_enter("clocks");
@@ -382,13 +382,13 @@ void test_clocks(void)
     CHECK(strstr(frame.data, "Siege  5/24") != NULL);
     bb_free(&frame);
 
-    CASE("clocks are saved as version 5 and read back, in order");
+    CASE("clocks are saved and read back, in order");
     char err[128];
     CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
     char *text = slurp(path);
     CHECK(text != NULL);
     if (text) {
-        CHECK_EQ(strncmp(text, "VTT 5\n", 6), 0);
+        CHECK_EQ(strncmp(text, "VTT 14\n", 7), 0);
         CHECK(strstr(text, "clock Dragon 1 6\n") != NULL);
         CHECK(strstr(text, "clock Siege 5 24\n") != NULL);
         free(text);
@@ -497,13 +497,13 @@ void test_clocks(void)
     press(&a, ":clock Fuse remove\r");
     press(&a, ":clock Storm remove\r");
 
-    CASE("with the clocks gone the file is version 3 again");
+    CASE("with the clocks gone the file is still version 14: one version, always");
     press(&a, ":clock Dragon remove\r");
     press(&a, ":clock Rite remove\r");
     press(&a, ":clock Siege remove\r");
     CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
     text = slurp(path);
-    if (text) { CHECK_EQ(strncmp(text, "VTT 3\n", 6), 0); free(text); }
+    if (text) { CHECK_EQ(strncmp(text, "VTT 14\n", 7), 0); free(text); }
 
     app_free(&a);
     rnd_free(&r);
@@ -653,13 +653,13 @@ void test_roll_command(void)
     press(&a, ":roll nothing\r");
     CHECK(strstr(a.status, "no roll called nothing") != NULL);
 
-    CASE("named rolls are saved as version 5 and read back");
+    CASE("named rolls are saved and read back");
     {
         char err[128];
         CHECK_EQ(mapio_save(a.world.map, path, err, sizeof err), 0);
         char *text = slurp(path);
         if (text) {
-            CHECK_EQ(strncmp(text, "VTT 5\n", 6), 0);
+            CHECK_EQ(strncmp(text, "VTT 14\n", 7), 0);
             CHECK(strstr(text, "roll attack \"2d12+3\"\n") != NULL);
             CHECK(strstr(text, "roll swing \"duality +2\"\n") != NULL);
             free(text);
@@ -871,9 +871,6 @@ void test_turns(void)
     CHECK_EQ(turn_acting(m), 2);
     CHECK_EQ(m->round, round_before);
 
-    /* A fight is combat state, like the markers version 3 was for: a file
-     * that holds one says 4 so an older build refuses it instead of quietly
-     * dropping whose turn it is. A map with no fight still says 3. */
     /* A game with no initiative: the turn is a side. */
     CASE("under a spotlight ruleset the turn passes between the players and the GM");
     str_lcpy(m->ruleset, "daggerheart", sizeof m->ruleset);
@@ -900,11 +897,11 @@ void test_turns(void)
     CHECK_EQ(turn_acting(m), 1);
     CHECK_EQ(turn_panel_wanted(m), 1);
 
-    CASE("a spotlight fight is version 4 too, and ends with the fight");
+    CASE("a spotlight fight is saved, and ends with the fight");
     CHECK_EQ(mapio_save(m, "/tmp/vtt-spot.vtt", err, sizeof err), 0);
     text = slurp("/tmp/vtt-spot.vtt");
     if (text) {
-        CHECK_EQ(strncmp(text, "VTT 4\n", 6), 0);
+        CHECK_EQ(strncmp(text, "VTT 14\n", 7), 0);
         CHECK(strstr(text, "spotlight gm\n") != NULL);
         free(text);
     }
@@ -921,7 +918,7 @@ void test_turns(void)
     turn_join(m, &u, 0, 18); turn_join(m, &u, 1, 15); turn_join(m, &u, 2, 15);
     turn_advance(m, &u, 3);
 
-    CASE("a fight round-trips through the file, as version 4");
+    CASE("a fight round-trips through the file");
     turn_take(m, &u, 3);                                        /* an outsider holds the turn */
     char path[128];
     snprintf(path, sizeof path, "/tmp/vtt-turns-%ld.vtt", (long)getpid());
@@ -929,7 +926,7 @@ void test_turns(void)
     text = slurp(path);
     CHECK(text != NULL);
     if (text) {
-        CHECK_EQ(strncmp(text, "VTT 4\n", 6), 0);
+        CHECK_EQ(strncmp(text, "VTT 14\n", 7), 0);
         CHECK(strstr(text, "tokenturn 18\n") != NULL);
         CHECK(strstr(text, "tokenturn - acting\n") != NULL);
         char want[32];
@@ -947,12 +944,12 @@ void test_turns(void)
         map_free(back);
     }
 
-    CASE("a map with no fight is still written as version 3");
+    CASE("a map with no fight writes no turn lines");
     turn_clear(m, &u);
     CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
     text = slurp(path);
     if (text) {
-        CHECK_EQ(strncmp(text, "VTT 3\n", 6), 0);
+        CHECK_EQ(strncmp(text, "VTT 14\n", 7), 0);
         CHECK(strstr(text, "tokenturn") == NULL);
         CHECK(strstr(text, "round") == NULL);
         free(text);
@@ -1424,7 +1421,7 @@ void test_scenes(void)
     CHECK_EQ(m->nscenes, MAP_SCENES_MAX - 1);
     CHECK(!strcmp(m->scenes[0].name, "ravine"));
 
-    CASE("the file keeps scenes: version 11, a box, hidden, markers, counters, turns");
+    CASE("the file keeps scenes: a box, hidden, markers, counters, turns");
     char path[] = "/tmp/vtt-scenes-XXXXXX";
     int fd = mkstemp(path);
     if (fd >= 0) close(fd);
@@ -1433,7 +1430,7 @@ void test_scenes(void)
     CHECK(scene_save(m, "Pass", box, err, sizeof err) == 1);
     CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
     char *text = slurp(path);
-    CHECK(text && !strncmp(text, "VTT 11\n", 7));
+    CHECK(text && !strncmp(text, "VTT 14\n", 7));
     CHECK(text && strstr(text, "scene \"Pass\" 5 3 8 6\n") != NULL);
     free(text);
     Map *l = mapio_load(path, err, sizeof err);

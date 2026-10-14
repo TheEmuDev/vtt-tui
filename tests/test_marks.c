@@ -213,13 +213,13 @@ void test_notes(void)
     CHECK(strstr(a.status, "s wants n") != NULL);
     app_key(&a, f2);
 
-    CASE("notes are saved as version 5, on the creature and on the squares, and read back");
+    CASE("notes are saved, on the creature and on the squares, and read back");
     char err[128];
     CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
     char *text = slurp(path);
     CHECK(text != NULL);
     if (text) {
-        CHECK_EQ(strncmp(text, "VTT 5\n", 6), 0);
+        CHECK_EQ(strncmp(text, "VTT 14\n", 7), 0);
         CHECK(strstr(text, "token player 0 0 1 \"Aria\"\ntokennote \"afraid of fire\"\n") != NULL);
         CHECK(strstr(text, "note 1 1 \"pressure plate\"\n") != NULL);
         free(text);
@@ -419,13 +419,13 @@ void test_counters(void)
     CHECK_EQ(m->tokens.v[1].ncounters, 2);
     CHECK_EQ(m->tokens.v[1].counters[0].value, 6);
 
-    CASE("counters are saved as version 6 and read back; without them the file says what it did before");
+    CASE("counters are saved and read back");
     char err[128];
     CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
     char *text = slurp(path);
     CHECK(text != NULL);
     if (text) {
-        CHECK_EQ(strncmp(text, "VTT 6\n", 6), 0);
+        CHECK_EQ(strncmp(text, "VTT 14\n", 7), 0);
         CHECK(strstr(text, "tokencounter HP 6 6\ntokencounter Stress 1 3\n") != NULL);
         free(text);
     }
@@ -461,7 +461,7 @@ void test_counters(void)
     CHECK_EQ(m->tokens.v[0].ncounters, 0);
     CHECK_EQ(mapio_save(m, path, err, sizeof err), 0);
     text = slurp(path);
-    if (text) { CHECK_EQ(strncmp(text, "VTT 4\n", 6), 0); free(text); }   /* still a fight */
+    if (text) { CHECK_EQ(strncmp(text, "VTT 14\n", 7), 0); free(text); }   /* still a fight */
 
     CASE("with no creature, s v and < say so");
     press(&a, ":turns end\r");
@@ -581,7 +581,7 @@ void test_hidden(void)
     CHECK(!m->tokens.v[0].hidden && !m->tokens.v[1].hidden);
     press(&a, "u");                                      /* both hidden again */
 
-    CASE("the file: version 10 with a hidden creature, read back hidden; copies keep it");
+    CASE("the file: a hidden creature read back hidden; copies keep it");
     {
         char err[256], p2[1300];
         snprintf(p2, sizeof p2, "%s/saved.vtt", sb.dir);
@@ -589,7 +589,7 @@ void test_hidden(void)
         FILE *h = fopen(p2, "r");
         char first[32] = "";
         if (h) { if (!fgets(first, sizeof first, h)) first[0] = 0; fclose(h); }
-        CHECK_EQ(strcmp(first, "VTT 10\n"), 0);
+        CHECK_EQ(strcmp(first, "VTT 14\n"), 0);
         Map *back = mapio_load(p2, err, sizeof err);
         CHECK(back && back->tokens.v[1].hidden == 1 && back->tokens.v[0].hidden == 1);
         map_free(back);

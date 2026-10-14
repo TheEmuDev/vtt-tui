@@ -29,12 +29,15 @@ char *card_clean_cut(const char *text, int *cut)
     char *t = xmalloc(CARD_TEXT_MAX);
     size_t n = 0, line = 0;
     const char *p = text ? text : "", *end = p + strlen(p);
-    while (p < end && (*p == '\n' || *p == '\r')) p++;
     while (p < end) {
         if (*p == '\n' || *p == '\r') {
             if (*p == '\r' && p + 1 < end && p[1] == '\n') p++;
             p++;
             while (n > line && t[n - 1] == ' ') n--;
+            /* Blank at the start as kept, not as given: a first line of
+             * control characters alone is blank only once they are dropped,
+             * and its file would read back without it (HEALTH B11). */
+            if (n == 0) continue;
             if (n + 2 > CARD_TEXT_MAX) { if (cut) *cut = 1; break; }
             t[n++] = '\n';
             line = n;

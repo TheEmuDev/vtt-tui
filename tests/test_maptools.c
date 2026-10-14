@@ -776,3 +776,218 @@ void test_loader_damage(void)
     sandbox_leave(&sb);
 }
 
+
+/* ---------------------------------------------------------------- fidelity */
+
+/* What a map tool prints of a map, as a string (freed by the caller). */
+static char *printed(const Map *m, int describe)
+{
+    char  *text = NULL;
+    size_t len = 0;
+    FILE  *out = open_memstream(&text, &len);
+    if (!out) return NULL;
+    if (describe) maptools_describe(out, m, 0);
+    else          maptools_dump(out, m, 0, 0, m->w - 1, m->h - 1);
+    fclose(out);
+    return text;
+}
+
+/* Saved, loaded and saved again: the map read back describes and dumps as
+ * the one saved (a writer that dropped something the same way twice would
+ * pass "the same bytes twice" alone), the two files are the same bytes, and
+ * the loader has nothing to say of the file but what a map may say. */
+static int round_trip(const Map *a, const char *dir)
+{
+    char p1[700], p2[700], err[256];
+    snprintf(p1, sizeof p1, "%s/one.vtt", dir);
+    snprintf(p2, sizeof p2, "%s/two.vtt", dir);
+    if (mapio_write(a, p1, err, sizeof err) != 0) return 0;
+    DiagLog d;
+    memset(&d, 0, sizeof d);
+    Map *b = mapio_load_diag(p1, err, sizeof err, diag_collect, &d);
+    if (!b) return 0;
+    int ok = mapio_write(b, p2, err, sizeof err) == 0;
+    for (int k = 0; k < d.n; k++) ok &= d.codes[k][0] != 'E' && strcmp(d.codes[k], "N021") != 0;
+    char *f1 = slurp(p1), *f2 = slurp(p2);
+    ok &= f1 && f2 && !strcmp(f1, f2) && !strncmp(f1, "VTT 14\n", 7);
+    for (int describe = 0; describe < 2; describe++) {
+        char *x = printed(a, describe), *y = printed(b, describe);
+        ok &= x && y && !strcmp(x, y);
+        free(x);
+        free(y);
+    }
+    ok &= a->tokens.n == b->tokens.n && a->nscenes == b->nscenes && a->ncards == b->ncards;
+    for (int i = 0; ok && i < a->tokens.n; i++) ok &= token_equal(&a->tokens.v[i], &b->tokens.v[i]);
+    free(f1);
+    free(f2);
+    map_free(b);
+    return ok;
+}
+
+/* The file 2.0 writes (docs/V2.md, step 5): version 14 always, a row of
+ * nothing an empty line, and what loads from it is what was saved. */
+void test_map_fidelity(void)
+{
+    Sandbox sb = sandbox_enter("fidelity");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    char path[700], err[256];
+    snprintf(path, sizeof path, "%s/m.vtt", sb.dir);
+
+    CASE("every fixture, oracle map and fuzz-found map loads, saves and loads again the same");
+    /* The oracle's e001.vtt is not a map at all: nothing to save. */
+    static const char *const files[] = {
+        "tests/fixtures/areas.vtt", "tests/fixtures/broken.vtt", "tests/fixtures/crowd.vtt",
+        "tests/fixtures/env.vtt", "tests/fixtures/everything.vtt", "tests/fixtures/floors.vtt",
+        "tests/fixtures/kinds.vtt", "tests/fixtures/links.vtt", "tests/fixtures/two-rooms.vtt",
+        "tests/oracle/maps/n105.vtt", "tests/oracle/maps/v10.vtt",
+        "tests/oracle/maps/v11.vtt", "tests/oracle/maps/v12.vtt", "tests/oracle/maps/v3.vtt",
+        "tests/oracle/maps/v4.vtt", "tests/oracle/maps/v5.vtt", "tests/oracle/maps/w024.vtt",
+        "tests/fuzz-found/card-leading-blank.vtt", "tests/fuzz-found/roundtrip-damaged.vtt",
+    };
+    for (size_t i = 0; i < sizeof files / sizeof files[0]; i++) {
+        char here[1024];
+        snprintf(here, sizeof here, "%s/%s", sb.cwd, files[i]);
+        Map *m = mapio_load(here, err, sizeof err);
+        CHECK(m != NULL);
+        if (!m) continue;
+        int ok = round_trip(m, sb.dir);
+        if (!ok) fprintf(stderr, "  not the same after a save: %s\n", files[i]);
+        CHECK(ok);
+        map_free(m);
+    }
+
+    CASE("maps made at random, with whole rows of nothing among them, save and load the same");
+    unsigned seed = 4242;
+    #define RND(n) ((int)((seed = seed * 1103515245u + 12345u) >> 16) % (n))
+    int same = 0;
+    for (int round = 0; round < 150; round++) {
+        int  w = 1 + RND(40), h = 1 + RND(30);
+        Map *m = map_new(w, h, "rand");
+        for (int y = 0; y < h; y++) {
+            if (RND(2)) continue;                           /* half the rows hold nothing */
+            for (int x = 0; x < w; x++) if (RND(3)) map_set_tile(m, x, y, (uint8_t)RND(TILE_COUNT));
+        }
+        for (int y = 0; y < h; y++) {
+            if (RND(2)) continue;
+            for (int x = 0; x <= w; x++) if (!RND(3)) map_set_vedge(m, x, y, (uint8_t)RND(EDGE_COUNT));
+        }
+        for (int y = 0; y <= h; y++) {
+            if (RND(2)) continue;
+            for (int x = 0; x < w; x++) if (!RND(3)) map_set_hedge(m, x, y, (uint8_t)RND(EDGE_COUNT));
+        }
+        if (RND(2)) {
+            /* Fog: two patches, the second deleted, and squares lit or on
+             * the rim, none of which is written. */
+            str_lcpy(m->fog_patches[0].name, "Crypt", sizeof m->fog_patches[0].name);
+            str_lcpy(m->fog_patches[1].name, "Gone", sizeof m->fog_patches[1].name);
+            m->fog_patches[0].reveal = m->fog_patches[1].reveal = 2;
+            m->fog_patches[1].dead = 1;
+            for (int y = 0; y < h; y++) {
+                int kind = RND(3);
+                for (int x = 0; x < w; x++) {
+                    if (!RND(2)) continue;
+                    uint8_t f = kind == 0 ? (uint8_t)(1 | (RND(2) ? FOG_SEEN : 0) | (RND(4) ? 0 : FOG_HELD | FOG_SEEN))
+                              : kind == 1 ? (uint8_t)(2 | FOG_SEEN) : (uint8_t)(RND(2) ? FOG_LIT : FOG_RIM);
+                    map_fog_set(m, x, y, f);
+                }
+            }
+        }
+        int nt = RND(6);
+        for (int k = 0; k < nt; k++) {
+            Token t = { (int16_t)RND(w), (int16_t)RND(h), 1, TOKEN_ENEMY, "" };
+            snprintf(t.label, sizeof t.label, "L%d", k);
+            tokens_add(&m->tokens, t);
+        }
+        same += round_trip(m, sb.dir);
+        map_free(m);
+    }
+    CHECK_EQ(same, 150);
+    #undef RND
+
+    CASE("an empty map is a few bytes a row: an empty line for each row of nothing");
+    {
+        Map *m = map_new(512, 512, "empty");
+        CHECK_EQ(mapio_write(m, path, err, sizeof err), 0);
+        char *f = slurp(path);
+        CHECK(f && strlen(f) < 2 * 1024);
+        CHECK(f && strstr(f, "tiles\n\n\n") && strstr(f, "vedges\n\n\n") && strstr(f, "hedges\n\n\n"));
+        free(f);
+        CHECK(round_trip(m, sb.dir));
+        map_free(m);
+    }
+
+    CASE("a row with anything in it is written whole, east boundary and all");
+    {
+        Map *m = map_new(4, 2, "one");
+        map_set_tile(m, 0, 0, TILE_FLOOR);
+        map_set_vedge(m, 0, 1, EDGE_WALL);
+        map_set_hedge(m, 3, 2, EDGE_DOOR_CLOSED);
+        CHECK_EQ(mapio_write(m, path, err, sizeof err), 0);
+        char *f = slurp(path);
+        char want[64];
+        snprintf(want, sizeof want, "hedges\n\n\n   %c\n", edge_file_char(EDGE_DOOR_CLOSED));
+        CHECK(f && strstr(f, "tiles\n.   \n\nvedges\n\n|    \n") && strstr(f, want));
+        free(f);
+        map_free(m);
+    }
+
+    CASE("lit squares, the rim and a deleted patch's squares write an empty fog row");
+    {
+        Map *m = map_new(3, 3, "fog");
+        str_lcpy(m->fog_patches[0].name, "Hall", sizeof m->fog_patches[0].name);
+        str_lcpy(m->fog_patches[1].name, "Gone", sizeof m->fog_patches[1].name);
+        m->fog_patches[0].reveal = m->fog_patches[1].reveal = 2;
+        m->fog_patches[1].dead = 1;
+        map_fog_set(m, 1, 0, 1);
+        map_fog_set(m, 0, 1, FOG_LIT);
+        map_fog_set(m, 1, 1, FOG_RIM);
+        map_fog_set(m, 2, 1, 2 | FOG_SEEN);
+        CHECK_EQ(mapio_write(m, path, err, sizeof err), 0);
+        char *f = slurp(path);
+        CHECK(f && strstr(f, "\nfog\n.A.\n\n\n") != NULL);
+        free(f);
+        map_free(m);
+    }
+
+    CASE("an empty line in a section is a row of nothing, no note; a part-short row still has one");
+    {
+        DiagLog d;
+        Map *m = diag_load(sb.dir, "VTT 14\nsize 3 2\ntiles\n\n.\nvedges\n\n\nhedges\n\n---\n\n", &d);
+        CHECK(m != NULL);
+        int n021 = 0;
+        for (int k = 0; k < d.n; k++) n021 += !strcmp(d.codes[k], "N021");
+        CHECK_EQ(n021, 1);                                 /* the tiles' '.', alone */
+        CHECK_EQ(diag_line(&d, "N021"), 5);
+        CHECK(m && map_tile(m, 0, 1) == TILE_FLOOR && map_tile(m, 1, 1) == TILE_VOID && map_tile(m, 0, 0) == TILE_VOID);
+        CHECK(m && map_hedge(m, 2, 1) == EDGE_WALL && map_hedge(m, 0, 0) == EDGE_NONE);
+        map_free(m);
+    }
+
+    CASE("a hand-edited file stays forgiven: CRLF, trailing spaces trimmed, a short section");
+    {
+        DiagLog d;
+        Map *m = diag_load(sb.dir, "VTT 14\r\nsize 3 2\r\ntiles\r\n...\r\n.\r\nvedges\r\n|  |\r\n", &d);
+        CHECK(m && map_tile(m, 2, 0) == TILE_FLOOR && map_tile(m, 2, 1) == TILE_VOID);
+        CHECK(m && map_vedge(m, 3, 0) == EDGE_WALL);
+        CHECK(diag_has(&d, "N021") && diag_has(&d, "E011"));   /* tiles row 2 short; vedges ends early */
+        map_free(m);
+    }
+
+    CASE("--check of a map 2.0 saved has no row-short note");
+    {
+        Map *m = map_new(30, 20, "check");
+        for (int x = 0; x < 6; x++) map_set_tile(m, x, 3, TILE_FLOOR);
+        CHECK_EQ(mapio_write(m, path, err, sizeof err), 0);
+        map_free(m);
+        char  *text = NULL;
+        size_t len = 0;
+        FILE  *out = open_memstream(&text, &len);
+        maptools_check(out, path, 0);
+        fclose(out);
+        CHECK(text && strstr(text, "N021") == NULL);
+        free(text);
+    }
+
+    sandbox_leave(&sb);
+}

@@ -25,43 +25,17 @@
 #include "turn.h"
 #include "util.h"
 
-/* v2 added terrain kinds and door/window/secret boundaries. A v1 reader would
- * take a closed door for an opening and water for a hole, so it must refuse
- * the file rather than quietly misread a sealed room as open.
- *
- * v3 added status markers on tokens. An older reader would ignore those lines
- * and silently drop them, which loses combat state from a saved fight, so it
- * refuses too. Each version still loads everything older. */
+/* The file's version, the first line. Each version added what an older
+ * reader would misread or drop on its next save (v2 terrain kinds and
+ * door/window/secret boundaries, v3 markers, 4 the turn order, 5 clocks,
+ * named rolls and notes, 6 counters and fog, 7 areas, 8 links, 9 floors,
+ * 10 hidden creatures, 11 scenes, 12 links to other maps, 13 cards, 14
+ * environments), so an older reader refuses it. The loader reads every
+ * version up to this one and refuses newer files; the writer writes this
+ * one, always (docs/V2.md, step 5): a lowest version that says everything
+ * kept only very old builds able to open simple maps, at the cost of a test
+ * of every feature on every save. */
 #define FORMAT_VERSION 14
-
-/* Version 4 added the turn order. A map with no fight in it is still written
- * as version 3, which says everything it needs and stays loadable by the
- * builds that came before; one with a fight says 4, so that an older reader
- * refuses it rather than dropping whose turn it is on the floor.
- *
- * Version 5 added clocks, named rolls and notes, on the same terms: a map
- * carrying none of them is written as whatever version it needs. The
- * writer always picks the lowest version that says everything. */
-#define FORMAT_BEFORE_TURNS    3
-#define FORMAT_BEFORE_CLOCKS   4
-#define FORMAT_BEFORE_COUNTERS 5
-/* Version 6 added counters and fog; 7 named areas; 8 links; 9 floors; 10
- * hidden creatures -- an older reader would ignore the line and show the
- * ambusher to the table, so it must refuse the file. */
-#define FORMAT_BEFORE_AREAS    6
-#define FORMAT_BEFORE_LINKS    7
-#define FORMAT_BEFORE_FLOORS   8
-#define FORMAT_BEFORE_HIDDEN   9
-/* Version 11 added scenes: an older reader would read a scene's creatures
- * as the map's own. */
-#define FORMAT_BEFORE_SCENES   10
-/* Version 12 added links to other map files: an older reader would read the
- * line's "to" as a square and drop the link, and the way out with it. */
-#define FORMAT_BEFORE_MAPLINKS 11
-/* Version 13 added cards (docs/CARDS.md): a map with none is still 12. */
-#define FORMAT_BEFORE_CARDS    12
-/* 14 added environments: a card's name on the map or an area. */
-#define FORMAT_BEFORE_ENV      13
 
 /* Fog rows: a held tile of patch 1..15 is one of these, in order. */
 static const char FOG_HELD_CHARS[FOG_PATCH_MAX + 1] = "123456789!\"#$%&";
@@ -83,12 +57,26 @@ static void file_chars(FileChars *fc)
     }
 }
 
+/* A row that holds nothing as written (every character the section's blank)
+ * is an empty line, which the loader reads as a row of nothing: an empty
+ * 512x512 map is 2 KB, not 789. Rows holding anything stay whole, so a
+ * vedges row keeps its east boundary where W022 looks for it. The test is
+ * of the characters, not the bytes: a kind with no character of its own
+ * writes as blank already. */
+static void put_line(FILE *f, char *line, int n, char blank)
+{
+    int any = 0;
+    for (int i = 0; i < n; i++) any |= line[i] != blank;
+    if (!any) n = 0;
+    line[n] = '\n';
+    fwrite(line, 1, (size_t)n + 1, f);
+}
+
 static void put_row(FILE *f, const uint8_t *row, int n, const char *chars)
 {
     char line[MAP_MAX_DIM + 3];                    /* a boundary more than squares */
     for (int i = 0; i < n; i++) line[i] = chars[row[i]];
-    line[n] = '\n';
-    fwrite(line, 1, (size_t)n + 1, f);
+    put_line(f, line, n, ' ');
 }
 
 /* Horizontal walls keep their historical '-' so a map still reads as a map in
@@ -186,8 +174,10 @@ static int write_map(const Map *m, const char *path, int autosave, char **keep, 
                      MapDisk *disk, char *err, size_t errsz)
 {
     PROF_ZONE("mapio.write");
-    char tmp[MAP_PATH_MAX + 8];
-    snprintf(tmp, sizeof tmp, "%s.tmp", path);
+    /* The pid in the name: two vtts saving one map never write through
+     * each other's half-written file; the last rename wins whole. */
+    char tmp[MAP_PATH_MAX + 32];
+    snprintf(tmp, sizeof tmp, "%s.%ld.tmp", path, (long)getpid());
 
     FileChars fc;
     file_chars(&fc);
@@ -199,42 +189,16 @@ static int write_map(const Map *m, const char *path, int autosave, char **keep, 
         return -1;
     }
 
-    int fight = m->round > 0 || m->spotlight != SPOTLIGHT_PLAYERS;
-    for (int i = 0; i < m->tokens.n && !fight; i++) fight = m->tokens.v[i].turn != 0;
-    int v5 = clock_count(m) > 0;
-    for (int i = 0; i < ROLL_MAX && !v5; i++) v5 = m->rolls[i].name[0] != '\0';
-    for (int i = 0; i < m->tokens.n && !v5; i++) v5 = m->tokens.v[i].note[0] != '\0';
-    if (m->nnotes) v5 = 1;
-    int v6 = 0, patches = 0;
-    for (int i = 0; i < m->tokens.n && !v6; i++) v6 = m->tokens.v[i].ncounters > 0;
+    int patches = 0;
     for (int i = 0; i < FOG_PATCH_MAX; i++)
         patches += m->fog_patches[i].name[0] && !m->fog_patches[i].dead;
-    if (patches) v6 = 1;
-    int v7 = m->nareas > 0;
-    int v8 = m->nlinks > 0;
-    int v9 = 0;
-    for (int i = 0; i < m->nareas; i++) v9 |= m->areas[i].floor;
-    int v10 = tokens_any_hidden(&m->tokens);
-    int v11 = m->nscenes > 0;
-    int v12 = 0;
-    for (int i = 0; i < m->nlinks; i++) v12 |= m->links[i].to_map[0] != '\0';
-    int v13 = m->ncards > 0;
-    for (int i = 0; i < m->tokens.n && !v13; i++) v13 = m->tokens.v[i].card[0] != '\0';
-    for (int s = 0; s < m->nscenes && !v13; s++)
-        for (int i = 0; i < m->scenes[s].tokens.n && !v13; i++) v13 = m->scenes[s].tokens.v[i].card[0] != '\0';
-    /* 14: an environment on the map or an area (docs/ENVIRONMENTS.md). An
-     * older build would ignore the lines and save the map without them. */
-    int v14 = m->env[0] != '\0';
-    for (int i = 0; i < m->nareas; i++) v14 |= m->areas[i].env[0] != '\0';
-    fprintf(f, "VTT %d\n", v14 ? FORMAT_VERSION : v13 ? FORMAT_BEFORE_ENV : v12 ? FORMAT_BEFORE_CARDS : v11 ? FORMAT_BEFORE_MAPLINKS : v10 ? FORMAT_BEFORE_SCENES : v9 ? FORMAT_BEFORE_HIDDEN : v8 ? FORMAT_BEFORE_FLOORS : v7 ? FORMAT_BEFORE_LINKS : v6 ? FORMAT_BEFORE_AREAS : v5 ? FORMAT_BEFORE_COUNTERS
-                          : fight ? FORMAT_BEFORE_CLOCKS : FORMAT_BEFORE_TURNS);
+    fprintf(f, "VTT %d\n", FORMAT_VERSION);
     fprintf(f, "name %s\n", m->name);
     fprintf(f, "size %d %d\n", m->w, m->h);
     fprintf(f, "zoom %d\n", m->zoom);
     fprintf(f, "scale %g\n", m->scale_ft);
     fprintf(f, "metric %s\n", dist_metric_name((DistMetric)m->metric));
     if (m->ruleset[0]) fprintf(f, "ruleset %s\n", m->ruleset);
-    /* No new version: a vtt without :dmg loses nothing by ignoring it. */
     if (m->massive) fputs("rule massive\n", f);
 
     fputs("tiles\n", f);
@@ -326,8 +290,7 @@ static int write_map(const Map *m, const char *path, int autosave, char **keep, 
                 }
                 line[x] = c;
             }
-            line[m->w] = '\n';
-            fwrite(line, 1, (size_t)m->w + 1, f);
+            put_line(f, line, m->w, '.');
         }
     }
 
@@ -556,7 +519,8 @@ static int section_row(Loader *ld, Section *sec, int y, char *line, size_t cap)
         diag(ld, ld->line, sec->width, "E010", "row-long",
              "%s row %d is %d characters, the map needs %d; the rest is ignored",
              sec->name, y + 1, len, sec->width);
-    else if (len < sec->width && !sec->shorts++)
+    /* An empty line is a row of nothing, as the writer writes one: no note. */
+    else if (len && len < sec->width && !sec->shorts++)
         sec->first_short = ld->line;
     for (int x = 0; x < len && x < sec->width; x++) {
         char c = line[x];

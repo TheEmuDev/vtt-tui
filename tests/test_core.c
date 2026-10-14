@@ -2313,7 +2313,11 @@ void test_autosave(void)
     CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 0);
     app_tick(&a, 2000 + 2 * AUTOSAVE_QUIET_MS);
     CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave"), 1);
-    CHECK_EQ(file_exists(sb.dir, "fight.vtt.autosave.tmp"), 0); /* renamed, unflushed or not */
+    {
+        char tmpname[64];
+        snprintf(tmpname, sizeof tmpname, "fight.vtt.autosave.%ld.tmp", (long)getpid());
+        CHECK_EQ(file_exists(sb.dir, tmpname), 0);          /* renamed, unflushed or not */
+    }
     CHECK_EQ(app_autosave_due(&a, 9000), -1);              /* nothing more owed */
     CHECK_EQ(a.world.map->modified, 1);                           /* it is not a save */
     CHECK_EQ(strcmp(a.world.map->path, path), 0);

@@ -235,7 +235,7 @@ void test_damage(void)
     press(&a, ":w\r");
     {
         char *text = slurp(path);
-        CHECK(text && strstr(text, "\nrule massive\n") && !strncmp(text, "VTT 13\n", 7));
+        CHECK(text && strstr(text, "\nrule massive\n") && !strncmp(text, "VTT 14\n", 7));
         free(text);
         char err[160];
         Map *m = mapio_load(path, err, sizeof err);

@@ -61,6 +61,7 @@ int main(int argc, char **argv)
         { "apply", test_apply },
         { "wire",   test_wire },
         { "mapdiag", test_map_diag },
+        { "mapfile", test_map_fidelity },
         { "mapdump", test_map_tools_dump },
         { "mapdescribe", test_map_tools_describe },
         { "mapcheck", test_map_tools_check },

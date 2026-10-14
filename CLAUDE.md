@@ -117,7 +117,7 @@ The map, the log, the file
   an edit does to the live App is guarded by `!ed->proposal`. Only the GM decides a disk
   job. **A new thing an agent should hear of calls `world_event`.**
 - The loader forgives damage silently: **every new silent-drop site calls `diag()`** with a
-  stable code. The writer picks the lowest file version that says everything.
+  stable code. The writer writes one version, the newest (`FORMAT_VERSION`).
 - The map the app will hold opens with `mapio_load_base`; a read-only look is `mapio_load`.
   A save of the open map is `app_save_map`. A map is put down only by `app_close_map`;
   each place a map leaves the app's hands sends `map closed` and calls `world_jobs_clear`;

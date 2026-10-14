@@ -111,7 +111,7 @@ perf: all
 # copy of the fixtures so libFuzzer's additions do not land in the tree.
 FUZZ_SECONDS ?= 60
 fuzz:
-	@mkdir -p $(OBJDIR)/fuzz-corpus && cp $(TESTDIR)/fixtures/*.vtt $(OBJDIR)/fuzz-corpus/
+	@mkdir -p $(OBJDIR)/fuzz-corpus && cp $(TESTDIR)/fixtures/*.vtt $(TESTDIR)/fuzz-found/*.vtt $(OBJDIR)/fuzz-corpus/
 	clang $(BASEFLAGS) -O1 -g -DVTT_PROF=0 -fsanitize=fuzzer,address,undefined \
 	    $(LIBSRCS) $(TESTDIR)/fuzz_mapio.c -o $(OBJDIR)/fuzz-mapio $(LDLIBS)
 	$(OBJDIR)/fuzz-mapio -max_total_time=$(FUZZ_SECONDS) -max_len=65536 $(OBJDIR)/fuzz-corpus

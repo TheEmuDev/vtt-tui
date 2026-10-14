@@ -1641,7 +1641,9 @@ hedges
 
 Sections are read by row count. A section with a missing row takes the next line as its last
 row, and the sections after it shift; `vtt --check` reports this. Short rows are read as if
-padded with spaces.
+padded with spaces. vtt writes a row with nothing in it (no terrain, no boundary, no fog) as an
+empty line, so the middle `hedges` row above is saved as an empty line; every other row is
+written whole.
 
 **Records.**
 
@@ -1665,25 +1667,9 @@ padded with spaces.
 | `fog on`, `fog soft-edge` | fog settings |
 | `fogpatch N NAME reveal R\|manual memory on\|off` | a fog patch; `fog` rows use `A`-`O` for patches 1-15 (unseen), `a`-`o` (seen), `1`-`9` `!"#$%&` (revealed by hand), `.` for none |
 
-**Versions.** The first line is the format version. A map is written with the lowest version
-that can hold its contents:
-
-| version | needed for |
-|---|---|
-| 3 | terrain, boundaries, creatures and status markers |
-| 4 | a fight: initiative, round, spotlight |
-| 5 | clocks, named rolls, notes |
-| 6 | counters, fog |
-| 7 | named areas |
-| 8 | links |
-| 9 | floors |
-| 10 | hidden creatures |
-| 11 | scenes |
-| 12 | links to other maps |
-| 13 | cards |
-| 14 | environments |
-
-vtt reads every version up to 14 and refuses newer files.
+**Versions.** The first line is the format version. vtt writes every map as version 14, the
+newest, and reads every version from 1 to 14, so a map from any older vtt opens. A vtt older than
+version 14 (before environments) refuses a map this one saved, rather than misreading it.
 
 ## Performance
 
