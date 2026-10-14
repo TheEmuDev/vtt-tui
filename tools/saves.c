@@ -19,7 +19,7 @@ static double now_ms(void)
 {
     struct timespec t;
     clock_gettime(CLOCK_MONOTONIC, &t);
-    return t.tv_sec * 1e3 + t.tv_nsec / 1e6;
+    return (double)t.tv_sec * 1e3 + (double)t.tv_nsec / 1e6;
 }
 
 static int by_value(const void *a, const void *b)
@@ -66,7 +66,7 @@ int main(int argc, char **argv)
         struct stat st;
         long bytes = stat(path, &st) == 0 ? (long)st.st_size : 0;
         printf("| %d×%d%s | %.1f KB | %s | %s |\n", w, h, n ? ", 24 creatures" : "",
-               bytes / 1000.0, cols[0], cols[1]);
+               (double)bytes / 1000.0, cols[0], cols[1]);
         unlink(path);
         map_free(m);
     }

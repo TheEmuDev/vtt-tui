@@ -24,7 +24,7 @@ static double now_us(void)
 {
     struct timespec t;
     clock_gettime(CLOCK_MONOTONIC, &t);
-    return t.tv_sec * 1e6 + t.tv_nsec / 1e3;
+    return (double)t.tv_sec * 1e6 + (double)t.tv_nsec / 1e3;
 }
 
 static int by_value(const void *a, const void *b)

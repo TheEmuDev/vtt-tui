@@ -129,6 +129,15 @@ fuzz-json:
 	    $(LIBSRCS) $(TESTDIR)/fuzz_json.c -o $(OBJDIR)/fuzz-json $(LDLIBS)
 	$(OBJDIR)/fuzz-json -max_total_time=$(FUZZ_SECONDS) -max_len=65536 $(OBJDIR)/fuzz-json-corpus
 
+# The measuring programs tools/saves.sh and tools/proposals.sh run
+# (tools/NAME.c against the release objects), linked here because make holds
+# today's object list: build/ keeps the objects of sources since renamed or
+# removed, which a glob there would link. Release flags on any object this
+# rebuilds, as `all` gives them.
+$(OBJDIR)/tool-%: BUILDFLAGS := $(RELFLAGS)
+$(OBJDIR)/tool-%: tools/%.c $(filter-out $(OBJDIR)/main.o,$(OBJS))
+	$(CC) $(BASEFLAGS) $(RELFLAGS) $(CFLAGS) $^ -o $@ $(LDLIBS)
+
 clean:
 	@rm -rf $(OBJDIR) $(BIN)
 
