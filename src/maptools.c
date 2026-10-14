@@ -12,6 +12,7 @@
 #include "json.h"
 #include "link.h"
 #include "ruler.h"
+#include "prof.h"
 #include "util.h"
 
 /* ---------------------------------------------------------------- naming */
@@ -307,40 +308,55 @@ void rooms_build(const Map *m, Rooms *r)
     r->start = -1;
     for (size_t i = 0; i < n; i++) r->at[i] = -1;
 
-    /* A flood fill with an explicit stack: no recursion, whatever the map. */
+    /* A flood fill with an explicit stack: no recursion, whatever the map.
+     * It visits every square of ground, so it reads the map's arrays
+     * straight -- a square is its tile and the four edge bytes round it --
+     * and keeps x and y on the stack rather than dividing an index back
+     * into them: through map_tile and map_vedge's bounds checks this walk
+     * was 5.5 ms of a 512x512 map's describe (docs/PERFORMANCE.md). */
+    PROF_ZONE("rooms.build");
+    const uint8_t *T = m->tiles, *V = m->vedges, *H = m->hedges;
+    const int      W = m->w, HH = m->h, VW = m->w + 1;
     int32_t *stack = xmalloc(n * sizeof *stack);
     int      cap = 0;
     for (int y = 0; y < m->h; y++)
         for (int x = 0; x < m->w; x++) {
             size_t i = (size_t)y * (size_t)m->w + (size_t)x;
-            if (r->at[i] >= 0 || !map_walkable(m, x, y)) continue;
+            if (r->at[i] >= 0 || T[i] == TILE_VOID) continue;
             if (r->n == cap) { cap = cap ? cap * 2 : 16; r->v = xrealloc(r->v, (size_t)cap * sizeof *r->v); }
             Room *rm = &r->v[r->n];
             rm->x0 = rm->x1 = rm->fx = x;
             rm->y0 = rm->y1 = rm->fy = y;
             rm->squares = 0;
             int sp = 0;
-            stack[sp++] = (int32_t)i;
-            r->at[i] = r->n;
+            const int id = r->n;
+            int32_t  *at = r->at;
+            stack[sp++] = (int32_t)(x | y << 16);            /* MAP_MAX_DIM is well under 65536 */
+            at[i] = id;
             while (sp) {
-                int32_t k = stack[--sp];
-                int kx = (int)(k % m->w), ky = (int)(k / m->w);
+                int32_t p = stack[--sp];
+                int kx = p & 0xffff, ky = p >> 16, k = ky * W + kx;
                 rm->squares++;
                 if (kx < rm->x0) rm->x0 = kx;
                 if (kx > rm->x1) rm->x1 = kx;
                 if (ky < rm->y0) rm->y0 = ky;
                 if (ky > rm->y1) rm->y1 = ky;
-                static const int d[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
-                for (int j = 0; j < 4; j++) {
-                    int nx = kx + d[j][0], ny = ky + d[j][1];
-                    if (!map_in_bounds(m, nx, ny) || !map_walkable(m, nx, ny)) continue;
-                    size_t ni = (size_t)ny * (size_t)m->w + (size_t)nx;
-                    if (r->at[ni] >= 0) continue;
-                    uint8_t e = d[j][0] > 0 ? map_vedge(m, kx + 1, ky) : d[j][0] < 0 ? map_vedge(m, kx, ky)
-                              : d[j][1] > 0 ? map_hedge(m, kx, ky + 1) : map_hedge(m, kx, ky);
-                    if (e != EDGE_NONE) continue;
-                    r->at[ni] = r->n;
-                    stack[sp++] = (int32_t)ni;
+                /* East, west, south, north: on the map, ground, not taken, and no edge between. */
+                if (kx + 1 < W && T[k + 1] != TILE_VOID && at[k + 1] < 0 && V[ky * VW + kx + 1] == EDGE_NONE) {
+                    at[k + 1] = id;
+                    stack[sp++] = (int32_t)((kx + 1) | ky << 16);
+                }
+                if (kx > 0 && T[k - 1] != TILE_VOID && at[k - 1] < 0 && V[ky * VW + kx] == EDGE_NONE) {
+                    at[k - 1] = id;
+                    stack[sp++] = (int32_t)((kx - 1) | ky << 16);
+                }
+                if (ky + 1 < HH && T[k + W] != TILE_VOID && at[k + W] < 0 && H[k + W] == EDGE_NONE) {
+                    at[k + W] = id;
+                    stack[sp++] = (int32_t)(kx | (ky + 1) << 16);
+                }
+                if (ky > 0 && T[k - W] != TILE_VOID && at[k - W] < 0 && H[k] == EDGE_NONE) {
+                    at[k - W] = id;
+                    stack[sp++] = (int32_t)(kx | (ky - 1) << 16);
                 }
             }
             r->n++;
@@ -362,9 +378,11 @@ void rooms_build(const Map *m, Rooms *r)
     if (r->start < 0) return;
     int ne = 0, ecap = 0;
     int (*pairs)[2] = NULL;
+    /* Every edge is looked at, and nearly all are none: the byte first. */
     for (int y = 0; y < m->h; y++)
-        for (int x = 0; x <= m->w; x++) {
-            if (x > 0 && x < m->w && edge_passable_kind(map_vedge(m, x, y))) {
+        for (int x = 1; x < m->w; x++) {
+            uint8_t e = V[y * VW + x];
+            if (e != EDGE_NONE && edge_passable_kind(e)) {
                 int a = rooms_at(r, m, x - 1, y), b = rooms_at(r, m, x, y);
                 if (a >= 0 && b >= 0 && a != b) {
                     if (ne == ecap) { ecap = ecap ? ecap * 2 : 16; pairs = xrealloc(pairs, (size_t)ecap * sizeof *pairs); }
@@ -374,7 +392,7 @@ void rooms_build(const Map *m, Rooms *r)
         }
     for (int y = 1; y < m->h; y++)
         for (int x = 0; x < m->w; x++)
-            if (edge_passable_kind(map_hedge(m, x, y))) {
+            if (H[y * W + x] != EDGE_NONE && edge_passable_kind(H[y * W + x])) {
                 int a = rooms_at(r, m, x, y - 1), b = rooms_at(r, m, x, y);
                 if (a >= 0 && b >= 0 && a != b) {
                     if (ne == ecap) { ecap = ecap ? ecap * 2 : 16; pairs = xrealloc(pairs, (size_t)ecap * sizeof *pairs); }
@@ -478,9 +496,15 @@ static int room_openings(const Map *m, const Rooms *r, int room, Opening **buf, 
 {
     const Room *rm = &r->v[room];
     int n = 0;
+    /* Every square of the room's box, and nearly all with nothing but
+     * floor round them: the four edge bytes are read straight first. */
+    const uint8_t *V = m->vedges, *H = m->hedges;
+    const int      W = m->w, VW = m->w + 1;
     for (int y = rm->y0; y <= rm->y1; y++)
         for (int x = rm->x0; x <= rm->x1; x++) {
-            if (rooms_at(r, m, x, y) != room) continue;
+            if (r->at[y * W + x] != room) continue;
+            uint8_t ew = V[y * VW + x], ee = V[y * VW + x + 1], en = H[y * W + x], es = H[(y + 1) * W + x];
+            if (ew <= EDGE_WALL && ee <= EDGE_WALL && en <= EDGE_WALL && es <= EDGE_WALL) continue;
             /* Its four sides; a boundary is listed from each room once. */
             const struct { int v, ex, ey, ox, oy; } side[4] = {
                 { 1, x, y, x - 1, y }, { 1, x + 1, y, x + 1, y },
@@ -957,13 +981,131 @@ static const char *severity(const Finding *f)
 }
 
 /* Everything the linter finds in a map, as against in its file. */
+/* Which creatures share a square, and which a label, without comparing each
+ * with every other: the squares hold a chain of the creatures standing on
+ * them, and the labels are sorted. */
+typedef struct {
+    const Map *m;
+    int32_t   *head;        /* by square: the first entry of its chain, 0 for none (entries count from 1,
+                               so the array is calloc'd and only a square a creature stands on is touched:
+                               the cost follows the creatures, not the map) */
+    int32_t   *next, *who;  /* by entry: the chain's next, and whose it is (ascending down a chain) */
+    int32_t   *same;        /* by creature: the next one with its label, -1 for none */
+    int32_t   *off;         /* the creatures with a square off the map: the grid cannot hold those */
+    int        noff;
+    int       *found;       /* pairs_after's answer: j << 1 | 1 for a label, | 0 for a square; ascending */
+    int        nfound, cap;
+} Pairs;
+
+static const Map *g_sort_map;
+static int by_label(const void *pa, const void *pb)
+{
+    int a = *(const int32_t *)pa, b = *(const int32_t *)pb;
+    int c = strcmp(g_sort_map->tokens.v[a].label, g_sort_map->tokens.v[b].label);
+    return c ? c : (a > b) - (a < b);
+}
+
+static int int_cmp(const void *pa, const void *pb)
+{
+    int a = *(const int *)pa, b = *(const int *)pb;
+    return (a > b) - (a < b);
+}
+
+static void pairs_build(Pairs *p, const Map *m)
+{
+    PROF_ZONE("check.pairs");
+    memset(p, 0, sizeof *p);
+    p->m = m;
+    int    n = m->tokens.n;
+    size_t squares = (size_t)m->w * (size_t)m->h, entries = 0;
+    for (int i = 0; i < n; i++) entries += (size_t)m->tokens.v[i].size * (size_t)m->tokens.v[i].size;
+    p->head = xcalloc(squares ? squares : 1, sizeof *p->head);
+    p->next = xmalloc((entries + 1) * sizeof *p->next);
+    p->who  = xmalloc((entries + 1) * sizeof *p->who);
+    p->same = xmalloc((size_t)(n ? n : 1) * sizeof *p->same);
+    p->off  = xmalloc((size_t)(n ? n : 1) * sizeof *p->off);
+    /* From the last creature to the first, each pushed on the front: a
+     * chain then runs from the lowest number up. */
+    int32_t e = 1;
+    for (int i = n - 1; i >= 0; i--) {
+        const Token *t = &m->tokens.v[i];
+        int out = 0;
+        for (int y = t->y; y < t->y + t->size; y++)
+            for (int x = t->x; x < t->x + t->size; x++) {
+                if (!map_in_bounds(m, x, y)) { out = 1; continue; }
+                size_t sq = (size_t)y * (size_t)m->w + (size_t)x;
+                p->who[e]  = i;
+                p->next[e] = p->head[sq];
+                p->head[sq] = e++;
+            }
+        if (out) p->off[p->noff++] = i;
+    }
+    /* (off[] was filled from the last down: pairs_after sorts what it finds.) */
+    int32_t *order = xmalloc((size_t)(n ? n : 1) * sizeof *order);
+    for (int i = 0; i < n; i++) { order[i] = i; p->same[i] = -1; }
+    g_sort_map = m;
+    qsort(order, (size_t)n, sizeof *order, by_label);
+    for (int k = 0; k + 1 < n; k++) {
+        const Token *a = &m->tokens.v[order[k]], *b = &m->tokens.v[order[k + 1]];
+        if (a->label[0] && !strcmp(a->label, b->label)) p->same[order[k]] = order[k + 1];
+    }
+    free(order);
+}
+
+static void pairs_put(Pairs *p, int v)
+{
+    if (p->nfound == p->cap) { p->cap = p->cap ? p->cap * 2 : 32; p->found = xrealloc(p->found, (size_t)p->cap * sizeof *p->found); }
+    p->found[p->nfound++] = v;
+}
+
+/* The creatures numbered after i that meet it or are called as it is, into
+ * p->found: how many. One that does both is there twice, the square first. */
+static int pairs_after(Pairs *p, const Map *m, int i)
+{
+    const Token *t = &m->tokens.v[i];
+    p->nfound = 0;
+    int off = 0;
+    for (int y = t->y; y < t->y + t->size; y++)
+        for (int x = t->x; x < t->x + t->size; x++) {
+            if (!map_in_bounds(m, x, y)) { off = 1; continue; }
+            for (int32_t e = p->head[(size_t)y * (size_t)m->w + (size_t)x]; e > 0; e = p->next[e])
+                if (p->who[e] > i) pairs_put(p, p->who[e] << 1);
+        }
+    /* Two that hang off the map may meet out there, where no square keeps a chain. */
+    if (off)
+        for (int k = 0; k < p->noff; k++) {
+            const Token *u = &m->tokens.v[p->off[k]];
+            if (p->off[k] > i && token_meets(t, u->x, u->y, u->size, u->size)) pairs_put(p, p->off[k] << 1);
+        }
+    for (int32_t j = p->same[i]; j >= 0; j = p->same[j]) pairs_put(p, j << 1 | 1);
+    if (p->nfound > 1) {
+        qsort(p->found, (size_t)p->nfound, sizeof *p->found, int_cmp);
+        int k = 1;                                       /* a big creature met on two of its squares is one pair */
+        for (int q = 1; q < p->nfound; q++)
+            if (p->found[q] != p->found[k - 1]) p->found[k++] = p->found[q];
+        p->nfound = k;
+    }
+    return p->nfound;
+}
+
+static void pairs_free(Pairs *p)
+{
+    free(p->head); free(p->next); free(p->who); free(p->same); free(p->off); free(p->found);
+}
+
 static void check_map(const Map *m, Findings *fs)
 {
     char where[64], msg[256];
+    Pairs px;
+    pairs_build(&px, m);
+    /* Every edge of the map, and nearly all are none: the byte is read
+     * here, and check_edge called for the ones that are something. */
     for (int y = 0; y < m->h; y++)
-        for (int x = 0; x <= m->w; x++) check_edge(m, fs, 1, x, y);
+        for (int x = 0; x <= m->w; x++)
+            if (m->vedges[y * (m->w + 1) + x] != EDGE_NONE) check_edge(m, fs, 1, x, y);
     for (int y = 0; y <= m->h; y++)
-        for (int x = 0; x < m->w; x++) check_edge(m, fs, 0, x, y);
+        for (int x = 0; x < m->w; x++)
+            if (m->hedges[y * m->w + x] != EDGE_NONE) check_edge(m, fs, 0, x, y);
 
     for (int i = 0; i < m->tokens.n; i++) {
         const Token *t = &m->tokens.v[i];
@@ -981,13 +1123,18 @@ static void check_map(const Map *m, Findings *fs)
             snprintf(msg, sizeof msg, "%s stands on void", label);
             map_finding(fs, "E110", "token-on-void", t->x, t->y, 0, where, msg);
         }
-        for (int j = i + 1; j < m->tokens.n; j++) {
+        /* The creatures after this one that share a square with it or bear its
+         * label: found through the pairs' two indexes, never by trying every
+         * other creature (which was the square of their number: a map of
+         * 262,144 ran for minutes). In the order of their numbers, as before. */
+        int nj = pairs_after(&px, m, i);
+        for (int q = 0; q < nj; q++) {
+            int j = px.found[q] >> 1, labeled = px.found[q] & 1;
             const Token *u = &m->tokens.v[j];
-            if (token_meets(t, u->x, u->y, u->size, u->size)) {
+            if (!labeled) {
                 snprintf(msg, sizeof msg, "%s and %s share a square", label, label_or_unnamed(u));
                 map_finding(fs, "E112", "token-overlap", t->x, t->y, 0, where, msg);
-            }
-            if (t->label[0] && !strcmp(t->label, u->label)) {
+            } else {
                 char w2[MAP_COORD_MAX];
                 map_coord_name(u->x, u->y, w2, sizeof w2);
                 snprintf(msg, sizeof msg, "two creatures called %s, here and at %s", label, w2);
@@ -995,6 +1142,7 @@ static void check_map(const Map *m, Findings *fs)
             }
         }
     }
+    pairs_free(&px);
 
     Rooms r;
     rooms_build(m, &r);

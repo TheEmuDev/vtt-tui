@@ -37,7 +37,7 @@ int  ctl_name_ok(const char *name);
  *  - the squares of map its reads walk (a region's for a dump of one, the
  *    map's for describe, check and a job read back, which is the map copied
  *    and then read: up to two walks for the one count). One whole read of
- *    the largest map, about 6 ms;
+ *    the largest map, about 5.5 ms as a dump and under 4 as a describe or check;
  *  - the squares its edits cover, whether or not they change them (a fill of
  *    what is already there records nothing, so the cap on recorded changes
  *    never sees it): the largest map twice, as that cap is;

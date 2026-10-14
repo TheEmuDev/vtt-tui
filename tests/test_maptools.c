@@ -178,8 +178,116 @@ static void scene_findings(void)
     unlink(path);
 }
 
+/* The rooms and the pairs by the slow road, for the fast one to be held to
+ * (HEALTH 70 and 71): a flood through map_walkable and map_vedge, as
+ * rooms_build was written before it read the arrays; and every creature
+ * against every other, as check_map did. */
+static void rooms_slowly(const Map *m, int32_t *at, int *count)
+{
+    int n = 0;
+    for (int i = 0; i < m->w * m->h; i++) at[i] = -1;
+    int32_t *stack = malloc((size_t)(m->w * m->h + 1) * sizeof *stack);
+    for (int y = 0; y < m->h; y++)
+        for (int x = 0; x < m->w; x++) {
+            if (at[y * m->w + x] >= 0 || !map_walkable(m, x, y)) continue;
+            int sp = 0;
+            stack[sp++] = y * m->w + x;
+            at[y * m->w + x] = n;
+            while (sp) {
+                int k = stack[--sp], kx = k % m->w, ky = k / m->w;
+                static const int d[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+                for (int j = 0; j < 4; j++) {
+                    int nx = kx + d[j][0], ny = ky + d[j][1];
+                    if (!map_in_bounds(m, nx, ny) || !map_walkable(m, nx, ny) || at[ny * m->w + nx] >= 0) continue;
+                    uint8_t e = d[j][0] > 0 ? map_vedge(m, kx + 1, ky) : d[j][0] < 0 ? map_vedge(m, kx, ky)
+                              : d[j][1] > 0 ? map_hedge(m, kx, ky + 1) : map_hedge(m, kx, ky);
+                    if (e != EDGE_NONE) continue;
+                    at[ny * m->w + nx] = n;
+                    stack[sp++] = ny * m->w + nx;
+                }
+            }
+            n++;
+        }
+    free(stack);
+    *count = n;
+}
+
+static int count_of(const char *text, const char *needle)
+{
+    int n = 0;
+    for (const char *p = text; (p = strstr(p, needle)) != NULL; p++) n++;
+    return n;
+}
+
+static void fast_against_slow(void)
+{
+    CASE("rooms and creature pairs by the arrays and the index are what the slow walks find, on maps made at random");
+    unsigned seed = 12345;
+    #define RND(n) ((int)((seed = seed * 1103515245u + 12345u) >> 16) % (n))
+    for (int round = 0; round < 60; round++) {
+        int  w = 1 + RND(24), h = 1 + RND(18);
+        Map *m = map_new(w, h, "rand");
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++) map_set_tile(m, x, y, RND(5) ? TILE_FLOOR : TILE_VOID);
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x <= w; x++) if (!RND(3)) map_set_vedge(m, x, y, (uint8_t)(1 + RND(4)));
+        for (int y = 0; y <= h; y++)
+            for (int x = 0; x < w; x++) if (!RND(3)) map_set_hedge(m, x, y, (uint8_t)(1 + RND(4)));
+        /* Creatures crowded on purpose: big ones, some off the map's edge
+         * and past it, three to a square, labels shared and none. */
+        int nt = RND(40);
+        for (int k = 0; k < nt; k++) {
+            Token t = { (int16_t)(RND(w + 3) - 1), (int16_t)(RND(h + 3) - 1), (uint8_t)(1 + RND(3)), TOKEN_ENEMY, "" };
+            if (RND(4)) snprintf(t.label, sizeof t.label, "L%d", RND(6));
+            tokens_add(&m->tokens, t);
+        }
+
+        Rooms r;
+        rooms_build(m, &r);
+        int32_t *slow = malloc((size_t)(w * h) * sizeof *slow);
+        int      nslow = 0, same = 1, squares = 0;
+        rooms_slowly(m, slow, &nslow);
+        for (int i = 0; i < w * h; i++) same &= slow[i] == r.at[i];
+        for (int i = 0; i < r.n; i++) {
+            const Room *rm = &r.v[i];
+            int cnt = 0, x0 = w, y0 = h, x1 = -1, y1 = -1, first = -1;
+            for (int q = 0; q < w * h; q++)
+                if (slow[q] == i) {
+                    cnt++;
+                    if (first < 0) first = q;
+                    x0 = imin(x0, q % w); x1 = imax(x1, q % w); y0 = imin(y0, q / w); y1 = imax(y1, q / w);
+                }
+            same &= cnt == rm->squares && x0 == rm->x0 && y0 == rm->y0 && x1 == rm->x1 && y1 == rm->y1 &&
+                    first == rm->fy * w + rm->fx;
+            squares += cnt;
+        }
+        CHECK(same && nslow == r.n);
+        rooms_free(&r);
+        free(slow);
+
+        int meet = 0, named = 0;
+        for (int i = 0; i < m->tokens.n; i++)
+            for (int j = i + 1; j < m->tokens.n; j++) {
+                const Token *t = &m->tokens.v[i], *u = &m->tokens.v[j];
+                meet  += token_meets(t, u->x, u->y, u->size, u->size);
+                named += t->label[0] && !strcmp(t->label, u->label);
+            }
+        char  *text = NULL;
+        size_t len = 0;
+        FILE  *out = open_memstream(&text, &len);
+        maptools_check_map(out, m, 0);
+        fclose(out);
+        CHECK_EQ(count_of(text, " share a square"), meet);
+        CHECK_EQ(count_of(text, "two creatures called "), named);
+        free(text);
+        map_free(m);
+    }
+    #undef RND
+}
+
 void test_map_tools_check(void)
 {
+    fast_against_slow();
     int    rc;
     size_t n;
 

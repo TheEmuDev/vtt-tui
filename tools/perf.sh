@@ -377,6 +377,9 @@ echo 'describe' > "$DIR/describe.ctl"
 echo 'check' > "$DIR/check.ctl"
 run "agent, describe 512x512" "$HUGE" 80x24 'lh' "--bench-ctl $DIR/describe.ctl"
 run "agent, check 512x512" "$HUGE"   80x24  'lh' "--bench-ctl $DIR/check.ctl"
+# The same check with 500 creatures to pair off: by square and by label, not
+# each against every other (HEALTH 71).
+run "agent, check 500 creatures" "$BIGHORDE" 80x24 'lh' "--bench-ctl $DIR/check.ctl"
 # A proposal (docs/CONFLICTS.md, step 4): the plan of rooms on a copy of the
 # largest map, then reviewed and scrapped, or accepted and undone. Each loop's
 # request is a new job; finished ones make room for the next.
