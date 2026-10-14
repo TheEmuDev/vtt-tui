@@ -1210,6 +1210,17 @@ elsewhere on this page was brought to the tables of the run before (HEALTH 67); 
 it quotes only these three moved by more than a tenth, and `undo.step`'s figure is changed
 where it is quoted. The rest differ from today's tables by a run's noise, a few percent.
 
+**`World` out of `App`** (docs/V2.md, D2; the desktop, 2026-10-13): the request handlers
+were turned from the whole `App` to a `World`, reaching the GM's screen through a table of
+function pointers. The plan's estimate was no cost: the same loads from a different base,
+and an indirect call where there was a direct one, some three a request. Measured by an
+A/B of the binary before the move (079206f) and after it (27c2181), the whole script three
+times each, turn about, medians: `ctl` (a `describe` of the largest map) 10,830.6 against
+10,895.6 µs; `job.propose` 40.5 against 40.8; `job.conflicts` 9.1 and 9.1; `agent.spawn`
+92.6 against 91.8; `undo.step` 164.0 against 163.9; and every agent scenario's frame within
+3% (`agent, room + 12` 98.6 and 98.9 µs, `agent, proposal, accept` 16.2 and 15.9). Nothing
+moved, so the tables above stand as they were regenerated the same day.
+
 **`--apply` finding the map's holder** (step 6; the desktop, 300 runs a figure, the median of
 five): a failing plan on a file nobody has open takes 1.06 ms with no vtt running and 1.17 ms
 with one, so asking a running vtt costs about 0.1 ms. The plan's estimate was 3 µs, the
