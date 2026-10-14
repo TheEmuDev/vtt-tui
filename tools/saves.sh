@@ -8,7 +8,9 @@ set -eu
     || { echo "no release build in build/ -- run make first" >&2; exit 1; }
 DIR=$(mktemp -d "${PERF_DIR:-.}/.perf.XXXXXX")
 trap 'rm -rf "$DIR"' EXIT
-OBJS=$(ls build/*.o | grep -v '/main\.o$')
+# The objects of today's sources only: build/ keeps those of files since
+# renamed or removed, which would no longer link.
+OBJS=$(for f in src/*.c; do b=$(basename "$f" .c); [ "$b" = main ] || echo "build/$b.o"; done)
 # shellcheck disable=SC2086
 ${CC:-cc} -std=c11 -D_POSIX_C_SOURCE=200809L -O2 -Isrc -o "$DIR/saves" tools/saves.c $OBJS -lm
 "$(dirname "$0")/machine.sh" "$DIR"
