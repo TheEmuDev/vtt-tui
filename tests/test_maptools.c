@@ -245,7 +245,7 @@ static void fast_against_slow(void)
         Rooms r;
         rooms_build(m, &r);
         int32_t *slow = malloc((size_t)(w * h) * sizeof *slow);
-        int      nslow = 0, same = 1, squares = 0;
+        int      nslow = 0, same = 1;
         rooms_slowly(m, slow, &nslow);
         for (int i = 0; i < w * h; i++) same &= slow[i] == r.at[i];
         for (int i = 0; i < r.n; i++) {
@@ -259,7 +259,6 @@ static void fast_against_slow(void)
                 }
             same &= cnt == rm->squares && x0 == rm->x0 && y0 == rm->y0 && x1 == rm->x1 && y1 == rm->y1 &&
                     first == rm->fy * w + rm->fx;
-            squares += cnt;
         }
         CHECK(same && nslow == r.n);
         rooms_free(&r);

@@ -341,7 +341,12 @@ void rooms_build(const Map *m, Rooms *r)
                 if (kx > rm->x1) rm->x1 = kx;
                 if (ky < rm->y0) rm->y0 = ky;
                 if (ky > rm->y1) rm->y1 = ky;
-                /* East, west, south, north: on the map, ground, not taken, and no edge between. */
+                /* East, west, south, north: on the map, ground, not taken, and
+                 * no edge between. Written out four times on purpose: one
+                 * step in a helper (tried, with the review that asked for
+                 * it) made this walk a third dearer, 2.2 to 3.0 ms on the
+                 * largest map, the compiler no longer keeping the tests in
+                 * the order that reads least. */
                 if (kx + 1 < W && T[k + 1] != TILE_VOID && at[k + 1] < 0 && V[ky * VW + kx + 1] == EDGE_NONE) {
                     at[k + 1] = id;
                     stack[sp++] = (int32_t)((kx + 1) | ky << 16);
@@ -502,7 +507,7 @@ static int room_openings(const Map *m, const Rooms *r, int room, Opening **buf, 
     const int      W = m->w, VW = m->w + 1;
     for (int y = rm->y0; y <= rm->y1; y++)
         for (int x = rm->x0; x <= rm->x1; x++) {
-            if (r->at[y * W + x] != room) continue;
+            if (r->at[y * W + x] != room) continue;      /* (a room's box is on the map: no bounds to ask) */
             uint8_t ew = V[y * VW + x], ee = V[y * VW + x + 1], en = H[y * W + x], es = H[(y + 1) * W + x];
             if (ew <= EDGE_WALL && ee <= EDGE_WALL && en <= EDGE_WALL && es <= EDGE_WALL) continue;
             /* Its four sides; a boundary is listed from each room once. */
@@ -1059,7 +1064,8 @@ static void pairs_put(Pairs *p, int v)
 }
 
 /* The creatures numbered after i that meet it or are called as it is, into
- * p->found: how many. One that does both is there twice, the square first. */
+ * p->found: how many. One that does both is there twice. Sorted, so that a
+ * big creature met on several squares is found beside itself and kept once. */
 static int pairs_after(Pairs *p, const Map *m, int i)
 {
     const Token *t = &m->tokens.v[i];
@@ -1126,7 +1132,8 @@ static void check_map(const Map *m, Findings *fs)
         /* The creatures after this one that share a square with it or bear its
          * label: found through the pairs' two indexes, never by trying every
          * other creature (which was the square of their number: a map of
-         * 262,144 ran for minutes). In the order of their numbers, as before. */
+         * 262,144 ran for minutes). Their order here does not reach the
+         * report, which is sorted whole (finding_cmp). */
         int nj = pairs_after(&px, m, i);
         for (int q = 0; q < nj; q++) {
             int j = px.found[q] >> 1, labeled = px.found[q] & 1;
