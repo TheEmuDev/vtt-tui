@@ -3,7 +3,7 @@ E011 section-short      line 21   'vedges' read as tiles row 14 of 14: a 'tiles'
    20 | 
       +                                           <- a row is missing here (or anywhere among the lines like it round it)
    21 | vedges
-      = evidence: its rows as read fit the walls, creatures and notes of the rest of the map, so what is missing is its last row, which held nothing
-      = help: add an empty line after line 20, the section's last (or after any of the empty lines before it: the same); then vtt DIR/bad.vtt --check
+      = evidence: its rows as read fit the walls, creatures and notes of the rest of the map, so as far as the map shows, what is missing is its last row, and it held nothing
+      = help: add an empty line after line 20, the section's last (or after any of the empty lines before it: the same), then vtt DIR/bad.vtt --check; if a row that held something was lost, take it from a copy of the map (the autosave, a backup)
       = 1 finding is caused by it, folded in: W019 x1
 1 error, 0 warnings

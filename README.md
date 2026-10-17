@@ -1476,10 +1476,13 @@ W031 row-extra          line 12   'tiles' has one row too many: from line 12 dow
 ```
 
 vtt finds the line by how the section fits the rest of the map: walls standing on void, wall ends
-that meet nothing, floor against void with no wall, creatures and notes on void. When nothing on
-the map shows where the line was (a stretch of plain floor with no walls), it says nothing more
-than that the section is short or a row is stray; when two places fit equally well it names the
-span between them. Fog rows are never placed this way: fog over void is allowed.
+that meet nothing, creatures and notes on void, and (on a map drawn with walls round every room)
+floor against void with no wall between. It only names a place it is sure of. When nothing on the
+map shows where the line was (a cave, a stretch of plain floor), or the map has enough walls on
+void or loose ends of its own that a wrong place could fit as well, it says only that the section
+is short or a row is stray; when several places fit equally well it names the span between them.
+A file that keeps a blank line after each section is read with those blanks as separators. Fog
+rows are never placed this way: fog over void is allowed.
 
 | code | finds |
 |---|---|

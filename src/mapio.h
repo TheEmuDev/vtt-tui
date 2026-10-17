@@ -69,6 +69,7 @@ enum { MAPIO_TILES, MAPIO_VEDGES, MAPIO_HEDGES, MAPIO_FOG, MAPIO_SECTIONS };
 typedef struct { int line; const char *text; int len; } MapioLine;
 typedef struct {
     int        header;      /* its header's line; 0 when the file has none */
+    int        repeated;    /* a second header of this name came (the loader reads that one) */
     int        rows, n, next;
     MapioLine *v;
 } MapioSection;

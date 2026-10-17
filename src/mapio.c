@@ -1440,6 +1440,7 @@ int mapio_sections(const char *text, size_t len, int w, int h, MapioSection out[
         if (kind >= 0) {
             if (in >= 0) out[in].next = lineno;
             /* The first of each: a second is the loader's to read over it. */
+            if (out[kind].header) out[kind].repeated = 1;
             in = out[kind].header ? -1 : kind;
             if (in >= 0) out[in].header = lineno;
             continue;
