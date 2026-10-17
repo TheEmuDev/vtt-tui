@@ -47,6 +47,7 @@ typedef enum {
     MODAL_CLEAR_STATUS,   /* which of a token's markers to take off */
     MODAL_CONFIRM_RECOVER,   /* an autosave newer than the map: take it? */
     MODAL_CONFIRM_HELD,      /* another vtt has this map open: open it here too? */
+    MODAL_CONFIRM_ROWS,      /* the file had a row added or lost: save the rows as read? */
     MODAL_PICKER,            /* a list filtered as the GM types: App.picker */
     MODAL_CARD,              /* :card -- a creature's card whole, scrolled by card_top */
 } ModalKind;
@@ -230,6 +231,14 @@ typedef struct {
      * proposal (`disk_job`), and the file's bytes and identity as last seen,
      * which become the map's base once the change is reviewed. */
     int      save_force;        /* :w! -- over a change on disk nobody has reviewed */
+    /* The open map's file as last read had a row added or lost by hand
+     * (W031, E011: maptools_file_finish): its line, 0 for none. A save over
+     * it writes the rows as read and the evidence is gone, so it asks once
+     * (file_rows_ok); a trip, which saves, refuses. */
+    int      file_rows, file_rows_ok;
+    int      save_then_close;   /* :wq, waiting on that question */
+    int      save_pending_force;
+    char     save_pending[MAP_PATH_MAX];
     int      ask_holders;       /* interactive: opening a map asks the other vtts first */
     int      open_anyway;       /* ... and the GM said yes */
     int      disk_state;        /* DiskState */

@@ -307,7 +307,7 @@ region B2:F5
       9   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·         
                                                                                 
                                                                                 
- NORMAL  I5  void  [wall/floor]  zoom 1 … opened Goblin Ambush (16x9, 0 tokens) 
+ NORMAL  I5  void  [wall… opened Goblin Ambush (16x9, 0 tokens); 2 errors and … 
  hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
 -- exit 0
 == roundtrip-damaged.vtt --seed 1 --script ../work/open.keys --dump-frame --players --size 80x24
@@ -337,11 +337,11 @@ region B2:F5
                                                                                 
 -- exit 0
 == roundtrip-damaged.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 80x24
--- cksum 1709392027-9757 exit 0
+-- cksum 2577262996-9759 exit 0
 == roundtrip-damaged.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 80x24
 -- cksum 3752749104-2448 exit 0
 == roundtrip-damaged.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 110x34
--- cksum 532358284-11857 exit 0
+-- cksum 2382524722-11860 exit 0
 == roundtrip-damaged.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 110x34
 -- cksum 1368086761-4522 exit 0
 == roundtrip-damaged.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 40x12

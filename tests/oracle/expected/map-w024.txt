@@ -289,7 +289,7 @@ region B2:F5
                                                                                 
                                                                                 
                                                                                 
- NORMAL  J4  void  [wall/floor]  zoom 1  map 18x6    opened t2 (18x6, 0 tokens) 
+ NORMAL  J4  void  [wall… opened t2 (18x6, 0 tokens); 1 warning in the file (:… 
  hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
 -- exit 0
 == w024.vtt --seed 1 --script ../work/open.keys --dump-frame --players --size 80x24
@@ -319,15 +319,15 @@ region B2:F5
                                                                                 
 -- exit 0
 == w024.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 80x24
--- cksum 2525594831-9780 exit 0
+-- cksum 144670406-9784 exit 0
 == w024.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 80x24
 -- cksum 3752749104-2448 exit 0
 == w024.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 110x34
--- cksum 3392150384-11910 exit 0
+-- cksum 620962577-11913 exit 0
 == w024.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 110x34
 -- cksum 1368086761-4522 exit 0
 == w024.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 40x12
--- cksum 2111833475-3698 exit 0
+-- cksum 212068253-3700 exit 0
 == w024.vtt --seed 1 --script ../work/play-help.keys --dump-frame --size 80x24
  VTT KEYS                                                             Play mode 
   Play mode                                                                     

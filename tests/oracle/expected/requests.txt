@@ -192,7 +192,7 @@ scene       put a saved scene's creatures back (an edit); save or remove one (al
 dump        the map as text: a region of it, or all of it; key says what its characters mean
 changes     the events after SEQ, then the map as it is now where they changed it: read this, not the map again
 describe    the rooms walls make, their doors and links, and what is in each
-check       mistakes: loose doors, creatures on void, rooms nothing reaches
+check       mistakes in the file (line numbers, a row added or lost) and on the map: loose doors, creatures on void, rooms nothing reaches
 stamps      the GM's saved stamps and their sizes
 characters  the GM's saved characters
 scenes      the map's scenes
@@ -1452,7 +1452,7 @@ scene       put a saved scene's creatures back (an edit); save or remove one (al
 dump        the map as text: a region of it, or all of it; key says what its characters mean
 changes     the events after SEQ, then the map as it is now where they changed it: read this, not the map again
 describe    the rooms walls make, their doors and links, and what is in each
-check       mistakes: loose doors, creatures on void, rooms nothing reaches
+check       mistakes in the file (line numbers, a row added or lost) and on the map: loose doors, creatures on void, rooms nothing reaches
 stamps      the GM's saved stamps and their sizes
 characters  the GM's saved characters
 scenes      the map's scenes

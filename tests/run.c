@@ -46,6 +46,7 @@ int main(int argc, char **argv)
         { "agentcmd", test_agent_command },
         { "disk", test_disk },
         { "diskwhole", test_disk_whole },
+        { "filefind", test_file_findings },
         { "linkkeys", test_link_keys },
         { "floors", test_floors },
         { "floorview", test_floor_view },

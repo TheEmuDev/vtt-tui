@@ -3,6 +3,8 @@
 
 #include "app_priv.h"
 
+#include "maptools.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -146,17 +148,30 @@ static int build_dest_path(App *a, const char *from, const char *typed,
 }
 
 /* Sets the title inside a saved map. Best effort: a map too damaged to load
- * keeps whatever title it had. */
+ * keeps whatever title it had (0), and so does one whose file has a row
+ * added or lost by hand (-1): the save would write its rows as read, one
+ * off, and the file's evidence of where with them. */
 static int retitle_map(const char *path, const char *title)
 {
     char err[MAPIO_ERR_MAX] = { 0 };
-    Map *m = mapio_load(path, err, sizeof err);
+    MaptoolsFile *fc = maptools_file_new();
+    Map *m = mapio_load_base_diag(path, err, sizeof err, maptools_file_sink, fc);
+    int rows = 0;
+    if (m) maptools_file_finish(fc, m, NULL, 0, &rows, NULL);
+    maptools_file_free(fc);
     if (!m) return 0;
+    if (rows) { map_free(m); return -1; }
 
     str_lcpy(m->name, title, sizeof m->name);
     int ok = (mapio_save(m, path, err, sizeof err) == 0);
     map_free(m);
     return ok;
+}
+
+static const char *retitle_said(int titled)
+{
+    return titled > 0 ? "" : titled < 0 ? "  (title unchanged: its file has a row added or lost - vtt FILE --check)"
+                                        : "  (title unchanged: the map would not load)";
 }
 
 /* Rescans, then puts the caret on a particular file rather than leaving it on
@@ -229,8 +244,7 @@ void app_rename_map(App *a, const char *from, const char *typed)
     select_path(a, to);
 
     char msg[MAP_PATH_MAX + 64];
-    snprintf(msg, sizeof msg, "renamed to %.80s.vtt%s", base,
-             titled ? "" : "  (title unchanged: the map would not load)");
+    snprintf(msg, sizeof msg, "renamed to %.80s.vtt%s", base, retitle_said(titled));
     app_set_status(a, msg);
 }
 
@@ -259,8 +273,7 @@ void app_duplicate_map(App *a, const char *from, const char *typed)
     select_path(a, to);
 
     char msg[MAP_PATH_MAX + 64];
-    snprintf(msg, sizeof msg, "copied to %.80s.vtt%s", base,
-             titled ? "" : "  (title unchanged: the map would not load)");
+    snprintf(msg, sizeof msg, "copied to %.80s.vtt%s", base, retitle_said(titled));
     app_set_status(a, msg);
 }
 

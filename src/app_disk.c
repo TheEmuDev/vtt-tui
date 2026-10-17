@@ -46,6 +46,13 @@ static void adopt(App *a)
         m->base     = a->disk_new;
         m->base_len = a->disk_new_len;
         a->disk_new = NULL;
+        /* Another writer's text: what it holds wrong, as an open says it
+         * (and a row added or lost there makes :w ask). */
+        char tail[200], msg[260];
+        if (app_file_tail(a, NULL, m, 1, tail, sizeof tail)) {
+            snprintf(msg, sizeof msg, "the file as another program wrote it%.200s", tail);
+            app_set_status_gm(a, msg);
+        }
     }
     if (m) m->disk = a->disk_seen;
     app_disk_reset(a);

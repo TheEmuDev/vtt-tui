@@ -709,6 +709,12 @@ static int run_apply(const Options *o)
                 rc = 1;
             } else if (a.world.map->gen == gen && a.world.map->scenes_gen == sgen && a.world.map->cards_gen == cgen) {
                 rc = 0;
+            } else if (a.file_rows) {
+                /* Saved, the rows would go to disk as read, one off, and the
+                 * file's evidence of where with them (as :w asks first). */
+                fprintf(stderr, "vtt: %s has a row added or lost by hand near line %d (vtt %s --check says where) - nothing saved\n",
+                        o->map_path, a.file_rows, o->map_path);
+                rc = 1;
             } else if (mapio_save(a.world.map, o->map_path, err, sizeof err) < 0) {
                 fprintf(stderr, "vtt: %s\n", err);
             } else rc = 0;

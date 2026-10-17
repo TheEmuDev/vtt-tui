@@ -468,6 +468,7 @@ void app_draw_view(App *a, View view)
                                  "press any key", frame); break;
     case MODAL_CONFIRM_QUIT:
     case MODAL_CONFIRM_DISCARD:
+    case MODAL_CONFIRM_ROWS:
         ui_confirm(a->rnd, a->th, a->modal_title, a->modal_body, frame);
         break;
 

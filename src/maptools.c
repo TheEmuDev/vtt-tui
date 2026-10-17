@@ -2696,3 +2696,162 @@ int maptools_check_map(FILE *out, const Map *m, int json)
     check_map(m, &fs);
     return check_report(out, &fs, m->path[0] ? m->path : NULL, json);
 }
+
+/* ------------------------------------------------- the file's findings, kept */
+
+/* What an open says of its file (docs/V2.md, step 5's second piece, part
+ * 2): the loader's findings, told in its one pass, then the line search on
+ * the bytes it kept (Map.base) -- which costs a scan of the line starts
+ * unless a section's count is off. Nothing is kept past the open: the
+ * report is made again from Map.base when asked (:check, the channel). */
+struct MaptoolsFile { Findings fs; };
+
+MaptoolsFile *maptools_file_new(void)
+{
+    return xcalloc(1, sizeof(MaptoolsFile));
+}
+
+void maptools_file_sink(void *ctx, int line, int col, const char *code, const char *slug, const char *msg)
+{
+    file_finding(&((MaptoolsFile *)ctx)->fs, line, col, code, slug, msg);
+}
+
+/* The line search on the bytes `m` was read from, then the count and the
+ * first finding (errors before warnings, then by line). */
+static int file_sum(Findings *fs, const Map *m, const char *text, size_t len, char *summary, size_t cap, int *rows, int *errors)
+{
+    if (m && text) check_shift(m, text, len, m->path, fs);
+    if (summary && cap) summary[0] = '\0';
+    if (rows) *rows = 0;
+    if (errors) *errors = 0;
+    int n = 0;
+    const Finding *first = NULL;
+    for (int i = 0; i < fs->n; i++) {
+        const Finding *g = &fs->v[i];
+        if (g->folded || (g->code[0] != 'E' && g->code[0] != 'W')) continue;
+        n++;
+        if (errors && g->code[0] == 'E') (*errors)++;
+        if (rows && (!strcmp(g->code, "W031") || !strcmp(g->code, "E011"))) *rows = g->line > 0 ? g->line : 1;
+        if (!first || (g->code[0] == 'E' && first->code[0] != 'E') ||
+            (g->code[0] == first->code[0] && g->line < first->line)) first = g;
+    }
+    if (first && summary && cap) {
+        if (first->line > 0) snprintf(summary, cap, "line %d, %s", first->line, first->msg);
+        else                 snprintf(summary, cap, "%s", first->msg);
+    }
+    return n;
+}
+
+int maptools_file_finish(MaptoolsFile *f, const Map *m, char *summary, size_t cap, int *rows, int *errors)
+{
+    return file_sum(&f->fs, m, m ? m->base : NULL, m ? m->base_len : 0, summary, cap, rows, errors);
+}
+
+int maptools_file_of(const Map *m, char *summary, size_t cap, int *rows, int *errors)
+{
+    Findings fs = { 0 };
+    char err[256];
+    Map *bm = m->base ? mapio_load_text_diag(m->path, m->base, m->base_len, err, sizeof err, file_finding, &fs) : NULL;
+    int n = file_sum(&fs, bm, m->base, m->base_len, summary, cap, rows, errors);
+    map_free(bm);
+    for (int i = 0; i < fs.n; i++) free(fs.v[i].more);
+    free(fs.v);
+    return n;
+}
+
+void maptools_file_free(MaptoolsFile *f)
+{
+    if (!f) return;
+    for (int i = 0; i < f->fs.n; i++) free(f->fs.v[i].more);
+    free(f->fs.v);
+    free(f);
+}
+
+/* Does the line search find anything in this file -- a place, the two
+ * readings, a row missing, or a count -- before the fold is paid for? */
+static int shift_any(const Map *m, const char *text, size_t len)
+{
+    MapioSection secs[MAPIO_SECTIONS];
+    mapio_sections(text, len, m->w, m->h, secs);
+    Shift sh;
+    shift_find(m, secs, &sh);
+    int any = sh.found;
+    for (int kind = MAPIO_TILES; kind <= MAPIO_HEDGES && !any; kind++) any = rows_past(&secs[kind]);
+    mapio_sections_free(secs);
+    return any;
+}
+
+/* The map findings the file's check folded, by what names one: its code,
+ * square and boundary. Sorted once, then each live finding looked up -- a
+ * map walled on every edge has a finding a square. */
+typedef struct { char code[8]; int x, y, edge; } FoldKey;
+
+static int foldkey_cmp(const void *pa, const void *pb)
+{
+    const FoldKey *a = pa, *b = pb;
+    int c = strcmp(a->code, b->code);
+    if (c) return c;
+    if (a->y != b->y) return a->y - b->y;
+    if (a->x != b->x) return a->x - b->x;
+    return a->edge - b->edge;
+}
+
+static FoldKey fold_key(const Finding *f)
+{
+    FoldKey k;
+    memset(&k, 0, sizeof k);
+    str_lcpy(k.code, f->code, sizeof k.code);
+    k.x = f->x; k.y = f->y; k.edge = f->edge;
+    return k;
+}
+
+int maptools_check_open(FILE *out, const Map *m, int json)
+{
+    /* The file as vtt last read or wrote it, with its line numbers: the
+     * loader's findings, the line search and its fold, checked on the map
+     * the bytes make; then the live map's own findings, less those the
+     * file's fold explains. A map never saved has only the second. */
+    Findings fs = { 0 };
+    if (m->base) {
+        Findings fb = { 0 };
+        char err[256];
+        Map *bm = mapio_load_text_diag(m->path, m->base, m->base_len, err, sizeof err, file_finding, &fb);
+        if (bm) {
+            /* The map the bytes make is checked only for the fold, which a
+             * shift found needs: else the live map's findings say it all. */
+            if (shift_any(bm, m->base, m->base_len)) {
+                check_map(bm, &fb);
+                check_shift(bm, m->base, m->base_len, m->path, &fb);
+            }
+            map_free(bm);
+        }
+        Findings live = { 0 };
+        check_map(m, &live);
+        FoldKey *keys = xmalloc((size_t)(fb.n ? fb.n : 1) * sizeof *keys);
+        int nk = 0;
+        for (int i = 0; i < fb.n; i++)
+            if (fb.v[i].folded && fb.v[i].line <= 0) keys[nk++] = fold_key(&fb.v[i]);
+        qsort(keys, (size_t)nk, sizeof *keys, foldkey_cmp);
+        for (int i = 0; i < fb.n; i++) {
+            Finding *g = &fb.v[i];
+            if (g->line <= 0 || g->folded) continue;        /* the base's map findings: the live map's say */
+            Finding *t = add_finding(&fs, g->code, g->slug);
+            *t = *g;
+            g->more = NULL;
+        }
+        for (int i = 0; i < live.n; i++) {
+            Finding *g = &live.v[i];
+            FoldKey k = fold_key(g);
+            if (nk && bsearch(&k, keys, (size_t)nk, sizeof *keys, foldkey_cmp)) { free(g->more); continue; }
+            Finding *t = add_finding(&fs, g->code, g->slug);
+            *t = *g;
+        }
+        for (int i = 0; i < fb.n; i++) free(fb.v[i].more);
+        free(fb.v);
+        free(live.v);
+        free(keys);
+    } else {
+        check_map(m, &fs);
+    }
+    return check_report(out, &fs, m->path[0] ? m->path : NULL, json);
+}

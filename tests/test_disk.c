@@ -5,11 +5,13 @@
  * opened here. */
 #include "harness.h"
 
+#include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "app_priv.h"
@@ -600,6 +602,176 @@ void test_disk_whole(void)
     t = ctl_ask(&a, cmd);
     CHECK(t && ctl_refused(t, "missing", 1));
     free(t);
+
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
+/* docs/V2.md, step 5's second piece, part 2: what an open says of its
+ * file, :check, the channel's check, and a save over a row added by hand. */
+static const char ROOM[] =
+    "VTT 14\nname room\nsize 10 6\ntiles\n"
+    "..........\n..........\n..........\n..........\n..........\n..........\n"
+    "vedges\n|         |\n|         |\n|         |\n|         |\n|         |\n|         |\n"
+    "hedges\n----------\n\n\n\n\n\n----------\ntoken enemy 2 2 1 \"Ogre\"\n";
+
+static void write_text(const char *path, const char *text, int dup_line)
+{
+    FILE *f = fopen(path, "w");
+    int line = 1;
+    for (const char *p = text; *p; line++) {
+        const char *e = strchr(p, '\n');
+        size_t n = e ? (size_t)(e - p) + 1 : strlen(p);
+        fwrite(p, 1, n, f);
+        if (line == dup_line) fwrite(p, 1, n, f);
+        p += n;
+    }
+    fclose(f);
+}
+
+void test_file_findings(void)
+{
+    Sandbox sb = sandbox_enter("filefind");
+    Renderer r;
+    App a;
+    rnd_init(&r);
+    rnd_resize(&r, 120, 40);
+    app_init(&a, NULL, &r);
+    char clean[700], bad[700];
+    snprintf(clean, sizeof clean, "%s/room.vtt", sb.dir);
+    snprintf(bad, sizeof bad, "%s/hand.vtt", sb.dir);
+    write_text(clean, ROOM, 0);
+    write_text(bad, ROOM, 6);                  /* a tiles row repeated by hand */
+
+    CASE("a clean file opens with the plain line, and nothing to ask at a save");
+    CHECK_EQ(app_open_map(&a, clean), 0);
+    CHECK(strstr(a.status, "opened room") != NULL && strstr(a.status, "in the file") == NULL);
+    CHECK_EQ(a.status_gm, 0);
+    CHECK_EQ(a.file_rows, 0);
+
+    CASE("a file with a row added by hand: the open says so, the GM's alone");
+    CHECK_EQ(app_open_map(&a, bad), 0);
+    CHECK(strstr(a.status, "opened room (10x6, 1 token); 1 warning in the file (:check): line 4, 'tiles' has 7 lines") != NULL);
+    CHECK_EQ(a.status_gm, 1);
+    CHECK_EQ(a.file_rows, 4);
+
+    CASE(":check shows the report in the card's view: the file's finding, its stray row folded in");
+    press(&a, ":check\r");
+    CHECK_EQ(a.modal, MODAL_CARD);
+    CHECK(a.card_text && strstr(a.card_text, "W031 row-extra") != NULL);
+    CHECK(a.card_text && strstr(a.card_text, "W019 stray-row") == NULL);
+    CHECK(a.card_text && strstr(a.card_text, "folded in: W019 x1") != NULL);
+    CHECK(app_view_differs(&a));
+    press(&a, "\x1b");
+    CHECK_EQ(a.modal, MODAL_NONE);
+
+    CASE("the channel's check says the file's findings too");
+    {
+        char *u = ctl_ask(&a, "check");
+        CHECK(u && !strncmp(u, "ok\n", 3) && strstr(u, "W031 row-extra") != NULL);
+        free(u);
+    }
+
+    CASE(":w over it asks first; n leaves the file as it is");
+    size_t n0, n1;
+    char *before = file_bytes(bad, &n0);
+    press(&a, ":w\r");
+    CHECK_EQ(a.modal, MODAL_CONFIRM_ROWS);
+    CHECK(strstr(a.modal_body, "Near line 4") != NULL);
+    press(&a, "n");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK(strstr(a.status, "not saved") != NULL);
+    char *after = file_bytes(bad, &n1);
+    CHECK(before && after && n0 == n1 && !memcmp(before, after, n0));
+    free(after);
+
+    CASE("y saves the rows as read, once: the next :w does not ask");
+    press(&a, ":w\r");
+    press(&a, "y");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK(strstr(a.status, "wrote ") != NULL);
+    CHECK_EQ(a.file_rows, 0);
+    after = file_bytes(bad, &n1);
+    CHECK(after && (n0 != n1 || memcmp(before, after, n0)));
+    free(after);
+    free(before);
+    press(&a, ":w\r");
+    CHECK_EQ(a.modal, MODAL_NONE);
+
+    CASE(":w! asks too; :w to another file asks nothing, and the map is that file's now");
+    write_text(bad, ROOM, 6);
+    CHECK_EQ(app_open_map(&a, bad), 0);
+    press(&a, ":w!\r");
+    CHECK_EQ(a.modal, MODAL_CONFIRM_ROWS);
+    press(&a, "n");
+    char other[720];
+    snprintf(other, sizeof other, "%s/copy.vtt", sb.dir);
+    char cmd[760];
+    snprintf(cmd, sizeof cmd, ":w %s\r", other);
+    press(&a, cmd);
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK_EQ(a.file_rows, 0);
+    CHECK(access(other, F_OK) == 0);
+
+    CASE("another program writes the file with a line vtt does not know: taken in, its finding said, the GM's");
+    {
+        CHECK_EQ(app_open_map(&a, clean), 0);
+        uint64_t now = 50000;
+        FILE *f = fopen(clean, "a");
+        fputs("# a note by hand\n", f);
+        fclose(f);
+        struct timespec later[2] = { { 0, UTIME_NOW }, { time(NULL) + 60, 0 } };
+        utimensat(AT_FDCWD, clean, later, 0);
+        key_then_quiet(&a, &now);
+        CHECK(strstr(a.status, "the file as another program wrote it; 1 warning in the file (:check): line") != NULL);
+        CHECK_EQ(a.status_gm, 1);
+        write_text(clean, ROOM, 0);
+    }
+
+    CASE(":wq over it asks, and y saves and closes");
+    write_text(bad, ROOM, 6);
+    CHECK_EQ(app_open_map(&a, bad), 0);
+    press(&a, ":wq\r");
+    CHECK_EQ(a.modal, MODAL_CONFIRM_ROWS);
+    press(&a, "y");
+    CHECK(a.world.map == NULL);
+
+    CASE("--apply over it saves nothing, and says why; the browser's rename keeps its title");
+    {
+        write_text(bad, ROOM, 6);
+        char plan[720], line[2400];
+        snprintf(plan, sizeof plan, "%s/plan.txt", sb.dir);
+        FILE *pf = fopen(plan, "w");
+        fputs("room Z B2 3x2\n", pf);
+        fclose(pf);
+        size_t n2;
+        char *was = file_bytes(bad, &n2);
+        snprintf(line, sizeof line, "./vtt %s --apply %s 2>&1", bad, plan);
+        FILE *p = popen(line, "r");
+        char said[600] = "";
+        size_t got = p ? fread(said, 1, sizeof said - 1, p) : 0;
+        said[got] = '\0';
+        int rc = p ? pclose(p) : -1;
+        CHECK(strstr(said, "has a row added or lost by hand near line 4") != NULL && strstr(said, "nothing saved") != NULL);
+        CHECK(rc != 0);
+        size_t n3;
+        char *now_bytes = file_bytes(bad, &n3);
+        CHECK(was && now_bytes && n2 == n3 && !memcmp(was, now_bytes, n2));
+        free(was);
+        free(now_bytes);
+        /* A copy made by the browser keeps the file's title: its save would
+         * write the rows as read. */
+        app_duplicate_map(&a, bad, "twin");
+        CHECK(strstr(a.status, "title unchanged: its file has a row added or lost") != NULL);
+        char twin[720];
+        snprintf(twin, sizeof twin, "%s/twin.vtt", sb.dir);
+        size_t n4;
+        char *tb = file_bytes(twin, &n4), *hb = file_bytes(bad, &n2);
+        CHECK(tb && hb && n4 == n2 && !memcmp(tb, hb, n2));      /* copied byte for byte, not rewritten */
+        free(tb);
+        free(hb);
+    }
 
     app_free(&a);
     rnd_free(&r);

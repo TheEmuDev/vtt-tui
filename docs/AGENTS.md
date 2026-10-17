@@ -176,7 +176,7 @@ can take back, so each goes in a request of its own.
 | `dump key` | what the characters of a dump mean; read it once |
 | `changes SEQ [REGION]` | the events after `SEQ` (as `wait` gives them), then the map **as it is now, only where they changed it**: a `changed REGION` line and that region's dump for each. After an event, read this and not the map again |
 | `describe [REGION] [json]` | the rooms walls make, named by their areas, with doors and links and where they lead, and what is in each; with a region (or an area's name), only the rooms that meet it, each whole |
-| `check [json]` | mistakes: loose doors, creatures on void, rooms nothing reaches ([codes](../README.md#map-tools---dump-map---check---describe)) |
+| `check [json]` | mistakes in the map's file, with its line numbers (a row added or lost by hand, a line vtt does not know), as vtt last read or wrote it, then on the map: loose doors, creatures on void, rooms nothing reaches ([codes](../README.md#map-tools---dump-map---check---describe)); what a row out of place breaks is folded into its finding |
 | `stamps` | the GM's saved stamps and their sizes |
 | `characters` | the GM's saved characters: name, label, side, size, counters, rolls |
 | `scenes` | the map's scenes: name, creatures, round, box |
@@ -420,7 +420,8 @@ A plan sent with `--apply` carries no name and its job is the GM's alone to deci
 
 **One request reads at most 300,000 squares of map** (the GM's screen waits on it). A
 `dump` counts its region's squares; `describe`, `check` and a `job N` read back count the
-whole map each. On most maps that is dozens of reads; on a 512×512 map it is one whole-map
+whole map each (`check` the map's squares or its file's bytes at a third of a square each,
+whichever is more). On most maps that is dozens of reads; on a 512×512 map it is one whole-map
 read a request, so send `describe` and `check` separately there and `dump` by region.
 `stamps` and `characters` open every saved file: three of them a request, and `changes`
 three times at most. One read's answer is never refused for its size, but once a request's

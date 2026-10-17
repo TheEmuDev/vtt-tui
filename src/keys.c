@@ -214,6 +214,7 @@ static const KeyDoc BUILD[] = {
     KEY(":ask a crypt here", "ask an agent for a change in the v box   :ask! lands it at once   :jobs lists them"),
     KEY(":review", "look at a change an agent proposed, drawn in place, and accept it or not"),
     KEY(":w!", "save over a change someone else made to the file   :e alone reads the file again"),
+    KEY(":check", "what is wrong in the map and its file: each finding where, why and how to fix it"),
     KEY(":",      "command line -- :w :q :resize :scale :metric ..."),
     KEY("F2",     "play mode    F1 back here    F12 profiler"),
     KEY("q",      "leave the map"),

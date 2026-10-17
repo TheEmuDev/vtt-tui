@@ -13,6 +13,7 @@
 #include "app_priv.h"
 #include "fog.h"
 #include "link.h"
+#include "maptools.h"
 #include "mapio.h"
 #include "prof.h"
 #include "turn.h"
@@ -134,8 +135,22 @@ static void travel(App *a, int li)
         return;
     }
 
-    Map *d = mapio_load_base(path, err, sizeof err);
-    if (!d) REFUSE("%s leads to %.30s, which is not beside this map", name, l.to_map);
+    /* A trip saves both maps: over a file with a row added or lost by hand
+     * that writes the rows as read, one off, and the evidence goes. */
+    if (a->file_rows && !a->file_rows_ok)
+        REFUSE("this map's file has a row added or lost near line %d - :check says where; :w asks to save it as read", a->file_rows);
+    MaptoolsFile *fc = maptools_file_new();
+    Map *d = mapio_load_base_diag(path, err, sizeof err, maptools_file_sink, fc);
+    if (!d) { maptools_file_free(fc); REFUSE("%s leads to %.30s, which is not beside this map", name, l.to_map); }
+    char dfile[200];
+    int  keep_rows = a->file_rows, keep_ok = a->file_rows_ok;      /* this map's, until it is left */
+    int  dsaid = app_file_tail(a, fc, d, 0, dfile, sizeof dfile), drows = a->file_rows;
+    a->file_rows = keep_rows;
+    a->file_rows_ok = keep_ok;
+    if (drows) {
+        map_free(d);
+        REFUSE("%.30s's file has a row added or lost near line %d - :e it and :check, before anyone goes there", l.to_map, drows);
+    }
     char autosave[MAP_PATH_MAX + 16];
     mapio_autosave_path(d, autosave, sizeof autosave);
     if (mapio_autosave_newer(d->path, autosave, NULL)) {
@@ -170,6 +185,7 @@ static void travel(App *a, int li)
     path_stem(m->path, stem, sizeof stem);
 
     app_travel_to(a, d);
+    a->file_rows = a->file_rows_ok = 0;             /* it had none, or nobody went */
     int first = -1;
     char who[160] = "";
     for (int k = 0; k < n; k++) {
@@ -206,6 +222,13 @@ static void travel(App *a, int li)
     snprintf(msg, sizeof msg, "%s took %s from %.30s to %.30s, %.31s%s%s%.40s%s", who, name, left, d->name, l.to_place,
              saved, back ? "" : " - no way back yet: in build mode :link to ", back ? "" : stem,
              back ? "" : " PLACE makes one");
+    /* What its file held wrong was read as the loader forgives, and the
+     * trip's save wrote that: said with the trip, the GM's (no :check: the
+     * file is vtt's writing now). */
+    if (dsaid) {
+        size_t at = strlen(msg);
+        snprintf(msg + at, sizeof msg - at, " - %.30s%.200s, saved as read", d->name, dfile);
+    }
     app_note_gm(a, msg);
 }
 

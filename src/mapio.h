@@ -51,6 +51,9 @@ int  mapio_disk_same(const MapDisk *a, const MapDisk *b);
 typedef void (*MapioDiag)(void *ctx, int line, int col, const char *code,
                           const char *slug, const char *msg);
 Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, void *ctx);
+/* mapio_load_base, the loader's findings told to `sink` in its one pass (an
+ * open that says what the file holds wrong: maptools_file_*). */
+Map *mapio_load_base_diag(const char *path, char *err, size_t errsz, MapioDiag sink, void *ctx);
 
 /* A map file's bytes, whole (malloc'd, NUL-terminated), or NULL with why. */
 char *mapio_file_read(const char *path, size_t *len, char *err, size_t errsz);

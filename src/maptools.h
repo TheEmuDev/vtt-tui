@@ -91,4 +91,22 @@ int  maptools_check(FILE *out, const char *path, int json);
  * JSON's "file" is the map's path, or null for one never saved. */
 int  maptools_check_map(FILE *out, const Map *m, int json);
 
+/* The open map's report (:check, the channel's check): its file's findings
+ * from Map.base as vtt last read or wrote it -- with line numbers, the line
+ * search and its fold -- then the live map's, less those the fold explains. */
+int  maptools_check_open(FILE *out, const Map *m, int json);
+
+/* What an open says of its file: a sink for mapio_load_base_diag, then
+ * maptools_file_finish -- the line search on Map.base -- which returns the
+ * file's warnings and errors (`errors` of them errors), `summary` the first
+ * ("line 214, ..."), and `rows` the line of a row added or lost (W031,
+ * E011), else 0. */
+typedef struct MaptoolsFile MaptoolsFile;
+MaptoolsFile *maptools_file_new(void);
+void maptools_file_sink(void *ctx, int line, int col, const char *code, const char *slug, const char *msg);
+int  maptools_file_finish(MaptoolsFile *f, const Map *m, char *summary, size_t cap, int *rows, int *errors);
+/* The same for a map already read, from its Map.base read again. */
+int  maptools_file_of(const Map *m, char *summary, size_t cap, int *rows, int *errors);
+void maptools_file_free(MaptoolsFile *f);
+
 #endif /* VTT_MAPTOOLS_H */

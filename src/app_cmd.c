@@ -1,4 +1,5 @@
 #include "app_priv.h"
+
 #include "card.h"
 
 #include <ctype.h>
@@ -10,6 +11,8 @@
 #include "dice.h"
 #include "floor.h"
 #include "fog.h"
+#include "maptools.h"
+#include "prof.h"
 
 /* ---------------------------------------------------------------- clocks */
 
@@ -702,7 +705,9 @@ static void cmd_wq(App *a, const char *verb, const char *rest)
     char path[MAP_PATH_MAX];
     if (m->path[0]) str_lcpy(path, m->path, sizeof path);
     else mapio_resolve_path(m->name, path, sizeof path);
+    a->save_then_close = 1;
     if (app_save_map(a, path) == 0) app_close_map(a);
+    if (a->modal != MODAL_CONFIRM_ROWS) a->save_then_close = 0;    /* else the question closes it */
 }
 
 static void cmd_q(App *a, const char *verb, const char *rest)
@@ -1016,6 +1021,29 @@ static void cmd_card(App *a, const char *verb, const char *rest)
     a->modal      = MODAL_CARD;
 }
 
+/* The open map's report, as --check gives it -- its file as vtt last read
+ * or wrote it, then the live map -- in the card's view. GM only: a finding
+ * can name a hidden creature, and any modal keeps the table on its own. */
+static void cmd_check(App *a, const char *verb, const char *rest)
+{
+    Map *m = a->world.map;
+    char  *text = NULL;
+    size_t len = 0;
+    FILE  *o = open_memstream(&text, &len);
+    if (!o) { app_set_status(a, "cannot make the report"); return; }
+    {
+        PROF_ZONE("app.check");
+        maptools_check_open(o, m, 0);
+    }
+    fclose(o);
+    free(a->card_own);
+    a->card_own  = text;
+    a->card_text = a->card_own;
+    snprintf(a->card_title, sizeof a->card_title, "check: %.38s", m->name);
+    a->card_top  = 0;
+    a->modal     = MODAL_CARD;
+}
+
 static void cmd_env(App *a, const char *verb, const char *rest)
 {
     app_env_command(a, rest);
@@ -1158,6 +1186,7 @@ static const struct {
     { "mirror", NULL, cmd_mirror },
     { "panel", NULL, cmd_panel },
     { "card", NULL, cmd_card },
+    { "check", NULL, cmd_check },
     { "dmg", "damage", cmd_dmg },
     { "log", NULL, cmd_log },
     { "zoom", NULL, cmd_zoom },

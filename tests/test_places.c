@@ -1390,6 +1390,60 @@ void test_map_links(void)
     CHECK(strstr(a.status, "unsaved work from a crash") != NULL);
     unlink(apath);
     {
+        /* A row lost by hand from the other map's file: the trip would write
+         * its rows as read, one off, so nobody goes. */
+        size_t clen;
+        char *ctext = file_read(cpath, 1 << 20, &clen, NULL);
+        CHECK(ctext != NULL);
+        char *row = ctext ? strstr(ctext, "\ntiles\n") : NULL;
+        if (row) {
+            row += 7;                                  /* its first row's line */
+            char *next = strchr(row, '\n');
+            FILE *cf = fopen(cpath, "w");
+            fwrite(ctext, 1, (size_t)(row - ctext), cf);
+            fputs(next + 1, cf);
+            fclose(cf);
+            press(&a, "go");
+            CHECK(!strcmp(a.world.map->name, "town"));
+            CHECK(strstr(a.status, "crypt's file has a row added or lost near line") != NULL);
+            FILE *cb = fopen(cpath, "w");                /* put back */
+            fwrite(ctext, 1, clen, cb);
+            fclose(cb);
+        }
+        free(ctext);
+        /* ... and this map's own: its save would. */
+        a.file_rows = 7;
+        press(&a, "go");
+        CHECK(!strcmp(a.world.map->name, "town"));
+        CHECK(strstr(a.status, "this map's file has a row added or lost near line 7") != NULL);
+        a.file_rows = 0;
+
+        /* The other map's file with a line vtt does not know: the trip goes,
+         * writes it as read, and says so with the trip -- the GM's. Then back. */
+        FILE *cn = fopen(cpath, "a");
+        fputs("# a note by hand\n", cn);
+        fclose(cn);
+        press(&a, "go");
+        CHECK(!strcmp(a.world.map->name, "crypt"));
+        CHECK(strstr(a.status, "crypt; 1 warning in the file: line") != NULL && strstr(a.status, "saved as read") != NULL);
+        CHECK(strstr(a.status, "(:check)") == NULL);
+        CHECK_EQ(a.status_gm, 1);
+        int ci = -1;
+        for (int i = 0; i < a.world.map->tokens.n; i++) if (!strcmp(a.world.map->tokens.v[i].label, "Aria")) ci = i;
+        CHECK(ci >= 0);
+        if (ci >= 0) {
+            a.world.map->tokens.v[ci].x = 8; a.world.map->tokens.v[ci].y = 8;
+            map_touch(a.world.map);
+            a.ed.cx = 8; a.ed.cy = 8;
+            press(&a, "go");
+        }
+        CHECK(!strcmp(a.world.map->name, "town"));
+        for (int i = 0; i < a.world.map->tokens.n; i++)
+            if (!strcmp(a.world.map->tokens.v[i].label, "Aria")) { a.world.map->tokens.v[i].x = 6; a.world.map->tokens.v[i].y = 3; }
+        map_touch(a.world.map);
+        a.ed.cx = 6; a.ed.cy = 3;
+    }
+    {
         /* This map's own file written by someone else: the trip would save
          * over it, so nobody goes until the change is looked at. */
         char tpath[700];

@@ -1202,6 +1202,24 @@ either one saves comes to the other as a change to review. A vtt that is suspend
 whose GM is in an editor writing a card) cannot say what it has open: vtt waits two seconds
 for it, then asks you whether to open the map anyway.
 
+### When the file has something wrong in it
+
+When a map opens -- `:e`, or a trip through a link -- vtt reads its file the way
+`vtt map.vtt --check` does. If the file has a mistake in it (a character no row holds, a line
+vtt does not know, a row added or lost by hand), the status line says so, to you only:
+`opened town (40x30, 3 tokens); 1 warning in the file (:check): line 214, ...`. `:check`
+shows the whole report: each finding, where it is, why, and how to fix it, with what a
+row out of place breaks on the map folded into it. It also lists the map's own mistakes
+(loose doors, creatures on void, rooms nothing reaches), as the agents' `check` does.
+
+A row added or lost by hand leaves some rows one off. Saving then would write them as
+they were read, and the file would no longer show where the fix goes, so `:w` asks first
+(once for the map); a trip through a link, which saves both maps, refuses while either
+file has one -- until it is fixed, or for this map until `:w` has saved it as read. So does
+`vtt map.vtt --apply plan.txt` (it saves nothing and says why), and the map browser's
+rename and copy leave such a file's title as it was rather than rewrite it. The fix is the file's: open it in an editor, do what
+`:check` says, and `:e` reads it again.
+
 ## Rulesets
 
 A map can name a ruleset with `:ruleset NAME`. This adds game-specific readouts; it never
@@ -1295,6 +1313,7 @@ use, and how `:dmg` marks HP. Available: `none`, `daggerheart`.
 |---------|--------|
 | `:w [name]` | save |
 | `:w!` | save over a change someone else made to the file that you have not reviewed |
+| `:check` | what is wrong in the map and its file, each finding with where, why and how to fix it |
 | `:wq` `:x` | save and close |
 | `:q` `:q!` | close / close without saving |
 | `:e NAME` | open another map (asks if there are unsaved changes) |
@@ -1520,6 +1539,7 @@ Fog rows are never placed this way: fog over void is allowed.
 | `W028 card-dropped`, `card-cut` | a card with a bad or repeated name, a sixty-fifth, one with no `endcard`, or a stray `endcard` |
 | `W029 unknown-rule` | a `rule` line naming a rule other than `massive`, ignored |
 | `W030 env-dropped` | an environment line for the map or an area that does not read, or a second one for the map |
+| `W032 section-repeated` | a second `tiles`, `vedges` or `hedges` section: it is read over the first, whose rows are lost |
 | `W031 row-extra` | a section with a line too many (one added or repeated by hand), and which line -- or, when the map does not show which, the count and the section's lines |
 | `W102 door-to-void` | a door or window leading into void |
 | `W103 wall-in-void` | a wall with no map on either side |

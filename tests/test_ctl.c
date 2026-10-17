@@ -2560,6 +2560,18 @@ void test_ctl_reads(void)
             u = ctl_ask(&b, "describe\ncheck");
             CHECK(ctl_refused(u, "limit", 2) && strstr(u, "reads more than 300000 squares of map"));
             free(u);
+            /* Floor and walls on every square, saved: the file is as big as
+             * it gets, and check, which reads it too, still fits once. */
+            Map *fm = b.world.map;
+            map_fill_tiles(fm, 0, 0, fm->w - 1, fm->h - 1, TILE_FLOOR);
+            for (int y = 0; y < fm->h; y++)
+                for (int x = 0; x <= fm->w; x++) map_set_vedge(fm, x, y, EDGE_WALL);
+            map_touch(fm);
+            CHECK_EQ(app_save_map(&b, fm->path), 0);
+            CHECK(fm->base_len > 400000);
+            u = ctl_ask(&b, "check");
+            CHECK(u && !strncmp(u, "ok\n", 3));
+            free(u);
             u = ctl_ask(&b, "dump all\ndump A1:D4\nscene diff None");
             CHECK(ctl_refused(u, "missing", 3));              /* a region's squares are its own: 16 more is nothing */
             free(u);

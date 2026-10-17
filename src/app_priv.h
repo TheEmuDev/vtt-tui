@@ -72,6 +72,8 @@ void app_leave_map(App *a);
 void app_leave_map_for(App *a, const char *next);   /* :e -- ask, then open */
 void app_close_map(App *a);
 int  app_save_map(App *a, const char *path);
+struct MaptoolsFile;
+int  app_file_tail(App *a, struct MaptoolsFile *fc, const Map *m, int hint, char *tail, size_t cap);
 
 /* app.c: opens a terminal window running `vtt --watch` against our server.
  * Returns 0 with what was opened in msg, or -1 with why not. */

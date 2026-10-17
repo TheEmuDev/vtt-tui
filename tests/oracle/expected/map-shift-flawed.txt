@@ -333,7 +333,7 @@ region B2:F5
        ╺━━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━━━━╸───┼───┼───┼───┼───┃                
 12   ·   ·   ·   · ┃   │   │   │   │   │   │   │   │   │   │   ┃ ·   ·   ·   ·  
                    ┃───┼───┼───┼───┼───┼───┼───┼───┼───┼───┼───┃                
- NORMAL  Q8  floor  [wall/floor]  zoom 1  map 33x… opened gen (33x14, 3 tokens) 
+ NORMAL  Q8  floor  [wal… opened gen (33x14, 3 tokens); 1 warning in the file … 
  hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
 -- exit 0
 == shift-flawed.vtt --seed 1 --script ../work/open.keys --dump-frame --players --size 80x24
@@ -363,11 +363,11 @@ region B2:F5
                                                                                 
 -- exit 0
 == shift-flawed.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 80x24
--- cksum 2886698497-14470 exit 0
+-- cksum 897650631-14472 exit 0
 == shift-flawed.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 80x24
 -- cksum 3752749104-2448 exit 0
 == shift-flawed.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 110x34
--- cksum 4218949401-26363 exit 0
+-- cksum 1134218611-26366 exit 0
 == shift-flawed.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 110x34
 -- cksum 1368086761-4522 exit 0
 == shift-flawed.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 40x12

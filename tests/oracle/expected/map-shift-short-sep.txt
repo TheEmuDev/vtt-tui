@@ -315,7 +315,7 @@ region B2:F5
                                                                                 
 15   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
                                                                                 
- NORMAL  Z11  void  [wall/floor]  zoom 1  map 50x21 opened gen (50x21, 1 token) 
+ NORMAL  Z11  void  [wal… opened gen (50x21, 1 token); 1 error in the file (:c… 
  hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
 -- exit 0
 == shift-short-sep.vtt --seed 1 --script ../work/open.keys --dump-frame --players --size 80x24
@@ -345,11 +345,11 @@ region B2:F5
                                                                                 
 -- exit 0
 == shift-short-sep.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 80x24
--- cksum 1810210838-12578 exit 0
+-- cksum 1917403025-12582 exit 0
 == shift-short-sep.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 80x24
 -- cksum 3752749104-2448 exit 0
 == shift-short-sep.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 110x34
--- cksum 2381037396-23939 exit 0
+-- cksum 2314703859-23942 exit 0
 == shift-short-sep.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 110x34
 -- cksum 1368086761-4522 exit 0
 == shift-short-sep.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 40x12

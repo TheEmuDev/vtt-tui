@@ -1596,8 +1596,13 @@ static int rq_check(RQ_ARGS)
     RQ_LOCALS;
     int j = want_json(w, n, 1, err, errsz);
     if (j < 0) return -1;
-    if (!request_read(world, (long)m->w * m->h, err, errsz)) return -1;
-    maptools_check_map(out, m, j);
+    /* The file's findings from its bytes as vtt last read them, then the
+     * live map's: one map, counted as its squares or as the file's bytes a
+     * third of a square each (three row sections a square), whichever is
+     * more -- a sparse file is small, a full one about the squares again. */
+    long sq = (long)m->w * m->h, fb = m->base ? (long)(m->base_len / 3) : 0;
+    if (!request_read(world, sq > fb ? sq : fb, err, errsz)) return -1;
+    maptools_check_open(out, m, j);
     return 0;
 }
 
@@ -1662,7 +1667,7 @@ static const Request REQUESTS[] = {
     { "dump",       0, rq_dump, "dump [REGION|all|key]", "the map as text: a region of it, or all of it; key says what its characters mean" },
     { "changes",    0, rq_changes, "changes SEQ [REGION]", "the events after SEQ, then the map as it is now where they changed it: read this, not the map again" },
     { "describe",   0, rq_describe, "describe [REGION] [json]", "the rooms walls make, their doors and links, and what is in each" },
-    { "check",      0, rq_check, "check [json]", "mistakes: loose doors, creatures on void, rooms nothing reaches" },
+    { "check",      0, rq_check, "check [json]", "mistakes in the file (line numbers, a row added or lost) and on the map: loose doors, creatures on void, rooms nothing reaches" },
     { "stamps",     0, rq_stamps, "stamps", "the GM's saved stamps and their sizes" },
     { "characters", 0, rq_characters, "characters", "the GM's saved characters" },
     { "scenes",     0, rq_scenes, "scenes", "the map's scenes" },

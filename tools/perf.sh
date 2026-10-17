@@ -420,6 +420,19 @@ cp "$VOID512" "$SAVEEMPTY"
 SAVEFULL=$(genmap savefull 512 512 1 0)
 run "build, :w empty 512x512" "$SAVEEMPTY" 80x24 ':w\rlh'
 run "build, :w full 512x512"  "$SAVEFULL"  80x24 ':w\rlh'
+# :check with a tiles row repeated by hand (docs/V2.md, step 5's second
+# piece, part 2): the file's findings from Map.base, the line search and its
+# fold, the live map's checks (app.check); the open at the start is the open's
+# file report (open.file). The rooms of the outside-change scenario, and the
+# map walled on every edge, a finding a square: the worst a report can be.
+# q puts the page away. Forty loops each: a :check is a key the GM presses.
+CHECKROOMS="$DIR/check-rooms.vtt"; CHECKFULL="$DIR/check-full.vtt"
+awk '/^tiles$/ { t = NR } { print } t && NR == t + 10 { print }' "$OUTNEW" > "$CHECKROOMS"
+awk '/^tiles$/ { t = NR } { print } t && NR == t + 10 { print }' "$SAVEFULL" > "$CHECKFULL"
+_loops=$LOOPS; LOOPS=40
+run ":check, rooms 512x512"      "$CHECKROOMS" 80x24 ':check\rq'
+run ":check, every edge 512x512" "$CHECKFULL"  80x24 ':check\rq'
+LOOPS=$_loops
 run "help page"            "$WALLED" 80x24  '?jjjj'
 run "profiler overlay"     "$WALLED" 80x24  '\e[24~jjll'
 

@@ -928,6 +928,11 @@ Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, 
 
 Map *mapio_load_base(const char *path, char *err, size_t errsz)
 {
+    return mapio_load_base_diag(path, err, errsz, NULL, NULL);
+}
+
+Map *mapio_load_base_diag(const char *path, char *err, size_t errsz, MapioDiag sink, void *ctx)
+{
     /* The identity first: a write between the two shows at the next look,
      * as a change with nothing in it, where the other order would hide one. */
     MapDisk id;
@@ -935,7 +940,7 @@ Map *mapio_load_base(const char *path, char *err, size_t errsz)
     size_t len = 0;
     char  *bytes = mapio_file_read(path, &len, err, errsz);
     if (!bytes) return NULL;
-    Map *m = load_bytes(path, bytes, len, err, errsz, NULL, NULL);
+    Map *m = load_bytes(path, bytes, len, err, errsz, sink, ctx);
     if (!m) { free(bytes); return NULL; }
     m->base     = bytes;
     m->base_len = len;
@@ -949,6 +954,16 @@ Map *mapio_load_mem(const char *bytes, size_t len, char *err, size_t errsz)
     return load_bytes("", (char *)(uintptr_t)bytes, len, err, errsz, NULL, NULL);
 }
 
+/* A row section's header: a second one is read over the first, whose rows
+ * are lost (a merge, a paste). */
+static void section_seen(Loader *ld, int seen[3], int k, const char *name)
+{
+    if (seen[k])
+        diag(ld, ld->line, -1, "W032", "section-repeated",
+             "a second '%s' section: it is read over the first, at line %d, whose rows are lost", name, seen[k]);
+    else seen[k] = ld->line;
+}
+
 static Map *load_text(FILE *f, const char *path, char *err, size_t errsz, MapioDiag sink, void *ctx)
 {
     PROF_ZONE("mapio.load");
@@ -957,7 +972,7 @@ static Map *load_text(FILE *f, const char *path, char *err, size_t errsz, MapioD
 
     char   line[MAP_MAX_DIM + 64];
     int    version = 0, w = 0, h = 0, zoom = 1;
-    int    name_line = 0;
+    int    name_line = 0, seen[3] = { 0, 0, 0 };   /* each row section's header line */
     char   name[MAP_NAME_MAX] = "untitled";
     double scale = MAP_SCALE_DEFAULT;
     int    metric = MAP_METRIC_DEFAULT;
@@ -1177,6 +1192,7 @@ static Map *load_text(FILE *f, const char *path, char *err, size_t errsz, MapioD
         } else if (!strncmp(line, "fogpatch ", 9)) {
             RECORD(parse_fogpatch_line(m, line), "fog patch");
         } else if (!strcmp(line, "tiles")) {
+            section_seen(ld, seen, 0, "tiles");
             Section sec = { "tiles", h, w, 0, 0, 0, w };
             for (int y = 0; y < h; y++) {
                 if (section_row(ld, &sec, y, line, sizeof line) < 0) break;
@@ -1184,6 +1200,7 @@ static Map *load_text(FILE *f, const char *path, char *err, size_t errsz, MapioD
             }
             section_done(ld, &sec);
         } else if (!strcmp(line, "vedges")) {
+            section_seen(ld, seen, 1, "vedges");
             Section sec = { "vedges", h, w + 1, 1, 0, 0, w };
             for (int y = 0; y < h; y++) {
                 if (section_row(ld, &sec, y, line, sizeof line) < 0) break;
@@ -1191,6 +1208,7 @@ static Map *load_text(FILE *f, const char *path, char *err, size_t errsz, MapioD
             }
             section_done(ld, &sec);
         } else if (!strcmp(line, "hedges")) {
+            section_seen(ld, seen, 2, "hedges");
             Section sec = { "hedges", h + 1, w, 1, 0, 0, w };
             for (int y = 0; y <= h; y++) {
                 if (section_row(ld, &sec, y, line, sizeof line) < 0) break;
@@ -1459,7 +1477,10 @@ int mapio_sections(const char *text, size_t len, int w, int h, MapioSection out[
         }
         size_t sp = 0;
         while (sp < keep && start[sp] == ' ') sp++;
-        sec->v[sec->n++] = (MapioLine){ lineno, start, (int)keep, sp == keep, sp < keep && looks_like_row(line) };
+        /* `row` is read only past the section's rows: tested only there,
+         * a character at a time being most of the scan on a full map. */
+        int past = sec->n >= sec->rows;
+        sec->v[sec->n++] = (MapioLine){ lineno, start, (int)keep, sp == keep, past && sp < keep && looks_like_row(line) };
     }
     /* Past its rows, a line neither blank nor a row is the loader's unknown
      * line (W015), not the section's: set aside, and counted. */

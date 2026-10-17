@@ -1381,6 +1381,7 @@ void test_map_shift(void)
             fclose(o);
             if (cases[c].want) CHECK(strstr(out, cases[c].want) != NULL);
             if (c < 2) CHECK(strstr(out, cases[c].never) == NULL);
+            if (c == 1) CHECK(strstr(out, "W032 section-repeated") != NULL && strstr(out, "at line 5, whose rows are lost") != NULL);
             if (getenv("VTT_SHIFT_SAY")) printf("    %s:\n%s", cases[c].what, out);
             free(out);
         }

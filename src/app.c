@@ -14,6 +14,7 @@
 #include "counter.h"
 #include "floor.h"
 #include "fog.h"
+#include "maptools.h"
 #include "prof.h"
 
 const char *const APP_MENU_ITEMS[APP_MENU_COUNT] = { "Open Map", "New Map", "Quit" };
@@ -149,6 +150,33 @@ void app_show_message(App *a, const char *title, const char *body)
     a->dirty = 1;
 }
 
+/* What the open map's file holds wrong, its load told to `fc`: the line
+ * search run, a->file_rows set, and the status line's end ("; 1 warning in
+ * the file (:check): line 214, ...", the :check with `hint`) into `tail`, or
+ * "". Returns the
+ * file's warnings and errors; `fc` is freed. */
+int app_file_tail(App *a, MaptoolsFile *fc, const Map *m, int hint, char *tail, size_t cap)
+{
+    PROF_ZONE("open.file");
+    char sum[160];
+    int  rows = 0, errors = 0;
+    int  n = fc ? maptools_file_finish(fc, m, sum, sizeof sum, &rows, &errors)
+                : maptools_file_of(m, sum, sizeof sum, &rows, &errors);
+    maptools_file_free(fc);
+    a->file_rows    = rows;
+    a->file_rows_ok = 0;
+    tail[0] = '\0';
+    if (!n) return 0;
+    int warnings = n - errors;
+    char counts[48];
+    if (errors && warnings) snprintf(counts, sizeof counts, "%d error%s and %d warning%s", errors, errors == 1 ? "" : "s", warnings, warnings == 1 ? "" : "s");
+    else if (errors)        snprintf(counts, sizeof counts, "%d error%s", errors, errors == 1 ? "" : "s");
+    else                    snprintf(counts, sizeof counts, "%d warning%s", warnings, warnings == 1 ? "" : "s");
+    /* :check before the finding: the status line is short, and cuts the end. */
+    snprintf(tail, cap, "; %s in the file%s: %.110s", counts, hint ? " (:check)" : "", sum);
+    return n;
+}
+
 /* --------------------------------------------------------------- maps */
 
 static void offer_recovery(App *a);
@@ -178,12 +206,17 @@ int app_open_map(App *a, const char *path)
         }
     }
     char err[MAPIO_ERR_MAX] = { 0 };
-    /* With its file's bytes and identity: someone else may write it. */
-    Map *m = mapio_load_base(path, err, sizeof err);
+    /* With its file's bytes and identity: someone else may write it. And
+     * with what the file holds wrong, told in the same pass. */
+    MaptoolsFile *fc = maptools_file_new();
+    Map *m = mapio_load_base_diag(path, err, sizeof err, maptools_file_sink, fc);
     if (!m) {
+        maptools_file_free(fc);
         app_show_message(a, "Cannot open map", err);
         return -1;
     }
+    char tail[200];
+    int  said = app_file_tail(a, fc, m, 1, tail, sizeof tail);
     app_disk_reset(a);
 
     slog_close(&a->slog);
@@ -209,10 +242,12 @@ int app_open_map(App *a, const char *path)
     a->agent_ring.until_ms = 0;
     fog_recompute(m);
 
-    char msg[192];
-    snprintf(msg, sizeof msg, "opened %s (%dx%d, %d token%s)",
-             m->name, m->w, m->h, m->tokens.n, m->tokens.n == 1 ? "" : "s");
-    app_set_status(a, msg);
+    char msg[400];
+    snprintf(msg, sizeof msg, "opened %s (%dx%d, %d token%s)%s",
+             m->name, m->w, m->h, m->tokens.n, m->tokens.n == 1 ? "" : "s", tail);
+    /* A finding can name a hidden creature: the table sees the plain line. */
+    if (said) app_set_status_gm(a, msg);
+    else      app_set_status(a, msg);
     offer_recovery(a);
     return 0;
 }
@@ -540,6 +575,7 @@ static void app_new_map(App *a, const char *name, int w, int h)
     slog_close(&a->slog);
     map_free(a->world.map);
     a->world.map = m;
+    a->file_rows = a->file_rows_ok = 0;
     undo_clear(&a->world.undo);
     play_init(&a->play);
     ed_init(&a->ed, m);
@@ -577,6 +613,22 @@ int app_save_map(App *a, const char *path)
         }
     }
 
+    /* Over a file with a row added or lost by hand: the rows go to disk as
+     * they were read, one off, and the file's evidence of where with them.
+     * Asked once for the map. */
+    if (own && a->file_rows && !a->file_rows_ok) {
+        str_lcpy(a->save_pending, path, sizeof a->save_pending);
+        a->save_pending_force = a->save_force;
+        snprintf(a->modal_title, sizeof a->modal_title, "Save the rows as read?");
+        snprintf(a->modal_body, sizeof a->modal_body,
+                 "Near line %d the file has a row added or lost by hand: some rows are one off. "
+                 "Saving writes them as read, and the file stops showing where (:check). Save anyway?",
+                 a->file_rows);
+        a->modal = MODAL_CONFIRM_ROWS;
+        a->dirty = 1;
+        return -1;
+    }
+
     /* Create the map directory on demand rather than making the user do it. */
     char dir[MAP_PATH_MAX];
     str_lcpy(dir, path, sizeof dir);
@@ -600,6 +652,7 @@ int app_save_map(App *a, const char *path)
     /* Written over, or the map is another file's now: a change waiting from
      * the old one is of a file that no longer matters. */
     app_disk_saved(a, own);
+    a->file_rows = a->file_rows_ok = 0;       /* the map's file is vtt's writing now */
 
     char msg[192];
     snprintf(msg, sizeof msg, "wrote %.170s", path);
@@ -1140,6 +1193,30 @@ static int modal_key(App *a, Key k)
     case MODAL_NONE:
         return 0;
 
+    case MODAL_CONFIRM_ROWS:
+        if (k.kind == KEY_CHAR && (k.ch == 'y' || k.ch == 'Y')) {
+            char path[MAP_PATH_MAX];
+            str_lcpy(path, a->save_pending, sizeof path);
+            int close = a->save_then_close;
+            a->save_then_close = 0;              /* before the save, which may ask something else */
+            a->save_pending[0] = '\0';
+            a->modal = MODAL_NONE;
+            a->file_rows_ok = 1;
+            a->save_force = a->save_pending_force;
+            int rc = app_save_map(a, path);
+            a->save_force = 0;
+            if (rc == 0 && close) app_close_map(a);
+            a->dirty = 1;
+            return 1;
+        } else if ((k.kind == KEY_CHAR && (k.ch == 'n' || k.ch == 'N')) || k.kind == KEY_ESC) {
+            a->modal = MODAL_NONE;
+            app_set_status_gm(a, "not saved - :check says where the file has a row added or lost");
+        } else return 1;
+        a->save_then_close = 0;
+        a->save_pending[0] = '\0';
+        a->dirty = 1;
+        return 1;
+
     case MODAL_CARD: {
         /* A card read whole: j k and the arrows a line, ctrl-d ctrl-u half
          * a screen, g G the ends; esc, q or enter put it away. The draw
@@ -1321,6 +1398,7 @@ void app_close_map(App *a)
     app_disk_reset(a);
     map_free(a->world.map);
     a->world.map = NULL;
+    a->file_rows = a->file_rows_ok = 0;
     a->npings = a->npinged = 0;
     a->agent_ring.until_ms = 0;
     world_jobs_clear(&a->world);

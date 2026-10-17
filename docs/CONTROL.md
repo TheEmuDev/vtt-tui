@@ -65,7 +65,7 @@ as `--describe` names them. Lines run in order, so a read sees the edits before 
 | `status` | the map, its file, unsaved or not; the screen and mode; the floor on the GM's screen (a `floor NAME` line, when the map has floors); undo depth; whether edits are taken now and why not |
 | `dump [REGION]` | `--dump-map` of the live map |
 | `describe [json]` | `--describe` |
-| `check [json]` | `--check` of the map in memory (so no file line numbers) |
+| `check [json]` | `--check` of the open map: its file as vtt last read or wrote it (`Map.base`, with line numbers and the line search), then the map in memory, less what the file's fold explains |
 | `stamps` | the saved stamps and their sizes |
 | `characters` | the saved character templates, each with its card's first line when it has one (added with character templates, docs/CHARACTERS.md; cards, docs/CARDS.md) |
 | `scenes`, `scene diff NAME` | the map's scenes, and what changed since one was saved: the checkpoints this page once left for later (added with scenes, docs/SCENES.md) |
