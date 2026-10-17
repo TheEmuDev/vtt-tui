@@ -1475,14 +1475,15 @@ W031 row-extra          line 12   'tiles' has one row too many: from line 12 dow
       = 3 findings are caused by it, folded in: W120 x3
 ```
 
-vtt finds the line by how the section fits the rest of the map: walls standing on void, wall ends
-that meet nothing, creatures and notes on void, and (on a map drawn with walls round every room)
-floor against void with no wall between. It only names a place it is sure of. When nothing on the
-map shows where the line was (a cave, a stretch of plain floor), or the map has enough walls on
-void or loose ends of its own that a wrong place could fit as well, it says only that the section
-is short or a row is stray; when several places fit equally well it names the span between them.
-A file that keeps a blank line after each section is read with those blanks as separators. Fog
-rows are never placed this way: fog over void is allowed.
+vtt finds the line by how the section fits the rest of the map: walls standing on void, creatures
+and notes on void, and (on a map drawn with walls round every room) floor against void with no wall
+between; wall ends that meet nothing count only beside one of those. It only names a place it is
+sure of. When nothing on the map shows where the line was (a cave, plain floor with walls drawn on
+it), or the map has walls on void of its own that a wrong place could seem to mend, it says only
+that the section is short, a row is stray, or a row is missing with no place; when several places
+fit equally well it names the span between them. In a file that keeps a blank line after two or
+more of its sections, those blanks are read as separators; otherwise a blank after a section is a
+row pushed out of it. Fog rows are never placed this way: fog over void is allowed.
 
 | code | finds |
 |---|---|
