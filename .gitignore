@@ -8,3 +8,4 @@ core
 .perf.*
 .pagebench.*
 !.claude/settings.json
+.vs1x.*

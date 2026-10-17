@@ -81,12 +81,13 @@ tools/machine.sh     the `Machine:` line every published table carries
 
 - Perf wants the machine to itself (editing a file mid-run lifted rows by a fifth). Two
   machines, laptop i7-4510U and desktop i7-8700K: compare only within one. When a row moves,
-  A/B the previous commit's binary (`git worktree add /tmp/prev HEAD~1 && make -C /tmp/prev`).
+  A/B the previous commit's binary **on the repo's disk** (`/tmp` is tmpfs, flushes free):
+  `git worktree add .vs1x.prev HEAD~1 && make -C .vs1x.prev`, removed after.
+  Each 2.0 step's timing ends with `tools/vs1x.sh` -> PERFORMANCE.md, *2.0 against 1.x*.
   A gap under ~10% on a tight loop can be code placement alone: rebuild **both** with
   `make -B CFLAGS="-falign-functions=64 -falign-loops=32"` first (PERFORMANCE.md, *The checkpoint*).
-- Bench scripts replay whole, so no toggles: loop-neutral pairs (`llllhhhh`, `8a8A`) or
-  absolute keys (`3b`, `2R`, `6r`).
-- `tools/pagebench.sh`, `sight.sh`, `saves.sh`, `proposals.sh`, other `--bench-*` flags: CODEMAP.
+- Bench scripts replay whole: loop-neutral pairs (`llllhhhh`, `8a8A`) or absolute keys (`3b`, `2R`).
+  `tools/pagebench.sh`, `sight.sh`, `saves.sh`, `proposals.sh`, other `--bench-*` flags: CODEMAP.
 
 ## Prohibitions and invariants
 
@@ -142,8 +143,8 @@ Code
 - Never `pkill -f <pattern>` from a command whose own line contains the pattern (it kills
   the shell, exit 144), and never kill `vtt` by name: the user may have one open. Record PIDs.
 - `grep` is aliased oddly here: use `awk`, or plain `grep -n` in a subshell.
-- Scratch files go in the session scratchpad, never the repo. In a key script `ESC`+letter is Alt.
-- A test or script that runs `./vtt` or opens the channel must sit in a sandbox
-  (`sandbox_enter`: its own `XDG_DATA_HOME`/`XDG_RUNTIME_DIR`), or it reaches the user's
-  files and running vtts.
+- Scratch files go in the session scratchpad, never the repo: reuse its `kit/` (README), one
+  dir a task deleted when done, everything but `kit/` swept before a commit. Key scripts: `ESC`+letter is Alt.
+- A test or script that runs `./vtt` or opens the channel sits in a sandbox (`sandbox_enter`:
+  its own `XDG_DATA_HOME`/`XDG_RUNTIME_DIR`), or it reaches the user's files and vtts.
 - Driving a live vtt from a script (a fifo and `script`): CODEMAP, *Conventions*.
