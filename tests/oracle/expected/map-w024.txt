@@ -3,7 +3,7 @@ W024 floor-dropped      line 34   floor Nowhere dropped: no area has that name
 0 errors, 1 warning
 -- exit 1
 == w024.vtt --check --json
-{"file":"w024.vtt","errors":0,"warnings":1,"notes":0,"findings":[{"code":"W024","slug":"floor-dropped","severity":"warning","line":34,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"floor Nowhere dropped: no area has that name"}]}
+{"file":"w024.vtt","errors":0,"warnings":1,"notes":0,"findings":[{"code":"W024","slug":"floor-dropped","severity":"warning","line":34,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"floor Nowhere dropped: no area has that name","help":null,"notes":[],"span":null,"folded":null,"confidence":null}]}
 -- exit 1
 == w024.vtt --describe
 map  t2  18x6  scale 5 ft  metric alt  ruleset none

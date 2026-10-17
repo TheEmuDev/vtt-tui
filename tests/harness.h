@@ -233,6 +233,7 @@ void test_map_tools_check(void);
 void test_map_tools_dump(void);
 void test_map_diag(void);
 void test_map_fidelity(void);
+void test_map_shift(void);
 void test_net_live(void);
 void test_net_msg(void);
 void test_net_server(void);

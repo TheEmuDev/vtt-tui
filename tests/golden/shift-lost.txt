@@ -1,0 +1,9 @@
+E011 section-short      line 36   'hedges' read as vedges row 14 of 14: a 'vedges' row is missing, and 'hedges' was not read
+      |
+   24 |  |         |                   
+      +                                           <- a row is missing here, or near it
+   25 |  |         |     |         |   
+      = evidence: with a copy of line 25 put in after line 24: 8 loose wall ends meet another wall, 4 edges of floor against void get the walls round them
+      = help: the rows beside it are alike, so the missing one most likely was too: add a copy of line 25 somewhere after line 24 and before line 31, then vtt DIR/bad.vtt --check; if it was not, take it from a copy of the map (the autosave, a backup)
+      = 2 findings are caused by it, folded in: W019 x1, E101 x1
+1 error, 0 warnings

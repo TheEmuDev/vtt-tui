@@ -3,7 +3,7 @@ W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map t
 0 errors, 1 warning
 -- exit 1
 == everything.vtt --check --json
-{"file":"everything.vtt","errors":0,"warnings":1,"notes":0,"findings":[{"code":"W151","slug":"link-to-nowhere","severity":"warning","line":null,"column":null,"where":"H8","x":7,"y":7,"edge":null,"message":"stairs 3 to town, Gate leads nowhere: no map town beside this one"}]}
+{"file":"everything.vtt","errors":0,"warnings":1,"notes":0,"findings":[{"code":"W151","slug":"link-to-nowhere","severity":"warning","line":null,"column":null,"where":"H8","x":7,"y":7,"edge":null,"message":"stairs 3 to town, Gate leads nowhere: no map town beside this one","help":null,"notes":[],"span":null,"folded":null,"confidence":null}]}
 -- exit 1
 == everything.vtt --describe
 map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart

@@ -876,7 +876,23 @@ typedef struct {
     int  col;               /* 0-based column of a file finding, -1 for none */
     int  x, y, edge;        /* 0-based square of a map finding; edge 'v', 'h' or 0 */
     char msg[256];
+    int  folded;            /* caused by another finding and counted in it: not listed */
+    struct FindingMore *more;   /* what a finding says past its line, when it says more */
 } Finding;
+
+/* The lines under a finding's own (docs/V2.md, step 5's second piece, *The
+ * standard*): the file's lines round it, the evidence, the fix, and what it
+ * folded. Out of line: few findings have it, and a map can have thousands. */
+typedef struct FindingMore {
+    char snippet[640];      /* "     |" lines, each ending in a newline */
+    char evidence[400];
+    char help[400];
+    char note[200];
+    char folded[200];       /* "W103 x14, E110 x1" */
+    int  nfolded;
+    int  span0, span1;      /* the file's lines a fix may be made at; 0 for none */
+    int  certain;           /* 1 certain, 0 likely */
+} FindingMore;
 
 typedef struct { Finding *v; int n, cap; } Findings;
 
@@ -1240,11 +1256,763 @@ static void check_map(const Map *m, Findings *fs)
     }
 }
 
+/* ----------------------------------------------------------- the line search */
+
+/* Where a row section's lines went wrong (docs/V2.md, step 5's second piece).
+ * A line added to a section, or lost from it, by hand moves every row below
+ * it; the three row sections describe the same squares, and creatures, notes
+ * and links are given by coordinates no line moves, so the section fits the
+ * rest of the map above the seam and is one off below it. The search reads
+ * the file's text by its headers (a lost row has swallowed the next header
+ * and left that section unread in the map), scores every place the fix could
+ * go in one pass, and says the best when it is clearly better than leaving
+ * the section as read. Fog is never searched: a patch over void is legal, so
+ * nothing on the map shows a fog row out of place. */
+
+enum { SH_WALLS, SH_ENDS, SH_OPEN, SH_THINGS, SH_PARTS };
+
+typedef struct {
+    int w, h, kind;               /* the suspect section */
+    const uint8_t *T, *V, *H;     /* the other sections, as their first rows say */
+    int *thing_start, *thing_x;   /* per row: the squares of creatures, notes and link ends */
+    int *thing_id;                /* the creature's index, or -1 */
+    int *ttrans;                  /* per true tiles row: where void meets map along it, inside the map */
+} ShiftScan;
+
+/* The row y of section `kind`: the suspect's `prev` or `cur` when it is the
+ * suspect and y is the band's row or the one above, else the true one. */
+static const uint8_t *shift_row(const ShiftScan *sc, int kind, int y, int band,
+                                const uint8_t *prev, const uint8_t *cur)
+{
+    if (kind == sc->kind) return y == band ? cur : y == band - 1 ? prev : NULL;
+    int rows = mapio_section_rows(kind, sc->h), width = mapio_section_width(kind, sc->w);
+    if (y < 0 || y >= rows) return NULL;
+    const uint8_t *a = kind == MAPIO_TILES ? sc->T : kind == MAPIO_VEDGES ? sc->V : sc->H;
+    return a + (size_t)y * (size_t)width;
+}
+
+static int shift_void(const uint8_t *row, int x, int w)
+{
+    return x < 0 || x >= w || !row || row[x] == TILE_VOID;
+}
+
+/* Band y: the boundaries on row y (vertical ones beside its squares, the
+ * horizontal ones above them), the corners on its top line, and the things
+ * on its squares. Each counts what a map drawn right has little of: a wall
+ * with void on both sides, a wall end that meets no other, floor against
+ * void with no wall between, and a creature, note or link on void. It reads
+ * the suspect's rows y-1 and y alone, which is what lets every candidate be
+ * scored from two running sums and its own seam. */
+static int shift_blank(const uint8_t *row, int width)
+{
+    static const uint8_t zero[MAP_MAX_DIM + 1];
+    return !row || !memcmp(row, zero, (size_t)width);
+}
+
+static int shift_band(const ShiftScan *sc, int y, const uint8_t *prev, const uint8_t *cur, int part[SH_PARTS])
+{
+    int w = sc->w;
+    const uint8_t *t0 = shift_row(sc, MAPIO_TILES, y - 1, y, prev, cur);
+    const uint8_t *t1 = shift_row(sc, MAPIO_TILES, y, y, prev, cur);
+    const uint8_t *v0 = shift_row(sc, MAPIO_VEDGES, y - 1, y, prev, cur);
+    const uint8_t *v1 = shift_row(sc, MAPIO_VEDGES, y, y, prev, cur);
+    const uint8_t *h1 = shift_row(sc, MAPIO_HEDGES, y, y, prev, cur);
+    int walls = 0, ends = 0, open = 0, things = 0;
+    /* Most bands of a big map have no boundary in them: then no wall is on
+     * void and no end is loose, and what is open is where void meets map
+     * along the row (kept for each true row) and between the two rows (none
+     * when they are alike). Only a band with a boundary is walked. */
+    if (shift_blank(v0, w + 1) && shift_blank(v1, w + 1) && shift_blank(h1, w)) {
+        if (y < sc->h) {
+            if (t1 && t1 == sc->T + (size_t)y * (size_t)w) open += sc->ttrans[y];
+            else for (int x = 1; x < w; x++) open += shift_void(t1, x - 1, w) != shift_void(t1, x, w);
+        }
+        int b0 = shift_blank(t0, w), b1 = shift_blank(t1, w);
+        if (y > 0 && y < sc->h && !(b0 && b1) && !(t0 && t1 && !memcmp(t0, t1, (size_t)w)))
+            for (int x = 0; x < w; x++) open += shift_void(t0, x, w) != shift_void(t1, x, w);
+        if (y < sc->h)
+            for (int i = sc->thing_start[y]; i < sc->thing_start[y + 1]; i++)
+                things += b1 || shift_void(t1, sc->thing_x[i], w);
+        if (part) { part[SH_OPEN] += open; part[SH_THINGS] += things; }
+        return open + things;
+    }
+    for (int x = 0; x <= w; x++) {
+        /* Open: floor against void with nothing between, inside the map --
+         * a map drawn to its edge has floor against the edge everywhere. */
+        if (y < sc->h) {
+            int a = shift_void(t1, x - 1, w), b = shift_void(t1, x, w);
+            if (v1 && v1[x] != EDGE_NONE) walls += a && b;
+            else if (x > 0 && x < w)      open += a != b;
+        }
+        if (x < w) {
+            int a = shift_void(t0, x, w), b = shift_void(t1, x, w);
+            if (h1 && h1[x] != EDGE_NONE)  walls += a && b;
+            else if (y > 0 && y < sc->h)   open += a != b;
+        }
+        int meet = (v0 && v0[x] != EDGE_NONE) + (v1 && v1[x] != EDGE_NONE) +
+                   (x > 0 && h1 && h1[x - 1] != EDGE_NONE) + (x < w && h1 && h1[x] != EDGE_NONE);
+        ends += meet == 1;
+    }
+    if (y < sc->h)
+        for (int i = sc->thing_start[y]; i < sc->thing_start[y + 1]; i++)
+            things += shift_void(t1, sc->thing_x[i], w);
+    if (part) { part[SH_WALLS] += walls; part[SH_ENDS] += ends; part[SH_OPEN] += open; part[SH_THINGS] += things; }
+    return walls + ends + open + things;
+}
+
+typedef struct {
+    int found, kind, extra;       /* extra 1: a line too many; -1: one lost */
+    int k;                        /* the seam: the row the fix takes out, or puts one at */
+    int fill;                     /* a lost row put back as: 0 empty, 1 a copy of the row above, 2 of the one below */
+    int at_end;                   /* lost, and the rows read fit: the section's last row is what is missing */
+    int tie, certain, more;
+    int score0, score;
+    int part0[SH_PARTS], part[SH_PARTS];
+    int thing;                    /* a creature on void as read and not after, or -1 */
+    int span0, span1;             /* the file's lines the fix may be made at */
+    int fix_line;                 /* extra: the line to delete; lost: the line to add after */
+    int copy_line;                /* lost, fill 1 or 2: the line to copy */
+} Shift;
+
+/* The suspect's row y with candidate k applied, `put` the row put back. */
+static const uint8_t *shift_cand(int extra, uint8_t *const *rows, int n, int nr, const uint8_t *put, int k, int y)
+{
+    if (y < 0 || y >= nr) return NULL;
+    int i = extra > 0 ? (y < k ? y : y + 1) : (y < k ? y : y == k ? -1 : y - 1);
+    if (i < 0) return put;
+    return i < n ? rows[i] : NULL;
+}
+
+static int shift_parts(const ShiftScan *sc, int extra, uint8_t *const *rows, int n, int nr,
+                       const uint8_t *put, int k, int part[SH_PARTS])
+{
+    memset(part, 0, SH_PARTS * sizeof *part);
+    int total = 0;
+    for (int y = 0; y <= sc->h; y++)
+        total += shift_band(sc, y, shift_cand(extra, rows, n, nr, put, k, y - 1),
+                            shift_cand(extra, rows, n, nr, put, k, y), part);
+    return total;
+}
+
+#define SHIFT_TIE 2
+
+/* The first position of candidate k's run: removing any of a run of like
+ * lines (`like` NULL), or putting `like` back anywhere among lines just like
+ * it, makes one file. */
+static int shift_run0(uint8_t *const *rows, const int *rstart, int n, int extra, int k, const uint8_t *like, size_t wz)
+{
+    if (extra > 0) return k < n ? rstart[k] : k;
+    return k > 0 && !memcmp(rows[k - 1], like, wz) ? rstart[k - 1] : k;
+}
+
+/* A candidate: where, and for a lost row what is put back. Two that make
+ * the same file are one: removing either of two like lines, or putting a row
+ * beside a line just like it on either side. `canon` is the last position of
+ * that run, which with the row put back names the file. */
+typedef struct { int k, fill, score, canon; } ShiftCand;
+
+/* One section searched: sh->extra set by the caller, `n` of its lines read. */
+static void shift_search(const ShiftScan *sc, const MapioSection *sec, int n, int strict, Shift *sh)
+{
+    int nr = mapio_section_rows(sc->kind, sc->h), width = mapio_section_width(sc->kind, sc->w);
+    int h = sc->h, npos = sh->extra > 0 ? nr + 1 : nr;
+    size_t wz = (size_t)width;
+    uint8_t  *buf = xcalloc((size_t)(n + 1) * wz, 1);
+    uint8_t **rows = xmalloc((size_t)(n + 1) * sizeof *rows);
+    for (int i = 0; i < n; i++) {
+        rows[i] = buf + (size_t)i * wz;
+        mapio_row_parse(sc->kind, sec->v[i].text, sec->v[i].len, rows[i], width);
+    }
+    const uint8_t *empty = buf + (size_t)n * wz;      /* zeroed: an empty row */
+    /* Runs of like rows, once: rstart[i] and rend[i] are the first and last
+     * of the run row i is in, so no candidate walks a run (an empty map is
+     * one run of 512). */
+    int *rstart = xmalloc((size_t)(n + 1) * sizeof *rstart), *rend = xmalloc((size_t)(n + 1) * sizeof *rend);
+    for (int i = 0; i < n; i++) rstart[i] = i > 0 && !memcmp(rows[i - 1], rows[i], wz) ? rstart[i - 1] : i;
+    for (int i = n - 1; i >= 0; i--) rend[i] = i + 1 < n && !memcmp(rows[i + 1], rows[i], wz) ? rend[i + 1] : i;
+    /* Every row alike and empty (a section of nothing): whatever is taken
+     * out or put back makes the file it is, so nothing to search -- unless
+     * a row is lost for certain, which is then its last (below). */
+    if (n > 0 && rstart[n - 1] == 0 && !memcmp(rows[0], empty, wz) && !(sh->extra < 0 && !strict)) {
+        free(rstart); free(rend); free(rows); free(buf);
+        return;
+    }
+
+    /* Each band as read and one off (rows[y+1] for a line too many, rows[y-1]
+     * for one lost), and running sums of both: then a candidate's score is
+     * the first sum above its seam, its seam's band or two, the second below. */
+    int *PA = xcalloc((size_t)h + 3, sizeof *PA), *SB = xcalloc((size_t)h + 4, sizeof *SB);
+    int *A = xmalloc((size_t)(h + 1) * sizeof *A);
+    for (int y = 0; y <= h; y++) {
+        const uint8_t *p = y - 1 >= 0 && y - 1 < nr && y - 1 < n ? rows[y - 1] : NULL;
+        const uint8_t *c = y < nr && y < n ? rows[y] : NULL;
+        A[y] = shift_band(sc, y, p, c, NULL);
+        PA[y + 1] = PA[y] + A[y];
+    }
+    for (int y = h; y >= 0; y--) {
+        int ip = sh->extra > 0 ? y : y - 2, ic = sh->extra > 0 ? y + 1 : y - 1;
+        const uint8_t *p = y - 1 >= 0 && y - 1 < nr && ip >= 0 && ip < n ? rows[ip] : NULL;
+        const uint8_t *c = y < nr && ic >= 0 && ic < n ? rows[ic] : NULL;
+        /* Deep in a run of like rows one off is the same as read. */
+        int lo = sh->extra > 0 ? y - 1 : y - 2, hi = sh->extra > 0 ? y + 1 : y;
+        int alike = lo >= 0 && hi < n && hi < nr && rstart[hi] <= lo;
+        SB[y] = SB[y + 1] + (alike ? A[y] : shift_band(sc, y, p, c, NULL));
+    }
+    free(A);
+#define SUM_A(i) PA[(i) <= h + 1 ? (i) : h + 1]
+#define SUM_B(i) SB[(i) <= h + 1 ? (i) : h + 1]
+    int nfill = sh->extra > 0 ? 1 : 3;
+    ShiftCand *cand = xmalloc((size_t)npos * (size_t)nfill * sizeof *cand);
+    int nc = 0;
+    for (int k = 0; k < npos; k++)
+        for (int f = 0; f < nfill; f++) {
+            const uint8_t *put = f == 0 ? empty : f == 1 ? (k > 0 && k - 1 < n ? rows[k - 1] : NULL)
+                                                         : (k < n ? rows[k] : NULL);
+            if (!put) continue;
+            /* A copy that is the empty row, or the other copy, is that one;
+             * and a candidate that makes the file the one before it makes
+             * (removing the second of two like lines, putting a row back
+             * after a line just like it) is that one: each file once. */
+            if (f > 0 && !memcmp(put, empty, wz)) continue;
+            if (f == 2 && k > 0 && k - 1 < n && !memcmp(put, rows[k - 1], wz)) continue;
+            if (sh->extra > 0 ? k < n && rstart[k] < k : k > 0 && k - 1 < n && !memcmp(rows[k - 1], put, wz)) continue;
+            int s = SUM_A(k), e = k;
+            if (sh->extra > 0) {
+                if (k <= h) s += shift_band(sc, k, shift_cand(1, rows, n, nr, NULL, k, k - 1),
+                                            shift_cand(1, rows, n, nr, NULL, k, k), NULL);
+                s += SUM_B(k + 1);
+                if (k < n) e = rend[k];
+            } else {
+                if (k <= h)     s += shift_band(sc, k, shift_cand(-1, rows, n, nr, put, k, k - 1), put, NULL);
+                if (k + 1 <= h) s += shift_band(sc, k + 1, put, shift_cand(-1, rows, n, nr, put, k, k + 1), NULL);
+                s += SUM_B(k + 2);
+                if (k < n && !memcmp(rows[k], put, wz)) e = rend[k] + 1;
+            }
+            cand[nc++] = (ShiftCand){ k, f, s, e };
+        }
+#undef SUM_A
+#undef SUM_B
+    /* The fill's row, for telling two candidates' files apart. */
+#define PUT(c) ((c).fill == 0 ? empty : (c).fill == 1 ? rows[(c).k - 1] : rows[(c).k])
+#define SAME(a, b) ((a).canon == (b).canon && (sh->extra > 0 || !memcmp(PUT(a), PUT(b), wz)))
+    ShiftCand none = sh->extra > 0 ? (ShiftCand){ nr, 0, 0, nr } : (ShiftCand){ nr - 1, 0, 0, 0 };
+    if (sh->extra < 0) none.canon = n;                 /* an empty row put at the end: n == nr - 1 */
+    /* The first position of a candidate's run: back from it while the rows
+     * match what it removes or puts back. */
+#define RUN0(c) shift_run0(rows, rstart, n, sh->extra, (c).k, sh->extra > 0 ? NULL : PUT(c), wz)
+    int bi = -1, s0 = -1;
+    for (int i = 0; i < nc; i++) {
+        if (SAME(cand[i], none) && (s0 < 0 || cand[i].score < s0)) s0 = cand[i].score;
+        if (bi < 0 || cand[i].score < cand[bi].score) bi = i;
+    }
+    /* Within SHIFT_TIE of the best is as good as the best: the evidence is
+     * counts of what a map drawn right has little of, and a map has a few
+     * by design (a wall's stub, a door in a doorway), so a candidate that
+     * lowers them by one or two over the true one is not to be told from it.
+     * Every candidate that close is in the answer, which is then a span. */
+    int sb = cand[bi].score, second = -1, tie = 0, best_none = SAME(cand[bi], none);
+    int lo = RUN0(cand[bi]), hi = cand[bi].canon;
+    for (int i = 0; i < nc; i++) {
+        if (SAME(cand[i], cand[bi])) continue;
+        if (cand[i].score <= sb + SHIFT_TIE) {
+            tie = 1;
+            best_none |= SAME(cand[i], none);
+            int r0 = RUN0(cand[i]);
+            if (r0 < lo) lo = r0;
+            if (cand[i].canon > hi) hi = cand[i].canon;
+        } else if (second < 0 || cand[i].score < second) second = cand[i].score;
+    }
+    int better = s0 - sb;
+    /* Clearly better: by more than a tie when the count already says a line
+     * is wrong; when the count looks right (a separator read as a row), by
+     * enough to stand out of a map's own share of loose ends and open edges
+     * -- a map drawn with no walls has its whole edge open. */
+    int clear = strict ? better >= 4 && better * 4 >= s0 : better > SHIFT_TIE;
+    /* A row is lost for certain when the section swallowed what followed
+     * it (not strict): then something is said even when leaving the rows
+     * where they are is among the best -- the row missing at the end. */
+    int lost_for_sure = sh->extra < 0 && !strict;
+    /* And a line too many for certain when what it pushed out of the
+     * section holds something (a blank there is what a hand-written file
+     * puts between sections): then a tie that takes in leaving it as read
+     * -- the last line being the extra one -- is still a span to tell. */
+    int stray = sh->extra > 0 && nr < n && sec->v[nr].len > 0 && memcmp(rows[nr], empty, wz);
+    if (best_none && !lost_for_sure && !(stray && tie)) { /* leaving it as read is as good: nothing to say */ }
+    else if (best_none || clear) {
+        ShiftCand c = cand[bi];
+        if (best_none && !tie) c = none;
+        const uint8_t *put = sh->extra > 0 ? NULL : PUT(c);
+        int first = tie ? lo : RUN0(c), last = tie ? hi : c.canon;
+        sh->found   = 1;
+        sh->at_end  = best_none && !tie;
+        sh->k       = c.k;
+        sh->fill    = c.fill;
+        sh->tie     = tie;
+        sh->certain = !tie && (second < 0 || second - sb >= 4 || second - sb >= (better + 1) / 2);
+        sh->score0  = s0;
+        sh->score   = c.score;
+        shift_parts(sc, sh->extra, rows, n, nr, sh->extra > 0 ? NULL : empty, none.k, sh->part0);
+        shift_parts(sc, sh->extra, rows, n, nr, put, c.k, sh->part);
+        if (sh->extra > 0) {
+            sh->span0 = sec->v[first].line;
+            sh->span1 = sec->v[last < n ? last : n - 1].line;
+            sh->fix_line = sec->v[c.k].line;
+        } else {
+            sh->span0 = first ? sec->v[first - 1].line : sec->header;
+            sh->span1 = last ? sec->v[(last < n ? last : n) - 1].line : sec->header;
+            sh->fix_line = c.k ? sec->v[c.k - 1].line : sec->header;
+            sh->copy_line = c.fill == 1 ? sec->v[c.k - 1].line : c.fill == 2 ? sec->v[c.k].line : 0;
+        }
+        /* A creature the fix takes off void, to name. */
+        sh->thing = -1;
+        if (sc->kind == MAPIO_TILES)
+            for (int y = 0; y < h && sh->thing < 0; y++) {
+                const uint8_t *ra = shift_cand(sh->extra, rows, n, nr, empty, none.k, y);
+                const uint8_t *rb = shift_cand(sh->extra, rows, n, nr, put, c.k, y);
+                for (int i = sc->thing_start[y]; i < sc->thing_start[y + 1]; i++)
+                    if (sc->thing_id[i] >= 0 && shift_void(ra, sc->thing_x[i], sc->w) && !shift_void(rb, sc->thing_x[i], sc->w)) {
+                        sh->thing = sc->thing_id[i];
+                        break;
+                    }
+            }
+    }
+#undef RUN0
+#undef PUT
+#undef SAME
+    free(cand);
+    free(rstart);
+    free(rend);
+    free(PA);
+    free(SB);
+    free(rows);
+    free(buf);
+}
+
+/* Every row section of the file searched; the clearest shift found, if any,
+ * into *out. `secs` are the file's sections by their headers. */
+static void shift_find(const Map *m, MapioSection secs[MAPIO_SECTIONS], Shift *out)
+{
+    PROF_ZONE("check.shift");
+    memset(out, 0, sizeof *out);
+    int w = m->w, h = m->h;
+    /* Which sections to search: one with a line too many or too few, or
+     * one whose count is right but whose last line is a blank (a separator
+     * read as its last row). None, and there is nothing to read. */
+    int want[3] = { 0 }, any = 0, counted = 0;
+    for (int kind = MAPIO_TILES; kind <= MAPIO_HEDGES; kind++) {
+        const MapioSection *sec = &secs[kind];
+        int n = sec->n;
+        while (n > sec->rows + 1 && sec->v[n - 1].len == 0) n--;
+        int off = sec->header && (n >= sec->rows + 1 || n == sec->rows - 1);
+        want[kind] = off ? 2 : sec->header && n == sec->rows && n > 0 && sec->v[n - 1].len == 0;
+        counted |= off;
+        any |= want[kind];
+    }
+    /* A section whose count is wrong is the suspect: one that only looks
+     * like it lost a row sees that section's shift too, and would answer
+     * it by shifting itself. */
+    if (counted) for (int kind = MAPIO_TILES; kind <= MAPIO_HEDGES; kind++) if (want[kind] == 1) want[kind] = 0;
+    if (!any) return;
+    /* The other sections as their first rows say: the loaded map's own,
+     * unless a section came up short -- then it swallowed what followed it,
+     * a whole section may be unread, and the text is read again. */
+    uint8_t *arr[3];
+    int short_one = 0;
+    for (int kind = MAPIO_TILES; kind <= MAPIO_HEDGES; kind++) short_one |= secs[kind].n < secs[kind].rows;
+    for (int kind = MAPIO_TILES; kind <= MAPIO_HEDGES; kind++) {
+        if (!short_one) { arr[kind] = kind == MAPIO_TILES ? m->tiles : kind == MAPIO_VEDGES ? m->vedges : m->hedges; continue; }
+        int rows = mapio_section_rows(kind, h), width = mapio_section_width(kind, w);
+        arr[kind] = xcalloc((size_t)rows * (size_t)width, 1);
+        for (int y = 0; y < rows && y < secs[kind].n; y++)
+            mapio_row_parse(kind, secs[kind].v[y].text, secs[kind].v[y].len, arr[kind] + (size_t)y * (size_t)width, width);
+    }
+    /* The things given by coordinates, by row: every square of a creature,
+     * each note, each end of a link on this map. */
+    int cap = 64, nth = 0, *ty = xmalloc((size_t)cap * sizeof *ty), *tx = xmalloc((size_t)cap * sizeof *tx), *tid = xmalloc((size_t)cap * sizeof *tid);
+#define THING(X, Y, ID) do { if ((X) >= 0 && (X) < w && (Y) >= 0 && (Y) < h) { \
+        if (nth == cap) { cap *= 2; ty = xrealloc(ty, (size_t)cap * sizeof *ty); tx = xrealloc(tx, (size_t)cap * sizeof *tx); tid = xrealloc(tid, (size_t)cap * sizeof *tid); } \
+        ty[nth] = (Y); tx[nth] = (X); tid[nth] = (ID); nth++; } } while (0)
+    for (int i = 0; i < m->tokens.n; i++) {
+        const Token *t = &m->tokens.v[i];
+        for (int y = t->y; y < t->y + t->size; y++)
+            for (int x = t->x; x < t->x + t->size; x++) THING(x, y, i);
+    }
+    for (int i = 0; i < m->nnotes; i++) THING(m->notes[i].x, m->notes[i].y, -1);
+    for (int i = 0; i < m->nlinks; i++) {
+        const Link *l = &m->links[i];
+        for (int e = 0; e < (l->to_map[0] ? 1 : 2); e++)
+            for (int y = l->y[e]; y < l->y[e] + l->size; y++)
+                for (int x = l->x[e]; x < l->x[e] + l->size; x++) THING(x, y, -1);
+    }
+#undef THING
+    ShiftScan sc = { w, h, 0, arr[MAPIO_TILES], arr[MAPIO_VEDGES], arr[MAPIO_HEDGES], NULL, NULL, NULL, NULL };
+    sc.ttrans = xcalloc((size_t)h + 1, sizeof *sc.ttrans);
+    for (int y = 0; y < h; y++) {
+        const uint8_t *t = sc.T + (size_t)y * (size_t)w;
+        for (int x = 1; x < w; x++) sc.ttrans[y] += shift_void(t, x - 1, w) != shift_void(t, x, w);
+    }
+    sc.thing_start = xcalloc((size_t)h + 2, sizeof *sc.thing_start);
+    sc.thing_x = xmalloc((size_t)(nth ? nth : 1) * sizeof *sc.thing_x);
+    sc.thing_id = xmalloc((size_t)(nth ? nth : 1) * sizeof *sc.thing_id);
+    for (int i = 0; i < nth; i++) sc.thing_start[ty[i] + 1]++;
+    for (int y = 0; y < h; y++) sc.thing_start[y + 1] += sc.thing_start[y];
+    {
+        int *fill = xcalloc((size_t)h + 1, sizeof *fill);
+        for (int i = 0; i < nth; i++) {
+            int at = sc.thing_start[ty[i]] + fill[ty[i]]++;
+            sc.thing_x[at] = tx[i];
+            sc.thing_id[at] = tid[i];
+        }
+        free(fill);
+    }
+    free(ty); free(tx); free(tid);
+
+    for (int kind = MAPIO_TILES; kind <= MAPIO_HEDGES; kind++) {
+        const MapioSection *sec = &secs[kind];
+        if (!want[kind]) continue;
+        int nr = sec->rows, n = sec->n;
+        /* Blank lines past one more than the rows are what a hand-written
+         * file puts between sections. */
+        while (n > nr + 1 && sec->v[n - 1].len == 0) n--;
+        Shift sh;
+        memset(&sh, 0, sizeof sh);
+        sh.kind = kind;
+        int strict = 0;
+        if (n >= nr + 1) { sh.extra = 1; sh.more = n > nr + 1; n = nr + 1; }
+        else if (n == nr - 1) sh.extra = -1;
+        else if (n == nr && n > 0 && sec->v[n - 1].len == 0) {
+            /* The count is right, but its last line is a blank: a separator
+             * read as the last row, a row lost above it? Only clear evidence
+             * says so. */
+            sh.extra = -1; n--; strict = 1;
+        }
+        else continue;
+        sc.kind = kind;
+        shift_search(&sc, sec, n, strict, &sh);
+        if (sh.found && (!out->found || sh.score0 - sh.score > out->score0 - out->score)) *out = sh;
+    }
+    free(sc.thing_start); free(sc.thing_x); free(sc.thing_id); free(sc.ttrans);
+    if (short_one) for (int kind = MAPIO_TILES; kind <= MAPIO_HEDGES; kind++) free(arr[kind]);
+}
+
+/* The file's text with the shift undone: the line deleted, or the lost
+ * row put back after fix_line (empty, or a copy of copy_line). */
+static char *shift_fixed_text(const char *text, size_t len, const Shift *sh, size_t *out_len)
+{
+    const char *copy = NULL;
+    size_t      copy_n = 0;
+    {
+        int    line = 0;
+        size_t at = 0;
+        while (sh->copy_line && at < len) {
+            const char *nl = memchr(text + at, '\n', len - at);
+            size_t      n  = nl ? (size_t)(nl - (text + at)) : len - at;
+            if (++line == sh->copy_line) { copy = text + at; copy_n = n; break; }
+            at += n + 1;
+        }
+    }
+    char  *out = xmalloc(len + copy_n + 3);
+    size_t o = 0, at = 0;
+    int    line = 0;
+    while (at < len) {
+        const char *nl = memchr(text + at, '\n', len - at);
+        size_t      n  = nl ? (size_t)(nl - (text + at)) + 1 : len - at;
+        line++;
+        if (!(sh->extra > 0 && line == sh->fix_line)) { memcpy(out + o, text + at, n); o += n; }
+        if (sh->extra < 0 && line == sh->fix_line) {
+            if (!nl) out[o++] = '\n';
+            if (copy) { memcpy(out + o, copy, copy_n); o += copy_n; }
+            out[o++] = '\n';
+        }
+        at += n;
+    }
+    out[o] = '\0';
+    *out_len = o;
+    return out;
+}
+
+/* A finding's place in the file with the shift undone: lines past the fix
+ * move by one, and so do the suspect section's own boundaries below the seam
+ * (and a room's first square, when the tiles moved). 0 when it has no place
+ * there: it was on the very line taken out. */
+typedef struct { char code[8]; int line, x, y, edge; } FKey;
+
+static int fkey_cmp(const void *pa, const void *pb)
+{
+    const FKey *a = pa, *b = pb;
+    int c = strcmp(a->code, b->code);
+    if (c) return c;
+    if (a->line != b->line) return a->line - b->line;
+    if (a->y != b->y) return a->y - b->y;
+    if (a->x != b->x) return a->x - b->x;
+    return a->edge - b->edge;
+}
+
+static int shift_key(const Shift *sh, const Finding *f, int moved, FKey *k)
+{
+    memset(k, 0, sizeof *k);
+    str_lcpy(k->code, f->code, sizeof k->code);
+    k->x = f->x; k->y = f->y; k->edge = f->edge;
+    if (f->line > 0) {
+        k->line = f->line;
+        if (!moved) return 1;
+        if (sh->extra > 0) {
+            if (f->line == sh->fix_line) return 0;
+            if (f->line > sh->fix_line) k->line--;
+        } else if (f->line > sh->fix_line) k->line++;
+        return 1;
+    }
+    int own = (sh->kind == MAPIO_VEDGES && f->edge == 'v') || (sh->kind == MAPIO_HEDGES && f->edge == 'h') ||
+              (sh->kind == MAPIO_TILES && !strcmp(f->code, "W120"));
+    if (!moved || !own || f->y < sh->k) return 1;
+    if (sh->extra > 0) {
+        if (f->y == sh->k) return 0;
+        k->y--;
+    } else k->y++;
+    return 1;
+}
+
+static FindingMore *finding_more(Finding *f)
+{
+    if (!f->more) f->more = xcalloc(1, sizeof *f->more);
+    return f->more;
+}
+
+/* Line `want` of the text, at most `cap`-1 bytes of it. */
+static void text_line(const char *text, size_t len, int want, char *buf, size_t cap)
+{
+    buf[0] = '\0';
+    int    line = 1;
+    size_t at = 0;
+    while (at < len && line < want) {
+        const char *nl = memchr(text + at, '\n', len - at);
+        if (!nl) return;
+        at = (size_t)(nl - text) + 1;
+        line++;
+    }
+    if (line != want || at > len) return;
+    size_t n = 0;
+    while (at + n < len && text[at + n] != '\n' && text[at + n] != '\r' && n + 1 < cap) n++;
+    memcpy(buf, text + at, n);
+    buf[n] = '\0';
+}
+
+static void snip_line(char *out, size_t cap, const char *text, size_t len, int line, const char *mark)
+{
+    char row[64];
+    text_line(text, len, line, row, sizeof row);
+    size_t n = strlen(row);
+    if (n > 40) { row[37] = '.'; row[38] = '.'; row[39] = '.'; row[40] = '\0'; }
+    size_t at = strlen(out);
+    if (mark) snprintf(out + at, cap - at, " %4d | %-40s  <- %s\n", line, row, mark);
+    else      snprintf(out + at, cap - at, " %4d | %s\n", line, row);
+}
+
+static const char *section_name(int kind)
+{
+    return kind == MAPIO_TILES ? "tiles" : kind == MAPIO_VEDGES ? "vedges" : kind == MAPIO_HEDGES ? "hedges" : "fog";
+}
+
+/* The search, and when it finds a shift, its finding and the fold: the file
+ * read again and checked with the shift undone, and every finding of this
+ * one that check does not have counted into it instead of listed. */
+static void check_shift(const Map *m, const char *text, size_t len, const char *path, Findings *fs)
+{
+    MapioSection secs[MAPIO_SECTIONS];
+    mapio_sections(text, len, m->w, m->h, secs);
+    Shift sh;
+    shift_find(m, secs, &sh);
+    if (!sh.found) { mapio_sections_free(secs); return; }
+    const MapioSection *sec = &secs[sh.kind];
+    const char *name = section_name(sh.kind);
+
+    /* Its finding: a lost row's is the loader's E011 told more, a line too
+     * many's is new. */
+    Finding *pf = NULL;
+    char msg[256];
+    if (sh.extra < 0) {
+        for (int i = 0; i < fs->n && !pf; i++)
+            if (!strcmp(fs->v[i].code, "E011") && fs->v[i].line > 0 &&
+                (fs->v[i].line == sec->next || fs->v[i].line > sh.span1)) pf = &fs->v[i];
+        if (pf) {
+            char *cut = strstr(pf->msg, ": the section is short");
+            if (cut) {
+                char swallowed[16] = "";
+                text_line(text, len, sec->next, swallowed, sizeof swallowed);
+                int header = !strcmp(swallowed, "tiles") || !strcmp(swallowed, "vedges") ||
+                             !strcmp(swallowed, "hedges") || !strcmp(swallowed, "fog");
+                snprintf(cut, sizeof pf->msg - (size_t)(cut - pf->msg), ": a '%s' row is missing%s%s%s", name,
+                         header ? ", and '" : "", header ? swallowed : "", header ? "' was not read" : "");
+            }
+        } else {
+            pf = add_finding(fs, "E011", "section-short");
+            pf->line = sec->v[sec->n - 1].line;
+            snprintf(pf->msg, sizeof pf->msg, "'%s' is one row short: the blank line %d after it was read as its last row",
+                     name, pf->line);
+        }
+    } else {
+        pf = add_finding(fs, "W031", "row-extra");
+        pf->line = sh.fix_line;
+        if (sh.tie) snprintf(msg, sizeof msg, "'%s' has one row too many, somewhere in lines %d-%d: the rows below it are one lower than the rest of the map",
+                             name, sh.span0, sh.span1);
+        else        snprintf(msg, sizeof msg, "'%s' has one row too many: from line %d down its rows are one lower than the rest of the map",
+                             name, sh.fix_line);
+        str_lcpy(pf->msg, msg, sizeof pf->msg);
+    }
+    int pi = (int)(pf - fs->v);
+
+    /* The fold. */
+    {
+        PROF_ZONE("check.fold");
+        size_t flen;
+        char  *fixed = shift_fixed_text(text, len, &sh, &flen);
+        Findings f2 = { 0 };
+        char err[256];
+        Map *m2 = mapio_load_text_diag(path, fixed, flen, err, sizeof err, file_finding, &f2);
+        if (m2) {
+            check_map(m2, &f2);
+            map_free(m2);
+            FKey *keys = xmalloc((size_t)(f2.n ? f2.n : 1) * sizeof *keys);
+            for (int i = 0; i < f2.n; i++) shift_key(&sh, &f2.v[i], 0, &keys[i]);
+            qsort(keys, (size_t)f2.n, sizeof *keys, fkey_cmp);
+            struct { char code[8]; int n; } tally[16];
+            int ntally = 0, nfold = 0;
+            for (int i = 0; i < fs->n; i++) {
+                if (i == pi) continue;
+                /* A tie is a span of fixes, so only what the file's form
+                 * said (a stray row, a short section) is surely its doing;
+                 * the map's findings stay listed. */
+                if (sh.tie && fs->v[i].line <= 0) {
+                    /* ...but for one thing: a lost row's section read what
+                     * followed it (a header, a record) as its last row, and
+                     * whatever stands on that row is the shift's doing. */
+                    const Finding *f = &fs->v[i];
+                    int own = (sh.kind == MAPIO_VEDGES && f->edge == 'v') || (sh.kind == MAPIO_HEDGES && f->edge == 'h');
+                    if (!(sh.extra < 0 && own && f->y == mapio_section_rows(sh.kind, m->h) - 1 && sec->next)) continue;
+                }
+                FKey k;
+                int  there = shift_key(&sh, &fs->v[i], 1, &k) && f2.n &&
+                             bsearch(&k, keys, (size_t)f2.n, sizeof *keys, fkey_cmp);
+                if (there) continue;
+                fs->v[i].folded = 1;
+                nfold++;
+                int t = 0;
+                while (t < ntally && strcmp(tally[t].code, fs->v[i].code)) t++;
+                if (t == ntally && ntally < 16) { str_lcpy(tally[ntally].code, fs->v[i].code, sizeof tally[0].code); tally[ntally++].n = 0; }
+                if (t < ntally) tally[t].n++;
+            }
+            pf = &fs->v[pi];
+            if (nfold) {
+                FindingMore *mo = finding_more(pf);
+                mo->nfolded = nfold;
+                for (int t = 0; t < ntally; t++) {
+                    size_t at = strlen(mo->folded);
+                    snprintf(mo->folded + at, sizeof mo->folded - at, "%s%s x%d", t ? ", " : "", tally[t].code, tally[t].n);
+                }
+            }
+            free(keys);
+        }
+        for (int i = 0; i < f2.n; i++) free(f2.v[i].more);
+        free(f2.v);
+        free(fixed);
+    }
+
+    /* What it says. */
+    FindingMore *mo = finding_more(pf);
+    mo->span0   = sh.span0;
+    mo->span1   = sh.span1;
+    mo->certain = sh.certain;
+    char *ev = mo->evidence;
+    size_t cap = sizeof mo->evidence;
+    if (sh.extra > 0) snprintf(ev, cap, sh.tie ? "with the extra line found and taken out" : "with line %d gone", sh.fix_line);
+    else if (sh.at_end) snprintf(ev, cap, "its rows as read fit the walls, creatures and notes of the rest of the map, so what is missing is its last row, which held nothing");
+    else if (sh.copy_line) snprintf(ev, cap, "with a copy of line %d put in after line %d", sh.copy_line, sh.fix_line);
+    else                   snprintf(ev, cap, "with an empty line put in after line %d", sh.fix_line);
+    int parts = 0;
+#define EV(...) do { size_t at_ = strlen(ev); snprintf(ev + at_, cap - at_, "%s", parts++ ? ", " : ": "); \
+                     at_ = strlen(ev); snprintf(ev + at_, cap - at_, __VA_ARGS__); } while (0)
+    int dw = sh.part0[SH_WALLS] - sh.part[SH_WALLS], de = sh.part0[SH_ENDS] - sh.part[SH_ENDS];
+    int dt = sh.part0[SH_THINGS] - sh.part[SH_THINGS], dopen = sh.part0[SH_OPEN] - sh.part[SH_OPEN];
+    if (dw > 0) EV("%d wall%s and door%s that stand on void stand on map", dw, dw == 1 ? "" : "s", dw == 1 ? "" : "s");
+    if (de > 0) EV("%d loose wall end%s meet%s another wall", de, de == 1 ? "" : "s", de == 1 ? "s" : "");
+    if (dopen > 0) EV("%d edge%s of floor against void get%s the wall%s round %s", dopen, dopen == 1 ? "" : "s",
+                      dopen == 1 ? "s" : "", dopen == 1 ? "" : "s", dopen == 1 ? "it" : "them");
+    if (dt > 0 && sh.thing >= 0)
+        EV("%s stands on map instead of void%s", label_or_unnamed(&m->tokens.v[sh.thing]), dt > 1 ? ", and more creatures, notes or links with it" : "");
+    else if (dt > 0) EV("%d square%s of creatures, notes or links stand%s on map instead of void", dt, dt == 1 ? "" : "s", dt == 1 ? "s" : "");
+#undef EV
+
+    if (sh.extra > 0) {
+        if (sh.tie)
+            snprintf(mo->help, sizeof mo->help, "the extra line is one of lines %d to %d: look for one that repeats the line beside it or does not belong, delete it, then vtt %s --check",
+                     sh.span0, sh.span1, path);
+        else if (sh.span1 > sh.span0)
+            snprintf(mo->help, sizeof mo->help, "delete line %d (or any of lines %d-%d: they are the same row); then vtt %s --check",
+                     sh.fix_line, sh.span0, sh.span1, path);
+        else
+            snprintf(mo->help, sizeof mo->help, "delete line %d; then vtt %s --check", sh.fix_line, path);
+        if (sh.more) str_lcpy(mo->note, "there are more lines than rows past this one too: check again once it is fixed", sizeof mo->note);
+    } else {
+        char where[64];
+        if (sh.tie)                   snprintf(where, sizeof where, "somewhere after line %d and before line %d", sh.span0, sh.span1 + 1);
+        else if (sh.span1 > sh.span0) snprintf(where, sizeof where, "after any of lines %d-%d (the same place)", sh.span0, sh.span1);
+        else                          snprintf(where, sizeof where, "after line %d", sh.fix_line);
+        if (sh.at_end)
+            snprintf(mo->help, sizeof mo->help, "add an empty line after line %d, the section's last%s; then vtt %s --check",
+                     sh.fix_line, sh.span1 > sh.span0 ? " (or after any of the empty lines before it: the same)" : "", path);
+        else if (sh.copy_line)
+            snprintf(mo->help, sizeof mo->help, "the rows beside it are alike, so the missing one most likely was too: add a copy of line %d %s, then vtt %s --check; if it was not, take it from a copy of the map (the autosave, a backup)",
+                     sh.copy_line, where, path);
+        else
+            snprintf(mo->help, sizeof mo->help, "if the missing row held nothing, add an empty line %s; if it held something, take it from a copy of the map (the autosave, a backup)",
+                     where);
+    }
+
+    /* The file's lines round it. */
+    char *sn = mo->snippet;
+    size_t scap = sizeof mo->snippet;
+    snprintf(sn, scap, "      |\n");
+    if (sh.extra > 0) {
+        int a = sh.span0, b = sh.span1;
+        if (a - 1 >= 1) snip_line(sn, scap, text, len, a - 1, NULL);
+        char row[64], above[64];
+        text_line(text, len, sh.fix_line, row, sizeof row);
+        text_line(text, len, sh.fix_line - 1, above, sizeof above);
+        const char *mark = sh.tie ? "the extra line is from here..."
+                         : b > a ? "these lines are one row, written"
+                         : row[0] && !strcmp(row, above) ? "this line repeats the one above it"
+                         : sh.certain ? "this line" : "this line, most likely";
+        snip_line(sn, scap, text, len, a, mark);
+        if (b > a) {
+            if (b - a > 1) { size_t at = strlen(sn); snprintf(sn + at, scap - at, "  ... |\n"); }
+            char last[64];
+            snprintf(last, sizeof last, "%d times where the map has %d: delete one", b - a + 1, b - a);
+            snip_line(sn, scap, text, len, b, sh.tie ? "...to here" : last);
+        }
+        snip_line(sn, scap, text, len, b + 1, NULL);
+    } else {
+        snip_line(sn, scap, text, len, sh.fix_line, NULL);
+        size_t at = strlen(sn);
+        snprintf(sn + at, scap - at, "      + %-40s  <- a row is missing here%s\n", "",
+                 sh.tie ? ", or near it" : sh.span1 > sh.span0 ? " (or anywhere among the lines like it round it)" : "");
+        snip_line(sn, scap, text, len, sh.fix_line + 1, NULL);
+    }
+    (void)sec;
+    mapio_sections_free(secs);
+}
+
 /* Sorts and prints the findings, `file` naming what was checked (NULL for
  * none), and frees them. Returns the exit status. */
 static int check_report(FILE *out, Findings *pfs, const char *file, int json)
 {
     Findings fs = *pfs;
+    /* What a finding folded is counted in it, not listed, nor counted again. */
+    int kept = 0;
+    for (int i = 0; i < fs.n; i++) {
+        if (fs.v[i].folded) { free(fs.v[i].more); continue; }
+        fs.v[kept++] = fs.v[i];
+    }
+    fs.n = kept;
     if (fs.n) qsort(fs.v, (size_t)fs.n, sizeof *fs.v, finding_cmp);
     int errors = 0, warnings = 0, notes = 0;
     for (int i = 0; i < fs.n; i++) {
@@ -1278,6 +2046,24 @@ static int check_report(FILE *out, Findings *pfs, const char *file, int json)
             json_key(&j, "edge");
             if (f->edge) { char e[2] = { (char)f->edge, 0 }; json_str(&j, e); } else json_null(&j);
             json_kstr(&j, "message", f->msg);
+            const FindingMore *mo = f->more;
+            json_key(&j, "help");  if (mo && mo->help[0]) json_str(&j, mo->help); else json_null(&j);
+            json_key(&j, "notes");
+            json_open(&j, '[');
+            if (mo && mo->evidence[0]) json_str(&j, mo->evidence);
+            if (mo && mo->note[0]) json_str(&j, mo->note);
+            json_close(&j, ']');
+            json_key(&j, "span");
+            if (mo && mo->span0) {
+                json_open(&j, '{');
+                json_kint(&j, "first", mo->span0);
+                json_kint(&j, "last", mo->span1);
+                json_close(&j, '}');
+            } else json_null(&j);
+            json_key(&j, "folded");
+            if (mo && mo->nfolded) json_str(&j, mo->folded); else json_null(&j);
+            json_key(&j, "confidence");
+            if (mo && mo->span0) json_str(&j, mo->certain ? "certain" : "likely"); else json_null(&j);
             json_close(&j, '}');
         }
         json_close(&j, ']');
@@ -1290,6 +2076,14 @@ static int check_report(FILE *out, Findings *pfs, const char *file, int json)
             if (f->line > 0) snprintf(loc, sizeof loc, "line %d", f->line);
             else             str_lcpy(loc, f->where, sizeof loc);
             fprintf(out, "%s %-18s %-9s %s\n", f->code, f->slug, loc, f->msg);
+            const FindingMore *mo = f->more;
+            if (!mo) continue;
+            fputs(mo->snippet, out);
+            if (mo->evidence[0]) fprintf(out, "      = evidence: %s\n", mo->evidence);
+            if (mo->note[0])     fprintf(out, "      = note: %s\n", mo->note);
+            if (mo->help[0])     fprintf(out, "      = help: %s\n", mo->help);
+            if (mo->nfolded)     fprintf(out, "      = %d finding%s caused by it, folded in: %s\n", mo->nfolded,
+                                         mo->nfolded == 1 ? " is" : "s are", mo->folded);
         }
         if (!fs.n) fputs("no findings\n", out);
         else {
@@ -1299,6 +2093,7 @@ static int check_report(FILE *out, Findings *pfs, const char *file, int json)
         }
     }
     int unreadable = fs.n && !strcmp(fs.v[0].code, "E001");
+    for (int i = 0; i < fs.n; i++) free(fs.v[i].more);
     free(fs.v);
     return unreadable ? 2 : errors || warnings ? 1 : 0;
 }
@@ -1306,15 +2101,19 @@ static int check_report(FILE *out, Findings *pfs, const char *file, int json)
 int maptools_check(FILE *out, const char *path, int json)
 {
     Findings fs = { 0 };
-    char err[256];
-    Map *m = mapio_load_diag(path, err, sizeof err, file_finding, &fs);
+    char   err[256];
+    size_t len = 0;
+    char  *text = mapio_file_read(path, &len, err, sizeof err);
+    Map   *m = text ? mapio_load_text_diag(path, text, len, err, sizeof err, file_finding, &fs) : NULL;
     if (!m) {
         Finding *f = add_finding(&fs, "E001", "unreadable");
         str_lcpy(f->msg, err, sizeof f->msg);
     } else {
         check_map(m, &fs);
+        check_shift(m, text, len, path, &fs);
         map_free(m);
     }
+    free(text);
     return check_report(out, &fs, path, json);
 }
 

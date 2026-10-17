@@ -1,0 +1,10 @@
+W031 row-extra          line 12   'tiles' has one row too many: from line 12 down its rows are one lower than the rest of the map
+      |
+   11 |  ..........      ..........   
+   12 |  ..........................               <- these lines are one row, written
+   13 |  ..........................               <- 2 times where the map has 1: delete one
+   14 |  ..........      ..........   
+      = evidence: with line 12 gone: 30 edges of floor against void get the walls round them
+      = help: delete line 12 (or any of lines 12-13: they are the same row); then vtt DIR/bad.vtt --check
+      = 3 findings are caused by it, folded in: W120 x3
+0 errors, 1 warning

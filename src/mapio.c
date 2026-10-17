@@ -436,22 +436,36 @@ static int read_line(Loader *ld, char *buf, size_t bufsz)
  * an editor that strips trailing whitespace cannot corrupt a map. An
  * unrecognized character reads as empty rather than aborting the load: a map
  * with one odd byte in it is still worth opening. */
+/* A character's square or boundary from a table: map.c's decoders look
+ * each character up in a list, and a row is hundreds of characters. */
+static uint8_t tile_dec[256], edge_dec[256];
+static int     dec_ready;
+
+static void dec_init(void)
+{
+    if (dec_ready) return;
+    for (int c = 0; c < 256; c++) {
+        int t = tile_from_file_char((char)c), e = edge_from_file_char((char)c);
+        tile_dec[c] = (uint8_t)(t >= 0 ? t : TILE_VOID);
+        edge_dec[c] = (uint8_t)(e >= 0 ? e : EDGE_NONE);
+    }
+    dec_ready = 1;
+}
+
 static void parse_tile_row(const char *line, uint8_t *row, int n)
 {
-    size_t len = strlen(line);
-    for (int i = 0; i < n; i++) {
-        int k = (size_t)i < len ? tile_from_file_char(line[i]) : TILE_VOID;
-        row[i] = (uint8_t)(k >= 0 ? k : TILE_VOID);
-    }
+    dec_init();
+    int i = 0;
+    for (; i < n && line[i]; i++) row[i] = tile_dec[(unsigned char)line[i]];
+    for (; i < n; i++) row[i] = TILE_VOID;
 }
 
 static void parse_edge_row(const char *line, uint8_t *row, int n)
 {
-    size_t len = strlen(line);
-    for (int i = 0; i < n; i++) {
-        int k = (size_t)i < len ? edge_from_file_char(line[i]) : EDGE_NONE;
-        row[i] = (uint8_t)(k >= 0 ? k : EDGE_NONE);
-    }
+    dec_init();
+    int i = 0;
+    for (; i < n && line[i]; i++) row[i] = edge_dec[(unsigned char)line[i]];
+    for (; i < n; i++) row[i] = EDGE_NONE;
 }
 
 /* The words a record line starts with. A section's row that begins with
@@ -461,7 +475,8 @@ static int looks_like_record(const char *line)
     static const char *const words[] = {
         "tiles", "vedges", "hedges", "fog", "fogpatch", "token", "tokenstatus",
         "tokenturn", "tokencounter", "tokennote", "tokenhidden", "tokencard", "card", "endcard", "note", "area", "floor", "env", "areaenv", "link", "spotlight", "clock",
-        "roll", "round", "name", "size", "zoom", "scale", "ruleset", "rule", "metric", "scene", "endscene", NULL,
+        "roll", "round", "name", "size", "zoom", "scale", "ruleset", "rule", "metric", "scene", "endscene",
+        "end", NULL,
     };
     size_t n = 0;
     while (line[n] >= 'a' && line[n] <= 'z') n++;
@@ -469,6 +484,19 @@ static int looks_like_record(const char *line)
     for (int i = 0; words[i]; i++)
         if (strlen(words[i]) == n && !strncmp(words[i], line, n)) return 1;
     return 0;
+}
+
+/* A fog row's seen patches are lowercase letters, so a real one can spell
+ * "fog" or "name"; only a line a fog row could not be is a swallowed record
+ * in that section. */
+static int fog_row_ok(const char *line, int width)
+{
+    if ((int)strlen(line) > width) return 0;
+    for (const char *p = line; *p; p++)
+        if (!(*p == '.' || *p == ' ' || (*p >= 'A' && *p <= 'O') || (*p >= 'a' && *p <= 'o') ||
+              strchr("123456789!\"#$%&", *p)))
+            return 0;
+    return 1;
 }
 
 /* Is every character one a row of some section could hold? For an unknown
@@ -495,14 +523,7 @@ static int section_row(Loader *ld, Section *sec, int y, char *line, size_t cap)
         return -1;
     }
     if (!ld->sink) return 0;
-    /* A fog row's seen patches are lowercase letters, so a real one can
-     * spell "fog" or "name"; only a line a fog row could not be is a
-     * swallowed record there. */
-    int fog_row = sec->kind == 2 && (int)strlen(line) <= sec->width;
-    for (const char *p = line; fog_row && *p; p++)
-        fog_row = *p == '.' || *p == ' ' || (*p >= 'A' && *p <= 'O') || (*p >= 'a' && *p <= 'o') ||
-                  (*p && strchr("123456789!\"#$%&", *p));
-    if (!fog_row && looks_like_record(line)) {
+    if (!(sec->kind == 2 && fog_row_ok(line, sec->width)) && looks_like_record(line)) {
         diag(ld, ld->line, -1, "E011", "section-short",
              "'%.24s' read as %s row %d of %d: the section is short", line, sec->name, y + 1, sec->rows);
         return 0;
@@ -884,16 +905,22 @@ static Map *load_bytes(const char *path, char *bytes, size_t len, char *err, siz
     return load_text(f, path, err, errsz, sink, ctx);       /* closes f */
 }
 
-Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, void *ctx)
+char *mapio_file_read(const char *path, size_t *len, char *err, size_t errsz)
 {
-    size_t len = 0;
-    int    big = 0;
-    char  *bytes = file_read(path, MAPIO_FILE_CAP, &len, &big);
+    int   big = 0;
+    char *bytes = file_read(path, MAPIO_FILE_CAP, len, &big);
     if (!bytes) {
         if (big) snprintf(err, errsz, "%s is too big to be a map", path);
         else     snprintf(err, errsz, "cannot open %s: %s", path, strerror(errno));
-        return NULL;
     }
+    return bytes;
+}
+
+Map *mapio_load_diag(const char *path, char *err, size_t errsz, MapioDiag sink, void *ctx)
+{
+    size_t len = 0;
+    char  *bytes = mapio_file_read(path, &len, err, errsz);
+    if (!bytes) return NULL;
     Map *m = load_bytes(path, bytes, len, err, errsz, sink, ctx);
     free(bytes);
     return m;
@@ -906,13 +933,8 @@ Map *mapio_load_base(const char *path, char *err, size_t errsz)
     MapDisk id;
     mapio_disk_stat(path, &id);
     size_t len = 0;
-    int    big = 0;
-    char  *bytes = file_read(path, MAPIO_FILE_CAP, &len, &big);
-    if (!bytes) {
-        if (big) snprintf(err, errsz, "%s is too big to be a map", path);
-        else     snprintf(err, errsz, "cannot open %s: %s", path, strerror(errno));
-        return NULL;
-    }
+    char  *bytes = mapio_file_read(path, &len, err, errsz);
+    if (!bytes) return NULL;
     Map *m = load_bytes(path, bytes, len, err, errsz, NULL, NULL);
     if (!m) { free(bytes); return NULL; }
     m->base     = bytes;
@@ -1376,6 +1398,83 @@ static Map *load_text(FILE *f, const char *path, char *err, size_t errsz, MapioD
 }
 
 /* ------------------------------------------------------------- discovery */
+
+Map *mapio_load_text_diag(const char *path, const char *bytes, size_t len, char *err, size_t errsz,
+                          MapioDiag sink, void *ctx)
+{
+    return load_bytes(path, (char *)(uintptr_t)bytes, len, err, errsz, sink, ctx);
+}
+
+/* ------------------------------------------------------- the row sections */
+
+static int section_kind(const char *line)
+{
+    return !strcmp(line, "tiles") ? MAPIO_TILES : !strcmp(line, "vedges") ? MAPIO_VEDGES
+         : !strcmp(line, "hedges") ? MAPIO_HEDGES : !strcmp(line, "fog") ? MAPIO_FOG : -1;
+}
+
+int mapio_section_rows(int kind, int h) { return kind == MAPIO_HEDGES ? h + 1 : h; }
+int mapio_section_width(int kind, int w) { return kind == MAPIO_VEDGES ? w + 1 : w; }
+
+int mapio_sections(const char *text, size_t len, int w, int h, MapioSection out[MAPIO_SECTIONS])
+{
+    PROF_ZONE("mapio.sections");
+    memset(out, 0, MAPIO_SECTIONS * sizeof *out);
+    for (int k = 0; k < MAPIO_SECTIONS; k++) out[k].rows = mapio_section_rows(k, h);
+    char   line[MAP_MAX_DIM + 64];
+    int    in = -1, caps[MAPIO_SECTIONS] = { 0 }, lineno = 0;
+    size_t at = 0;
+    while (at < len) {
+        const char *start = text + at;
+        const char *nl = memchr(start, '\n', len - at);
+        size_t      n = nl ? (size_t)(nl - start) : len - at;
+        at += n + (nl ? 1 : 0);
+        lineno++;
+        size_t      keep = n;
+        while (keep && start[keep - 1] == '\r') keep--;
+        size_t c = keep < sizeof line - 1 ? keep : sizeof line - 1;
+        memcpy(line, start, c);
+        line[c] = '\0';
+
+        int kind = section_kind(line);
+        if (kind >= 0) {
+            if (in >= 0) out[in].next = lineno;
+            /* The first of each: a second is the loader's to read over it. */
+            in = out[kind].header ? -1 : kind;
+            if (in >= 0) out[in].header = lineno;
+            continue;
+        }
+        if (in < 0) continue;
+        int width = mapio_section_width(in, w);
+        if (!(in == MAPIO_FOG && fog_row_ok(line, width)) && looks_like_record(line)) {
+            out[in].next = lineno;
+            in = -1;
+            continue;
+        }
+        MapioSection *sec = &out[in];
+        if (sec->n == caps[in]) {
+            caps[in] = caps[in] ? caps[in] * 2 : 64;
+            sec->v = xrealloc(sec->v, (size_t)caps[in] * sizeof *sec->v);
+        }
+        sec->v[sec->n++] = (MapioLine){ lineno, start, (int)keep };
+    }
+    return 0;
+}
+
+void mapio_sections_free(MapioSection s[MAPIO_SECTIONS])
+{
+    for (int k = 0; k < MAPIO_SECTIONS; k++) { free(s[k].v); s[k].v = NULL; s[k].n = 0; }
+}
+
+void mapio_row_parse(int kind, const char *text, int len, uint8_t *row, int n)
+{
+    char line[MAP_MAX_DIM + 64];
+    int  c = len < (int)sizeof line - 1 ? len : (int)sizeof line - 1;
+    memcpy(line, text, (size_t)(c > 0 ? c : 0));
+    line[c > 0 ? c : 0] = '\0';
+    if (kind == MAPIO_TILES) parse_tile_row(line, row, n);
+    else                     parse_edge_row(line, row, n);
+}
 
 void mapio_default_dir(char *buf, size_t bufsz)
 {

@@ -3,7 +3,7 @@ N105 door-off-map       -|A2      door leads off the map: a way out?
 0 errors, 0 warnings, 1 note
 -- exit 0
 == n105.vtt --check --json
-{"file":"n105.vtt","errors":0,"warnings":0,"notes":1,"findings":[{"code":"N105","slug":"door-off-map","severity":"note","line":null,"column":null,"where":"-|A2","x":0,"y":1,"edge":"v","message":"door leads off the map: a way out?"}]}
+{"file":"n105.vtt","errors":0,"warnings":0,"notes":1,"findings":[{"code":"N105","slug":"door-off-map","severity":"note","line":null,"column":null,"where":"-|A2","x":0,"y":1,"edge":"v","message":"door leads off the map: a way out?","help":null,"notes":[],"span":null,"folded":null,"confidence":null}]}
 -- exit 0
 == n105.vtt --describe
 map  n105  8x6  scale 5 ft  metric alt  ruleset none

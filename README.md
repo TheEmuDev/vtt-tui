@@ -1459,11 +1459,33 @@ W120 unreachable-room  room K2   18 squares, no door leads to it from room B2
 2 errors, 1 warning
 ```
 
+When a line was added to a section of rows, repeated or deleted, the finding says which line,
+shows it, says what made vtt think so, and how to fix it. The findings the moved rows caused are
+counted under it instead of listed:
+
+```
+W031 row-extra          line 12   'tiles' has one row too many: from line 12 down its rows are one lower than the rest of the map
+      |
+   11 |  ..........      ..........
+   12 |  ..........................               <- these lines are one row, written
+   13 |  ..........................               <- 2 times where the map has 1: delete one
+   14 |  ..........      ..........
+      = evidence: with line 12 gone: 30 edges of floor against void get the walls round them
+      = help: delete line 12 (or any of lines 12-13: they are the same row); then vtt map.vtt --check
+      = 3 findings are caused by it, folded in: W120 x3
+```
+
+vtt finds the line by how the section fits the rest of the map: walls standing on void, wall ends
+that meet nothing, floor against void with no wall, creatures and notes on void. When nothing on
+the map shows where the line was (a stretch of plain floor with no walls), it says nothing more
+than that the section is short or a row is stray; when two places fit equally well it names the
+span between them. Fog rows are never placed this way: fog over void is allowed.
+
 | code | finds |
 |---|---|
 | `E001 unreadable` | not a map, a bad size, or a newer format |
 | `E010 row-long` | a row longer than its section's width |
-| `E011 section-short` | a section that consumed the next line, or a file ending inside one |
+| `E011 section-short` | a section that consumed the next line, or a file ending inside one; with the line where its row is missing, when the map shows it |
 | `E013 bad-char` | a character not valid in that section (read as empty) |
 | `E014 bad-record` | a line that could not be read and was dropped |
 | `E101 door-in-void` | a door or window with no map on either side |
@@ -1483,6 +1505,8 @@ W120 unreachable-room  room K2   18 squares, no door leads to it from room B2
 | `W027 name-cleaned` | control characters in the map's name, taken out |
 | `W028 card-dropped`, `card-cut` | a card with a bad or repeated name, a sixty-fifth, one with no `endcard`, or a stray `endcard` |
 | `W029 unknown-rule` | a `rule` line naming a rule other than `massive`, ignored |
+| `W030 env-dropped` | an environment line for the map or an area that does not read, or a second one for the map |
+| `W031 row-extra` | a section with a line too many (one added or repeated by hand), and which line |
 | `W102 door-to-void` | a door or window leading into void |
 | `W103 wall-in-void` | a wall with no map on either side |
 | `W104 door-loose` | a door or window with no wall at either end |
@@ -1494,13 +1518,16 @@ W120 unreachable-room  room K2   18 squares, no door leads to it from room B2
 | `W150 link-on-void` | a link with an end on a square that is not map (nobody can be sent there) |
 | `W151 link-to-nowhere` | a link to another map whose file is not beside this one, or has no such area or square, or the square is void |
 | `W160 floors-overlap` | two floors sharing squares |
+| `W170 env-no-card` | an environment naming a card the map does not have |
 | `N021 row-short` | rows shorter than their section, read as trailing blanks |
 | `N105 door-off-map` | a door or window on the edge of the map |
 | `N131 fog-patch-disabled` | a disabled fog patch |
 
 **`--json`** gives `--describe` or `--check` as JSON, with 0-based coordinates alongside the
 square names, room `area` names and `floor`s, the lists of `areas`, `floors` and `links`, and
-each finding's `line` and `column`. `--describe` names each room's floor, lists its link ends and where they lead, and counts a room
+each finding's `line` and `column`, and for each finding `help` (the fix, or null), `notes` (the
+evidence), `span` (the first and last line a fix may be made at, or null), `folded` (what it
+counts instead of listing, or null) and `confidence` (`certain`, `likely` or null). `--describe` names each room's floor, lists its link ends and where they lead, and counts a room
 reached only by a link as reachable (a one-way link only in its direction).
 
 ## Control channel (`:agent`, `vtt --ctl`)
@@ -1643,9 +1670,8 @@ Sections are read by row count. A section with a missing row takes the next line
 row, and the sections after it shift; `vtt --check` reports this. Short rows are read as if
 padded with spaces. vtt writes a row with nothing in it (no terrain, no boundary, no fog) as an
 empty line, so the middle `hedges` row above is saved as an empty line; every other row is
-written whole. An extra empty line inside a section is read as a row and moves the rows below
-it down, and `vtt --check` cannot tell, so do not let an editor or tool add or squeeze blank lines
-in a map file.
+written whole. A line added to a section by hand, or one deleted, moves every row below it;
+`vtt --check` finds which line it was and says how to put it right (`W031`, `E011`).
 
 **Records.**
 

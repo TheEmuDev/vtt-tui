@@ -1,5 +1,7 @@
 /* Tests: the map tools: --dump-map, --describe, --check, the loader's diagnostics. */
 
+#include <ctype.h>
+
 #include "harness.h"
 
 /* A map built by hand: rooms and what joins them. */
@@ -887,8 +889,9 @@ void test_map_fidelity(void)
                 int kind = RND(3);
                 for (int x = 0; x < w; x++) {
                     if (!RND(2)) continue;
-                    uint8_t f = kind == 0 ? (uint8_t)(1 | (RND(2) ? FOG_SEEN : 0) | (RND(4) ? 0 : FOG_HELD | FOG_SEEN))
-                              : kind == 1 ? (uint8_t)(2 | FOG_SEEN) : (uint8_t)(RND(2) ? FOG_LIT : FOG_RIM);
+                    int seen = RND(2), held = !RND(4), lit = RND(2);
+                    uint8_t f = kind == 0 ? (uint8_t)(1 | (seen ? FOG_SEEN : 0) | (held ? FOG_HELD | FOG_SEEN : 0))
+                              : kind == 1 ? (uint8_t)(2 | FOG_SEEN) : (uint8_t)(lit ? FOG_LIT : FOG_RIM);
                     map_fog_set(m, x, y, f);
                 }
             }
@@ -988,6 +991,390 @@ void test_map_fidelity(void)
         CHECK(text && strstr(text, "N021") == NULL);
         free(text);
     }
+
+    sandbox_leave(&sb);
+}
+
+/* ------------------------------------------------------------ the line search */
+
+/* A map made of rooms in walls, doors in some of them, creatures in some:
+ * what a GM draws, which is what the search reads evidence from. */
+static Map *rooms_at_random(unsigned *seed)
+{
+    #define RR(n) ((int)((*seed = *seed * 1103515245u + 12345u) >> 16) % (n))
+    int  w = 20 + RR(40), h = 15 + RR(30);
+    Map *m = map_new(w, h, "rooms");
+    int  nrooms = 1 + RR(5);
+    for (int r = 0; r < nrooms; r++) {
+        int rw = 3 + RR(10), rh = 3 + RR(8);
+        int x0 = RR(w - rw), y0 = RR(h - rh);
+        map_fill_tiles(m, x0, y0, x0 + rw - 1, y0 + rh - 1, TILE_FLOOR);
+        map_rect_walls(m, x0, y0, x0 + rw - 1, y0 + rh - 1, EDGE_WALL);
+        if (RR(2)) map_set_vedge(m, x0, y0 + rh / 2, EDGE_DOOR_CLOSED);
+        if (RR(2)) {
+            Token t = { (int16_t)(x0 + 1), (int16_t)(y0 + 1), 1, TOKEN_ENEMY, "" };
+            snprintf(t.label, sizeof t.label, "Ogre %d", r);
+            tokens_add(&m->tokens, t);
+        }
+    }
+    #undef RR
+    return m;
+}
+
+/* What --check --json says of a file: a span, and its code, when it has one. */
+static int check_span(const char *path, int *first, int *last, char *code)
+{
+    char  *text = NULL;
+    size_t len = 0;
+    FILE  *out = open_memstream(&text, &len);
+    maptools_check(out, path, 1);
+    fclose(out);
+    int got = 0;
+    const char *p = text ? strstr(text, "\"span\":{\"first\":") : NULL;
+    if (p && sscanf(p, "\"span\":{\"first\":%d,\"last\":%d", first, last) == 2) {
+        got = 1;
+        const char *c = p;
+        while (c > text && strncmp(c, "{\"code\":\"", 9)) c--;
+        sscanf(c, "{\"code\":\"%7[^\"]", code);
+        if (strstr(c, "somewhere")) code[0] = (char)tolower(code[0]);   /* a tie: told by the case */
+    }
+    free(text);
+    return got;
+}
+
+static char *lines_join(char **v, int n, size_t *len)
+{
+    size_t total = 0;
+    for (int i = 0; i < n; i++) total += strlen(v[i]) + 1;
+    char *out = xmalloc(total + 1), *o = out;
+    for (int i = 0; i < n; i++) { size_t k = strlen(v[i]); memcpy(o, v[i], k); o += k; *o++ = '\n'; }
+    *o = '\0';
+    *len = total;
+    return out;
+}
+
+/* Two rooms in walls, a corridor between with a door at each end, a
+ * creature in each room. */
+static Map *pair_map(void)
+{
+    Map *m = map_new(30, 14, "pair");
+    map_fill_tiles(m, 1, 1, 10, 8, TILE_FLOOR);
+    map_rect_walls(m, 1, 1, 10, 8, EDGE_WALL);
+    map_fill_tiles(m, 17, 2, 26, 9, TILE_FLOOR);
+    map_rect_walls(m, 17, 2, 26, 9, EDGE_WALL);
+    map_fill_tiles(m, 11, 4, 16, 4, TILE_FLOOR);
+    map_set_vedge(m, 11, 4, EDGE_DOOR_CLOSED);
+    map_set_vedge(m, 17, 4, EDGE_DOOR_OPEN);
+    for (int x = 11; x <= 16; x++) { map_set_hedge(m, x, 4, EDGE_WALL); map_set_hedge(m, x, 5, EDGE_WALL); }
+    Token t1 = { 3, 3, 1, TOKEN_ENEMY, "Ogre" }, t2 = { 20, 6, 1, TOKEN_PLAYER, "Aria" };
+    tokens_add(&m->tokens, t1);
+    tokens_add(&m->tokens, t2);
+    return m;
+}
+
+/* docs/V2.md, step 5's second piece: a line added, repeated or lost in a row
+ * section is found where it was, or not said at all -- never somewhere else. */
+void test_map_shift(void)
+{
+    Sandbox sb = sandbox_enter("mapshift");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    char path[700], bad[700], err[256];
+    snprintf(path, sizeof path, "%s/s.vtt", sb.dir);
+    snprintf(bad, sizeof bad, "%s/bad.vtt", sb.dir);
+
+    CASE("a file vtt wrote has nothing to say of its rows; nor a hand-written one with blank lines between sections");
+    unsigned seed = 777;
+    int quiet = 1;
+    for (int i = 0; i < 40; i++) {
+        Map *m = rooms_at_random(&seed);
+        CHECK_EQ(mapio_write(m, path, err, sizeof err), 0);
+        int a, b; char code[8];
+        quiet &= !check_span(path, &a, &b, code);
+        map_free(m);
+    }
+    CHECK(quiet);
+    {
+        FILE *f = fopen(bad, "w");
+        fputs("VTT 14\nsize 5 3\ntiles\n.....\n.....\n.....\n\nvedges\n|    |\n|    |\n|    |\n\n"
+              "hedges\n-----\n\n\n-----\n\ntoken enemy 1 1 1 \"Ogre\"\n", f);
+        fclose(f);
+        int a, b; char code[8];
+        CHECK(!check_span(bad, &a, &b, code));
+    }
+
+    CASE("what it says, as text and JSON: a row repeated, a row lost (a copy put back), a lost empty last row");
+    {
+        Map *m = pair_map();
+        CHECK_EQ(mapio_write(m, path, err, sizeof err), 0);
+        size_t len;
+        char *text = file_read(path, 1 << 20, &len, NULL);
+        MapioSection secs[MAPIO_SECTIONS];
+        mapio_sections(text, len, m->w, m->h, secs);
+        static const struct { const char *name; int kind, row, op; } cases[] = {
+            { "shift-repeated",  MAPIO_TILES,  4, 0 },     /* the corridor's row, repeated */
+            { "shift-lost",      MAPIO_VEDGES, 5, 2 },     /* a room row lost: a copy fits */
+            { "shift-lost-end",  MAPIO_TILES, 12, 2 },     /* an empty row near the end lost */
+            { "shift-added",     MAPIO_HEDGES, 3, 1 },     /* an empty line in hedges */
+        };
+        for (size_t c = 0; c < sizeof cases / sizeof cases[0]; c++) {
+            int at = secs[cases[c].kind].v[cases[c].row].line;
+            FILE *f = fopen(bad, "w");
+            int line = 1;
+            for (const char *p = text; *p; line++) {
+                const char *e = strchr(p, '\n');
+                size_t n = e ? (size_t)(e - p) + 1 : strlen(p);
+                if (!(cases[c].op == 2 && line == at)) fwrite(p, 1, n, f);
+                if (line == at && cases[c].op == 0) fwrite(p, 1, n, f);
+                if (line == at && cases[c].op == 1) fputc('\n', f);
+                p += n;
+            }
+            fclose(f);
+            for (int json = 0; json < 2; json++) {
+                char  *out = NULL;
+                size_t olen = 0;
+                FILE  *o = open_memstream(&out, &olen);
+                maptools_check(o, bad, json);
+                fclose(o);
+                /* The sandbox's name changes each run: DIR for it. */
+                char *t = xmalloc(olen + 1), *w = t;
+                size_t dl = strlen(sb.dir);
+                for (const char *p = out; *p; ) {
+                    if (!strncmp(p, sb.dir, dl)) { memcpy(w, "DIR", 3); w += 3; p += dl; }
+                    else *w++ = *p++;
+                }
+                *w = '\0';
+                char gname[64];
+                snprintf(gname, sizeof gname, "%s%s", cases[c].name, json ? "-json" : "");
+                golden_bytes(gname, t, strlen(t));
+                free(t);
+                free(out);
+            }
+        }
+        mapio_sections_free(secs);
+        free(text);
+        map_free(m);
+    }
+
+    CASE("a blank line between sections read as a lost row's place (the count right) is found by its evidence");
+    {
+        Map *m = pair_map();
+        CHECK_EQ(mapio_write(m, path, err, sizeof err), 0);
+        size_t len;
+        char *text = file_read(path, 1 << 20, &len, NULL);
+        MapioSection secs[MAPIO_SECTIONS];
+        mapio_sections(text, len, m->w, m->h, secs);
+        int lost = secs[MAPIO_TILES].v[2].line, before = secs[MAPIO_VEDGES].header;
+        FILE *f = fopen(bad, "w");
+        int line = 1;
+        for (const char *p = text; *p; line++) {
+            const char *e = strchr(p, '\n');
+            size_t n = e ? (size_t)(e - p) + 1 : strlen(p);
+            if (line == before) fputc('\n', f);        /* a separator, hand-written */
+            if (line != lost) fwrite(p, 1, n, f);
+            p += n;
+        }
+        fclose(f);
+        int a, b; char code[8] = "";
+        CHECK(check_span(bad, &a, &b, code));
+        CHECK(!strcmp(code, "E011") || !strcmp(code, "e011"));
+        CHECK(a <= lost - 1 && lost - 1 <= b);
+        mapio_sections_free(secs);
+        free(text);
+        map_free(m);
+    }
+
+    CASE("a line repeated, an empty line added or a line lost in tiles, vedges or hedges: found where it was, or not said");
+    static char blank[1];
+    int found = 0, silent = 0, silent_harm = 0, wrong = 0, trials = 0, fog_said = 0;
+    int by_found[3][3] = { { 0 } }, by_trials[3][3] = { { 0 } }, widths[3] = { 0 };
+    int rounds = getenv("VTT_SHIFT_ROUNDS") ? atoi(getenv("VTT_SHIFT_ROUNDS")) : 120;
+    for (int round = 0; round < rounds; round++) {
+        Map *m = rooms_at_random(&seed);
+        CHECK_EQ(mapio_write(m, path, err, sizeof err), 0);
+        size_t len;
+        char *text = file_read(path, 1 << 20, &len, NULL);
+        MapioSection secs[MAPIO_SECTIONS];
+        mapio_sections(text, len, m->w, m->h, secs);
+        /* The file as lines. */
+        int nl = 0;
+        for (size_t i = 0; i < len; i++) nl += text[i] == '\n';
+        char **lines = xmalloc((size_t)(nl + 2) * sizeof *lines);
+        int k = 0;
+        for (char *p = text; *p; ) {
+            char *e = strchr(p, '\n');
+            if (!e) break;
+            *e = '\0';
+            lines[k++] = p;
+            p = e + 1;
+        }
+        for (int t = 0; t < 6; t++) {
+            int kind = (int)((seed = seed * 1103515245u + 12345u) >> 16) % 3;
+            int op   = (int)((seed = seed * 1103515245u + 12345u) >> 16) % 3;
+            const MapioSection *sec = &secs[kind];
+            int r = (int)((seed = seed * 1103515245u + 12345u) >> 16) % sec->n;
+            int at = sec->v[r].line - 1;                    /* 0-based index into lines */
+            char **mut = xmalloc((size_t)(k + 2) * sizeof *mut);
+            int    mk = 0, changed = 0;
+            for (int i = 0; i < k; i++) {
+                if (op == 2 && i == at) continue;            /* lost */
+                mut[mk++] = lines[i];
+                if (i == at && op == 0) { mut[mk++] = lines[i]; changed = mk; }   /* repeated: the copy's line */
+                if (i == at && op == 1) { mut[mk++] = blank; changed = mk; }      /* an empty line added */
+            }
+            if (op == 2) changed = at;                       /* the fix goes after the line before it */
+            size_t ml;
+            char *mt = lines_join(mut, mk, &ml);
+            FILE *f = fopen(bad, "w");
+            fwrite(mt, 1, ml, f);
+            fclose(f);
+            int a, b; char code[8] = "";
+            trials++;
+            by_trials[kind][op]++;
+            if (!check_span(bad, &a, &b, code)) {
+                silent++;
+                /* Silent is right when the edit changed nothing the map
+                 * holds (an empty line among empty rows at the bottom). */
+                Map *mb = mapio_load(bad, err, sizeof err);
+                char *d0 = printed(m, 0), *d1 = mb ? printed(mb, 0) : NULL;
+                if (d1 && strcmp(d0, d1)) {
+                    silent_harm++;
+                    if (getenv("VTT_SHIFT_KEEP") && silent_harm <= 6) {
+                        char keep[800];
+                        snprintf(keep, sizeof keep, "%s/miss%d-%s-op%d-line%d.vtt", getenv("VTT_SHIFT_KEEP"), silent_harm,
+                                 kind == 0 ? "tiles" : kind == 1 ? "vedges" : "hedges", op, changed);
+                        FILE *kf = fopen(keep, "w");
+                        if (kf) { fwrite(mt, 1, ml, kf); fclose(kf); }
+                    }
+                }
+                free(d0); free(d1);
+                map_free(mb);
+            }
+            else if (a <= changed && changed <= b) { found++; by_found[kind][op]++; widths[islower((unsigned char)code[0]) ? 2 : b - a < 1 ? 0 : 1]++; }
+            else {
+                wrong++;
+                if (wrong <= 3) fprintf(stderr, "  shift misplaced: %s op %d at line %d, said %s %d-%d\n",
+                                        kind == 0 ? "tiles" : kind == 1 ? "vedges" : "hedges", op, changed, code, a, b);
+            }
+            free(mt);
+            free(mut);
+        }
+        /* A fog row: never searched, so never a span. The map gets a patch
+         * over its first room, saved, then a fog line repeated or lost. */
+        {
+            str_lcpy(m->fog_patches[0].name, "Crypt", sizeof m->fog_patches[0].name);
+            m->fog_patches[0].reveal = 2;
+            for (int y = 0; y < m->h; y++)
+                for (int x = 0; x < m->w / 2; x++) map_fog_set(m, x, y, 1);
+            CHECK_EQ(mapio_write(m, path, err, sizeof err), 0);
+            size_t fl;
+            char *ft = file_read(path, 1 << 20, &fl, NULL);
+            MapioSection fs2[MAPIO_SECTIONS];
+            mapio_sections(ft, fl, m->w, m->h, fs2);
+            const MapioSection *fsec = &fs2[MAPIO_FOG];
+            if (fsec->n > 2) {
+                int at = fsec->v[fsec->n / 2].line;          /* 1-based */
+                FILE *f = fopen(bad, "w");
+                int line = 1;
+                for (char *p = ft; *p; line++) {
+                    char *e = strchr(p, '\n');
+                    size_t n = e ? (size_t)(e - p) + 1 : strlen(p);
+                    fwrite(p, 1, n, f);
+                    if (line == at) fwrite(p, 1, n, f);      /* repeated */
+                    p += n;
+                }
+                fclose(f);
+                int a, b; char code[8];
+                fog_said += check_span(bad, &a, &b, code);
+            }
+            mapio_sections_free(fs2);
+            free(ft);
+        }
+        free(lines);
+        mapio_sections_free(secs);
+        free(text);
+        map_free(m);
+    }
+    /* The shipped maps, every line of every row section, each way. */
+    static const char *const shipped[] = {
+        "tests/fixtures/areas.vtt", "tests/fixtures/crowd.vtt", "tests/fixtures/env.vtt",
+        "tests/fixtures/everything.vtt", "tests/fixtures/floors.vtt", "tests/fixtures/kinds.vtt",
+        "tests/fixtures/links.vtt", "tests/fixtures/two-rooms.vtt", "tests/oracle/maps/v3.vtt",
+        "tests/oracle/maps/v10.vtt", "tests/oracle/maps/v12.vtt", "tests/oracle/maps/w024.vtt",
+    };
+    int sfound = 0, strials = 0, swrong = 0, sharm = 0;
+    for (size_t f = 0; f < sizeof shipped / sizeof shipped[0]; f++) {
+        char here[1024];
+        snprintf(here, sizeof here, "%s/%s", sb.cwd, shipped[f]);
+        Map *m = mapio_load(here, err, sizeof err);
+        if (!m) continue;
+        CHECK_EQ(mapio_write(m, path, err, sizeof err), 0);
+        size_t len;
+        char *text = file_read(path, 1 << 20, &len, NULL);
+        MapioSection secs[MAPIO_SECTIONS];
+        mapio_sections(text, len, m->w, m->h, secs);
+        int nl = 0;
+        for (size_t i = 0; i < len; i++) nl += text[i] == '\n';
+        char **lines = xmalloc((size_t)(nl + 2) * sizeof *lines);
+        int k = 0;
+        for (char *p = text; *p; ) { char *e = strchr(p, '\n'); if (!e) break; *e = '\0'; lines[k++] = p; p = e + 1; }
+        for (int kind = 0; kind < 3; kind++)
+            for (int r = 0; r < secs[kind].n; r++)
+                for (int op = 0; op < 3; op++) {
+                    int at = secs[kind].v[r].line - 1, mk = 0, changed = 0;
+                    char **mut = xmalloc((size_t)(k + 2) * sizeof *mut);
+                    for (int i = 0; i < k; i++) {
+                        if (op == 2 && i == at) continue;
+                        mut[mk++] = lines[i];
+                        if (i == at && op == 0) { mut[mk++] = lines[i]; changed = mk; }
+                        if (i == at && op == 1) { mut[mk++] = blank; changed = mk; }
+                    }
+                    if (op == 2) changed = at;
+                    size_t ml;
+                    char *mt = lines_join(mut, mk, &ml);
+                    FILE *bf = fopen(bad, "w");
+                    fwrite(mt, 1, ml, bf);
+                    fclose(bf);
+                    int a, b; char code[8] = "";
+                    strials++;
+                    if (!check_span(bad, &a, &b, code)) {
+                        Map *mb = mapio_load(bad, err, sizeof err);
+                        char *d0 = printed(m, 0), *d1 = mb ? printed(mb, 0) : NULL;
+                        if (d1 && strcmp(d0, d1)) {
+                            sharm++;
+                            if (getenv("VTT_SHIFT_SAY")) fprintf(stderr, "    silent: %s %s op %d line %d\n", shipped[f],
+                                                                kind == 0 ? "tiles" : kind == 1 ? "vedges" : "hedges", op, changed);
+                        }
+                        free(d0); free(d1);
+                        map_free(mb);
+                    } else {
+                        if (a <= changed && changed <= b) sfound++;
+                        else if (++swrong <= 30) fprintf(stderr, "  shift misplaced in %s: %s op %d at line %d, said %s %d-%d\n",
+                                                        shipped[f], kind == 0 ? "tiles" : kind == 1 ? "vedges" : "hedges", op, changed, code, a, b);
+                    }
+                    free(mt);
+                    free(mut);
+                }
+        free(lines);
+        mapio_sections_free(secs);
+        free(text);
+        map_free(m);
+    }
+    fprintf(stderr, "  the shipped maps: %d of %d found, %d not said that changed the map, %d misplaced\n",
+            sfound, strials, sharm, swrong);
+    CHECK_EQ(swrong, 0);
+    CHECK(sharm * 50 <= strials);                       /* an edit that changes the map is nearly always said */
+    fprintf(stderr, "  the line search: %d of %d found, %d not said (%d of them changed the map), %d misplaced\n",
+            found, trials, silent, silent_harm, wrong);
+    fprintf(stderr, "    answers: %d one line, %d a run of like lines (one row), %d a span of candidates\n", widths[0], widths[1], widths[2]);
+    for (int kind = 0; kind < 3; kind++)
+        fprintf(stderr, "    %-6s repeated %d/%d, an empty line added %d/%d, lost %d/%d\n",
+                kind == 0 ? "tiles" : kind == 1 ? "vedges" : "hedges", by_found[kind][0], by_trials[kind][0],
+                by_found[kind][1], by_trials[kind][1], by_found[kind][2], by_trials[kind][2]);
+    CHECK_EQ(wrong, 0);
+    CHECK(found * 10 >= trials * 6);                    /* most are found */
+    CHECK(silent_harm * 50 <= trials);
+    CHECK_EQ(fog_said, 0);
 
     sandbox_leave(&sb);
 }

@@ -3,7 +3,7 @@ E001 unreadable                   e001.vtt is not a vtt map
 1 error, 0 warnings
 -- exit 2
 == e001.vtt --check --json
-{"file":"e001.vtt","errors":1,"warnings":0,"notes":0,"findings":[{"code":"E001","slug":"unreadable","severity":"error","line":null,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"e001.vtt is not a vtt map"}]}
+{"file":"e001.vtt","errors":1,"warnings":0,"notes":0,"findings":[{"code":"E001","slug":"unreadable","severity":"error","line":null,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"e001.vtt is not a vtt map","help":null,"notes":[],"span":null,"folded":null,"confidence":null}]}
 -- exit 2
 == e001.vtt --describe
 vtt: e001.vtt is not a vtt map

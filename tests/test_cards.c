@@ -1059,13 +1059,13 @@ void test_env(void)
     press(&a, ":env adversaries\r");
     CHECK(a.modal == MODAL_NONE && strstr(a.status, "none of haunted-crypt's potential adversaries") != NULL);
     {
-        Token t;
-        memset(&t, 0, sizeof t);
-        t.size = 1; t.kind = TOKEN_ENEMY; t.x = 10; t.y = 10;
+        Token tk;
+        memset(&tk, 0, sizeof tk);
+        tk.size = 1; tk.kind = TOKEN_ENEMY; tk.x = 10; tk.y = 10;
         const char *who[] = { "Giant Rat", "Bat", "Wolf" };
         for (int k = 0; k < 3; k++) {
-            str_lcpy(t.label, who[k], sizeof t.label);
-            int idx = tokens_add(&m->tokens, t);
+            str_lcpy(tk.label, who[k], sizeof tk.label);
+            int idx = tokens_add(&m->tokens, tk);
             char nm[MAP_NAME_MAX];
             character_name_from_label(who[k], nm, sizeof nm);
             CHECK(character_save(m, idx, nm, NULL, 0, err, sizeof err) == 0);
