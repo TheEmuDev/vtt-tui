@@ -54,7 +54,7 @@ DEPS      := $(OBJS:.o=.d)
 LIBSRCS   := $(filter-out $(SRCDIR)/main.c,$(SRCS))
 TESTSRCS  := $(filter-out $(TESTDIR)/fuzz_%.c,$(wildcard $(TESTDIR)/*.c))
 
-.PHONY: all debug test oracle bench perf fuzz fuzz-ctl fuzz-json clean help
+.PHONY: all debug test test-build oracle bench perf fuzz fuzz-ctl fuzz-json clean help
 .DEFAULT_GOAL := all
 
 all: BUILDFLAGS := $(RELFLAGS)
@@ -70,13 +70,17 @@ $(BIN): $(OBJS)
 $(OBJDIR)/%.o: $(SRCDIR)/%.c
 	$(CC) $(BASEFLAGS) $(BUILDFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
 
+# The test binary alone, rebuilt every time (no dependency tracking for it):
+# `make test-build && build/run-tests NAME...` while iterating on a suite.
 # The release vtt too: the --apply and channel tests run ./vtt, and a stale
 # one would be tested silently.
-test: all
+test-build: all
 	@mkdir -p $(OBJDIR)
 	$(CC) $(BASEFLAGS) $(DBGFLAGS) $(CFLAGS) -I$(TESTDIR) $(TESTWARN) \
 	    $(LIBSRCS) $(TESTSRCS) -o $(OBJDIR)/run-tests \
 	    -fsanitize=address,undefined $(LDLIBS)
+
+test: test-build
 	@$(OBJDIR)/run-tests
 	@# The seam (docs/V2.md, D2): the protocol's suite again, built with no
 	@# src/app*.c and no loop: a request handler or world.c that reached for
@@ -145,6 +149,7 @@ help:
 	@echo "make          release build (-O2)"
 	@echo "make debug    -Og -g3 with ASan + UBSan"
 	@echo "make test     build and run the unit/golden test suite"
+	@echo "make test-build   build build/run-tests only, for build/run-tests NAME..."
 	@echo "make oracle   compare ./vtt's output with tests/oracle/expected"
 	@echo "make bench    replay tests/bench.keys and print frame stats"
 	@echo "make perf     measure every path; regenerates docs/PERFORMANCE.md"

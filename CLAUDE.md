@@ -68,7 +68,7 @@ prohibitions only, under 150 lines. Reference lives where it is read on demand.
 ```
 make                 release build (-O2), profiler compiled in
 make test            ASan+UBSan build, unit + golden-frame tests, then tools/oracle.sh check (`record` after a meant change of output)
-build/run-tests NAME...   only the suites named (tests/run.c's table)
+make test-build; build/run-tests NAME...   only the suites named (`make build/run-tests` does not rebuild it)
 make perf            one run; publish the per-row MEDIAN of three quiet runs (tools/median.py a b c)
 make fuzz | fuzz-ctl | fuzz-json    libFuzzer (clang): map loader, channel requests, JSON; FUZZ_SECONDS=600
 tools/embed.sh       after editing web/index.html (-> src/webpage.c); tools/blit_wasm.py after the blitter
@@ -143,8 +143,8 @@ Code
 - Never `pkill -f <pattern>` from a command whose own line contains the pattern (it kills
   the shell, exit 144), and never kill `vtt` by name: the user may have one open. Record PIDs.
 - `grep` is aliased oddly here: use `awk`, or plain `grep -n` in a subshell.
-- Scratch files go in the session scratchpad, never the repo: reuse its `kit/` (README), one
-  dir a task deleted when done, everything but `kit/` swept before a commit. Key scripts: `ESC`+letter is Alt.
+- Scratch files go in the session scratchpad, never the repo: one dir a task, deleted when done,
+  swept before a commit; a tool worth reuse goes to tools/ instead. Key scripts: `ESC`+letter is Alt.
 - A test or script that runs `./vtt` or opens the channel sits in a sandbox (`sandbox_enter`:
   its own `XDG_DATA_HOME`/`XDG_RUNTIME_DIR`), or it reaches the user's files and vtts.
 - Driving a live vtt from a script (a fifo and `script`): CODEMAP, *Conventions*.

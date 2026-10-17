@@ -90,6 +90,9 @@ tools/pageprobe.js   paste into a served page's console, then probe.report(): na
 tools/saves.sh  a save flushed and unflushed, three map sizes, on the real disk (PERFORMANCE.md's save table)
 tools/proposals.sh  the proposal, checkpoint and outside-change tables (copy, diff, conflicts, preview, accept; stat, parse, compare) against the release objects
 tools/oracle.sh record|check [VTT]  what a vtt prints, from outside it, kept under tests/oracle/expected: the map tools and frames over every fixture, tests/fuzz-found and tests/oracle/maps (file versions 3, 4, 5, 10, 11, 12 and codes E001, N105, W024, which no other fixture has), each tests/fuzz-ctl request through `--apply`, checksums for generated maps and for cell dumps (`ORACLE_KEEP=DIR` keeps their text). `make test` ends with `check`; `make oracle` is it alone. `record` after a change meant to alter output, and read the diff. Sandboxed (its own XDG directories, copies of the maps). docs/V2.md, D11
+make test-build  build/run-tests alone, for build/run-tests NAME... (only this and make test rebuild it)
+build/tool-checkbench MAP T.json N   (make build/tool-checkbench) --check N times traced; tools/zones.py T.json each zone's median
+tools/shift/   the line search's counterexample generators, undamaged-file scan and judge, from its reviews (README.md)
 tools/vs1x.sh [REF]  2.0 against 1.x: main's binary (or REF) and this tree's, perf.sh three times each alternating, both on the repo's disk; tools/compare.py prints the shared rows side by side -> PERFORMANCE.md, *2.0 against 1.x*
 tools/machine.sh  the `Machine:` line every published table carries (perf.sh, saves.sh, pagebench.sh print it; median.py keeps it)
 VTT_FOGDIFF_OPS=36000 ./build/run-tests   the long run of the fog differential test

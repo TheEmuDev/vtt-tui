@@ -3,9 +3,11 @@
 Loaded when a file under tests/ is read. The suite list by area is the `tests/` row of
 docs/CODEMAP.md; `tests/run.c` is the table of suites and `main`, nothing else.
 
-- `make test` builds with ASan+UBSan and runs everything. `build/run-tests NAME...` runs
-  only the suites named in run.c's table -- use it while iterating, the whole suite before
-  a change is called done.
+- `make test` builds with ASan+UBSan and runs everything. `make test-build` rebuilds
+  `build/run-tests` alone (`make build/run-tests` does not), then `build/run-tests NAME...`
+  runs only the suites named in run.c's table -- use it while iterating, the whole suite
+  before a change is called done. The line search's own counterexample tools are
+  tools/shift/ (README.md).
 - `VTT_UPDATE_GOLDEN=1` regenerates golden frames; `VTT_REQUIRE_NODE=1` fails rather than
   skips the page decoder test; `VTT_FOGDIFF_OPS=36000 build/run-tests` is the long fog
   differential run.
