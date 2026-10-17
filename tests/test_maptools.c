@@ -1463,9 +1463,10 @@ void test_map_shift(void)
     /* Most edits that change the map are placed. The rest are on maps
      * whose only evidence is loose wall ends (all floor, walls drawn on it:
      * kinds.vtt, two-rooms.vtt), which place nothing alone, or with
-     * mistakes of their own (two-rooms.vtt's four loose ends) -- silence
-     * over a guess. */
-    CHECK(sharm * 10 <= strials);
+     * mistakes of their own (two-rooms.vtt's four loose ends), or where a
+     * row with a twin elsewhere in its section could have been pasted --
+     * silence over a guess. */
+    CHECK(sharm * 8 <= strials);
     fprintf(stderr, "  the line search: %d of %d found, %d said without a place, %d not said (%d of them changed the map), %d misplaced\n",
             found, trials, told_unplaced, silent, silent_harm, wrong);
     fprintf(stderr, "    answers: %d one line, %d a run of like lines (one row), %d a span of candidates\n", widths[0], widths[1], widths[2]);

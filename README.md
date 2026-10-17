@@ -1483,7 +1483,10 @@ it), or the map has walls on void of its own that a wrong place could seem to me
 that the section is short, a row is stray, or a row is missing with no place; when several places
 fit equally well it names the span between them. In a file that keeps a blank line after two or
 more of its sections, those blanks are read as separators; otherwise a blank after a section is a
-row pushed out of it. Fog rows are never placed this way: fog over void is allowed.
+row pushed out of it -- and a finding that rests on that reading says so ("unless that is a
+separator"), since a file that keeps a blank after only some sections reads the same. A row pasted
+from elsewhere in the section, or two sections damaged at once, gets no place unless it is clear.
+Fog rows are never placed this way: fog over void is allowed.
 
 | code | finds |
 |---|---|
