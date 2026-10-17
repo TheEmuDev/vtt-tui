@@ -1599,8 +1599,8 @@ static void shift_search(const ShiftScan *sc, const MapioSection *sec, int n, Sh
      * puts between sections): then a tie that takes in leaving it as read
      * -- the last line being the extra one -- is still a span to tell. */
     int stray = sh->extra > 0 && nr < n && sec->v[nr].len > 0 && memcmp(rows[nr], empty, wz);
-    if (best_none && !lost_for_sure && !(stray && tie && !unsure)) { /* leaving it as read is as good: nothing to say */ }
-    else if (lost_for_sure && sb > 0 && (best_none ? !tie : better > SHIFT_TIE)) {
+    if (best_none && !lost_for_sure && !(stray && tie && !unsure && sb == 0)) { /* leaving it as read is as good: nothing to say */ }
+    else if (lost_for_sure && sb > 0) {
         /* A row lost, and leaving the rows where they are fits best -- but
          * the map has mistakes of its own even so, and a map with some can
          * score better shifted than true: no place is told. */
@@ -2121,7 +2121,7 @@ static void check_shift(const Map *m, const char *text, size_t len, const char *
         if (sh.blank_only) {
             /* Both readings, said: the help as it stands is for one. */
             char h2[sizeof mo->help];
-            snprintf(h2, sizeof h2, "if this file keeps a blank line after some of its sections (by hand), that blank is a separator and this finding is not a mistake; otherwise: %s", mo->help);
+            snprintf(h2, sizeof h2, "if this file keeps a blank line after some of its sections (by hand), that blank is a separator and nothing is wrong here; otherwise: %s", mo->help);
             str_lcpy(mo->help, h2, sizeof mo->help);
         }
     } else {

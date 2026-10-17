@@ -5,6 +5,6 @@ W031 row-extra          line 41   'hedges' ends in a blank line after its rows: 
    42 |                                           <- 2 times where the map has 1: delete one
    43 |            ------             
       = evidence: with line 41 gone: 26 walls and doors that stand on void stand on map, 8 loose wall ends meet another wall, 26 places where floor met void with no wall between are gone
-      = help: if this file keeps a blank line after some of its sections (by hand), that blank is a separator and this finding is not a mistake; otherwise: delete line 41 (or any of lines 41-42: they are the same row); then vtt DIR/bad.vtt --check
+      = help: if this file keeps a blank line after some of its sections (by hand), that blank is a separator and nothing is wrong here; otherwise: delete line 41 (or any of lines 41-42: they are the same row); then vtt DIR/bad.vtt --check
       = 26 findings are caused by it, folded in: W103 x26
 0 errors, 1 warning
