@@ -1,0 +1,6 @@
+W031 row-extra          line 18   'vedges' has 10 lines where the map has 9 rows: one of lines 19-28 is one too many, and the map does not show which
+      = evidence: the count is certain (a line past its rows reads as a row); no place to take a line out of fits the rest of the map better than another (rows alike, or only wall ends that meet nothing differ, which a doorway has by design)
+      = help: compare lines 19-28 with a copy of the map (the autosave, a backup) and delete what is too many, then vtt DIR/bad.vtt --check; look first at line 28 past its rows (itself the line too many, if no row of the map), line 19 (empty), lines 20-27 (alike: any one of them) -- an added line is most often empty or a repeat of the line above
+      = 1 finding is caused by it, folded in: W019 x1
+W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+0 errors, 2 warnings

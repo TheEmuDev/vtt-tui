@@ -452,7 +452,7 @@ vtt: e001.vtt is not a vtt map
 == e001.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 40x12
 -- cksum 2306292080-1085 exit 0
 == e001.vtt --seed 1 --script ../work/roll.keys --dump-frame --size 80x24
- open map                                                               22 maps 
+ open map                                                               23 maps 
                                                                                 
    > areas.vtt                         ./areas.vtt                              
      broken.vtt                        ./broken.vtt                             
@@ -467,12 +467,12 @@ vtt: e001.vtt is not a vtt map
      n105.vtt                          ./n105.vtt                               
      roundtrip-damaged.vtt             ./roundtrip-damaged.vtt                  
      shift-either-one.vtt              ./shift-either-one.vtt                   
+     shift-flawed.vtt                  ./shift-flawed.vtt                       
      shift-short-sep.vtt               ./shift-short-sep.vtt                    
      two-rooms.vtt                     ./two-rooms.vtt                          
      v10.vtt                           ./v10.vtt                                
      v11.vtt                           ./v11.vtt                                
-     v12.vtt                           ./v12.vtt                                
-     v3.vtt                            ./v3.vtt                             v   
+     v12.vtt                           ./v12.vtt                            v   
                                                                                 
                                                                                 
  j/k move  enter open  d delete                                          ? keys 
@@ -504,12 +504,12 @@ vtt: e001.vtt is not a vtt map
                                                                                 
 -- exit 0
 == e001.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 80x24
--- cksum 1410601049-3420 exit 0
+-- cksum 3458805884-3420 exit 0
 == e001.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --players --size 80x24
 -- cksum 3752749104-2448 exit 0
 == e001.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 110x34
--- cksum 4127076709-5570 exit 0
+-- cksum 3514851578-5608 exit 0
 == e001.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --players --size 110x34
 -- cksum 1368086761-4522 exit 0
 == e001.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 40x12
--- cksum 1829894180-1230 exit 0
+-- cksum 2541622317-1230 exit 0

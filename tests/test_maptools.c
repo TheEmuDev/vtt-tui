@@ -1062,28 +1062,43 @@ static Map *shape_at_random(unsigned *seed, int shape)
     return m;
 }
 
-/* A file as a hand-writer keeps one: `blanks` blank lines after each row
- * section in `mask` (bit k for section k). */
-static char *with_separators_in(const char *text, size_t len, int w, int h, int mask, int blanks, size_t *out_len)
+/* The file with `after[k]` written after section k's last line. */
+static char *with_after(const char *text, size_t len, int w, int h, const char *const after[MAPIO_SECTIONS], size_t *out_len)
 {
     MapioSection secs[MAPIO_SECTIONS];
     mapio_sections(text, len, w, h, secs);
-    int after[MAPIO_SECTIONS];
-    for (int k = 0; k < MAPIO_SECTIONS; k++) after[k] = secs[k].n ? secs[k].v[secs[k].n - 1].line : 0;
+    int at[MAPIO_SECTIONS];
+    size_t extra = 0;
+    for (int k = 0; k < MAPIO_SECTIONS; k++) {
+        at[k] = secs[k].n ? secs[k].v[secs[k].n - 1].line : 0;
+        extra += strlen(after[k]);
+    }
     mapio_sections_free(secs);
-    char *out = xmalloc(len + 4 * (size_t)blanks + 8), *o = out;
+    char *out = xmalloc(len + extra + 1), *o = out;
     int line = 1;
     for (const char *p = text; *p; line++) {
         const char *e = strchr(p, '\n');
         size_t n = e ? (size_t)(e - p) + 1 : strlen(p);
         memcpy(o, p, n); o += n;
         for (int k = 0; k < MAPIO_SECTIONS; k++)
-            if ((mask >> k & 1) && after[k] == line) for (int b = 0; b < blanks; b++) *o++ = '\n';
+            if (at[k] == line) { size_t a = strlen(after[k]); memcpy(o, after[k], a); o += a; }
         p += n;
     }
     *o = '\0';
     *out_len = (size_t)(o - out);
     return out;
+}
+
+/* A file as a hand-writer keeps one: `blanks` blank lines after each row
+ * section in `mask` (bit k for section k); negative, that many lines of
+ * three spaces (an editor's blank line, which the loader reads as blank). */
+static char *with_separators_in(const char *text, size_t len, int w, int h, int mask, int blanks, size_t *out_len)
+{
+    char sep[64] = "";
+    for (int b = 0; b < (blanks < 0 ? -blanks : blanks) && b < 8; b++) strcat(sep, blanks < 0 ? "   \n" : "\n");
+    const char *after[MAPIO_SECTIONS];
+    for (int k = 0; k < MAPIO_SECTIONS; k++) after[k] = mask >> k & 1 ? sep : "";
+    return with_after(text, len, w, h, after, out_len);
 }
 
 static char *with_separators(const char *text, size_t len, int w, int h, size_t *out_len)
@@ -1243,10 +1258,145 @@ void test_map_shift(void)
         map_free(m);
     }
 
-    CASE("separators after some sections; one section short before its blank is set aside and another with a line too many: two damaged, no place");
+    CASE("separators after some sections; tiles short before its blank is set aside, a blank added to hedges' closing empty rows: hedges' line never told (it was once, wrong); tiles' row told where it was");
     {
-        int a, b; char code[8];
-        CHECK(!check_span("tests/fixtures/shift-short-sep.vtt", &a, &b, code));
+        int a = 0, b = 0; char code[8] = "";
+        char  *out = NULL;
+        size_t olen = 0;
+        FILE  *o = open_memstream(&out, &olen);
+        maptools_check(o, "tests/fixtures/shift-short-sep.vtt", 1);
+        fclose(o);
+        CHECK(strstr(out, "\"W031\"") == NULL);
+        free(out);
+        /* The row lost is the original's line 16, after line 15 here; the
+         * blank in hedges changes no square, so that fix alone restores it. */
+        if (check_span("tests/fixtures/shift-short-sep.vtt", &a, &b, code)) CHECK(a <= 15 && 15 <= b);
+    }
+
+    CASE("certain without a place: a line too many where every row is alike (the count, the lines), a row lost there (missing, no place)");
+    {
+        size_t len;
+        char *text = file_read("tests/fixtures/everything.vtt", 1 << 20, &len, NULL);
+        CHECK(text != NULL);
+        MapioSection secs[MAPIO_SECTIONS];
+        mapio_sections(text, len, 16, 9, secs);
+        int at = secs[MAPIO_VEDGES].v[0].line;
+        mapio_sections_free(secs);
+        for (int op = 0; op < 2 && text; op++) {
+            FILE *f = fopen(bad, "w");
+            int line = 1;
+            for (const char *p = text; *p; line++) {
+                const char *e = strchr(p, '\n');
+                size_t n = e ? (size_t)(e - p) + 1 : strlen(p);
+                if (line == at && op == 0) fputc('\n', f);           /* an empty line added */
+                if (!(line == at && op == 1)) fwrite(p, 1, n, f);   /* a row lost */
+                p += n;
+            }
+            fclose(f);
+            char  *out = NULL;
+            size_t olen = 0;
+            FILE  *o = open_memstream(&out, &olen);
+            maptools_check(o, bad, 0);
+            fclose(o);
+            CHECK(strstr(out, op ? "a 'vedges' row is missing" : "the map does not show which") != NULL);
+            char *t = xmalloc(olen + 1), *w = t;
+            size_t dl = strlen(sb.dir);
+            for (const char *p = out; *p; ) {
+                if (!strncmp(p, sb.dir, dl)) { memcpy(w, "DIR", 3); w += 3; p += dl; }
+                else *w++ = *p++;
+            }
+            *w = '\0';
+            golden_bytes(op ? "shift-lost-quiet" : "shift-count-only", t, strlen(t));
+            free(t);
+            free(out);
+        }
+        free(text);
+    }
+
+    CASE("two sections each a line too many for certain: both counts said, no place");
+    {
+        size_t len;
+        char *text = file_read("tests/fixtures/everything.vtt", 1 << 20, &len, NULL);
+        MapioSection secs[MAPIO_SECTIONS];
+        mapio_sections(text, len, 16, 9, secs);
+        int at_t = secs[MAPIO_TILES].v[0].line, at_v = secs[MAPIO_VEDGES].v[0].line;
+        mapio_sections_free(secs);
+        FILE *f = fopen(bad, "w");
+        int line = 1;
+        for (const char *p = text; *p; line++) {
+            const char *e = strchr(p, '\n');
+            size_t n = e ? (size_t)(e - p) + 1 : strlen(p);
+            if (line == at_t || line == at_v) fputc('\n', f);
+            fwrite(p, 1, n, f);
+            p += n;
+        }
+        fclose(f);
+        free(text);
+        char  *out = NULL;
+        size_t olen = 0;
+        FILE  *o = open_memstream(&out, &olen);
+        maptools_check(o, bad, 0);
+        fclose(o);
+        int said = 0;
+        for (const char *p = out; (p = strstr(p, "with another section wrong too")); p++) said++;
+        CHECK_EQ(said, 2);
+        CHECK(strstr(out, "W019 stray-row") == NULL);          /* folded into the counts */
+        free(out);
+    }
+
+    CASE("a count is said only when it is so: not with a header missing or repeated; 'at least' when a line past the rows was set aside");
+    {
+        size_t len;
+        char *text = file_read("tests/fixtures/two-rooms.vtt", 1 << 20, &len, NULL);
+        CHECK(text != NULL);
+        static const struct { const char *what, *from, *to, *want, *never; } cases[] = {
+            /* The vedges header gone: its rows read as tiles' surplus. */
+            { "no header", "\nvedges\n", "\n", NULL, "W031" },
+            /* A tiles block before the one the loader reads, a line too long. */
+            { "repeated", "\ntiles\n", "\ntiles\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\ntiles\n", NULL, "W031" },
+            /* Two empty lines into tiles, its last row with a stray character. */
+            { "set aside", "\nvedges\n", "\n..x.\nvedges\n", "at least", "W031 row-extra          line 5    'tiles' has 1" },
+        };
+        for (size_t c = 0; c < sizeof cases / sizeof cases[0] && text; c++) {
+            const char *at = strstr(text, cases[c].from);
+            CHECK(at != NULL);
+            if (!at) continue;
+            FILE *f = fopen(bad, "w");
+            fwrite(text, 1, (size_t)(at - text), f);
+            if (c == 2) {
+                /* Two empty lines after tiles' first row as well. */
+                const char *t = strstr(text, "\ntiles\n") + 7, *e = strchr(t, '\n') + 1;
+                fseek(f, 0, SEEK_SET);
+                fwrite(text, 1, (size_t)(e - text), f);
+                fputs("\n\n", f);
+                fwrite(e, 1, (size_t)(at - e), f);
+            }
+            fputs(cases[c].to, f);
+            fputs(at + strlen(cases[c].from), f);
+            fclose(f);
+            char  *out = NULL;
+            size_t olen = 0;
+            FILE  *o = open_memstream(&out, &olen);
+            maptools_check(o, bad, 0);
+            fclose(o);
+            if (cases[c].want) CHECK(strstr(out, cases[c].want) != NULL);
+            if (c < 2) CHECK(strstr(out, cases[c].never) == NULL);
+            if (getenv("VTT_SHIFT_SAY")) printf("    %s:\n%s", cases[c].what, out);
+            free(out);
+        }
+        free(text);
+    }
+
+    CASE("a map with flaws of its own: a pasted empty row is not placed where a wrong place scores better than the truth; the count says why");
+    {
+        char  *out = NULL;
+        size_t olen = 0;
+        FILE  *o = open_memstream(&out, &olen);
+        maptools_check(o, "tests/fixtures/shift-flawed.vtt", 1);
+        fclose(o);
+        CHECK(strstr(out, "\"span\":{") == NULL);
+        CHECK(strstr(out, "the map has mistakes of its own") != NULL);
+        free(out);
     }
 
     CASE("two readings, one witness: a line too many in vedges, or hedges lost a row under a separator -- both said, no place");
@@ -1310,10 +1460,11 @@ void test_map_shift(void)
             CHECK_EQ(mapio_write(m, path, err, sizeof err), 0);
             size_t len;
             char *text = file_read(path, 1 << 22, &len, NULL);
-            for (int mask = 1; mask < 16; mask++) {
+            for (int mask = 1; mask < 32; mask++) {
                 size_t sl;
-                /* Bit 3: two blanks, not one. */
-                char *st = with_separators_in(text, len, m->w, m->h, mask & 7, mask & 8 ? 2 : 1, &sl);
+                /* Bit 3: two blanks, not one; bit 4: blanks of spaces. */
+                int nbl = mask & 8 ? 2 : 1;
+                char *st = with_separators_in(text, len, m->w, m->h, mask & 7, mask & 16 ? -nbl : nbl, &sl);
                 if (!(mask & 7)) { free(st); continue; }
                 FILE *f = fopen(bad, "w");
                 fwrite(st, 1, sl, f);
@@ -1321,6 +1472,21 @@ void test_map_shift(void)
                 free(st);
                 files++;
                 if (check_says_rows(bad)) { alarms++; if (getenv("VTT_SHIFT_SAY")) printf("    false alarm: map %d mask %d\n", i, mask); }
+            }
+            /* Each section ended its own way, mixed: nothing, one blank or
+             * two, a line of spaces, a comment or a tab the loader ignores. */
+            static const char *const ends[] = { "", "\n", "\n\n", "   \n", "# note\n", "\t\n", "# see the door.\n", "lights\n", "\n# wall ----\n" };
+            for (int t = 0; t < 20; t++) {
+                const char *after[MAPIO_SECTIONS] = { "", "", "", "" };
+                for (int k = 0; k < 3; k++) after[k] = ends[(unsigned)rand_r(&fseed) % 9u];
+                size_t al;
+                char *st2 = with_after(text, len, m->w, m->h, after, &al);
+                FILE *f = fopen(bad, "w");
+                fwrite(st2, 1, al, f);
+                fclose(f);
+                free(st2);
+                files++;
+                if (check_says_rows(bad)) { alarms++; if (getenv("VTT_SHIFT_SAY")) printf("    false alarm: map %d ends %d %d %d\n", i, (int)strlen(after[0]), (int)strlen(after[1]), (int)strlen(after[2])); }
             }
             /* Separators everywhere, a row lost in each of two sections. */
             size_t sl;

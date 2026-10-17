@@ -62,15 +62,21 @@ Map *mapio_load_text_diag(const char *path, const char *bytes, size_t len, char 
  * counts (docs/V2.md, step 5's second piece): each section's lines run from
  * its header to the next header or record, blank lines between sections
  * included, so a section with a line added or lost by hand is seen with the
- * lines it really has. The lines point into `text`, a carriage return off.
+ * lines it really has -- but past its rows, a line neither blank nor a row
+ * is the loader's unknown line and is set aside (`dropped`). The lines point
+ * into `text`, a carriage return off.
  * `rows` is what the size says; `next` the line that ended it (0: the
  * file's end). Fog's rows are told from records as the loader tells them. */
 enum { MAPIO_TILES, MAPIO_VEDGES, MAPIO_HEDGES, MAPIO_FOG, MAPIO_SECTIONS };
-typedef struct { int line; const char *text; int len; } MapioLine;
+/* `blank`: only spaces, or nothing; `row`: not blank, and every character one
+ * a row could hold -- the loader's own readings (a blank line; a stray row). */
+typedef struct { int line; const char *text; int len, blank, row; } MapioLine;
 typedef struct {
     int        header;      /* its header's line; 0 when the file has none */
     int        repeated;    /* a second header of this name came (the loader reads that one) */
     int        rows, n, next;
+    int        dropped;     /* lines past its rows set aside: neither blank nor a row (the loader's W015) */
+    int        last;        /* the line its text ends on, those included */
     MapioLine *v;
 } MapioSection;
 int  mapio_sections(const char *text, size_t len, int w, int h, MapioSection out[MAPIO_SECTIONS]);

@@ -887,7 +887,7 @@ typedef struct {
 typedef struct FindingMore {
     char snippet[640];      /* "     |" lines, each ending in a newline */
     char evidence[400];
-    char help[400];
+    char help[720];         /* room for two readings' fixes and a long path */
     char note[200];
     char folded[200];       /* "W103 x14, E110 x1" */
     int  nfolded;
@@ -1392,6 +1392,9 @@ typedef struct {
     int copy_line;                /* lost, fill 1 or 2: the line to copy */
     int stray;                    /* a line too many, and what it pushed out holds something */
     int nowhere;                  /* a row lost for certain, and no place for it can be told */
+    int quiet;                    /* ...because nothing on the map tells one place from another */
+    int withdrawn;                /* kind + 1: a place for a line too many there, taken back by the hidden-loss check */
+    int flawed;                   /* kind + 1: a place fit best there, but its fix left mistakes (the map's own?) */
     int blank_only;               /* the section's only oddity is a blank after its rows: a separator's other reading */
     int either;                   /* blank_only, and these sections (bit by kind) may each have lost a row instead: no place */
     int kfirst, klast;            /* the places (rows) the answer covers */
@@ -1592,7 +1595,9 @@ static void shift_search(const ShiftScan *sc, const MapioSection *sec, int n, Sh
     /* A lost row is put back as a guess (empty, or a neighbor's copy), so
      * its place is told only when the map comes out with nothing left of
      * what is counted; else, the row is said to be missing, no place. */
-    if (clear && lost_for_sure && sb > 0) clear = 0;
+    /* ...and so is a line too many: on a map with flaws of its own a wrong
+     * place can score better than the true one, which keeps them all. */
+    if (clear && sb > 0) { clear = 0; sh->flawed = sc->kind + 1; }
     int unsure = shadow >= 0 && shadow <= sb + SHIFT_TIE;
     if (unsure) clear = 0;
     /* Loose wall ends alone place nothing: a doorway or a corridor's mouth
@@ -1617,7 +1622,7 @@ static void shift_search(const ShiftScan *sc, const MapioSection *sec, int n, Sh
      * section holds something (a blank there is what a hand-written file
      * puts between sections): then a tie that takes in leaving it as read
      * -- the last line being the extra one -- is still a span to tell. */
-    int stray = sh->extra > 0 && nr < n && sec->v[nr].len > 0 && memcmp(rows[nr], empty, wz);
+    int stray = sh->extra > 0 && nr < n && !sec->v[nr].blank && memcmp(rows[nr], empty, wz);
     if (best_none && !lost_for_sure && !(stray && tie && !unsure && sb == 0)) { /* leaving it as read is as good: nothing to say */ }
     else if (lost_for_sure && sb > 0) {
         /* A row lost, and leaving the rows where they are fits best -- but
@@ -1628,6 +1633,16 @@ static void shift_search(const ShiftScan *sc, const MapioSection *sec, int n, Sh
         sh->score0 = s0;
         sh->score  = sb;
         sh->thing  = -1;
+    }
+    else if (lost_for_sure && !clear && !best_none) {
+        /* A row lost for certain, the count says so, and the map shows no
+         * place: loose ends alone, or no place clearly best. Said, no place. */
+        sh->found   = 1;
+        sh->nowhere = 1;
+        sh->quiet   = 1;
+        sh->score0  = s0;
+        sh->score   = sb;
+        sh->thing   = -1;
     }
     else if (best_none || clear) {
         ShiftCand c = cand[bi];
@@ -1852,6 +1867,16 @@ static int shift_joint(const ShiftScan *base, const JointSide side[2], int use_o
     return fits;
 }
 
+/* Is a line past the section's rows one the loader reads as a stray row?
+ * Then the section has a line too many for certain: a blank there may be a
+ * separator, and an unknown line is the loader's W015, not a row. */
+static int rows_past(const MapioSection *sec)
+{
+    for (int i = sec->rows; i < sec->n; i++)
+        if (sec->v[i].row) return 1;
+    return 0;
+}
+
 /* Every row section of the file searched; the clearest shift found, if any,
  * into *out. `secs` are the file's sections by their headers. */
 static void shift_find(const Map *m, MapioSection secs[MAPIO_SECTIONS], Shift *out)
@@ -1873,37 +1898,40 @@ static void shift_find(const Map *m, MapioSection secs[MAPIO_SECTIONS], Shift *o
      * pushed out (the veto on new open edges keeps a separator's reading
      * from moving a wall). A header seen twice (two sections of one name:
      * a merge) leaves nothing to trust. */
-    int want[3] = { 0 }, any = 0, n_of[3], seps = 0, wmask = 0;
+    int want[3] = { 0 }, any = 0, n_of[3], seps = 0, wmask = 0, flawed = 0;
     for (int kind = MAPIO_TILES; kind <= MAPIO_HEDGES; kind++) {
         const MapioSection *sec = &secs[kind];
         if (sec->repeated) return;
         int n = sec->n;
-        while (n > sec->rows + 1 && sec->v[n - 1].len == 0) n--;      /* blanks past one more */
+        while (n > sec->rows + 1 && sec->v[n - 1].blank) n--;      /* blanks past one more */
         n_of[kind] = n;
-        seps += sec->header && n == sec->rows + 1 && sec->v[n - 1].len == 0;
+        seps += sec->header && n == sec->rows + 1 && sec->v[n - 1].blank;
     }
     for (int kind = MAPIO_TILES; kind <= MAPIO_HEDGES; kind++) {
         const MapioSection *sec = &secs[kind];
         if (!sec->header) continue;
         int nr = sec->rows;
         if (seps >= 2) {
-            int n = sec->n, aside = n > 0 && sec->v[n - 1].len == 0;
+            int n = sec->n, aside = n > 0 && sec->v[n - 1].blank;
             if (aside) n--;
             n_of[kind] = n;
-            if (n >= nr + 1 || (n == nr - 1 && !aside)) want[kind] = 2;
+            /* One line more whose last is a blank too: a second separator,
+             * or a row pushed out -- as in vtt's form, it yields. */
+            if (n == nr + 1 && sec->v[nr].blank) want[kind] = 1;
+            else if (n >= nr + 1 || (n == nr - 1 && !aside)) want[kind] = 2;
             /* Short even with its blank counted: short for certain (the
              * blank is a row it read, not a separator). */
             else if (sec->n < nr) { want[kind] = 2; n_of[kind] = sec->n; }
         } else if (n_of[kind] == nr - 1 || n_of[kind] >= nr + 1) {
             /* A line more whose last is a blank could be a separator: it
              * yields to a section whose count is wrong for certain. */
-            want[kind] = n_of[kind] == nr + 1 && sec->v[nr].len == 0 ? 1 : 2;
+            want[kind] = n_of[kind] == nr + 1 && sec->v[nr].blank ? 1 : 2;
         }
         /* In vtt's form with one section ending in a blank, a section with
          * its count right and a blank last line may have lost a row and
          * kept its separator (a file with blanks after some sections): a
          * witness, weighed against an answer that rests on a blank (below). */
-        else if (seps == 1 && n_of[kind] == nr && nr > 0 && sec->v[nr - 1].len == 0) wmask |= 1 << kind;
+        else if (seps == 1 && n_of[kind] == nr && nr > 0 && sec->v[nr - 1].blank) wmask |= 1 << kind;
         any |= want[kind] != 0;
     }
     int definite = 0;
@@ -1992,6 +2020,7 @@ static void shift_find(const Map *m, MapioSection secs[MAPIO_SECTIONS], Shift *o
             shift_search(&sc, sec, n, &sh);
         }
         sh.blank_only = want[kind] == 1;
+        if (!sh.found && sh.flawed) flawed = sh.flawed;
         if (sh.found && (!out->found || sh.score0 - sh.score > out->score0 - out->score)) *out = sh;
     }
     /* An answer resting on a trailing blank needs a fix that leaves the map
@@ -2031,8 +2060,8 @@ static void shift_find(const Map *m, MapioSection secs[MAPIO_SECTIONS], Shift *o
             int nr = ws->rows;
             /* Its last row as loaded a blank, and only blanks after it (a
              * file may keep two). */
-            int tail = ws->n >= nr && nr >= 1 && !ws->v[nr - 1].len;
-            for (int i = nr; i < ws->n && tail; i++) tail = !ws->v[i].len;
+            int tail = ws->n >= nr && nr >= 1 && ws->v[nr - 1].blank;
+            for (int i = nr; i < ws->n && tail; i++) tail = ws->v[i].blank;
             if (kind == out->kind || !ws->header || !tail) continue;
             JointSide side[2] = {
                 { out->kind, out->extra, xa, xn, 0, out->kfirst, out->klast },
@@ -2048,9 +2077,11 @@ static void shift_find(const Map *m, MapioSection secs[MAPIO_SECTIONS], Shift *o
             out->extra = ex;
             /* A row lost for certain is still said, without a place. */
             if (ex < 0) { out->found = 1; out->nowhere = 1; }
+            else out->withdrawn = kd + 1;
         }
     }
 
+    if (!out->flawed) out->flawed = flawed;
     free(sc.thing_start); free(sc.thing_x); free(sc.thing_id); free(sc.ttrans);
     if (short_one) for (int kind = MAPIO_TILES; kind <= MAPIO_HEDGES; kind++) free(arr[kind]);
 }
@@ -2167,6 +2198,80 @@ static const char *section_name(int kind)
     return kind == MAPIO_TILES ? "tiles" : kind == MAPIO_VEDGES ? "vedges" : kind == MAPIO_HEDGES ? "hedges" : "fog";
 }
 
+/* A section with a line too many for certain -- a line past its rows the
+ * loader reads as a stray row -- and no place told: its count and its
+ * lines, where an added line usually is, and the loader's stray-row
+ * findings past its rows folded in. `why`: 0 nothing on the map tells the
+ * places apart, 1 a hidden loss fits as well as the place, 2 another
+ * section is wrong too, 3 the best place's fix leaves mistakes. */
+static void say_count(const MapioSection *sec, const char *name, int why, const char *path, Findings *fs)
+{
+    int nr = sec->rows, n = sec->n;
+    while (n > nr && !sec->v[n - 1].row) n--;          /* through the last stray row */
+    int first = sec->v[0].line, last = sec->v[n - 1].line;
+    /* Exact only when every line past the rows reads as a row: a blank
+     * there may be a separator or an added empty line, and a line set
+     * aside an ignored note or a row with a stray character. */
+    int strays = 0, exact = !sec->dropped;
+    for (int i = nr; i < n; i++) { strays += sec->v[i].row; exact &= sec->v[i].row; }
+    if (sec->dropped && sec->last > last) last = sec->last;
+    Finding *cf = add_finding(fs, "W031", "row-extra");
+    cf->line = sec->header;
+    const char *tail = why == 2 ? "with another section wrong too no place is told" : "the map does not show which";
+    if (exact)
+        snprintf(cf->msg, sizeof cf->msg, "'%s' has %d lines where the map has %d rows: %s of lines %d-%d %s too many, and %s",
+                 name, n, nr, n - nr == 1 ? "one" : "some", first, last, n - nr == 1 ? "is one" : "are", tail);
+    else if (strays == 1)
+        snprintf(cf->msg, sizeof cf->msg, "'%s' has more lines than its %d rows: at least one of lines %d-%d is too many, and %s",
+                 name, nr, first, last, tail);
+    else
+        snprintf(cf->msg, sizeof cf->msg, "'%s' has more lines than its %d rows: at least %d of lines %d-%d are too many, and %s",
+                 name, nr, strays, first, last, tail);
+    FindingMore *mo = finding_more(cf);
+    static const char *const ev[] = {
+        "no place to take a line out of fits the rest of the map better than another (rows alike, or only wall ends that meet nothing differ, which a doorway has by design)",
+        "a place fits, but a row lost before a blank line in another section, with the line taken out elsewhere, fits as well",
+        "another section has more or fewer lines than rows too, and each would be scored beside the other's damage",
+        "a place fits best, but its fix leaves walls on void or loose ends still: the map has mistakes of its own, and a wrong place can fit them better than the true one",
+    };
+    snprintf(mo->evidence, sizeof mo->evidence, "the count is certain (a line past its rows reads as a row); %s", ev[why]);
+    /* Where an editor's added line usually is: an empty line, or one that
+     * repeats the line above. Named, not chosen; runs grouped. */
+    char look[240] = "";
+    int said = 0;
+    /* The lines past the rows: a ruler or a note there is itself the line
+     * too many, if it is no row of the map. */
+    if (n - nr > 1) snprintf(look, sizeof look, "lines %d-%d past its rows (themselves too many, if no rows of the map)", sec->v[nr].line, sec->v[n - 1].line);
+    else            snprintf(look, sizeof look, "line %d past its rows (itself the line too many, if no row of the map)", sec->v[nr].line);
+    said = 1;
+    for (int i = 0; i < nr && said < 5; i++) {
+        int j = i;
+        while (j + 1 < nr && sec->v[j + 1].blank == sec->v[i].blank &&
+               (sec->v[i].blank || (sec->v[j + 1].len == sec->v[i].len && !memcmp(sec->v[j + 1].text, sec->v[i].text, (size_t)sec->v[i].len)))) j++;
+        size_t at = strlen(look);
+        if (sec->v[i].blank && j > i) snprintf(look + at, sizeof look - at, "%slines %d-%d (empty)", said++ ? ", " : "", sec->v[i].line, sec->v[j].line);
+        else if (sec->v[i].blank)     snprintf(look + at, sizeof look - at, "%sline %d (empty)", said++ ? ", " : "", sec->v[i].line);
+        else if (j > i)               snprintf(look + at, sizeof look - at, "%slines %d-%d (alike: any one of them)", said++ ? ", " : "", sec->v[i].line, sec->v[j].line);
+        i = j;
+    }
+    if (said)
+        snprintf(mo->help, sizeof mo->help, "compare lines %d-%d with a copy of the map (the autosave, a backup) and delete what is too many, then vtt %s --check; look first at %s -- an added line is most often empty or a repeat of the line above",
+                 first, last, path, look);
+    else
+        snprintf(mo->help, sizeof mo->help, "compare lines %d-%d with a copy of the map (the autosave, a backup) and delete what is not in it, then vtt %s --check",
+                 first, last, path);
+    /* The loader's stray rows past the section's rows are these lines. */
+    int ci = (int)(cf - fs->v);
+    for (int i = 0; i < fs->n; i++) {
+        Finding *f = &fs->v[i];
+        if (strcmp(f->code, "W019") || f->line < sec->v[nr].line || f->line > last) continue;
+        f->folded = 1;
+        mo = fs->v[ci].more;
+        mo->nfolded++;
+        snprintf(mo->folded, sizeof mo->folded, "W019 x%d", mo->nfolded);
+    }
+}
+
 /* The search, and when it finds a shift, its finding and the fold: the file
  * read again and checked with the shift undone, and every finding of this
  * one that check does not have counted into it instead of listed. */
@@ -2176,9 +2281,26 @@ static void check_shift(const Map *m, const char *text, size_t len, const char *
     mapio_sections(text, len, m->w, m->h, secs);
     Shift sh;
     shift_find(m, secs, &sh);
+    /* Lines set aside past its rows may be rows too (a stray character):
+     * more may be wrong than the answer's line. */
+    if (sh.found && sh.extra > 0 && secs[sh.kind].dropped) sh.more = 1;
+    /* What the count makes certain and no place told says -- when the file
+     * has each row section once: with one missing, a surplus may be its
+     * rows under a lost header; with one twice, the loader reads the other. */
+    int wrong = 0, whole = 1;
+    for (int kind = MAPIO_TILES; kind <= MAPIO_HEDGES; kind++) {
+        wrong += secs[kind].header && (rows_past(&secs[kind]) || secs[kind].n < secs[kind].rows);
+        whole &= secs[kind].header && !secs[kind].repeated;
+    }
+    for (int kind = MAPIO_TILES; kind <= MAPIO_HEDGES && whole; kind++) {
+        if (!secs[kind].header || !rows_past(&secs[kind])) continue;
+        if (sh.found && sh.kind == kind) continue;
+        say_count(&secs[kind], section_name(kind), wrong >= 2 ? 2 : sh.withdrawn == kind + 1 ? 1 : sh.flawed == kind + 1 ? 3 : 0, path, fs);
+    }
     if (!sh.found) { mapio_sections_free(secs); return; }
     const MapioSection *sec = &secs[sh.kind];
     const char *name = section_name(sh.kind);
+
 
     /* Its finding: a lost row's is the loader's E011 told more, a line too
      * many's is new. */
@@ -2266,13 +2388,20 @@ static void check_shift(const Map *m, const char *text, size_t len, const char *
     else if (sh.nowhere) {
         /* A row is missing for certain, and no place for it stands out. */
         FindingMore *mo = finding_more(pf);
-        snprintf(mo->evidence, sizeof mo->evidence,
-                 "the map has walls on void or loose ends of its own, and a row put back in the wrong place can seem to mend them, so no place is told");
+        snprintf(mo->evidence, sizeof mo->evidence, "%s", sh.quiet
+                 ? "nothing on the map tells one place from another (rows alike, or only wall ends that meet nothing differ, which a doorway has by design), so no place is told"
+                 : "the map has walls on void or loose ends of its own, and a row put back in the wrong place can seem to mend them, so no place is told");
         snprintf(mo->help, sizeof mo->help,
                  "the missing row is one of the %d after line %d: compare them with a copy of the map (the autosave, a backup), put it back (an empty line, if it held nothing), then vtt %s --check",
                  sec->rows, sec->header, path);
-        mapio_sections_free(secs);
-        return;
+        /* The fold, as for a tie: a row put back anywhere in the section
+         * gives the same file below it, so what the file's own lines said
+         * of the swallowed header and the rows after it goes, wherever. */
+        sh.tie = 1;
+        sh.fill = 0;
+        sh.copy_line = 0;
+        sh.k = mapio_section_rows(sh.kind, m->h) - 1;
+        sh.fix_line = sec->n ? sec->v[sec->n - 1].line : sec->header;
     }
 
     /* The fold. */
@@ -2334,6 +2463,10 @@ static void check_shift(const Map *m, const char *text, size_t len, const char *
         free(fixed);
     }
 
+    if (sh.nowhere) {
+        mapio_sections_free(secs);
+        return;
+    }
     if (sh.either) {
         FindingMore *mo = finding_more(pf);
         if (mo->nfolded) {

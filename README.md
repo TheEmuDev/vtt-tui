@@ -1479,9 +1479,11 @@ vtt finds the line by how the section fits the rest of the map: walls standing o
 and notes on void, and (on a map drawn with walls round every room) floor against void with no wall
 between; wall ends that meet nothing count only beside one of those. It only names a place it is
 sure of. When nothing on the map shows where the line was (a cave, plain floor with walls drawn on
-it), or the map has walls on void of its own that a wrong place could seem to mend, it says only
-that the section is short, a row is stray, or a row is missing with no place; when several places
-fit equally well it names the span between them. In a file that keeps a blank line after two or
+it), or the map has walls on void of its own that a wrong place could seem to mend, it says what
+the count makes certain without a place -- a row is missing from the section, or the section has
+more lines than rows, with its lines and where an added line usually is (an empty line, a repeat of
+the line above); when several places fit equally well it names the span between them. A line of
+spaces counts as a blank line. In a file that keeps a blank line after two or
 more of its sections, those blanks are read as separators; otherwise a blank after a section is a
 row pushed out of it. Sometimes the text reads both ways: one section ends in a blank line and
 others end in an empty row, so either the first has a line too many or the blank is a separator
@@ -1518,7 +1520,7 @@ Fog rows are never placed this way: fog over void is allowed.
 | `W028 card-dropped`, `card-cut` | a card with a bad or repeated name, a sixty-fifth, one with no `endcard`, or a stray `endcard` |
 | `W029 unknown-rule` | a `rule` line naming a rule other than `massive`, ignored |
 | `W030 env-dropped` | an environment line for the map or an area that does not read, or a second one for the map |
-| `W031 row-extra` | a section with a line too many (one added or repeated by hand), and which line |
+| `W031 row-extra` | a section with a line too many (one added or repeated by hand), and which line -- or, when the map does not show which, the count and the section's lines |
 | `W102 door-to-void` | a door or window leading into void |
 | `W103 wall-in-void` | a wall with no map on either side |
 | `W104 door-loose` | a door or window with no wall at either end |

@@ -1,0 +1,6 @@
+E011 section-short      line 27   'hedges' read as vedges row 9 of 9: a 'vedges' row is missing, and 'hedges' was not read
+      = evidence: nothing on the map tells one place from another (rows alike, or only wall ends that meet nothing differ, which a doorway has by design), so no place is told
+      = help: the missing row is one of the 9 after line 18: compare them with a copy of the map (the autosave, a backup), put it back (an empty line, if it held nothing), then vtt DIR/bad.vtt --check
+      = 2 findings are caused by it, folded in: W019 x1, W104 x1
+W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+1 error, 1 warning

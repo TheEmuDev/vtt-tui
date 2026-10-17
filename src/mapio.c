@@ -1457,7 +1457,21 @@ int mapio_sections(const char *text, size_t len, int w, int h, MapioSection out[
             caps[in] = caps[in] ? caps[in] * 2 : 64;
             sec->v = xrealloc(sec->v, (size_t)caps[in] * sizeof *sec->v);
         }
-        sec->v[sec->n++] = (MapioLine){ lineno, start, (int)keep };
+        size_t sp = 0;
+        while (sp < keep && start[sp] == ' ') sp++;
+        sec->v[sec->n++] = (MapioLine){ lineno, start, (int)keep, sp == keep, sp < keep && looks_like_row(line) };
+    }
+    /* Past its rows, a line neither blank nor a row is the loader's unknown
+     * line (W015), not the section's: set aside, and counted. */
+    for (int k = 0; k < MAPIO_FOG; k++) {
+        MapioSection *sec = &out[k];
+        int keep = sec->rows < sec->n ? sec->rows : sec->n;
+        sec->last = sec->n ? sec->v[sec->n - 1].line : 0;
+        for (int i = keep; i < sec->n; i++) {
+            if (sec->v[i].blank || sec->v[i].row) sec->v[keep++] = sec->v[i];
+            else sec->dropped++;
+        }
+        sec->n = keep;
     }
     return 0;
 }
