@@ -1267,6 +1267,48 @@ they do between runs of one binary. `mapio.load`'s row in *Cost per call* now na
 startup load of `build, :w full 512x512` as its heaviest: the outside-change scenario's
 loads, which it named before, are of small files now.
 
+### The line search (2.0, step 5's second piece)
+
+`--check` finding a line added, repeated or lost in a row section (docs/V2.md, *Step 5,
+second piece*). Measured 2026-10-17 on the desktop with a harness that calls
+`maptools_check` 20 times a run under the profiler, three runs, the median of the run
+medians; before is f6ae5aa, after is the never-a-wrong-line change. Two 512x512 maps saved
+by vtt (an empty one, and 40 walled rooms with a void bottom row), and the rooms map with a
+floor row repeated in `tiles` (the two readings are weighed) and with a `vedges` row lost
+(the answer is weighed against a loss hidden under `hedges`' last blank, twice: two
+sections end in one).
+
+| path | speed of light | before | after | gap, and why |
+|---|---|---|---|---|
+| `mapio.sections`, the scan by headers (434 KB) | each line's first word once | 25 us | 25 us | none |
+| `check.shift` on an undamaged file (both maps) | nothing to search | 0.1 us | 0.1 us | none |
+| `check.shift`, a row repeated (rooms) | the three sections' squares read once, about 0.3 ms (the plan) | 13.8 ms | 9.3 ms, of it 4.7 the two readings (`check.joint`) | below |
+| `check.shift`, a row lost (rooms) | the same | 9.3 ms | 17.1 ms, of it 2 x 5.2 the hidden-loss weighing | below |
+| `check.fold` | the file parsed and checked once more (the plan: about 6 ms) | 3.7 ms | 3.6 ms | none |
+| `mapio.load` | the bytes | 1.07 / 1.9 ms | the same | none |
+
+**The search scores a band, not a byte.** A band reads five rows of 512 squares and
+counts walls on void, loose ends and open edges with a branch or two a square: 1.5 us a
+band on this machine, where the plan's 0.3 ms reckoned a read of the bytes. Without the
+weighing the search reads about 3,000 bands on these maps: the band sums as read and one
+off (1.6 ms), the candidates' seams (0.2 ms for a line too many, 2.6 ms for a lost row,
+which has three rows to try at each place), and two whole-map scorings of the answer to
+tell what its fix mends (2.3 ms). That last pair was done twice, once to decide and once
+to tell; now once (the 13.8 -> 9.3 above, with the lone-witness search's removal). Left as
+a finding: per-part running sums would give the answer's two scorings without a pass.
+
+**The weighing costs three whole-map scorings and what the seams need.** `shift_joint`
+scores the map with each of the two sections as read or moved (four running sums, about
+2,000 bands), then weighs every pair of places but reads a seam only when the running sums
+alone leave the pair within the limit, and stops at the first pair that fits. As first
+built it read every seam and every meeting pair to find the least: 13.4 ms and 2 x 27.5 ms
+here. One of the four sums (both sections as read) is the map as read and is the same in
+every call of a check; sharing it would save a quarter, not done.
+
+All of this is for a damaged file under `--check`, on the largest map; an undamaged file
+pays nothing. Machine: Intel Core i7-8700K @ 3.70GHz (6 cores, 12 threads, 4.7 GHz max,
+powersave governor), 16 GB RAM, Linux 7.2.5-3-omarchy, gcc 16.2.1 -O2.
+
 ## The phone page
 
 What the page's own code costs a phone per frame, from `tools/pagebench.sh`: each scenario

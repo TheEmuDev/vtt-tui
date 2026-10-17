@@ -1,0 +1,78 @@
+VTT 14
+name gen
+size 50 21
+zoom 1
+tiles
+
+
+
+
+
+
+                  ......                          
+                  ......                          
+                  ......                          
+                  ......                          
+
+
+
+
+
+
+
+
+
+
+vedges
+
+
+
+
+
+
+                  |     |                          
+                  +     +                          
+                  |     S                          
+                  |     /                          
+                  /     /                          
+
+
+
+
+
+
+
+
+
+
+
+hedges
+
+
+
+
+
+
+                  ---+//                          
+
+
+
+
+                  /--+%-                          
+
+
+
+
+
+
+
+
+
+
+
+
+token player 23 6 1 "Ogre"
+scene "Ambush"
+token enemy 0 0 1 "Imp"
+endscene
+end

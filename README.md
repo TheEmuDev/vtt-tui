@@ -1483,8 +1483,13 @@ it), or the map has walls on void of its own that a wrong place could seem to me
 that the section is short, a row is stray, or a row is missing with no place; when several places
 fit equally well it names the span between them. In a file that keeps a blank line after two or
 more of its sections, those blanks are read as separators; otherwise a blank after a section is a
-row pushed out of it -- and a finding that rests on that reading says so ("unless that is a
-separator"), since a file that keeps a blank after only some sections reads the same. A row pasted
+row pushed out of it. Sometimes the text reads both ways: one section ends in a blank line and
+others end in an empty row, so either the first has a line too many or the blank is a separator
+and the others lost a row. Then vtt says both, names no place, and its help gives each fix: if you
+keep blank lines between sections by hand, put back the lost row; if not, delete the line it names.
+A row lost just before a blank line leaves no trace in the count, so every place vtt names is
+checked against one such hidden loss too, and none is named when one would fit as well. When the
+two readings are said, the findings folded into them are the ones deleting the named line clears. A row pasted
 from elsewhere in the section, or two sections damaged at once, gets no place unless it is clear.
 Fog rows are never placed this way: fog over void is allowed.
 

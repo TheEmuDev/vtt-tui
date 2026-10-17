@@ -1,10 +1,6 @@
-W031 row-extra          line 12   'tiles' ends in a blank line after its rows: unless that is a separator, one of lines 12-13 is one too many
-      |
-   11 |  ..........      ..........   
-   12 |  ..........................               <- these lines are one row, written
-   13 |  ..........................               <- 2 times where the map has 1: delete one
-   14 |  ..........      ..........   
-      = evidence: with line 12 gone: 30 places where floor met void with no wall between are gone
-      = help: if this file keeps a blank line after some of its sections (by hand), that blank is a separator and nothing is wrong here; otherwise: delete line 12 (or any of lines 12-13: they are the same row); then vtt DIR/bad.vtt --check
-      = 3 findings are caused by it, folded in: W120 x3
+W031 row-extra          line 7    'tiles' ends in a blank line after its rows and 'vedges' and 'hedges' end in an empty row: either 'tiles' has one line too many, or the blank is a separator and 'vedges', 'hedges' or both lost a row; the text cannot tell which
+      = evidence: a line taken out of 'tiles' lines its rows up with the rest of the map, and a row put back into 'vedges', 'hedges' or both, with the blank lines read as separators, would as well or within 2 of the walls on void and loose ends counted
+      = note: the findings folded in go away with line 12 deleted (the reading without separators); with separators, check again once the rows are back
+      = help: if this file keeps a blank line after its sections (written by hand), 'vedges', 'hedges' or both lost a row: compare 'vedges' and 'hedges' with a copy of the map (the autosave, a backup) and put it back; if not (vtt writes none), delete line 12 (or any of lines 12-13: they are the same row); then vtt DIR/bad.vtt --check
+      = 3 findings are folded in: W120 x3
 0 errors, 1 warning

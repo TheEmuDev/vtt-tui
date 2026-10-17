@@ -1062,21 +1062,23 @@ static Map *shape_at_random(unsigned *seed, int shape)
     return m;
 }
 
-/* A file as a hand-writer keeps one: a blank line after each row section. */
-static char *with_separators(const char *text, size_t len, int w, int h, size_t *out_len)
+/* A file as a hand-writer keeps one: `blanks` blank lines after each row
+ * section in `mask` (bit k for section k). */
+static char *with_separators_in(const char *text, size_t len, int w, int h, int mask, int blanks, size_t *out_len)
 {
     MapioSection secs[MAPIO_SECTIONS];
     mapio_sections(text, len, w, h, secs);
     int after[MAPIO_SECTIONS];
     for (int k = 0; k < MAPIO_SECTIONS; k++) after[k] = secs[k].n ? secs[k].v[secs[k].n - 1].line : 0;
     mapio_sections_free(secs);
-    char *out = xmalloc(len + 8), *o = out;
+    char *out = xmalloc(len + 4 * (size_t)blanks + 8), *o = out;
     int line = 1;
     for (const char *p = text; *p; line++) {
         const char *e = strchr(p, '\n');
         size_t n = e ? (size_t)(e - p) + 1 : strlen(p);
         memcpy(o, p, n); o += n;
-        for (int k = 0; k < MAPIO_SECTIONS; k++) if (after[k] == line) *o++ = '\n';
+        for (int k = 0; k < MAPIO_SECTIONS; k++)
+            if ((mask >> k & 1) && after[k] == line) for (int b = 0; b < blanks; b++) *o++ = '\n';
         p += n;
     }
     *o = '\0';
@@ -1084,7 +1086,25 @@ static char *with_separators(const char *text, size_t len, int w, int h, size_t 
     return out;
 }
 
-static int unplaced;                    /* findings that said a row is missing, no place */
+static char *with_separators(const char *text, size_t len, int w, int h, size_t *out_len)
+{
+    return with_separators_in(text, len, w, h, ~0, 1, out_len);
+}
+
+/* Does --check --json say a row section is wrong (W031, or E011 told more)? */
+static int check_says_rows(const char *path)
+{
+    char  *text = NULL;
+    size_t len = 0;
+    FILE  *out = open_memstream(&text, &len);
+    maptools_check(out, path, 1);
+    fclose(out);
+    int said = text && (strstr(text, "\"W031\"") || strstr(text, "\"E011\""));
+    free(text);
+    return said;
+}
+
+static int unplaced;                    /* findings that said a row is missing, or both readings, no place */
 
 /* What --check --json says of a file: a span, and its code, when it has one. */
 static int check_span(const char *path, int *first, int *last, char *code)
@@ -1096,7 +1116,7 @@ static int check_span(const char *path, int *first, int *last, char *code)
     fclose(out);
     int got = 0;
     /* Said without a place ("the missing row is one of the N after..."). */
-    if (text && strstr(text, "the missing row is one of the")) unplaced++;
+    if (text && (strstr(text, "the missing row is one of the") || strstr(text, "the text cannot tell which"))) unplaced++;
     const char *p = text ? strstr(text, "\"span\":{\"first\":") : NULL;
     if (p && sscanf(p, "\"span\":{\"first\":%d,\"last\":%d", first, last) == 2) {
         got = 1;
@@ -1223,6 +1243,25 @@ void test_map_shift(void)
         map_free(m);
     }
 
+    CASE("separators after some sections; one section short before its blank is set aside and another with a line too many: two damaged, no place");
+    {
+        int a, b; char code[8];
+        CHECK(!check_span("tests/fixtures/shift-short-sep.vtt", &a, &b, code));
+    }
+
+    CASE("two readings, one witness: a line too many in vedges, or hedges lost a row under a separator -- both said, no place");
+    for (int json = 0; json < 2; json++) {
+        char  *out = NULL;
+        size_t olen = 0;
+        FILE  *o = open_memstream(&out, &olen);
+        maptools_check(o, "tests/fixtures/shift-either-one.vtt", json);
+        fclose(o);
+        CHECK(strstr(out, "the text cannot tell which") != NULL);
+        CHECK(strstr(out, "\"span\":{") == NULL);
+        golden_bytes(json ? "shift-either-one-json" : "shift-either-one", out, olen);
+        free(out);
+    }
+
     CASE("a separator read as a lost row's place (the count right) is never placed wrong: such a file reads like a correct one with a blank last row");
     {
         Map *m = pair_map();
@@ -1251,6 +1290,112 @@ void test_map_shift(void)
         mapio_sections_free(secs);
         free(text);
         map_free(m);
+    }
+
+    CASE("never a false positive: a correct file with a blank after some sections only (flaws of its own or not) says nothing of its rows; a file with a blank after every section and two rows lost names no place");
+    {
+        unsigned fseed = 4242;
+        int alarms = 0, placed = 0, files = 0, hidden_told = 0, hidden_wrong = 0;
+        for (int i = 0; i < 60; i++) {
+            Map *m = i % 5 == 4 ? rooms_at_random(&fseed) : shape_at_random(&fseed, i % 5);
+            if (i % 2) {                       /* a flaw of its own: a wall out on the void */
+                for (int k = 0; k < 40; k++) {
+                    int x = (int)((unsigned)rand_r(&fseed) % (unsigned)m->w), y = (int)((unsigned)rand_r(&fseed) % (unsigned)m->h);
+                    if (map_tile(m, x, y) == TILE_VOID && (x == 0 || map_tile(m, x - 1, y) == TILE_VOID)) {
+                        map_set_vedge(m, x, y, EDGE_WALL);
+                        break;
+                    }
+                }
+            }
+            CHECK_EQ(mapio_write(m, path, err, sizeof err), 0);
+            size_t len;
+            char *text = file_read(path, 1 << 22, &len, NULL);
+            for (int mask = 1; mask < 16; mask++) {
+                size_t sl;
+                /* Bit 3: two blanks, not one. */
+                char *st = with_separators_in(text, len, m->w, m->h, mask & 7, mask & 8 ? 2 : 1, &sl);
+                if (!(mask & 7)) { free(st); continue; }
+                FILE *f = fopen(bad, "w");
+                fwrite(st, 1, sl, f);
+                fclose(f);
+                free(st);
+                files++;
+                if (check_says_rows(bad)) { alarms++; if (getenv("VTT_SHIFT_SAY")) printf("    false alarm: map %d mask %d\n", i, mask); }
+            }
+            /* Separators everywhere, a row lost in each of two sections. */
+            size_t sl;
+            char *st = with_separators(text, len, m->w, m->h, &sl);
+            MapioSection secs[MAPIO_SECTIONS];
+            mapio_sections(st, sl, m->w, m->h, secs);
+            for (int pair = 0; pair < 3; pair++) {
+                int ka = pair == 2 ? MAPIO_VEDGES : MAPIO_TILES, kb = pair == 0 ? MAPIO_VEDGES : MAPIO_HEDGES;
+                int la = secs[ka].v[(int)((unsigned)rand_r(&fseed) % (unsigned)secs[ka].rows)].line;
+                int lb = secs[kb].v[(int)((unsigned)rand_r(&fseed) % (unsigned)secs[kb].rows)].line;
+                FILE *f = fopen(bad, "w");
+                int line = 1;
+                for (const char *p = st; *p; line++) {
+                    const char *e = strchr(p, '\n');
+                    size_t n = e ? (size_t)(e - p) + 1 : strlen(p);
+                    if (line != la && line != lb) fwrite(p, 1, n, f);
+                    p += n;
+                }
+                fclose(f);
+                int a, b; char code[8];
+                if (check_span(bad, &a, &b, code)) { placed++; if (getenv("VTT_SHIFT_SAY")) printf("    placed: map %d lines %d %d span %d-%d\n", i, la, lb, a, b); }
+            }
+            mapio_sections_free(secs);
+            free(st);
+            /* Two blanks after one section, a row lost there (the count
+             * then right, the loss unseen) and a row repeated in another:
+             * a place told is the repeated row's run, or none. */
+            for (int t = 0; t < 3; t++) {
+                int kw = t, kx = (t + 1 + (int)((unsigned)rand_r(&fseed) % 2u)) % 3;
+                char *s2 = with_separators_in(text, len, m->w, m->h, 1 << kw, 2, &sl);
+                mapio_sections(s2, sl, m->w, m->h, secs);
+                int lw = secs[kw].v[(int)((unsigned)rand_r(&fseed) % (unsigned)secs[kw].rows)].line;
+                int ld = secs[kx].v[(int)((unsigned)rand_r(&fseed) % (unsigned)secs[kx].rows)].line;
+                char **lines = NULL;
+                int nl = 0;
+                for (const char *p = s2; *p; ) {
+                    const char *e = strchr(p, '\n');
+                    size_t n = e ? (size_t)(e - p) : strlen(p);
+                    lines = xrealloc(lines, (size_t)(nl + 2) * sizeof *lines);
+                    lines[nl] = xmalloc(n + 1);
+                    memcpy(lines[nl], p, n);
+                    lines[nl++][n] = '\0';
+                    p += n + (e ? 1 : 0);
+                }
+                FILE *f = fopen(bad, "w");
+                for (int i2 = 1; i2 <= nl; i2++) {
+                    if (i2 == lw) continue;
+                    fprintf(f, "%s\n", lines[i2 - 1]);
+                    if (i2 == ld) fprintf(f, "%s\n", lines[i2 - 1]);
+                }
+                fclose(f);
+                /* The run of lines like the repeated one, as written. */
+                int lo = ld, hi = ld;
+                while (lo > 1 && !strcmp(lines[lo - 2], lines[ld - 1])) lo--;
+                while (hi < nl && !strcmp(lines[hi], lines[ld - 1])) hi++;
+                int shift = lw < ld ? -1 : 0;
+                lo += shift; hi += shift + 1;
+                int a, b; char code[8];
+                if (check_span(bad, &a, &b, code)) {
+                    hidden_told++;
+                    if (a < lo || b > hi) { hidden_wrong++; if (getenv("VTT_SHIFT_SAY")) printf("    hidden loss: map %d lost %d repeated %d told %d-%d\n", i, lw, ld, a, b); }
+                }
+                for (int i2 = 0; i2 < nl; i2++) free(lines[i2]);
+                free(lines);
+                mapio_sections_free(secs);
+                free(s2);
+            }
+            free(text);
+            map_free(m);
+        }
+        printf("    blank after some sections: %d files, %d said; two rows lost under separators: %d placed; a loss under two blanks beside a repeated row: %d placed, %d wrong\n",
+               files, alarms, placed, hidden_told, hidden_wrong);
+        CHECK_EQ(alarms, 0);
+        CHECK_EQ(placed, 0);
+        CHECK_EQ(hidden_wrong, 0);
     }
 
     CASE("a line repeated, an empty line added or a line lost in tiles, vedges or hedges: found where it was, or not said");

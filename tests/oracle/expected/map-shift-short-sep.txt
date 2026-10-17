@@ -1,0 +1,604 @@
+== shift-short-sep.vtt --check
+E011 section-short      line 26   'vedges' read as tiles row 21 of 21: the section is short
+W019 stray-row          line 33   rows outside any section, ignored: is the section before them one row too long, or its header swallowed by a short one?
+E101 door-in-void       S11/S12   open door between two squares that are not map
+E101 door-in-void       V11/V12   door between two squares that are not map
+E101 door-in-void       W11/W12   window between two squares that are not map
+W102 door-to-void       V6/V7     door leads into void
+W102 door-to-void       W6/W7     open door leads into void
+W102 door-to-void       X6/X7     open door leads into void
+W103 wall-in-void       T11/T12   wall between two squares that are not map
+W103 wall-in-void       U11/U12   wall between two squares that are not map
+W103 wall-in-void       X11/X12   wall between two squares that are not map
+4 errors, 7 warnings
+-- exit 1
+== shift-short-sep.vtt --check --json
+{"file":"shift-short-sep.vtt","errors":4,"warnings":7,"notes":0,"findings":[{"code":"E011","slug":"section-short","severity":"error","line":26,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"'vedges' read as tiles row 21 of 21: the section is short","help":null,"notes":[],"span":null,"folded":null,"confidence":null},{"code":"W019","slug":"stray-row","severity":"warning","line":33,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"rows outside any section, ignored: is the section before them one row too long, or its header swallowed by a short one?","help":null,"notes":[],"span":null,"folded":null,"confidence":null},{"code":"E101","slug":"door-in-void","severity":"error","line":null,"column":null,"where":"S11/S12","x":18,"y":11,"edge":"h","message":"open door between two squares that are not map","help":null,"notes":[],"span":null,"folded":null,"confidence":null},{"code":"E101","slug":"door-in-void","severity":"error","line":null,"column":null,"where":"V11/V12","x":21,"y":11,"edge":"h","message":"door between two squares that are not map","help":null,"notes":[],"span":null,"folded":null,"confidence":null},{"code":"E101","slug":"door-in-void","severity":"error","line":null,"column":null,"where":"W11/W12","x":22,"y":11,"edge":"h","message":"window between two squares that are not map","help":null,"notes":[],"span":null,"folded":null,"confidence":null},{"code":"W102","slug":"door-to-void","severity":"warning","line":null,"column":null,"where":"V6/V7","x":21,"y":6,"edge":"h","message":"door leads into void","help":null,"notes":[],"span":null,"folded":null,"confidence":null},{"code":"W102","slug":"door-to-void","severity":"warning","line":null,"column":null,"where":"W6/W7","x":22,"y":6,"edge":"h","message":"open door leads into void","help":null,"notes":[],"span":null,"folded":null,"confidence":null},{"code":"W102","slug":"door-to-void","severity":"warning","line":null,"column":null,"where":"X6/X7","x":23,"y":6,"edge":"h","message":"open door leads into void","help":null,"notes":[],"span":null,"folded":null,"confidence":null},{"code":"W103","slug":"wall-in-void","severity":"warning","line":null,"column":null,"where":"T11/T12","x":19,"y":11,"edge":"h","message":"wall between two squares that are not map","help":null,"notes":[],"span":null,"folded":null,"confidence":null},{"code":"W103","slug":"wall-in-void","severity":"warning","line":null,"column":null,"where":"U11/U12","x":20,"y":11,"edge":"h","message":"wall between two squares that are not map","help":null,"notes":[],"span":null,"folded":null,"confidence":null},{"code":"W103","slug":"wall-in-void","severity":"warning","line":null,"column":null,"where":"X11/X12","x":23,"y":11,"edge":"h","message":"wall between two squares that are not map","help":null,"notes":[],"span":null,"folded":null,"confidence":null}]}
+-- exit 1
+== shift-short-sep.vtt --describe
+map  gen  50x21  scale 5 ft  metric alt  ruleset none
+  1 creature, 1 room, starting in room 1 (S7)
+
+room 1 (S7)  S7:X10  24 squares
+  terrain  floor 24
+  door         V6/V7    to void
+  open door    W6/W7    to void
+  open door    X6/X7    to void
+  player       X7       Ogre
+-- exit 0
+== shift-short-sep.vtt --describe --json
+{"map":{"name":"gen","width":50,"height":21,"scale_ft":5,"metric":"alt","ruleset":null,"round":0,"fog":false,"creatures":1,"rooms":1,"start_room":1},"rooms":[{"id":1,"name":"S7","area":null,"floor":null,"x":18,"y":6,"bounds":"S7:X10","squares":24,"reachable":true,"terrain":{"floor":24},"doors":[{"kind":"door","where":"V6/V7","to":"void"},{"kind":"open door","where":"W6/W7","to":"void"},{"kind":"open door","where":"X6/X7","to":"void"}],"creatures":[{"label":"Ogre","kind":"player","size":1,"at":"X7","x":23,"y":6}],"notes":[],"fog":[]}],"areas":[],"floors":[],"links":[],"outside":[]}
+-- exit 0
+== shift-short-sep.vtt --dump-map
+                                                        A A A A A A A A A A A A A A A A A A A A A A A A
+    A B C D E F G H I J K L M N O P Q R S T U V W X Y Z A B C D E F G H I J K L M N O P Q R S T U V W X
+
+ 1
+
+ 2
+
+ 3
+
+ 4
+
+ 5
+
+ 6
+                                       -------+-/-/-
+ 7                                      . . . . . 1
+
+ 8                                      . . . . . .
+
+ 9                                      . . . . . .
+
+10                                      . . . . . .
+
+11
+                                       -/-----+-%---
+12
+
+13
+
+14
+
+15
+
+16
+
+17
+
+18
+
+19
+
+20
+
+21
+
+
+creatures
+  1  Ogre             player       X7
+
+key
+  .  floor   ~  water   :  rough   "  brush   =  wood   ^  hazard   (blank) void
+  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door
+  S and s are the GM's: the players see a wall and an open door
+
+map  gen  50x21  scale 5 ft  metric alt  ruleset none
+-- exit 0
+== shift-short-sep.vtt --dump-map --region B2:F5
+   B C D E F
+
+2
+
+3
+
+4
+
+5
+
+
+key
+  .  floor   ~  water   :  rough   "  brush   =  wood   ^  hazard   (blank) void
+  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door
+  S and s are the GM's: the players see a wall and an open door
+
+map  gen  50x21  scale 5 ft  metric alt  ruleset none
+region B2:F5
+-- exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/build-box.keys --dump-frame --size 80x24
+ gen                                                                      BUILD 
+     Q   R   S   T   U   V   W   X   Y   Z   AA  AB  AC  AD  AE  AF  AG  AH  AI 
+ 6   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ╺━━━━━━━━━━━━═══╸───┬───┐                                            
+ 7   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ├───┼───┼───┼───┼───┼───┤                                            
+ 8   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ├───┼───┼───┼───┼───┼───┤                                            
+ 9   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ├───┼───┼───┼───┼───┼───┤                                            
+10   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           └───┴───┴───┴───┴───┴───┘                                            
+11   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ╶───╺━━━━━━━━═══━┅┅┅━━━━╸                                            
+12   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+13   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+14   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+15   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ VISUAL  AB13  void  [wall/floor]  box  … VISUAL - f floor, x clear, esc cancel 
+ hjkl extend  v/V shape  f floor  x clear  esc cancel                    ? keys 
+-- exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/build-box.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 80x24
+-- cksum 3703145303-12580 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 110x34
+-- cksum 551971342-23939 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 40x12
+-- cksum 383801872-3071 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --size 80x24
+ gen [+]                                                                  BUILD 
+     Q   R   S   T   U   V   W   X   Y   Z   AA  AB  AC  AD  AE  AF  AG  AH  AI 
+ 6   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ╺━━━━━━━━━━━━═══╸───┬───┐                                            
+ 7   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ├───┼───┼───┼───┼───┼───┤                                            
+ 8   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ├───┼───┼───┼───┼───┼───┤                                            
+ 9   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ├───┼───┼───┼───┼───┼───┤                                            
+10   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           └───┴───┴───┴───┴───┴───┘                                            
+11   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ╶───╺━━━━━━━━═══━┅┅┅━━━━╸                                            
+12   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+13   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+14   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+15   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ NORMAL  Z13  void  [wall/floor]  zoom 1  map 50x21                        undo 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 80x24
+-- cksum 1375422421-12578 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 110x34
+-- cksum 3437388435-23939 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 40x12
+-- cksum 3722220109-3068 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/help.keys --dump-frame --size 80x24
+ VTT KEYS                                                            Build mode 
+  Build mode                                                                    
+  ──────────                                                                    
+    Move                                                                        
+      h j k l       move the cursor                                             
+      0  $          first / last column                                         
+      gg  G         first / last row                                            
+      3j            any motion takes a count                                    
+      :d6           jump to a square by its label  (:6 for a row)               
+      #             column letters and row numbers, on or off                   
+      ctrl-d        half a page down    ctrl-u up                               
+      z             center the view    + - zoom                                 
+                                                                                
+    Walls and doors                                                             
+      H J K L       wall on the west / south / north / east face                
+      w             trace mode: walk the cursor and leave wall behind           
+      t             cycle which boundary H J K L and the pen lay                
+      o  O          open or close a door / a secret door                        
+                                                                                
+    Floors                                                                      
+      :floor Upper 1                                                            
+                    make the named area Upper a floor, level 1   :floors list…  
+────────────────────────────────────────────────────────────────────────────────
+  j k  scroll      ctrl-d ctrl-u  page      g G  ends      q esc ?  close       
+-- exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/help.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 80x24
+-- cksum 2258426481-3409 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 110x34
+-- cksum 1788162512-5765 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 40x12
+-- cksum 1540148677-1261 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/open.keys --dump-frame --size 80x24
+ gen                                                                      BUILD 
+     Q   R   S   T   U   V   W   X   Y   Z   AA  AB  AC  AD  AE  AF  AG  AH  AI 
+ 6   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ╺━━━━━━━━━━━━═══╸───┬───┐                                            
+ 7   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ├───┼───┼───┼───┼───┼───┤                                            
+ 8   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ├───┼───┼───┼───┼───┼───┤                                            
+ 9   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ├───┼───┼───┼───┼───┼───┤                                            
+10   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           └───┴───┴───┴───┴───┴───┘                                            
+11   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ╶───╺━━━━━━━━═══━┅┅┅━━━━╸                                            
+12   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+13   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+14   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+15   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ NORMAL  Z11  void  [wall/floor]  zoom 1  map 50x21 opened gen (50x21, 1 token) 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/open.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 80x24
+-- cksum 1810210838-12578 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 110x34
+-- cksum 2381037396-23939 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 40x12
+-- cksum 3266768690-3247 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/play-help.keys --dump-frame --size 80x24
+ VTT KEYS                                                             Play mode 
+  Play mode                                                                     
+  ─────────                                                                     
+    Move                                                                        
+      h j k l       move the cursor, or the creature in hand                    
+      arrows        the same                                                    
+      3j            any motion takes a count                                    
+      :d6           jump to a square by its label                               
+      :area Crypt   jump to a named area   :areas lists them                    
+      [  ]          the floor below / above   :floor all shows the whole map    
+      #             column letters and row numbers, on or off                   
+      z             center the view on the cursor                               
+      + -           zoom in and out                                             
+                                                                                
+    Creatures                                                                   
+      i p           place a player                                              
+      i e           place an enemy                                              
+      i t e  i t p  place a saved character as an enemy / a player: a list to…  
+      :character save                                                           
+                    save the creature under the cursor as a character   :char…  
+      :summon 3 lackey far                                                      
+                    light that range round this creature and place three insi…  
+────────────────────────────────────────────────────────────────────────────────
+  j k  scroll      ctrl-d ctrl-u  page      g G  ends      q esc ?  close       
+-- exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/play-help.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 80x24
+-- cksum 52838005-3410 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 110x34
+-- cksum 1795894224-5874 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 40x12
+-- cksum 2644023987-1261 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --size 80x24
+ gen                                                                       PLAY 
+     Q   R   S   T   U   V   W   X   Y   Z   AA  AB  AC  AD  AE  AF  AG  AH  AI 
+ 6   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ╺━━━━━━━━━━━━═══╸───┬───┐                                            
+ 7   ·   · │   │   │   │   │   │(O)│ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ├───┼───┼───┼───┼───┼───┤                                            
+ 8   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ├───┼───┼───┼───┼───┼───┤                                            
+ 9   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ├───┼───┼───┼───┼───┼───┤                                            
+10   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           └───┴───┴───┴───┴───┴───┘                                            
+11   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ╶───╺━━━━━━━━═══━┅┅┅━━━━╸                                            
+12   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+13   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+14   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+15   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ PLAY    AB13  void  1 token  ne… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --players --size 80x24
+ gen                                                                       PLAY 
+     Q   R   S   T   U   V   W   X   Y   Z   AA  AB  AC  AD  AE  AF  AG  AH  AI 
+ 6   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ╺━━━━━━━━━━━━═══╸───┬───┐                                            
+ 7   ·   · │   │   │   │   │   │(O)│ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ├───┼───┼───┼───┼───┼───┤                                            
+ 8   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ├───┼───┼───┼───┼───┼───┤                                            
+ 9   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ├───┼───┼───┼───┼───┼───┤                                            
+10   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           └───┴───┴───┴───┴───┴───┘                                            
+11   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ╶───╺━━━━━━━━═══━┅┅┅━━━━╸                                            
+12   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+13   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+14   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+15   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ PLAY    AB13  void  1 token  ne… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 80x24
+-- cksum 3137682749-12742 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --players --size 80x24
+-- cksum 3137682749-12742 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 110x34
+-- cksum 540350281-24099 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --players --size 110x34
+-- cksum 540350281-24099 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 40x12
+-- cksum 1049516358-3231 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/play.keys --dump-frame --size 80x24
+ gen                                                                       PLAY 
+     Q   R   S   T   U   V   W   X   Y   Z   AA  AB  AC  AD  AE  AF  AG  AH  AI 
+ 6   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ╺━━━━━━━━━━━━═══╸───┬───┐                                            
+ 7   ·   · │   │   │   │   │   │(O)│ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ├───┼───┼───┼───┼───┼───┤                                            
+ 8   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ├───┼───┼───┼───┼───┼───┤                                            
+ 9   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ├───┼───┼───┼───┼───┼───┤                                            
+10   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           └───┴───┴───┴───┴───┴───┘                                            
+11   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ╶───╺━━━━━━━━═══━┅┅┅━━━━╸                                            
+12   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+13   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+14   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+15   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ PLAY    Z11  void  1 token  nex… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/play.keys --dump-frame --players --size 80x24
+ gen                                                                       PLAY 
+     Q   R   S   T   U   V   W   X   Y   Z   AA  AB  AC  AD  AE  AF  AG  AH  AI 
+ 6   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ╺━━━━━━━━━━━━═══╸───┬───┐                                            
+ 7   ·   · │   │   │   │   │   │(O)│ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ├───┼───┼───┼───┼───┼───┤                                            
+ 8   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ├───┼───┼───┼───┼───┼───┤                                            
+ 9   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ├───┼───┼───┼───┼───┼───┤                                            
+10   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           └───┴───┴───┴───┴───┴───┘                                            
+11   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ╶───╺━━━━━━━━═══━┅┅┅━━━━╸                                            
+12   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+13   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+14   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+15   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ PLAY    Z11  void  1 token  nex… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 80x24
+-- cksum 1789310861-12740 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --players --size 80x24
+-- cksum 1789310861-12740 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 110x34
+-- cksum 3627472688-24099 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --players --size 110x34
+-- cksum 3627472688-24099 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 40x12
+-- cksum 264777383-3407 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/roll.keys --dump-frame --size 80x24
+ gen                                                                      BUILD 
+     Q   R   S   T   U   V   W   X   Y   Z   AA  AB  AC  AD  AE  AF  AG  AH  AI 
+ 6   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ╺━━━━━━━━━━━━═══╸───┬───┐                                            
+ 7   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ├───┼───┼───┼───┼───┼───┤                                            
+ 8   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ├───┼───┼───┼───┼───┼───┤                                            
+ 9   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ├───┼───┼───┼───┼───┼───┤                                            
+10   ·   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           └───┴───┴───┴───┴───┴───┘                                            
+11   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+           ╶───╺━━━━━━━━═══━┅┅┅━━━━╸                                            
+12   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+13   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+14   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+15   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·  
+                                                                                
+ NORMAL  Z11  void  [wall/floor]  zoom 1  map 50x21           2d6+3 = 12  [6 3] 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/roll.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 80x24
+-- cksum 1520994427-12579 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 110x34
+-- cksum 2327338523-23939 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== shift-short-sep.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 40x12
+-- cksum 1787823051-3245 exit 0
