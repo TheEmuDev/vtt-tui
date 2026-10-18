@@ -7,6 +7,8 @@
 # (tools/compare.py). Wants the machine to itself, as make perf does.
 #
 #   tools/vs1x.sh [REF]      REF: the 1.x commit, main by default
+#   KEEP=DIR tools/vs1x.sh   also leaves old.md and new.md (the medians) in DIR: new.md is
+#                            this tree's tables for PERFORMANCE.md, with no run of its own
 set -eu
 cd "$(dirname "$0")/.."
 REF=${1:-main}
@@ -21,5 +23,6 @@ for r in 1 2 3; do
 done
 python3 tools/median.py "$OLD/old-1.log" "$OLD/old-2.log" "$OLD/old-3.log" > "$OLD/old.md"
 python3 tools/median.py "$OLD/new-1.log" "$OLD/new-2.log" "$OLD/new-3.log" > "$OLD/new.md"
+[ -n "${KEEP:-}" ] && mkdir -p "$KEEP" && cp "$OLD/old.md" "$OLD/new.md" "$KEEP/"
 echo "1.x is $(git rev-parse --short "$REF"), 2.0 is $(git rev-parse --short HEAD)$(git diff --quiet || echo ' plus uncommitted changes')"
 python3 tools/compare.py "$OLD/old.md" "$OLD/new.md"

@@ -94,7 +94,7 @@ make test-build  build/run-tests alone, for build/run-tests NAME... (only this a
 build/tool-checkbench MAP T.json N   (make build/tool-checkbench) --check N times traced; tools/zones.py T.json each zone's median
 tools/codehelp.py   after a help line changes: rewrites README's code table's what-to-do column from CODE_HELP (checkhelp fails while they disagree)
 tools/shift/   the line search's counterexample generators, undamaged-file scan and judge, from its reviews (README.md)
-tools/vs1x.sh [REF]  2.0 against 1.x: main's binary (or REF) and this tree's, perf.sh three times each alternating, both on the repo's disk; tools/compare.py prints the shared rows side by side -> PERFORMANCE.md, *2.0 against 1.x*
+tools/vs1x.sh [REF]  2.0 against 1.x: main's binary (or REF) and this tree's, perf.sh three times each alternating, both on the repo's disk; tools/compare.py prints the shared rows side by side -> PERFORMANCE.md, *2.0 against 1.x*; KEEP=DIR leaves both median tables (new.md is this tree's tables for PERFORMANCE.md, no run of its own)
 tools/machine.sh  the `Machine:` line every published table carries (perf.sh, saves.sh, pagebench.sh print it; median.py keeps it)
 VTT_FOGDIFF_OPS=36000 ./build/run-tests   the long run of the fog differential test
 make fuzz       libFuzzer on the map loader (clang), FUZZ_SECONDS=600 for longer
