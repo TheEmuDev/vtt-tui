@@ -535,7 +535,7 @@ static int section_row(Loader *ld, Section *sec, int y, char *line, size_t cap)
     if (sec->kind == 1 && sec->width == sec->rows_w + 1 && len == sec->rows_w && line[len - 1] != ' ')
         diag(ld, ld->line, len, "W022", "edge-row-short",
              "vedges row %d is %d characters: a vedges row is %d, one more than the map is wide, "
-             "and the east boundary is the last; is it missing?", y + 1, len, sec->width);
+             "the last being the east boundary, read as none", y + 1, len, sec->width);
     if (len > sec->width)
         diag(ld, ld->line, sec->width, "E010", "row-long",
              "%s row %d is %d characters, the map needs %d; the rest is ignored",
@@ -1051,7 +1051,7 @@ static Map *load_text(FILE *f, const char *path, char *err, size_t errsz, MapioD
      * rather than trust it. */
     m->scale_ft = (scale > 0.0 && scale < 100000.0) ? scale : MAP_SCALE_DEFAULT;
     if (m->scale_ft != scale)
-        diag(ld, scale_line, -1, "W020", "clamped", "scale %g is not a length; %g ft is used", scale, m->scale_ft);
+        diag(ld, scale_line, -1, "W020", "clamped", "scale %g is not a length above 0 and under 100000 ft; %g ft is used", scale, m->scale_ft);
     m->metric   = metric;
     m->massive = massive;
     if (ruleset_by_name(ruleset)) str_lcpy(m->ruleset, ruleset, sizeof m->ruleset);
@@ -1175,7 +1175,7 @@ static Map *load_text(FILE *f, const char *path, char *err, size_t errsz, MapioD
             if (sscanf(line, "round %d", &round) == 1) {
                 scene_round = iclamp(round, 0, INT16_MAX);
                 if (scene_round != round)
-                    diag(ld, ld->line, -1, "W020", "clamped", "round %d is out of range; %d is used", round, scene_round);
+                    diag(ld, ld->line, -1, "W020", "clamped", "round %d is not 0-%d; %d is used", round, INT16_MAX, scene_round);
             }
         } else if (!strcmp(line, "fog")) {
             Section sec = { "fog", h, w, 2, 0, 0, w };
@@ -1300,7 +1300,7 @@ static Map *load_text(FILE *f, const char *path, char *err, size_t errsz, MapioD
             if (sscanf(line, "round %d", &round) == 1) {
                 m->round = iclamp(round, 0, INT16_MAX);
                 if (m->round != round)
-                    diag(ld, ld->line, -1, "W020", "clamped", "round %d is out of range; %d is used", round, m->round);
+                    diag(ld, ld->line, -1, "W020", "clamped", "round %d is not 0-%d; %d is used", round, INT16_MAX, m->round);
             }
         } else if (ld->sink && !line[strspn(line, " ")]) {
             /* Only spaces: a blank line, whatever an editor left in it --

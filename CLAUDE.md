@@ -19,14 +19,13 @@ prohibitions only, under 150 lines. Reference lives where it is read on demand.
 | the channel, agents, proposals | docs/CONTROL.md, docs/AGENTS.md, docs/CONFLICTS.md |
 | a big doc (PERFORMANCE.md, README.md, CONFLICTS.md, FOG.md) | by section: `grep -n '^#' FILE`, then the lines needed |
 | which doc is current, which is a design record | docs/README.md, the index; a design record's Status line says where the truth is now |
-| resuming work | memory first, then the plan's *Progress* section: what is built and what is owed (CONFLICTS.md's build log is *Progress, step by step*) |
+| resuming work, or after a compaction | docs/V2.md's *Next, in the order the user set*, then memory, then the plan's *Progress* (CONFLICTS.md's log is *Progress, step by step*) |
 
 ## Standing rules (the user's, not defaults)
 
-- **Plan before refactors.** Anything that reshapes a shared struct, changes a shared
-  signature or touches several subsystems gets a written plan -- the engineering decisions,
-  their tradeoffs, the instrumentation -- and waits for explicit sign-off. Small additive
-  work goes straight to code.
+- **Plan before refactors.** Anything that reshapes a shared struct, changes a shared signature or
+  touches several subsystems gets a written plan -- the engineering decisions, their tradeoffs,
+  the instrumentation -- and waits for explicit sign-off. Small additive work goes straight to code.
 - **No software waste** (2026-10-07). Every plan has a **Performance considerations**
   section giving, per new or changed path, the **speed-of-light estimate** (the least the
   work could cost: bytes it must touch, syscalls and flushes it cannot avoid; reference
@@ -53,15 +52,16 @@ prohibitions only, under 150 lines. Reference lives where it is read on demand.
 - **Never dismiss a finding without validating it** (2026-10-09): reproduce it or disprove
   it with a check that was actually run, and say which; "X already handles it" from memory
   is not a check. Ask the reviewer (SendMessage) for its reproduction when unclear.
-- **Every finding not fixed is written down** in HEALTH.md, *Left open by reviews*: one row
-  with why and what would close it; a disproved one under *Disproved* with the check. The
-  report to the user names the rows added.
+- **Every finding not fixed is written down** in HEALTH.md, *Left open by reviews* (why, what would
+  close it; a disproved one under *Disproved*, with the check); the report names the rows added.
 - **A feature is not done** until README.md (keys tables, feature sections, *Rulesets*,
   *File format*; for a user: plain, instructional, no history or design argument),
   PERFORMANCE.md (tables + a paragraph per finding), `src/keys.c` (the `?` page),
-  docs/CODEMAP.md's rows and the design doc agree with the code; its ROADMAP.md item moves
-  to *Built*; a new design doc has a Status line and a row in docs/README.md. HEALTH.md
-  records each health check; an item fixed says so there, by commit. Ideas: docs/IDEAS.md.
+  docs/CODEMAP.md's rows, the design doc and, for what agents see, docs/AGENTS.md and the
+  agent skill agree with the code; its ROADMAP.md item moves to *Built*; a new design doc has
+  a Status line and a row in docs/README.md. HEALTH.md records each health check, an item
+  fixed says so by commit. Ideas: docs/IDEAS.md. **A decision the user makes goes into its doc
+  the same turn** (the plan, ROADMAP.md, V2.md's *Next*): memory points at it, never holds it.
 
 ## Commands
 

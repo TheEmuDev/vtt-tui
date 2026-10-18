@@ -96,6 +96,7 @@ Docs: `:condition` on the `?` page (src/keys.c), the README's *Daggerheart*, COD
   (https://www.daggerheart.com/wp-content/uploads/2026/08/DH_SRD_2_2026_08_25.pdf).
   2.0's text for the three is the same as 1.0's. The first summaries still followed the
   SRD's sentences clause for clause; the review caught it and they were rewritten.
+  The user, 2026-10-17: keep the summaries for now; the SRD's wording may come later.
 - **The key is `s a`**, then the word: `s` alone is the markers' prefix.
 - **A condition goes on once.** `s a vulnerable` on a creature that is Vulnerable is
   refused ("already Vulnerable"); the SRD says the same condition is not applied twice.

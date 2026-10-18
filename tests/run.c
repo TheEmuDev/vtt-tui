@@ -47,6 +47,7 @@ int main(int argc, char **argv)
         { "disk", test_disk },
         { "diskwhole", test_disk_whole },
         { "filefind", test_file_findings },
+        { "checkhelp", test_check_help },
         { "linkkeys", test_link_keys },
         { "floors", test_floors },
         { "floorview", test_floor_view },

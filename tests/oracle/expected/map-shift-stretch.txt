@@ -1,0 +1,574 @@
+== shift-stretch.vtt --check
+E011 section-short      line 22   'hedges' read as vedges row 8 of 8: a 'vedges' row is missing, and 'hedges' was not read
+      = evidence: the map has walls on void or loose ends of its own, and a row put back in the wrong place can seem to mend them, so no place is told
+      = help: the missing row is one of the 8 after line 14: compare them with a copy of the map (the autosave, a backup), put it back (an empty line, if it held nothing), then vtt shift-stretch.vtt --check
+      = 2 findings are caused by it, folded in: W019 x1, E101 x1
+W103 wall-in-void       A3|B3     wall between two squares that are not map
+      = help: floor the squares beside the wall (space, or f over the brush), or clear it: brush 1 (1b), t to wall, then H J K L toward it
+W103 wall-in-void       G3|H3     wall between two squares that are not map
+W103 wall-in-void       E7|F7     wall between two squares that are not map
+1 error, 3 warnings
+-- exit 1
+== shift-stretch.vtt --check --json
+{"file":"shift-stretch.vtt","errors":1,"warnings":3,"notes":0,"findings":[{"code":"E011","slug":"section-short","severity":"error","line":22,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"'hedges' read as vedges row 8 of 8: a 'vedges' row is missing, and 'hedges' was not read","help":"the missing row is one of the 8 after line 14: compare them with a copy of the map (the autosave, a backup), put it back (an empty line, if it held nothing), then vtt shift-stretch.vtt --check","notes":["the map has walls on void or loose ends of its own, and a row put back in the wrong place can seem to mend them, so no place is told"],"span":null,"folded":"W019 x1, E101 x1","confidence":null},{"code":"W103","slug":"wall-in-void","severity":"warning","line":null,"column":null,"where":"A3|B3","x":1,"y":2,"edge":"v","message":"wall between two squares that are not map","help":null,"notes":[],"span":null,"folded":null,"confidence":null},{"code":"W103","slug":"wall-in-void","severity":"warning","line":null,"column":null,"where":"G3|H3","x":7,"y":2,"edge":"v","message":"wall between two squares that are not map","help":null,"notes":[],"span":null,"folded":null,"confidence":null},{"code":"W103","slug":"wall-in-void","severity":"warning","line":null,"column":null,"where":"E7|F7","x":5,"y":6,"edge":"v","message":"wall between two squares that are not map","help":null,"notes":[],"span":null,"folded":null,"confidence":null}],"codes":{"E011":{"help":"put the missing row back where it was lost (an empty line, if it held nothing), or take it from a copy of the map (the autosave, a backup)","note":"a section that comes up short reads the next line as its last row: a header swallowed leaves the whole next section unread"},"W103":{"help":"floor the squares beside the wall (space, or f over the brush), or clear it: brush 1 (1b), t to wall, then H J K L toward it","note":null}}}
+-- exit 1
+== shift-stretch.vtt --describe
+map  fold  12x8  scale 5 ft  metric alt  ruleset none
+  1 creature, 1 room, starting in room 1 (B4)
+
+room 1 (B4)  B4:G6  18 squares
+  terrain  floor 18
+  player       C5       Aria
+-- exit 0
+== shift-stretch.vtt --describe --json
+{"map":{"name":"fold","width":12,"height":8,"scale_ft":5,"metric":"alt","ruleset":null,"round":0,"fog":false,"creatures":1,"rooms":1,"start_room":1},"rooms":[{"id":1,"name":"B4","area":null,"floor":null,"x":1,"y":3,"bounds":"B4:G6","squares":18,"reachable":true,"terrain":{"floor":18},"doors":[],"creatures":[{"label":"Aria","kind":"player","size":1,"at":"C5","x":2,"y":4}],"notes":[],"fog":[]}],"areas":[],"floors":[],"links":[],"outside":[]}
+-- exit 0
+== shift-stretch.vtt --dump-map
+   A B C D E F G H I J K L
+
+1
+
+2
+    |           |
+3   |           |
+    |           |
+4   |. . . . . .|
+    |           |
+5   |. 1 . . . .|
+    |           |
+6    . . . . . .
+            |
+7           |
+            |
+8           s
+            |
+
+creatures
+  1  Aria             player       C5
+
+key
+  .  floor   ~  water   :  rough   "  brush   =  wood   ^  hazard   (blank) void
+  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door
+  S and s are the GM's: the players see a wall and an open door
+
+map  fold  12x8  scale 5 ft  metric alt  ruleset none
+-- exit 0
+== shift-stretch.vtt --dump-map --region B2:F5
+   B C D E F
+
+2
+  |
+3 |
+  |
+4 |. . . . .
+  |
+5 |. 1 . . .
+  |
+
+creatures
+  1  Aria             player       C5
+
+key
+  .  floor   ~  water   :  rough   "  brush   =  wood   ^  hazard   (blank) void
+  | -  wall   +  door   /  open door   %  window   S  secret door   s  open secret door
+  S and s are the GM's: the players see a wall and an open door
+
+map  fold  12x8  scale 5 ft  metric alt  ruleset none
+region B2:F5
+-- exit 0
+== shift-stretch.vtt --seed 1 --script ../work/build-box.keys --dump-frame --size 80x24
+ fold                                                                     BUILD 
+                  A   B   C   D   E   F   G   H   I   J   K   L                 
+                                                                                
+                                                                                
+              1   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·                 
+                                                                                
+              2   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·                 
+                    ╻                       ╻                                   
+              3   · ┃ ·   ·   ·   ·   ·   · ┃ ·   ·   ·   ·   ·                 
+                    ┃───┬───┬───┬───┬───┬───┃                                   
+              4   · ┃   │   │   │   │   │   ┃ ·   ·   ·   ·   ·                 
+                    ┃───┼───┼───┼───┼───┼───┃                                   
+              5   · ┃   │   │   │   │   │   ┃ ·   ·   ·   ·   ·                 
+                    ╹───┼───┼───┼───┼───┼───╹                                   
+              6   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·                 
+                    └───┴───┴───┴───╻───┴───┘                                   
+              7   ·   ·   ·   ·   · ┃ ·   ·   ·   ·   ·   ·   ·                 
+                                    ╹                                           
+              8   ·   ·   ·   ·   · │ ·   ·   ·   ·   ·   ·   ·                 
+                                    ╵                                           
+                                                                                
+                                                                                
+ VISUAL  I7  void  [wall/floor]  box  zo… VISUAL - f floor, x clear, esc cancel 
+ hjkl extend  v/V shape  f floor  x clear  esc cancel                    ? keys 
+-- exit 0
+== shift-stretch.vtt --seed 1 --script ../work/build-box.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== shift-stretch.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 80x24
+-- cksum 2459194422-8622 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 110x34
+-- cksum 642263238-10680 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 40x12
+-- cksum 726003167-3419 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --size 80x24
+ fold [+]                                                                 BUILD 
+                  A   B   C   D   E   F   G   H   I   J   K   L                 
+                                                                                
+                                                                                
+              1   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·                 
+                                                                                
+              2   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·                 
+                    ╻                       ╻                                   
+              3   · ┃ ·   ·   ·   ·   ·   · ┃ ·   ·   ·   ·   ·                 
+                    ┃───┬───┬───┬───┬───┬───┃                                   
+              4   · ┃   │   │   │   │   │   ┃ ·   ·   ·   ·   ·                 
+                    ┃───┼───┼───┼───┼───┼───┃                                   
+              5   · ┃   │   │   │   │   │   ┃ ·   ·   ·   ·   ·                 
+                    ╹───┼───┼───┼───┼───┼───╹                                   
+              6   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·                 
+                    └───┴───┴───┴───╻───┴───┘                                   
+              7   ·   ·   ·   ·   · ┃ ·   ·   ·   ·   ·   ·   ·                 
+                                    ╹                                           
+              8   ·   ·   ·   ·   · │ ·   ·   ·   ·   ·   ·   ·                 
+                                    ╵                                           
+                                                                                
+                                                                                
+ NORMAL  G7  void  [wall/floor]  zoom 1  map 12x8                          undo 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== shift-stretch.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== shift-stretch.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 80x24
+-- cksum 2511911716-8620 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 110x34
+-- cksum 1282408366-10680 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 40x12
+-- cksum 3990072714-3416 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/help.keys --dump-frame --size 80x24
+ VTT KEYS                                                            Build mode 
+  Build mode                                                                    
+  ──────────                                                                    
+    Move                                                                        
+      h j k l       move the cursor                                             
+      0  $          first / last column                                         
+      gg  G         first / last row                                            
+      3j            any motion takes a count                                    
+      :d6           jump to a square by its label  (:6 for a row)               
+      #             column letters and row numbers, on or off                   
+      ctrl-d        half a page down    ctrl-u up                               
+      z             center the view    + - zoom                                 
+                                                                                
+    Walls and doors                                                             
+      H J K L       wall on the west / south / north / east face                
+      w             trace mode: walk the cursor and leave wall behind           
+      t             cycle which boundary H J K L and the pen lay                
+      o  O          open or close a door / a secret door                        
+                                                                                
+    Floors                                                                      
+      :floor Upper 1                                                            
+                    make the named area Upper a floor, level 1   :floors list…  
+────────────────────────────────────────────────────────────────────────────────
+  j k  scroll      ctrl-d ctrl-u  page      g G  ends      q esc ?  close       
+-- exit 0
+== shift-stretch.vtt --seed 1 --script ../work/help.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== shift-stretch.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 80x24
+-- cksum 2258426481-3409 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 110x34
+-- cksum 1788162512-5765 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 40x12
+-- cksum 1540148677-1261 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/open.keys --dump-frame --size 80x24
+ fold                                                                     BUILD 
+                  A   B   C   D   E   F   G   H   I   J   K   L                 
+                                                                                
+                                                                                
+              1   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·                 
+                                                                                
+              2   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·                 
+                    ╻                       ╻                                   
+              3   · ┃ ·   ·   ·   ·   ·   · ┃ ·   ·   ·   ·   ·                 
+                    ┃───┬───┬───┬───┬───┬───┃                                   
+              4   · ┃   │   │   │   │   │   ┃ ·   ·   ·   ·   ·                 
+                    ┃───┼───┼───┼───┼───┼───┃                                   
+              5   · ┃   │   │   │   │   │   ┃ ·   ·   ·   ·   ·                 
+                    ╹───┼───┼───┼───┼───┼───╹                                   
+              6   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·                 
+                    └───┴───┴───┴───╻───┴───┘                                   
+              7   ·   ·   ·   ·   · ┃ ·   ·   ·   ·   ·   ·   ·                 
+                                    ╹                                           
+              8   ·   ·   ·   ·   · │ ·   ·   ·   ·   ·   ·   ·                 
+                                    ╵                                           
+                                                                                
+                                                                                
+ NORMAL  G5  floor  [wal… opened fold (12x8, 1 token); 1 error in the file (:c… 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== shift-stretch.vtt --seed 1 --script ../work/open.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== shift-stretch.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 80x24
+-- cksum 3037396710-8582 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 110x34
+-- cksum 2188397505-10641 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 40x12
+-- cksum 3661826989-3503 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/play-help.keys --dump-frame --size 80x24
+ VTT KEYS                                                             Play mode 
+  Play mode                                                                     
+  ─────────                                                                     
+    Move                                                                        
+      h j k l       move the cursor, or the creature in hand                    
+      arrows        the same                                                    
+      3j            any motion takes a count                                    
+      :d6           jump to a square by its label                               
+      :area Crypt   jump to a named area   :areas lists them                    
+      [  ]          the floor below / above   :floor all shows the whole map    
+      #             column letters and row numbers, on or off                   
+      z             center the view on the cursor                               
+      + -           zoom in and out                                             
+                                                                                
+    Creatures                                                                   
+      i p           place a player                                              
+      i e           place an enemy                                              
+      i t e  i t p  place a saved character as an enemy / a player: a list to…  
+      :character save                                                           
+                    save the creature under the cursor as a character   :char…  
+      :summon 3 lackey far                                                      
+                    light that range round this creature and place three insi…  
+────────────────────────────────────────────────────────────────────────────────
+  j k  scroll      ctrl-d ctrl-u  page      g G  ends      q esc ?  close       
+-- exit 0
+== shift-stretch.vtt --seed 1 --script ../work/play-help.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== shift-stretch.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 80x24
+-- cksum 52838005-3410 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 110x34
+-- cksum 1795894224-5874 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/play-help.keys --dump-frame --cells --size 40x12
+-- cksum 2644023987-1261 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --size 80x24
+ fold                                                                      PLAY 
+                  A   B   C   D   E   F   G   H   I   J   K   L                 
+                                                                                
+                                                                                
+              1   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·                 
+                                                                                
+              2   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·                 
+                    ╻                       ╻                                   
+              3   · ┃ ·   ·   ·   ·   ·   · ┃ ·   ·   ·   ·   ·                 
+                    ┃───┬───┬───┬───┬───┬───┃                                   
+              4   · ┃   │   │   │   │   │   ┃ ·   ·   ·   ·   ·                 
+                    ┃───┼───┼───┼───┼───┼───┃                                   
+              5   · ┃   │(A)│   │   │   │   ┃ ·   ·   ·   ·   ·                 
+                    ╹───┼───┼───┼───┼───┼───╹                                   
+              6   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·                 
+                    └───┴───┴───┴───╻───┴───┘                                   
+              7   ·   ·   ·   ·   · ┃ ·   ·   ·   ·   ·   ·   ·                 
+                                    ╹                                           
+              8   ·   ·   ·   ·   · │ ·   ·   ·   ·   ·   ·   ·                 
+                                    ╵                                           
+                                                                                
+                                                                                
+ PLAY    I7  void  1 token  next… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== shift-stretch.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --players --size 80x24
+ fold                                                                      PLAY 
+                  A   B   C   D   E   F   G   H   I   J   K   L                 
+                                                                                
+                                                                                
+              1   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·                 
+                                                                                
+              2   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·                 
+                    ╻                       ╻                                   
+              3   · ┃ ·   ·   ·   ·   ·   · ┃ ·   ·   ·   ·   ·                 
+                    ┃───┬───┬───┬───┬───┬───┃                                   
+              4   · ┃   │   │   │   │   │   ┃ ·   ·   ·   ·   ·                 
+                    ┃───┼───┼───┼───┼───┼───┃                                   
+              5   · ┃   │(A)│   │   │   │   ┃ ·   ·   ·   ·   ·                 
+                    ╹───┼───┼───┼───┼───┼───╹                                   
+              6   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·                 
+                    └───┴───┴───┴───╻───┴───┘                                   
+              7   ·   ·   ·   ·   · ┃ ·   ·   ·   ·   ·   ·   ·                 
+                                    ╹                                           
+              8   ·   ·   ·   ·   · │ ·   ·   ·   ·   ·   ·   ·                 
+                                    ╵                                           
+                                                                                
+                                                                                
+ PLAY    I7  void  1 token  next… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== shift-stretch.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 80x24
+-- cksum 3156303571-8783 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --players --size 80x24
+-- cksum 3156303571-8783 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 110x34
+-- cksum 2926826079-10841 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --players --size 110x34
+-- cksum 2926826079-10841 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 40x12
+-- cksum 1939934215-3578 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/play.keys --dump-frame --size 80x24
+ fold                                                                      PLAY 
+                  A   B   C   D   E   F   G   H   I   J   K   L                 
+                                                                                
+                                                                                
+              1   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·                 
+                                                                                
+              2   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·                 
+                    ╻                       ╻                                   
+              3   · ┃ ·   ·   ·   ·   ·   · ┃ ·   ·   ·   ·   ·                 
+                    ┃───┬───┬───┬───┬───┬───┃                                   
+              4   · ┃   │   │   │   │   │   ┃ ·   ·   ·   ·   ·                 
+                    ┃───┼───┼───┼───┼───┼───┃                                   
+              5   · ┃   │(A)│   │   │   │   ┃ ·   ·   ·   ·   ·                 
+                    ╹───┼───┼───┼───┼───┼───╹                                   
+              6   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·                 
+                    └───┴───┴───┴───╻───┴───┘                                   
+              7   ·   ·   ·   ·   · ┃ ·   ·   ·   ·   ·   ·   ·                 
+                                    ╹                                           
+              8   ·   ·   ·   ·   · │ ·   ·   ·   ·   ·   ·   ·                 
+                                    ╵                                           
+                                                                                
+                                                                                
+ PLAY    G5  floor  1 token  nex… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== shift-stretch.vtt --seed 1 --script ../work/play.keys --dump-frame --players --size 80x24
+ fold                                                                      PLAY 
+                  A   B   C   D   E   F   G   H   I   J   K   L                 
+                                                                                
+                                                                                
+              1   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·                 
+                                                                                
+              2   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·                 
+                    ╻                       ╻                                   
+              3   · ┃ ·   ·   ·   ·   ·   · ┃ ·   ·   ·   ·   ·                 
+                    ┃───┬───┬───┬───┬───┬───┃                                   
+              4   · ┃   │   │   │   │   │   ┃ ·   ·   ·   ·   ·                 
+                    ┃───┼───┼───┼───┼───┼───┃                                   
+              5   · ┃   │(A)│   │   │   │   ┃ ·   ·   ·   ·   ·                 
+                    ╹───┼───┼───┼───┼───┼───╹                                   
+              6   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·                 
+                    └───┴───┴───┴───╻───┴───┘                                   
+              7   ·   ·   ·   ·   · ┃ ·   ·   ·   ·   ·   ·   ·                 
+                                    ╹                                           
+              8   ·   ·   ·   ·   · │ ·   ·   ·   ·   ·   ·   ·                 
+                                    ╵                                           
+                                                                                
+                                                                                
+ PLAY    G5  floor  1 token  nex… play mode - i places, enter grabs, ? for keys 
+ i place  enter grab  d y p edit  v select  t/f/e cycle                  ? keys 
+-- exit 0
+== shift-stretch.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 80x24
+-- cksum 452884507-8660 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --players --size 80x24
+-- cksum 452884507-8660 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 110x34
+-- cksum 3002733346-10718 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --players --size 110x34
+-- cksum 3002733346-10718 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 40x12
+-- cksum 2862427481-3583 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/roll.keys --dump-frame --size 80x24
+ fold                                                                     BUILD 
+                  A   B   C   D   E   F   G   H   I   J   K   L                 
+                                                                                
+                                                                                
+              1   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·                 
+                                                                                
+              2   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·                 
+                    ╻                       ╻                                   
+              3   · ┃ ·   ·   ·   ·   ·   · ┃ ·   ·   ·   ·   ·                 
+                    ┃───┬───┬───┬───┬───┬───┃                                   
+              4   · ┃   │   │   │   │   │   ┃ ·   ·   ·   ·   ·                 
+                    ┃───┼───┼───┼───┼───┼───┃                                   
+              5   · ┃   │   │   │   │   │   ┃ ·   ·   ·   ·   ·                 
+                    ╹───┼───┼───┼───┼───┼───╹                                   
+              6   · │   │   │   │   │   │   │ ·   ·   ·   ·   ·                 
+                    └───┴───┴───┴───╻───┴───┘                                   
+              7   ·   ·   ·   ·   · ┃ ·   ·   ·   ·   ·   ·   ·                 
+                                    ╹                                           
+              8   ·   ·   ·   ·   · │ ·   ·   ·   ·   ·   ·   ·                 
+                                    ╵                                           
+                                                                                
+                                                                                
+ NORMAL  G5  floor  [wall/floor]  zoom 1  map 12x8            2d6+3 = 12  [6 3] 
+ hjkl move  HJKL wall  w trace  t kind  f paint                          ? keys 
+-- exit 0
+== shift-stretch.vtt --seed 1 --script ../work/roll.keys --dump-frame --players --size 80x24
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+-- exit 0
+== shift-stretch.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 80x24
+-- cksum 636634158-8579 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --players --size 80x24
+-- cksum 3752749104-2448 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 110x34
+-- cksum 1369886221-10638 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --players --size 110x34
+-- cksum 1368086761-4522 exit 0
+== shift-stretch.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 40x12
+-- cksum 369108458-3501 exit 0

@@ -2,7 +2,7 @@
 no findings
 -- exit 0
 == env.vtt --check --json
-{"file":"env.vtt","errors":0,"warnings":0,"notes":0,"findings":[]}
+{"file":"env.vtt","errors":0,"warnings":0,"notes":0,"findings":[],"codes":{}}
 -- exit 0
 == env.vtt --describe
 map  env  4x3  scale 5 ft  metric alt  ruleset none

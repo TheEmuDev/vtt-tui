@@ -7,6 +7,9 @@ IDEAS.md.
 
 ## Order
 
+**On branch vtt-2.0, decided 2026-10-18:** step 5's second piece, part 3 (docs/V2.md); then
+25; then 26 (its plan first); then the rest of 2.0 (steps 3, 6-9).
+
 Suggested, of what is left: 12, 8, 22, 7, 11; then 14 and 15 when play asks for
 them, and 1 if play testing of hidden creatures asks for it.
 
@@ -15,6 +18,18 @@ them, and 1 if play testing of hidden creatures asks for it.
 Item 1 was decided 2026-09-27, the rest 2026-09-29.
 
 ### Any ruleset
+
+- **25. A thin agent skill, and `vtt --agent-guide`** (asked 2026-10-09, docs/CONFLICTS.md's
+  follow-up; ordered 2026-10-18). A dozen lines for an AI agent: when to use vtt, the
+  opening move (`vtt --ctl status`, then live or `--apply`), the job loop, and a pointer to
+  the full guide. `vtt --agent-guide` prints docs/AGENTS.md from the binary (embedded as the
+  phone page is, a test that the two agree), so the guide matches the installed vtt. The
+  skill's source lives in the repo and a make target installs it to `~/.claude/skills/vtt/`;
+  it is part of "not done" for any change to what agents see.
+- **26. A Claude API agent** (the user, 2026-10-17: API credits in hand). An agent option
+  that calls the Claude API directly, beside `:agent command CMD`. A written plan first: no
+  dependencies beyond libc/POSIX means no TLS in the binary (a helper process, e.g. curl, is
+  the likely shape); the API key is never written into a map, a log or the repo.
 
 - **1. Messages marked at the source**, if play testing of hidden creatures (built 2026-09-27)
   asks for it. While any creature is hidden, the players' screens show no status messages --

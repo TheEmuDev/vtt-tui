@@ -2,7 +2,7 @@
 no findings
 -- exit 0
 == two-rooms.vtt --check --json
-{"file":"two-rooms.vtt","errors":0,"warnings":0,"notes":0,"findings":[]}
+{"file":"two-rooms.vtt","errors":0,"warnings":0,"notes":0,"findings":[],"codes":{}}
 -- exit 0
 == two-rooms.vtt --describe
 map  Two Rooms  16x9  scale 5 ft  metric alt  ruleset none

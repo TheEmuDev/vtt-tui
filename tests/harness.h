@@ -281,6 +281,7 @@ void jobs_reset(App *a);
 void test_disk(void);
 void test_disk_whole(void);
 void test_file_findings(void);
+void test_check_help(void);
 void test_link_keys(void);
 void test_floors(void);
 void test_floor_view(void);

@@ -96,6 +96,10 @@ int  maptools_check_map(FILE *out, const Map *m, int json);
  * search and its fold -- then the live map's, less those the fold explains. */
 int  maptools_check_open(FILE *out, const Map *m, int json);
 
+/* What to do about a finding of `code` (and `slug`, for a code with two
+ * meanings): its help line, or NULL for a code with none. */
+const char *maptools_code_help(const char *code, const char *slug);
+
 /* What an open says of its file: a sink for mapio_load_base_diag, then
  * maptools_file_finish -- the line search on Map.base -- which returns the
  * file's warnings and errors (`errors` of them errors), `summary` the first

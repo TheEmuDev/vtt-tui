@@ -2,7 +2,7 @@
 no findings
 -- exit 0
 == v12.vtt --check --json
-{"file":"v12.vtt","errors":0,"warnings":0,"notes":0,"findings":[]}
+{"file":"v12.vtt","errors":0,"warnings":0,"notes":0,"findings":[],"codes":{}}
 -- exit 0
 == v12.vtt --describe
 map  v3  12x8  scale 5 ft  metric alt  ruleset none

@@ -2,7 +2,7 @@
 no findings
 -- exit 0
 == kinds.vtt --check --json
-{"file":"kinds.vtt","errors":0,"warnings":0,"notes":0,"findings":[]}
+{"file":"kinds.vtt","errors":0,"warnings":0,"notes":0,"findings":[],"codes":{}}
 -- exit 0
 == kinds.vtt --describe
 map  Kinds  16x8  scale 5 ft  metric alt  ruleset none

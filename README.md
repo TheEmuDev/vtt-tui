@@ -1514,54 +1514,57 @@ two readings are said, the findings folded into them are the ones deleting the n
 from elsewhere in the section, or two sections damaged at once, gets no place unless it is clear.
 Fog rows are never placed this way: fog over void is allowed.
 
-| code | finds |
-|---|---|
-| `E001 unreadable` | not a map, a bad size, or a newer format |
-| `E010 row-long` | a row longer than its section's width |
-| `E011 section-short` | a section that consumed the next line, or a file ending inside one; with the line where its row is missing, when the map shows it |
-| `E013 bad-char` | a character not valid in that section (read as empty) |
-| `E014 bad-record` | a line that could not be read and was dropped |
-| `E101 door-in-void` | a door or window with no map on either side |
-| `E110 token-on-void` | a creature on a square that is not map |
-| `E111 token-overhang` | a creature extending off the edge of the map |
-| `E112 token-overlap` | two creatures on one square |
-| `W015 unknown-line` | an unrecognized line |
-| `W016 unknown-ruleset`, `W017 unknown-metric` | an unknown setting |
-| `W018 fog-unknown-patch` | a fog row naming a patch that is not defined |
-| `W019 stray-row` | rows outside any section |
-| `W020 clamped` | a setting out of range, replaced by the nearest valid value; a card over 4 KB, cut there |
-| `W022 edge-row-short` | a `vedges` row missing its east boundary |
-| `W023 link-dropped` | a link with an end off the map, its ends overlapping, or on another link's squares |
-| `W024 floor-dropped` | a floor naming no area, marked twice, or overlapping another |
-| `W025 scene-dropped` | a scene with a bad name or box, a name used twice, a seventeenth, or no `endscene` |
-| `W026 after-end` | lines after an `end` line, which ends the file |
-| `W027 name-cleaned` | control characters in the map's name, taken out |
-| `W028 card-dropped`, `card-cut` | a card with a bad or repeated name, a sixty-fifth, one with no `endcard`, or a stray `endcard` |
-| `W029 unknown-rule` | a `rule` line naming a rule other than `massive`, ignored |
-| `W030 env-dropped` | an environment line for the map or an area that does not read, or a second one for the map |
-| `W032 section-repeated` | a second `tiles`, `vedges` or `hedges` section: it is read over the first, whose rows are lost |
-| `W031 row-extra` | a section with a line too many (one added or repeated by hand), and which line -- or, when the map does not show which, the count and the section's lines |
-| `W102 door-to-void` | a door or window leading into void |
-| `W103 wall-in-void` | a wall with no map on either side |
-| `W104 door-loose` | a door or window with no wall at either end |
-| `W113 duplicate-label` | two creatures with the same name |
-| `W120 unreachable-room` | a room no door leads to from the party's start |
-| `W121 party-split` | a player creature in such a room |
-| `W130 fog-patch-empty` | a fog patch with no squares |
-| `W140 note-on-void` | a note on a square that is not map |
-| `W150 link-on-void` | a link with an end on a square that is not map (nobody can be sent there) |
-| `W151 link-to-nowhere` | a link to another map whose file is not beside this one, or has no such area or square, or the square is void |
-| `W160 floors-overlap` | two floors sharing squares |
-| `W170 env-no-card` | an environment naming a card the map does not have |
-| `N021 row-short` | rows shorter than their section, read as trailing blanks |
-| `N105 door-off-map` | a door or window on the edge of the map |
-| `N131 fog-patch-disabled` | a disabled fog patch |
+| code | finds | what to do |
+|---|---|---|
+| `E001 unreadable` | not a map, a bad size, or a newer format | the first line must be VTT and a version this vtt reads (its own or older), and a size line must give the width and height; a map from a newer vtt opens in that vtt |
+| `E010 row-long` | a row longer than its section's width | delete the characters past the map's width, or :resize the map if it should be wider |
+| `E011 section-short` | a section that consumed the next line, or a file ending inside one; with the line where its row is missing, when the map shows it | put the missing row back where it was lost (an empty line, if it held nothing), or take it from a copy of the map (the autosave, a backup) |
+| `E013 bad-char` | a character not valid in that section (read as empty) | use a character the section knows: [File format](#file-format) lists them |
+| `E014 bad-record` | a line that could not be read and was dropped | write the line as [File format](#file-format) gives it, or delete it |
+| `E101 door-in-void` | a door or window with no map on either side, with the walls and doors joined to it on void folded in | floor the squares beside it (space), or take it away: brush 1 (1b), t to its kind, then H J K L toward it |
+| `E110 token-on-void` | a creature on a square that is not map | in play mode move it onto floor (enter picks it up, h j k l, enter puts it down; ctrl-w first lets it cross void) or remove it (d); or floor the square (space) |
+| `E111 token-overhang` | a creature extending off the edge of the map (and on void, said in the same finding) | in play mode make it smaller (enter, enter selects it, then B or 1b), or walk it all onto the map: ctrl-w lets it cross void, then enter, h j k l, enter |
+| `E112 token-overlap` | two creatures on one square | in play mode move one of them: enter picks it up |
+| `W015 unknown-line` | an unrecognized line | correct the line's first word ([File format](#file-format)), or delete it; a newer vtt's line is read by that vtt |
+| `W016 unknown-ruleset`, `W017 unknown-metric` | an unknown setting | :ruleset NAME names a ruleset this vtt knows ([Rulesets](#rulesets)); :metric names one: chebyshev, euclidean, alt or manhattan |
+| `W018 fog-unknown-patch` | a fog row naming a patch that is not defined | write the fogpatch line the row names, or paint those squares again: :fog NAME, then g f |
+| `W019 stray-row` | rows outside any section | if the section above has a line too many, delete it; if a header was lost, put it back on a line of its own (tiles, vedges or hedges) |
+| `W020 clamped` | a setting out of range, replaced by the nearest valid value; a card over 4 KB, cut there | write a value in range (the message names it), or shorten a card over 4 KB; vtt keeps what it used |
+| `W022 edge-row-short` | a `vedges` row missing its east boundary | add the row's last character, its east boundary (a space for none) |
+| `W023 link-dropped` | a link with an end off the map, its ends overlapping, or on another link's squares | make the link again with both ends on the map, apart and off other links: g l on one end, g l on the other |
+| `W024 floor-dropped` | a floor naming no area, marked twice, or overlapping another | name the area first (:area NAME), then :floor NAME LEVEL, once, and over no other floor |
+| `W025 scene-dropped` | a scene with a bad name or box, a name used twice, a seventeenth, or no `endscene` | give the scene a name used once and a box on the map, and end it with endscene; a map keeps 16 |
+| `W026 after-end` | lines after an `end` line, which ends the file | move the lines above end, or delete them |
+| `W027 name-cleaned` | control characters in the map's name, taken out | nothing to do: the name is kept without them, and a save writes it clean |
+| `W028 card-dropped`, `card-cut` | a card with a bad or repeated name, a sixty-fifth, one with no `endcard`, or a stray `endcard` | put endcard on a line of its own where the card ends; what was read before the line that ended it is kept; give the card a name used once and end it with endcard; a map keeps 64 cards |
+| `W029 unknown-rule` | a `rule` line naming a rule other than `massive`, ignored | write rule massive, the one rule there is, or delete the line |
+| `W030 env-dropped` | an environment line for the map or an area that does not read, or a second one for the map | name an area the map has, or :env NAME again where the cursor is |
+| `W032 section-repeated` | a second `tiles`, `vedges` or `hedges` section: it is read over the first, whose rows are lost | keep the right rows once: merge the two sections by hand and delete the second header |
+| `W031 row-extra` | a section with a line too many (one added or repeated by hand), and which line -- or, when the map does not show which, the count and the section's lines | delete the line too many: the finding names it when the map shows which |
+| `W102 door-to-void` | a door or window leading into void | floor the void side (space), or make it a wall: t to wall, then that side's key (H J K L) |
+| `W103 wall-in-void` | walls with no map on either side: one finding a stretch joined end to end, with how many and where it runs | floor the squares beside the wall (space, or f over the brush), or clear it: brush 1 (1b), t to wall, then H J K L toward it |
+| `W104 door-loose` | a door or window with no wall at either end | a door sits in a wall: draw the wall at each end (t to wall, then H J K L), or move the door into the wall it was meant for |
+| `W113 duplicate-label` | two creatures with the same name | in play mode c changes one's label |
+| `W120 unreachable-room` | a room no door leads to from the party's start | if the party should reach it, put a door in its wall (t to door, then H J K L on that side) or a link to it (g l); a room shut on purpose needs nothing |
+| `W121 party-split` | a player creature in such a room | in play mode move it to the others (enter), or open a way: a door (t to door, then H J K L) or a link (g l) |
+| `W130 fog-patch-empty` | a fog patch with no squares | pick it with :fog NAME and paint it (g f), or :fog NAME remove |
+| `W140 note-on-void` | a note on a square that is not map | floor the square (space), or move the note: s n there, ctrl-u, enter, then s n where it belongs |
+| `W150 link-on-void` | a link with an end on a square that is not map (nobody can be sent there) | floor the square under that end (space), or :link N remove and make it again with g l |
+| `W151 link-to-nowhere` | a link to another map whose file is not beside this one, or has no such area or square, or the square is void | save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE |
+| `W160 floors-overlap` | two floors sharing squares | a square is on one floor: :floor NAME off on one, or redraw its area (:area) |
+| `W170 env-no-card` | an environment naming a card the map does not have | :env edit writes the card, or :env pick takes one you keep |
+| `N021 row-short` | rows shorter than their section, read as trailing blanks | nothing to do: a short row reads as if filled out with nothing, and a save writes it whole |
+| `N105 door-off-map` | a door or window on the edge of the map | nothing to do if it is a way out of the map; else move it inside |
+| `N131 fog-patch-disabled` | a disabled fog patch | :fog NAME enable puts it back to work |
 
 **`--json`** gives `--describe` or `--check` as JSON, with 0-based coordinates alongside the
 square names, room `area` names and `floor`s, the lists of `areas`, `floors` and `links`, and
-each finding's `line` and `column`, and for each finding `help` (the fix, or null), `notes` (the
-evidence), `span` (the first and last line a fix may be made at, or null), `folded` (what it
-counts instead of listing, or null) and `confidence` (`certain`, `likely` or null). `--describe` names each room's floor, lists its link ends and where they lead, and counts a room
+each finding's `line` and `column`, and for each finding `help` (a fix particular to this
+finding, or null), `notes` (the evidence), `span` (the first and last line a fix may be made at,
+or null), `folded` (what it counts instead of listing, or null) and `confidence` (`certain`,
+`likely` or null). What to do about each kind of finding is said once, in `codes`: an object
+keyed by code (`"W103"`, or `"W028/card-cut"` where a code has two meanings) holding its `help`
+and `note`. The text report says the same once too, under the first finding of each code. `--describe` names each room's floor, lists its link ends and where they lead, and counts a room
 reached only by a link as reachable (a one-way link only in its direction).
 
 ## Control channel (`:agent`, `vtt --ctl`)

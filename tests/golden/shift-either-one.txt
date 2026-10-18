@@ -4,4 +4,5 @@ W031 row-extra          line 12   'vedges' ends in a blank line after its rows a
       = help: if this file keeps a blank line after its sections (written by hand), 'hedges' lost a row: compare 'hedges' with a copy of the map (the autosave, a backup) and put it back; if not (vtt writes none), delete line 14 (or any of lines 14-17: they are the same row); then vtt tests/fixtures/shift-either-one.vtt --check
       = 2 findings are folded in: W103 x2
 W120 unreachable-room   room B6   5 squares, no door leads to it from room B2
+      = help: if the party should reach it, put a door in its wall (t to door, then H J K L on that side) or a link to it (g l); a room shut on purpose needs nothing
 0 errors, 2 warnings

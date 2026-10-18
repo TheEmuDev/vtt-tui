@@ -2,7 +2,7 @@
 no findings
 -- exit 0
 == crowd.vtt --check --json
-{"file":"crowd.vtt","errors":0,"warnings":0,"notes":0,"findings":[]}
+{"file":"crowd.vtt","errors":0,"warnings":0,"notes":0,"findings":[],"codes":{}}
 -- exit 0
 == crowd.vtt --describe
 map  Crowd  14x10  scale 5 ft  metric alt  ruleset none

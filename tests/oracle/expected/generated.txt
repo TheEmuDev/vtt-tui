@@ -1,5 +1,5 @@
 == gen-small.vtt --check
--- cksum 2642799888-77900 exit 1
+-- cksum 2569879128-78188 exit 1
 == gen-small.vtt --describe
 -- cksum 3081853765-69729 exit 0
 == gen-small.vtt --dump-map
@@ -7,7 +7,7 @@
 == gen-small.vtt --dump-frame --cells --size 120x40
 -- cksum 740298883-34663 exit 0
 == gen-wide.vtt --check
--- cksum 3089816360-27817 exit 1
+-- cksum 3148733961-27880 exit 1
 == gen-wide.vtt --describe
 -- cksum 3889074028-16068 exit 0
 == gen-wide.vtt --dump-map
@@ -15,7 +15,7 @@
 == gen-wide.vtt --dump-frame --cells --size 120x40
 -- cksum 2422105190-34249 exit 0
 == gen-turns.vtt --check
--- cksum 1174543974-187266 exit 1
+-- cksum 4233687464-187554 exit 1
 == gen-turns.vtt --describe
 -- cksum 1579531972-171336 exit 0
 == gen-turns.vtt --dump-map

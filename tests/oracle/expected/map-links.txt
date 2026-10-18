@@ -2,7 +2,7 @@
 no findings
 -- exit 0
 == links.vtt --check --json
-{"file":"links.vtt","errors":0,"warnings":0,"notes":0,"findings":[]}
+{"file":"links.vtt","errors":0,"warnings":0,"notes":0,"findings":[],"codes":{}}
 -- exit 0
 == links.vtt --describe
 map  new  20x10  scale 5 ft  metric alt  ruleset none

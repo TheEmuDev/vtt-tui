@@ -1,9 +1,10 @@
 == e001.vtt --check
 E001 unreadable                   e001.vtt is not a vtt map
+      = help: the first line must be VTT and a version this vtt reads (its own or older), and a size line must give the width and height; a map from a newer vtt opens in that vtt
 1 error, 0 warnings
 -- exit 2
 == e001.vtt --check --json
-{"file":"e001.vtt","errors":1,"warnings":0,"notes":0,"findings":[{"code":"E001","slug":"unreadable","severity":"error","line":null,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"e001.vtt is not a vtt map","help":null,"notes":[],"span":null,"folded":null,"confidence":null}]}
+{"file":"e001.vtt","errors":1,"warnings":0,"notes":0,"findings":[{"code":"E001","slug":"unreadable","severity":"error","line":null,"column":null,"where":null,"x":null,"y":null,"edge":null,"message":"e001.vtt is not a vtt map","help":null,"notes":[],"span":null,"folded":null,"confidence":null}],"codes":{"E001":{"help":"the first line must be VTT and a version this vtt reads (its own or older), and a size line must give the width and height; a map from a newer vtt opens in that vtt","note":null}}}
 -- exit 2
 == e001.vtt --describe
 vtt: e001.vtt is not a vtt map
@@ -452,7 +453,7 @@ vtt: e001.vtt is not a vtt map
 == e001.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 40x12
 -- cksum 2306292080-1085 exit 0
 == e001.vtt --seed 1 --script ../work/roll.keys --dump-frame --size 80x24
- open map                                                               23 maps 
+ open map                                                               24 maps 
                                                                                 
    > areas.vtt                         ./areas.vtt                              
      broken.vtt                        ./broken.vtt                             
@@ -469,10 +470,10 @@ vtt: e001.vtt is not a vtt map
      shift-either-one.vtt              ./shift-either-one.vtt                   
      shift-flawed.vtt                  ./shift-flawed.vtt                       
      shift-short-sep.vtt               ./shift-short-sep.vtt                    
+     shift-stretch.vtt                 ./shift-stretch.vtt                      
      two-rooms.vtt                     ./two-rooms.vtt                          
      v10.vtt                           ./v10.vtt                                
-     v11.vtt                           ./v11.vtt                                
-     v12.vtt                           ./v12.vtt                            v   
+     v11.vtt                           ./v11.vtt                            v   
                                                                                 
                                                                                 
  j/k move  enter open  d delete                                          ? keys 
@@ -504,12 +505,12 @@ vtt: e001.vtt is not a vtt map
                                                                                 
 -- exit 0
 == e001.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 80x24
--- cksum 3458805884-3420 exit 0
+-- cksum 2143832567-3420 exit 0
 == e001.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --players --size 80x24
 -- cksum 3752749104-2448 exit 0
 == e001.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 110x34
--- cksum 3514851578-5608 exit 0
+-- cksum 4121152277-5646 exit 0
 == e001.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --players --size 110x34
 -- cksum 1368086761-4522 exit 0
 == e001.vtt --seed 1 --script ../work/roll.keys --dump-frame --cells --size 40x12
--- cksum 2541622317-1230 exit 0
+-- cksum 2046012284-1230 exit 0

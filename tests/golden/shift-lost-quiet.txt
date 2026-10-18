@@ -3,4 +3,5 @@ E011 section-short      line 27   'hedges' read as vedges row 9 of 9: a 'vedges'
       = help: the missing row is one of the 9 after line 18: compare them with a copy of the map (the autosave, a backup), put it back (an empty line, if it held nothing), then vtt DIR/bad.vtt --check
       = 2 findings are caused by it, folded in: W019 x1, W104 x1
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 1 error, 1 warning

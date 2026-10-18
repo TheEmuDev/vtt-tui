@@ -1,6 +1,7 @@
 /* Tests: the map tools: --dump-map, --describe, --check, the loader's diagnostics. */
 
 #include <ctype.h>
+#include <dirent.h>
 
 #include "harness.h"
 
@@ -1797,4 +1798,132 @@ void test_map_shift(void)
     CHECK_EQ(fog_said, 0);
 
     sandbox_leave(&sb);
+}
+
+/* docs/V2.md, step 5's second piece, part 3: every code the loader or a
+ * check emits has its help -- read from the sources, so a new code without a
+ * row in maptools.c's table fails here, not in a GM's report. */
+void test_check_help(void)
+{
+    CASE("every finding code in src/ has a help line (and every slug of a code with two meanings)");
+    DIR *d = opendir("src");
+    CHECK(d != NULL);
+    int pairs = 0, missing = 0;
+    for (struct dirent *e; d && (e = readdir(d)); ) {
+        size_t n = strlen(e->d_name);
+        if (n < 3 || strcmp(e->d_name + n - 2, ".c")) continue;
+        char path[300];
+        snprintf(path, sizeof path, "src/%s", e->d_name);
+        size_t len;
+        char *text = file_read(path, 4u << 20, &len, NULL);
+        for (const char *p = text; p && (p = strchr(p, '"')); p++) {
+            /* "E011", "section-short" -- a code, then its slug */
+            if (!(strchr("EWN", p[1]) && isdigit((unsigned char)p[2]) && isdigit((unsigned char)p[3]) &&
+                  isdigit((unsigned char)p[4]) && p[5] == '"')) continue;
+            const char *q = p + 6;
+            while (*q == ',' || *q == ' ' || *q == '\n') q++;
+            char code[5], slug[32] = "";
+            memcpy(code, p + 1, 4); code[4] = '\0';
+            if (*q == '"') {
+                const char *end = strchr(q + 1, '"');
+                if (end && end - q - 1 < (long)sizeof slug) { memcpy(slug, q + 1, (size_t)(end - q - 1)); slug[end - q - 1] = '\0'; }
+            }
+            pairs++;
+            if (!maptools_code_help(code, slug[0] ? slug : NULL)) {
+                missing++;
+                printf("    no help for %s %s (%s)\n", code, slug, path);
+            }
+        }
+        free(text);
+    }
+    if (d) closedir(d);
+    CHECK(pairs >= 41);
+    CHECK_EQ(missing, 0);
+
+    CASE("a stretch on void that mixes the line search's doing with a true wall: the fold takes only its own, the wall stays listed");
+    {
+        char  *out = NULL;
+        size_t olen = 0;
+        FILE  *o = open_memstream(&out, &olen);
+        maptools_check(o, "tests/fixtures/shift-stretch.vtt", 0);
+        fclose(o);
+        CHECK(strstr(out, "folded in: W019 x1, E101 x1") != NULL);    /* the swallowed header's door, not the wall */
+        CHECK(strstr(out, "W103 wall-in-void       E7|F7") != NULL);   /* the wall on void the file has anyway */
+        free(out);
+    }
+
+    CASE("the README's code table says what the help says, for every code (tools/codehelp.py writes its what-to-do column)");
+    {
+        size_t rl;
+        char *readme = file_read("README.md", 4u << 20, &rl, NULL);
+        CHECK(readme != NULL);
+        int drift = 0, rows = 0;
+        for (const char *p = readme ? strstr(readme, "| code | finds | what to do |") : NULL; p && *p; ) {
+            const char *eol = strchr(p, '\n');
+            if (!eol || eol == p) break;
+            /* Every code in the row's first cell (W016's row names W017 too). */
+            const char *cell_end = p[0] == '|' ? strchr(p + 1, '|') : NULL;
+            for (const char *b = p; cell_end && (b = strchr(b, '`')) && b < cell_end; b++) {
+            char code[5] = "";
+            if (strchr("EWN", b[1]) && isdigit((unsigned char)b[2])) memcpy(code, b + 1, 4);
+            else continue;
+            {
+                rows++;
+                /* Each of the code's rows' help (both of W028's) on its line. */
+                for (const char *slug0 = NULL, *h; ; slug0 = "card-dropped") {
+                    h = maptools_code_help(code, slug0);
+                    if (!h) break;
+                    char want[600];
+                    size_t w = 0;
+                    for (const char *q = h; *q && w + 40 < sizeof want; q++) {
+                        if (!strncmp(q, "the README's File format", 24)) { w += (size_t)snprintf(want + w, sizeof want - w, "[File format](#file-format)"); q += 23; }
+                        else if (!strncmp(q, "the README's Rulesets", 21)) { w += (size_t)snprintf(want + w, sizeof want - w, "[Rulesets](#rulesets)"); q += 20; }
+                        else want[w++] = *q;
+                    }
+                    want[w] = '\0';
+                    char *line = xmalloc((size_t)(eol - p) + 1);
+                    memcpy(line, p, (size_t)(eol - p)); line[eol - p] = '\0';
+                    if (!strstr(line, want)) { drift++; printf("    README's row for %s lacks: %s\n", code, want); }
+                    free(line);
+                    if (strcmp(code, "W028") || slug0) break;
+                }
+            }
+            }
+            p = eol + 1;
+            if (*p != '|') break;
+        }
+        CHECK_EQ(drift, 0);
+        CHECK(rows >= 39);
+        free(readme);
+    }
+
+    CASE("one mistake, one finding: a stretch of walls on void, a door drawn in void with its walls, a creature off the edge on void");
+    {
+        Map *m = map_new(12, 8, "cascade");
+        map_fill_tiles(m, 0, 0, 3, 3, TILE_FLOOR);                /* floor at A1:D4 only */
+        for (int y = 5; y <= 7; y++) map_set_vedge(m, 8, y, EDGE_WALL);     /* three walls in a line, on void */
+        map_set_hedge(m, 8, 5, EDGE_WALL);                                   /* ...joined at a corner: four */
+        map_set_vedge(m, 6, 1, EDGE_DOOR_CLOSED);                            /* a door in void... */
+        map_set_hedge(m, 6, 1, EDGE_WALL);                                   /* ...with walls round it */
+        map_set_hedge(m, 6, 2, EDGE_WALL);
+        map_set_vedge(m, 11, 0, EDGE_WALL);                                  /* a wall alone, apart */
+        Token t = { 11, 6, 2, TOKEN_ENEMY, "Giant" };                        /* 2x2 at L7: off the edge, on void */
+        tokens_add(&m->tokens, t);
+        char  *out = NULL;
+        size_t olen = 0;
+        FILE  *o = open_memstream(&out, &olen);
+        maptools_check_map(o, m, 0);
+        fclose(o);
+        if (getenv("VTT_SHIFT_SAY")) printf("%s", out);
+        CHECK(strstr(out, "W103 wall-in-void") != NULL && strstr(out, "4 walls between squares that are not map, joined end to end from") != NULL);
+        CHECK(strstr(out, "E101 door-in-void") != NULL && strstr(out, "with 2 more boundaries joined to it on void") != NULL);
+        CHECK(strstr(out, "2 more folded in with it: W103 x2") != NULL);
+        CHECK(strstr(out, "Giant is 2x2 and hangs off the map's edge, and the part on the map stands on void") != NULL);
+        CHECK(strstr(out, "E110 token-on-void") == NULL);
+        int w103 = 0;
+        for (const char *p = out; (p = strstr(p, "W103 wall-in-void")); p++) w103++;
+        CHECK_EQ(w103, 2);                                                   /* the stretch, and the one apart */
+        free(out);
+        map_free(m);
+    }
 }

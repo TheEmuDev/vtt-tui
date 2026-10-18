@@ -1,26 +1,51 @@
 W020 clamped            line 4    zoom 7 is not 0-3; 3 is used
+      = help: write a value in range (the message names it), or shorten a card over 4 KB; vtt keeps what it used
 W016 unknown-ruleset    line 5    no ruleset called 'nosuch'; the map has none
+      = help: :ruleset NAME names a ruleset this vtt knows (the README's Rulesets)
 E010 row-long           line 8    tiles row 2 is 9 characters, the map needs 8; the rest is ignored
+      = help: delete the characters past the map's width, or :resize the map if it should be wider
 E013 bad-char           line 8    'X' in tiles row 2, column 5, reads as void
+      = help: use a character the section knows: the README's File format lists them
 N021 row-short          line 9    1 tiles row is shorter than 8; the rest reads as void
+      = help: nothing to do: a short row reads as if filled out with nothing, and a save writes it whole
 E014 bad-record         line 25   marker dropped: 'tokenstatus red "Early"'
+      = help: write the line as the README's File format gives it, or delete it
 W015 unknown-line       line 32   ignored: 'mystery line'
+      = help: correct the line's first word (the README's File format), or delete it; a newer vtt's line is read by that vtt
 W019 stray-row          line 33   rows outside any section, ignored: is the section before them one row too long, or its header swallowed by a short one?
+      = help: if the section above has a line too many, delete it; if a header was lost, put it back on a line of its own (tiles, vedges or hedges)
 W018 fog-unknown-patch  line 38   fog row 1 names patch 3 ('C'), which no fogpatch line creates; read as no fog
+      = help: write the fogpatch line the row names, or paint those squares again: :fog NAME, then g f
 E011 section-short      line 39   the file ends inside 'fog' after 2 of 5 rows
+      = note: a section that comes up short reads the next line as its last row: a header swallowed leaves the whole next section unread
+      = help: put the missing row back where it was lost (an empty line, if it held nothing), or take it from a copy of the map (the autosave, a backup)
 E101 door-in-void       E4|F4     door between two squares that are not map
+      = help: floor the squares beside it (space), or take it away: brush 1 (1b), t to its kind, then H J K L toward it
 E110 token-on-void      F3        Ogre stands on void
+      = help: in play mode move it onto floor (enter picks it up, h j k l, enter puts it down; ctrl-w first lets it cross void) or remove it (d); or floor the square (space)
 E111 token-overhang     H5        Giant is 2x2 and hangs off the map's edge
+      = help: in play mode make it smaller (enter, enter selects it, then B or 1b), or walk it all onto the map: ctrl-w lets it cross void, then enter, h j k l, enter
 E112 token-overlap      F3        Ogre and Ogre share a square
+      = help: in play mode move one of them: enter picks it up
 W102 door-to-void       F3|G3     door leads into void
+      = help: floor the void side (space), or make it a wall: t to wall, then that side's key (H J K L)
 W103 wall-in-void       H3|-      wall between two squares that are not map
+      = help: floor the squares beside the wall (space, or f over the brush), or clear it: brush 1 (1b), t to wall, then H J K L toward it
 W104 door-loose         C1/C2     door with no wall at either end: is it in the row or column it was meant for?
+      = help: a door sits in a wall: draw the wall at each end (t to wall, then H J K L), or move the door into the wall it was meant for
 W113 duplicate-label    F3        two creatures called Ogre, here and at G3
+      = note: the turn order, damage and agents tell creatures apart by their labels
+      = help: in play mode c changes one's label
 W120 unreachable-room   room E1   14 squares, no door leads to it from room A1
+      = help: if the party should reach it, put a door in its wall (t to door, then H J K L on that side) or a link to it (g l); a room shut on purpose needs nothing
 W120 unreachable-room   room E3   1 square, no door leads to it from room A1
 W121 party-split        G2        Bram cannot reach the rest of the party in room A1
+      = help: in play mode move it to the others (enter), or open a way: a door (t to door, then H J K L) or a link (g l)
 W130 fog-patch-empty    Crypt     fog patch Crypt has no square painted in the fog section
+      = help: pick it with :fog NAME and paint it (g f), or :fog NAME remove
 W130 fog-patch-empty    Mist      fog patch Mist has no square painted in the fog section
 W140 note-on-void       F3        a note on void: on the gap
+      = help: floor the square (space), or move the note: s n there, ctrl-u, enter, then s n where it belongs
 N131 fog-patch-disabled Mist      fog patch Mist is disabled: it hides nothing
+      = help: :fog NAME enable puts it back to work
 8 errors, 15 warnings, 2 notes

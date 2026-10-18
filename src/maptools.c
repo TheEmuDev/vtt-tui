@@ -892,6 +892,7 @@ typedef struct FindingMore {
     char folded[200];       /* "W103 x14, E110 x1" */
     int  nfolded;
     int  fold_if;           /* folded by one reading's fix only: the note says which */
+    int  joined;            /* folded in as one mistake with it (a stretch on void), not caused by it */
     int  span0, span1;      /* the file's lines a fix may be made at; 0 for none */
     int  certain;           /* 1 certain, 0 likely */
 } FindingMore;
@@ -941,8 +942,9 @@ static int corner_busy(const Map *m, int cx, int cy, int skip_v, int skip_x, int
     return 0;
 }
 
-/* One boundary's findings: a door or wall with nothing either side, a door
- * with nothing on one, a door on its own in open floor. */
+/* One boundary's findings: a door or wall with nothing either side (one
+ * finding a boundary here; check_report joins them by stretch), a door with
+ * nothing on one, a door on its own in open floor. */
 static void check_edge(const Map *m, Findings *fs, int vertical, int x, int y)
 {
     uint8_t k = vertical ? map_vedge(m, x, y) : map_hedge(m, x, y);
@@ -979,6 +981,86 @@ static void check_edge(const Map *m, Findings *fs, int vertical, int x, int y)
         snprintf(msg, sizeof msg, "%s with no wall at either end: is it in the row or column it was meant for?", kn);
         map_finding(fs, "W104", "door-loose", x, y, vertical ? 'v' : 'h', where, msg);
     }
+}
+
+/* What to do about each finding (docs/V2.md, step 5's second piece, part 3:
+ * the standard's fourth point), and why where that is not obvious. The map's
+ * mistakes in vtt's keys and commands (build mode unless it says play mode);
+ * the file's in the file's terms. Said once a code in a report: the text
+ * under its first finding, the JSON in its `codes` object. A finding with help
+ * of its own (FindingMore.help: the line search's) says that instead. Every
+ * code the loader or a check emits has a row: the suite `checkhelp` reads the
+ * sources for them. A code with two meanings has a row a slug. */
+typedef struct { const char *code, *slug, *help, *note; } CodeHelp;
+
+static const CodeHelp CODE_HELP[] = {
+    { "E001", NULL, "the first line must be VTT and a version this vtt reads (its own or older), and a size line must give the width and height; a map from a newer vtt opens in that vtt", NULL },
+    { "E010", NULL, "delete the characters past the map's width, or :resize the map if it should be wider", NULL },
+    { "E011", NULL, "put the missing row back where it was lost (an empty line, if it held nothing), or take it from a copy of the map (the autosave, a backup)",
+      "a section that comes up short reads the next line as its last row: a header swallowed leaves the whole next section unread" },
+    { "E013", NULL, "use a character the section knows: the README's File format lists them", NULL },
+    { "E014", NULL, "write the line as the README's File format gives it, or delete it", NULL },
+    { "N021", NULL, "nothing to do: a short row reads as if filled out with nothing, and a save writes it whole", NULL },
+    { "W015", NULL, "correct the line's first word (the README's File format), or delete it; a newer vtt's line is read by that vtt", NULL },
+    { "W016", NULL, ":ruleset NAME names a ruleset this vtt knows (the README's Rulesets)", NULL },
+    { "W017", NULL, ":metric names one: chebyshev, euclidean, alt or manhattan", NULL },
+    { "W018", NULL, "write the fogpatch line the row names, or paint those squares again: :fog NAME, then g f", NULL },
+    { "W019", NULL, "if the section above has a line too many, delete it; if a header was lost, put it back on a line of its own (tiles, vedges or hedges)", NULL },
+    { "W020", NULL, "write a value in range (the message names it), or shorten a card over 4 KB; vtt keeps what it used", NULL },
+    { "W022", NULL, "add the row's last character, its east boundary (a space for none)", NULL },
+    { "W023", NULL, "make the link again with both ends on the map, apart and off other links: g l on one end, g l on the other", NULL },
+    { "W024", NULL, "name the area first (:area NAME), then :floor NAME LEVEL, once, and over no other floor", NULL },
+    { "W025", NULL, "give the scene a name used once and a box on the map, and end it with endscene; a map keeps 16", NULL },
+    { "W026", NULL, "move the lines above end, or delete them", NULL },
+    { "W027", NULL, "nothing to do: the name is kept without them, and a save writes it clean", NULL },
+    { "W028", "card-cut", "put endcard on a line of its own where the card ends; what was read before the line that ended it is kept", NULL },
+    { "W028", "card-dropped", "give the card a name used once and end it with endcard; a map keeps 64 cards", NULL },
+    { "W029", NULL, "write rule massive, the one rule there is, or delete the line", NULL },
+    { "W030", NULL, "name an area the map has, or :env NAME again where the cursor is", NULL },
+    { "W031", NULL, "delete the line too many: the finding names it when the map shows which", NULL },
+    { "W032", NULL, "keep the right rows once: merge the two sections by hand and delete the second header", NULL },
+    { "E101", NULL, "floor the squares beside it (space), or take it away: brush 1 (1b), t to its kind, then H J K L toward it", NULL },
+    { "E110", NULL, "in play mode move it onto floor (enter picks it up, h j k l, enter puts it down; ctrl-w first lets it cross void) or remove it (d); or floor the square (space)", NULL },
+    { "E111", NULL, "in play mode make it smaller (enter, enter selects it, then B or 1b), or walk it all onto the map: ctrl-w lets it cross void, then enter, h j k l, enter", NULL },
+    { "E112", NULL, "in play mode move one of them: enter picks it up", NULL },
+    { "W102", NULL, "floor the void side (space), or make it a wall: t to wall, then that side's key (H J K L)", NULL },
+    { "W103", NULL, "floor the squares beside the wall (space, or f over the brush), or clear it: brush 1 (1b), t to wall, then H J K L toward it", NULL },
+    { "W104", NULL, "a door sits in a wall: draw the wall at each end (t to wall, then H J K L), or move the door into the wall it was meant for", NULL },
+    { "N105", NULL, "nothing to do if it is a way out of the map; else move it inside", NULL },
+    { "W113", NULL, "in play mode c changes one's label", "the turn order, damage and agents tell creatures apart by their labels" },
+    { "W120", NULL, "if the party should reach it, put a door in its wall (t to door, then H J K L on that side) or a link to it (g l); a room shut on purpose needs nothing", NULL },
+    { "W121", NULL, "in play mode move it to the others (enter), or open a way: a door (t to door, then H J K L) or a link (g l)", NULL },
+    { "W130", NULL, "pick it with :fog NAME and paint it (g f), or :fog NAME remove", NULL },
+    { "N131", NULL, ":fog NAME enable puts it back to work", NULL },
+    { "W140", NULL, "floor the square (space), or move the note: s n there, ctrl-u, enter, then s n where it belongs", NULL },
+    { "W150", NULL, "floor the square under that end (space), or :link N remove and make it again with g l", NULL },
+    { "W151", NULL, "save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE", NULL },
+    { "W160", NULL, "a square is on one floor: :floor NAME off on one, or redraw its area (:area)", NULL },
+    { "W170", NULL, ":env edit writes the card, or :env pick takes one you keep", NULL },
+};
+
+/* The table's row for a code and slug: the codes' numbers do not repeat
+ * across E, W and N, so an index a number finds one in a step. */
+static const CodeHelp *code_help(const char *code, const char *slug)
+{
+    static short at[1000];
+    static int built;
+    if (!built) {
+        for (int i = 0; i < 1000; i++) at[i] = -1;
+        for (int i = (int)(sizeof CODE_HELP / sizeof CODE_HELP[0]) - 1; i >= 0; i--) at[atoi(CODE_HELP[i].code + 1)] = (short)i;
+        built = 1;
+    }
+    int n = code && code[0] ? atoi(code + 1) : -1;
+    if (n < 0 || n >= 1000 || at[n] < 0 || CODE_HELP[at[n]].code[0] != code[0]) return NULL;
+    for (int i = at[n]; i < (int)(sizeof CODE_HELP / sizeof CODE_HELP[0]) && !strcmp(CODE_HELP[i].code, code); i++)
+        if (!CODE_HELP[i].slug || (slug && !strcmp(CODE_HELP[i].slug, slug))) return &CODE_HELP[i];
+    return &CODE_HELP[at[n]];
+}
+
+const char *maptools_code_help(const char *code, const char *slug)
+{
+    const CodeHelp *h = code_help(code, slug);
+    return h && !strcmp(h->code, code) ? h->help : NULL;
 }
 
 static int finding_cmp(const void *pa, const void *pb)
@@ -1117,6 +1199,117 @@ static void pairs_free(Pairs *p)
     free(p->head); free(p->next); free(p->who); free(p->same); free(p->off); free(p->found);
 }
 
+static FindingMore *finding_more(Finding *f);
+
+/* Boundaries with no map on either side, said by stretch: two meet when they
+ * share a corner. A stretch with a door in it is the door's finding (a doorway
+ * drawn where there is no floor), the rest joined to it; one of walls alone
+ * says how many and where it runs. One mistake, one finding: a map walled on
+ * every boundary with no floor is one finding, not one a boundary. Done here,
+ * as the report is made, on what is left once every fold has run: the line
+ * search and :check fold boundary by boundary, so a stretch keeps exactly its
+ * members that are still true. */
+typedef struct { long long corner; int member; } StretchCorner;
+
+static int stretch_corner_cmp(const void *pa, const void *pb)
+{
+    const StretchCorner *a = pa, *b = pb;
+    return a->corner < b->corner ? -1 : a->corner > b->corner ? 1 : a->member - b->member;
+}
+
+static int stretch_find(int *parent, int i)
+{
+    while (parent[i] != i) { parent[i] = parent[parent[i]]; i = parent[i]; }
+    return i;
+}
+
+static int void_member(const Finding *f)
+{
+    return f->line <= 0 && f->edge && (!strcmp(f->code, "W103") || !strcmp(f->code, "E101"));
+}
+
+static int stretch_before(const Finding *a, const Finding *b)
+{
+    return a->y != b->y ? a->y < b->y : a->x != b->x ? a->x < b->x : a->edge > b->edge;
+}
+
+static void group_void_findings(Findings *fs)
+{
+    int n = 0;
+    for (int i = 0; i < fs->n; i++) n += void_member(&fs->v[i]);
+    if (n < 2) return;
+    int *idx = xmalloc((size_t)n * sizeof *idx), *parent = xmalloc((size_t)n * sizeof *parent);
+    StretchCorner *c = xmalloc((size_t)n * 2 * sizeof *c);
+    int k = 0;
+    for (int i = 0; i < fs->n; i++) {
+        const Finding *f = &fs->v[i];
+        if (!void_member(f)) continue;
+        idx[k] = i; parent[k] = k;
+        /* A corner as one number: a map is at most 512 squares a side. */
+        long long x1 = f->edge == 'v' ? f->x : f->x + 1, y1 = f->edge == 'v' ? f->y + 1 : f->y;
+        c[2 * k]     = (StretchCorner){ (long long)f->y * 1024 + f->x, k };
+        c[2 * k + 1] = (StretchCorner){ y1 * 1024 + x1, k };
+        k++;
+    }
+    qsort(c, (size_t)n * 2, sizeof *c, stretch_corner_cmp);
+    for (int i = 1; i < n * 2; i++)
+        if (c[i].corner == c[i - 1].corner) {
+            int ra = stretch_find(parent, c[i].member), rb = stretch_find(parent, c[i - 1].member);
+            if (ra != rb) parent[ra] = rb;
+        }
+    free(c);
+    /* Per stretch, by its root: walls, doors, the first and last member, the
+     * first door. */
+    int *walls = xcalloc((size_t)n, sizeof *walls), *doors = xcalloc((size_t)n, sizeof *doors);
+    int *first = xmalloc((size_t)n * sizeof *first), *last = xmalloc((size_t)n * sizeof *last);
+    int *door1 = xmalloc((size_t)n * sizeof *door1);
+    for (int i = 0; i < n; i++) first[i] = last[i] = door1[i] = -1;
+    for (int i = 0; i < n; i++) {
+        int r = stretch_find(parent, i);
+        const Finding *f = &fs->v[idx[i]];
+        if (f->code[0] == 'W') walls[r]++;
+        else {
+            doors[r]++;
+            if (door1[r] < 0 || stretch_before(f, &fs->v[idx[door1[r]]])) door1[r] = i;
+        }
+        if (first[r] < 0 || stretch_before(f, &fs->v[idx[first[r]]])) first[r] = i;
+        if (last[r] < 0 || stretch_before(&fs->v[idx[last[r]]], f)) last[r] = i;
+    }
+    /* The stretch's finding stays; its other members go. */
+    char *gone = xcalloc((size_t)fs->n, 1);
+    for (int i = 0; i < n; i++) {
+        int r = stretch_find(parent, i), keep = doors[r] ? door1[r] : first[r];
+        if (i != keep) { gone[idx[i]] = 1; continue; }
+        if (walls[r] + doors[r] < 2) continue;
+        Finding *f = &fs->v[idx[i]];
+        if (doors[r]) {
+            int more = walls[r] + doors[r] - 1;
+            char kind[24];
+            str_lcpy(kind, f->msg, sizeof kind);
+            char *sp = strstr(kind, " between");
+            if (sp) *sp = '\0';
+            snprintf(f->msg, sizeof f->msg, "%s between two squares that are not map, with %d more boundar%s joined to it on void",
+                     kind, more, more == 1 ? "y" : "ies");
+            FindingMore *mo = finding_more(f);
+            mo->nfolded = more;
+            mo->joined = 1;
+            if (walls[r] && doors[r] > 1) snprintf(mo->folded, sizeof mo->folded, "W103 x%d, E101 x%d", walls[r], doors[r] - 1);
+            else if (walls[r])            snprintf(mo->folded, sizeof mo->folded, "W103 x%d", walls[r]);
+            else                          snprintf(mo->folded, sizeof mo->folded, "E101 x%d", doors[r] - 1);
+        } else {
+            snprintf(f->msg, sizeof f->msg, "%d walls between squares that are not map, joined end to end from %s to %s",
+                     walls[r], fs->v[idx[first[r]]].where, fs->v[idx[last[r]]].where);
+        }
+    }
+    int kept = 0;
+    for (int i = 0; i < fs->n; i++) {
+        if (gone[i]) { free(fs->v[i].more); continue; }
+        fs->v[kept++] = fs->v[i];
+    }
+    fs->n = kept;
+    free(gone); free(idx); free(parent); free(walls); free(doors); free(first); free(last); free(door1);
+}
+
 static void check_map(const Map *m, Findings *fs)
 {
     char where[64], msg[256];
@@ -1135,15 +1328,24 @@ static void check_map(const Map *m, Findings *fs)
         const Token *t = &m->tokens.v[i];
         const char  *label = label_or_unnamed(t);
         map_coord_name(t->x, t->y, where, sizeof where);
-        if (t->x + t->size > m->w || t->y + t->size > m->h) {
-            snprintf(msg, sizeof msg, "%s is %dx%d and hangs off the map's edge", label, t->size, t->size);
-            map_finding(fs, "E111", "token-overhang", t->x, t->y, 0, where, msg);
-        }
-        int on_void = 0;
+        int over = t->x + t->size > m->w || t->y + t->size > m->h, on_void = 0;
         for (int y = t->y; y < t->y + t->size && !on_void; y++)
             for (int x = t->x; x < t->x + t->size && !on_void; x++)
                 on_void = map_in_bounds(m, x, y) && !map_walkable(m, x, y);
-        if (on_void) {
+        /* Off the edge and on void at once is one creature out of place: one
+         * finding, the other folded in. */
+        if (over) {
+            snprintf(msg, sizeof msg, "%s is %dx%d and hangs off the map's edge%s", label, t->size, t->size,
+                     on_void ? ", and the part on the map stands on void" : "");
+            map_finding(fs, "E111", "token-overhang", t->x, t->y, 0, where, msg);
+            if (on_void) {
+                FindingMore *mo = xcalloc(1, sizeof *mo);
+                fs->v[fs->n - 1].more = mo;
+                mo->nfolded = 1;
+                mo->joined = 1;
+                str_lcpy(mo->folded, "E110 x1", sizeof mo->folded);
+            }
+        } else if (on_void) {
             snprintf(msg, sizeof msg, "%s stands on void", label);
             map_finding(fs, "E110", "token-on-void", t->x, t->y, 0, where, msg);
         }
@@ -2584,6 +2786,7 @@ static int check_report(FILE *out, Findings *pfs, const char *file, int json)
         fs.v[kept++] = fs.v[i];
     }
     fs.n = kept;
+    group_void_findings(&fs);
     if (fs.n) qsort(fs.v, (size_t)fs.n, sizeof *fs.v, finding_cmp);
     int errors = 0, warnings = 0, notes = 0;
     for (int i = 0; i < fs.n; i++) {
@@ -2591,6 +2794,9 @@ static int check_report(FILE *out, Findings *pfs, const char *file, int json)
         warnings += fs.v[i].code[0] == 'W';
         notes    += fs.v[i].code[0] == 'N';
     }
+    /* Each code's help said once: which rows of the table this report has. */
+    enum { NHELP = sizeof CODE_HELP / sizeof CODE_HELP[0] };
+    char said[NHELP] = { 0 };
 
     if (json) {
         Json j;
@@ -2636,8 +2842,27 @@ static int check_report(FILE *out, Findings *pfs, const char *file, int json)
             json_key(&j, "confidence");
             if (mo && mo->span0) json_str(&j, mo->certain ? "certain" : "likely"); else json_null(&j);
             json_close(&j, '}');
+            const CodeHelp *h = code_help(f->code, f->slug);
+            if (h) said[h - CODE_HELP] = 1;
         }
         json_close(&j, ']');
+        /* What to do about each code in it, once: "CODE", or "CODE/slug" for a
+         * code with two meanings. A finding's own help is in the finding. */
+        json_key(&j, "codes");
+        json_open(&j, '{');
+        for (int k = 0; k < NHELP; k++) {
+            if (!said[k]) continue;
+            char key[40];
+            if (CODE_HELP[k].slug) snprintf(key, sizeof key, "%s/%s", CODE_HELP[k].code, CODE_HELP[k].slug);
+            else                   str_lcpy(key, CODE_HELP[k].code, sizeof key);
+            json_key(&j, key);
+            json_open(&j, '{');
+            json_kstr(&j, "help", CODE_HELP[k].help);
+            json_key(&j, "note");
+            if (CODE_HELP[k].note) json_str(&j, CODE_HELP[k].note); else json_null(&j);
+            json_close(&j, '}');
+        }
+        json_close(&j, '}');
         json_close(&j, '}');
         fputc('\n', out);
     } else {
@@ -2648,13 +2873,25 @@ static int check_report(FILE *out, Findings *pfs, const char *file, int json)
             else             str_lcpy(loc, f->where, sizeof loc);
             fprintf(out, "%s %-18s %-9s %s\n", f->code, f->slug, loc, f->msg);
             const FindingMore *mo = f->more;
-            if (!mo) continue;
+            /* The code's help under its first finding, unless this one has
+             * help of its own. */
+            const CodeHelp *h = mo && mo->help[0] ? NULL : code_help(f->code, f->slug);
+            if (h && said[h - CODE_HELP]) h = NULL;
+            if (h) said[h - CODE_HELP] = 1;
+            if (!mo) {
+                if (h && h->note) fprintf(out, "      = note: %s\n", h->note);
+                if (h)            fprintf(out, "      = help: %s\n", h->help);
+                continue;
+            }
             fputs(mo->snippet, out);
             if (mo->evidence[0]) fprintf(out, "      = evidence: %s\n", mo->evidence);
             if (mo->note[0])     fprintf(out, "      = note: %s\n", mo->note);
+            else if (h && h->note) fprintf(out, "      = note: %s\n", h->note);
             if (mo->help[0])     fprintf(out, "      = help: %s\n", mo->help);
+            else if (h)          fprintf(out, "      = help: %s\n", h->help);
             if (mo->nfolded && mo->fold_if) fprintf(out, "      = %d finding%s folded in: %s\n", mo->nfolded,
                                                     mo->nfolded == 1 ? " is" : "s are", mo->folded);
+            else if (mo->nfolded && mo->joined) fprintf(out, "      = %d more folded in with it: %s\n", mo->nfolded, mo->folded);
             else if (mo->nfolded) fprintf(out, "      = %d finding%s caused by it, folded in: %s\n", mo->nfolded,
                                           mo->nfolded == 1 ? " is" : "s are", mo->folded);
         }

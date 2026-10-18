@@ -2,7 +2,7 @@
 no findings
 -- exit 0
 == areas.vtt --check --json
-{"file":"areas.vtt","errors":0,"warnings":0,"notes":0,"findings":[]}
+{"file":"areas.vtt","errors":0,"warnings":0,"notes":0,"findings":[],"codes":{}}
 -- exit 0
 == areas.vtt --describe
 map  untitled  6x4  scale 5 ft  metric alt  ruleset none

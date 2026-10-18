@@ -127,6 +127,7 @@ map  Two Rooms  16x9  scale 5 ft  metric alt  ruleset none
 -- exit 0
 == req.vtt --check
 N105 door-off-map       -|A1      door leads off the map: a way out?
+      = help: nothing to do if it is a way out of the map; else move it inside
 N105 door-off-map       -/B1      door leads off the map: a way out?
 N105 door-off-map       -|A2      door leads off the map: a way out?
 0 errors, 0 warnings, 3 notes
@@ -1213,6 +1214,7 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 -- exit 0
 == req.vtt --check
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 0 errors, 1 warning
 -- exit 1
    file: as it was
@@ -1283,6 +1285,7 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 -- exit 0
 == req.vtt --check
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 0 errors, 1 warning
 -- exit 1
    file: as it was
@@ -1357,7 +1360,9 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 -- exit 0
 == req.vtt --check
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 N105 door-off-map       -|A1      door leads off the map: a way out?
+      = help: nothing to do if it is a way out of the map; else move it inside
 N105 door-off-map       -/B1      door leads off the map: a way out?
 N105 door-off-map       -|A2      door leads off the map: a way out?
 0 errors, 1 warning, 3 notes
@@ -1430,6 +1435,7 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 -- exit 0
 == req.vtt --check
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 0 errors, 1 warning
 -- exit 1
    file: as it was
@@ -1534,6 +1540,7 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 -- exit 0
 == req.vtt --check
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 0 errors, 1 warning
 -- exit 1
    file: as it was
@@ -1609,6 +1616,7 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 -- exit 0
 == req.vtt --check
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 0 errors, 1 warning
 -- exit 1
    file: as it was
@@ -1679,6 +1687,7 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 -- exit 0
 == req.vtt --check
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 0 errors, 1 warning
 -- exit 1
    file: as it was
@@ -1749,6 +1758,7 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 -- exit 0
 == req.vtt --check
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 0 errors, 1 warning
 -- exit 1
    file: as it was
@@ -1819,6 +1829,7 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 -- exit 0
 == req.vtt --check
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 0 errors, 1 warning
 -- exit 1
    file: as it was
@@ -1889,6 +1900,7 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 -- exit 0
 == req.vtt --check
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 0 errors, 1 warning
 -- exit 1
    file: as it was
@@ -1959,6 +1971,7 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 -- exit 0
 == req.vtt --check
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 0 errors, 1 warning
 -- exit 1
    file: as it was
@@ -2029,6 +2042,7 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 -- exit 0
 == req.vtt --check
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 0 errors, 1 warning
 -- exit 1
    file: as it was
@@ -2108,6 +2122,7 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 -- exit 0
 == req.vtt --check
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 0 errors, 1 warning
 -- exit 1
    file: as it was
@@ -2179,6 +2194,7 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 -- exit 0
 == req.vtt --check
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 0 errors, 1 warning
 -- exit 1
    file: written
@@ -2249,6 +2265,7 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 -- exit 0
 == req.vtt --check
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 0 errors, 1 warning
 -- exit 1
    file: as it was
@@ -2319,6 +2336,7 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 -- exit 0
 == req.vtt --check
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 0 errors, 1 warning
 -- exit 1
    file: as it was
@@ -2359,6 +2377,7 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 region B2:C3
 {"map":{"name":"Goblin Ambush","width":16,"height":9,"scale_ft":5,"metric":"alt","ruleset":"daggerheart","round":2,"fog":true,"creatures":2,"rooms":1,"start_room":1},"rooms":[{"id":1,"name":"A1","area":null,"floor":"Ground","x":0,"y":0,"bounds":"A1:P9","squares":144,"reachable":true,"terrain":{"floor":144},"doors":[],"creatures":[{"label":"Aria","kind":"player","size":1,"at":"C3","x":2,"y":2,"note":"wants the amulet"},{"label":"Ogre","kind":"enemy","size":2,"at":"K5","x":10,"y":4,"hidden":true}],"notes":[{"at":"F4","text":"pressure plate"}],"fog":[{"patch":"Crypt","painted":30,"seen":21}]}],"areas":[{"name":"Crypt","bounds":"B2:G5","x0":1,"y0":1,"x1":6,"y1":4},{"name":"Ground","bounds":"A1:P9","x0":0,"y0":0,"x1":15,"y1":8}],"floors":[{"name":"Ground","level":0,"bounds":"A1:P9"}],"links":[{"num":1,"kind":"stairs","size":1,"oneway":false,"secret":false,"ends":[{"at":"F3","x":5,"y":2,"room":1},{"at":"O3","x":14,"y":2,"room":1}]},{"num":2,"kind":"portal","size":2,"oneway":true,"secret":true,"ends":[{"at":"B7-C8","x":1,"y":6,"room":1},{"at":"M7-N8","x":12,"y":6,"room":1}]},{"num":3,"kind":"stairs","size":1,"oneway":false,"secret":false,"to_map":"town","to_place":"Gate","ends":[{"at":"H8","x":7,"y":7,"room":1}]}],"outside":[]}
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 0 errors, 1 warning
 {"screen":"build","mode":"normal","cursor":{"region":"I5","x0":8,"y0":4,"x1":8,"y1":4},"in":null,"floor":null,"corner":null,"box":null,"selected":[],"ruler":null,"pings":[]}
 -- exit 0
@@ -2426,6 +2445,7 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 -- exit 0
 == req.vtt --check
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 0 errors, 1 warning
 -- exit 1
    file: as it was
@@ -2576,6 +2596,7 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 -- exit 0
 == req.vtt --check
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 0 errors, 1 warning
 -- exit 1
    file: as it was
@@ -2646,6 +2667,7 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 -- exit 0
 == req.vtt --check
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 0 errors, 1 warning
 -- exit 1
    file: as it was
@@ -2716,6 +2738,7 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 -- exit 0
 == req.vtt --check
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 0 errors, 1 warning
 -- exit 1
    file: written
@@ -2786,6 +2809,7 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 -- exit 0
 == req.vtt --check
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 0 errors, 1 warning
 -- exit 1
    file: written
@@ -2860,6 +2884,7 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 -- exit 0
 == req.vtt --check
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 0 errors, 1 warning
 -- exit 1
    file: as it was
@@ -2930,6 +2955,7 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 -- exit 0
 == req.vtt --check
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 0 errors, 1 warning
 -- exit 1
    file: written
@@ -3000,6 +3026,7 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 -- exit 0
 == req.vtt --check
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 0 errors, 1 warning
 -- exit 1
    file: as it was
@@ -3070,6 +3097,7 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 -- exit 0
 == req.vtt --check
 W151 link-to-nowhere    H8        stairs 3 to town, Gate leads nowhere: no map town beside this one
+      = help: save the other map beside this one, or :link N remove and make it again from here: :link to MAP PLACE
 0 errors, 1 warning
 -- exit 1
    file: as it was
@@ -3141,5 +3169,6 @@ map  new  30x20  scale 5 ft  metric alt  ruleset none
 -- exit 0
 == new.vtt --check
 W102 door-to-void       C1/C2     window leads into void
+      = help: floor the void side (space), or make it a wall: t to wall, then that side's key (H J K L)
 0 errors, 1 warning
 -- exit 1

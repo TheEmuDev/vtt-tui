@@ -42,7 +42,10 @@ What is still owed, in the order the user set:
    than copying it. With it, `vtt --agent-guide` prints docs/AGENTS.md from the binary (embedded
    as the phone page is, with a test that the two agree), so the skill stays a dozen lines and
    the guide always matches the installed vtt. After step 6 because steps 5 and 6 change the
-   loop it describes (`wait`, `--apply` to an open map).
+   loop it describes (`wait`, `--apply` to an open map). **Moved up 2026-10-18** (the user):
+   built on vtt-2.0 right after step 5, as ROADMAP.md item 25, ahead of the Claude API agent
+   (item 26) that will be its first new user; step 6 touches it again. Its source lives in the
+   repo, installed by a make target, so it is versioned and reviewed.
 
 What each step built, what its review fixed and where it left the plan is *Progress, step by
 step*, at the end of this page.
