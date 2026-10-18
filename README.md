@@ -95,6 +95,7 @@ vtt [options] [map.vtt]
   --ctl [REQUEST]    send a request to a running vtt and print the answer
                      (no REQUEST, or -: read it from stdin)
   --ctl-pid N [REQ]  with several vtts running, send to the one with pid N
+  --agent-guide      print the guide for AI agents (docs/AGENTS.md), as this vtt has it
   --import-adversaries FILE
                      the Daggerheart SRD's adversaries as characters with cards
                      (see Cards); --force replaces ones already saved
@@ -1356,7 +1357,13 @@ use, and how `:dmg` marks HP. Available: `none`, `daggerheart`.
 An AI agent can build and edit maps for the GM, either by writing a plan file and running it
 with `--apply`, or live in the GM's session through the control channel.
 [docs/AGENTS.md](docs/AGENTS.md) is the complete guide for an agent, including the request
-language.
+language; `vtt --agent-guide` prints the copy built into your vtt, so it always matches the
+version installed.
+
+To point Claude Code at it, install the vtt skill once: `make install-skill` copies
+`tools/skill/SKILL.md` to `~/.claude/skills/vtt/`. The skill is a few lines telling an agent
+when to use vtt and how to start, and it sends the agent to `vtt --agent-guide` for the rest.
+Run it again after updating vtt.
 
 ### Asking an agent
 

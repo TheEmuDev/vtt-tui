@@ -65,6 +65,10 @@ typedef struct {
 
 enum { TOOL_NONE, TOOL_DUMP, TOOL_CHECK, TOOL_DESCRIBE };
 
+/* docs/AGENTS.md, embedded by tools/embed.sh: the guide of the vtt installed. */
+extern const char   AGENT_GUIDE[];
+extern const size_t AGENT_GUIDE_LEN;
+
 static void usage(void)
 {
     fputs(
@@ -98,6 +102,7 @@ static void usage(void)
         "  --ctl [REQUEST]    send a request to the vtt taking them, print the answer\n"
         "                     (no REQUEST, or -: read it from stdin; docs/CONTROL.md)\n"
         "  --ctl-pid N [REQ]  with several running, the one with pid N\n"
+        "  --agent-guide      print the guide for AI agents that build maps (docs/AGENTS.md)\n"
         "\n"
         "  map tools (print a report and exit; see README, Map tools):\n"
         "  --dump-map         the whole map as text, with a legend\n"
@@ -132,6 +137,7 @@ static int parse_args(Options *o, int argc, char **argv)
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
         if (!strcmp(a, "-h") || !strcmp(a, "--help")) { usage(); return 1; }
+        else if (!strcmp(a, "--agent-guide")) { fwrite(AGENT_GUIDE, 1, AGENT_GUIDE_LEN, stdout); return 1; }
         else if (!strcmp(a, "--ascii"))      o->ascii = 1;
         else if (!strcmp(a, "--dump-frame")) o->dump_frame = 1;
         else if (!strcmp(a, "--cells"))      o->dump_cells = 1;

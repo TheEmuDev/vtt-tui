@@ -1178,6 +1178,7 @@ void test_agent_command(void)
         CHECK(strstr(body, "The lines that change a map: room, area, ") != NULL);
         CHECK(strstr(body, ", env, ") != NULL);
         CHECK(strstr(body, "--ctl 'help token'\n") != NULL);
+        CHECK(strstr(body, " --agent-guide\n") != NULL);
     }
     pump_until_file(&a, out, "\x01never");                  /* let the second run finish */
     press(&a, ":agent command off\r");

@@ -19,13 +19,6 @@ Item 1 was decided 2026-09-27, the rest 2026-09-29.
 
 ### Any ruleset
 
-- **25. A thin agent skill, and `vtt --agent-guide`** (asked 2026-10-09, docs/CONFLICTS.md's
-  follow-up; ordered 2026-10-18). A dozen lines for an AI agent: when to use vtt, the
-  opening move (`vtt --ctl status`, then live or `--apply`), the job loop, and a pointer to
-  the full guide. `vtt --agent-guide` prints docs/AGENTS.md from the binary (embedded as the
-  phone page is, a test that the two agree), so the guide matches the installed vtt. The
-  skill's source lives in the repo and a make target installs it to `~/.claude/skills/vtt/`;
-  it is part of "not done" for any change to what agents see.
 - **26. A Claude API agent** (the user, 2026-10-17: API credits in hand). An agent option
   that calls the Claude API directly, beside `:agent command CMD`. A written plan first: no
   dependencies beyond libc/POSIX means no TLS in the binary (a helper process, e.g. curl, is
@@ -104,6 +97,7 @@ says what happened. The Fear pool stays set aside (IDEAS.md).
 | 19 | Summoning at a range: `:summon 3 lackey far` lights the range round a creature and the GM places them inside it | 2026-10-12 | docs/SUMMON.md |
 | 21 | A camera for a TV: `:player camera follow\|party\|hold` | 2026-10-04 | docs/CAMERA.md |
 | 23 | Whisper to one player: a handout to one phone; each phone picks a name when it joins | 2026-10-03 | docs/WHISPER.md |
+| 25 | A thin agent skill (`make install-skill`) and `vtt --agent-guide`, the guide built into the binary | 2026-10-18 | docs/AGENTS.md's top; the README, *Working with AI agents* |
 
 ## Done, not features
 

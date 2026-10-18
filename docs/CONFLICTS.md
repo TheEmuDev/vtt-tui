@@ -35,7 +35,7 @@ What is still owed, in the order the user set:
 1. **The findings the reviews left open**: docs/HEALTH.md, *Left open by reviews* (rows 1-45 and 47
    and B1-B12; Fable's ranking of them is there). First: B11, the card round trip in
    `card_clean`, and row 10's test of two holders of one map.
-2. **A thin agent skill** (the user, 2026-10-09, as a follow-up after step 6). A user-level skill
+2. **A thin agent skill** -- *built 2026-10-18 on vtt-2.0 as ROADMAP.md item 25: `tools/skill/SKILL.md`, `make install-skill`, `vtt --agent-guide`, suite `agentguide`.* (the user, 2026-10-09, as a follow-up after step 6). A user-level skill
    (`~/.claude/skills/vtt/`, not the repo's `.claude/`: the agents that build maps run
    wherever the GM starts them) that says when to use vtt, the opening move (`vtt --ctl
    status`, then live or `--apply`), and the job loop, and points at the full guide rather

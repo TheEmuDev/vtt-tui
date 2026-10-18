@@ -54,7 +54,7 @@ DEPS      := $(OBJS:.o=.d)
 LIBSRCS   := $(filter-out $(SRCDIR)/main.c,$(SRCS))
 TESTSRCS  := $(filter-out $(TESTDIR)/fuzz_%.c,$(wildcard $(TESTDIR)/*.c))
 
-.PHONY: all debug test test-build oracle bench perf fuzz fuzz-ctl fuzz-json clean help
+.PHONY: all debug test test-build oracle bench perf fuzz fuzz-ctl fuzz-json install-skill clean help
 .DEFAULT_GOAL := all
 
 all: BUILDFLAGS := $(RELFLAGS)
@@ -142,6 +142,13 @@ $(OBJDIR)/tool-%: BUILDFLAGS := $(RELFLAGS)
 $(OBJDIR)/tool-%: tools/%.c $(filter-out $(OBJDIR)/main.o,$(OBJS))
 	$(CC) $(BASEFLAGS) $(RELFLAGS) $(CFLAGS) $^ -o $@ $(LDLIBS)
 
+# The agent skill (docs/AGENTS.md's top): user-level, because the agents
+# that build maps run wherever the GM starts them, not in this repository.
+SKILLDIR  ?= $(HOME)/.claude/skills/vtt
+install-skill:
+	mkdir -p $(SKILLDIR)
+	cp tools/skill/SKILL.md $(SKILLDIR)/SKILL.md
+
 clean:
 	@rm -rf $(OBJDIR) $(BIN)
 
@@ -153,6 +160,7 @@ help:
 	@echo "make oracle   compare ./vtt's output with tests/oracle/expected"
 	@echo "make bench    replay tests/bench.keys and print frame stats"
 	@echo "make perf     measure every path; regenerates docs/PERFORMANCE.md"
+	@echo "make install-skill  the agent skill to ~/.claude/skills/vtt/"
 	@echo "make clean    remove build artifacts"
 	@echo "make PROF=0   build with profiling instrumentation compiled out"
 

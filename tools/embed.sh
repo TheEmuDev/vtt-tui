@@ -1,7 +1,8 @@
 #!/bin/sh
-# Turns web/index.html into src/webpage.c, a C string the binary serves.
-# Run it after editing the page; the result is committed, so the build
-# needs nothing but a C compiler.
+# Turns web/index.html into src/webpage.c, a C string the binary serves, and
+# docs/AGENTS.md into src/agentguide.c, what `vtt --agent-guide` prints. Run
+# it after editing either; the results are committed, so the build needs
+# nothing but a C compiler.
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -45,3 +46,29 @@ sys.stdout.write(out if len(sys.argv) < 2 else str(len(out.encode())))'
 printf 'src/webpage.c: %s bytes of page as sent (%s in web/index.html)\n' \
     "$(python3 -c "$SENT" count < web/index.html)" \
     "$(wc -c < web/index.html)"
+
+# The guide goes in verbatim: an agent reads the guide of the vtt installed,
+# and tests/test_ctl.c's agentguide compares it with docs/AGENTS.md byte for
+# byte. `?` is escaped so no `??` in it can ever read as a trigraph under -std=c11.
+# Two shapes cannot go through the line-by-line copy: a carriage return (it ends
+# the C string literal mid-line) and a last line with no newline (one is added).
+if [ "$(tail -c 1 docs/AGENTS.md | od -An -c | tr -d ' ')" != '\n' ]; then
+    echo 'embed.sh: docs/AGENTS.md must end with a newline' >&2; exit 1
+fi
+if tr -d '\n' < docs/AGENTS.md | od -An -c | grep -q '\\r'; then
+    echo 'embed.sh: docs/AGENTS.md has a carriage return (CRLF line ends?); save it with LF' >&2; exit 1
+fi
+{
+    echo '/* Generated from docs/AGENTS.md by tools/embed.sh -- edit the guide, not this. */'
+    echo '#include <stddef.h>'
+    echo
+    echo '#pragma GCC diagnostic ignored "-Woverlength-strings"'
+    echo
+    echo 'const char AGENT_GUIDE[] ='
+    sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/?/\\?/g' -e 's/^/    "/' -e 's/$/\\n"/' docs/AGENTS.md
+    echo '    ;'
+    echo
+    echo 'const size_t AGENT_GUIDE_LEN = sizeof AGENT_GUIDE - 1;'
+} > src/agentguide.c
+
+printf 'src/agentguide.c: %s bytes of guide\n' "$(wc -c < docs/AGENTS.md)"

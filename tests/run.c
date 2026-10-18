@@ -94,6 +94,7 @@ int main(int argc, char **argv)
         { "ctlnames", test_ctl_names },
         { "protocol", test_protocol },
         { "webpage", test_webpage },
+        { "agentguide", test_agent_guide },
         { "turns",  test_turns },
         { "turnkeys", test_turn_keys },
         { "dice",   test_dice },

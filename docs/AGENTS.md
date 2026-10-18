@@ -2,7 +2,10 @@
 
 Everything an AI agent needs to build and change `vtt` maps for a GM: from a description, in
 a file, or live in the GM's session while they watch. Read this page whole before the first
-map; the README is the reference for the rest of the app.
+map; the README is the reference for the rest of the app. `vtt --agent-guide` prints this
+page as the vtt installed has it, so an agent reads the guide that matches the binary. The
+agent skill (`tools/skill/SKILL.md`, installed with `make install-skill` to
+`~/.claude/skills/vtt/`) is a dozen lines that send an agent here.
 
 > **Not the page for working on vtt's own code.** An agent changing the C source reads
 > `CLAUDE.md` at the top of the repository and `docs/CODEMAP.md`; this page is for an agent

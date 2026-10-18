@@ -71,7 +71,7 @@ make test            ASan+UBSan build, unit + golden-frame tests, then tools/ora
 make test-build; build/run-tests NAME...   only the suites named (`make build/run-tests` does not rebuild it)
 make perf            one run; publish the per-row MEDIAN of three quiet runs (tools/median.py a b c)
 make fuzz | fuzz-ctl | fuzz-json    libFuzzer (clang): map loader, channel requests, JSON; FUZZ_SECONDS=600
-tools/embed.sh       after editing web/index.html (-> src/webpage.c); tools/blit_wasm.py after the blitter
+tools/embed.sh       after editing web/index.html or docs/AGENTS.md (-> src/webpage.c, src/agentguide.c); tools/blit_wasm.py after the blitter
 tools/machine.sh     the `Machine:` line every published table carries
 ./vtt map.vtt --check [--json] | --describe [--json] | --dump-map [--region B2:K12]
 ./vtt map.vtt --script keys --dump-frame --size 100x30      one frame as text

@@ -249,6 +249,7 @@ void test_fog_edge(void);
 void test_fog_sight(void);
 void test_serve_commands(void);
 void test_webpage(void);
+void test_agent_guide(void);
 void test_stamps(void);
 void test_undo_nesting(void);
 void test_ctl(void);

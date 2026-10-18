@@ -3569,3 +3569,109 @@ void test_ctl_names(void)
     rnd_free(&r);
     sandbox_leave(&sb);
 }
+
+/* docs/AGENTS.md is in the binary (tools/embed.sh) so an agent reads the guide
+ * of the vtt installed; the skill (tools/skill/SKILL.md) is a dozen lines that
+ * point at it, and may name only flags and requests that exist. */
+void test_agent_guide(void)
+{
+    extern const char   AGENT_GUIDE[];
+    extern const size_t AGENT_GUIDE_LEN;
+    size_t dl = 0, sl = 0;
+    char  *doc   = file_read("docs/AGENTS.md", (size_t)1 << 20, &dl, NULL);
+    char  *skill = file_read("tools/skill/SKILL.md", (size_t)1 << 16, &sl, NULL);
+    CHECK(doc != NULL && skill != NULL);
+    if (!doc || !skill) { free(doc); free(skill); return; }
+
+    CASE("the embedded guide is docs/AGENTS.md byte for byte (run tools/embed.sh)");
+    CHECK_EQ(AGENT_GUIDE_LEN, dl);
+    CHECK(AGENT_GUIDE_LEN == dl && !memcmp(AGENT_GUIDE, doc, dl));
+    CHECK(strstr(doc, "`vtt --agent-guide`") != NULL);
+
+    CASE("the skill has the frontmatter a skill is found by");
+    CHECK(!strncmp(skill, "---\nname: vtt\ndescription: ", 27));
+    CHECK(strstr(skill, "`vtt --agent-guide`") != NULL);
+
+    CASE("vtt --agent-guide prints it and exits 0");
+    Sandbox sb = sandbox_enter("guide");
+    CHECK_EQ(sb.ok, 1);
+    char *help = NULL;
+    if (sb.ok) {
+        FILE *p = popen("./vtt --agent-guide", "r");
+        CHECK(p != NULL);
+        char  *got = malloc(dl + 2);
+        size_t n   = p && got ? fread(got, 1, dl + 1, p) : 0;
+        CHECK_EQ(p ? WEXITSTATUS(pclose(p)) : -1, 0);
+        CHECK(n == dl && got && !memcmp(got, doc, dl));
+        free(got);
+        p = popen("./vtt --help", "r");
+        help = calloc(1, 16384);
+        if (p && help) fread(help, 1, 16383, p);
+        if (p) pclose(p);
+    }
+
+    CASE("every flag the skill names is in --help; every request in it a verb, a job's a sub-verb");
+    Renderer r;
+    App      a;
+    rnd_init(&r);
+    rnd_resize(&r, 80, 24);
+    app_init(&a, NULL, &r);
+    char *hjob = ctl_ask(&a, "help job");
+    /* A sub-verb's own arguments (`dump [REGION|all|key]`) are not sub-verbs. */
+    for (char *b = hjob ? strchr(hjob, '[') : NULL; b; b = strchr(b, '['))
+        for (; *b && *b != ']'; b++) *b = ' ';
+    int flags = 0, verbs = 0, subs = 0;
+    for (const char *s = strchr(skill, '`'); help && hjob && s; ) {
+        const char *e = strchr(s + 1, '`');
+        if (!e) break;
+        const char *rq = !strncmp(s + 1, "job ", 4) ? s + 1 : NULL;   /* a request header alone */
+        for (const char *t = s + 1; t < e; ) {
+            while (t < e && *t == ' ') t++;
+            const char *w = t;
+            while (t < e && *t != ' ') t++;
+            if (t - w < 3 || w[0] != '-' || w[1] != '-') continue;
+            char want[64];
+            snprintf(want, sizeof want, "  %.*s ", (int)(t - w), w);
+            if (!strstr(help, want)) { printf("    not in --help: %s\n", want); CHECK(0); }
+            flags++;
+            if (!strncmp(w, "--ctl ", 6) && t < e) rq = t + 1;
+        }
+        if (rq && (*rq == '\'' || *rq == '"')) rq++;
+        if (rq && strncmp(rq, "<<", 2)) {                           /* a heredoc's request is not on this line */
+            size_t vl = strcspn(rq, " '\"`");
+            int    ok = 0;
+            for (int i = 0; request_verb(i, NULL); i++)
+                if (strlen(request_verb(i, NULL)) == vl && !strncmp(request_verb(i, NULL), rq, vl)) ok = 1;
+            if (!ok) { printf("    not a request: %.*s\n", (int)vl, rq); CHECK(0); }
+            verbs++;
+            if (vl == 3 && !strncmp(rq, "job", 3)) {                /* job N SUB: SUB as `help job` writes it */
+                const char *sub = rq + 4;
+                sub += strcspn(sub, " '\"`");
+                sub += *sub == ' ';
+                size_t sl2 = strcspn(sub, " '\"`");
+                char   a1[48], a2[48];
+                snprintf(a1, sizeof a1, "job N %.*s", (int)sl2, sub);
+                snprintf(a2, sizeof a2, "|%.*s", (int)sl2, sub);
+                int found = 0;
+                for (const char *h = hjob; !found && (h = strstr(h, a1)); h++)
+                    found = strchr(" |\n", h[strlen(a1)]) != NULL;
+                for (const char *h = hjob; !found && (h = strstr(h, a2)); h++)
+                    found = strchr(" |\n", h[strlen(a2)]) != NULL;
+                if (!found || !sl2) { printf("    not a job request: %.*s\n", (int)sl2, sub); CHECK(0); }
+                subs++;
+            }
+        }
+        s = strchr(e + 1, '`');
+    }
+    CHECK(flags > 8);
+    CHECK(verbs > 5);
+    CHECK(subs >= 3);
+    free(hjob);
+    app_free(&a);
+    rnd_free(&r);
+
+    free(help);
+    free(doc);
+    free(skill);
+    sandbox_leave(&sb);
+}
