@@ -962,8 +962,15 @@ void test_floor_view(void)
         CHECK(ans && ctl_refused(ans, "state", 1) && strstr(ans, "Wing is not a floor"));
         free(ans);
     }
+    int d = a.world.undo.depth;
     press(&a, ":floor Upper off\r");
     CHECK_EQ(m->areas[map_area_find(m, "Upper")].floor, 0);
+    CHECK_EQ(a.world.undo.depth, d + 1);                    /* each :floor one undo step of its own */
+    press(&a, ":floor Upper 3\r");
+    CHECK(m->areas[map_area_find(m, "Upper")].floor && m->areas[map_area_find(m, "Upper")].level == 3 &&
+          a.world.undo.depth == d + 2);
+    press(&a, "u");
+    CHECK(!m->areas[map_area_find(m, "Upper")].floor && a.world.undo.depth == d + 1);
     press(&a, "u");
     CHECK_EQ(m->areas[map_area_find(m, "Upper")].floor, 1);
     press(&a, ":floors\r");

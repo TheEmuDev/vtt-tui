@@ -999,8 +999,11 @@ void test_room_language(void)
     press(&a, ":area Hall off\r");                       /* not an area called "Hall off" */
     CHECK(map_area_find(m, "Hall") >= 0 && map_area_find(m, "Hall off") < 0);
     CHECK(strstr(a.status, ":area Hall remove") != NULL);
+    int d = a.world.undo.depth;
     press(&a, ":area Hall remove\r");
-    CHECK_EQ(map_area_find(m, "Hall"), -1);
+    CHECK(map_area_find(m, "Hall") == -1 && a.world.undo.depth == d + 1);     /* one undo step of its own */
+    press(&a, "u");
+    CHECK(map_area_find(m, "Hall") >= 0 && a.world.undo.depth == d);
 
     app_free(&a);
     rnd_free(&r);
