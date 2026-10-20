@@ -515,6 +515,8 @@ void test_scene_keys(void)
     }
     press(&a, ":scene save\r");
     CHECK(strstr(a.status, ":scene save NAME") != NULL);
+    press(&a, ":scene save \"quoted\"\r");                   /* a bad name: no room is not the trouble */
+    CHECK(strstr(a.status, "a scene's name is") && !strstr(a.status, "makes room") && a.status_gm);
 
     CASE("build mode too, with its v box");
     app_key(&a, (Key){ KEY_F1, 0, 0 });

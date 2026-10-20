@@ -1,5 +1,6 @@
 #include "apikey.h"
 #include "app_priv.h"
+#include "disk.h"
 #include "world_ops.h"
 
 #include <errno.h>
@@ -245,6 +246,7 @@ int app_open_map(App *a, const char *path)
 
     a->screen = SCREEN_EDITOR;
     a->autosave_gen = a->world.seen_gen = m->gen;
+    a->autosave_said = 0;                        /* a new map: its own failures are news */
     a->npings = 0;                 /* squares of the old map mean nothing here */
     a->npinged = 0;
     a->agent_ring.until_ms = 0;
@@ -292,6 +294,7 @@ void app_travel_to(App *a, Map *m)
     ed_layout(&a->ed, m, a->rnd->w, a->rnd->h);
     a->screen = SCREEN_PLAY;
     a->autosave_gen = a->world.seen_gen = m->gen;
+    a->autosave_said = 0;                        /* a new map: its own failures are news */
     a->npings = a->npinged = 0;
     a->agent_ring.until_ms = 0;
     world_jobs_clear(&a->world);              /* jobs are the map's */
@@ -371,6 +374,7 @@ static void recover_autosave(App *a)
     grid_center_on(&a->ed.view, m, a->ed.cx, a->ed.cy);
     m->modified = 1;
     a->autosave_gen = a->world.seen_gen = m->gen;
+    a->autosave_said = 0;                        /* a new map: its own failures are news */
     fog_recompute(m);
     app_set_status(a, "recovered - :w keeps it, :q! lets it go");
 }
@@ -382,7 +386,7 @@ static void drop_autosave(const App *a)
     if (!a->world.map) return;
     char autosave[MAP_PATH_MAX + 16];
     mapio_autosave_path(a->world.map, autosave, sizeof autosave);
-    unlink(autosave);
+    disk()->unlink(autosave);
 }
 
 /* The slot for `who` in a set of PING_MAX: its own, else a free one, else
@@ -556,14 +560,23 @@ int app_autosave(App *a)
     PROF_ZONE("autosave");
     char autosave[MAP_PATH_MAX + 16], err[MAPIO_ERR_MAX];
     mapio_autosave_path(a->world.map, autosave, sizeof autosave);
-    /* The directory may not exist yet for a map that was never saved; one
-     * failure is not worth a message, the next save will say. Either way
-     * this generation counts as attempted: a failure that stayed "owed"
-     * would be retried on every turn of the loop, with poll told not to
-     * wait, which is a spinning process for as long as the map is unsaved. */
+    /* Either way this generation counts as attempted: a failure that stayed
+     * "owed" would be retried on every turn of the loop, with poll told not
+     * to wait, which is a spinning process for as long as the map is unsaved. */
     int rc = mapio_write_unflushed(a->world.map, autosave, err, sizeof err);
+    int why = errno;
     a->autosave_gen = a->world.map->gen;
-    return rc == 0 ? 0 : -1;
+    if (rc == 0) { a->autosave_said = 0; return 0; }
+    /* A failure is said once, so a full disk is one line and not one a turn.
+     * Not for a map never saved whose folder is not there yet: the first :w
+     * makes it, and says so if it cannot. */
+    if (!a->autosave_said && !(why == ENOENT && !a->world.map->path[0])) {
+        char msg[MAPIO_ERR_MAX + 48];
+        snprintf(msg, sizeof msg, "autosave failed: %s - :w saves the map", err);
+        app_note_gm(a, msg);
+        a->autosave_said = 1;
+    }
+    return -1;
 }
 
 /* A fresh map is a floored rectangle with a wall around it: the common case
@@ -600,6 +613,7 @@ static void app_new_map(App *a, const char *name, int w, int h)
              name, w, h, path);
     app_set_status(a, msg);
     a->autosave_gen = a->world.seen_gen = m->gen;
+    a->autosave_said = 0;                        /* a new map: its own failures are news */
     offer_recovery(a);
 }
 
@@ -655,8 +669,9 @@ int app_save_map(App *a, const char *path)
         app_show_message(a, "Cannot save map", err);
         return -1;
     }
-    unlink(autosave);
+    disk()->unlink(autosave);
     a->autosave_gen = a->world.map->gen;
+    a->autosave_said = 0;
     /* Written over, or the map is another file's now: a change waiting from
      * the old one is of a file that no longer matters. */
     app_disk_saved(a, own);

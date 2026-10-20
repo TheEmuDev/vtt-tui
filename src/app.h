@@ -213,6 +213,7 @@ typedef struct {
      * terminal. Off for headless runs, which would litter. */
     int      autosave_on;
     unsigned autosave_gen;   /* the map generation the autosave holds */
+    int      autosave_said;  /* a failure is on the GM's line: not again until one works or :w */
 
     /* Pings: rings on the table for PING_SHOW_MS, one per source -- the
      * GM (PING_GM) or a phone, by its connection id -- a newer one from the

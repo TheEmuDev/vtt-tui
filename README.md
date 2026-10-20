@@ -1166,7 +1166,9 @@ unexpectedly, the next time the map is opened it offers to recover the changes. 
 covers vtt or its terminal closing. A power cut or a computer that stops without shutting
 down can lose the last half minute of unsaved work, so save with `:w` when you pause. A
 copy the power cut left incomplete is not recovered: vtt says so and keeps it as
-`name.vtt.autosave.damaged`.
+`name.vtt.autosave.damaged`. If the copy cannot be written (a full disk, a folder you
+cannot write to), vtt says `autosave failed` and why, once, until one is written again or you
+save: until then nothing is copied, and `:w` is the way to keep your work.
 
 ```
 ╭─ Unsaved work found ───────────────────────────────────────╮

@@ -2,6 +2,7 @@
  * the test_*.c files by area; harness.h is what they share. */
 
 #include "harness.h"
+#include "disk.h"
 
 /* build/run-tests runs every suite; build/run-tests NAME... only the ones
  * named (see the table), for the one being worked on. */
@@ -46,6 +47,7 @@ int main(int argc, char **argv)
         { "agentcmd", test_agent_command },
         { "disk", test_disk },
         { "diskwhole", test_disk_whole },
+        { "diskfail", test_disk_fail },
         { "filefind", test_file_findings },
         { "checkhelp", test_check_help },
         { "linkkeys", test_link_keys },
@@ -197,6 +199,11 @@ int main(int argc, char **argv)
         ran++;
         int before = g_fails;
         suites[i].fn();
+        if (disk() != &DISK_REAL) {          /* a suite's failing disk must not reach the next */
+            g_fails++;
+            printf("  FAIL %s left a test's disk in use\n", suites[i].name);
+            disk_use(NULL);
+        }
         printf("  %-8s %s\n", suites[i].name, g_fails == before ? "ok" : "FAILED");
     }
 

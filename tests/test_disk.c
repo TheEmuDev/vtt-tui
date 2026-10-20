@@ -5,6 +5,7 @@
  * opened here. */
 #include "harness.h"
 
+#include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,6 +16,7 @@
 #include <unistd.h>
 
 #include "app_priv.h"
+#include "disk.h"
 #include "mapio.h"
 
 /* Someone else writes the file: the map as it is on disk, one square
@@ -773,6 +775,140 @@ void test_file_findings(void)
         free(hb);
     }
 
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
+/* ------------------------------------------------------- a failing disk */
+
+/* The disk seam's test table (disk.h): the real calls, but the `nth` call of
+ * `kind` fails with `err`. */
+enum { DK_OPEN, DK_WRITE, DK_FSYNC, DK_FSTAT, DK_CLOSE, DK_RENAME, DK_UNLINK, DK_STAT, DK_NONE };
+static struct { int kind, nth, err, seen; } g_dk;
+
+static int dk_hit(int kind)
+{
+    if (g_dk.kind != kind || ++g_dk.seen != g_dk.nth) return 0;
+    errno = g_dk.err;
+    return 1;
+}
+static int dk_open(const char *p, int fl, mode_t md) { return dk_hit(DK_OPEN) ? -1 : DISK_REAL.open(p, fl, md); }
+static ssize_t dk_write(int fd, const void *b, size_t n) { return dk_hit(DK_WRITE) ? -1 : DISK_REAL.write(fd, b, n); }
+static int dk_fsync(int fd) { return dk_hit(DK_FSYNC) ? -1 : DISK_REAL.fsync(fd); }
+static int dk_fstat(int fd, struct stat *st) { return dk_hit(DK_FSTAT) ? -1 : DISK_REAL.fstat(fd, st); }
+static int dk_close(int fd)
+{
+    int rc = DISK_REAL.close(fd);                    /* closed either way: no descriptor leaks */
+    return dk_hit(DK_CLOSE) ? -1 : rc;
+}
+static int dk_rename(const char *a, const char *b) { return dk_hit(DK_RENAME) ? -1 : DISK_REAL.rename(a, b); }
+static int dk_unlink(const char *p) { return dk_hit(DK_UNLINK) ? -1 : DISK_REAL.unlink(p); }
+static int dk_stat(const char *p, struct stat *st) { return dk_hit(DK_STAT) ? -1 : DISK_REAL.stat(p, st); }
+static const Disk DK_TABLE = { dk_open, dk_write, dk_fsync, dk_fstat, dk_close, dk_rename, dk_unlink, dk_stat };
+
+static void dk_fail(int kind, int err)
+{
+    g_dk.kind = kind;
+    g_dk.nth  = 1;
+    g_dk.err  = err;
+    g_dk.seen = 0;
+    disk_use(&DK_TABLE);
+}
+
+/* Is a temporary file of a save left in the directory? */
+static int tmp_left(const char *dir)
+{
+    char cmd[800];
+    snprintf(cmd, sizeof cmd, "ls '%s' | grep -q '\\.tmp$'", dir);
+    return system(cmd) == 0;
+}
+
+void test_disk_fail(void)
+{
+    Sandbox sb = sandbox_enter("diskfail");
+    Renderer r;
+    App a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK(ctl_blank_map(&a, sb.dir, 20, 12));
+    if (!a.world.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    Map *m = a.world.map;
+    char path[700];
+    str_lcpy(path, m->path, sizeof path);
+    char *had = slurp(path);
+    CHECK(had != NULL);
+
+    CASE(":w that fails at each call: Cannot save map with why, the map still unsaved, its file as it was, no .tmp");
+    static const struct { int kind, err; const char *why; } fails[] = {
+        { DK_OPEN,   ENOSPC, "No space left on device" },
+        { DK_WRITE,  ENOSPC, "No space left on device" },
+        { DK_FSYNC,  EIO,    "Input/output error" },
+        { DK_CLOSE,  EIO,    "Input/output error" },
+        { DK_RENAME, EROFS,  "Read-only file system" },
+    };
+    for (size_t k = 0; k < sizeof fails / sizeof *fails; k++) {
+        map_set_tile(m, 3, 3, k % 2 ? TILE_WATER : TILE_ROUGH);
+        map_touch(m);
+        a.modal = MODAL_NONE;
+        dk_fail(fails[k].kind, fails[k].err);
+        press(&a, ":w\r");
+        disk_use(NULL);
+        char *now = slurp(path);
+        CHECK(a.modal == MODAL_MESSAGE && !strcmp(a.modal_title, "Cannot save map") &&
+              strstr(a.modal_body, fails[k].why) != NULL);
+        CHECK(m->modified == 1 && g_dk.seen >= 1);
+        CHECK(now && had && !strcmp(now, had));
+        CHECK(!tmp_left(sb.dir));
+        free(now);
+        a.modal = MODAL_NONE;
+    }
+    press(&a, ":w\r");                                   /* the real disk: it saves */
+    CHECK(a.modal == MODAL_NONE && m->modified == 0);
+
+    CASE("an autosave that fails is said once on the GM's line, and again only after one has worked");
+    a.autosave_on = 1;
+    map_touch(m);
+    a.status[0] = '\0';
+    dk_fail(DK_WRITE, ENOSPC);
+    CHECK_EQ(app_autosave(&a), -1);
+    CHECK(!strcmp(a.status, "autosave failed: write failed: No space left on device - :w saves the map") && a.status_gm);
+    for (int k = 0; k < 3; k++) {                        /* the next turns: said already */
+        a.status[0] = '\0';
+        map_touch(m);
+        g_dk.seen = 0;
+        CHECK_EQ(app_autosave(&a), -1);
+        CHECK(a.status[0] == '\0');
+    }
+    disk_use(NULL);
+    map_touch(m);
+    CHECK_EQ(app_autosave(&a), 0);
+    dk_fail(DK_RENAME, EIO);
+    map_touch(m);
+    CHECK_EQ(app_autosave(&a), -1);
+    CHECK(strstr(a.status, "autosave failed: ") && strstr(a.status, "Input/output error") && a.status_gm);
+    disk_use(NULL);
+
+    CASE("a map never saved whose folder is not there yet: its autosave's failure stays quiet");
+    a.status[0] = '\0';
+    a.autosave_said = 0;
+    char keep[MAP_PATH_MAX];
+    str_lcpy(keep, m->path, sizeof keep);
+    m->path[0] = '\0';
+    map_touch(m);
+    dk_fail(DK_OPEN, ENOENT);
+    CHECK_EQ(app_autosave(&a), -1);
+    CHECK(a.status[0] == '\0' && a.autosave_said == 0);
+    disk_use(NULL);
+    str_lcpy(m->path, keep, sizeof m->path);
+    map_touch(m);
+    dk_fail(DK_OPEN, ENOSPC);                            /* the same map, a full disk: said */
+    CHECK_EQ(app_autosave(&a), -1);
+    CHECK(strstr(a.status, "autosave failed") != NULL);
+    disk_use(NULL);
+
+    free(had);
     app_free(&a);
     rnd_free(&r);
     sandbox_leave(&sb);

@@ -296,6 +296,7 @@ int pump_until_file(App *a, const char *path, const char *needle);
 int pump_until_reaped(App *a);
 void test_disk(void);
 void test_disk_whole(void);
+void test_disk_fail(void);
 void test_file_findings(void);
 void test_check_help(void);
 void test_link_keys(void);

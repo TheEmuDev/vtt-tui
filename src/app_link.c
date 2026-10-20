@@ -208,6 +208,7 @@ static void travel(App *a, int li)
         snprintf(saved, sizeof saved, " - NOT SAVED here: %.50s, :w", err);
     else
         a->autosave_gen = d->gen;
+    a->autosave_said = 0;                        /* a new map: its own failures are news */
     fog_recompute(d);
     a->ed.cx = d->tokens.v[first].x;
     a->ed.cy = d->tokens.v[first].y;

@@ -14,6 +14,7 @@
 
 #include "card.h"
 #include "clock.h"
+#include "disk.h"
 #include "counter.h"
 #include "floor.h"
 #include "fog.h"
@@ -156,7 +157,7 @@ int mapio_disk_stat(const char *path, MapDisk *d)
 {
     struct stat st;
     memset(d, 0, sizeof *d);
-    if (stat(path, &st) < 0) return -1;
+    if (disk()->stat(path, &st) < 0) return -1;
     disk_from_stat(d, &st);
     return 0;
 }
@@ -171,7 +172,7 @@ int mapio_disk_same(const MapDisk *a, const MapDisk *b)
  * text is what the app keeps as the file's base (`keep`, with the identity
  * of the file it became), and one write is the least a save can cost. */
 static int write_map(const Map *m, const char *path, int autosave, char **keep, size_t *keep_len,
-                     MapDisk *disk, char *err, size_t errsz)
+                     MapDisk *ident, char *err, size_t errsz)
 {
     PROF_ZONE("mapio.write");
     /* The pid in the name: two vtts saving one map never write through
@@ -303,38 +304,46 @@ static int write_map(const Map *m, const char *path, int autosave, char **keep, 
         snprintf(err, errsz, "write failed: %s", strerror(errno));
         return -1;
     }
-    int fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    const Disk *dk = disk();
+    int fd = dk->open(tmp, O_WRONLY | O_CREAT | O_TRUNC, 0666);
     if (fd < 0) {
-        snprintf(err, errsz, "cannot write %s: %s", tmp, strerror(errno));
+        int why = errno;
+        snprintf(err, errsz, "cannot write %s: %s", tmp, strerror(why));
         free(text);
+        errno = why;
         return -1;
     }
     int ok = 1;
     for (size_t off = 0; ok && off < text_len; ) {
-        ssize_t w = write(fd, text + off, text_len - off);
+        ssize_t w = dk->write(fd, text + off, text_len - off);
         if (w > 0) off += (size_t)w;
         else if (w < 0 && errno == EINTR) continue;
         else { if (w == 0) errno = EIO; ok = 0; }
     }
     if (ok && !autosave) {
         PROF_ZONE("mapio.fsync");
-        ok = (fsync(fd) == 0) || errno == EINVAL;          /* pipes are fine */
+        ok = (dk->fsync(fd) == 0) || errno == EINVAL;      /* pipes are fine */
     }
     /* The file's identity as it will be at `path`: a rename keeps it. */
     struct stat st;
-    if (ok && disk && fstat(fd, &st) == 0) disk_from_stat(disk, &st);
-    if (close(fd) != 0) ok = 0;
+    if (ok && ident && dk->fstat(fd, &st) == 0) disk_from_stat(ident, &st);
+    int why = errno;
+    if (dk->close(fd) != 0) { ok = 0; why = errno; }
 
+    /* A refusal keeps the errno it was for (the autosave tells ENOENT apart). */
     if (!ok) {
-        snprintf(err, errsz, "write failed: %s", strerror(errno));
-        unlink(tmp);
+        snprintf(err, errsz, "write failed: %s", strerror(why));
+        dk->unlink(tmp);
         free(text);
+        errno = why;
         return -1;
     }
-    if (rename(tmp, path) != 0) {
-        snprintf(err, errsz, "cannot replace %s: %s", path, strerror(errno));
-        unlink(tmp);
+    if (dk->rename(tmp, path) != 0) {
+        why = errno;
+        snprintf(err, errsz, "cannot replace %s: %s", path, strerror(why));
+        dk->unlink(tmp);
         free(text);
+        errno = why;
         return -1;
     }
     if (keep) { *keep = text; *keep_len = text_len; }
@@ -380,9 +389,9 @@ void mapio_autosave_path(const Map *m, char *buf, size_t bufsz)
 int mapio_autosave_newer(const char *path, const char *autosave, long *when)
 {
     struct stat sa, sp;
-    if (stat(autosave, &sa) != 0 || !S_ISREG(sa.st_mode)) return 0;
+    if (disk()->stat(autosave, &sa) != 0 || !S_ISREG(sa.st_mode)) return 0;
     if (when) *when = (long)sa.st_mtime;
-    if (stat(path, &sp) != 0) return 1;
+    if (disk()->stat(path, &sp) != 0) return 1;
     /* To the nanosecond: a save and its autosave can fall in one second. */
     return sa.st_mtim.tv_sec > sp.st_mtim.tv_sec ||
            (sa.st_mtim.tv_sec == sp.st_mtim.tv_sec && sa.st_mtim.tv_nsec > sp.st_mtim.tv_nsec);
