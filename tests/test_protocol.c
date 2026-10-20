@@ -322,6 +322,31 @@ void test_protocol(void)
         CHECK_EQ(map_area_find(live, "Vault"), -1);
     }
 
+    CASE("notes on a bare World: set, taken off, too long and too many refused as limits");
+    {
+        WorldErr e;
+        char longer[NOTE_MAX + 4];
+        memset(longer, 'x', sizeof longer - 1);
+        longer[sizeof longer - 1] = '\0';
+        CHECK(world_note_set(&w, 1, 1, longer, &e) < 0 && e.cls == CTL_E_LIMIT && strstr(e.text, "the note is over"));
+        undo_begin(&w.undo);
+        CHECK_EQ(world_note_set(&w, 1, 1, "trap", &e), 0);
+        undo_end(&w.undo);
+        CHECK(map_note_at(live, 1, 1) && !strcmp(map_note_at(live, 1, 1), "trap"));
+        int had = live->nnotes;
+        undo_begin(&w.undo);
+        for (int i = 0; live->nnotes < MAP_NOTES_MAX; i++) CHECK_EQ(world_note_set(&w, i % 20, 2 + i / 20, "n", &e), 0);
+        CHECK(world_note_set(&w, 19, 11, "one more", &e) < 0 && e.cls == CTL_E_LIMIT);
+        CHECK(!strcmp(e.text, "no room: a map holds 64 notes on squares"));
+        undo_end(&w.undo);
+        undo_undo(&w.undo, live);
+        CHECK_EQ(live->nnotes, had);
+        undo_begin(&w.undo);
+        CHECK_EQ(world_note_set(&w, 1, 1, "", &e), 0);
+        undo_end(&w.undo);
+        CHECK(!map_note_at(live, 1, 1));
+    }
+
     world_jobs_clear(&w);
     if (w.ctl_scratch) map_free(w.ctl_scratch);
     undo_free(&w.undo);

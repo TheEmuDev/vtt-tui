@@ -781,8 +781,7 @@ static int edit_line(World *world, char w[][CTL_WORD_MAX], int n, Edits *ed, cha
         }
         else if (!square(m, w[1], &x, &y, err, errsz)) return -1;
         const char *text = n == 3 ? w[2] : "";
-        if (strlen(text) >= NOTE_MAX) BADC(CTL_E_LIMIT, "the note is over %d characters", NOTE_MAX - 1);
-        if (!undo_set_note(u, m, x, y, text)) BADC(CTL_E_LIMIT, "no room: a map holds %d notes on squares", MAP_NOTES_MAX);
+        if (world_note_set(world, x, y, text, &we) < 0) BADC(we.cls, "%s", we.text);
         x0 = x1 = x; y0 = y1 = y;
     }
     else if (!strcmp(v, "fog")) {

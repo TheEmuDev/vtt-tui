@@ -27,4 +27,8 @@ int world_area_fits(const World *w, const char *name, int x0, int y0, int x1, in
 int world_area_set(World *w, const char *name, int x0, int y0, int x1, int y1, WorldErr *e);
 int world_area_remove(World *w, const char *name, int box[4], WorldErr *e);
 
+/* A note on square x,y (on the map), or "" to take it off: refused when the
+ * text is too long or the map holds all the notes it can. */
+int world_note_set(World *w, int x, int y, const char *text, WorldErr *e);
+
 #endif /* VTT_WORLD_OPS_H */

@@ -2,6 +2,7 @@
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "world_ops.h"
 #include "floor.h"
@@ -51,5 +52,15 @@ int world_area_remove(World *w, const char *name, int box[4], WorldErr *e)
     const Area *ar = &w->map->areas[ai];
     box[0] = ar->x0; box[1] = ar->y0; box[2] = ar->x1; box[3] = ar->y1;
     undo_remove_area(&w->undo, w->map, name);
+    return 0;
+}
+
+/* ------------------------------------------------------------------ notes */
+
+int world_note_set(World *w, int x, int y, const char *text, WorldErr *e)
+{
+    if (strlen(text) >= NOTE_MAX) return refuse(e, CTL_E_LIMIT, "the note is over %d characters", NOTE_MAX - 1);
+    if (!undo_set_note(&w->undo, w->map, x, y, text))
+        return refuse(e, CTL_E_LIMIT, "no room: a map holds %d notes on squares", MAP_NOTES_MAX);
     return 0;
 }

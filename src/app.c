@@ -1,5 +1,6 @@
 #include "apikey.h"
 #include "app_priv.h"
+#include "world_ops.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -959,14 +960,11 @@ static void prompt_accept(App *a)
         int had = map_note_at(a->world.map, a->pending_tx, a->pending_ty) != NULL;
         if (!*text && !had) { app_set_status(a, "nothing noted"); return; }
         /* Through the log, like a creature's note: u takes it back. */
+        WorldErr we;
         undo_begin(&a->world.undo);
-        int noted = undo_set_note(&a->world.undo, a->world.map, a->pending_tx, a->pending_ty, text);
+        int rc = world_note_set(&a->world, a->pending_tx, a->pending_ty, text, &we);
         undo_end(&a->world.undo);
-        if (!noted) {
-            snprintf(msg, sizeof msg, "no room: a map holds %d notes on squares", MAP_NOTES_MAX);
-            app_set_status(a, msg);
-            return;
-        }
+        if (rc < 0) { app_set_status(a, we.text); return; }
         snprintf(msg, sizeof msg, *text ? "noted on %s" : "note taken off %s", at);
         app_note(a, msg);
         return;
