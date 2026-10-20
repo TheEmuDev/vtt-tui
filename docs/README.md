@@ -44,7 +44,7 @@ source: the column below is a copy, changed in the same commit.
 | [ENVIRONMENTS.md](ENVIRONMENTS.md) | environment cards on a map or an area: `:env`, its adversaries, the import | built 2026-10-12 |
 | [PAGESPEED.md](PAGESPEED.md) | where a frame goes on a phone, and what was done about it | built 2026-10-04 |
 | [CONFLICTS.md](CONFLICTS.md) | proposals, jobs and the review; other writers of the map's file | built 2026-10-08 to 10; *Progress* says what is still owed; decision 5 (an off channel takes proposals) reversed 2026-10-12 by V2.md's ruling 9 |
-| [APIAGENT.md](APIAGENT.md) | the Claude API agent: `:agent claude`, vtt as its own agent through curl | a plan, waiting for sign-off (2026-10-19) |
+| [APIAGENT.md](APIAGENT.md) | the Claude API agent: `:agent claude`, vtt as its own agent through curl; the settings and Options; the first `:ask` | built 2026-10-20; its review, live check and timings owed |
 
 ## Not built
 

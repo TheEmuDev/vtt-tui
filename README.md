@@ -43,7 +43,7 @@ box characters). It is built and tested on Linux. Players need only a browser.
 
 ```sh
 make                              # build (release, -O2)
-./vtt                             # the menu: open or create a map
+./vtt                             # the menu: open or create a map, or Options
 ./vtt crypt.vtt                   # open a map file directly
 cp vtt ~/.local/bin/              # optional: run it as plain `vtt` from anywhere
 ```
@@ -96,6 +96,7 @@ vtt [options] [map.vtt]
                      (no REQUEST, or -: read it from stdin)
   --ctl-pid N [REQ]  with several vtts running, send to the one with pid N
   --agent-guide      print the guide for AI agents (docs/AGENTS.md), as this vtt has it
+  --claude-agent     the Claude API agent itself; :agent claude starts it for you
   --import-adversaries FILE
                      the Daggerheart SRD's adversaries as characters with cards
                      (see Cards); --force replaces ones already saved
@@ -1348,6 +1349,8 @@ use, and how `:dmg` marks HP. Available: `none`, `daggerheart`.
 | `:player preview` | show the players' view on your screen; `:player floor NAME\|auto` pins their [floor](#floors); `:player camera follow\|party\|hold` their camera |
 | `:mirror` | open a second terminal with the players' view |
 | `:agent on` | open the [control channel](#control-channel-agent-vtt---ctl) for an AI agent; `:agent off` switches it off (every request is then refused, with a line saying to switch it on) |
+| `:agent claude [MODEL]` | each `:ask` is answered by Claude through the API ([The Claude API agent](#the-claude-api-agent)) |
+| `:agent` | the channel and the agent's settings in one line |
 | `:roll EXPR` | roll dice; `:roll NAME = EXPR` saves a named roll, `:rolls` lists them |
 | `:log` | start / stop the [session log](#session-log-log) |
 | `:play` `:build` | switch mode |
@@ -1395,7 +1398,75 @@ nothing lands on your map until you accept it.
 An agent may also propose a change you did not ask for; it comes the same way, ready for
 `:review`.
 
-**Having vtt start the agent.** `:agent command CMD` names a command that vtt starts for each
+### Who answers an `:ask`
+
+The first time you `:ask` with no agent chosen, vtt asks how agents should answer, in a
+box only you see:
+
+| key | answers with |
+|---|---|
+| `c` | the Claude API agent ([below](#the-claude-api-agent)); with no API key yet, it asks for one first |
+| `m` | a command you type, such as `claude -p` or a script ([below](#having-vtt-start-the-agent)) |
+| `w` | nothing started: an agent that comes to the channel by itself (`vtt --ctl` from a shell) takes it. The channel comes on |
+| `esc` | not now: the job waits, and the next `:ask` asks again |
+
+The choice is saved, and the job you asked starts at once. After that every `:ask` says on
+the status line what happens to its job: started, waiting for an agent on the channel, or
+why nothing can start (no API key, the agent paused) and what to type. Change the choice
+any time with `:agent claude`, `:agent command CMD`, or **Options** on the menu.
+
+### Options
+
+**Options** on the menu holds your settings, saved in `~/.config/vtt/settings` as you change
+them: which agent answers an `:ask`, its command, the Claude agent's model, effort and caps,
+whether the channel is on and changes land at once when vtt starts, your API key, and what
+the Claude agent has spent so far.
+
+| key | does |
+|---|---|
+| `j` `k` | move between the settings |
+| `enter` | change one: the next value, or type one in |
+| `h` `l` | the value before or after, for a setting of a few values |
+| `d` | on the API key: remove the stored key, asking first |
+| `esc` | back to the menu |
+
+Rows that do not apply to the agent you chose are dim. `:agent` and its words below change the
+same settings from inside a map.
+
+### The Claude API agent
+
+vtt can answer an `:ask` itself, through the Claude API, with no other program installed but
+`curl`. You need an Anthropic API key (from the Claude Console). Each job is billed by the
+API to that key; **Options** shows what the jobs have cost, and a cap stops any one job at
+$1.00 unless you change it.
+
+1. **The key.** Either set `ANTHROPIC_API_KEY` in your shell before starting vtt, or type it
+   in: `:agent key` (or the API key row of **Options**) opens a prompt that shows only `*`.
+   A typed key goes to your system keyring (GNOME Keyring, KWallet), or, on a machine with
+   no keyring, to `~/.config/vtt/anthropic-key`, readable by you alone. vtt shows only its
+   last four characters. Only the Claude agent gets the key: programs started with `:agent
+   command` never see it. `:agent key remove` takes a stored key away (asking first).
+2. **Choose it.** `:agent claude` (or `c` in the box above). With no key yet, it asks for one.
+3. **Ask.** Every `:ask` starts it: Claude reads the guide built into vtt, takes the job, reads
+   the map where you drew, proposes, checks its proposal and stops. You review it as any
+   agent's. Send it back with `c` and it starts again with your feedback.
+
+| command | does |
+|---|---|
+| `:agent claude [MODEL]` | the Claude agent answers each `:ask`; MODEL is `opus` (the default), `sonnet`, `haiku`, `fable` or a model id |
+| `:agent model M`, `:agent effort low\|medium\|high` | the model, and how hard it thinks (medium by default) |
+| `:agent cap 2.50`, `:agent calls 30` | stop a job past this many dollars (by vtt's price table; 0 for none) or API calls; $1.00 and 25 by default |
+| `:agent fallbacks on\|off` | when Claude declines a request, try it on another model in the same call (on by default) |
+| `:agent key`, `:agent key remove` | type a key in, hidden; take the stored one away |
+
+What each job cost is in the session log when `:log` is on, and every run adds a line to
+`~/.local/share/vtt/claude-usage.tsv`; **Options** sums it. A job that cannot finish says
+why on the status line: the key refused, Claude declined the job, a cap reached, the network
+down. The job then waits as asked.
+
+### Having vtt start the agent
+
+`:agent command CMD` names a command that vtt starts for each
 `:ask`, and again each time you send a job back with `c`. For example `:agent command claude
 -p`, or a script of your own. The command gets the job on its standard input: what you
 asked, the box, the job's history, and the few `vtt --ctl` lines it needs to read the map
@@ -1403,7 +1474,7 @@ and propose. It runs in the background; its output goes to the session log when 
 It answers over the agent channel, so the first job switches the channel on if it is off,
 and the status line says so. `:agent command` alone shows the command, `:agent command off`
 stops it being started and `:agent command on` brings it back, and the `VTT_AGENT_COMMAND`
-environment variable sets it at startup. Only a job you asked for starts it: not an agent's
+environment variable sets it at startup for that session (it is not saved). Only a job you asked for starts it: not an agent's
 own idea, an `--apply`, or a change from the file. Each job has one run at a time: send a
 job back while its agent is still running and the next run starts when that one stops. If a
 run ends with nothing proposed, the status line says how (`exit 127: the command could not
@@ -1424,7 +1495,8 @@ is not started for it: `:jobs N` says who has a job.
 | `:jobs`, `:jobs N` | list the jobs; one job's history (your words, the agent's, each proposal) |
 | `:review [N]` | review a ready change |
 | `:ask N remove` | take a job away |
-| `:agent command CMD` | start CMD for each `:ask` and each job sent back; `:agent command off` and `on` |
+| `:agent command CMD` | start CMD for each `:ask` and each job sent back; `:agent command off` and `on` pause and resume whichever agent is chosen |
+| `:agent claude` | the Claude API agent answers instead ([above](#the-claude-api-agent)) |
 | `:agent accept auto` | every change an agent sends lands at once, one undo step each; `:agent accept review` goes back to reviewing |
 
 A change waiting to land at once never lands while you are typing, answering a prompt,

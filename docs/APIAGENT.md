@@ -1,10 +1,11 @@
 # The Claude API agent (ROADMAP item 26)
 
-> **Status: a plan, written 2026-10-19; signed off by the user the same day** ("yes to the
-> keyring, go with recommendations": decisions 1-6 and 8 as recommended, 7 the keyring).
-> Nothing of it is built yet. *Decisions for the user* at the end are the questions open. The same day the user
-> added: an options screen on the landing menu to set the agent up, and commands in a map
-> that change the same settings (*Settings* below).
+> **Status: built 2026-10-19 to 20** (887f306, cbd4c99, 46395d8, b98d8c7/a30a55e, e24b7cd,
+> ab97c33), from the plan signed off 2026-10-19 ("yes to the keyring, go with
+> recommendations"). A design record: what is true now is the README (*Working with AI
+> agents*) and the files' rows in docs/CODEMAP.md; *As built* at the end says where the code
+> left the plan. Owed: the Fable review, the live check (it spends money: the user's go), and
+> the timings (PERFORMANCE.md, also with the user's go).
 
 An agent option that calls the Claude API itself, beside `:agent command CMD`: the GM types
 `:agent claude`, and every `:ask` (and every send-back) is answered by Claude through the
@@ -397,3 +398,43 @@ against the estimate above.
 8. **The Options screen in a map too** (`:options` opening the same screen over the map,
    GM-only) -- not recommended now: the commands do the same, and a screen over a map
    brings the players'-view rules to every row of it. Easy to add later.
+
+## As built
+
+Where the code left the plan, and what the build found:
+
+- **`:agent claude` with no key asks for one** (the hidden prompt) instead of refusing: the
+  choice box's `c` does the same, and one way in is simpler than two. With no curl it
+  refuses, saying so.
+- **The choice box has no `o` row.** `:ask` needs a map open, and Options is the landing
+  screen's (decision 8: not over a map), so `o` could only have printed the commands; the
+  footer and every `:ask` line name `:agent claude`, `:agent command` and Options instead.
+  The box takes `c m w` or `1-3`.
+- **"Listening" is what the channel records:** a `wait` held now (by the waiter's name), or
+  one answered in the last ten minutes (`World.agent_seen_ms`). Other requests leave no time
+  behind them, so they do not count.
+- **A locked keyring is not told apart:** `secret-tool lookup` fails alike for "none" and
+  "locked with nobody to unlock it", so both read as no key (GNOME unlocks it in a window of
+  its own when there is one).
+- **`app_init` starts with agent `off`, `main` with the file's `unset`:** a test or a bench
+  has no GM to ask, so its `:ask` waits for a channel agent as before; a GM who never chose
+  is asked.
+- **One line for an `:ask`:** the job's own line (`#3 asked in C3:F5: ...`) and why nothing
+  started are said together, so the session log has one line, as before.
+- **Any agent's last word is kept:** `run_ended` puts an agent's last `job N say` line on
+  the GM's when it stops with nothing proposed (how the Claude agent says a key was
+  refused); every agent gets it.
+- **`:agent command off`/`on` pause and resume whichever agent is chosen** (`paused` in the
+  settings), the Claude agent too.
+- **The agent command buffer** is `AGENT_LINE_MAX` (4400): the Claude agent's line has vtt's
+  own path in it. A command typed in is still at most 255 characters.
+- **Found while building:** the JSON reader's number scan overflowed a 64-byte stack buffer
+  on an exponent after 63 digits (the fuzz target's span check found it on its first
+  minute; fixed in 887f306, the input kept as a seed). The test sandbox, `tools/oracle.sh`
+  and `tools/perf.sh` now give vtt its own `XDG_CONFIG_HOME` and no keyring tool, so no
+  suite or measurement reads the user's settings or key.
+- **Shared code:** `file_write_whole` (util.c) is the one temp-flush-rename for everything but
+  the map's own save (import.c moved onto it); `stream_read` moved from ctl.c to util.c;
+  `ctl_ask_pid` came out of `ctl_client_main`; the test pumps for started agents moved to
+  harness.c.
+
