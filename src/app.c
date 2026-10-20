@@ -18,7 +18,7 @@
 #include "maptools.h"
 #include "prof.h"
 
-const char *const APP_MENU_ITEMS[APP_MENU_COUNT] = { "Open Map", "New Map", "Quit" };
+const char *const APP_MENU_ITEMS[APP_MENU_COUNT] = { "Open Map", "New Map", "Options", "Quit" };
 
 /* ------------------------------------------------------------ lifecycle */
 
@@ -33,6 +33,7 @@ void app_init(App *a, Term *t, Renderer *r)
     a->agent_deadline_ms = AGENT_DEADLINE_MS;
     a->agent_grace_ms    = AGENT_GRACE_MS;
     settings_default(&a->settings);
+    a->opt_prompt = -1;
     a->th      = &THEME_DARK;
     a->screen  = SCREEN_MENU;
     a->running = 1;
@@ -902,6 +903,9 @@ static void prompt_accept(App *a)
     case PROMPT_JOB_FEEDBACK:
         app_job_feedback(a, text);
         return;
+    case PROMPT_SETTING:
+        app_options_prompt(a, text);
+        return;
     case PROMPT_API_KEY: {
         /* The key leaves the prompt's buffer for the keyring and is wiped
          * from it; a prompt opened again by the call starts empty anyway. */
@@ -1134,6 +1138,7 @@ KeyMapId app_keymap_id(const App *a)
     switch (a->screen) {
     case SCREEN_MENU:    return KEYS_MENU;
     case SCREEN_BROWSER: return KEYS_BROWSER;
+    case SCREEN_OPTIONS: return KEYS_OPTIONS;
     case SCREEN_PLAY:
         if (app_summoning(a)) return KEYS_PLAY_SUMMON;
         if (a->play.visual)  return KEYS_PLAY_VISUAL;
@@ -1695,6 +1700,7 @@ static void app_key_dispatch(App *a, Key k)
     switch (a->screen) {
     case SCREEN_MENU:    app_menu_key(a, k); break;
     case SCREEN_BROWSER: app_browser_key(a, k); break;
+    case SCREEN_OPTIONS: app_options_key(a, k); break;
     case SCREEN_EDITOR:  app_editor_key(a, k); break;
     case SCREEN_PLAY:
         app_play_key(a, k);

@@ -329,6 +329,9 @@ void app_menu_key(App *a, Key k)
         case 1:
             app_open_prompt(a, PROMPT_NEW_NAME, "New map", "saved as <name>.vtt", "");
             break;
+        case 2:
+            app_options_open(a);
+            break;
         default:
             app_request_quit(a);
             break;

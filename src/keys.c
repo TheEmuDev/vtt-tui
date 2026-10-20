@@ -309,6 +309,16 @@ static const KeyDoc MENU[] = {
     { "?",        "this page",                         NULL, "keys" },
 };
 
+static const KeyDoc OPTIONS[] = {
+    GROUP("Options"),
+    { "j  k",     "move between the settings",         "j/k", "move" },
+    { "enter",    "change it: the next value, or type one in", NULL, "change" },
+    KEY("h  l",   "the value before / after, for a setting of a few values"),
+    { "d",        "on the API key: remove the stored key, asking first", NULL, "remove key" },
+    { "esc",      "back to the menu  (q does too)",    NULL, "back" },
+    { "?",        "this page",                         NULL, "keys" },
+};
+
 /* ------------------------------------------------------------------------ */
 
 #define MAP(id, title, table) [id] = { (title), (table), (int)(sizeof (table) / sizeof *(table)) }
@@ -326,6 +336,7 @@ static const KeyMap MAPS[KEYS_COUNT] = {
     MAP(KEYS_RULER,        "Ruler",               RULER),
     MAP(KEYS_BROWSER,      "Open a map",          BROWSER),
     MAP(KEYS_MENU,         "Menu",                MENU),
+    MAP(KEYS_OPTIONS,      "Options",             OPTIONS),
 };
 
 const KeyMap *keys_map(KeyMapId id)

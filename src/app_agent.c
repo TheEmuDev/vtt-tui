@@ -447,6 +447,7 @@ void app_agent_key_typed(App *a, const char *key)
     if (where == APIKEY_KEYRING) snprintf(msg, sizeof msg, "API key ...%s stored in your keyring%s", last4, shadow);
     else snprintf(msg, sizeof msg, "API key ...%s stored in %s, readable by you alone (no keyring here)%s", last4, path, shadow);
     app_note_gm(a, msg);
+    app_options_key_changed(a);
     if (then == KEY_THEN_CLAUDE) app_agent_setting(a, "claude");
 }
 
@@ -456,6 +457,7 @@ void app_agent_key_remove(App *a)
     if (apikey_remove(err, sizeof err) < 0) { app_set_status_gm(a, err); return; }
     char last4[8];
     int src = app_agent_key_where(last4, sizeof last4);
+    app_options_key_changed(a);
     if (src == APIKEY_ENV) app_note_gm(a, "the stored key is removed - ANTHROPIC_API_KEY is still set in the environment; unset it to stop using it");
     else app_note_gm(a, "the stored API key is removed");
 }

@@ -30,8 +30,8 @@ vtt: e001.vtt is not a vtt map
                                                                                 
                  Open Map                                                       
                  New Map                                                        
-               > Quit                                                           
-                                                                                
+               > Options                                                        
+                 Quit                                                           
                                                                                 
                                                                                 
                                                                                 
@@ -71,15 +71,15 @@ vtt: e001.vtt is not a vtt map
                                                                                 
 -- exit 0
 == e001.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 80x24
--- cksum 4168915285-2865 exit 0
+-- cksum 3039522279-2906 exit 0
 == e001.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --players --size 80x24
 -- cksum 3752749104-2448 exit 0
 == e001.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 110x34
--- cksum 634343427-4935 exit 0
+-- cksum 3869214618-4975 exit 0
 == e001.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --players --size 110x34
 -- cksum 1368086761-4522 exit 0
 == e001.vtt --seed 1 --script ../work/build-box.keys --dump-frame --cells --size 40x12
--- cksum 702305928-1087 exit 0
+-- cksum 2091434263-1125 exit 0
 == e001.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --size 80x24
  vtt                                                               F12 profiler 
                                                                                 
@@ -92,8 +92,8 @@ vtt: e001.vtt is not a vtt map
                                                                                 
                  Open Map                                                       
                > New Map                                                        
+                 Options                                                        
                  Quit                                                           
-                                                                                
                                                                                 
                                                                                 
                                                                                 
@@ -133,15 +133,15 @@ vtt: e001.vtt is not a vtt map
                                                                                 
 -- exit 0
 == e001.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 80x24
--- cksum 2007495192-2865 exit 0
+-- cksum 1325395988-2906 exit 0
 == e001.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --players --size 80x24
 -- cksum 3752749104-2448 exit 0
 == e001.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 110x34
--- cksum 933852509-4935 exit 0
+-- cksum 3186918115-4975 exit 0
 == e001.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --players --size 110x34
 -- cksum 1368086761-4522 exit 0
 == e001.vtt --seed 1 --script ../work/edit-undo.keys --dump-frame --cells --size 40x12
--- cksum 159081480-1085 exit 0
+-- cksum 3224680961-1123 exit 0
 == e001.vtt --seed 1 --script ../work/help.keys --dump-frame --size 80x24
  vtt                                                               F12 profiler 
                                                                                 
@@ -154,8 +154,8 @@ vtt: e001.vtt is not a vtt map
                                                                                 
                > Open Map                                                       
                  New Map                                                        
+                 Options                                                        
                  Quit                                                           
-                                                                                
                                                                                 
                                                                                 
                                                                                 
@@ -195,15 +195,15 @@ vtt: e001.vtt is not a vtt map
                                                                                 
 -- exit 0
 == e001.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 80x24
--- cksum 418794699-2865 exit 0
+-- cksum 2900069540-2906 exit 0
 == e001.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --players --size 80x24
 -- cksum 3752749104-2448 exit 0
 == e001.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 110x34
--- cksum 17849980-4935 exit 0
+-- cksum 2318234387-4975 exit 0
 == e001.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --players --size 110x34
 -- cksum 1368086761-4522 exit 0
 == e001.vtt --seed 1 --script ../work/help.keys --dump-frame --cells --size 40x12
--- cksum 2306292080-1085 exit 0
+-- cksum 4168625471-1123 exit 0
 == e001.vtt --seed 1 --script ../work/open.keys --dump-frame --size 80x24
  vtt                                                               F12 profiler 
                                                                                 
@@ -216,8 +216,8 @@ vtt: e001.vtt is not a vtt map
                         ╭─ Cannot open map ───────────╮                         
                > Open Ma│                             │                         
                  New Map│  e001.vtt is not a vtt map  │                         
-                 Quit   │                             │                         
-                        │  press any key              │                         
+                 Options│                             │                         
+                 Quit   │  press any key              │                         
                         │                             │                         
                         ╰─────────────────────────────╯                         
                                                                                 
@@ -257,15 +257,15 @@ vtt: e001.vtt is not a vtt map
                                                                                 
 -- exit 0
 == e001.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 80x24
--- cksum 1855733827-3550 exit 0
+-- cksum 2916958834-3590 exit 0
 == e001.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 80x24
 -- cksum 3752749104-2448 exit 0
 == e001.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 110x34
--- cksum 2688714445-5616 exit 0
+-- cksum 3334514225-5656 exit 0
 == e001.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --players --size 110x34
 -- cksum 1368086761-4522 exit 0
 == e001.vtt --seed 1 --script ../work/open.keys --dump-frame --cells --size 40x12
--- cksum 3088084601-1706 exit 0
+-- cksum 2073317970-1725 exit 0
 == e001.vtt --seed 1 --script ../work/play-help.keys --dump-frame --size 80x24
  VTT KEYS                                                                  Menu 
   Menu                                                                          
@@ -340,8 +340,8 @@ vtt: e001.vtt is not a vtt map
                                                                                 
                  Open Map                                                       
                  New Map                                                        
-               > Quit                                                           
-                                                                                
+               > Options                                                        
+                 Quit                                                           
                                                                                 
                                                                                 
                                                                                 
@@ -381,15 +381,15 @@ vtt: e001.vtt is not a vtt map
                                                                                 
 -- exit 0
 == e001.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 80x24
--- cksum 4168915285-2865 exit 0
+-- cksum 3039522279-2906 exit 0
 == e001.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --players --size 80x24
 -- cksum 3752749104-2448 exit 0
 == e001.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 110x34
--- cksum 634343427-4935 exit 0
+-- cksum 3869214618-4975 exit 0
 == e001.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --players --size 110x34
 -- cksum 1368086761-4522 exit 0
 == e001.vtt --seed 1 --script ../work/play-walk.keys --dump-frame --cells --size 40x12
--- cksum 702305928-1087 exit 0
+-- cksum 2091434263-1125 exit 0
 == e001.vtt --seed 1 --script ../work/play.keys --dump-frame --size 80x24
  vtt                                                               F12 profiler 
                                                                                 
@@ -402,8 +402,8 @@ vtt: e001.vtt is not a vtt map
                                                                                 
                > Open Map                                                       
                  New Map                                                        
+                 Options                                                        
                  Quit                                                           
-                                                                                
                                                                                 
                                                                                 
                                                                                 
@@ -443,15 +443,15 @@ vtt: e001.vtt is not a vtt map
                                                                                 
 -- exit 0
 == e001.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 80x24
--- cksum 418794699-2865 exit 0
+-- cksum 2900069540-2906 exit 0
 == e001.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --players --size 80x24
 -- cksum 3752749104-2448 exit 0
 == e001.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 110x34
--- cksum 17849980-4935 exit 0
+-- cksum 2318234387-4975 exit 0
 == e001.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --players --size 110x34
 -- cksum 1368086761-4522 exit 0
 == e001.vtt --seed 1 --script ../work/play.keys --dump-frame --cells --size 40x12
--- cksum 2306292080-1085 exit 0
+-- cksum 4168625471-1123 exit 0
 == e001.vtt --seed 1 --script ../work/roll.keys --dump-frame --size 80x24
  open map                                                               24 maps 
                                                                                 

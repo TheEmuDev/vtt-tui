@@ -36,6 +36,9 @@ DIR=$(mktemp -d "${PERF_DIR:-.}/.perf.XXXXXX")
 trap 'rm -rf "$DIR"' EXIT
 export XDG_DATA_HOME="$DIR/xdg"
 mkdir -p "$XDG_DATA_HOME"
+# The settings, the key file and the keyring are the user's: never read here.
+export XDG_CONFIG_HOME="$DIR/config" VTT_SECRET_TOOL=/nonexistent/vtt-perf/secret-tool
+mkdir -p "$XDG_CONFIG_HOME"
 
 TAB=$(printf '\t')
 
@@ -227,8 +230,11 @@ run() {
     _label=$1 _map=$2 _size=$3 _keys=$4 _extra=${5:-}
     printf '%s' "$_keys" > "$DIR/keys"
 
+    # A map of - is none: the bench starts on the menu.
+    set -- "$_map"
+    [ "$_map" = - ] && set --
     # shellcheck disable=SC2086
-    "$BIN" "$_map" --bench "$DIR/keys" --bench-loops "$LOOPS" --size "$_size" $_extra \
+    "$BIN" "$@" --bench "$DIR/keys" --bench-loops "$LOOPS" --size "$_size" $_extra \
         --trace "$DIR/t.json" > /dev/null 2> "$DIR/out" \
         || { echo "  $_label FAILED" >&2; return; }
     # Its zone rows then count only the calls before the cap.
@@ -294,6 +300,7 @@ run "build, fill history"   "$BIG"    80x24  'v199l199jx199h199kv199l199jf199h19
 run "build, :ask starts an agent" "$BIG" 80x24 ':agent command true\r:ask flood it\r:ask 1 remove\r'
 run "build, a job's tint"   "$BIG"    80x24  'v39l19j:ask flood it\rllllhhhh:ask 1 remove\r39h19k'
 run "ruler, three legs"    "$WALLED" 80x24  'mlll\rjjj\rll'
+run "menu, options"        -         80x24  'jj\rjjjjjjkkkkkk\033kk'
 run "play, 24 tokens"      "$MOB"    80x24  ':play\rjjllkkhh'
 run "play, 24 tokens"      "$MOB"    200x50 ':play\rjjllkkhh'
 run "play, carrying"       "$MOB"    80x24  ':play\rt\rlllljjjj\r'

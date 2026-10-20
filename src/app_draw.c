@@ -145,6 +145,35 @@ static void draw_browser(App *a)
     ui_keybar(r, th, keys_map(KEYS_BROWSER));
 }
 
+/* The settings a row each, label then value; a row that does not apply to
+ * the agent chosen is dim. A dozen rows: drawn whole. */
+static void draw_options(App *a)
+{
+    PROF_ZONE("draw.options");
+    Renderer    *r  = a->rnd;
+    const Theme *th = a->th;
+    ui_titlebar(r, th, "options", "saved as you change them");
+    Style lab = style(th->dim, th->bg, 0), val = style(th->fg, th->bg, 0), off = style(th->dim, th->bg, 0);
+    Style sel = style(th->fg, th->sel_bg, ATTR_BOLD);
+    int x = 2, lw = 18, top = 2;
+    draw_text(r, x, top, "Agents", -1, style(th->accent, th->bg, ATTR_BOLD));
+    for (int i = 0; i < OPT_COUNT && top + 2 + i < r->h - 2; i++) {
+        char label[32], value[256];
+        int  dim = app_options_row(a, i, label, sizeof label, value, sizeof value);
+        int  y = top + 2 + i;
+        if (i == a->options.sel) {
+            draw_fill(r, rect(x - 1, y, r->w - 2 * x + 2, 1), ' ', sel);
+            draw_text(r, x, y, label, lw, sel);
+            draw_text_ellipsis(r, x + lw, y, value, r->w - x - lw - 2, sel);
+        } else {
+            draw_text(r, x, y, label, lw, lab);
+            draw_text_ellipsis(r, x + lw, y, value, r->w - x - lw - 2, dim ? off : val);
+        }
+    }
+    draw_status_line(a);
+    ui_keybar(r, th, keys_map(KEYS_OPTIONS));
+}
+
 static int ping_visible(const void *ctx, int tx, int ty)
 {
     return !fog_ground_hidden((const Map *)ctx, tx, ty);
@@ -430,6 +459,7 @@ void app_draw_view(App *a, View view)
     case SCREEN_HELP:    draw_help(a); prof_overlay_draw(a->rnd); return;
     case SCREEN_MENU:    draw_menu(a); break;
     case SCREEN_BROWSER: draw_browser(a); break;
+    case SCREEN_OPTIONS: draw_options(a); break;
     case SCREEN_EDITOR:
     case SCREEN_PLAY:
         if (a->world.map) draw_editor(a);

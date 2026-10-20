@@ -38,6 +38,7 @@ typedef enum {
     KEYS_RULER,
     KEYS_BROWSER,
     KEYS_MENU,
+    KEYS_OPTIONS,
     KEYS_COUNT,
 } KeyMapId;
 

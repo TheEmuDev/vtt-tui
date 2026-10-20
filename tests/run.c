@@ -99,6 +99,7 @@ int main(int argc, char **argv)
         { "apiparts", test_api_agent_parts },
         { "settings", test_settings },
         { "apikey", test_api_key },
+        { "options", test_options },
         { "turns",  test_turns },
         { "turnkeys", test_turn_keys },
         { "dice",   test_dice },

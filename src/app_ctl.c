@@ -17,6 +17,7 @@ const char *app_ctl_screen_name(Screen s)
     switch (s) {
     case SCREEN_MENU:    return "menu";
     case SCREEN_BROWSER: return "file browser";
+    case SCREEN_OPTIONS: return "options";
     case SCREEN_EDITOR:  return "build";
     case SCREEN_PLAY:    return "play";
     case SCREEN_HELP:    return "help";

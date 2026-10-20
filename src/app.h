@@ -28,6 +28,7 @@ typedef enum {
     SCREEN_EDITOR,     /* build mode */
     SCREEN_PLAY,
     SCREEN_HELP,       /* the ? reference, over whatever called it */
+    SCREEN_OPTIONS,    /* the GM's settings, from the menu (app_options.c) */
 } Screen;
 
 /* Whose eyes a frame is drawn for. The GM's terminal is VIEW_GM; the
@@ -79,6 +80,7 @@ typedef enum {
     PROMPT_COUNTERS,
     PROMPT_JOB_FEEDBACK,
     PROMPT_API_KEY,          /* the hidden prompt: the key goes to the keyring (app_agent_key_typed) */
+    PROMPT_SETTING,          /* an Options row's text or number: App.opt_prompt (app_options_prompt) */
 } PromptWhat;
 
 /* A ping: a ring round a block of squares, until a moment passes. */
@@ -272,6 +274,14 @@ typedef struct {
     Settings settings;
     char     settings_file[1024];
     int      key_then;          /* what the key prompt does once a key is stored: KEY_THEN_* (app_agent.c) */
+    /* The Options screen: its row, the row a prompt is for, and what was
+     * read when it opened (the key's source and last four, the spend). */
+    ListState options;
+    int      opt_prompt;
+    int      opt_key;
+    char     opt_key_last4[8];
+    double   opt_spent, opt_spent_month;
+    int      opt_runs, opt_runs_month;
 
     TextPrompt prompt;
     PromptWhat prompt_what;

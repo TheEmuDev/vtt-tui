@@ -46,7 +46,7 @@ static inline int take_count_raw(Editor *e)
 
 /* app.c */
 /* The main menu, in order. */
-#define APP_MENU_COUNT 3
+#define APP_MENU_COUNT 4
 extern const char *const APP_MENU_ITEMS[APP_MENU_COUNT];
 static inline int app_menu_visible_rows(const App *a) { return imax(1, a->rnd->h - 10); }
 /* Which key map describes where the GM is now: the bar and the ? page agree. */
@@ -237,6 +237,16 @@ void app_agent_key_typed(App *a, const char *key);
 void app_agent_key_remove(App *a);
 /* Where the key in use is from, and its last four characters ("" with none). */
 int  app_agent_key_where(char *last4, size_t sz);
+
+/* The Options screen (app_options.c). */
+enum { OPT_AGENT, OPT_COMMAND, OPT_MODEL, OPT_EFFORT, OPT_CAP, OPT_CALLS, OPT_FALLBACKS,
+       OPT_CHANNEL, OPT_ACCEPT, OPT_KEY, OPT_SPENT, OPT_COUNT };
+void app_options_open(App *a);
+void app_options_key(App *a, Key k);
+void app_options_prompt(App *a, const char *text);
+void app_options_key_changed(App *a);
+/* Row i's label and value; 1 when it does not apply now (drawn dim). */
+int  app_options_row(const App *a, int row, char *label, size_t lsz, char *value, size_t vsz);
 
 /* Jobs and the review (app_job.c). */
 void app_review_key(App *a, Key k);

@@ -8,12 +8,14 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "apiagent.h"
 #include "apikey.h"
 #include "app_priv.h"
 #include "settings.h"
+#include "store.h"
 
 #define KEY "sk-test-0123456789abcdefghijKLMN"
 
@@ -587,6 +589,139 @@ void test_api_key(void)
     CHECK(getenv("ANTHROPIC_API_KEY") == NULL);
 
     unsetenv("VTT_CLAUDE_CURL");
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
+/* The Options screen (app_options.c): the menu's third row. */
+void test_options(void)
+{
+    Sandbox sb = sandbox_enter("options");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    unsetenv("ANTHROPIC_API_KEY");
+    char path[1200];
+    settings_path(path, sizeof path);
+
+    CASE("the screen as it opens on no settings: every row, the agent's own dim while none is chosen");
+    {
+        static const char *const seg[] = { "jj\r" };
+        golden("options", 90, 22, NULL, seg, 1, 0);
+    }
+
+    Renderer r;
+    App a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    str_lcpy(a.settings_file, path, sizeof a.settings_file);
+    press(&a, "jj\r");
+    CHECK_EQ(a.screen, SCREEN_OPTIONS);
+    CHECK(frame_has(&a, &r, "not chosen - the first :ask asks"));
+
+    CASE("the agent row: enter steps none -> a command (asking for it when there is none)");
+    press(&a, "\r");
+    CHECK_EQ(a.settings.agent, AGENT_KIND_OFF);
+    CHECK(file_has(path, "agent off\n"));
+    press(&a, "\r");
+    CHECK_EQ(a.modal, MODAL_PROMPT);
+    CHECK_EQ(a.prompt_what, PROMPT_SETTING);
+    press(&a, "sh agent.sh\r");
+    CHECK_EQ(a.settings.agent, AGENT_KIND_COMMAND);
+    CHECK(!strcmp(a.agent_cmd, "sh agent.sh"));
+    CHECK(file_has(path, "agent command\ncommand sh agent.sh\n"));
+    CHECK(frame_has(&a, &r, "a command"));
+
+    CASE("the command row: its prompt opens holding the command; empty takes it away");
+    press(&a, "j\r");
+    CHECK(!strcmp(a.prompt.buf, "sh agent.sh"));
+    press(&a, "\025\r");
+    CHECK_EQ(a.settings.agent, AGENT_KIND_OFF);
+    CHECK(!a.settings.command[0]);
+
+    CASE("model and effort step with enter, l and h; the rest of the Claude rows likewise");
+    press(&a, "j\r");
+    CHECK(!strcmp(a.settings.model, "sonnet"));
+    press(&a, "h");
+    CHECK(!strcmp(a.settings.model, "opus"));
+    press(&a, "h");
+    CHECK(!strcmp(a.settings.model, "fable"));
+    press(&a, "jl");
+    CHECK(!strcmp(a.settings.effort, "high"));
+    CHECK(file_has(path, "model fable\neffort high\n"));
+
+    CASE("cap and calls: a prompt with the number in it; a bad one is refused and changes nothing");
+    press(&a, "j\r");
+    CHECK(!strcmp(a.prompt.buf, "1.00"));
+    press(&a, "\025lots\r");
+    CHECK(strstr(a.status, "cap is dollars a job") != NULL);
+    CHECK(a.settings.cap == 1.00);
+    press(&a, "\r\0252.5\r");
+    CHECK(a.settings.cap == 2.5);
+    press(&a, "j\r\02540\r");
+    CHECK_EQ(a.settings.calls, 40);
+    CHECK(file_has(path, "cap 2.50\ncalls 40\n"));
+
+    CASE("fallbacks, the channel and changes at start toggle; the last two say when they apply");
+    press(&a, "j\r");
+    CHECK_EQ(a.settings.fallbacks, 0);
+    press(&a, "j\r");
+    CHECK_EQ(a.settings.channel, 1);
+    CHECK(strstr(a.status, "next time vtt starts") != NULL);
+    press(&a, "j\r");
+    CHECK_EQ(a.settings.accept_auto, 1);
+    CHECK(file_has(path, "fallbacks off\npaused off\nchannel on\naccept auto\n"));
+
+    CASE("the key row: enter is the hidden prompt; stored, the row says where and ends ...; d asks, then removes");
+    press(&a, "j\r");
+    CHECK_EQ(a.modal, MODAL_PROMPT);
+    CHECK_EQ(a.prompt.secret, 1);
+    press(&a, KEY "\r");
+    CHECK(frame_has(&a, &r, "a file only you can read, ending ...KLMN"));
+    press(&a, "d");
+    CHECK_EQ(a.modal, MODAL_CONFIRM_KEY);
+    press(&a, "y");
+    CHECK(frame_has(&a, &r, "none - enter types one in"));
+
+    CASE("the agent row to Claude with no key asks for one; esc leaves the agent as it was");
+    press(&a, "g");
+    setenv("VTT_CLAUDE_CURL", "/bin/true", 1);
+    press(&a, "h");                                                    /* none, back one: claude */
+    CHECK_EQ(a.modal, MODAL_PROMPT);
+    press(&a, "\x1b");
+    CHECK_EQ(a.settings.agent, AGENT_KIND_OFF);
+    press(&a, "h" KEY "\r");
+    CHECK_EQ(a.settings.agent, AGENT_KIND_CLAUDE);
+    CHECK(frame_has(&a, &r, "the Claude API agent"));
+    unsetenv("VTT_CLAUDE_CURL");
+
+    CASE("spent so far, from the usage file when the screen opens: all of it, and this month's");
+    {
+        char dir[1024], up[1100], month[8], line[200];
+        store_dir("", dir, sizeof dir);
+        dir_make(dir);
+        snprintf(up, sizeof up, "%sclaude-usage.tsv", dir);
+        time_t now = time(NULL);
+        strftime(month, sizeof month, "%Y-%m", localtime(&now));
+        FILE *f = fopen(up, "w");
+        fputs("when\tjob\tmodel\tcalls\tinput\tcache_write\tcache_read\toutput\tdollars\tended\n", f);
+        fputs("2025-01-03T10:00:00\t1\tclaude-opus-5-5\t7\t1\t1\t1\t1\t0.5000\tdone\n", f);
+        snprintf(line, sizeof line, "%s-01T10:00:00\t2\tclaude-opus-5-5\t7\t1\t1\t1\t1\t0.2500\tdone\n", month);
+        fputs(line, f);
+        fclose(f);
+        press(&a, "\x1b");
+        CHECK_EQ(a.screen, SCREEN_MENU);
+        press(&a, "\r");
+        CHECK_EQ(a.screen, SCREEN_OPTIONS);
+        CHECK(frame_has(&a, &r, "about $0.75 over 2 runs, $0.25 this month"));
+    }
+
+    CASE("esc and q go back to the menu; the menu has Options before Quit");
+    press(&a, "q");
+    CHECK_EQ(a.screen, SCREEN_MENU);
+    CHECK(frame_has(&a, &r, "Options"));
+
     app_free(&a);
     rnd_free(&r);
     sandbox_leave(&sb);

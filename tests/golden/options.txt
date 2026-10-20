@@ -1,0 +1,22 @@
+ options                                                         saved as you change them 
+                                                                                          
+  Agents                                                                                  
+                                                                                          
+  Agent             not chosen - the first :ask asks                                      
+  Command           none                                                                  
+  Model             opus (claude-opus-5-5)                                                
+  Effort            medium                                                                
+  Spend cap         $1.00 a job                                                           
+  Calls cap         25 a job                                                              
+  Fallbacks         on - a declined request is tried on another model                     
+  Channel at start  off - :agent on opens it                                              
+  Changes at start  wait for :review                                                      
+  API key           none - enter types one in                                             
+  Spent so far      nothing yet                                                           
+                                                                                          
+                                                                                          
+                                                                                          
+                                                                                          
+                                                                                          
+                                                                                          
+ j/k move  enter change  d remove key  esc back                                    ? keys 
