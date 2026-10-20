@@ -846,14 +846,15 @@ static int edit_line(World *world, char w[][CTL_WORD_MAX], int n, Edits *ed, cha
             if (n == 3 && !strcmp(w[2], "off")) BAD("link %d remove takes a link away", num);
             if (n == 3 && !strcmp(w[2], "remove")) {
                 for (int e = 0; e < 2; e++) touched(ed, l.x[e], l.y[e], l.x[e] + l.size - 1, l.y[e] + l.size - 1);
-                undo_remove_link(u, m, num);
+                if (world_link_remove(world, num, &we) < 0) BADC(we.cls, "%s", we.text);
                 return 0;
             }
             first = 2;
         } else if (n >= 4 && !strcmp(w[2], "to")) {
             /* link A to MAP PLACE [KIND] [size N] [secret]: to another map. */
-            l.num = (uint8_t)link_free_num(m);
-            if (!l.num) BADC(CTL_E_LIMIT, "the map holds %d links", MAP_LINKS_MAX);
+            int num = world_link_num(world, &we);
+            if (num < 0) BADC(we.cls, "%s", we.text);
+            l.num = (uint8_t)num;
             if (n < 5) BAD("link SQUARE to MAP PLACE [KIND] [size N] [secret] - PLACE an area or a square in MAP");
             l.size = 1;
             for (int i = 5; i < n; i++) {
@@ -876,8 +877,9 @@ static int edit_line(World *world, char w[][CTL_WORD_MAX], int n, Edits *ed, cha
             l.x[0] = l.x[1] = (int16_t)ax; l.y[0] = l.y[1] = (int16_t)ay;
             first = n;
         } else {
-            l.num = (uint8_t)link_free_num(m);
-            if (!l.num) BADC(CTL_E_LIMIT, "the map holds %d links", MAP_LINKS_MAX);
+            int num = world_link_num(world, &we);
+            if (num < 0) BADC(we.cls, "%s", we.text);
+            l.num = (uint8_t)num;
             l.size = 1;
             /* The size first: where an end goes in a named area depends on it. */
             for (int i = 3; i < n; i++) {
@@ -910,9 +912,7 @@ static int edit_line(World *world, char w[][CTL_WORD_MAX], int n, Edits *ed, cha
             else BAD("%.20s: a link is stairs, ladder, trapdoor or portal; oneway, twoway, secret, seen%s",
                      w[i], isnum ? ", reverse or remove" : " or size N");
         }
-        const char *why = link_problem(m, &l);
-        if (why) BADC(CTL_E_CONFLICT, "%s", why);
-        (void)undo_set_link(u, m, &l);
+        if (world_link_set(world, &l, &we) < 0) BADC(we.cls, "%s", we.text);
         for (int e = 0; e < link_ends(&l); e++) touched(ed, l.x[e], l.y[e], l.x[e] + l.size - 1, l.y[e] + l.size - 1);
         return 0;
     }

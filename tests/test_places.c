@@ -639,6 +639,34 @@ void test_link_keys(void)
     press(&a, ":links\r");
     CHECK(strstr(a.status, "more") != NULL && strlen(a.status) < sizeof a.status - 1);
 
+    CASE("a link changed whose end is now on void: the GM and the channel refuse it in the same words");
+    {
+        int li = link_find(m, 10), x = m->links[li].x[1], y = m->links[li].y[1];
+        map_set_tile(m, x, y, TILE_VOID);
+        press(&a, ":link 10 portal\r");
+        CHECK(!strcmp(a.status, "an end is on void") && a.status_gm && m->links[li].kind == LINK_LADDER);
+        char *ans = ctl_ask(&a, "link 10 portal\n");
+        CHECK(ans && ctl_refused(ans, "conflict", 1) && strstr(ans, "an end is on void"));
+        free(ans);
+        map_set_tile(m, x, y, TILE_FLOOR);
+    }
+
+    CASE("a map that holds all the links it can: g l and the channel refuse in the same words");
+    {
+        int o = link_meets(m, 4, 3, 1, 1, NULL);              /* every floor square has an end: free E4 */
+        if (o >= 0) link_remove(m, m->links[o].num);
+    }
+    for (int num = 1; m->nlinks < MAP_LINKS_MAX; num++)
+        if (link_find(m, num) < 0) { Link x = mklink(num, LINK_LADDER, 1, 0, 3, 0, 3); link_put(m, &x); }
+    a.ed.cx = 4; a.ed.cy = 3;
+    press(&a, "gl");
+    CHECK(!strcmp(a.status, "no room: a map holds 64 links") && a.ed.link_on == 0);
+    {
+        char *ans = ctl_ask(&a, "link E4 L4\n");
+        CHECK(ans && ctl_refused(ans, "limit", 1) && strstr(ans, "no room: a map holds 64 links"));
+        free(ans);
+    }
+
     app_free(&a);
     rnd_free(&r);
     char cmd[1200];

@@ -12,6 +12,7 @@
 #include "request.h"
 #include "world.h"
 #include "world_ops.h"
+#include "link.h"
 #include "util.h"
 
 void test_protocol(void);
@@ -345,6 +346,37 @@ void test_protocol(void)
         CHECK_EQ(world_note_set(&w, 1, 1, "", &e), 0);
         undo_end(&w.undo);
         CHECK(!map_note_at(live, 1, 1));
+    }
+
+    CASE("links on a bare World: a number, put down, refused on void, taken away, and none left past the last");
+    {
+        WorldErr e;
+        Link l;
+        memset(&l, 0, sizeof l);
+        l.num = (uint8_t)world_link_num(&w, &e);
+        l.size = 1;
+        l.x[0] = 2; l.y[0] = 9; l.x[1] = 6; l.y[1] = 9;
+        CHECK(l.num >= 1);
+        map_set_tile(live, 6, 9, TILE_VOID);
+        CHECK(world_link_set(&w, &l, &e) < 0 && e.cls == CTL_E_CONFLICT && !strcmp(e.text, "an end is on void"));
+        map_set_tile(live, 6, 9, TILE_FLOOR);
+        undo_begin(&w.undo);
+        CHECK_EQ(world_link_set(&w, &l, &e), 0);
+        undo_end(&w.undo);
+        CHECK(link_find(live, l.num) >= 0);
+        CHECK(world_link_remove(&w, 99, &e) < 0 && e.cls == CTL_E_MISSING);
+        undo_begin(&w.undo);
+        CHECK_EQ(world_link_remove(&w, l.num, &e), 0);
+        undo_end(&w.undo);
+        CHECK(link_find(live, l.num) < 0);
+        int had = live->nlinks;
+        for (int num = 1; live->nlinks < MAP_LINKS_MAX; num++) {
+            Link f = l;
+            f.num = (uint8_t)num;
+            if (link_find(live, num) < 0) link_put(live, &f);
+        }
+        CHECK(world_link_num(&w, &e) < 0 && e.cls == CTL_E_LIMIT && !strcmp(e.text, "no room: a map holds 64 links"));
+        while (live->nlinks > had) live->nlinks--;
     }
 
     world_jobs_clear(&w);

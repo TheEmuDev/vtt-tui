@@ -31,4 +31,11 @@ int world_area_remove(World *w, const char *name, int box[4], WorldErr *e);
  * text is too long or the map holds all the notes it can. */
 int world_note_set(World *w, int x, int y, const char *text, WorldErr *e);
 
+/* Links. `num` is the number a new link takes, or -1 when the map holds all
+ * it can; `set` puts down a new link or a change to one, refused when an end
+ * is misplaced or on void (link_problem); `remove` takes link `num` away. */
+int world_link_num(const World *w, WorldErr *e);
+int world_link_set(World *w, const Link *l, WorldErr *e);
+int world_link_remove(World *w, int num, WorldErr *e);
+
 #endif /* VTT_WORLD_OPS_H */

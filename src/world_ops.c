@@ -6,6 +6,7 @@
 
 #include "world_ops.h"
 #include "floor.h"
+#include "link.h"
 
 static int refuse(WorldErr *e, int cls, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
 static int refuse(WorldErr *e, int cls, const char *fmt, ...)
@@ -62,5 +63,29 @@ int world_note_set(World *w, int x, int y, const char *text, WorldErr *e)
     if (strlen(text) >= NOTE_MAX) return refuse(e, CTL_E_LIMIT, "the note is over %d characters", NOTE_MAX - 1);
     if (!undo_set_note(&w->undo, w->map, x, y, text))
         return refuse(e, CTL_E_LIMIT, "no room: a map holds %d notes on squares", MAP_NOTES_MAX);
+    return 0;
+}
+
+/* ------------------------------------------------------------------ links */
+
+int world_link_num(const World *w, WorldErr *e)
+{
+    int num = link_free_num(w->map);
+    if (!num) return refuse(e, CTL_E_LIMIT, "no room: a map holds %d links", MAP_LINKS_MAX);
+    return num;
+}
+
+int world_link_set(World *w, const Link *l, WorldErr *e)
+{
+    const char *why = link_problem(w->map, l);
+    if (why) return refuse(e, CTL_E_CONFLICT, "%s", why);
+    (void)undo_set_link(&w->undo, w->map, l);
+    return 0;
+}
+
+int world_link_remove(World *w, int num, WorldErr *e)
+{
+    if (link_find(w->map, num) < 0) return refuse(e, CTL_E_MISSING, "there is no link %d", num);
+    undo_remove_link(&w->undo, w->map, num);
     return 0;
 }

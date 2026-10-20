@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 
 #include "app_priv.h"
+#include "world_ops.h"
 #include "fog.h"
 #include "link.h"
 #include "maptools.h"
@@ -49,11 +50,8 @@ void app_link_mark(App *a)
             app_set_status(a, msg);
             return;
         }
-        if (!link_free_num(m)) {
-            snprintf(msg, sizeof msg, "a map holds %d links", MAP_LINKS_MAX);
-            app_set_status(a, msg);
-            return;
-        }
+        WorldErr we;
+        if (world_link_num(&a->world, &we) < 0) { app_set_status(a, we.text); return; }
         e->link_on   = 1;
         e->link_x    = e->cx;
         e->link_y    = e->cy;
@@ -66,21 +64,25 @@ void app_link_mark(App *a)
     }
 
     Link l;
+    WorldErr we;
     memset(&l, 0, sizeof l);
-    l.num  = (uint8_t)link_free_num(m);
+    int num = world_link_num(&a->world, &we);
+    l.num  = (uint8_t)(num > 0 ? num : 0);
     l.kind = e->link_kind;
     l.size = e->link_size;
     l.x[0] = (int16_t)e->link_x; l.y[0] = (int16_t)e->link_y;
     l.x[1] = (int16_t)e->cx;     l.y[1] = (int16_t)e->cy;
-    const char *why = l.num ? link_problem(m, &l) : "the map holds all the links it can";
-    if (why) {
-        snprintf(msg, sizeof msg, "%s - move and g l again, or esc", why);
+    int rc = num;
+    if (rc > 0) {
+        undo_begin(&a->world.undo);
+        rc = world_link_set(&a->world, &l, &we);
+        undo_end(&a->world.undo);
+    }
+    if (rc < 0) {
+        snprintf(msg, sizeof msg, "%.110s - move and g l again, or esc", we.text);
         app_set_status(a, msg);
         return;
     }
-    undo_begin(&a->world.undo);
-    (void)undo_set_link(&a->world.undo, m, &l);
-    undo_end(&a->world.undo);
     e->link_on = 0;
     char line[96];
     link_describe(&l, line, sizeof line);
@@ -326,21 +328,22 @@ void app_link_command(App *a, const char *rest)
         if (strlen(place) >= AREA_NAME_MAX) { app_set_status_gm(a, "no area has a name that long"); return; }
         if (link_map_check(m, to_map, place, why, sizeof why, NULL)) { app_set_status_gm(a, why); return; }
         Link nl;
+        WorldErr we;
         memset(&nl, 0, sizeof nl);
-        nl.num  = (uint8_t)link_free_num(m);
+        int num = world_link_num(&a->world, &we);
+        if (num < 0) { app_set_status_gm(a, we.text); return; }
+        nl.num  = (uint8_t)num;
         nl.kind = e->link_kind;
         nl.size = (uint8_t)e->brush;
         nl.x[0] = nl.x[1] = (int16_t)e->cx;
         nl.y[0] = nl.y[1] = (int16_t)e->cy;
         str_lcpy(nl.to_map, to_map, sizeof nl.to_map);
         str_lcpy(nl.to_place, place, sizeof nl.to_place);
-        if (!nl.num) { app_set_status_gm(a, "the map holds all the links it can"); return; }
-        const char *bad = link_problem(m, &nl);
-        if (bad) { snprintf(msg, sizeof msg, "no link here: %s", bad); app_set_status_gm(a, msg); return; }
-        e->link_on = 0;
         undo_begin(&a->world.undo);
-        (void)undo_set_link(&a->world.undo, m, &nl);
+        int rc = world_link_set(&a->world, &nl, &we);
         undo_end(&a->world.undo);
+        if (rc < 0) { snprintf(msg, sizeof msg, "no link here: %.120s", we.text); app_set_status_gm(a, msg); return; }
+        e->link_on = 0;
         char line[160];
         link_describe(&nl, line, sizeof line);
         app_note_gm(a, line);
@@ -402,9 +405,11 @@ void app_link_command(App *a, const char *rest)
     if (nw == 2 && !strcmp(words[1], "remove")) {
         char name[32];
         link_name(&l, name, sizeof name);
+        WorldErr we;
         undo_begin(&a->world.undo);
-        undo_remove_link(&a->world.undo, m, l.num);
+        int rc = world_link_remove(&a->world, l.num, &we);
         undo_end(&a->world.undo);
+        if (rc < 0) { app_set_status_gm(a, we.text); return; }
         snprintf(msg, sizeof msg, "%s is gone", name);
         app_note_gm(a, msg);
         return;
@@ -433,9 +438,11 @@ void app_link_command(App *a, const char *rest)
             return;
         }
     }
+    WorldErr we;
     undo_begin(&a->world.undo);
-    (void)undo_set_link(&a->world.undo, m, &l);
+    int rc = world_link_set(&a->world, &l, &we);
     undo_end(&a->world.undo);
+    if (rc < 0) { app_set_status_gm(a, we.text); return; }
     char line[96];
     link_describe(&l, line, sizeof line);
     app_note_gm(a, line);
