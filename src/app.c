@@ -31,6 +31,7 @@ void app_init(App *a, Term *t, Renderer *r)
     a->ctl_turn_ns = CTL_TURN_NS;
     a->agent_deadline_ms = AGENT_DEADLINE_MS;
     a->agent_grace_ms    = AGENT_GRACE_MS;
+    settings_default(&a->settings);
     a->th      = &THEME_DARK;
     a->screen  = SCREEN_MENU;
     a->running = 1;

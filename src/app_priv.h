@@ -222,6 +222,13 @@ void app_agent_heard(App *a, const char *who);
 void app_agent_forget(App *a, int num);
 void app_agent_prompt(const App *a, const Job *j, FILE *out);
 void app_agent_command_cmd(App *a, const char *rest);
+/* A setting changed: applied, and saved when the app has a settings file. */
+void app_settings_changed(App *a);
+/* The :agent words for the settings: claude, model, effort, cap, calls,
+ * fallbacks. 1 when rest was one of them. */
+int  app_agent_setting(App *a, const char *rest);
+/* The agent's settings in a line, for :agent and the Options screen. */
+void app_agent_describe(const App *a, char *buf, size_t sz);
 
 /* Jobs and the review (app_job.c). */
 void app_review_key(App *a, Key k);

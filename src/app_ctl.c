@@ -151,16 +151,17 @@ const WorldHost APP_WORLD_HOST = {
 void app_agent_command(App *a, const char *rest)
 {
     Ctl *c = &a->ctl;
-    char msg[CTL_PATH_MAX + 96];
+    char msg[CTL_PATH_MAX + 512];
     if (!*rest) {
-        if (!a->world.agent_on) app_set_status_gm(a, "the agent channel is off - :agent on opens it; until then every request is refused");
-        else {
-            snprintf(msg, sizeof msg, "agent channel on at %s - %u request%s so far; changes %s", c->path,
-                     c->requests, c->requests == 1 ? "" : "s", a->world.ctl_auto ? "land at once" : "wait for :review");
-            app_set_status_gm(a, msg);
-        }
+        char d[400];
+        app_agent_describe(a, d, sizeof d);
+        if (!a->world.agent_on) snprintf(msg, sizeof msg, "the agent channel is off - :agent on opens it; until then every request is refused. %s", d);
+        else snprintf(msg, sizeof msg, "agent channel on at %s - %u request%s so far; changes %s. %s", c->path,
+                      c->requests, c->requests == 1 ? "" : "s", a->world.ctl_auto ? "land at once" : "wait for :review", d);
+        app_set_status_gm(a, msg);
         return;
     }
+    if (app_agent_setting(a, rest)) return;
     if (!strncmp(rest, "accept", 6) && (!rest[6] || rest[6] == ' ')) {
         const char *how = rest[6] ? rest + 7 : "";
         if (!strcmp(how, "auto"))        a->world.ctl_auto = 1;
@@ -183,7 +184,7 @@ void app_agent_command(App *a, const char *rest)
         app_note_gm(a, "agent channel off - requests are refused until :agent on");
         return;
     }
-    if (strcmp(rest, "on") != 0) { app_set_status_gm(a, ":agent on, :agent off, :agent accept auto|review, :agent command CMD, or :agent to ask"); return; }
+    if (strcmp(rest, "on") != 0) { app_set_status_gm(a, ":agent on|off, :agent accept auto|review, :agent claude [MODEL], :agent command CMD, :agent model|effort|cap|calls|fallbacks, or :agent to ask"); return; }
     if (a->world.agent_on) {
         snprintf(msg, sizeof msg, "the agent channel is already on at %s", c->path);
         app_set_status_gm(a, msg);

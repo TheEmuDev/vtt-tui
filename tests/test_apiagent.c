@@ -13,6 +13,7 @@
 #include "apiagent.h"
 #include "apikey.h"
 #include "app_priv.h"
+#include "settings.h"
 
 #define KEY "sk-test-0123456789abcdefghijKLMN"
 
@@ -299,4 +300,131 @@ void test_api_agent_parts(void)
     CHECK(!apikey_ok("sk-test-0123456789abcdef\"ghij"));
     CHECK(!apikey_ok("sk-test-0123456789abcdef\nghij"));
     CHECK(!apikey_ok("sk-test-0123456789 abcdefghij"));
+}
+
+/* The settings (settings.c) and the :agent words that change them. */
+void test_settings(void)
+{
+    Sandbox sb = sandbox_enter("settings");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    char path[1200], err[600], note[400];
+    settings_path(path, sizeof path);
+    CHECK(strncmp(path, sb.dir, strlen(sb.dir)) == 0);              /* the sandbox's, never the user's */
+
+    CASE("the defaults: no agent chosen, opus at medium effort, $1.00 and 25 calls, fallbacks on, review");
+    Settings s;
+    settings_default(&s);
+    CHECK_EQ(s.agent, AGENT_KIND_UNSET);
+    CHECK(!strcmp(s.model, "opus") && !strcmp(s.effort, "medium") && s.cap == 1.00 && s.calls == 25 && s.fallbacks);
+    CHECK(!s.channel && !s.accept_auto && !s.paused);
+
+    CASE("written and read back the same; no file is the defaults, said by nothing");
+    CHECK_EQ(settings_load(&s, path, note, sizeof note), 0);
+    CHECK(!note[0]);
+    s.agent = AGENT_KIND_COMMAND;
+    str_lcpy(s.command, "claude -p --verbose", sizeof s.command);
+    str_lcpy(s.model, "sonnet", sizeof s.model);
+    s.cap = 2.5; s.calls = 30; s.fallbacks = 0; s.channel = 1; s.accept_auto = 1;
+    CHECK_EQ(settings_save(&s, path, err, sizeof err), 0);
+    Settings t;
+    settings_default(&t);
+    CHECK_EQ(settings_load(&t, path, note, sizeof note), 0);
+    CHECK(!note[0]);
+    CHECK(t.agent == AGENT_KIND_COMMAND && !strcmp(t.command, "claude -p --verbose") && !strcmp(t.model, "sonnet"));
+    CHECK(t.cap == 2.5 && t.calls == 30 && !t.fallbacks && t.channel && t.accept_auto);
+    CHECK(file_has(path, "agent command\ncommand claude -p --verbose\nmodel sonnet\n"));
+
+    CASE("a line it does not know is kept and named; a bad value keeps its default and is named");
+    {
+        FILE *f = fopen(path, "w");
+        fputs("# mine\nagent claude\ntheme dark\ncalls lots\neffort high\n", f);
+        fclose(f);
+        settings_default(&t);
+        settings_load(&t, path, note, sizeof note);
+        CHECK(strstr(note, "line 3: theme is not a setting") != NULL);
+        CHECK(t.agent == AGENT_KIND_CLAUDE && t.calls == 25 && !strcmp(t.effort, "high"));
+        CHECK_EQ(settings_save(&t, path, err, sizeof err), 0);
+        CHECK(file_has(path, "theme dark\n") && file_has(path, "# mine\n"));
+        settings_default(&t);
+        settings_load(&t, path, note, sizeof note);
+        CHECK(strstr(note, "line 2: calls is 1 to 200") == NULL);       /* the bad value was not written back */
+    }
+
+    CASE(":agent words change the setting, the file and the line the next agent starts with");
+    Renderer r;
+    App a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK(ctl_blank_map(&a, sb.dir, 8, 6));
+    str_lcpy(a.settings_file, path, sizeof a.settings_file);
+    unlink(path);
+    const char *self_was = app_self_path;
+    app_self_path = "/opt/my vtt/vtt";
+    press(&a, ":agent\r");
+    CHECK(strstr(a.status, "no agent chosen") != NULL);
+    press(&a, ":agent command sh agent.sh\r");
+    CHECK(strstr(a.status, "each :ask now starts: sh agent.sh") != NULL);
+    CHECK(!strcmp(a.agent_cmd, "sh agent.sh"));
+    CHECK(file_has(path, "agent command\ncommand sh agent.sh\n"));
+    press(&a, ":agent effort high\r");
+    CHECK(strstr(a.status, "effort high - for the Claude agent") != NULL);
+    press(&a, ":agent effort huge\r");
+    CHECK(strstr(a.status, "effort is low, medium or high") != NULL);
+    press(&a, ":agent cap $2.50\r");
+    press(&a, ":agent calls 40\r");
+    press(&a, ":agent fallbacks off\r");
+    CHECK(file_has(path, "effort high\ncap 2.50\ncalls 40\nfallbacks off\n"));
+    press(&a, ":agent command off\r");
+    CHECK(file_has(path, "paused on\n"));
+    CHECK_EQ(a.agent_cmd_off, 1);
+    press(&a, ":agent command on\r");
+    CHECK(file_has(path, "paused off\n"));
+
+    CASE(":agent claude: refused with no key, saying how; with a key and curl, the line is built from the settings");
+    unsetenv("ANTHROPIC_API_KEY");
+    press(&a, ":agent claude\r");
+    CHECK(strstr(a.status, "no API key") != NULL);
+    CHECK_EQ(a.settings.agent, AGENT_KIND_COMMAND);                   /* nothing changed */
+    setenv("ANTHROPIC_API_KEY", KEY, 1);
+    setenv("VTT_CLAUDE_CURL", "/bin/true", 1);
+    press(&a, ":agent claude sonnet\r");
+    CHECK(strstr(a.status, "each :ask now starts the Claude agent - agent claude: sonnet (claude-sonnet-5-5), high effort, $2.50 and 40 calls a job, fallbacks off") != NULL);
+    CHECK(!strcmp(a.agent_cmd, "'/opt/my vtt/vtt' --claude-agent --model claude-sonnet-5-5 --effort high --cap 2.50 --calls 40 --fallbacks off"));
+    CHECK(file_has(path, "agent claude\n") && file_has(path, "model sonnet\n"));
+    CHECK(!file_has(path, KEY));                                       /* the key is never a setting */
+    press(&a, ":agent model gpt-5\r");
+    CHECK(strstr(a.status, "model is opus, sonnet, haiku, fable") != NULL);
+    press(&a, ":agent model haiku\r");
+    CHECK(strstr(a.agent_cmd, "--model claude-haiku-5-5 ") != NULL);
+    press(&a, ":agent\r");
+    CHECK(strstr(a.status, "agent claude: haiku (claude-haiku-5-5), high effort") != NULL);
+    press(&a, ":agent command\r");
+    CHECK(strstr(a.status, "each :ask starts: the Claude agent (haiku, high effort)") != NULL);
+
+    CASE("VTT_AGENT_COMMAND wins for its session and is not saved; :agent command CMD takes over from it");
+    a.agent_from_env = 1;
+    str_lcpy(a.agent_cmd, "my-env-agent", sizeof a.agent_cmd);
+    press(&a, ":agent effort low\r");
+    CHECK(!strcmp(a.agent_cmd, "my-env-agent"));
+    CHECK(!file_has(path, "my-env-agent"));
+    press(&a, ":agent\r");
+    CHECK(strstr(a.status, "my-env-agent (VTT_AGENT_COMMAND, this session)") != NULL);
+    press(&a, ":agent command sh other.sh\r");
+    CHECK_EQ(a.agent_from_env, 0);
+    CHECK(!strcmp(a.agent_cmd, "sh other.sh"));
+
+    CASE("with no settings file (a test, a bench) nothing is written");
+    a.settings_file[0] = '\0';
+    unlink(path);
+    press(&a, ":agent calls 12\r");
+    CHECK(access(path, F_OK) != 0);
+
+    unsetenv("VTT_CLAUDE_CURL");
+    unsetenv("ANTHROPIC_API_KEY");
+    app_self_path = self_was;
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
 }

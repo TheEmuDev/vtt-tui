@@ -17,7 +17,10 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "apiagent.h"
+#include "apikey.h"
 #include "app_priv.h"
+#include "proc.h"
 #include "prof.h"
 
 /* A word for a shell, whatever is in it: in single quotes, each of its own
@@ -197,6 +200,15 @@ void app_agents_tick(App *a, uint64_t now_ms)
     }
 }
 
+/* What an :ask starts, as the GM reads it: the Claude agent by its model,
+ * a command as it was typed. */
+static void agent_shown(const App *a, char *buf, size_t sz)
+{
+    if (!a->agent_from_env && a->settings.agent == AGENT_KIND_CLAUDE)
+        snprintf(buf, sz, "the Claude agent (%s, %s effort)", a->settings.model, a->settings.effort);
+    else snprintf(buf, sz, "%.250s", a->agent_cmd);
+}
+
 int app_agent_start(App *a, const Job *j)
 {
     /* For what the GM asked for, and nothing else (decision 1b: "for each
@@ -306,11 +318,133 @@ int app_agent_start(App *a, const Job *j)
     free(prompt);
     /* On the GM's line: what was started, where its output is (a command
      * that cannot run says so only there), and the channel if it came on. */
-    snprintf(msg, sizeof msg, "#%d asked - started %.150s%s%s", j->num, a->agent_cmd,
+    char shown[300];
+    agent_shown(a, shown, sizeof shown);
+    snprintf(msg, sizeof msg, "#%d asked - started %s%s%s", j->num, shown,
              slog_on(&a->slog) ? "" : " (:log on shows what it prints)",
              turned_on ? " - agent channel on for it" : "");
     app_note_gm(a, msg);
     return 1;
+}
+
+/* ------------------------------------------------------------ the settings */
+
+void app_agent_apply(App *a)
+{
+    const Settings *st = &a->settings;
+    a->agent_cmd_off = st->paused;
+    if (a->agent_from_env) return;                   /* VTT_AGENT_COMMAND, for this session */
+    if (st->agent == AGENT_KIND_COMMAND) { str_lcpy(a->agent_cmd, st->command, sizeof a->agent_cmd); return; }
+    if (st->agent != AGENT_KIND_CLAUDE) { a->agent_cmd[0] = '\0'; return; }
+    /* The Claude agent is this vtt again, told what the settings say: it
+     * never reads them itself, and the session log shows what a run used. */
+    char  *line;
+    size_t len;
+    FILE  *f = open_memstream(&line, &len);
+    sh_quote(f, app_self_path ? app_self_path : "vtt");
+    const char *model = apiagent_model_id(st->model);
+    fprintf(f, " --claude-agent --model %s --effort %s --cap %.2f --calls %d --fallbacks %s",
+            model ? model : "claude-opus-5-5", st->effort, st->cap, st->calls, st->fallbacks ? "on" : "off");
+    fclose(f);
+    if (len < sizeof a->agent_cmd) str_lcpy(a->agent_cmd, line, sizeof a->agent_cmd);
+    else a->agent_cmd[0] = '\0';
+    free(line);
+}
+
+void app_settings_changed(App *a)
+{
+    app_agent_apply(a);
+    if (!a->settings_file[0]) return;
+    char err[1200];
+    if (settings_save(&a->settings, a->settings_file, err, sizeof err) < 0) app_set_status_gm(a, err);
+}
+
+void app_agent_describe(const App *a, char *buf, size_t sz)
+{
+    const Settings *st = &a->settings;
+    const char *paused = st->paused ? " - paused, :agent command on starts it again" : "";
+    if (a->agent_from_env) snprintf(buf, sz, "agent: %.150s (VTT_AGENT_COMMAND, this session)%s", a->agent_cmd, paused);
+    else if (st->agent == AGENT_KIND_CLAUDE) {
+        const char *id = apiagent_model_id(st->model);
+        char cap[32];
+        if (st->cap > 0) snprintf(cap, sizeof cap, "$%.2f and ", st->cap);
+        else cap[0] = '\0';
+        snprintf(buf, sz, "agent claude: %s%s%s%s, %s effort, %s%d calls a job, fallbacks %s%s", st->model,
+                 id && strcmp(id, st->model) ? " (" : "", id && strcmp(id, st->model) ? id : "", id && strcmp(id, st->model) ? ")" : "",
+                 st->effort, cap, st->calls, st->fallbacks ? "on" : "off", paused);
+    }
+    else if (st->agent == AGENT_KIND_COMMAND) snprintf(buf, sz, "agent command: %.150s%s", st->command, paused);
+    else if (st->agent == AGENT_KIND_OFF) snprintf(buf, sz, "agent off: an :ask waits for an agent that comes to the channel");
+    else snprintf(buf, sz, "no agent chosen: :agent claude, :agent command CMD, or the Options screen");
+}
+
+/* Whether the Claude agent could run now: a key, and curl. The key's copy
+ * is wiped; only where it is from is kept. */
+static int claude_ready(App *a, char *why, size_t whysz)
+{
+    char key[APIKEY_MAX], err[600];
+    ApiKeySource src = apikey_find(key, sizeof key, err, sizeof err);
+    apikey_wipe(key, sizeof key);
+    if (src == APIKEY_NONE) { snprintf(why, whysz, "%s", err); return 0; }
+    const char *curl = getenv("VTT_CLAUDE_CURL");
+    if (!proc_found(curl && *curl ? curl : "curl")) { snprintf(why, whysz, "the Claude agent needs curl, and it is not on PATH"); return 0; }
+    return 1;
+}
+
+static int word_is(const char *rest, const char *w, const char **arg)
+{
+    size_t n = strlen(w);
+    if (strncmp(rest, w, n) || (rest[n] && rest[n] != ' ')) return 0;
+    *arg = rest + n;
+    while (**arg == ' ') (*arg)++;
+    return 1;
+}
+
+int app_agent_setting(App *a, const char *rest)
+{
+    static const struct { const char *word; SettingId id; } ONE[] = {
+        { "model", SET_MODEL }, { "effort", SET_EFFORT }, { "cap", SET_CAP }, { "calls", SET_CALLS },
+        { "fallbacks", SET_FALLBACKS },
+    };
+    char msg[700], err[600];
+    const char *arg;
+    if (word_is(rest, "claude", &arg)) {
+        Settings was = a->settings;
+        if (*arg && settings_set(&a->settings, SET_MODEL, arg, err, sizeof err) < 0) { app_set_status_gm(a, err); return 1; }
+        if (!claude_ready(a, err, sizeof err)) {
+            a->settings = was;
+            snprintf(msg, sizeof msg, "%s", err);
+            app_set_status_gm(a, msg);
+            return 1;
+        }
+        a->settings.agent = AGENT_KIND_CLAUDE;
+        a->settings.paused = 0;
+        a->agent_from_env = 0;
+        app_settings_changed(a);
+        char d[400];
+        app_agent_describe(a, d, sizeof d);
+        snprintf(msg, sizeof msg, "each :ask now starts the Claude agent - %s", d);
+        app_note_gm(a, msg);
+        return 1;
+    }
+    for (size_t i = 0; i < sizeof ONE / sizeof *ONE; i++) {
+        if (!word_is(rest, ONE[i].word, &arg)) continue;
+        char v[80];
+        if (!*arg) {
+            settings_value(&a->settings, ONE[i].id, v, sizeof v);
+            snprintf(msg, sizeof msg, "%s is %s - :agent %s VALUE changes it", ONE[i].word, v, ONE[i].word);
+            app_set_status_gm(a, msg);
+            return 1;
+        }
+        if (settings_set(&a->settings, ONE[i].id, arg, err, sizeof err) < 0) { app_set_status_gm(a, err); return 1; }
+        app_settings_changed(a);
+        settings_value(&a->settings, ONE[i].id, v, sizeof v);
+        snprintf(msg, sizeof msg, "%s %s%s", ONE[i].word, v,
+                 a->settings.agent == AGENT_KIND_CLAUDE ? " - from the next :ask" : " - for the Claude agent (:agent claude)");
+        app_note_gm(a, msg);
+        return 1;
+    }
+    return 0;
 }
 
 void app_agent_command_cmd(App *a, const char *rest)
@@ -318,10 +452,12 @@ void app_agent_command_cmd(App *a, const char *rest)
     char msg[AGENT_CMD_MAX + 96];
     while (*rest == ' ') rest++;
     if (!*rest) {
+        char shown[300];
+        agent_shown(a, shown, sizeof shown);
         if (a->agent_cmd[0] && !a->agent_cmd_off)
-            snprintf(msg, sizeof msg, "each :ask starts: %s - :agent command off stops that", a->agent_cmd);
+            snprintf(msg, sizeof msg, "each :ask starts: %s - :agent command off stops that", shown);
         else if (a->agent_cmd[0])
-            snprintf(msg, sizeof msg, "the agent command is off (:agent command on): %s", a->agent_cmd);
+            snprintf(msg, sizeof msg, "the agent command is off (:agent command on): %s", shown);
         else snprintf(msg, sizeof msg, ":agent command CMD starts CMD for each :ask (the job on its stdin); none is set");
         app_set_status_gm(a, msg);
         return;
@@ -330,24 +466,27 @@ void app_agent_command_cmd(App *a, const char *rest)
      * (KEYS.md rule 9). */
     if (!strcmp(rest, "off")) {
         if (!a->agent_cmd[0] || a->agent_cmd_off) { app_set_status_gm(a, "no agent command is set"); return; }
-        a->agent_cmd_off = 1;
+        a->settings.paused = 1;
+        app_settings_changed(a);
         app_note_gm(a, "agent command off - :ask waits for an agent that comes for work; :agent command on brings it back");
         return;
     }
     if (!strcmp(rest, "on")) {
         if (!a->agent_cmd[0]) { app_set_status_gm(a, "no agent command to switch on - :agent command CMD sets one"); return; }
-        a->agent_cmd_off = 0;
-        snprintf(msg, sizeof msg, "each :ask now starts: %s", a->agent_cmd);
+        a->settings.paused = 0;
+        app_settings_changed(a);
+        char shown[300];
+        agent_shown(a, shown, sizeof shown);
+        snprintf(msg, sizeof msg, "each :ask now starts: %s", shown);
         app_note_gm(a, msg);
         return;
     }
-    if (strlen(rest) >= sizeof a->agent_cmd) {
-        snprintf(msg, sizeof msg, "the command is over %d characters - put it in a script", AGENT_CMD_MAX - 1);
-        app_set_status_gm(a, msg);
-        return;
-    }
-    str_lcpy(a->agent_cmd, rest, sizeof a->agent_cmd);
-    a->agent_cmd_off = 0;
-    snprintf(msg, sizeof msg, "each :ask now starts: %s", a->agent_cmd);
+    char err[160];
+    if (settings_set(&a->settings, SET_COMMAND, rest, err, sizeof err) < 0) { app_set_status_gm(a, err); return; }
+    a->settings.agent  = AGENT_KIND_COMMAND;
+    a->settings.paused = 0;
+    a->agent_from_env  = 0;
+    app_settings_changed(a);
+    snprintf(msg, sizeof msg, "each :ask now starts: %.250s", a->agent_cmd);
     app_note_gm(a, msg);
 }

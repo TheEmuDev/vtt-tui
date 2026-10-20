@@ -15,6 +15,7 @@
 #include "ruler.h"
 #include "slog.h"
 #include "render.h"
+#include "settings.h"
 #include "term.h"
 #include "theme.h"
 #include "turn.h"
@@ -86,7 +87,8 @@ typedef enum {
     DISK_STUCK,         /* it changed in a way no proposal can say (unreadable, resized) */
 } DiskState;
 
-#define AGENT_CMD_MAX 256
+#define AGENT_CMD_MAX SETTINGS_COMMAND_MAX   /* a command typed in */
+#define AGENT_LINE_MAX 4400                    /* what is run: the Claude agent's line has vtt's path in it */
 /* An agent vtt started (app_agent.c; docs/V2.md, D8): its child, cut from
  * the terminal and reaped by the tick. One a job: a second start of a job
  * whose agent still runs waits for it (`again`). Silent for
@@ -258,8 +260,15 @@ typedef struct {
     int      nagents;
     int      agent_deadline_ms; /* AGENT_DEADLINE_MS; a test sets less */
     int      agent_grace_ms;    /* AGENT_GRACE_MS; likewise */
-    char     agent_cmd[AGENT_CMD_MAX];
+    char     agent_cmd[AGENT_LINE_MAX];  /* what an :ask starts now, from the settings (app_agent_apply) */
     int      agent_cmd_off;     /* :agent command off: kept, not started */
+    int      agent_from_env;    /* agent_cmd is VTT_AGENT_COMMAND's, for this session */
+
+    /* The GM's settings (settings.c; docs/APIAGENT.md): what the Options
+     * screen and :agent change. Saved to settings_file on each change; ""
+     * (a test, a headless run) keeps them in memory only. */
+    Settings settings;
+    char     settings_file[1024];
 
     TextPrompt prompt;
     PromptWhat prompt_what;
@@ -432,6 +441,9 @@ int  app_events_due(const App *a, uint64_t now_ms);
  * stopped and stops the ones past their deadline; this is when the next
  * deadline falls, -1 with none running. */
 int  app_agents_due(const App *a, uint64_t now_ms);
+/* The settings (and VTT_AGENT_COMMAND) made what :ask starts: agent_cmd,
+ * agent_cmd_off. main calls it once they are read. */
+void app_agent_apply(App *a);
 
 /* Another writer of the file (app_disk.c): app_disk_due is the milliseconds
  * until a changed file is read (once the keys are quiet), -1 for none. */

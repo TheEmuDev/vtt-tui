@@ -240,7 +240,7 @@ void test_ctl(void)
     CHECK(strstr(a.status, "the agent channel is off") != NULL);
     CHECK_EQ(a.status_gm, 1);
     press(&a, ":agent sideways\r");
-    CHECK(strstr(a.status, ":agent on, :agent off") != NULL);
+    CHECK(strstr(a.status, ":agent on|off, :agent accept auto|review, :agent claude") != NULL);
     press(&a, ":agent off\r");
     CHECK(strstr(a.status, "already off") != NULL);
 

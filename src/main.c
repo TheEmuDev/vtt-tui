@@ -580,6 +580,15 @@ static int run_interactive(const Options *o)
     a.ascii = o->ascii;
     a.autosave_on = 1;              /* interactive only: a bench would litter */
     a.ask_holders = 1;              /* a GM is here to be asked */
+    /* The GM's settings (docs/APIAGENT.md): interactive only, and saved on
+     * each change; a bench or a tool keeps the defaults in memory. */
+    {
+        char note[400];
+        settings_path(a.settings_file, sizeof a.settings_file);
+        settings_load(&a.settings, a.settings_file, note, sizeof note);
+        if (note[0]) app_set_status_gm(&a, note);
+        a.world.ctl_auto = a.settings.accept_auto;
+    }
     if (o->map_path) app_open_map(&a, o->map_path);
 
     /* From here a terminal that stops reading holds nothing else up; one
@@ -620,11 +629,13 @@ static int run_interactive(const Options *o)
         /* Said either way: with no socket, an --apply to this map cannot
          * find it open and writes the file. */
         if (ctl_start(&a.ctl, err, sizeof err) < 0) app_set_status_gm(&a, err);
-        else a.world.agent_on = o->agent;
-        /* The agent a GM always uses, without typing it each session. */
+        else a.world.agent_on = o->agent || a.settings.channel;
+        /* VTT_AGENT_COMMAND wins over the settings for the session it
+         * starts, and is not saved. */
         const char *cmd = getenv("VTT_AGENT_COMMAND");
-        if (cmd && cmd[0] && strlen(cmd) < sizeof a.agent_cmd) str_lcpy(a.agent_cmd, cmd, sizeof a.agent_cmd);
+        if (cmd && cmd[0] && strlen(cmd) < AGENT_CMD_MAX) { str_lcpy(a.agent_cmd, cmd, sizeof a.agent_cmd); a.agent_from_env = 1; }
         else if (cmd && cmd[0]) app_set_status_gm(&a, "VTT_AGENT_COMMAND is over 255 characters - not set; put it in a script");
+        app_agent_apply(&a);
     }
 
     /* Paint once before blocking so the first frame is up immediately. */
