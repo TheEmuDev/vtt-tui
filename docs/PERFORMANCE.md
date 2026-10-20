@@ -1205,8 +1205,13 @@ under `build, :w full 512x512` 2.6 ms to 3.2 ms (+23%), and `build, outside chan
 not move them: the binary before it (b51b030) and this one, `tools/vs1x.sh b51b030`, three
 runs each alternating on the repo's disk (2026-10-20): `outside change` 17.2 against 17.0 µs,
 `mapio.write` 3.18 against 2.49 ms, `mapio.fsync` 2.60 against 2.05 ms -- the old binary as
-slow as the recording, or slower. The flush is the disk's: a save that is mostly `fsync` reads
-within about a quarter of itself from one recording to the next.
+slow as the recording, or slower. That much is shown. Why the rows moved is not: the save is
+mostly `fsync` (about 80%), and the flush moved by most of what the save did, which points at
+the disk, but one binary's spread from run to run was not measured, and the part of the save
+outside the flush moved too (0.58 against 0.44 ms). `outside change` reads and never flushes;
+its 20.4 µs did not come back in the A/B, cause unknown. What would settle it: one binary,
+ten runs on the repo's disk and ten on tmpfs -- if the disk's spread covers the move and
+tmpfs's does not, it is the flush.
 
 **`:ask` starting an agent** (`:agent command`; the desktop, 2026-10-13): `agent.spawn` is
 92.5 µs at p50 and 175 µs at p99 (`build, :ask starts an agent`, a 200×200 map), once an
