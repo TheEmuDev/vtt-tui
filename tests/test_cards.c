@@ -854,7 +854,7 @@ void test_env(void)
     press(&a, ":env\r");
     CHECK(strstr(a.status, "no environment here") != NULL);
     press(&a, ":env bad/name\r");
-    CHECK(strstr(a.status, "letters, digits") != NULL && !crypt->env[0]);
+    CHECK(strstr(a.status, "letters, digits") != NULL && !crypt->env[0] && a.status_gm);   /* it names the card: the GM's */
     press(&a, ":env a b\r");
     CHECK(strstr(a.status, ":env, :env NAME") != NULL);
 

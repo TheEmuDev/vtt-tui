@@ -225,7 +225,7 @@ static void env_set(App *a, EnvAt at, const char *card)
     env_where(m, at, where, sizeof where);
     WorldErr we;
     if (card[0] && world_card_name(card, &we) < 0) {
-        app_set_status(a, we.text);
+        app_set_status_gm(a, we.text);              /* it says the name typed: an environment is the GM's */
         return;
     }
     if (!strcmp(at.env, card)) {
