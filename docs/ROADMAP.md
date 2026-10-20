@@ -22,7 +22,7 @@ Item 1 was decided 2026-09-27, the rest 2026-09-29.
 - **26. A Claude API agent** (the user, 2026-10-17: API credits in hand). An agent option
   that calls the Claude API directly, beside `:agent command CMD`. A written plan first: no
   dependencies beyond libc/POSIX means no TLS in the binary (a helper process, e.g. curl, is
-  the likely shape); the API key is never written into a map, a log or the repo.
+  the likely shape); the API key is never written into a map, a log or the repo. **The plan: docs/APIAGENT.md** (2026-10-19, waiting for sign-off).
 
 - **1. Messages marked at the source**, if play testing of hidden creatures (built 2026-09-27)
   asks for it. While any creature is hidden, the players' screens show no status messages --
