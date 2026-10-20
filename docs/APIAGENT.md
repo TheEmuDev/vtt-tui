@@ -1,7 +1,8 @@
 # The Claude API agent (ROADMAP item 26)
 
-> **Status: a plan, written 2026-10-19, waiting for the user's sign-off.** Nothing of it is
-> built. *Decisions for the user* at the end are the questions open. The same day the user
+> **Status: a plan, written 2026-10-19; signed off by the user the same day** ("yes to the
+> keyring, go with recommendations": decisions 1-6 and 8 as recommended, 7 the keyring).
+> Nothing of it is built yet. *Decisions for the user* at the end are the questions open. The same day the user
 > added: an options screen on the landing menu to set the agent up, and commands in a map
 > that change the same settings (*Settings* below).
 
@@ -184,7 +185,7 @@ write, each setting's name, kinds and default. The app holds one (`App.settings`
 
 | setting | values | default |
 |---|---|---|
-| agent | `off`, `command`, `claude`: what an `:ask` starts | `off` |
+| agent | `unset`, `off`, `command`, `claude`: what an `:ask` starts (*An `:ask` with no agent chosen*) | `unset` |
 | command | the shell line for `command` | none |
 | model | `opus`, `sonnet`, `haiku`, `fable` (the current model of each), or a full model id | `opus` |
 | effort | `low`, `medium`, `high` | `medium` |
@@ -234,6 +235,47 @@ hidden key prompt is a prompt, so it is GM-only and never on the players' screen
 `'vtt' --claude-agent --model claude-opus-5-5 --effort medium --cap 1.00 --calls 25`, so the
 agent process never reads the settings file, and what a run used is in the session log.
 
+## An `:ask` with no agent chosen
+
+The user asked (2026-10-19) what happens when the GM asks before choosing how. Today, with
+no agent command, `:ask` says `#3 asked: ...` and the job waits for an agent that comes to
+the channel by itself; if none is listening (or the channel is off) nothing ever comes and
+nothing says so. The plan's default (`agent off`) would make that every new GM's first
+`:ask`. So the `agent` setting has a fourth value, **`unset`** (the default: never chosen),
+apart from `off` (chosen: nothing is started), and every `:ask` says what will happen to
+it:
+
+| the `agent` setting | what an `:ask` does |
+|---|---|
+| `unset` | asks the GM once, with the choice below; the job is made either way and waits for the answer |
+| `claude`, with a key and curl | starts the Claude agent (as planned) |
+| `claude`, no key or no curl | the job waits; the GM's line says why and how to fix it (`#3 asked - the Claude agent has no API key: :agent key, or Options`) |
+| `command` | starts the command (as today) |
+| `off`, an agent listening on the channel | the job waits for it: `#3 asked - for the agent on the channel (job-1 is waiting for work)` |
+| `off`, nobody listening, channel on | `#3 asked - no agent is set to start and none is listening: :agent claude, :agent command CMD, or Options` |
+| `off`, channel off | the same, and `:agent on` lets one come by itself |
+
+"Listening" is what the channel knows: a `wait` held now, or a request from an agent in the
+last ten minutes (the deadline's window); nothing is guessed.
+
+**The choice** (on the first `:ask` while `unset`): a small GM-only box over the map, as the
+review's is, which never reaches the phones (`a->view`, `app_view_differs`):
+
+```
+ How should agents answer :ask?
+   c  the Claude API agent      key: keyring ...ab12      (or: no key yet - you will be asked for it)
+   m  a command (Claude Code, a script...)
+   w  wait for an agent that comes to the channel by itself
+   o  the Options screen
+   esc  not now: the job waits, and the next :ask asks again
+```
+
+`c` saves `agent claude` (asking for the key first when there is none) and starts the agent
+on the waiting job; `m` opens a prompt for the command line, then saves and starts it; `w`
+saves `off`, switches the channel on, and says so; `o` opens Options (in a map: the commands
+it lists on its line, since Options is the landing screen's). The choice is saved, so it is
+asked once, not every session; `:agent` and Options change it after.
+
 ## Code
 
 | where | what |
@@ -244,7 +286,8 @@ agent process never reads the settings file, and what a run used is in the sessi
 | `src/settings.c/h` (new) | the settings: the struct, the file read and written, each setting's values and default |
 | `src/app_agent.c`, `app_ctl.c` | the `:agent` commands above; the agent command line built from the settings at each start |
 | `src/app_browser.c`, `app_draw.c`, `app.c` | the menu's Options row; the Options screen (`SCREEN_OPTIONS`): its keys, its rows, the hidden key prompt (`PROMPT_API_KEY`), the usage summary |
-| `src/keys.c` | the Options screen's key table; `:agent`'s new words on the `?` page |
+| `src/keys.c` | the Options screen's key table; `:agent`'s new words on the `?` page; the choice box's keys |
+| `src/app_job.c` | `:ask` says what will happen to the job (the table above); the choice box when `unset` |
 | `src/main.c` | `--claude-agent [--model M] [--effort E]`: `apiagent_main`, before any terminal |
 | tests | suite `apiagent` (below); `make fuzz-json` with the spans |
 
@@ -286,6 +329,10 @@ own command line, and answers from a script of canned answers. The suite runs a 
    stdin and on no command line; with no keyring, the file is mode 600 from the first byte;
    the variable wins over both; a `:agent command` agent's environment has no key from vtt;
    `d` and `:agent key remove` ask, then remove it.
+11. an `:ask` in each row of *An `:ask` with no agent chosen*: the line it says; the choice
+   box on `unset` (a golden frame; never in the players' frame); `c` with and without a key,
+   `m`, `w`, `esc` (asked again next time), each saving what it says; "listening" from a held
+   `wait` and from a recent request, and not from an old one.
 
 **Then one live check, with the user's go** (it spends money): three jobs on a small map --
 a room from nothing, a change inside a box, a send-back with feedback -- each judged by
