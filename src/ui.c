@@ -267,6 +267,13 @@ void ui_prompt_open(TextPrompt *p, const char *title, const char *hint,
     p->active = 1;
 }
 
+void ui_prompt_wipe(TextPrompt *p)
+{
+    volatile char *b = p->buf;
+    for (size_t i = 0; i < sizeof p->buf; i++) b[i] = 0;
+    p->len = p->cursor = 0;
+}
+
 /* Steps one whole UTF-8 scalar, so cursor motion never lands mid-sequence. */
 static int prev_char_start(const char *s, int pos)
 {
@@ -374,11 +381,19 @@ static void entry_field(Renderer *r, const Theme *th, Rect field, const TextProm
 {
     Style fst = style(th->fg, th->sel_bg, 0);
     draw_fill(r, field, ' ', fst);
+    /* A secret is drawn as a * a byte (a key is ASCII): only its length shows. */
+    char shown[UI_PROMPT_MAX];
+    const char *buf = p->buf;
+    if (p->secret) {
+        memset(shown, '*', (size_t)p->len);
+        shown[p->len] = '\0';
+        buf = shown;
+    }
     char before[UI_PROMPT_MAX];
-    memcpy(before, p->buf, (size_t)p->cursor);
+    memcpy(before, buf, (size_t)p->cursor);
     before[p->cursor] = '\0';
     int cw = text_width(before), shift = imax(0, cw - (field.w - 2));
-    draw_text(r, field.x, field.y, p->buf + imin(shift, p->len), field.w - 1, fst);
+    draw_text(r, field.x, field.y, buf + imin(shift, p->len), field.w - 1, fst);
     Cell *c = rnd_at(r, field.x + cw - shift, field.y);
     if (c) { c->bg = th->accent; c->fg = th->bg; }
 }

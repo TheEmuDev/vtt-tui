@@ -1,3 +1,4 @@
+#include "apikey.h"
 #include "app_priv.h"
 
 #include <errno.h>
@@ -901,6 +902,16 @@ static void prompt_accept(App *a)
     case PROMPT_JOB_FEEDBACK:
         app_job_feedback(a, text);
         return;
+    case PROMPT_API_KEY: {
+        /* The key leaves the prompt's buffer for the keyring and is wiped
+         * from it; a prompt opened again by the call starts empty anyway. */
+        char key[UI_PROMPT_MAX];
+        str_lcpy(key, text, sizeof key);
+        ui_prompt_wipe(&a->prompt);
+        app_agent_key_typed(a, key);
+        apikey_wipe(key, sizeof key);
+        return;
+    }
     case PROMPT_NOTE: {
         /* The text itself stays off the status line and out of the log: the
          * line is in the frame the players see, and the log is for what
@@ -1240,9 +1251,13 @@ static int modal_key(App *a, Key k)
         int r = ui_prompt_key(&a->prompt, k);
         if (r == 1) prompt_accept(a);
         else if (r == -1) {
+            int secret = a->prompt.secret;
+            if (secret) ui_prompt_wipe(&a->prompt);
             a->modal       = MODAL_NONE;
             a->prompt_what = PROMPT_NONE;
-            app_set_status(a, "canceled");
+            a->key_then    = KEY_THEN_NOTHING;
+            if (secret) app_set_status_gm(a, "canceled - no key stored");
+            else app_set_status(a, "canceled");
         }
         return 1;
     }
@@ -1277,6 +1292,16 @@ static int modal_key(App *a, Key k)
         }
         return 1;
     }
+
+    case MODAL_CONFIRM_KEY:
+        if (k.kind == KEY_CHAR && (k.ch == 'y' || k.ch == 'Y')) {
+            a->modal = MODAL_NONE;
+            app_agent_key_remove(a);
+        } else if (k.kind == KEY_ESC || (k.kind == KEY_CHAR && (k.ch == 'n' || k.ch == 'N'))) {
+            a->modal = MODAL_NONE;
+            app_set_status_gm(a, "the key is kept");
+        }
+        return 1;
 
     case MODAL_CONFIRM_DELETE: {
         if (k.kind == KEY_CHAR && (k.ch == 'y' || k.ch == 'Y')) {

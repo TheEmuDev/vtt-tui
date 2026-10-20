@@ -49,6 +49,7 @@ typedef enum {
     MODAL_CONFIRM_RECOVER,   /* an autosave newer than the map: take it? */
     MODAL_CONFIRM_HELD,      /* another vtt has this map open: open it here too? */
     MODAL_CONFIRM_ROWS,      /* the file had a row added or lost: save the rows as read? */
+    MODAL_CONFIRM_KEY,       /* :agent key remove: take the stored API key away? */
     MODAL_PICKER,            /* a list filtered as the GM types: App.picker */
     MODAL_CARD,              /* :card -- a creature's card whole, scrolled by card_top */
 } ModalKind;
@@ -77,6 +78,7 @@ typedef enum {
     PROMPT_NOTE,
     PROMPT_COUNTERS,
     PROMPT_JOB_FEEDBACK,
+    PROMPT_API_KEY,          /* the hidden prompt: the key goes to the keyring (app_agent_key_typed) */
 } PromptWhat;
 
 /* A ping: a ring round a block of squares, until a moment passes. */
@@ -269,6 +271,7 @@ typedef struct {
      * (a test, a headless run) keeps them in memory only. */
     Settings settings;
     char     settings_file[1024];
+    int      key_then;          /* what the key prompt does once a key is stored: KEY_THEN_* (app_agent.c) */
 
     TextPrompt prompt;
     PromptWhat prompt_what;

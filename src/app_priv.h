@@ -229,6 +229,14 @@ void app_settings_changed(App *a);
 int  app_agent_setting(App *a, const char *rest);
 /* The agent's settings in a line, for :agent and the Options screen. */
 void app_agent_describe(const App *a, char *buf, size_t sz);
+/* The hidden key prompt (PROMPT_API_KEY), what it stores, and :agent key
+ * remove once the GM says yes. `then` is what follows a key stored. */
+enum { KEY_THEN_NOTHING, KEY_THEN_CLAUDE };
+void app_agent_key_prompt(App *a, int then, const char *why);
+void app_agent_key_typed(App *a, const char *key);
+void app_agent_key_remove(App *a);
+/* Where the key in use is from, and its last four characters ("" with none). */
+int  app_agent_key_where(char *last4, size_t sz);
 
 /* Jobs and the review (app_job.c). */
 void app_review_key(App *a, Key k);

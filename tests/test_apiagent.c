@@ -428,3 +428,164 @@ void test_settings(void)
     rnd_free(&r);
     sandbox_leave(&sb);
 }
+
+/* A stand-in secret-tool: store keeps stdin in `secret`, lookup prints it,
+ * clear removes it; each run's arguments and stdin are kept. */
+static void fake_secret_tool(const char *dir, char *path, size_t sz)
+{
+    snprintf(path, sz, "%s/secret-tool", dir);
+    FILE *f = fopen(path, "w");
+    fprintf(f, "#!/bin/sh\n"
+               "d='%s'\n"
+               "for a in \"$@\"; do printf '%%s\\n' \"$a\"; done >> \"$d/st.argv\"\n"
+               "case \"$1\" in\n"
+               "store) cat > \"$d/secret\" ;;\n"
+               "lookup) [ -f \"$d/secret\" ] && cat \"$d/secret\" || exit 1 ;;\n"
+               "clear) rm -f \"$d/secret\" ;;\n"
+               "esac\n", dir);
+    fclose(f);
+    chmod(path, 0755);
+}
+
+static int frame_has(App *a, Renderer *r, const char *needle)
+{
+    rnd_begin(r);
+    app_draw(a);
+    ByteBuf b;
+    bb_init(&b, 4096);
+    rnd_dump(r, &b);
+    bb_putc(&b, '\0');
+    int has = strstr(b.data, needle) != NULL;
+    bb_free(&b);
+    return has;
+}
+
+void test_api_key(void)
+{
+    Sandbox sb = sandbox_enter("apikey");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    unsetenv("ANTHROPIC_API_KEY");
+    char tool[900], secret[900], kf[1200];
+    fake_secret_tool(sb.dir, tool, sizeof tool);
+    snprintf(secret, sizeof secret, "%s/secret", sb.dir);
+    apikey_file_path(kf, sizeof kf);
+    Renderer r;
+    App a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK(ctl_blank_map(&a, sb.dir, 8, 6));
+
+    CASE(":agent key: a hidden prompt -- the frame shows a * a character, never the key");
+    setenv("VTT_SECRET_TOOL", tool, 1);
+    press(&a, ":agent key\r");
+    CHECK_EQ(a.modal, MODAL_PROMPT);
+    CHECK_EQ(a.prompt.secret, 1);
+    CHECK(frame_has(&a, &r, "none yet - it goes to your keyring"));
+    press(&a, KEY);
+    CHECK(frame_has(&a, &r, "Anthropic API key"));
+    CHECK(!frame_has(&a, &r, "sk-test"));
+    CHECK(frame_has(&a, &r, "*******************************"));
+    {
+        char *pl = players_text(&a, &r);
+        CHECK(pl && !strstr(pl, "Anthropic") && !strstr(pl, "****"));    /* nothing of it on the phones */
+        free(pl);
+    }
+
+    CASE("enter: to the keyring down stdin, no newline, never an argument; the prompt wiped; only the last four said");
+    press(&a, "\r");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    {
+        char *sec = slurp(secret);
+        CHECK(sec && !strcmp(sec, KEY));
+        free(sec);
+        char path[1000];
+        snprintf(path, sizeof path, "%s/st.argv", sb.dir);
+        CHECK(file_has(path, "store\n--label=vtt: Anthropic API key\nservice\nvtt\naccount\nanthropic-api-key\n"));
+        CHECK(!file_has(path, "sk-test"));
+    }
+    CHECK(strstr(a.status, "API key ...KLMN stored in your keyring") != NULL && a.status_gm);
+    CHECK(!strstr(a.status, "sk-test"));
+    {
+        int clean = 1;
+        for (size_t i = 0; i < sizeof a.prompt.buf; i++) clean &= a.prompt.buf[i] == 0;
+        CHECK(clean);
+    }
+    CHECK(access(kf, F_OK) != 0);                                     /* no file beside the keyring */
+
+    CASE("found again: the keyring's, its last four on the prompt's line");
+    char last4[8];
+    CHECK_EQ(app_agent_key_where(last4, sizeof last4), APIKEY_KEYRING);
+    CHECK(!strcmp(last4, "KLMN"));
+    press(&a, ":agent key\r");
+    CHECK(frame_has(&a, &r, "now: the keyring's, ending ...KLMN"));
+
+    CASE("not a key: refused, the prompt kept open saying why; esc: nothing stored, wiped");
+    press(&a, "sk-test-0123456789\"abcdefgh\r");
+    CHECK_EQ(a.modal, MODAL_PROMPT);
+    CHECK(frame_has(&a, &r, "not a key: letters, digits"));
+    press(&a, "half-a-key\x1b");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK(strstr(a.status, "canceled - no key stored") != NULL);
+    CHECK(a.prompt.buf[0] == 0 && a.prompt.len == 0);
+    {
+        char *sec = slurp(secret);
+        CHECK(sec && !strcmp(sec, KEY));                               /* the stored one untouched */
+        free(sec);
+    }
+
+    CASE(":agent key remove asks; n keeps it, y takes it from the keyring");
+    press(&a, ":agent key remove\r");
+    CHECK_EQ(a.modal, MODAL_CONFIRM_KEY);
+    CHECK(frame_has(&a, &r, "ending ...KLMN, from your keyring"));
+    press(&a, "n");
+    CHECK(access(secret, F_OK) == 0);
+    press(&a, ":agent key remove\ry");
+    CHECK(access(secret, F_OK) != 0);
+    CHECK(strstr(a.status, "the stored API key is removed") != NULL);
+    press(&a, ":agent key remove\r");
+    CHECK(strstr(a.status, "no API key is stored") != NULL);
+
+    CASE("no keyring here: the key goes to a file, mode 600, and the GM is told it is a file");
+    setenv("VTT_SECRET_TOOL", "/nonexistent/secret-tool", 1);
+    press(&a, ":agent key\r" KEY "\r");
+    {
+        struct stat st;
+        CHECK(stat(kf, &st) == 0 && (st.st_mode & 0777) == 0600);
+        char *t = slurp(kf);
+        CHECK(t && !strcmp(t, KEY "\n"));
+        free(t);
+    }
+    CHECK(strstr(a.status, "readable by you alone (no keyring here)") != NULL);
+    CHECK_EQ(app_agent_key_where(last4, sizeof last4), APIKEY_FILE);
+    press(&a, ":agent key remove\ry");
+    CHECK(access(kf, F_OK) != 0);
+
+    CASE("the variable wins, is said, and is the GM's to unset");
+    setenv("ANTHROPIC_API_KEY", KEY, 1);
+    CHECK_EQ(app_agent_key_where(last4, sizeof last4), APIKEY_ENV);
+    press(&a, ":agent key remove\r");
+    CHECK(strstr(a.status, "unset it yourself") != NULL);
+    unsetenv("ANTHROPIC_API_KEY");
+
+    CASE(":agent claude with no key asks for one, and is set once it is stored");
+    setenv("VTT_SECRET_TOOL", tool, 1);
+    setenv("VTT_CLAUDE_CURL", "/bin/true", 1);
+    press(&a, ":agent claude sonnet\r");
+    CHECK_EQ(a.modal, MODAL_PROMPT);
+    CHECK_EQ(a.settings.agent, AGENT_KIND_UNSET);
+    press(&a, KEY "\r");
+    CHECK_EQ(a.settings.agent, AGENT_KIND_CLAUDE);
+    CHECK(!strcmp(a.settings.model, "sonnet"));
+    CHECK(strstr(a.status, "each :ask now starts the Claude agent") != NULL);
+    CHECK(strstr(a.agent_cmd, KEY) == NULL);
+
+    CASE("a :agent command agent gets no key from vtt: vtt never puts it in the environment");
+    CHECK(getenv("ANTHROPIC_API_KEY") == NULL);
+
+    unsetenv("VTT_CLAUDE_CURL");
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}

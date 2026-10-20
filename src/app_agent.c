@@ -391,6 +391,91 @@ static int claude_ready(App *a, char *why, size_t whysz)
     return 1;
 }
 
+/* ------------------------------------------------------------- the API key */
+
+int app_agent_key_where(char *last4, size_t sz)
+{
+    char key[APIKEY_MAX], err[600];
+    ApiKeySource src = apikey_find(key, sizeof key, err, sizeof err);
+    size_t n = strlen(key);
+    if (src != APIKEY_NONE && n >= 4) snprintf(last4, sz, "%s", key + n - 4);
+    else if (sz) last4[0] = '\0';
+    apikey_wipe(key, sizeof key);
+    return src;
+}
+
+void app_agent_key_prompt(App *a, int then, const char *why)
+{
+    char hint[96], last4[8];
+    int  src = app_agent_key_where(last4, sizeof last4);
+    if (why && *why) snprintf(hint, sizeof hint, "%.90s", why);
+    else if (src == APIKEY_NONE) snprintf(hint, sizeof hint, "none yet - it goes to your keyring, shown as *");
+    else snprintf(hint, sizeof hint, "now: the %s's, ending ...%s - a new one replaces it", apikey_source_name(src), last4);
+    app_open_prompt(a, PROMPT_API_KEY, "Anthropic API key", hint, "");
+    a->prompt.secret = 1;
+    a->prompt.max = APIKEY_MAX < UI_PROMPT_MAX ? APIKEY_MAX : UI_PROMPT_MAX;
+    a->key_then = then;
+}
+
+void app_agent_key_typed(App *a, const char *key)
+{
+    char err[600], msg[1400];
+    int  then = a->key_then;
+    a->key_then = KEY_THEN_NOTHING;
+    /* Pasted keys bring white space at the ends; inside, it is not a key. */
+    while (*key == ' ' || *key == '\t') key++;
+    char k[APIKEY_MAX];
+    str_lcpy(k, key, sizeof k);
+    size_t n = strlen(k);
+    while (n && (k[n - 1] == ' ' || k[n - 1] == '\t' || k[n - 1] == '\r' || k[n - 1] == '\n')) k[--n] = '\0';
+    if (!*k) { apikey_wipe(k, sizeof k); app_set_status_gm(a, "canceled - no key stored"); return; }
+    if (!apikey_ok(k)) {
+        apikey_wipe(k, sizeof k);
+        app_agent_key_prompt(a, then, "not a key: letters, digits, - and _ only - again, or esc");
+        return;
+    }
+    ApiKeySource where;
+    int rc = apikey_store(k, &where, err, sizeof err);
+    char last4[8];
+    snprintf(last4, sizeof last4, "%s", k + n - 4);
+    apikey_wipe(k, sizeof k);
+    if (rc < 0) { app_set_status_gm(a, err); return; }
+    char path[1100];
+    apikey_file_path(path, sizeof path);
+    const char *shadow = getenv("ANTHROPIC_API_KEY") && *getenv("ANTHROPIC_API_KEY")
+                         ? " - but ANTHROPIC_API_KEY is set, and it is the one used" : "";
+    if (where == APIKEY_KEYRING) snprintf(msg, sizeof msg, "API key ...%s stored in your keyring%s", last4, shadow);
+    else snprintf(msg, sizeof msg, "API key ...%s stored in %s, readable by you alone (no keyring here)%s", last4, path, shadow);
+    app_note_gm(a, msg);
+    if (then == KEY_THEN_CLAUDE) app_agent_setting(a, "claude");
+}
+
+void app_agent_key_remove(App *a)
+{
+    char err[600];
+    if (apikey_remove(err, sizeof err) < 0) { app_set_status_gm(a, err); return; }
+    char last4[8];
+    int src = app_agent_key_where(last4, sizeof last4);
+    if (src == APIKEY_ENV) app_note_gm(a, "the stored key is removed - ANTHROPIC_API_KEY is still set in the environment; unset it to stop using it");
+    else app_note_gm(a, "the stored API key is removed");
+}
+
+static void key_remove_ask(App *a)
+{
+    char last4[8];
+    int src = app_agent_key_where(last4, sizeof last4);
+    if (src == APIKEY_NONE) { app_set_status_gm(a, "no API key is stored"); return; }
+    if (src == APIKEY_ENV) {
+        app_set_status_gm(a, "the key in use is ANTHROPIC_API_KEY, from the environment: unset it yourself (vtt stores none of it)");
+        return;
+    }
+    snprintf(a->modal_title, sizeof a->modal_title, "Remove the API key?");
+    snprintf(a->modal_body, sizeof a->modal_body, "The key ending ...%s, from your %s. The Claude agent stops working until a key is given again.",
+             last4, apikey_source_name(src));
+    a->modal = MODAL_CONFIRM_KEY;
+    a->dirty = 1;
+}
+
 static int word_is(const char *rest, const char *w, const char **arg)
 {
     size_t n = strlen(w);
@@ -408,10 +493,25 @@ int app_agent_setting(App *a, const char *rest)
     };
     char msg[700], err[600];
     const char *arg;
+    if (word_is(rest, "key", &arg)) {
+        if (!strcmp(arg, "remove")) key_remove_ask(a);
+        else if (!strcmp(arg, "off")) app_set_status_gm(a, ":agent key remove takes the stored key away");   /* KEYS.md rule 9 */
+        else if (*arg) app_set_status_gm(a, ":agent key types a key in (hidden); :agent key remove takes it away");
+        else app_agent_key_prompt(a, KEY_THEN_NOTHING, NULL);
+        return 1;
+    }
     if (word_is(rest, "claude", &arg)) {
         Settings was = a->settings;
         if (*arg && settings_set(&a->settings, SET_MODEL, arg, err, sizeof err) < 0) { app_set_status_gm(a, err); return 1; }
         if (!claude_ready(a, err, sizeof err)) {
+            /* No key: asked for one, and the agent is set once it is stored
+             * (the choice box's c does the same). No curl: nothing to ask. */
+            char last4[8];
+            if (app_agent_key_where(last4, sizeof last4) == APIKEY_NONE) {
+                app_settings_changed(a);                 /* the model, if one was named */
+                app_agent_key_prompt(a, KEY_THEN_CLAUDE, err);
+                return 1;
+            }
             a->settings = was;
             snprintf(msg, sizeof msg, "%s", err);
             app_set_status_gm(a, msg);

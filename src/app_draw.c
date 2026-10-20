@@ -482,6 +482,11 @@ void app_draw_view(App *a, View view)
                  "y  open it here too      n / esc  leave it", frame);
         break;
 
+    case MODAL_CONFIRM_KEY:
+        ui_modal(a->rnd, a->th, a->modal_title, a->modal_body,
+                 "y  remove the stored key      n / esc  keep it", frame);
+        break;
+
     case MODAL_CONFIRM_DELETE:
         /* Its own footer: this one removes a file from disk, and the word
          * "yes" does not say that. */

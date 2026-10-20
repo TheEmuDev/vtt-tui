@@ -62,10 +62,14 @@ typedef struct {
     int  cursor;     /* byte offset */
     int  active;
     int  max;        /* bytes the answer may hold, NUL included; 0 means the buffer */
+    int  secret;     /* drawn as *, never as itself (the API key); wiped by ui_prompt_wipe */
 } TextPrompt;
 
 void ui_prompt_open(TextPrompt *p, const char *title, const char *hint,
                     const char *initial);
+
+/* Overwrites what was typed: a secret's prompt calls it once it is done. */
+void ui_prompt_wipe(TextPrompt *p);
 
 /* Returns 1 when the user accepted (Enter), -1 when canceled (Esc),
  * 0 while still editing. */

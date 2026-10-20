@@ -257,6 +257,7 @@ void test_agent_guide(void);
 void test_api_agent(void);
 void test_api_agent_parts(void);
 void test_settings(void);
+void test_api_key(void);
 void test_stamps(void);
 void test_undo_nesting(void);
 void test_ctl(void);
