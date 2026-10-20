@@ -1055,12 +1055,35 @@ void test_ask_agent(void)
         CHECK(frame_has(&a, &r, "the Claude API agent  (key: keyring ...KLMN)"));   /* the key as stored now */
         press(&a, "\x1b");
     }
-    CASE("m, then an empty command: nothing chosen, and nothing left waiting on the box");
+    CASE("from the box, a prompt that ends with nothing chosen brings the box back; its esc leaves nothing waiting on it");
     jobs_reset(&a);
     a.settings.agent = AGENT_KIND_UNSET;
     app_agent_apply(&a);
     press(&a, ":ask a drain\r");
-    press(&a, "m\r");
+    press(&a, "m\r");                                               /* an empty command */
+    CHECK_EQ(a.modal, MODAL_CHOOSE_AGENT);
+    {
+        char sec[900];
+        snprintf(sec, sizeof sec, "%s/secret", sb.dir);
+        unlink(sec);
+        press(&a, "c\r");                                           /* an empty key */
+        CHECK_EQ(a.modal, MODAL_CHOOSE_AGENT);
+        CHECK(strstr(a.status, "canceled - no key stored") != NULL);
+        /* a key that cannot be stored: no keyring, and the config dir a file */
+        char cfgfile[900], was_cfg[900];
+        snprintf(cfgfile, sizeof cfgfile, "%s/not-a-dir", sb.dir);
+        FILE *f = fopen(cfgfile, "w"); fclose(f);
+        str_lcpy(was_cfg, getenv("XDG_CONFIG_HOME"), sizeof was_cfg);
+        setenv("XDG_CONFIG_HOME", cfgfile, 1);
+        setenv("VTT_SECRET_TOOL", "/nonexistent/secret-tool", 1);
+        press(&a, "c" KEY "\r");
+        CHECK(strstr(a.status, "cannot write") != NULL);
+        CHECK_EQ(a.modal, MODAL_CHOOSE_AGENT);
+        CHECK_EQ(a.settings.agent, AGENT_KIND_UNSET);
+        setenv("XDG_CONFIG_HOME", was_cfg, 1);
+        setenv("VTT_SECRET_TOOL", tool, 1);
+    }
+    press(&a, "\x1b");
     CHECK_EQ(a.choice_job, 0);
     press(&a, ":agent key\r\x1b");
     CHECK_EQ(a.modal, MODAL_NONE);

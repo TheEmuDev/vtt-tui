@@ -462,4 +462,8 @@ Where the code left the plan, and what the build found:
   set (cleared now); a whole error answer (429, 401) followed by a lost connection read as cut
   off (its status is kept now: a 429 backs off and is sent again, a 401 says so), and a lone
   `100 Continue` no longer counts as an answer begun.
+- **The third recheck, the same leak twice more** (an empty key, a key that could not be
+  stored, each returning early with the box's job still set): closed as a class rather than
+  exit by exit -- any prompt the box opened that ends with nothing chosen brings the box back
+  (`back_to_choice`), as `esc` does; only the box's own `esc`, `w` and a choice made clear it.
 

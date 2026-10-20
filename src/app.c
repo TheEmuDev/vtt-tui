@@ -732,6 +732,16 @@ void app_report_selection(App *a)
     app_set_status(a, msg);
 }
 
+/* A prompt the agent choice box opened ended with nothing chosen (an empty
+ * answer, a key that could not be stored): the job still waits, so the box
+ * comes back, as esc brings it back. One rule for every way out, rather than
+ * each early return clearing App.choice_job. */
+static void back_to_choice(App *a)
+{
+    if (a->choice_job && a->modal == MODAL_NONE && a->settings.agent == AGENT_KIND_UNSET)
+        a->modal = MODAL_CHOOSE_AGENT;
+}
+
 static void prompt_accept(App *a)
 {
     const char *text = a->prompt.buf;
@@ -909,6 +919,7 @@ static void prompt_accept(App *a)
         return;
     case PROMPT_SETTING:
         app_options_prompt(a, text);
+        back_to_choice(a);
         return;
     case PROMPT_API_KEY: {
         /* The key leaves the prompt's buffer for the keyring and is wiped
@@ -918,6 +929,7 @@ static void prompt_accept(App *a)
         ui_prompt_wipe(&a->prompt);
         app_agent_key_typed(a, key);
         apikey_wipe(key, sizeof key);
+        back_to_choice(a);
         return;
     }
     case PROMPT_NOTE: {
