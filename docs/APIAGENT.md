@@ -4,8 +4,8 @@
 > ab97c33), from the plan signed off 2026-10-19 ("yes to the keyring, go with
 > recommendations"). A design record: what is true now is the README (*Working with AI
 > agents*) and the files' rows in docs/CODEMAP.md; *As built* at the end says where the code
-> left the plan. Owed: the Fable review, the live check (it spends money: the user's go), and
-> the timings (PERFORMANCE.md, also with the user's go).
+> left the plan. Reviewed (Fable, three rechecks, quiet at 3f7fd2b). Owed: the live check (it
+> spends money: the user's go), and the timings (PERFORMANCE.md, also with the user's go).
 
 An agent option that calls the Claude API itself, beside `:agent command CMD`: the GM types
 `:agent claude`, and every `:ask` (and every send-back) is answered by Claude through the
