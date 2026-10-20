@@ -955,7 +955,10 @@ void test_floor_view(void)
         /* The GM's line and the channel's refusal are one operation's words (world_ops.c). */
         char said[sizeof a.status];
         str_lcpy(said, a.status, sizeof said);
-        char *ans = ctl_ask(&a, "area Ground F1:O4\n");
+        char *ans = ctl_ask(&a, "area ground F1:O4\n");          /* typed in lower case: the refusal names it as stored */
+        CHECK(ans && ctl_refused(ans, "conflict", 1) && strstr(ans, said));
+        free(ans);
+        ans = ctl_ask(&a, "room ground F1:O4\n");                /* a room drawn over it: the same check */
         CHECK(ans && ctl_refused(ans, "conflict", 1) && strstr(ans, said));
         free(ans);
     }
