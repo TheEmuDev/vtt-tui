@@ -437,6 +437,17 @@ void test_protocol(void)
         map_free(st);
     }
 
+    CASE("scenes on a bare World: saved, found, put back as one step; a bad name, a missing one refused");
+    {
+        WorldErr e;
+        CHECK(world_scene_find(&w, "Ambush", &e) < 0 && e.cls == CTL_E_MISSING && !strcmp(e.text, "no scene called Ambush"));
+        CHECK(world_scene_save(&w, "", NULL, &e) < 0 && e.cls == CTL_E_USAGE);
+        int i = world_scene_save(&w, "Ambush", NULL, &e);
+        CHECK(i >= 0 && world_scene_find(&w, "ambush", &e) == i);
+        int d = w.undo.depth;
+        CHECK(world_scene_restore(&w, i, &e) >= 0 && w.undo.depth <= d + 1);
+    }
+
     world_jobs_clear(&w);
     if (w.ctl_scratch) map_free(w.ctl_scratch);
     undo_free(&w.undo);

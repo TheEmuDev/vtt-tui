@@ -934,9 +934,8 @@ static int edit_line(World *world, char w[][CTL_WORD_MAX], int n, Edits *ed, cha
     }
     else if (!strcmp(v, "scene")) {
         /* scene NAME: put it back, one step with the rest of the request. */
-        int i = scene_find(m, w[1]);
-        if (i < 0) BADC(CTL_E_MISSING, "no scene called %.31s", w[1]);
-        if (scene_restore(m, u, i, err, errsz) < 0) return rq_class(CTL_E_CONFLICT);
+        int i = world_scene_find(world, w[1], &we);
+        if (i < 0 || world_scene_restore(world, i, &we) < 0) BADC(we.cls, "%s", we.text);
         const Scene *sc = &m->scenes[i];
         if (sc->boxed) {
             /* The box, and any creature of the scene hanging over its edge. */
@@ -1077,8 +1076,9 @@ static int rq_scene_other(RQ_ARGS)
         return -1;
     }
     if (n == 3 && !strcmp(w[1], "diff")) {
-        int i = scene_find(m, w[2]);
-        if (i < 0) { rq_class(CTL_E_MISSING), snprintf(err, errsz, "no scene called %.31s", w[2]); return -1; }
+        WorldErr we;
+        int i = world_scene_find(world, w[2], &we);
+        if (i < 0) { rq_class(we.cls), str_lcpy(err, we.text, errsz); return -1; }
         /* Every creature of the scene against every one of the map's. */
         if (!request_read(world, (long)m->scenes[i].tokens.n * m->tokens.n / 8 + 1, err, errsz)) return -1;
         if (!scene_diff(out, m, i)) fputs("no changes\n", out);
@@ -1093,18 +1093,19 @@ static int rq_scene_other(RQ_ARGS)
     const char *busy = world->host->busy(world->gm);
     if (busy) { str_lcpy(err, busy, errsz); return -2; }
     char msg[160];
+    WorldErr we;
     if (save) {
         int box[4], boxed = n == 4;
         if (boxed && !region(m, w[3], &box[0], &box[1], &box[2], &box[3], err, errsz)) return -1;
-        int i = scene_save(m, w[2], boxed ? box : NULL, err, errsz);
-        if (i < 0) return rq_class(scene_name_ok(w[2]) ? CTL_E_LIMIT : CTL_E_USAGE);     /* its two refusals: the name, or no room */
+        int i = world_scene_save(world, w[2], boxed ? box : NULL, &we);
+        if (i < 0) { rq_class(we.cls), str_lcpy(err, we.text, errsz); return -1; }
         char what[64];
         scene_describe(m, i, what, sizeof what);
         fprintf(out, "saved scene \"%s\": %s\n", m->scenes[i].name, what);
         snprintf(msg, sizeof msg, "agent: saved scene %.31s (%s)", m->scenes[i].name, what);
     } else {
-        int i = scene_find(m, w[1]);
-        if (i < 0) { rq_class(CTL_E_MISSING), snprintf(err, errsz, "no scene called %.31s", w[1]); return -1; }
+        int i = world_scene_find(world, w[1], &we);
+        if (i < 0) { rq_class(we.cls), str_lcpy(err, we.text, errsz); return -1; }
         snprintf(msg, sizeof msg, "agent: removed scene %.31s", m->scenes[i].name);
         fprintf(out, "removed scene \"%s\"\n", m->scenes[i].name);
         scene_remove(m, i);

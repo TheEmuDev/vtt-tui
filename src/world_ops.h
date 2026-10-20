@@ -56,4 +56,13 @@ int world_area_env(World *w, int ai, const char *card, WorldErr *e);
  * the map holds all the links or notes it can. */
 int world_stamp_place(World *w, const Map *s, int x, int y, WorldErr *e);
 
+/* Scenes (scene.h): `find` is the scene called NAME, or -1 with "no scene
+ * called"; `restore` puts scene `i` back, giving its creatures' count, refused
+ * when they would land on something; `save` keeps the creatures (those
+ * meeting `box` when it is not NULL), giving the scene's index, refused for a
+ * name (usage) or a map that holds all it can (limit). */
+int world_scene_find(const World *w, const char *name, WorldErr *e);
+int world_scene_restore(World *w, int i, WorldErr *e);
+int world_scene_save(World *w, const char *name, const int box[4], WorldErr *e);
+
 #endif /* VTT_WORLD_OPS_H */

@@ -507,7 +507,12 @@ void test_scene_keys(void)
     CHECK_EQ(m->nscenes, 1);
     CHECK(strstr(a.status, "scene Ogre corner removed") != NULL);
     press(&a, ":scene nowhere\r");
-    CHECK(strstr(a.status, "no scene called nowhere") != NULL);
+    CHECK(!strcmp(a.status, "no scene called nowhere - :scenes lists them") && a.status_gm);
+    {
+        char *t = ctl_ask(&a, "scene nowhere\n");             /* the channel's: the same words, less the hint */
+        CHECK(t && ctl_refused(t, "missing", 1) && strstr(t, "no scene called nowhere\n"));
+        free(t);
+    }
     press(&a, ":scene save\r");
     CHECK(strstr(a.status, ":scene save NAME") != NULL);
 

@@ -8,6 +8,7 @@
 #include "card.h"
 #include "floor.h"
 #include "link.h"
+#include "scene.h"
 #include "stamp.h"
 
 static int refuse(WorldErr *e, int cls, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
@@ -154,4 +155,27 @@ int world_stamp_place(World *w, const Map *s, int x, int y, WorldErr *e)
     if (stamp_place(w->map, &w->undo, s, x, y, &full, e->text, sizeof e->text)) return 0;
     e->cls = full ? CTL_E_LIMIT : CTL_E_CONFLICT;
     return -1;
+}
+
+/* ----------------------------------------------------------------- scenes */
+
+int world_scene_find(const World *w, const char *name, WorldErr *e)
+{
+    int i = scene_find(w->map, name);
+    if (i < 0) return refuse(e, CTL_E_MISSING, "no scene called %.31s", name);
+    return i;
+}
+
+int world_scene_restore(World *w, int i, WorldErr *e)
+{
+    int n = scene_restore(w->map, &w->undo, i, e->text, sizeof e->text);
+    if (n < 0) e->cls = CTL_E_CONFLICT;
+    return n;
+}
+
+int world_scene_save(World *w, const char *name, const int box[4], WorldErr *e)
+{
+    int i = scene_save(w->map, name, box, e->text, sizeof e->text);
+    if (i < 0) e->cls = scene_name_ok(name) ? CTL_E_LIMIT : CTL_E_USAGE;     /* its two refusals: the name, or no room */
+    return i;
 }

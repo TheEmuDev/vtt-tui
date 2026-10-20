@@ -6,21 +6,23 @@
 #include <string.h>
 
 #include "app_priv.h"
+#include "world_ops.h"
 #include "scene.h"
 #include "turn.h"
 
 void app_scene_restore(App *a, const char *name)
 {
-    char msg[200], err[160];
-    int  i = scene_find(a->world.map, name);
+    char msg[240];
+    WorldErr we;
+    int  i = world_scene_find(&a->world, name, &we);
     if (i < 0) {
-        snprintf(msg, sizeof msg, "no scene called %.31s - :scenes lists them", name);
+        snprintf(msg, sizeof msg, "%s - :scenes lists them", we.text);
         app_set_status_gm(a, msg);
         return;
     }
     if (a->play.grabbed) { app_set_status_gm(a, "put the creature down first - enter"); return; }
-    int n = scene_restore(a->world.map, &a->world.undo, i, err, sizeof err);
-    if (n < 0) { app_set_status_gm(a, err); return; }
+    int n = world_scene_restore(&a->world, i, &we);
+    if (n < 0) { app_set_status_gm(a, we.text); return; }
     app_creatures_renumbered(a);
     snprintf(msg, sizeof msg, "scene %.31s is back - %d creature%s, u takes it back",
              a->world.map->scenes[i].name, n, n == 1 ? "" : "s");
@@ -60,7 +62,7 @@ static void list(App *a)
  * :scene NAME remove     throw it away */
 void app_scene_command(App *a, const char *verb, const char *rest)
 {
-    char msg[200], err[160], name[SCENE_NAME_MAX + 16];
+    char msg[200], name[SCENE_NAME_MAX + 16];
     if (!a->world.map) return;
     if (!strcmp(verb, "scenes")) { list(a); return; }
     if (!*rest) { app_pick_open(a, PICK_SCENE, -1, ""); return; }
@@ -80,8 +82,9 @@ void app_scene_command(App *a, const char *verb, const char *rest)
         if (!*nm) { app_set_status_gm(a, ":scene save NAME keeps the creatures as they stand"); return; }
         if (a->play.grabbed) { app_set_status_gm(a, "put the creature down first - enter"); return; }
         int box[4], boxed = drawn_box(a, box);
-        int i = scene_save(a->world.map, nm, boxed ? box : NULL, err, sizeof err);
-        if (i < 0) { app_set_status_gm(a, err); return; }
+        WorldErr we;
+        int i = world_scene_save(&a->world, nm, boxed ? box : NULL, &we);
+        if (i < 0) { app_set_status_gm(a, we.text); return; }
         char what[64];
         scene_describe(a->world.map, i, what, sizeof what);
         snprintf(msg, sizeof msg, "scene %.31s saved - %s; :scene %.31s puts it back", a->world.map->scenes[i].name, what,
@@ -98,8 +101,9 @@ void app_scene_command(App *a, const char *verb, const char *rest)
         return;
     }
     if (scene_find(a->world.map, name) < 0 && str_cut_word(name, "remove")) {
-        int i = scene_find(a->world.map, name);
-        if (i < 0) { snprintf(msg, sizeof msg, "no scene called %.31s", name); app_set_status_gm(a, msg); return; }
+        WorldErr we;
+        int i = world_scene_find(&a->world, name, &we);
+        if (i < 0) { app_set_status_gm(a, we.text); return; }
         snprintf(msg, sizeof msg, "scene %.31s removed", a->world.map->scenes[i].name);
         scene_remove(a->world.map, i);
         app_note_gm(a, msg);
