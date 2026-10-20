@@ -23,6 +23,8 @@ void json_int(Json *j, long v);
 void json_num(Json *j, double v);
 void json_bool(Json *j, int v);
 void json_null(Json *j);
+/* A value that is JSON already (the API agent's copy of an answer's content). */
+void json_raw(Json *j, const char *text, size_t len);
 
 static inline void json_kstr(Json *j, const char *k, const char *v) { json_key(j, k); json_str(j, v); }
 static inline void json_kint(Json *j, const char *k, long v)        { json_key(j, k); json_int(j, v); }

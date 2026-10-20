@@ -358,3 +358,57 @@ void dir_make(const char *dir)
     }
     mkdir(partial, 0755);
 }
+
+int file_write_whole(const char *path, const char *data, size_t len, mode_t mode, int durable,
+                     char *err, size_t errsz)
+{
+    char tmp[4096 + 8];
+    if (snprintf(tmp, sizeof tmp, "%s.tmp", path) >= (int)sizeof tmp) {
+        snprintf(err, errsz, "the path is too long");
+        return -1;
+    }
+    /* A new file each time: one left over from a crash would keep its old
+     * mode through O_TRUNC, and a key file must be no one else's even for a
+     * moment. The umask can only take bits away from `mode`. */
+    unlink(tmp);
+    int fd = open(tmp, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, mode);
+    if (fd < 0) { snprintf(err, errsz, "cannot write %s: %s", tmp, strerror(errno)); return -1; }
+    int ok = 1;
+    for (size_t off = 0; ok && off < len; ) {
+        ssize_t w = write(fd, data + off, len - off);
+        if (w > 0) off += (size_t)w;
+        else if (w < 0 && errno == EINTR) continue;
+        else { if (w == 0) errno = EIO; ok = 0; }
+    }
+    if (ok && durable) ok = fsync(fd) == 0 || errno == EINVAL;
+    if (close(fd) != 0) ok = 0;
+    if (ok && rename(tmp, path) != 0) ok = 0;
+    if (!ok) {
+        snprintf(err, errsz, "cannot write %s: %s", path, strerror(errno));
+        unlink(tmp);
+        return -1;
+    }
+    return 0;
+}
+
+char *stream_read(FILE *f, size_t cap, size_t *len)
+{
+    size_t sz = 4096, n = 0;
+    char  *buf = malloc(sz);
+    if (!buf) return NULL;
+    for (;;) {
+        if (n + 1 >= sz) {
+            if (sz > cap) break;
+            char *nb = realloc(buf, sz * 2);
+            if (!nb) { free(buf); return NULL; }
+            buf = nb;
+            sz *= 2;
+        }
+        size_t r = fread(buf + n, 1, sz - n - 1, f);
+        if (!r) break;
+        n += r;
+    }
+    buf[n] = '\0';
+    *len = n;
+    return buf;
+}

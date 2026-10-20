@@ -21,6 +21,7 @@
 #include "term.h"
 #include "util.h"
 #include "watch.h"
+#include "apiagent.h"
 
 typedef struct {
     const char *trace_path;
@@ -61,6 +62,8 @@ typedef struct {
     const char *import_env;         /* --import-environments FILE: SRD environments as cards for :env */
     int         force;              /* --force: the import replaces templates already there */
     int         new_w, new_h;       /* --new WxH: the map --apply starts from, when it is not there */
+    int         claude_agent;       /* --claude-agent: the agent :agent claude starts (apiagent.c) */
+    ApiAgentCfg api;                /* its --model, --effort, --cap, --calls, --fallbacks */
 } Options;
 
 enum { TOOL_NONE, TOOL_DUMP, TOOL_CHECK, TOOL_DESCRIBE };
@@ -103,6 +106,9 @@ static void usage(void)
         "                     (no REQUEST, or -: read it from stdin; docs/CONTROL.md)\n"
         "  --ctl-pid N [REQ]  with several running, the one with pid N\n"
         "  --agent-guide      print the guide for AI agents that build maps (docs/AGENTS.md)\n"
+        "  --claude-agent     the Claude API agent itself, as :agent claude starts it (docs/APIAGENT.md);\n"
+        "                     --model opus|sonnet|haiku|fable|ID, --effort low|medium|high,\n"
+        "                     --cap DOLLARS, --calls N, --fallbacks on|off\n"
         "\n"
         "  map tools (print a report and exit; see README, Map tools):\n"
         "  --dump-map         the whole map as text, with a legend\n"
@@ -133,11 +139,35 @@ static int parse_args(Options *o, int argc, char **argv)
     o->width       = 80;
     o->height      = 24;
     o->bench_loops = 50;
+    o->api = (ApiAgentCfg){ "claude-opus-5-5", "medium", 1.00, 25, 1 };
 
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
         if (!strcmp(a, "-h") || !strcmp(a, "--help")) { usage(); return 1; }
         else if (!strcmp(a, "--agent-guide")) { fwrite(AGENT_GUIDE, 1, AGENT_GUIDE_LEN, stdout); return 1; }
+        else if (!strcmp(a, "--claude-agent")) o->claude_agent = 1;
+        else if (!strcmp(a, "--model") && i + 1 < argc) {
+            if (!(o->api.model = apiagent_model_id(argv[++i]))) die("bad --model (opus, sonnet, haiku, fable, or a claude- model id)");
+        }
+        else if (!strcmp(a, "--effort") && i + 1 < argc) {
+            o->api.effort = argv[++i];
+            if (strcmp(o->api.effort, "low") && strcmp(o->api.effort, "medium") && strcmp(o->api.effort, "high"))
+                die("bad --effort (low, medium or high)");
+        }
+        else if (!strcmp(a, "--cap") && i + 1 < argc) {
+            char *end;
+            o->api.cap = strtod(argv[++i], &end);
+            if (*end || o->api.cap < 0 || o->api.cap > 1000) die("bad --cap (dollars, 0 to 1000; 0 is none)");
+        }
+        else if (!strcmp(a, "--calls") && i + 1 < argc) {
+            o->api.calls = atoi(argv[++i]);
+            if (o->api.calls < 1 || o->api.calls > 200) die("bad --calls (1 to 200)");
+        }
+        else if (!strcmp(a, "--fallbacks") && i + 1 < argc) {
+            const char *v = argv[++i];
+            if (strcmp(v, "on") && strcmp(v, "off")) die("bad --fallbacks (on or off)");
+            o->api.fallbacks = !strcmp(v, "on");
+        }
         else if (!strcmp(a, "--ascii"))      o->ascii = 1;
         else if (!strcmp(a, "--dump-frame")) o->dump_frame = 1;
         else if (!strcmp(a, "--cells"))      o->dump_cells = 1;
@@ -738,6 +768,7 @@ int main(int argc, char **argv)
 {
     Options o;
     if (parse_args(&o, argc, argv)) return 0;
+    if (o.claude_agent) return apiagent_main(&o.api);
     if (o.tool) return run_tool(&o);
     if (o.ctl)  return ctl_client_main(o.ctl_req, o.ctl_pid);
     if (o.apply) return run_apply(&o);

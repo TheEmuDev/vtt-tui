@@ -67,6 +67,10 @@ typedef struct {
     char saved_xdg[1024];
     char saved_rt[1024];            /* XDG_RUNTIME_DIR as it was */
     int  had_rt;
+    char saved_cfg[1024];           /* XDG_CONFIG_HOME as it was */
+    int  had_cfg;
+    char saved_st[1024];            /* VTT_SECRET_TOOL as it was */
+    int  had_st;
     int  ok;
 } Sandbox;
 
@@ -250,6 +254,8 @@ void test_fog_sight(void);
 void test_serve_commands(void);
 void test_webpage(void);
 void test_agent_guide(void);
+void test_api_agent(void);
+void test_api_agent_parts(void);
 void test_stamps(void);
 void test_undo_nesting(void);
 void test_ctl(void);
@@ -279,6 +285,11 @@ void test_jobs_ctl(void);
 void test_events(void);
 void test_agent_command(void);
 void jobs_reset(App *a);
+/* Whether the file holds the text; turns of the loop until it does (five
+ * seconds), or until no started agent is left to reap. */
+int file_has(const char *path, const char *needle);
+int pump_until_file(App *a, const char *path, const char *needle);
+int pump_until_reaped(App *a);
 void test_disk(void);
 void test_disk_whole(void);
 void test_file_findings(void);

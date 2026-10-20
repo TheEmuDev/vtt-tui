@@ -206,5 +206,8 @@ long ctl_who_holds(const char *map_path, long *silent);
 /* `vtt --ctl`: sends `req` (NULL reads stdin) to the vtt of `pid` (0: the
  * only one running), prints the answer. Returns the exit status. */
 int  ctl_client_main(const char *req, long pid);
+/* One request to the vtt with that pid; its whole answer (verdict line first),
+ * NUL-ended, for the caller to free, or NULL with why. --ctl and the API agent. */
+char *ctl_ask_pid(long pid, const char *req, size_t len, size_t *alen, char *err, size_t errsz);
 
 #endif /* VTT_CTL_H */

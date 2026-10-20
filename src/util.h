@@ -2,6 +2,8 @@
 #define VTT_UTIL_H
 
 #include <stddef.h>
+#include <stdio.h>
+#include <sys/types.h>
 #include <stdint.h>
 
 /* ---------------------------------------------------------------- errors */
@@ -109,5 +111,16 @@ void dir_make(const char *dir);
 /* A whole file on the heap, NUL-terminated, its length in *len. NULL when
  * it cannot be read, or -- *too_big set -- when it is over cap bytes. */
 char *file_read(const char *path, size_t cap, size_t *len, int *too_big);
+
+/* A stream read to its end, NUL-terminated, or until it passes about cap
+ * bytes (the rest left unread). NULL only when out of memory. */
+char *stream_read(FILE *f, size_t cap, size_t *len);
+
+/* data as the whole of path, or path as it was: written to path.tmp (made
+ * new, with `mode` less the umask), flushed when durable, then renamed over. 0, or
+ * -1 with why. The map's own save is mapio.c's (it keeps the file's identity
+ * and the text); this is the rest's: the settings, the key, an import. */
+int file_write_whole(const char *path, const char *data, size_t len, mode_t mode, int durable,
+                     char *err, size_t errsz);
 
 #endif /* VTT_UTIL_H */

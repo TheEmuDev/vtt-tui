@@ -7,9 +7,10 @@
 #   tools/oracle.sh record [VTT]   write expected/ from VTT (default ./vtt)
 #   tools/oracle.sh check  [VTT]   run VTT over the same and diff; exit 1 on a difference
 #
-# Everything runs in a temporary directory with its own XDG_DATA_HOME and
-# XDG_RUNTIME_DIR, on copies of the maps, so no saved character, stamp or
-# running vtt of the user's is reached and no fixture is written to.
+# Everything runs in a temporary directory with its own XDG_DATA_HOME,
+# XDG_RUNTIME_DIR and XDG_CONFIG_HOME, and no keyring tool, on copies of the
+# maps, so no saved character, stamp, setting, key or running vtt of the
+# user's is reached and no fixture is written to.
 set -eu
 export LC_ALL=C          # globs sort by collation: the record's order must not follow the caller's locale
 MODE=${1:-check}
@@ -21,8 +22,9 @@ case $MODE in record|check) ;; *) echo "usage: tools/oracle.sh record|check [VTT
 
 DIR=$(mktemp -d)
 trap 'rm -rf "$DIR"' EXIT
-mkdir "$DIR/data" "$DIR/run" "$DIR/maps" "$DIR/out" "$DIR/work"
-export XDG_DATA_HOME="$DIR/data" XDG_RUNTIME_DIR="$DIR/run"
+mkdir "$DIR/data" "$DIR/run" "$DIR/config" "$DIR/maps" "$DIR/out" "$DIR/work"
+export XDG_DATA_HOME="$DIR/data" XDG_RUNTIME_DIR="$DIR/run" XDG_CONFIG_HOME="$DIR/config"
+export VTT_SECRET_TOOL=/nonexistent/vtt-oracle/secret-tool
 cp "$ROOT"/tests/fixtures/*.vtt "$ROOT"/tests/fuzz-found/*.vtt "$ROOT"/tests/oracle/maps/*.vtt "$DIR/maps/"
 cd "$DIR/maps"
 

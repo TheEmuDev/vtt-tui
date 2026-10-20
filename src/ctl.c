@@ -474,28 +474,6 @@ static char *exchange(int fd, const char *req, size_t len, size_t *out_len, int 
     return buf;
 }
 
-static char *read_all(FILE *f, size_t *len)
-{
-    size_t cap = 4096, n = 0;
-    char  *buf = malloc(cap);
-    if (!buf) return NULL;
-    for (;;) {
-        if (n + 1 >= cap) {
-            if (cap > CTL_REQ_CAP * 2) break;       /* the server says no past 64 KB anyway */
-            char *nb = realloc(buf, cap * 2);
-            if (!nb) { free(buf); return NULL; }
-            buf = nb;
-            cap *= 2;
-        }
-        size_t r = fread(buf + n, 1, cap - n - 1, f);
-        if (!r) break;
-        n += r;
-    }
-    buf[n] = '\0';
-    *len = n;
-    return buf;
-}
-
 #define CTL_LIST_MAX 16
 
 /* Every socket in the directory, by pid. Whether a vtt is behind each is
@@ -606,6 +584,21 @@ static void on_each(void *ctx, long pid, const char *ans)
     c->on[c->n++] = pid;
 }
 
+char *ctl_ask_pid(long pid, const char *req, size_t len, size_t *alen, char *err, size_t errsz)
+{
+    char dir[CTL_PATH_MAX], path[CTL_PATH_MAX];
+    if (ctl_dir(dir, sizeof dir) < 0) { snprintf(err, errsz, "no socket directory"); return NULL; }
+    if (sock_path(path, sizeof path, dir, pid) < 0) { snprintf(err, errsz, "socket path too long"); return NULL; }
+    int fd = ctl_connect(path);
+    if (fd < 0) { snprintf(err, errsz, "no vtt with pid %ld is taking requests", pid); return NULL; }
+    char *ans = exchange(fd, req, len, alen, ctl_held_ms(req) + CTL_TIMEOUT_MS + 5000);
+    close(fd);
+    if (!ans) { snprintf(err, errsz, "no answer from the vtt"); return NULL; }
+    /* Closed with nothing said: :agent off, or the vtt quit, on a held wait. */
+    if (!*alen) { free(ans); snprintf(err, errsz, "the vtt closed the channel"); return NULL; }
+    return ans;
+}
+
 int ctl_client_main(const char *req, long pid)
 {
     char dir[CTL_PATH_MAX], err[CTL_PATH_MAX + 64];
@@ -634,19 +627,11 @@ int ctl_client_main(const char *req, long pid)
         pid = c.on[0];
     }
 
-    char path[CTL_PATH_MAX];
-    if (sock_path(path, sizeof path, dir, pid) < 0) { fputs("vtt: socket path too long\n", stderr); return 2; }
-    int fd = ctl_connect(path);
-    if (fd < 0) {
-        fprintf(stderr, "vtt: no vtt with pid %ld is taking requests\n", pid);
-        return 2;
-    }
-
     size_t len;
     char  *mine = NULL;
     if (!req) {
-        mine = read_all(stdin, &len);
-        if (!mine) { close(fd); fputs("vtt: out of memory\n", stderr); return 2; }
+        mine = stream_read(stdin, CTL_REQ_CAP * 2, &len);   /* the server says no past 64 KB anyway */
+        if (!mine) { fputs("vtt: out of memory\n", stderr); return 2; }
         req = mine;
     }
     else len = strlen(req);
@@ -656,14 +641,13 @@ int ctl_client_main(const char *req, long pid)
     const char *name = getenv("VTT_AGENT");
     if (name && *name && !ctl_name_line(req)) {
         if (!ctl_name_ok(name)) {
-            close(fd);
             free(mine);
             fprintf(stderr, "vtt: VTT_AGENT is %.40s - a name is 1-%d letters, digits, - or _\n", name, CTL_NAME_MAX - 1);
             return 2;
         }
         size_t hl = strlen(name) + 7;
         char  *named = malloc(hl + len + 1);
-        if (!named) { close(fd); free(mine); fputs("vtt: out of memory\n", stderr); return 2; }
+        if (!named) { free(mine); fputs("vtt: out of memory\n", stderr); return 2; }
         snprintf(named, hl + 1, "agent %s\n", name);
         memcpy(named + hl, req, len);
         named[hl + len] = '\0';
@@ -674,12 +658,9 @@ int ctl_client_main(const char *req, long pid)
     }
 
     size_t alen;
-    char  *ans = exchange(fd, req, len, &alen, ctl_held_ms(req) + CTL_TIMEOUT_MS + 5000);
-    close(fd);
+    char  *ans = ctl_ask_pid(pid, req, len, &alen, err, sizeof err);
     free(mine);
-    if (!ans) { fputs("vtt: no answer from the vtt\n", stderr); return 2; }
-    /* Closed with nothing said: :agent off, or the vtt quit, on a held wait. */
-    if (!alen) { free(ans); fputs("vtt: the vtt closed the channel\n", stderr); return 2; }
+    if (!ans) { fprintf(stderr, "vtt: %s\n", err); return 2; }
 
     /* The first line is the verdict; the rest is the report. */
     size_t first = strcspn(ans, "\n");

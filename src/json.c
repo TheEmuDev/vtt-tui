@@ -59,6 +59,7 @@ void json_int(Json *j, long v)        { json_sep(j); fprintf(j->f, "%ld", v); }
 void json_num(Json *j, double v)      { json_sep(j); fprintf(j->f, "%g", v); }
 void json_bool(Json *j, int v)        { json_sep(j); fputs(v ? "true" : "false", j->f); }
 void json_null(Json *j)               { json_sep(j); fputs("null", j->f); }
+void json_raw(Json *j, const char *text, size_t len) { json_sep(j); fwrite(text, 1, len, j->f); }
 
 /* ------------------------------------------------------------------ reading */
 

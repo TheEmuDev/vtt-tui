@@ -235,13 +235,12 @@ int import_environments(const char *path, int force, FILE *out, char *err, size_
         if (cut) fprintf(out, "%s: cut to what a card holds (4 KB)\n", label);
         bb_free(&b);
         /* Whole or not at all: --force must not leave half of one behind. */
-        char tmp[MAP_PATH_MAX + 8];
-        snprintf(tmp, sizeof tmp, "%s.tmp", path_out);
-        FILE *f = fopen(tmp, "w");
-        int ok = f && fputs(clean, f) >= 0 && fputc('\n', f) != EOF;
-        if (f && fclose(f) != 0) ok = 0;
-        if (ok && rename(tmp, path_out) != 0) ok = 0;
-        if (!ok) unlink(tmp);
+        size_t cl = strlen(clean);
+        char  *line = xmalloc(cl + 2), werr[MAP_PATH_MAX + 64];
+        memcpy(line, clean, cl);
+        line[cl] = '\n';
+        int ok = file_write_whole(path_out, line, cl + 1, 0666, 0, werr, sizeof werr) == 0;
+        free(line);
         free(clean);
         if (ok) { written++; str_lcpy(done[ndone++], name, CARD_NAME_MAX); }
         else { fprintf(out, "skipped %s: cannot write %s\n", label, path_out); skipped++; }

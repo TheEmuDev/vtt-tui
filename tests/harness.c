@@ -180,6 +180,22 @@ Sandbox sandbox_enter(const char *tag)
     if (rt) str_lcpy(s.saved_rt, rt, sizeof s.saved_rt);
     setenv("XDG_RUNTIME_DIR", s.dir, 1);
 
+    /* The settings and a key file are under XDG_CONFIG_HOME, and the keyring
+     * is reached through secret-tool: a suite must read neither the user's
+     * settings nor their key. VTT_SECRET_TOOL names no program, so nothing
+     * reaches the keyring unless a test puts its own stand-in there. */
+    const char *cfg = getenv("XDG_CONFIG_HOME");
+    s.had_cfg = cfg != NULL;
+    if (cfg) str_lcpy(s.saved_cfg, cfg, sizeof s.saved_cfg);
+    char cdir[1100];
+    snprintf(cdir, sizeof cdir, "%s/config", s.dir);
+    mkdir(cdir, 0700);
+    setenv("XDG_CONFIG_HOME", cdir, 1);
+    const char *st = getenv("VTT_SECRET_TOOL");
+    s.had_st = st != NULL;
+    if (st) str_lcpy(s.saved_st, st, sizeof s.saved_st);
+    setenv("VTT_SECRET_TOOL", "/nonexistent/vtt-sandbox/secret-tool", 1);
+
     s.ok = 1;
     return s;
 }
@@ -216,6 +232,10 @@ void sandbox_leave(Sandbox *s)
     else                 unsetenv("XDG_DATA_HOME");
     if (s->had_rt) setenv("XDG_RUNTIME_DIR", s->saved_rt, 1);
     else           unsetenv("XDG_RUNTIME_DIR");
+    if (s->had_cfg) setenv("XDG_CONFIG_HOME", s->saved_cfg, 1);
+    else            unsetenv("XDG_CONFIG_HOME");
+    if (s->had_st) setenv("VTT_SECRET_TOOL", s->saved_st, 1);
+    else           unsetenv("VTT_SECRET_TOOL");
     if (!strncmp(s->dir, "/tmp/vtt-", 9)) remove_tree(s->dir);
     s->ok = 0;
 }
@@ -491,4 +511,44 @@ int ctl_read_some(void *ctx)
         if (k <= 0) { rd->done = 1; rd->buf[rd->n] = '\0'; return 1; }
         rd->n += (size_t)k;
     }
+}
+
+/* ------------------------------------------- started agents (agentcmd, apiagent) */
+
+int file_has(const char *path, const char *needle)
+{
+    char *t = slurp(path);
+    int has = t && strstr(t, needle) != NULL;
+    free(t);
+    return has;
+}
+
+/* Turns of the loop, as main makes them, until `path` holds `needle` or five
+ * seconds pass. */
+int pump_until_file(App *a, const char *path, const char *needle)
+{
+    for (int spin = 0; spin < 1000; spin++) {
+        if (file_has(path, needle)) return 1;
+        struct pollfd fds[1 + CTL_SLOTS];
+        int n = ctl_pollfds(&a->ctl, fds, 1 + CTL_SLOTS);
+        poll(fds, (nfds_t)n, 5);
+        uint64_t now = prof_now_ns() / 1000000u;
+        ctl_service(&a->ctl, fds, n, now);
+        app_tick(a, now);
+    }
+    return file_has(path, needle);
+}
+
+/* Turns of the loop until no started agent is left to reap, or two seconds. */
+int pump_until_reaped(App *a)
+{
+    for (int spin = 0; spin < 400 && a->nagents; spin++) {
+        struct pollfd fds[1 + CTL_SLOTS];
+        int n = ctl_pollfds(&a->ctl, fds, 1 + CTL_SLOTS);
+        poll(fds, (nfds_t)n, 5);
+        uint64_t now = prof_now_ns() / 1000000u;
+        ctl_service(&a->ctl, fds, n, now);
+        app_tick(a, now);
+    }
+    return a->nagents == 0;
 }

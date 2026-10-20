@@ -32,8 +32,10 @@ docs/CODEMAP.md; `tests/run.c` is the table of suites and `main`, nothing else.
 - A new suite: a `void test_x(void)` in the file for its area (make it non-static and
   declare it in `harness.h`), then a row in `run.c`'s table. A helper another file needs
   moves its prototype to `harness.h` and loses `static`.
-- `sandbox_enter` sets `XDG_DATA_HOME` and `XDG_RUNTIME_DIR` to the sandbox: a test that runs
-  `./vtt` or opens the channel outside one reaches the user's own files and running vtts.
+- `sandbox_enter` sets `XDG_DATA_HOME`, `XDG_RUNTIME_DIR` and `XDG_CONFIG_HOME` to the sandbox,
+  and `VTT_SECRET_TOOL` to no program: a test that runs `./vtt` or opens the channel outside
+  one reaches the user's own files, settings, API key (their keyring) and running vtts. A test
+  of the keyring sets `VTT_SECRET_TOOL` to a stand-in of its own; of curl, `VTT_CLAUDE_CURL`.
   To check: `XDG_RUNTIME_DIR=/some/canary build/run-tests` must leave the canary untouched.
 - App tests: `Sandbox sb = sandbox_enter("name")`, `write_map_file(sb.dir, "fight.vtt")`
   (a **2×2 empty map** — place tokens with `ipAria\r` after setting `a.ed.cx/cy`),

@@ -95,6 +95,8 @@ int main(int argc, char **argv)
         { "protocol", test_protocol },
         { "webpage", test_webpage },
         { "agentguide", test_agent_guide },
+        { "apiagent", test_api_agent },
+        { "apiparts", test_api_agent_parts },
         { "turns",  test_turns },
         { "turnkeys", test_turn_keys },
         { "dice",   test_dice },

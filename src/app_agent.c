@@ -145,17 +145,20 @@ static void run_ended(App *a, AgentRun r, int status)
      * or scrapped it) wants nobody. */
     if (j->state != JOB_ASKED && j->state != JOB_WORKING) return;
     if (r.again) { app_agent_start(a, j); return; }         /* the feedback that came while it ran */
-    char own[CTL_NAME_MAX], how[80], msg[320];
+    char own[CTL_NAME_MAX], how[80], msg[480], said[JOB_TEXT_MAX + 8] = "";
     snprintf(own, sizeof own, AGENT_NAME_FMT, j->num);
     if (j->taker[0] && strcmp(j->taker, own) != 0) return;
     ended_how(&r, status, a->agent_deadline_ms, how, sizeof how);
+    /* An agent that says why it stops (job N say, as the API agent does on a
+     * refused key) is heard: its last line stays on the GM's. */
+    if (j->nthread && j->thread[j->nthread - 1].who == 'A') snprintf(said, sizeof said, ": %.150s", j->thread[j->nthread - 1].text);
     j->state    = JOB_ASKED;
     j->taker[0] = '\0';
     j->has_area = 0;
     snprintf(msg, sizeof msg, "its agent stopped (%s)", how);
     world_job_thread_add(j, '-', msg);
     world_event(&a->world, CTL_EV_ASKED, j->num, "its agent stopped (%s): %.120s", how, j->text);
-    snprintf(msg, sizeof msg, "#%d: its agent stopped with nothing proposed (%s) - the job waits as asked%s", j->num, how,
+    snprintf(msg, sizeof msg, "#%d: its agent stopped with nothing proposed (%s)%s - the job waits as asked%s", j->num, how, said,
              slog_on(&a->slog) ? "; the session log has what it printed" : "; :log on shows what the next one prints");
     app_note_gm(a, msg);
     a->dirty = 1;
