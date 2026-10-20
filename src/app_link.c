@@ -206,9 +206,8 @@ static void travel(App *a, int li)
     char saved[80] = "";
     if (mapio_save(d, d->path, err, sizeof err) != 0)
         snprintf(saved, sizeof saved, " - NOT SAVED here: %.50s, :w", err);
-    else
-        a->autosave_gen = d->gen;
     a->autosave_said = 0;                        /* a new map: its own failures are news */
+    if (!saved[0]) app_autosave_track(a, d->gen);
     fog_recompute(d);
     a->ed.cx = d->tokens.v[first].x;
     a->ed.cy = d->tokens.v[first].y;

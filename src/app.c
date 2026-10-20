@@ -245,8 +245,8 @@ int app_open_map(App *a, const char *path)
     grid_center_on(&a->ed.view, m, a->ed.cx, a->ed.cy);
 
     a->screen = SCREEN_EDITOR;
-    a->autosave_gen = a->world.seen_gen = m->gen;
-    a->autosave_said = 0;                        /* a new map: its own failures are news */
+    a->world.seen_gen = m->gen;
+    app_autosave_track(a, m->gen);               /* a new map: its own failures are news */
     a->npings = 0;                 /* squares of the old map mean nothing here */
     a->npinged = 0;
     a->agent_ring.until_ms = 0;
@@ -293,8 +293,8 @@ void app_travel_to(App *a, Map *m)
     app_floor_reset(a);
     ed_layout(&a->ed, m, a->rnd->w, a->rnd->h);
     a->screen = SCREEN_PLAY;
-    a->autosave_gen = a->world.seen_gen = m->gen;
-    a->autosave_said = 0;                        /* a new map: its own failures are news */
+    a->world.seen_gen = m->gen;
+    app_autosave_track(a, m->gen);               /* a new map: its own failures are news */
     a->npings = a->npinged = 0;
     a->agent_ring.until_ms = 0;
     world_jobs_clear(&a->world);              /* jobs are the map's */
@@ -344,7 +344,7 @@ static void recover_autosave(App *a)
         /* Set aside rather than deleted, and so never offered again. */
         char aside[sizeof a->pending_file + 16];
         snprintf(aside, sizeof aside, "%s.damaged", a->pending_file);
-        int kept = rename(a->pending_file, aside) == 0;
+        int kept = disk()->rename(a->pending_file, aside) == 0;
         const char *shown = kept ? aside : a->pending_file;
         const char *base = strrchr(shown, '/');
         char body[192];
@@ -373,8 +373,8 @@ static void recover_autosave(App *a)
     ed_layout(&a->ed, m, a->rnd->w, a->rnd->h);
     grid_center_on(&a->ed.view, m, a->ed.cx, a->ed.cy);
     m->modified = 1;
-    a->autosave_gen = a->world.seen_gen = m->gen;
-    a->autosave_said = 0;                        /* a new map: its own failures are news */
+    a->world.seen_gen = m->gen;
+    app_autosave_track(a, m->gen);               /* a new map: its own failures are news */
     fog_recompute(m);
     app_set_status(a, "recovered - :w keeps it, :q! lets it go");
 }
@@ -554,6 +554,12 @@ int app_autosave_due(const App *a, uint64_t now_ms)
     return now_ms >= at ? 0 : (int)(at - now_ms);
 }
 
+void app_autosave_track(App *a, unsigned gen)
+{
+    a->autosave_gen  = gen;
+    a->autosave_said = 0;
+}
+
 int app_autosave(App *a)
 {
     if (!a->world.map) return -1;
@@ -612,8 +618,8 @@ static void app_new_map(App *a, const char *name, int w, int h)
     snprintf(msg, sizeof msg, "new map %.40s (%dx%d) - :w saves to %.100s",
              name, w, h, path);
     app_set_status(a, msg);
-    a->autosave_gen = a->world.seen_gen = m->gen;
-    a->autosave_said = 0;                        /* a new map: its own failures are news */
+    a->world.seen_gen = m->gen;
+    app_autosave_track(a, m->gen);               /* a new map: its own failures are news */
     offer_recovery(a);
 }
 
@@ -670,8 +676,7 @@ int app_save_map(App *a, const char *path)
         return -1;
     }
     disk()->unlink(autosave);
-    a->autosave_gen = a->world.map->gen;
-    a->autosave_said = 0;
+    app_autosave_track(a, a->world.map->gen);
     /* Written over, or the map is another file's now: a change waiting from
      * the old one is of a file that no longer matters. */
     app_disk_saved(a, own);
@@ -1381,7 +1386,7 @@ static int modal_key(App *a, Key k)
         } else if (k.kind == KEY_ESC ||
                    (k.kind == KEY_CHAR && (k.ch == 'n' || k.ch == 'N'))) {
             a->modal = MODAL_NONE;
-            unlink(a->pending_file);
+            disk()->unlink(a->pending_file);
             app_set_status(a, "the unsaved work was let go");
             a->pending_file[0] = '\0';
         }

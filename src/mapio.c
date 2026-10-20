@@ -326,7 +326,13 @@ static int write_map(const Map *m, const char *path, int autosave, char **keep, 
     }
     /* The file's identity as it will be at `path`: a rename keeps it. */
     struct stat st;
-    if (ok && ident && dk->fstat(fd, &st) == 0) disk_from_stat(ident, &st);
+    /* Without it a save would leave the map knowing no file, and another
+     * writer's change would go unseen: a failed fstat fails the save, which
+     * has touched nothing at `path` yet. */
+    if (ok && ident) {
+        if (dk->fstat(fd, &st) == 0) disk_from_stat(ident, &st);
+        else ok = 0;
+    }
     int why = errno;
     if (dk->close(fd) != 0) { ok = 0; why = errno; }
 

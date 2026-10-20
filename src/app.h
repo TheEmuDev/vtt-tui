@@ -474,5 +474,8 @@ void app_ping(App *a, uint32_t who, int x0, int y0, int x1, int y1);
 int  app_ping_cell(App *a, uint32_t who, int sx, int sy);
 int  app_ping_due(const App *a, uint64_t now_ms);
 int  app_autosave(App *a);      /* writes it now; 0 on success */
+/* The autosave holds generation `gen` of the map, and a failure of the next
+ * one is news: after a save, and wherever a new map comes in. */
+void app_autosave_track(App *a, unsigned gen);
 
 #endif /* VTT_APP_H */

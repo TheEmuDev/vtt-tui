@@ -793,17 +793,24 @@ static int dk_hit(int kind)
     errno = g_dk.err;
     return 1;
 }
-static int dk_open(const char *p, int fl, mode_t md) { return dk_hit(DK_OPEN) ? -1 : DISK_REAL.open(p, fl, md); }
-static ssize_t dk_write(int fd, const void *b, size_t n) { return dk_hit(DK_WRITE) ? -1 : DISK_REAL.write(fd, b, n); }
-static int dk_fsync(int fd) { return dk_hit(DK_FSYNC) ? -1 : DISK_REAL.fsync(fd); }
-static int dk_fstat(int fd, struct stat *st) { return dk_hit(DK_FSTAT) ? -1 : DISK_REAL.fstat(fd, st); }
+/* A call that worked may leave errno anything; this one leaves it 0, so a
+ * refusal that relied on errno surviving the calls after it would show. */
+static int dk_ok(int rc)
+{
+    if (rc >= 0) errno = 0;
+    return rc;
+}
+static int dk_open(const char *p, int fl, mode_t md) { return dk_hit(DK_OPEN) ? -1 : dk_ok(DISK_REAL.open(p, fl, md)); }
+static ssize_t dk_write(int fd, const void *b, size_t n) { return dk_hit(DK_WRITE) ? -1 : (ssize_t)dk_ok((int)DISK_REAL.write(fd, b, n)); }
+static int dk_fsync(int fd) { return dk_hit(DK_FSYNC) ? -1 : dk_ok(DISK_REAL.fsync(fd)); }
+static int dk_fstat(int fd, struct stat *st) { return dk_hit(DK_FSTAT) ? -1 : dk_ok(DISK_REAL.fstat(fd, st)); }
 static int dk_close(int fd)
 {
     int rc = DISK_REAL.close(fd);                    /* closed either way: no descriptor leaks */
-    return dk_hit(DK_CLOSE) ? -1 : rc;
+    return dk_hit(DK_CLOSE) ? -1 : dk_ok(rc);
 }
-static int dk_rename(const char *a, const char *b) { return dk_hit(DK_RENAME) ? -1 : DISK_REAL.rename(a, b); }
-static int dk_unlink(const char *p) { return dk_hit(DK_UNLINK) ? -1 : DISK_REAL.unlink(p); }
+static int dk_rename(const char *a, const char *b) { return dk_hit(DK_RENAME) ? -1 : dk_ok(DISK_REAL.rename(a, b)); }
+static int dk_unlink(const char *p) { return dk_hit(DK_UNLINK) ? -1 : dk_ok(DISK_REAL.unlink(p)); }
 static int dk_stat(const char *p, struct stat *st) { return dk_hit(DK_STAT) ? -1 : DISK_REAL.stat(p, st); }
 static const Disk DK_TABLE = { dk_open, dk_write, dk_fsync, dk_fstat, dk_close, dk_rename, dk_unlink, dk_stat };
 
@@ -846,6 +853,7 @@ void test_disk_fail(void)
         { DK_WRITE,  ENOSPC, "No space left on device" },
         { DK_FSYNC,  EIO,    "Input/output error" },
         { DK_CLOSE,  EIO,    "Input/output error" },
+        { DK_FSTAT,  EIO,    "Input/output error" },    /* without it the map would know no file */
         { DK_RENAME, EROFS,  "Read-only file system" },
     };
     for (size_t k = 0; k < sizeof fails / sizeof *fails; k++) {
@@ -900,6 +908,16 @@ void test_disk_fail(void)
     dk_fail(DK_OPEN, ENOENT);
     CHECK_EQ(app_autosave(&a), -1);
     CHECK(a.status[0] == '\0' && a.autosave_said == 0);
+    {
+        char where[MAP_PATH_MAX + 16];                   /* its folder there, so the write gets as far as the rename */
+        mapio_autosave_path(m, where, sizeof where);
+        char *slash = strrchr(where, '/');
+        if (slash) { *slash = '\0'; dir_make(where); }
+    }
+    map_touch(m);
+    dk_fail(DK_RENAME, ENOENT);                          /* the same, found at the rename: its errno outlives the cleanup */
+    CHECK_EQ(app_autosave(&a), -1);
+    CHECK(a.status[0] == '\0' && a.autosave_said == 0 && g_dk.seen == 1);
     disk_use(NULL);
     str_lcpy(m->path, keep, sizeof m->path);
     map_touch(m);
