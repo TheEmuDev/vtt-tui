@@ -296,6 +296,21 @@ void test_api_agent(void)
     CHECK_EQ(calls(), 1);
     CHECK(strstr(a.status, "the API's answer was cut off (curl exit 56) - not sent again") != NULL);
 
+    CASE("a whole error answer, then the connection lost: kept -- a 429 backs off and is sent again, a 401 says so");
+    jobs_reset(&a);
+    fresh();
+    answer(1, "HTTP/2 429\r\nretry-after: 0", "{\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"slow\"}}");
+    then_exits(1, 56);
+    answer(2, OK200, "{\"content\":[],\"stop_reason\":\"end_turn\",\"usage\":{}}");
+    ask_and_wait(&a, "busy then dropped", "done");
+    CHECK_EQ(calls(), 2);
+    jobs_reset(&a);
+    fresh();
+    answer(1, "HTTP/2 401", "{\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"invalid\"}}");
+    then_exits(1, 56);
+    ask_and_wait(&a, "refused then dropped", "failed");
+    CHECK(strstr(a.status, "the API key was refused (401)") != NULL);
+
     CASE("max_tokens: the run ends, saying the answer ran too long");
     jobs_reset(&a);
     fresh();
@@ -1040,6 +1055,16 @@ void test_ask_agent(void)
         CHECK(frame_has(&a, &r, "the Claude API agent  (key: keyring ...KLMN)"));   /* the key as stored now */
         press(&a, "\x1b");
     }
+    CASE("m, then an empty command: nothing chosen, and nothing left waiting on the box");
+    jobs_reset(&a);
+    a.settings.agent = AGENT_KIND_UNSET;
+    app_agent_apply(&a);
+    press(&a, ":ask a drain\r");
+    press(&a, "m\r");
+    CHECK_EQ(a.choice_job, 0);
+    press(&a, ":agent key\r\x1b");
+    CHECK_EQ(a.modal, MODAL_NONE);
+
     a.settings.agent = AGENT_KIND_CLAUDE;
     app_agent_apply(&a);
 

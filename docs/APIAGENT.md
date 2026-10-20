@@ -458,4 +458,8 @@ Where the code left the plan, and what the build found:
   exits 52/55/56 after an answer had begun were sent again, paying twice (now a whole 200 is
   used and a cut one ends the run); a resize while Options was open could leave the selection
   off the screen (now kept in view at each draw).
+- **The second recheck, two more, fixed:** the box's `m` with an empty command left its job
+  set (cleared now); a whole error answer (429, 401) followed by a lost connection read as cut
+  off (its status is kept now: a 429 backs off and is sent again, a 401 says so), and a lone
+  `100 Continue` no longer counts as an answer begun.
 

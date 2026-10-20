@@ -339,7 +339,14 @@ static int call_api(Run *r, const ByteBuf *body, ByteBuf *out, Http *h, char *er
         JsonVal *d = h->status == 200 && h->body_len ? json_parse(h->body, h->body_len, e, sizeof e) : NULL;
         int whole = d && json_get(d, "content") && json_get(d, "stop_reason");
         json_free(d);
-        if (!whole) { h->cut = h->status != 0; h->status = 0; }
+        /* A whole error answer keeps its status: a 429 backs off as ever (it
+         * was not billed), a 401 says so. A lone 100 Continue began nothing. */
+        if (!whole && h->status >= 400 && h->body_len) {
+            JsonVal *eo = json_parse(h->body, h->body_len, e, sizeof e);
+            whole = eo && json_text(json_get(json_get(eo, "error"), "message")) != NULL;
+            json_free(eo);
+        }
+        if (!whole) { h->cut = h->status >= 200; h->status = 0; }
     }
     return 0;
 }

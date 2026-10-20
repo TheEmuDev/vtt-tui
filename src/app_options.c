@@ -226,6 +226,7 @@ void app_options_prompt(App *a, const char *text)
         if (a->settings.agent == AGENT_KIND_COMMAND) a->settings.agent = AGENT_KIND_OFF;
         app_settings_changed(a);
         app_note_gm(a, "no command - saved; the agent is not a command now");
+        app_agent_choice_continue(a);          /* from the box: nothing to start, and nothing left waiting on it */
         return;
     }
     if (row == OPT_COMMAND) {
