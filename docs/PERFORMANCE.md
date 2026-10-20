@@ -1213,6 +1213,20 @@ its 20.4 µs did not come back in the A/B, cause unknown. What would settle it: 
 ten runs on the repo's disk and ten on tmpfs -- if the disk's spread covers the move and
 tmpfs's does not, it is the flush.
 
+**The `Disk` seam** (docs/V2.md, *The `Disk` seam*; the desktop, 2026-10-20): the build before
+it (027fef2) against this one (59544ce), `tools/vs1x.sh 027fef2`, three runs each alternating
+on the repo's disk. The plan's estimate was six indirect calls a save, nanoseconds. Measured:
+`mapio.write` 3311.1 against 2493.2 µs and `mapio.fsync` 2631.6 against 2061.6 µs at p50, the
+new build faster; `disk.check` 1.9 and 1.9 µs; no scenario row's p50 moved past a tenth. So
+the seam's cost does not show; the save's own swing between builds is the flush, as before,
+and it went the same way as this morning's A/B (the older binary slower both times). Why the
+older binary is slower twice is not known; one guess, unchecked, is the order the script runs
+them in. One zone moved the other way: `mapio.sections` (`:check, every edge 512x512`, 81
+samples) 74.5 against 216.8 µs at p50, but 514.4 against 276.5 at p95. The seam did not touch
+it (it reads text already in memory; `git diff 027fef2` changes no line of it), and its median
+and p95 moving opposite ways points at two populations of samples whose middle falls on either
+side from run to run; that reading is a guess, not shown.
+
 **`:ask` starting an agent** (`:agent command`; the desktop, 2026-10-13): `agent.spawn` is
 92.5 µs at p50 and 175 µs at p99 (`build, :ask starts an agent`, a 200×200 map), once an
 `:ask`. It was 0.36 ms in 1.x, which forked twice and waited for the first child so that
