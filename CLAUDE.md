@@ -15,7 +15,7 @@ prohibitions only, under 150 lines. Reference lives where it is read on demand.
 | a Daggerheart rule's wording or page | the SRD 2.0 PDF: its link is in docs/CODEMAP.md's `ruler.c` row. Summarize with the page; never copy its text in |
 | binding a key | docs/KEYS.md, the nine rules (the ninth: `off` switches off, `remove` destroys) |
 | a plan's performance section | docs/PERFORMANCE.md, *Speed of light* |
-| reviewing; why 2.0 does something | docs/HEALTH.md: *The questions*, *Left open by reviews*; docs/reviews/, the three reviews docs/V2.md rests on, by heading |
+| reviewing; why 2.0 does something | docs/HEALTH.md: *The questions*, *Left open by reviews*; docs/reviews/, the reviews docs/V2.md rests on (agentic, performance, testing, memory), by heading |
 | the channel, agents, proposals | docs/CONTROL.md, docs/AGENTS.md, docs/CONFLICTS.md |
 | a big doc (PERFORMANCE.md, README.md, CONFLICTS.md, FOG.md) | by section: `grep -n '^#' FILE`, then the lines needed |
 | which doc is current, which is a design record | docs/README.md, the index; a design record's Status line says where the truth is now |

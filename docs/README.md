@@ -53,6 +53,6 @@ source: the column below is a copy, changed in the same commit.
 | [PICTURES.md](PICTURES.md) | picture handouts: a finished plan, parked 2026-10-03 |
 | [VEHICLES.md](VEHICLES.md) | vehicles (an area that moves, with riders): a reviewed plan, parked 2026-10-12 |
 | [V2.md](V2.md) | vtt 2.0, the rewrite (branch `vtt-2.0`): a plan, its questions answered 2026-10-12; being built (steps 0 to 2 and part of 4: its *Progress*) |
-| [reviews/](reviews/) | the three reviews V2.md rests on (agent architecture, performance, testing), 2026-10-12: reports as written, true of e7c58e9 |
+| [reviews/](reviews/) | the reviews V2.md rests on: agent architecture, performance, testing (2026-10-12, true of e7c58e9), and memory (2026-10-20, true of d66b883; its M1 and M2 reproduced by the planner the same day). Reports as written |
 
 A new page gets a row here in the commit that adds it.
