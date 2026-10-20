@@ -263,15 +263,21 @@ review's is, which never reaches the phones (`a->view`, `app_view_differs`):
 
 ```
  How should agents answer :ask?
-   c  the Claude API agent      key: keyring ...ab12      (or: no key yet - you will be asked for it)
+   c  the Claude API agent      key: keyring ...ab12      (or: no key yet - c asks for it)
    m  a command (Claude Code, a script...)
    w  wait for an agent that comes to the channel by itself
    o  the Options screen
    esc  not now: the job waits, and the next :ask asks again
 ```
 
-`c` saves `agent claude` (asking for the key first when there is none) and starts the agent
-on the waiting job; `m` opens a prompt for the command line, then saves and starts it; `w`
+`c` saves `agent claude` and starts the agent on the waiting job. When no key is found (no
+variable, nothing in the keyring or the file), `c` first opens the hidden key prompt, the
+same one as Options' and `:agent key`: the key typed is checked for its characters (a bad
+one is refused and the prompt stays open, saying why), stored in the keyring (the file
+where there is none), and then the agent starts. `Esc` in the key prompt goes back to the
+box with nothing saved, and the job still waits. A key that is stored but wrong is found
+out at the first call (401): the run ends, the GM's line says the key was refused and that
+`:agent key` replaces it; `m` opens a prompt for the command line, then saves and starts it; `w`
 saves `off`, switches the channel on, and says so; `o` opens Options (in a map: the commands
 it lists on its line, since Options is the landing screen's). The choice is saved, so it is
 asked once, not every session; `:agent` and Options change it after.
@@ -330,7 +336,9 @@ own command line, and answers from a script of canned answers. The suite runs a 
    the variable wins over both; a `:agent command` agent's environment has no key from vtt;
    `d` and `:agent key remove` ask, then remove it.
 11. an `:ask` in each row of *An `:ask` with no agent chosen*: the line it says; the choice
-   box on `unset` (a golden frame; never in the players' frame); `c` with and without a key,
+   box on `unset` (a golden frame; never in the players' frame); `c` with and without a key
+   (the key prompt from the box: stored, then the agent started; a bad key refused with the
+   prompt kept; `Esc` back to the box, nothing saved),
    `m`, `w`, `esc` (asked again next time), each saving what it says; "listening" from a held
    `wait` and from a recent request, and not from an old one.
 
