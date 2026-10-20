@@ -1191,6 +1191,13 @@ void test_stamp_keys(void)
         t = ctl_ask(&a, "stamp Noted A1\n");            /* no note on A1: one more than the map holds */
         CHECK(ctl_refused(t, "limit", 1) && strstr(t, "no room: a map holds"));
         free(t);
+        {
+            char rq[NOTE_MAX + 32];
+            snprintf(rq, sizeof rq, "note A1 \"%0*d\"\n", NOTE_MAX, 0);   /* one character too many */
+            t = ctl_ask(&a, rq);
+            CHECK(ctl_refused(t, "limit", 1) && strstr(t, "the note is over"));
+            free(t);
+        }
         t = ctl_ask(&a, "note A1 \"one too many\"\n");        /* the channel's note and the GM's: one operation's words */
         CHECK(ctl_refused(t, "limit", 1) && strstr(t, "no room: a map holds 64 notes on squares"));
         free(t);
