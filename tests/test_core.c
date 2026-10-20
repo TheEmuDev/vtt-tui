@@ -1146,6 +1146,33 @@ void test_undo(void)
     CHECK_EQ(big->tokens.n, 1);                             /* "Keep" is history, not undone */
     map_free(big);
 
+    CASE("a log of creature edits is bounded in bytes too: 70,000 edits of 532 bytes stay under 32 MB");
+    {
+        Undo cu;
+        undo_init(&cu);
+        Map *cm = map_new(4, 4, "edits");
+        Token gh;
+        memset(&gh, 0, sizeof gh);
+        gh.size = 1; gh.kind = TOKEN_ENEMY;
+        str_lcpy(gh.label, "Ghoul", sizeof gh.label);
+        tokens_add(&cm->tokens, gh);
+        size_t most = 0;
+        for (int k = 0; k < 70000; k++) {                   /* each its own step, a two-slot op */
+            Token e = cm->tokens.v[0];
+            snprintf(e.note, sizeof e.note, "edit %d", k);
+            undo_begin(&cu);
+            undo_edit_token(&cu, cm, 0, e);
+            undo_end(&cu);
+            if (undo_bytes(&cu) > most) most = undo_bytes(&cu);
+        }
+        CHECK(most <= UNDO_MAX_BYTES && cu.trimmed > 0);    /* the oldest went; never past the cap */
+        CHECK(undo_bytes(&cu) >= UNDO_TRIM_BYTES - 2 * sizeof(Token) - sizeof(Op));
+        CHECK_EQ(undo_undo(&cu, cm), 1);                    /* the newest is still there to take back */
+        CHECK(!strcmp(cm->tokens.v[0].note, "edit 69998"));
+        undo_free(&cu);
+        map_free(cm);
+    }
+
     undo_free(&u);
     map_free(m);
 }

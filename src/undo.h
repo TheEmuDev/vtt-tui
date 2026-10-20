@@ -42,14 +42,21 @@ typedef struct {
                             tokens too */
 } Op;
 
-/* The history is bounded. Past UNDO_MAX_OPS the oldest batches are dropped
- * until the log is back under UNDO_TRIM_TO, so the memmove that closes the
- * gap runs once per quarter-log of new ops rather than once per keystroke.
- * The cap is four fills of the largest map (512x512 is 262,144 ops a fill),
- * a little over 20 MB at the very worst and nothing at all in normal use;
- * before the payloads moved out of the op, one such fill alone was 60 MB. */
-#define UNDO_MAX_OPS (4 * MAP_MAX_DIM * MAP_MAX_DIM)
-#define UNDO_TRIM_TO (UNDO_MAX_OPS - UNDO_MAX_OPS / 4)
+/* The history is bounded twice. Past UNDO_MAX_OPS ops, or past UNDO_MAX_BYTES
+ * of ops and their token slots, the oldest batches are dropped until the log
+ * is back under three quarters of the cap it crossed, so the memmove that
+ * closes the gap runs once per quarter-log rather than once per keystroke.
+ * The ops cap is four fills of the largest map (512x512 is 262,144 ops a fill,
+ * 20 MB of ops); the bytes cap is what a creature's op makes needed, since it
+ * carries one or two 256-byte slots (docs/reviews/2026-10-20-4-memory.md, M1:
+ * 1,500 scene restores of 500 creatures held 287 MB before it). With both the
+ * log holds at most UNDO_MAX_BYTES and one batch: four fills of cells, about
+ * 63,000 creature edits, or 121,000 creatures added or removed. A batch is
+ * never dropped while it is the only one. */
+#define UNDO_MAX_OPS   (4 * MAP_MAX_DIM * MAP_MAX_DIM)
+#define UNDO_TRIM_TO   (UNDO_MAX_OPS - UNDO_MAX_OPS / 4)
+#define UNDO_MAX_BYTES ((size_t)32 << 20)
+#define UNDO_TRIM_BYTES (UNDO_MAX_BYTES - UNDO_MAX_BYTES / 4)
 
 /* Whose batch one is, when it is not the GM's own (docs/V2.md, D8): a job's
  * landing carries the job's number and the name of the agent that had it, so
@@ -192,5 +199,9 @@ void undo_tag_forget(Undo *u, int job);
 
 static inline int undo_can_undo(const Undo *u) { return u->depth > 0; }
 static inline int undo_can_redo(const Undo *u) { return u->depth < u->nmarks; }
+
+/* The bytes the log holds: its ops and their token slots (the cap is
+ * UNDO_MAX_BYTES, above). */
+size_t undo_bytes(const Undo *u);
 
 #endif /* VTT_UNDO_H */

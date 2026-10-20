@@ -53,15 +53,31 @@ void undo_stroke_end(Undo *u)
 /* Drops whole batches from the front until the log is under UNDO_TRIM_TO.
  * The open batch is never dropped, whatever its size: the cap bounds the
  * history, not the operation the user is in the middle of. */
+/* What the log holds from the start of batch b on: its ops and their slots. */
+static size_t bytes_from(const Undo *u, int b)
+{
+    int from = u->marks[b];
+    int toks = from < u->nops ? u->ops[from].tok : u->ntoks;
+    return (size_t)(u->nops - from) * sizeof(Op) + (size_t)(u->ntoks - toks) * sizeof(Token);
+}
+
+size_t undo_bytes(const Undo *u)
+{
+    return (size_t)u->nops * sizeof(Op) + (size_t)u->ntoks * sizeof(Token);
+}
+
 static void trim(Undo *u)
 {
-    if (u->nops <= UNDO_MAX_OPS) return;
+    int ops_over = u->nops > UNDO_MAX_OPS, bytes_over = undo_bytes(u) > UNDO_MAX_BYTES;
+    if (!ops_over && !bytes_over) return;
     PROF_ZONE("undo.trim");
 
-    /* b = how many batches to drop: the fewest that get under the mark,
-     * never the last one. */
+    /* b = how many batches to drop: the fewest that get under the mark of the
+     * cap that was crossed, never the last one. */
     int b = 0;
-    while (b < u->nmarks - 1 && u->nops - u->marks[b] > UNDO_TRIM_TO) b++;
+    while (b < u->nmarks - 1 && ((ops_over && u->nops - u->marks[b] > UNDO_TRIM_TO) ||
+                                 (bytes_over && bytes_from(u, b) > UNDO_TRIM_BYTES)))
+        b++;
     if (b == 0) return;
 
     int dops  = u->marks[b];

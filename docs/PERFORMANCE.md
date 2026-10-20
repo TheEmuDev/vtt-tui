@@ -396,6 +396,12 @@ fills and then drops its oldest quarter in one memmove, `undo.trim`: about 2.4ms
 per 262,144 new ops, which is 9ns an op amortized and a thing that happens a handful
 of times in a long session of painting. The scenario that measures it (`fill history`)
 paints and clears 200×200 without undoing so the log grows 80,000 ops a loop.
+**And it is bounded in bytes** (2026-10-20, review 4's M1): a creature's op carries one or two
+256-byte token slots, which the cap in ops did not count, so 1,500 scene restores of 500
+creatures held 286,768 KB at their peak. With `UNDO_MAX_BYTES` (32 MB of ops and slots) the
+same run peaks at 37,000 KB (38,768 at 400 restores, 18,960 at 50: where the trim falls), the
+desktop, `ru_maxrss` of the release `./vtt --bench`, one run each. The check is one
+multiply-add per batch closed.
 
 #### Play: range and templates, cards, damage, whispers, the camera, the turn order, the panel
 
