@@ -583,6 +583,35 @@ void test_json_read(void)
     }
     json_free(v);
 
+    CASE("each value knows its own text: the API agent copies an answer's content back unchanged");
+    {
+        const char *t = "\xef\xbb\xbf {\"content\": [ {\"type\":\"thinking\", \"signature\": \"s\\u00e9\"} , 1.50 ], \"n\": -0.0 } ";
+        v = PARSE(t);
+        CHECK(v != NULL);
+        if (v) {
+            const JsonVal *c = json_get(v, "content");
+            CHECK(c && c->len == strlen("[ {\"type\":\"thinking\", \"signature\": \"s\\u00e9\"} , 1.50 ]"));
+            CHECK(c && !strncmp(t + c->at, "[ {", 3) && t[c->at + c->len - 1] == ']');
+            CHECK(c && c->n == 2 && c->kids[1].len == 4 && !strncmp(t + c->kids[1].at, "1.50", 4));
+            CHECK(c && !strncmp(t + c->kids[0].at, "{\"type\"", 7) && t[c->kids[0].at + c->kids[0].len - 1] == '}');
+            const JsonVal *n = json_get(v, "n");
+            CHECK(n && n->len == 4 && !strncmp(t + n->at, "-0.0", 4));
+            CHECK(v->at == 4 && t[v->at] == '{' && t[v->at + v->len - 1] == '}');
+        }
+        json_free(v);
+    }
+
+    CASE("a number longer than 63 characters is read whole (an exponent after 63 digits overflowed a buffer once: tests/fuzz-json/long-number)");
+    {
+        char t[160] = "[1.";
+        for (int i = 0; i < 100; i++) strcat(t, "5");
+        strcat(t, "e-1]");
+        v = PARSE(t);
+        CHECK(v && v->kind == JSON_ARR && v->n == 1);
+        CHECK(v && v->kids[0].num > 0.1555 && v->kids[0].num < 0.1556);
+        json_free(v);
+    }
+
     CASE("escapes are decoded, \\u as UTF-8, a surrogate pair as one character");
     v = PARSE("\"a\\\"b\\\\c\\/d\\ne\\u00e9\\ud83d\\ude00\"");
     CHECK(v && json_text(v) && !strcmp(json_text(v), "a\"b\\c/d\ne\xc3\xa9\xf0\x9f\x98\x80"));

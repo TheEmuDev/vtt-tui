@@ -23,6 +23,19 @@ static size_t walk(const JsonVal *v)
     return n;
 }
 
+/* Each value's span is its own text: parsed alone, it is a value of the same kind
+ * (the API agent copies spans back into requests unchanged). */
+static void spans(const JsonVal *v, const char *text)
+{
+    for (int i = 0; i < v->n; i++) {
+        char err[160];
+        JsonVal *k = json_parse(text + v->kids[i].at, v->kids[i].len, err, sizeof err);
+        if (!k || k->kind != v->kids[i].kind || k->n != v->kids[i].n) abort();
+        json_free(k);
+        spans(&v->kids[i], text);
+    }
+}
+
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
     char err[160];
@@ -30,6 +43,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     if (v) {
         volatile size_t n = walk(v);
         (void)n;
+        spans(v, (const char *)data);
         json_free(v);
     } else if (strncmp(err, "not JSON at line ", 17) != 0) {
         abort();                                  /* a refusal always says where */

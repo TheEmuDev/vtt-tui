@@ -42,6 +42,7 @@ typedef struct JsonVal {
     int              n;
     struct JsonVal  *kids;
     char           **keys;
+    size_t           at, len;       /* where the value's text is in the document, and how long */
 } JsonVal;
 
 /* The whole of text as one JSON value, a UTF-8 byte-order mark allowed in

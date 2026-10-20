@@ -145,6 +145,17 @@ static char *jstring(JsonIn *in)
 
 static void jvalue(JsonIn *in, JsonVal *v, int depth);
 
+/* The value's own text, so a caller can copy it back unchanged (the API
+ * agent sends an answer's content back byte for byte: apiagent.c). */
+static void jvalue_spanned(JsonIn *in, JsonVal *v, int depth)
+{
+    jspace(in);
+    const char *from = in->p;
+    jvalue(in, v, depth);
+    v->at  = (size_t)(from - in->start);
+    v->len = (size_t)(in->p - from);
+}
+
 static void jadd(JsonVal *v, int *cap)
 {
     if (v->n == *cap) {
@@ -185,7 +196,7 @@ static void jvalue(JsonIn *in, JsonVal *v, int depth)
             }
             jadd(v, &cap);
             if (key) v->keys[v->n - 1] = key;
-            jvalue(in, &v->kids[v->n - 1], depth + 1);
+            jvalue_spanned(in, &v->kids[v->n - 1], depth + 1);
             if (in->failed) return;
             jspace(in);
             if (in->p < in->end && *in->p == ',') { in->p++; continue; }
@@ -199,23 +210,27 @@ static void jvalue(JsonIn *in, JsonVal *v, int depth)
     if (in->end - in->p >= 5 && !memcmp(in->p, "false", 5)) { v->kind = JSON_BOOL; in->p += 5; return; }
     if (in->end - in->p >= 4 && !memcmp(in->p, "null", 4))  { v->kind = JSON_NULL; in->p += 4; return; }
     if (c == '-' || (c >= '0' && c <= '9')) {
-        /* JSON's own number: -?digits(.digits)?([eE][+-]?digits)? */
+        /* JSON's own number: -?digits(.digits)?([eE][+-]?digits)? -- scanned
+         * whole first, then copied for strtod (which wants it NUL-ended): a
+         * number of any length, read as written. */
         const char *q = in->p;
-        char buf[64];
-        size_t k = 0;
-        #define TAKE_DIGITS() do { int d = 0; while (q < in->end && *q >= '0' && *q <= '9' && k + 1 < sizeof buf) { buf[k++] = *q++; d++; } if (!d) { jfail(in, "a malformed number"); return; } } while (0)
-        if (*q == '-') buf[k++] = *q++;
-        TAKE_DIGITS();
-        if (q < in->end && *q == '.') { buf[k++] = *q++; TAKE_DIGITS(); }
+        #define DIGITS() do { const char *d0 = q; while (q < in->end && *q >= '0' && *q <= '9') q++; if (q == d0) { jfail(in, "a malformed number"); return; } } while (0)
+        if (*q == '-') q++;
+        DIGITS();
+        if (q < in->end && *q == '.') { q++; DIGITS(); }
         if (q < in->end && (*q == 'e' || *q == 'E')) {
-            buf[k++] = *q++;
-            if (q < in->end && (*q == '+' || *q == '-')) buf[k++] = *q++;
-            TAKE_DIGITS();
+            q++;
+            if (q < in->end && (*q == '+' || *q == '-')) q++;
+            DIGITS();
         }
-        #undef TAKE_DIGITS
-        buf[k] = '\0';
+        #undef DIGITS
+        size_t n = (size_t)(q - in->p);
+        char   buf[64], *num = n < sizeof buf ? buf : xmalloc(n + 1);
+        memcpy(num, in->p, n);
+        num[n] = '\0';
         v->kind = JSON_NUM;
-        v->num  = strtod(buf, NULL);
+        v->num  = strtod(num, NULL);
+        if (num != buf) free(num);
         in->p   = q;
         return;
     }
@@ -238,7 +253,7 @@ JsonVal *json_parse(const char *text, size_t len, char *err, size_t errsz)
     JsonIn in = { text, text + len, text, err, errsz, 0 };
     if (len >= 3 && !memcmp(text, "\xef\xbb\xbf", 3)) in.p += 3;       /* a byte-order mark */
     JsonVal *v = xmalloc(sizeof *v);
-    jvalue(&in, v, 0);
+    jvalue_spanned(&in, v, 0);
     jspace(&in);
     if (!in.failed && in.p < in.end) jfail(&in, "more after the value");
     if (in.failed) { jfree_val(v); free(v); return NULL; }
