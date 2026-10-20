@@ -227,8 +227,7 @@ void app_ask_command(App *a, const char *verb, const char *rest)
     world_event(&a->world, CTL_EV_ASKED, a->world.jobs[slot].num, "%s%s%s%s", bp ? where + 1 : "", at_once ? (bp ? ", to land at once" : "to land at once") : "",
               bp || at_once ? ": " : "", rest);
     snprintf(msg, sizeof msg, "#%d asked%s%s: %.150s", a->world.jobs[slot].num, where, at_once ? ", to land at once" : "", rest);
-    app_note_gm(a, msg);
-    app_agent_start(a, &a->world.jobs[slot]);      /* :agent command: someone to do it */
+    app_agent_ask(a, &a->world.jobs[slot], msg);   /* the line, then someone to do it, or why not */
 }
 
 /* :jobs lists them on the status line; :jobs N shows one's history. */

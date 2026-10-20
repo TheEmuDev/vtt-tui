@@ -230,6 +230,7 @@ void app_options_prompt(App *a, const char *text)
     }
     app_settings_changed(a);
     said(a, ID[row], row == OPT_COMMAND ? " - each :ask starts it" : " - from the next :ask");
+    if (row == OPT_COMMAND) app_agent_choice_continue(a);           /* from the choice box: its job */
 }
 
 void app_options_key(App *a, Key k)

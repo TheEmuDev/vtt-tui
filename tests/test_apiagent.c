@@ -360,6 +360,7 @@ void test_settings(void)
     rnd_resize(&r, 100, 30);
     app_init(&a, NULL, &r);
     CHECK(ctl_blank_map(&a, sb.dir, 8, 6));
+    a.settings.agent = AGENT_KIND_UNSET;                              /* as main starts a GM's session */
     str_lcpy(a.settings_file, path, sizeof a.settings_file);
     unlink(path);
     const char *self_was = app_self_path;
@@ -578,7 +579,7 @@ void test_api_key(void)
     setenv("VTT_CLAUDE_CURL", "/bin/true", 1);
     press(&a, ":agent claude sonnet\r");
     CHECK_EQ(a.modal, MODAL_PROMPT);
-    CHECK_EQ(a.settings.agent, AGENT_KIND_UNSET);
+    CHECK_EQ(a.settings.agent, AGENT_KIND_OFF);                       /* as it was, until a key is stored */
     press(&a, KEY "\r");
     CHECK_EQ(a.settings.agent, AGENT_KIND_CLAUDE);
     CHECK(!strcmp(a.settings.model, "sonnet"));
@@ -604,21 +605,28 @@ void test_options(void)
     char path[1200];
     settings_path(path, sizeof path);
 
-    CASE("the screen as it opens on no settings: every row, the agent's own dim while none is chosen");
-    {
-        static const char *const seg[] = { "jj\r" };
-        golden("options", 90, 22, NULL, seg, 1, 0);
-    }
-
     Renderer r;
     App a;
     rnd_init(&r);
-    rnd_resize(&r, 100, 30);
+    rnd_resize(&r, 90, 22);
     app_init(&a, NULL, &r);
+    a.settings.agent = AGENT_KIND_UNSET;                              /* as main starts a GM's session */
     str_lcpy(a.settings_file, path, sizeof a.settings_file);
     press(&a, "jj\r");
     CHECK_EQ(a.screen, SCREEN_OPTIONS);
+
+    CASE("the screen as it opens on no settings: every row, the agent's own dim while none is chosen");
+    {
+        rnd_begin(&r);
+        app_draw(&a);
+        ByteBuf b;
+        bb_init(&b, 4096);
+        rnd_dump(&r, &b);
+        golden_bytes("options", b.data, b.len);
+        bb_free(&b);
+    }
     CHECK(frame_has(&a, &r, "not chosen - the first :ask asks"));
+    rnd_resize(&r, 100, 30);
 
     CASE("the agent row: enter steps none -> a command (asking for it when there is none)");
     press(&a, "\r");
@@ -722,6 +730,157 @@ void test_options(void)
     CHECK_EQ(a.screen, SCREEN_MENU);
     CHECK(frame_has(&a, &r, "Options"));
 
+    app_free(&a);
+    rnd_free(&r);
+    sandbox_leave(&sb);
+}
+
+/* An :ask with no agent chosen (docs/APIAGENT.md): every :ask says what
+ * happens to its job; the first, when none was ever chosen, asks. */
+void test_ask_agent(void)
+{
+    Sandbox sb = sandbox_enter("askagent");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    unsetenv("ANTHROPIC_API_KEY");
+    Renderer r;
+    App a;
+    rnd_init(&r);
+    rnd_resize(&r, 100, 30);
+    app_init(&a, NULL, &r);
+    CHECK(ctl_blank_map(&a, sb.dir, 20, 12));
+    if (!a.world.map) { app_free(&a); rnd_free(&r); sandbox_leave(&sb); return; }
+    a.settings.agent = AGENT_KIND_UNSET;                              /* as main starts a GM's session */
+    char path[1200];
+    settings_path(path, sizeof path);
+    str_lcpy(a.settings_file, path, sizeof a.settings_file);
+    const char *self_was = app_self_path;
+    char self[700];
+    snprintf(self, sizeof self, "%s/vtt", sb.cwd);
+    app_self_path = self;
+    str_lcpy(g_dir, sb.dir, sizeof g_dir);
+    snprintf(g_usage, sizeof g_usage, "%s/vtt/claude-usage.tsv", sb.datadir);
+    char tool[900];
+    fake_secret_tool(sb.dir, tool, sizeof tool);
+    setenv("VTT_SECRET_TOOL", tool, 1);
+
+    CASE("never chosen: the :ask makes its job and asks, in a box the players never see");
+    press(&a, ":ask a pool\r");
+    CHECK(a.world.jobs[0].used && a.world.jobs[0].state == JOB_ASKED);
+    CHECK_EQ(a.modal, MODAL_CHOOSE_AGENT);
+    CHECK(frame_has(&a, &r, "How should agents answer :ask?"));
+    CHECK(frame_has(&a, &r, "the Claude API agent  (no key yet - c asks for it)"));
+    CHECK(frame_has(&a, &r, "a command  (Claude Code, a script...)"));
+    CHECK(frame_has(&a, &r, "wait for an agent that comes to the channel"));
+    {
+        char *pl = players_text(&a, &r);
+        CHECK(pl && !strstr(pl, "How should agents"));
+        free(pl);
+    }
+
+    CASE("esc: not now -- the job waits, nothing saved, and the next :ask asks again");
+    press(&a, "\x1b");
+    CHECK(strstr(a.status, "#1 waits - no agent chosen yet") != NULL);
+    CHECK_EQ(a.settings.agent, AGENT_KIND_UNSET);
+    CHECK(access(path, F_OK) != 0);
+    press(&a, ":ask a second pool\r");
+    CHECK_EQ(a.modal, MODAL_CHOOSE_AGENT);
+
+    CASE("w: an agent that comes to the channel -- saved, the channel on, the GM told");
+    press(&a, "w");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK_EQ(a.settings.agent, AGENT_KIND_OFF);
+    CHECK(file_has(path, "agent off\n"));
+    CHECK_EQ(a.world.agent_on, 1);
+    CHECK(strstr(a.status, "#2 waits for an agent that comes to the channel - saved") != NULL);
+
+    CASE("off, and nobody listening: said, with what to do");
+    a.world.agent_seen_ms = 0;
+    press(&a, ":ask a third\r");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK(strstr(a.status, "#3 asked: a third - no agent is set to start and none is listening: :agent claude") != NULL);
+
+    CASE("off, an agent waited for work lately: the job is for it, and the line says so");
+    a.world.now_ms = 1000000;
+    a.world.agent_seen_ms = 1000000 - 120000;
+    press(&a, ":ask a fourth\r");
+    CHECK(strstr(a.status, "#4 asked: a fourth - for the agent on the channel (an agent waited for work 2 min ago)") != NULL);
+    a.world.agent_seen_ms = 0;
+    jobs_reset(&a);
+
+    CASE("m: a command, typed in the box's prompt -- saved, and the waiting job started with it");
+    a.settings.agent = AGENT_KIND_UNSET;
+    app_agent_apply(&a);
+    char out[900], cmd[1200];
+    snprintf(out, sizeof out, "%s/m.out", sb.dir);
+    snprintf(cmd, sizeof cmd, "cat > '%s'", out);
+    press(&a, ":ask a moat\r");
+    CHECK_EQ(a.modal, MODAL_CHOOSE_AGENT);
+    press(&a, "m");
+    CHECK_EQ(a.modal, MODAL_PROMPT);
+    press(&a, "\x1b");
+    CHECK_EQ(a.modal, MODAL_CHOOSE_AGENT);                            /* esc in the prompt: back to the box */
+    press(&a, "2");
+    press(&a, cmd);
+    press(&a, "\r");
+    CHECK_EQ(a.settings.agent, AGENT_KIND_COMMAND);
+    CHECK(pump_until_file(&a, out, "Job #1: a moat"));
+    CHECK(pump_until_reaped(&a));
+    jobs_reset(&a);
+
+    CASE("c with no key: the key prompt from the box; esc back to it; a key stored, the Claude agent set and started");
+    a.settings.agent = AGENT_KIND_UNSET;
+    app_agent_apply(&a);
+    fake_curl(sb.dir);
+    fresh();
+    answer(1, OK200, "{\"content\":[{\"type\":\"text\",\"text\":\"nothing to do\"}],\"stop_reason\":\"end_turn\",\"usage\":{}}");
+    press(&a, ":ask a crypt\r");
+    press(&a, "c");
+    CHECK_EQ(a.modal, MODAL_PROMPT);
+    CHECK_EQ(a.prompt.secret, 1);
+    press(&a, "\x1b");
+    CHECK_EQ(a.modal, MODAL_CHOOSE_AGENT);
+    CHECK_EQ(a.settings.agent, AGENT_KIND_UNSET);
+    press(&a, "c" KEY "\r");
+    CHECK_EQ(a.settings.agent, AGENT_KIND_CLAUDE);
+    CHECK(file_has(path, "agent claude\n"));
+    CHECK(pump_until_file(&a, g_usage, "\tdone\n"));
+    CHECK(pump_until_reaped(&a));
+    CHECK_EQ(calls(), 1);
+    jobs_reset(&a);
+
+    CASE("claude with its key in the keyring: the box shows it; and once chosen, an :ask just starts it");
+    a.settings.agent = AGENT_KIND_UNSET;
+    app_agent_apply(&a);
+    press(&a, ":ask a hall\r");
+    CHECK(frame_has(&a, &r, "the Claude API agent  (key: keyring ...KLMN)"));
+    press(&a, "\x1b");
+    a.settings.agent = AGENT_KIND_CLAUDE;
+    app_agent_apply(&a);
+    fresh();
+    answer(1, OK200, "{\"content\":[{\"type\":\"text\",\"text\":\"x\"}],\"stop_reason\":\"end_turn\",\"usage\":{}}");
+    press(&a, ":ask a cellar\r");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK(strstr(a.status, "started the Claude agent (opus, medium effort)") != NULL);
+    CHECK(pump_until_file(&a, g_usage, "\tdone\n"));
+    CHECK(pump_until_reaped(&a));
+    jobs_reset(&a);
+
+    CASE("claude that cannot start (no curl): the job waits, and the line says why");
+    setenv("VTT_CLAUDE_CURL", "/nonexistent/curl", 1);
+    press(&a, ":ask a well\r");
+    CHECK(strstr(a.status, "asked: a well - the Claude agent cannot start: the Claude agent needs curl") != NULL);
+    CHECK_EQ(a.nagents, 0);
+    fake_curl(sb.dir);
+
+    CASE("paused: the job waits, and :agent command on is named");
+    press(&a, ":agent command off\r");
+    press(&a, ":ask a gate\r");
+    CHECK(strstr(a.status, "the agent is paused (:agent command on starts it)") != NULL);
+    CHECK_EQ(a.nagents, 0);
+
+    unsetenv("VTT_CLAUDE_CURL");
+    app_self_path = self_was;
     app_free(&a);
     rnd_free(&r);
     sandbox_leave(&sb);

@@ -1072,8 +1072,12 @@ void test_agent_command(void)
     CHECK(strstr(a.status, "none is set") != NULL && a.status_gm);
     press(&a, ":agent command off\r");
     CHECK(strstr(a.status, "no agent command is set") != NULL);
+    a.settings.agent = AGENT_KIND_UNSET;                         /* a GM who never chose (main's default) */
     press(&a, ":ask nothing starts\r");
     CHECK_EQ(a.world.agent_on, 0);                               /* no command: nothing started, nothing opened */
+    CHECK_EQ(a.modal, MODAL_CHOOSE_AGENT);                       /* no agent ever chosen: the GM is asked (docs/APIAGENT.md) */
+    press(&a, "\x1b");
+    CHECK(strstr(a.status, "#1 waits - no agent chosen yet") != NULL && a.status_gm);
     jobs_reset(&a);
 
     CASE("set: each :ask starts it, the job and how to answer on its stdin; the channel comes on for it");

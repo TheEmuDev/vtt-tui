@@ -51,6 +51,7 @@ typedef enum {
     MODAL_CONFIRM_HELD,      /* another vtt has this map open: open it here too? */
     MODAL_CONFIRM_ROWS,      /* the file had a row added or lost: save the rows as read? */
     MODAL_CONFIRM_KEY,       /* :agent key remove: take the stored API key away? */
+    MODAL_CHOOSE_AGENT,      /* the first :ask with no agent chosen: how should agents answer? (app_agent.c) */
     MODAL_PICKER,            /* a list filtered as the GM types: App.picker */
     MODAL_CARD,              /* :card -- a creature's card whole, scrolled by card_top */
 } ModalKind;
@@ -274,6 +275,7 @@ typedef struct {
     Settings settings;
     char     settings_file[1024];
     int      key_then;          /* what the key prompt does once a key is stored: KEY_THEN_* (app_agent.c) */
+    int      choice_job;        /* the job the agent choice box (or what it opened) is for; 0: none */
     /* The Options screen: its row, the row a prompt is for, and what was
      * read when it opened (the key's source and last four, the spend). */
     ListState options;

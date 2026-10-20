@@ -585,6 +585,7 @@ static int run_interactive(const Options *o)
     {
         char note[400];
         settings_path(a.settings_file, sizeof a.settings_file);
+        settings_default(&a.settings);
         settings_load(&a.settings, a.settings_file, note, sizeof note);
         if (note[0]) app_set_status_gm(&a, note);
         a.world.ctl_auto = a.settings.accept_auto;

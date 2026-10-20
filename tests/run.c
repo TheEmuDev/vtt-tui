@@ -100,6 +100,7 @@ int main(int argc, char **argv)
         { "settings", test_settings },
         { "apikey", test_api_key },
         { "options", test_options },
+        { "askagent", test_ask_agent },
         { "turns",  test_turns },
         { "turnkeys", test_turn_keys },
         { "dice",   test_dice },

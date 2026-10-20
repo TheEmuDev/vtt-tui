@@ -391,6 +391,121 @@ static int claude_ready(App *a, char *why, size_t whysz)
     return 1;
 }
 
+/* ------------------------------------------------- an :ask, and who answers it */
+
+/* What the channel knows of an agent listening: a wait held now (by name),
+ * or one in the last ten minutes. Nothing guessed. */
+static int listening(const App *a, char *who, size_t sz)
+{
+    unsigned seq;
+    uint64_t until;
+    const char *name;
+    for (int i = 0; i < ctl_waiters(&a->ctl); i++)
+        if (ctl_waiter(&a->ctl, i, &seq, &until, &name)) { snprintf(who, sz, "%s is waiting for work", name && *name ? name : "an agent"); return 1; }
+    uint64_t now = a->world.now_ms;
+    if (a->world.agent_seen_ms && now >= a->world.agent_seen_ms && now - a->world.agent_seen_ms < (uint64_t)CTL_WAIT_MAX_S * 1000) {
+        snprintf(who, sz, "an agent waited for work %d min ago", (int)((now - a->world.agent_seen_ms) / 60000));
+        return 1;
+    }
+    return 0;
+}
+
+void app_agent_ask(App *a, const Job *j, const char *asked)
+{
+    char msg[1100], why[600], who[96];
+    const Settings *st = &a->settings;
+    if (a->agent_cmd_off && a->agent_cmd[0]) {
+        snprintf(msg, sizeof msg, "%s - the agent is paused (:agent command on starts it); the job waits", asked);
+        app_note_gm(a, msg);
+        return;
+    }
+    if (!a->agent_from_env && st->agent == AGENT_KIND_CLAUDE && !claude_ready(a, why, sizeof why)) {
+        snprintf(msg, sizeof msg, "%s - the Claude agent cannot start: %s; the job waits", asked, why);
+        app_note_gm(a, msg);
+        return;
+    }
+    if (a->agent_cmd[0]) { app_note_gm(a, asked); app_agent_start(a, j); return; }
+    if (!a->agent_from_env && st->agent == AGENT_KIND_UNSET) {
+        app_note_gm(a, asked);
+        a->choice_job = j->num;
+        snprintf(a->modal_title, sizeof a->modal_title, "How should agents answer :ask?");
+        a->modal = MODAL_CHOOSE_AGENT;
+        a->dirty = 1;
+        return;
+    }
+    if (listening(a, who, sizeof who))
+        snprintf(msg, sizeof msg, "%s - for the agent on the channel (%s)", asked, who);
+    else
+        snprintf(msg, sizeof msg, "%s - no agent is set to start and none is listening: :agent claude, :agent command CMD, or Options%s",
+                 asked, a->world.agent_on ? "" : "; :agent on lets one come by itself");
+    app_note_gm(a, msg);
+}
+
+int app_agent_choice_rows(const App *a, UiChoice *items, int max)
+{
+    if (max < 3) return 0;
+    char last4[8];
+    int  src = app_agent_key_where(last4, sizeof last4);
+    if (src == APIKEY_NONE) snprintf(items[0].text, sizeof items[0].text, "c  the Claude API agent  (no key yet - c asks for it)");
+    else snprintf(items[0].text, sizeof items[0].text, "c  the Claude API agent  (key: %s ...%s)", apikey_source_name(src), last4);
+    snprintf(items[1].text, sizeof items[1].text, "m  a command  (Claude Code, a script...)");
+    snprintf(items[2].text, sizeof items[2].text, "w  wait for an agent that comes to the channel");
+    for (int i = 0; i < 3; i++) items[i].color = a->th->fg;
+    return 3;
+}
+
+void app_agent_choice_continue(App *a)
+{
+    int num = a->choice_job;
+    a->choice_job = 0;
+    int slot = num ? world_job_find(&a->world, num) : -1;
+    if (slot < 0) return;
+    Job *j = &a->world.jobs[slot];
+    if (j->state == JOB_ASKED && a->agent_cmd[0] && !a->agent_cmd_off) app_agent_start(a, j);
+}
+
+void app_agent_choice_key(App *a, Key k)
+{
+    if (k.kind == KEY_ESC || (k.kind == KEY_CHAR && k.ch == 'q')) {
+        a->modal = MODAL_NONE;
+        char msg[160];
+        snprintf(msg, sizeof msg, "#%d waits - no agent chosen yet; the next :ask asks again (or Options, :agent)", a->choice_job);
+        a->choice_job = 0;
+        app_set_status_gm(a, msg);
+        return;
+    }
+    if (k.kind != KEY_CHAR || k.mods) return;
+    uint32_t c = k.ch;
+    if (c == '1') c = 'c';
+    else if (c == '2') c = 'm';
+    else if (c == '3') c = 'w';
+    if (c == 'c') {
+        a->modal = MODAL_NONE;
+        app_agent_setting(a, "claude");          /* asks for a key first when there is none */
+        if (a->settings.agent == AGENT_KIND_CLAUDE) app_agent_choice_continue(a);
+        else if (a->modal != MODAL_PROMPT) a->choice_job = 0;   /* refused (no curl): said, nothing waits on it */
+        return;
+    }
+    if (c == 'm') {
+        a->modal = MODAL_NONE;
+        a->opt_prompt = OPT_COMMAND;
+        app_open_prompt(a, PROMPT_SETTING, "Agent command", "started for each :ask, the job on its stdin", "");
+        a->prompt.max = SETTINGS_COMMAND_MAX;
+        return;
+    }
+    if (c == 'w') {
+        a->modal = MODAL_NONE;
+        a->settings.agent = AGENT_KIND_OFF;
+        app_settings_changed(a);
+        int num = a->choice_job;
+        a->choice_job = 0;
+        if (!a->world.agent_on) app_agent_command(a, "on");
+        char msg[200];
+        snprintf(msg, sizeof msg, "#%d waits for an agent that comes to the channel - saved; :agent claude or :agent command change it", num);
+        app_note_gm(a, msg);
+    }
+}
+
 /* ------------------------------------------------------------- the API key */
 
 int app_agent_key_where(char *last4, size_t sz)
@@ -448,7 +563,10 @@ void app_agent_key_typed(App *a, const char *key)
     else snprintf(msg, sizeof msg, "API key ...%s stored in %s, readable by you alone (no keyring here)%s", last4, path, shadow);
     app_note_gm(a, msg);
     app_options_key_changed(a);
-    if (then == KEY_THEN_CLAUDE) app_agent_setting(a, "claude");
+    if (then == KEY_THEN_CLAUDE) {
+        app_agent_setting(a, "claude");
+        if (a->settings.agent == AGENT_KIND_CLAUDE) app_agent_choice_continue(a);   /* the job the box was for */
+    }
 }
 
 void app_agent_key_remove(App *a)

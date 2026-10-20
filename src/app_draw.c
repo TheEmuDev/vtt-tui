@@ -517,6 +517,14 @@ void app_draw_view(App *a, View view)
                  "y  remove the stored key      n / esc  keep it", frame);
         break;
 
+    case MODAL_CHOOSE_AGENT: {
+        UiChoice items[3];
+        int n = app_agent_choice_rows(a, items, 3);
+        ui_choice(a->rnd, a->th, a->modal_title, items, n,
+                  "c m w (or 1-3)  choose, saved      esc  not now - the job waits", frame);
+        break;
+    }
+
     case MODAL_CONFIRM_DELETE:
         /* Its own footer: this one removes a file from disk, and the word
          * "yes" does not say that. */

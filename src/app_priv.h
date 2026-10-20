@@ -238,6 +238,16 @@ void app_agent_key_remove(App *a);
 /* Where the key in use is from, and its last four characters ("" with none). */
 int  app_agent_key_where(char *last4, size_t sz);
 
+/* An :ask's job handed on: started, or the GM told why not and what to do
+ * (docs/APIAGENT.md, *An :ask with no agent chosen*), in one line after
+ * `asked` (the :ask's own); the choice box when no agent was ever chosen.
+ * Its keys, and its rows for the drawing. */
+void app_agent_ask(App *a, const Job *j, const char *asked);
+void app_agent_choice_key(App *a, Key k);
+int  app_agent_choice_rows(const App *a, UiChoice *items, int max);
+/* After a choice made through a prompt: the job it was for is started. */
+void app_agent_choice_continue(App *a);
+
 /* The Options screen (app_options.c). */
 enum { OPT_AGENT, OPT_COMMAND, OPT_MODEL, OPT_EFFORT, OPT_CAP, OPT_CALLS, OPT_FALLBACKS,
        OPT_CHANNEL, OPT_ACCEPT, OPT_KEY, OPT_SPENT, OPT_COUNT };

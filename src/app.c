@@ -33,6 +33,10 @@ void app_init(App *a, Term *t, Renderer *r)
     a->agent_deadline_ms = AGENT_DEADLINE_MS;
     a->agent_grace_ms    = AGENT_GRACE_MS;
     settings_default(&a->settings);
+    /* A test or a bench has no GM to ask how agents answer: its :ask waits
+     * for one on the channel. main starts from the defaults again (unset),
+     * so a GM who never chose is asked. */
+    a->settings.agent = AGENT_KIND_OFF;
     a->opt_prompt = -1;
     a->th      = &THEME_DARK;
     a->screen  = SCREEN_MENU;
@@ -1257,10 +1261,14 @@ static int modal_key(App *a, Key k)
         if (r == 1) prompt_accept(a);
         else if (r == -1) {
             int secret = a->prompt.secret;
+            PromptWhat what = a->prompt_what;
             if (secret) ui_prompt_wipe(&a->prompt);
             a->modal       = MODAL_NONE;
             a->prompt_what = PROMPT_NONE;
             a->key_then    = KEY_THEN_NOTHING;
+            a->opt_prompt  = -1;
+            /* From the agent choice box: back to it, the job still waiting. */
+            if (a->choice_job && (what == PROMPT_API_KEY || what == PROMPT_SETTING)) a->modal = MODAL_CHOOSE_AGENT;
             if (secret) app_set_status_gm(a, "canceled - no key stored");
             else app_set_status(a, "canceled");
         }
@@ -1297,6 +1305,10 @@ static int modal_key(App *a, Key k)
         }
         return 1;
     }
+
+    case MODAL_CHOOSE_AGENT:
+        app_agent_choice_key(a, k);
+        return 1;
 
     case MODAL_CONFIRM_KEY:
         if (k.kind == KEY_CHAR && (k.ch == 'y' || k.ch == 'Y')) {
