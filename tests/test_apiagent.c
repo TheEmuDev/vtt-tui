@@ -382,10 +382,12 @@ void test_settings(void)
     press(&a, ":agent command on\r");
     CHECK(file_has(path, "paused off\n"));
 
-    CASE(":agent claude: refused with no key, saying how; with a key and curl, the line is built from the settings");
+    CASE(":agent claude: with no key it asks for one (esc: nothing changed); with a key and curl, the line is built from the settings");
     unsetenv("ANTHROPIC_API_KEY");
     press(&a, ":agent claude\r");
-    CHECK(strstr(a.status, "no API key") != NULL);
+    CHECK_EQ(a.modal, MODAL_PROMPT);
+    CHECK(a.prompt.secret && strstr(a.prompt.hint, "no API key") != NULL);
+    press(&a, "\x1b");
     CHECK_EQ(a.settings.agent, AGENT_KIND_COMMAND);                   /* nothing changed */
     setenv("ANTHROPIC_API_KEY", KEY, 1);
     setenv("VTT_CLAUDE_CURL", "/bin/true", 1);
