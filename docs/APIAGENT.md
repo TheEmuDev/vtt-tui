@@ -1,7 +1,9 @@
 # The Claude API agent (ROADMAP item 26)
 
 > **Status: a plan, written 2026-10-19, waiting for the user's sign-off.** Nothing of it is
-> built. *Decisions for the user* at the end are the questions open.
+> built. *Decisions for the user* at the end are the questions open. The same day the user
+> added: an options screen on the landing menu to set the agent up, and commands in a map
+> that change the same settings (*Settings* below).
 
 An agent option that calls the Claude API itself, beside `:agent command CMD`: the GM types
 `:agent claude`, and every `:ask` (and every send-back) is answered by Claude through the
@@ -140,6 +142,76 @@ debugging; off unless set.
 - README *Working with AI agents* gets a section: the key, the command, the models and what
   they cost, the usage file. `src/keys.c`'s `?` page gets `:agent claude`.
 
+## Settings: the Options screen and the `:agent` commands
+
+The user asked (2026-10-19) for both: an options menu on the landing screen where the
+agent is set up, and commands in a map that change the same settings. One set of settings
+serves both, saved so it holds from one session to the next.
+
+**Where they live:** `$XDG_CONFIG_HOME/vtt/settings` (`~/.config/vtt/settings`), a line a
+setting, `name value`. vtt has no settings file today: `:agent command CMD` and the rest
+last a session. The file is read once at start-up and written whole (a temporary file and
+a `rename`) each time a setting changes. A line it does not know is kept as it is and
+named once on the status line, never dropped; a value it cannot read leaves that setting
+at its default and says so. `VTT_AGENT_COMMAND` and `--agent` still win for the session
+they start (and are not saved). New code, `src/settings.c/h`: the `Settings` struct, read,
+write, each setting's name, kinds and default. The app holds one (`App.settings`).
+
+**What is in them:**
+
+| setting | values | default |
+|---|---|---|
+| agent | `off`, `command`, `claude`: what an `:ask` starts | `off` |
+| command | the shell line for `command` | none |
+| model | `opus`, `sonnet`, `haiku`, `fable` (the current model of each), or a full model id | `opus` |
+| effort | `low`, `medium`, `high` | `medium` |
+| cap | dollars a job, the spend cap | `1.00` |
+| calls | API calls a job | `25` |
+| fallbacks | `on`, `off` | `on` |
+| channel | `on` or `off` at start-up (what `--agent` does for one session) | `off` |
+| accept | `review` or `auto` at start-up | `review` |
+
+The key is not a setting: it stays in its own file (*The key*), which the Options screen can
+write.
+
+**The Options screen** (the landing menu becomes Open Map, New Map, **Options**, Quit): a
+list of the settings above, each a row with its value; `j`/`k` move, `Enter` changes the
+row (a choice goes to the next value, `h`/`l` step back and forward through it; a number or
+the command line opens a prompt with the value in it), `Esc` goes back. Two more rows:
+
+- **API key:** `from ANTHROPIC_API_KEY`, `saved (ends ...ab12)` or `none`. `Enter` opens a
+  prompt whose characters show as `*`; the key goes to the key file, created mode 600 (a
+  temporary file of mode 600 and a `rename`, so it is never readable by others, not even for
+  a moment). `d` removes the file after a yes. The key is never drawn, logged or put on the
+  status line; only its last four characters are shown.
+- **Spent so far:** read from the usage file when the screen opens: dollars and runs, all
+  time and this month. Nothing to change; the credits at a glance.
+
+Rows that do not apply are shown dim (the model and the caps when the agent is `command`;
+the command when it is `claude`). A change is saved at once and says so on the status
+line.
+
+**The commands in a map** change the same settings, save them, and take effect on the next
+`:ask` (a run already going keeps what it started with):
+
+| command | does |
+|---|---|
+| `:agent` | what it says today, plus the settings in one line: `agent claude: opus, medium effort, $1.00 and 25 calls a job, fallbacks on` |
+| `:agent claude [MODEL]` | the agent is the Claude API one (the key and curl checked first) |
+| `:agent command CMD` | the agent is CMD (as today, now saved) |
+| `:agent command off` / `on` | an `:ask` starts nothing / starts the agent again, whichever kind (as today, now saved: `agent off`, or back) |
+| `:agent model MODEL`, `:agent effort E`, `:agent cap 2.50`, `:agent calls 30`, `:agent fallbacks on\|off` | one setting each |
+| `:agent key` | the same hidden prompt as the Options screen's; `:agent key remove` takes the file away (asked first) |
+| `:agent on` / `off`, `:agent accept auto\|review` | this session only, as today; their start-up values are the Options screen's `channel` and `accept` |
+
+All of them are GM-only messages (`app_set_status_gm`), as every `:agent` line is. The
+hidden key prompt is a prompt, so it is GM-only and never on the players' screens
+(`app_view_differs`), and its text is wiped from memory when it closes.
+
+**The agent command line is built from the settings** each time an `:ask` starts one:
+`'vtt' --claude-agent --model claude-opus-5-5 --effort medium --cap 1.00 --calls 25`, so the
+agent process never reads the settings file, and what a run used is in the session log.
+
 ## Code
 
 | where | what |
@@ -147,7 +219,10 @@ debugging; off unless set.
 | `src/apiagent.c/h` (new) | the loop: request built (writer + the raw assistant turns), curl run (fork, pipes on 0, 1 and 3, `waitpid`), the answer's headers and body read, tool calls run, usage and price, the log lines |
 | `src/ctl.c` | `ctl_ask_pid`: one request to one vtt, the answer returned in a buffer -- taken out of `ctl_client_main`, which then calls it |
 | `src/json.c/h` | `JsonVal.at`/`.len`: each value's span in the text (additive; the reader's other users ignore it) |
-| `src/app_agent.c`, `app_cmd.c` | `:agent claude [MODEL] [effort E]`: the key and curl checked, then the agent command set |
+| `src/settings.c/h` (new) | the settings: the struct, the file read and written, each setting's values and default |
+| `src/app_agent.c`, `app_ctl.c` | the `:agent` commands above; the agent command line built from the settings at each start |
+| `src/app_browser.c`, `app_draw.c`, `app.c` | the menu's Options row; the Options screen (`SCREEN_OPTIONS`): its keys, its rows, the hidden key prompt (`PROMPT_API_KEY`), the usage summary |
+| `src/keys.c` | the Options screen's key table; `:agent`'s new words on the `?` page |
 | `src/main.c` | `--claude-agent [--model M] [--effort E]`: `apiagent_main`, before any terminal |
 | tests | suite `apiagent` (below); `make fuzz-json` with the spans |
 
@@ -177,6 +252,15 @@ own command line, and answers from a script of canned answers. The suite runs a 
 6. an `agent X` line from the model is refused by the channel;
 7. `json_parse`'s spans: every value's span re-parses to the same value (and the fuzz
    target checks it).
+8. the settings: written and read back the same; a line it does not know kept and named;
+   a bad value left at the default and named; `VTT_AGENT_COMMAND` and `--agent` win for the
+   session and are not saved; each `:agent` command changes the setting, the file and the
+   next agent's command line; a run already going keeps its own;
+9. the Options screen: a golden frame of it (with and without a key, a dim row), each row's
+   change through its keys, the usage summary from a usage file;
+10. the key prompt: its frame shows only `*`; the key is in no frame, the players' frame,
+   the session log or the status line; the file is mode 600 from the first byte; `d` and
+   `:agent key remove` ask, then remove it.
 
 **Then one live check, with the user's go** (it spends money): three jobs on a small map --
 a room from nothing, a change inside a box, a send-back with feedback -- each judged by
@@ -196,6 +280,10 @@ The work is the network's and the model's: a call is seconds; nothing local come
 | a call, locally | writing the request: its bytes (the guide 35 KB, the history up to a few hundred KB) at memory speed, tens of µs; reading the answer, under 100 KB | the same, plus one `fork`/`exec` of curl (about 1-2 ms) and curl's TLS handshake (about 100 ms on the network) | the handshake, once a call: no connection is kept between calls because each is its own curl. About 1 s over a job of eight calls against 30-90 s of model time; accepted. A long-lived helper holding the connection is the fix, if the live check says it matters |
 | a call, in tokens | the guide read from the cache (11k tokens at 0.05x), the history read from the cache, only the newest turn written | that | measured: the cache's share of input tokens per call goes in the usage log and the table below |
 | the channel's work for the agent | as for any agent's requests | unchanged | none |
+| the Options screen drawn | its dozen rows: a few hundred bytes to the terminal | a list drawn as the menu is | none; a `PROF_ZONE` and a `tools/perf.sh` scenario, as every new drawing path gets |
+| a setting changed | the file's few hundred bytes written and made durable: 2.0 ms (*Speed of light*, a durable save) | the same: write, `fsync`, `rename` | none; on a key the GM pressed to change a setting |
+| the usage summary | reading the usage file: a line a run, 100 bytes; a thousand runs is 100 KB, about 30 µs to copy | read once when the Options screen opens | none; never per frame |
+| start-up | one `open` and read of the settings file | that | none |
 
 Nothing is added to a frame, a keystroke or the loop: the agent is another process, and the
 app's side of it is `:agent command`'s. No `PROF_ZONE` is owed (no drawing or key path);
@@ -218,3 +306,14 @@ against the estimate above.
 4. **Fallbacks on** for a request a classifier declines (re-run on a fallback model inside
    the call, billed at that model's rates). Recommended; off with `fallbacks off`.
 5. **The usage file** `~/.local/share/vtt/claude-usage.tsv`, a line a run. Recommended.
+6. **Which settings are saved:** the agent's (kind, command, model, effort, caps,
+   fallbacks) are saved by both the screen and the commands -- recommended. `:agent on/off`
+   and `:agent accept` stay this-session, with their start-up values on the Options screen,
+   so a GM who switched to `accept auto` for one fight does not find it on next week
+   without having chosen it there. The other way: every `:agent` command saves.
+7. **Typing the key into vtt** (the hidden prompt, written mode 600) -- recommended, as
+   the easy way in; the variable and a file made by hand still work. The other way: vtt
+   only says where to put the key and never takes it.
+8. **The Options screen in a map too** (`:options` opening the same screen over the map,
+   GM-only) -- not recommended now: the commands do the same, and a screen over a map
+   brings the players'-view rules to every row of it. Easy to add later.
