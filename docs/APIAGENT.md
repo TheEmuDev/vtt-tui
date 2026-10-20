@@ -89,19 +89,42 @@ the loop with no network and no money (below).
 
 ## The key
 
-Looked for in this order, read by the agent process only:
+Both ways are supported (the user, 2026-10-19): the environment variable, and typing the key
+into vtt. A typed key goes to the **system keyring**, not a file and not the environment:
 
-1. `ANTHROPIC_API_KEY` in the environment vtt was started with (the child inherits it);
-2. `$XDG_CONFIG_HOME/vtt/anthropic-key` (`~/.config/vtt/anthropic-key`): a regular file of
-   the user's, readable by nobody else. A file with any group or other bit set is refused,
-   with the `chmod 600` that fixes it; so is a key with a character outside `A-Z a-z 0-9 -
-   _` (which also keeps the config line from being written into).
+| where | how | when |
+|---|---|---|
+| `ANTHROPIC_API_KEY` in the environment vtt was started with | read by the agent process, which inherits it | always wins when set |
+| the keyring (Linux: the Secret Service -- GNOME Keyring, KWallet -- through `secret-tool`) | stored encrypted, unlocked with your login, as `service vtt account anthropic-api-key` | where `secret-tool` and a Secret Service are there (this machine: GNOME Keyring) |
+| `$XDG_CONFIG_HOME/vtt/anthropic-key`, mode 600 | a file only you can read | only where there is no keyring (a machine over SSH, a desktop without one); the Options screen says it is a file |
 
-`:agent claude` checks there is one (the variable set, or the file there with the right
-mode; it does not read the file) and refuses with where to put it when there is none. A key
-the API turns down (401) ends the run with `job N say "the API key was refused (401)"`, and
-an exit status vtt reports. OAuth profiles (`ant auth login`) are not read: a key or
-nothing.
+- **Typing it in** (the Options screen's API key row, or `:agent key`): a prompt whose
+  characters show as `*`. vtt hands the key to `secret-tool store` down a pipe (never on a
+  command line, which `ps` shows) with no newline after it (`secret-tool` stores all it is
+  piped, a newline too), then wipes its copy. With no keyring, it writes the file
+  instead: a temporary file of mode 600 and a `rename`, never readable by others even for a
+  moment. A key with a character outside `A-Z a-z 0-9 - _` is refused before it is stored.
+- **Reading it:** only the Claude agent process reads the key, at its start: the variable,
+  else `secret-tool lookup`, else the file (a file with any group or other bit set is
+  refused, with the `chmod 600` that fixes it). It gives the key to curl down the fd-3 pipe
+  (*HTTPS without a library*) and to nothing else.
+- **Never in the environment from vtt:** vtt does not set `ANTHROPIC_API_KEY`, so agents
+  started with `:agent command` (Claude Code, a script) get the environment you started vtt
+  with, as today, and never a key typed into vtt (the user, 2026-10-19: only the Claude
+  agent). That matters for Claude Code: given `ANTHROPIC_API_KEY` it bills the key's API
+  credits instead of the subscription. A variable you exported yourself is yours, and they
+  see it as they do now.
+- **What vtt shows:** where the key in use comes from (`environment`, `keyring`, `file`, or
+  `none`) and its last four characters, never more. When the variable is set, a key typed
+  in is stored but not used, and the row says so.
+- **Removing it:** `d` on the row, or `:agent key remove`, asks, then runs
+  `secret-tool clear` (or removes the file). A variable is yours to unset; vtt says so.
+- `:agent claude` checks a key is there (a lookup, the copy wiped) and refuses with how to
+  give one when there is none. A key the API turns down (401) ends the run with
+  `job N say "the API key was refused (401)"`, and an exit status vtt reports. OAuth
+  profiles (`ant auth login`) are not read.
+- A locked keyring may ask for your password in a window of its own (GNOME's prompt); with
+  no window to ask in, the lookup fails and the agent says the keyring is locked.
 
 ## Errors, limits, cost
 
@@ -171,19 +194,18 @@ write, each setting's name, kinds and default. The app holds one (`App.settings`
 | channel | `on` or `off` at start-up (what `--agent` does for one session) | `off` |
 | accept | `review` or `auto` at start-up | `review` |
 
-The key is not a setting: it stays in its own file (*The key*), which the Options screen can
-write.
+The key is not a setting: it is kept in the keyring (or its own file), never in the
+settings file (*The key*).
 
 **The Options screen** (the landing menu becomes Open Map, New Map, **Options**, Quit): a
 list of the settings above, each a row with its value; `j`/`k` move, `Enter` changes the
 row (a choice goes to the next value, `h`/`l` step back and forward through it; a number or
 the command line opens a prompt with the value in it), `Esc` goes back. Two more rows:
 
-- **API key:** `from ANTHROPIC_API_KEY`, `saved (ends ...ab12)` or `none`. `Enter` opens a
-  prompt whose characters show as `*`; the key goes to the key file, created mode 600 (a
-  temporary file of mode 600 and a `rename`, so it is never readable by others, not even for
-  a moment). `d` removes the file after a yes. The key is never drawn, logged or put on the
-  status line; only its last four characters are shown.
+- **API key:** where the key in use comes from (`environment`, `keyring`, `file`, `none`)
+  and its last four characters. `Enter` opens the hidden prompt and stores the key as *The
+  key* says (the keyring, else the file); `d` removes it after a yes. The key is never
+  drawn, logged or put on the status line.
 - **Spent so far:** read from the usage file when the screen opens: dollars and runs, all
   time and this month. Nothing to change; the credits at a glance.
 
@@ -201,7 +223,7 @@ line.
 | `:agent command CMD` | the agent is CMD (as today, now saved) |
 | `:agent command off` / `on` | an `:ask` starts nothing / starts the agent again, whichever kind (as today, now saved: `agent off`, or back) |
 | `:agent model MODEL`, `:agent effort E`, `:agent cap 2.50`, `:agent calls 30`, `:agent fallbacks on\|off` | one setting each |
-| `:agent key` | the same hidden prompt as the Options screen's; `:agent key remove` takes the file away (asked first) |
+| `:agent key` | the same hidden prompt as the Options screen's; `:agent key remove` takes the key away (asked first) |
 | `:agent on` / `off`, `:agent accept auto\|review` | this session only, as today; their start-up values are the Options screen's `channel` and `accept` |
 
 All of them are GM-only messages (`app_set_status_gm`), as every `:agent` line is. The
@@ -259,8 +281,11 @@ own command line, and answers from a script of canned answers. The suite runs a 
 9. the Options screen: a golden frame of it (with and without a key, a dim row), each row's
    change through its keys, the usage summary from a usage file;
 10. the key prompt: its frame shows only `*`; the key is in no frame, the players' frame,
-   the session log or the status line; the file is mode 600 from the first byte; `d` and
-   `:agent key remove` ask, then remove it.
+   the session log or the status line; stored through a stand-in for `secret-tool`
+   (`VTT_SECRET_TOOL`, as `VTT_CLAUDE_CURL` is for curl) that records it got the key on
+   stdin and on no command line; with no keyring, the file is mode 600 from the first byte;
+   the variable wins over both; a `:agent command` agent's environment has no key from vtt;
+   `d` and `:agent key remove` ask, then remove it.
 
 **Then one live check, with the user's go** (it spends money): three jobs on a small map --
 a room from nothing, a change inside a box, a send-back with feedback -- each judged by
@@ -311,9 +336,9 @@ against the estimate above.
    and `:agent accept` stay this-session, with their start-up values on the Options screen,
    so a GM who switched to `accept auto` for one fight does not find it on next week
    without having chosen it there. The other way: every `:agent` command saves.
-7. **Typing the key into vtt** (the hidden prompt, written mode 600) -- recommended, as
-   the easy way in; the variable and a file made by hand still work. The other way: vtt
-   only says where to put the key and never takes it.
+7. **Settled 2026-10-19 (the user):** both the variable and a key typed into vtt, the typed
+   one only for the Claude agent. How a typed key is kept is the proposal in *The key*: the
+   system keyring, a mode-600 file only where there is none -- waiting for the user's yes.
 8. **The Options screen in a map too** (`:options` opening the same screen over the map,
    GM-only) -- not recommended now: the commands do the same, and a screen over a map
    brings the players'-view rules to every row of it. Easy to add later.
