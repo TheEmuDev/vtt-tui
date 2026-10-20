@@ -35,7 +35,8 @@ static void fake_curl(const char *dir)
                "cat <&3 > \"$d/fd3.$n\"\n"
                "cat > \"$d/body.$n\"\n"
                "if [ -f \"$d/answer.$n\" ] && head -c 5 \"$d/answer.$n\" | grep -q '^EXIT '; then exit $(cut -c6- \"$d/answer.$n\"); fi\n"
-               "if [ -f \"$d/answer.$n\" ]; then cat \"$d/answer.$n\"; else printf 'HTTP/1.1 500 x\\r\\n\\r\\n{}'; fi\n", dir);
+               "if [ -f \"$d/answer.$n\" ]; then cat \"$d/answer.$n\"; else printf 'HTTP/1.1 500 x\\r\\n\\r\\n{}'; fi\n"
+               "if [ -f \"$d/exit.$n\" ]; then exit $(cat \"$d/exit.$n\"); fi\n", dir);
     fclose(f);
     chmod(path, 0755);
     setenv("VTT_CLAUDE_CURL", path, 1);
@@ -45,7 +46,7 @@ static void fake_curl(const char *dir)
 static void fresh(void)
 {
     char cmd[1000];
-    snprintf(cmd, sizeof cmd, "rm -f '%s'/n '%s'/argv.* '%s'/fd3.* '%s'/body.* '%s'/answer.*", g_dir, g_dir, g_dir, g_dir, g_dir);
+    snprintf(cmd, sizeof cmd, "rm -f '%s'/n '%s'/argv.* '%s'/fd3.* '%s'/body.* '%s'/answer.* '%s'/exit.*", g_dir, g_dir, g_dir, g_dir, g_dir, g_dir);
     CHECK_EQ(system(cmd), 0);
     unlink(g_usage);                       /* each run's line is looked for alone */
 }
@@ -66,6 +67,17 @@ static void curl_exits(int n, int code)
     snprintf(path, sizeof path, "%s/answer.%d", g_dir, n);
     FILE *f = fopen(path, "w");
     fprintf(f, "EXIT %d", code);
+    fclose(f);
+}
+
+/* curl printing its answer, then failing with `code` (the connection lost
+ * after it, or partway through it). */
+static void then_exits(int n, int code)
+{
+    char path[900];
+    snprintf(path, sizeof path, "%s/exit.%d", g_dir, n);
+    FILE *f = fopen(path, "w");
+    fprintf(f, "%d", code);
     fclose(f);
 }
 
@@ -265,6 +277,24 @@ void test_api_agent(void)
     answer(2, OK200, "{\"content\":[{\"type\":\"text\",\"text\":\"x\"}],\"stop_reason\":\"end_turn\",\"usage\":{}}");
     ask_and_wait(&a, "flaky", "done");
     CHECK_EQ(calls(), 2);
+
+    CASE("a whole answer, then the connection lost (curl exit 56): used as it came, never paid for twice");
+    jobs_reset(&a);
+    fresh();
+    answer(1, OK200, "{\"content\":[{\"type\":\"text\",\"text\":\"x\"}],\"stop_reason\":\"end_turn\",\"usage\":{}}");
+    then_exits(1, 56);
+    ask_and_wait(&a, "dropped after", "done");
+    CHECK_EQ(calls(), 1);
+
+    CASE("an answer cut off partway (200, then exit 56): the run ends saying so, and nothing is sent again");
+    jobs_reset(&a);
+    fresh();
+    answer(1, OK200, "{\"content\":[{\"type\":\"text\",");
+    then_exits(1, 56);
+    answer(2, OK200, "{\"content\":[],\"stop_reason\":\"end_turn\",\"usage\":{}}");
+    ask_and_wait(&a, "dropped during", "failed");
+    CHECK_EQ(calls(), 1);
+    CHECK(strstr(a.status, "the API's answer was cut off (curl exit 56) - not sent again") != NULL);
 
     CASE("max_tokens: the run ends, saying the answer ran too long");
     jobs_reset(&a);
@@ -818,6 +848,15 @@ void test_options(void)
     CHECK(frame_has(&a, &r, "Agent  "));
     CHECK(!frame_has(&a, &r, "Spent so far"));
     rnd_resize(&r, 100, 30);
+    CHECK(frame_has(&a, &r, "Agent  "));
+
+    CASE("resized while open: the selection kept on screen with no key pressed");
+    press(&a, "G");
+    rnd_resize(&r, 80, 12);
+    CHECK(frame_has(&a, &r, "Spent so far"));
+    rnd_resize(&r, 100, 30);
+    CHECK(frame_has(&a, &r, "Agent  ") && frame_has(&a, &r, "Spent so far"));
+    press(&a, "g");
 
     CASE("esc and q go back to the menu; the menu has Options before Quit");
     press(&a, "q");
@@ -975,6 +1014,34 @@ void test_ask_agent(void)
     CHECK(strstr(a.status, "asked: a well - the Claude agent cannot start: the Claude agent needs curl") != NULL);
     CHECK_EQ(a.nagents, 0);
     fake_curl(sb.dir);
+
+    CASE("c, a key stored, but no curl: refused and said -- and nothing is left waiting on the box");
+    jobs_reset(&a);
+    {
+        char cmdx[300];
+        a.settings.agent = AGENT_KIND_UNSET;
+        app_agent_apply(&a);
+        char sec[900];
+        snprintf(sec, sizeof sec, "%s/secret", sb.dir);
+        unlink(sec);                                                 /* no key: c asks for one */
+        setenv("VTT_CLAUDE_CURL", "/nonexistent/curl", 1);
+        press(&a, ":ask a cistern\r");
+        press(&a, "c" KEY "\r");
+        CHECK(strstr(a.status, "needs curl") != NULL);
+        CHECK_EQ(a.choice_job, 0);
+        snprintf(cmdx, sizeof cmdx, ":agent key\r\x1b");
+        press(&a, cmdx);
+        CHECK_EQ(a.modal, MODAL_NONE);                               /* esc does not bring back a box nobody waits on */
+        fake_curl(sb.dir);
+        jobs_reset(&a);
+        a.settings.agent = AGENT_KIND_UNSET;
+        app_agent_apply(&a);
+        press(&a, ":ask a cellar again\r");
+        CHECK(frame_has(&a, &r, "the Claude API agent  (key: keyring ...KLMN)"));   /* the key as stored now */
+        press(&a, "\x1b");
+    }
+    a.settings.agent = AGENT_KIND_CLAUDE;
+    app_agent_apply(&a);
 
     CASE("paused: the job waits, and :agent command on is named");
     press(&a, ":agent command off\r");

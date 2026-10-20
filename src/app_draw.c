@@ -157,8 +157,11 @@ static void draw_options(App *a)
     Style sel = style(th->fg, th->sel_bg, ATTR_BOLD);
     int x = 2, lw = 18, top = 2;
     draw_text(r, x, top, "Agents", -1, style(th->accent, th->bg, ATTR_BOLD));
-    /* Scrolled to keep the selection in view on a short terminal. */
-    int first = a->options.top, vis = app_options_visible_rows(a);
+    /* Scrolled to keep the selection in view on a short terminal, the
+     * terminal's size as it is now (it may have changed since the last key). */
+    int vis = app_options_visible_rows(a);
+    ui_list_move(&a->options, OPT_COUNT, 0, vis);
+    int first = a->options.top;
     for (int i = first; i < OPT_COUNT && i < first + vis; i++) {
         char label[32], value[256];
         int  dim = app_options_row(a, i, label, sizeof label, value, sizeof value);

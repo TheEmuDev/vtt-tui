@@ -568,6 +568,7 @@ void app_agent_key_typed(App *a, const char *key)
     if (then == KEY_THEN_CLAUDE) {
         app_agent_setting(a, "claude");
         if (a->settings.agent == AGENT_KIND_CLAUDE) app_agent_choice_continue(a);   /* the job the box was for */
+        else a->choice_job = 0;            /* refused (no curl), and said: nothing waits on the box now */
     }
 }
 

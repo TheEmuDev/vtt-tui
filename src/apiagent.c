@@ -272,6 +272,7 @@ typedef struct {
     int    status;          /* HTTP status; 0: no answer (curl failed) */
     int    curl;            /* curl's exit status */
     long   retry_after;     /* seconds, or -1 */
+    int    cut;             /* a status line came, then curl failed: the request reached the API */
     char  *body;            /* into the answer's buffer */
     size_t body_len;
 } Http;
@@ -328,15 +329,26 @@ static int call_api(Run *r, const ByteBuf *body, ByteBuf *out, Http *h, char *er
     apikey_wipe(fd3, sizeof fd3);
     if (rc < 0) return -1;
     h->curl = st;
+    h->cut = 0;
     read_http(out, h);
-    if (st != 0) h->status = 0;
+    if (st != 0) {
+        /* curl failed after an answer began: a whole 200 is used as it came
+         * (sending it again would pay twice); anything less is cut, and never
+         * sent again either -- the API has the request. */
+        char e[80];
+        JsonVal *d = h->status == 200 && h->body_len ? json_parse(h->body, h->body_len, e, sizeof e) : NULL;
+        int whole = d && json_get(d, "content") && json_get(d, "stop_reason");
+        json_free(d);
+        if (!whole) { h->cut = h->status != 0; h->status = 0; }
+    }
     return 0;
 }
 
-/* curl's exits that mean the request never reached the API: resolving,
- * connecting, TLS, a connection dropped before an answer began. A timeout
- * (28) is not one: the API may have answered, and billed, after curl gave
- * up, so it is never sent again. */
+/* curl's exits that may mean the request never reached the API: resolving,
+ * connecting, TLS, and a connection lost with no answer begun (52, 55, 56 --
+ * retried only when no status line came: call_api's `cut`). A timeout (28)
+ * is not one: the API may have answered, and billed, after curl gave up, so
+ * it is never sent again. */
 static int curl_never_reached(int code)
 {
     return code == 5 || code == 6 || code == 7 || code == 35 || code == 52 || code == 55 || code == 56;
@@ -344,7 +356,7 @@ static int curl_never_reached(int code)
 
 static int retryable(const Http *h)
 {
-    if (h->status == 0) return curl_never_reached(h->curl);
+    if (h->status == 0) return !h->cut && curl_never_reached(h->curl);
     return h->status == 429 || h->status == 500 || h->status == 502 || h->status == 503 || h->status == 529;
 }
 
@@ -353,7 +365,8 @@ static void api_message(const Http *h, char *msg, size_t sz)
     char err[160];
     JsonVal *doc = h->body_len ? json_parse(h->body, h->body_len, err, sizeof err) : NULL;
     const char *m = doc ? json_text(json_get(json_get(doc, "error"), "message")) : NULL;
-    if (h->status == 0 && h->curl == 28) snprintf(msg, sz, "the API did not answer within " CURL_TIME_S " s (curl timed out) - not sent again, since it may have been billed");
+    if (h->status == 0 && h->cut) snprintf(msg, sz, "the API's answer was cut off (curl exit %d) - not sent again, since it may have been billed", h->curl);
+    else if (h->status == 0 && h->curl == 28) snprintf(msg, sz, "the API did not answer within " CURL_TIME_S " s (curl timed out) - not sent again, since it may have been billed");
     else if (h->status == 0 && h->curl == 127) snprintf(msg, sz, "curl could not be run (exit 127)");
     else if (h->status == 0) snprintf(msg, sz, "curl could not reach the API (curl exit %d)", h->curl);
     else snprintf(msg, sz, "the API said %d%s%.200s", h->status, m ? ": " : "", m ? m : "");
@@ -527,7 +540,7 @@ int apiagent_main(const ApiAgentCfg *cfg)
         Http h;
         int tries = 0;
         for (;;) {
-            if (call_api(r, &body, &out, &h, err, sizeof err) < 0) { h.status = 0; h.curl = -1; h.body = NULL; h.body_len = 0; h.retry_after = -1; }
+            if (call_api(r, &body, &out, &h, err, sizeof err) < 0) { h.status = 0; h.curl = -1; h.body = NULL; h.body_len = 0; h.retry_after = -1; h.cut = 0; }
             if (h.status == 200 || !retryable(&h) || tries >= RETRIES) break;
             long wait = h.retry_after >= 0 ? h.retry_after : 2L << tries;
             if (wait > 60) wait = 60;

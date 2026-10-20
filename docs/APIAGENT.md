@@ -134,6 +134,7 @@ into vtt. A typed key goes to the **system keyring**, not a file and not the env
 |---|---|
 | 429, 500, 502, 503, 529, or curl could not reach the API (exits 5, 6, 7, 35, 52, 55, 56) | waits `retry-after` in seconds (else, or for a date, 2, 4, 8 s) and sends it again, up to three times (four attempts), then ends the run saying why |
 | curl timed out (exit 28) | ends the run at once: the API may have answered, and billed, after curl gave up, so it is never sent again |
+| an answer began, then curl failed | a whole 200 is used as it came; anything less ends the run ("the API's answer was cut off"): the API has the request, so it is never sent again |
 | 400, 401, 403, 404, 413 | ends the run at once: the API's message on the GM's line (`job N say`), the status in the log |
 | `stop_reason: refusal` (after any fallback) | ends the run: "Claude declined this job (CATEGORY)" |
 | `stop_reason: max_tokens` | ends the run: "the answer ran past 16,000 tokens" |
@@ -451,4 +452,10 @@ Where the code left the plan, and what the build found:
   the no-key one only (the key row's other values are checked as text), and "a run already
   going keeps its own" holds by construction (the settings reach a run as its command line
   when it starts) rather than by a test.
+- **The recheck (Fable, the same day), three more, fixed:** a refused Claude choice (no curl)
+  left the box's job set, so a later prompt's `esc` opened the box again, with the key as it
+  was when the box first opened (now cleared, and the key re-read whenever it changes); curl
+  exits 52/55/56 after an answer had begun were sent again, paying twice (now a whole 200 is
+  used and a cut one ends the run); a resize while Options was open could leave the selection
+  off the screen (now kept in view at each draw).
 

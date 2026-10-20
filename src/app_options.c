@@ -69,10 +69,12 @@ void app_options_open(App *a)
     a->dirty = 1;
 }
 
-/* The key's row after the prompt or a removal changed it. */
+/* The key's source and last four after the prompt or a removal changed them. */
 void app_options_key_changed(App *a)
 {
-    if (a->screen == SCREEN_OPTIONS) a->opt_key = app_agent_key_where(a->opt_key_last4, sizeof a->opt_key_last4);
+    /* Whoever shows it next (Options, the choice box) shows it as it is: a
+     * lookup only when the key changed, never a frame. */
+    a->opt_key = app_agent_key_where(a->opt_key_last4, sizeof a->opt_key_last4);
 }
 
 int app_options_row(const App *a, int row, char *label, size_t lsz, char *value, size_t vsz)
