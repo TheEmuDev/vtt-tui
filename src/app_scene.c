@@ -84,7 +84,13 @@ void app_scene_command(App *a, const char *verb, const char *rest)
         int box[4], boxed = drawn_box(a, box);
         WorldErr we;
         int i = world_scene_save(&a->world, nm, boxed ? box : NULL, &we);
-        if (i < 0) { app_set_status_gm(a, we.text); return; }
+        if (i < 0) {
+            if (we.cls == CTL_E_LIMIT) {                    /* the GM's way to make room */
+                snprintf(msg, sizeof msg, "%.150s - :scene NAME remove makes room", we.text);
+                app_set_status_gm(a, msg);
+            } else app_set_status_gm(a, we.text);
+            return;
+        }
         char what[64];
         scene_describe(a->world.map, i, what, sizeof what);
         snprintf(msg, sizeof msg, "scene %.31s saved - %s; :scene %.31s puts it back", a->world.map->scenes[i].name, what,

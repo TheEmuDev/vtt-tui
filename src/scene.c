@@ -45,7 +45,7 @@ int scene_save(Map *m, const char *name, const int *box, char *err, size_t errsz
     int i = scene_find(m, name);
     if (i < 0) {
         if (m->nscenes >= MAP_SCENES_MAX) {
-            snprintf(err, errsz, "a map holds %d scenes - :scene NAME remove makes room", MAP_SCENES_MAX);
+            snprintf(err, errsz, MAP_FULL_FMT, MAP_SCENES_MAX, "scenes");
             return -1;
         }
         i = m->nscenes++;

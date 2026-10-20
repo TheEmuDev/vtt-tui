@@ -1416,7 +1416,7 @@ void test_scenes(void)
         snprintf(nm, sizeof nm, "s%d", i);
         CHECK(scene_save(m, nm, NULL, err, sizeof err) == i);
     }
-    CHECK(scene_save(m, "one more", NULL, err, sizeof err) < 0 && strstr(err, "remove makes room"));
+    CHECK(scene_save(m, "one more", NULL, err, sizeof err) < 0 && !strcmp(err, "no room: a map holds 16 scenes"));
     scene_remove(m, 0);
     CHECK_EQ(m->nscenes, MAP_SCENES_MAX - 1);
     CHECK(!strcmp(m->scenes[0].name, "ravine"));

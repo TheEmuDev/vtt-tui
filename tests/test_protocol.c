@@ -445,7 +445,21 @@ void test_protocol(void)
         int i = world_scene_save(&w, "Ambush", NULL, &e);
         CHECK(i >= 0 && world_scene_find(&w, "ambush", &e) == i);
         int d = w.undo.depth;
-        CHECK(world_scene_restore(&w, i, &e) >= 0 && w.undo.depth <= d + 1);
+        CHECK(world_scene_restore(&w, i, &e) >= 0 && w.undo.depth == d + 1);   /* the creatures there: it records */
+        Token troll;
+        memset(&troll, 0, sizeof troll);
+        troll.x = 14; troll.y = 9; troll.size = 2; troll.kind = TOKEN_ENEMY;
+        str_lcpy(troll.label, "Troll", sizeof troll.label);
+        int ti = undo_add_token(&w.undo, live, troll);
+        int box[4] = { 15, 10, 15, 10 };                      /* meets the troll's corner only */
+        int c = world_scene_save(&w, "Corner", box, &e);
+        undo_move_token(&w.undo, live, ti, 0, 10);            /* the troll leaves */
+        Token cara = troll;
+        cara.size = 1;
+        str_lcpy(cara.label, "Cara", sizeof cara.label);
+        undo_add_token(&w.undo, live, cara);                  /* Cara stands in its old corner, outside the box */
+        CHECK(c >= 0 && world_scene_restore(&w, c, &e) < 0 && e.cls == CTL_E_CONFLICT &&
+              strstr(e.text, "Troll would come back onto Cara"));
     }
 
     world_jobs_clear(&w);

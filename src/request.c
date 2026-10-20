@@ -1078,7 +1078,7 @@ static int rq_scene_other(RQ_ARGS)
     if (n == 3 && !strcmp(w[1], "diff")) {
         WorldErr we;
         int i = world_scene_find(world, w[2], &we);
-        if (i < 0) { rq_class(we.cls), str_lcpy(err, we.text, errsz); return -1; }
+        if (i < 0) BADC(we.cls, "%s", we.text);
         /* Every creature of the scene against every one of the map's. */
         if (!request_read(world, (long)m->scenes[i].tokens.n * m->tokens.n / 8 + 1, err, errsz)) return -1;
         if (!scene_diff(out, m, i)) fputs("no changes\n", out);
@@ -1098,14 +1098,14 @@ static int rq_scene_other(RQ_ARGS)
         int box[4], boxed = n == 4;
         if (boxed && !region(m, w[3], &box[0], &box[1], &box[2], &box[3], err, errsz)) return -1;
         int i = world_scene_save(world, w[2], boxed ? box : NULL, &we);
-        if (i < 0) { rq_class(we.cls), str_lcpy(err, we.text, errsz); return -1; }
+        if (i < 0) BADC(we.cls, "%s", we.text);
         char what[64];
         scene_describe(m, i, what, sizeof what);
         fprintf(out, "saved scene \"%s\": %s\n", m->scenes[i].name, what);
         snprintf(msg, sizeof msg, "agent: saved scene %.31s (%s)", m->scenes[i].name, what);
     } else {
         int i = world_scene_find(world, w[1], &we);
-        if (i < 0) { rq_class(we.cls), str_lcpy(err, we.text, errsz); return -1; }
+        if (i < 0) BADC(we.cls, "%s", we.text);
         snprintf(msg, sizeof msg, "agent: removed scene %.31s", m->scenes[i].name);
         fprintf(out, "removed scene \"%s\"\n", m->scenes[i].name);
         scene_remove(m, i);

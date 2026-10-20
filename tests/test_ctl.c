@@ -2214,7 +2214,8 @@ void test_ctl_scenes(void)
         t = ctl_ask(&a, "scene save OneMore");
         CHECK(t && ctl_refused(t, "limit", 1) && strstr(t, "a map holds"));
         press(&a, ":scene save OneMore\r");                 /* the GM's: the same words (world_ops.c) */
-        CHECK(t && a.status_gm && strstr(t, a.status) && m->nscenes == MAP_SCENES_MAX);
+        CHECK(t && a.status_gm && strstr(t, "no room: a map holds 16 scenes\n") && m->nscenes == MAP_SCENES_MAX &&
+              !strcmp(a.status, "no room: a map holds 16 scenes - :scene NAME remove makes room"));
         free(t);
         while (m->nscenes > had) {
             char rq[40];
