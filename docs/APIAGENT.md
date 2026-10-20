@@ -5,7 +5,7 @@
 > recommendations"). A design record: what is true now is the README (*Working with AI
 > agents*) and the files' rows in docs/CODEMAP.md; *As built* at the end says where the code
 > left the plan. Reviewed (Fable, three rechecks, quiet at 3f7fd2b). Timed 2026-10-20 (PERFORMANCE.md, *The
-> Options screen*; an A/B of two moved save rows owed). Owed: the live check (it spends money:
+> Options screen*; two save rows that moved, A/B'd: the disk, not the code). Owed: the live check (it spends money:
 > the user's go), and the agent's tokens, seconds and dollars a job, which come with it.
 
 An agent option that calls the Claude API itself, beside `:agent command CMD`: the GM types

@@ -1201,10 +1201,12 @@ a key or the loop: it is another process.
 
 **Two rows moved in this recording, both writes of the 512×512 map's file:** `mapio.write`
 under `build, :w full 512x512` 2.6 ms to 3.2 ms (+23%), and `build, outside change 512x512`
-17.1 to 20.4 µs (+19%). Nothing in ROADMAP 26 touches either path (the map's save keeps its
-own write; the outside change reads the file as before). The A/B against the binary before it
-(b51b030, `tools/vs1x.sh b51b030`) was started and stopped unfinished, the machine needed:
-**owed**, and until it is run the two rows are unexplained.
+17.1 to 20.4 µs (+19%). Nothing in ROADMAP 26 touches either path, and the A/B says the code did
+not move them: the binary before it (b51b030) and this one, `tools/vs1x.sh b51b030`, three
+runs each alternating on the repo's disk (2026-10-20): `outside change` 17.2 against 17.0 µs,
+`mapio.write` 3.18 against 2.49 ms, `mapio.fsync` 2.60 against 2.05 ms -- the old binary as
+slow as the recording, or slower. The flush is the disk's: a save that is mostly `fsync` reads
+within about a quarter of itself from one recording to the next.
 
 **`:ask` starting an agent** (`:agent command`; the desktop, 2026-10-13): `agent.spawn` is
 92.5 µs at p50 and 175 µs at p99 (`build, :ask starts an agent`, a 200×200 map), once an
