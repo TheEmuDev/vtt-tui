@@ -5,7 +5,19 @@
 #include "disk.h"
 
 /* build/run-tests runs every suite; build/run-tests NAME... only the ones
- * named (see the table), for the one being worked on. */
+ * named (see the table), for the one being worked on; build/run-tests --fast
+ * all but the slow ones (make test-fast). */
+
+/* The suites of real sockets and processes, most of the run's time (docs/V2.md,
+ * ruling 8): skipped by --fast, run by make test. */
+static const char *const SLOW[] = { "netedges", "agentcmd", "netmsg", "netserver", "ctllive" };
+
+static int slow(const char *name)
+{
+    for (size_t i = 0; i < sizeof SLOW / sizeof *SLOW; i++)
+        if (!strcmp(SLOW[i], name)) return 1;
+    return 0;
+}
 int main(int argc, char **argv)
 {
     prof_init();
@@ -191,9 +203,11 @@ int main(int argc, char **argv)
         { "golden", test_golden },
     };
 
+    int fast = argc == 2 && !strcmp(argv[1], "--fast");
+    if (fast) argc = 1;
     int ran = 0;
     for (size_t i = 0; i < sizeof suites / sizeof *suites; i++) {
-        int wanted = argc < 2;
+        int wanted = argc < 2 && !(fast && slow(suites[i].name));
         for (int k = 1; k < argc && !wanted; k++) wanted = !strcmp(argv[k], suites[i].name);
         if (!wanted) continue;
         ran++;

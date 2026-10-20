@@ -68,7 +68,7 @@ prohibitions only, under 150 lines. Reference lives where it is read on demand.
 ```
 make                 release build (-O2), profiler compiled in
 make test            ASan+UBSan build, unit + golden-frame tests, then tools/oracle.sh check (`record` after a meant change of output)
-make test-build; build/run-tests NAME...   only the suites named (`make build/run-tests` does not rebuild it)
+make test-build; build/run-tests NAME...   only the suites named (`make build/run-tests` does not rebuild it); `make test-fast` all but the five socket/process suites (while iterating; `make test` before a commit)
 make perf            one run; publish the per-row MEDIAN of three quiet runs (tools/median.py a b c)
 make fuzz | fuzz-ctl | fuzz-json    libFuzzer (clang): map loader, channel requests, JSON; FUZZ_SECONDS=600
 tools/embed.sh       after editing web/index.html or docs/AGENTS.md (-> src/webpage.c, src/agentguide.c); tools/blit_wasm.py after the blitter

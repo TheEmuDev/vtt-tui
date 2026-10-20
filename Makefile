@@ -54,7 +54,7 @@ DEPS      := $(OBJS:.o=.d)
 LIBSRCS   := $(filter-out $(SRCDIR)/main.c,$(SRCS))
 TESTSRCS  := $(filter-out $(TESTDIR)/fuzz_%.c,$(wildcard $(TESTDIR)/*.c))
 
-.PHONY: all debug test test-build oracle bench perf fuzz fuzz-ctl fuzz-json install-skill clean help
+.PHONY: all debug test test-fast test-after test-build oracle bench perf fuzz fuzz-ctl fuzz-json install-skill clean help
 .DEFAULT_GOAL := all
 
 all: BUILDFLAGS := $(RELFLAGS)
@@ -82,6 +82,16 @@ test-build: all
 
 test: test-build
 	@$(OBJDIR)/run-tests
+	@$(MAKE) --no-print-directory test-after
+
+# make test less the suites of real sockets and processes, about 60 s of it
+# (docs/V2.md, ruling 8; run-tests' SLOW list). make test before a commit.
+test-fast: test-build
+	@$(OBJDIR)/run-tests --fast
+	@$(MAKE) --no-print-directory test-after
+
+# What both run after the suites.
+test-after:
 	@# The seam (docs/V2.md, D2): the protocol's suite again, built with no
 	@# src/app*.c and no loop: a request handler or world.c that reached for
 	@# the app would not link.
