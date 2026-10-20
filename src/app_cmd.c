@@ -1,4 +1,5 @@
 #include "app_priv.h"
+#include "world_ops.h"
 
 #include "card.h"
 
@@ -638,33 +639,25 @@ static void area_command(App *a, const char *verb, const char *rest)
         return;
     }
     int off = str_cut_word(name, "remove");
-    if (!map_area_name_ok(name)) {
-        snprintf(msg, sizeof msg, "an area's name is 1-%d characters, no quote or colon, and not a square", AREA_NAME_MAX - 1);
-        app_set_status_gm(a, msg);
-        return;
-    }
+    WorldErr we;
+    if (world_area_name(name, &we) < 0) { app_set_status_gm(a, we.text); return; }
     int ai = map_area_find(m, name);
     if (off) {
-        if (ai < 0) { snprintf(msg, sizeof msg, "no area called %.40s", name); app_set_status_gm(a, msg); return; }
+        int box[4];
         undo_begin(&a->world.undo);
-        undo_remove_area(&a->world.undo, m, name);
+        int rc = world_area_remove(&a->world, name, box, &we);
         undo_end(&a->world.undo);
+        if (rc < 0) { app_set_status_gm(a, we.text); return; }
         snprintf(msg, sizeof msg, "%.40s is no longer named", name);
         app_note_gm(a, msg);
         return;
     }
     int bx0, by0, bx1, by1;
     if (app_cmd_vbox(a, &bx0, &by0, &bx1, &by1)) {
-        const char *fwhy = floor_problem_box(m, ai, bx0, by0, bx1, by1);
-        if (fwhy) {
-            snprintf(msg, sizeof msg, "%.40s is a floor, and %s", m->areas[ai].name, fwhy);
-            app_set_status_gm(a, msg);
-            return;
-        }
         undo_begin(&a->world.undo);
-        int ok = undo_set_area(&a->world.undo, m, name, bx0, by0, bx1, by1);
+        int rc = world_area_set(&a->world, name, bx0, by0, bx1, by1, &we);
         undo_end(&a->world.undo);
-        if (!ok) { snprintf(msg, sizeof msg, "a map holds %d named areas", MAP_AREAS_MAX); app_set_status_gm(a, msg); return; }
+        if (rc < 0) { app_set_status_gm(a, we.text); return; }
         ai = map_area_find(m, name);
         map_coord_name(m->areas[ai].x0, m->areas[ai].y0, b0, sizeof b0);
         map_coord_name(m->areas[ai].x1, m->areas[ai].y1, b1, sizeof b1);

@@ -951,6 +951,14 @@ void test_floor_view(void)
     press(&a, ":area Ground\r");                            /* over Cellar and Upper */
     CHECK(strstr(a.status, "Ground is a floor, and it would overlap another floor") != NULL);
     CHECK(m->areas[map_area_find(m, "Ground")].x0 == 7);
+    {
+        /* The GM's line and the channel's refusal are one operation's words (world_ops.c). */
+        char said[sizeof a.status];
+        str_lcpy(said, a.status, sizeof said);
+        char *ans = ctl_ask(&a, "area Ground F1:O4\n");
+        CHECK(ans && ctl_refused(ans, "conflict", 1) && strstr(ans, said));
+        free(ans);
+    }
     press(&a, ":floor Ground  0 \r");                       /* stray spaces */
     CHECK(strstr(a.status, "no area called") == NULL);
 
@@ -978,6 +986,25 @@ void test_floor_view(void)
         ans = ctl_ask(&a, "marked json\n");
         CHECK(ans && strstr(ans, "\"floor\":\"Ground\""));
         free(ans);
+    }
+
+    CASE("a map that holds all the areas it can: the GM and the channel refuse in the same words");
+    {
+        int had = m->nareas;
+        for (int k = 0; m->nareas < MAP_AREAS_MAX; k++) {
+            char name[16];
+            snprintf(name, sizeof name, "Fill%d", k);
+            map_area_set(m, name, 0, 0, 0, 0);
+        }
+        a.ed.cx = 0; a.ed.cy = 0;
+        press(&a, "\x1b");
+        press(&a, "v");
+        press(&a, ":area OneMore\r");
+        CHECK(!strcmp(a.status, "no room: a map holds 64 named areas") && a.status_gm);
+        char *ans = ctl_ask(&a, "area OneMore A1\n");
+        CHECK(ans && ctl_refused(ans, "limit", 1) && strstr(ans, "no room: a map holds 64 named areas"));
+        free(ans);
+        while (m->nareas > had) map_area_remove(m, m->areas[m->nareas - 1].name);
     }
 
     app_free(&a);

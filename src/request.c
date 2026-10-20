@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 
 #include "request.h"
+#include "world_ops.h"
 #include "editor.h"
 #include "turn.h"
 #include "card.h"
@@ -659,37 +660,30 @@ static int edit_line(World *world, char w[][CTL_WORD_MAX], int n, Edits *ed, cha
     Undo *u = &world->undo;
     const char *v = w[0];
     int x0, y0, x1, y1;
+    WorldErr we;
 
     if (!strcmp(v, "room")) {
         const char *name = NULL;
         if (!room_box(m, w, n, &name, &x0, &y0, &x1, &y1, err, errsz)) return -1;
         for (int y = y0; y <= y1; y++)
             for (int x = x0; x <= x1; x++) undo_set_tile(u, m, x, y, TILE_FLOOR);
-        const char *fwhy = name ? floor_problem_box(m, map_area_find(m, name), x0, y0, x1, y1) : NULL;
-        if (fwhy) BADC(CTL_E_CONFLICT, "%.40s is a floor, and %s", name, fwhy);
+        if (name && world_area_fits(world, name, x0, y0, x1, y1, &we) < 0) BADC(we.cls, "%s", we.text);
         COVER((long)(x1 - x0 + 1) * (y1 - y0 + 1));
         outline(u, m, x0, y0, x1, y1, EDGE_WALL);
-        if (name && !undo_set_area(u, m, name, x0, y0, x1, y1))
-            BADC(CTL_E_LIMIT, "the map holds %d named areas", MAP_AREAS_MAX);
+        if (name && world_area_set(world, name, x0, y0, x1, y1, &we) < 0) BADC(we.cls, "%s", we.text);
     }
     else if (!strcmp(v, "area")) {
         /* area NAME REGION, area NAME remove: a name, nothing drawn. */
         if (n != 3) BAD("area NAME REGION, or area NAME remove");
         if (!strcmp(w[2], "off")) BAD("area %.40s remove takes the name off", w[1]);
-        if (!map_area_name_ok(w[1]))
-            BAD("%.40s: an area's name is 1-%d characters, no quote or colon, and not a square",
-                w[1], AREA_NAME_MAX - 1);
+        if (world_area_name(w[1], &we) < 0) BADC(we.cls, "%s", we.text);
         if (!strcmp(w[2], "remove")) {
-            int ai = map_area_find(m, w[1]);
-            if (ai < 0) BADC(CTL_E_MISSING, "no area called %.40s", w[1]);
-            const Area *ar = &m->areas[ai];
-            x0 = ar->x0; y0 = ar->y0; x1 = ar->x1; y1 = ar->y1;
-            undo_remove_area(u, m, w[1]);
+            int b[4];
+            if (world_area_remove(world, w[1], b, &we) < 0) BADC(we.cls, "%s", we.text);
+            x0 = b[0]; y0 = b[1]; x1 = b[2]; y1 = b[3];
         } else {
             if (!region(m, w[2], &x0, &y0, &x1, &y1, err, errsz)) return -1;
-            const char *fwhy = floor_problem_box(m, map_area_find(m, w[1]), x0, y0, x1, y1);
-            if (fwhy) BADC(CTL_E_CONFLICT, "%.40s is a floor, and %s", w[1], fwhy);
-            if (!undo_set_area(u, m, w[1], x0, y0, x1, y1)) BADC(CTL_E_LIMIT, "the map holds %d named areas", MAP_AREAS_MAX);
+            if (world_area_set(world, w[1], x0, y0, x1, y1, &we) < 0) BADC(we.cls, "%s", we.text);
         }
     }
     else if (!strcmp(v, "corridor")) {

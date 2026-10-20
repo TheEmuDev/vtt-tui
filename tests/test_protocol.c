@@ -11,6 +11,7 @@
 #include "check.h"
 #include "request.h"
 #include "world.h"
+#include "world_ops.h"
 #include "util.h"
 
 void test_protocol(void);
@@ -292,6 +293,34 @@ void test_protocol(void)
           rec.changed[2][0] == WORLD_EDITED);
     CHECK(wight >= 0 && live->tokens.n == 2 && rec.nrefused == 1);
     w.ctl_direct = 0;
+
+    CASE("the GM's and the channel's operations on a bare World: areas named, refused with a class, taken off");
+    {
+        WorldErr e;
+        int box[4];
+        CHECK(world_area_name("C3", &e) < 0 && e.cls == CTL_E_USAGE && strstr(e.text, "an area's name is"));
+        undo_begin(&w.undo);
+        CHECK_EQ(world_area_set(&w, "Vault", 0, 0, 2, 2, &e), 0);
+        undo_end(&w.undo);
+        CHECK(map_area_find(live, "vault") >= 0);
+        CHECK(world_area_remove(&w, "Nope", box, &e) < 0 && e.cls == CTL_E_MISSING && !strcmp(e.text, "no area called Nope"));
+        int had = live->nareas;
+        undo_begin(&w.undo);
+        for (int k = live->nareas; k < MAP_AREAS_MAX; k++) {
+            char name[16];
+            snprintf(name, sizeof name, "Fill%d", k);
+            CHECK_EQ(world_area_set(&w, name, 5, 5, 5, 5, &e), 0);
+        }
+        CHECK(world_area_set(&w, "OneMore", 5, 5, 5, 5, &e) < 0 && e.cls == CTL_E_LIMIT);
+        CHECK(!strcmp(e.text, "no room: a map holds 64 named areas"));
+        undo_end(&w.undo);
+        undo_undo(&w.undo, live);
+        CHECK_EQ(live->nareas, had);
+        undo_begin(&w.undo);
+        CHECK(world_area_remove(&w, "VAULT", box, &e) == 0 && box[0] == 0 && box[2] == 2 && box[3] == 2);
+        undo_end(&w.undo);
+        CHECK_EQ(map_area_find(live, "Vault"), -1);
+    }
 
     world_jobs_clear(&w);
     if (w.ctl_scratch) map_free(w.ctl_scratch);
