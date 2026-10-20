@@ -1074,9 +1074,20 @@ void test_env(void)
     t = ctl_ask(&a, "env Upper remove\n");
     CHECK(strncmp(t, "ok\n", 3) == 0 && !upper->env[0]);
     free(t);
-    t = ctl_ask(&a, "env Upper remove\n");
-    CHECK(strstr(t, "has no environment") != NULL);
+    t = ctl_ask(&a, "env upper remove\n");                 /* typed in lower case: said as stored */
+    CHECK(ctl_refused(t, "state", 1) && strstr(t, "Upper has no environment") != NULL);
     free(t);
+    press(&a, ":env area \"Upper\" remove\r");             /* the GM's line: the same words */
+    CHECK(!strcmp(a.status, "Upper has no environment") && a.status_gm);
+    press(&a, ":env bad/name\r");
+    {
+        char said[sizeof a.status];
+        str_lcpy(said, a.status, sizeof said);
+        t = ctl_ask(&a, "env Crypt bad/name\n");
+        CHECK(!strcmp(said, "bad/name: a card's name is letters, digits, - and _") && ctl_refused(t, "usage", 1) &&
+              strstr(t, said));
+        free(t);
+    }
 
     CASE(":env adversaries: the picker holds the card's creatures that are saved characters, and names the rest");
     app_key(&a, (Key){ KEY_F2, 0, 0 });

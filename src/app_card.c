@@ -13,6 +13,7 @@
 #include <unistd.h>
 
 #include "app_priv.h"
+#include "world_ops.h"
 #include "card.h"
 #include "character.h"
 #include "floor.h"
@@ -222,8 +223,9 @@ static void env_set(App *a, EnvAt at, const char *card)
     Map *m = a->world.map;
     char msg[160], where[40];
     env_where(m, at, where, sizeof where);
-    if (card[0] && !card_name_ok(card)) {
-        app_set_status(a, "a card's name is letters, digits, - and _");
+    WorldErr we;
+    if (card[0] && world_card_name(card, &we) < 0) {
+        app_set_status(a, we.text);
         return;
     }
     if (!strcmp(at.env, card)) {
@@ -233,8 +235,9 @@ static void env_set(App *a, EnvAt at, const char *card)
     }
     if (at.area >= 0) {
         undo_begin(&a->world.undo);
-        undo_set_area_env(&a->world.undo, m, m->areas[at.area].name, card);
+        int rc = world_area_env(&a->world, at.area, card, &we);
         undo_end(&a->world.undo);
+        if (rc < 0) { app_set_status_gm(a, we.text); return; }
     } else {
         /* The map's own goes round the undo log, as the cards do. */
         str_lcpy(m->env, card, sizeof m->env);

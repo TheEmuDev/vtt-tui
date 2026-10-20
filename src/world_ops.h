@@ -44,4 +44,10 @@ int world_link_remove(World *w, int num, WorldErr *e);
 int world_floor_set(World *w, int ai, int level, WorldErr *e);
 int world_floor_off(World *w, int ai, WorldErr *e);
 
+/* Environments (docs/ENVIRONMENTS.md): `card_name` is whether CARD may name
+ * a card at all; `area_env` makes card CARD area `ai`'s environment, or ""
+ * takes it off, refused when it has none to take. */
+int world_card_name(const char *card, WorldErr *e);
+int world_area_env(World *w, int ai, const char *card, WorldErr *e);
+
 #endif /* VTT_WORLD_OPS_H */

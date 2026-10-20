@@ -818,13 +818,7 @@ static int edit_line(World *world, char w[][CTL_WORD_MAX], int n, Edits *ed, cha
         int ai = map_area_find(m, w[1]);
         if (ai < 0) BADC(CTL_E_MISSING, "no area called %.40s - area NAME REGION names one", w[1]);
         const Area *ar = &m->areas[ai];
-        if (!strcmp(w[2], "remove")) {
-            if (!ar->env[0]) BADC(CTL_E_STATE, "%.40s has no environment", w[1]);
-            undo_set_area_env(u, m, ar->name, "");
-        } else {
-            if (!card_name_ok(w[2])) BAD("%.40s: a card's name is letters, digits, - and _", w[2]);
-            undo_set_area_env(u, m, ar->name, w[2]);
-        }
+        if (world_area_env(world, ai, !strcmp(w[2], "remove") ? "" : w[2], &we) < 0) BADC(we.cls, "%s", we.text);
         x0 = ar->x0; y0 = ar->y0; x1 = ar->x1; y1 = ar->y1;
     }
     else if (!strcmp(v, "link")) {

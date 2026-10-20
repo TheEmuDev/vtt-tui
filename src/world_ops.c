@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "world_ops.h"
+#include "card.h"
 #include "floor.h"
 #include "link.h"
 
@@ -108,5 +109,22 @@ int world_floor_off(World *w, int ai, WorldErr *e)
     const Area *ar = &w->map->areas[ai];
     if (!ar->floor) return refuse(e, CTL_E_STATE, "%.40s is not a floor", ar->name);
     undo_set_floor(&w->undo, w->map, ar->name, 0, 0);
+    return 0;
+}
+
+/* ----------------------------------------------------------- environments */
+
+int world_card_name(const char *card, WorldErr *e)
+{
+    if (card_name_ok(card)) return 0;
+    return refuse(e, CTL_E_USAGE, "%.40s: a card's name is letters, digits, - and _", card);
+}
+
+int world_area_env(World *w, int ai, const char *card, WorldErr *e)
+{
+    const Area *ar = &w->map->areas[ai];
+    if (card[0] && world_card_name(card, e) < 0) return -1;
+    if (!card[0] && !ar->env[0]) return refuse(e, CTL_E_STATE, "%.40s has no environment", ar->name);
+    undo_set_area_env(&w->undo, w->map, ar->name, card);
     return 0;
 }

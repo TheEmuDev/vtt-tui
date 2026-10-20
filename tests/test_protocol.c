@@ -400,6 +400,23 @@ void test_protocol(void)
         CHECK(!live->areas[lo].floor);
     }
 
+    CASE("environments on a bare World: a card named, a bad name refused, taken off, and none to take off");
+    {
+        WorldErr e;
+        int lo = map_area_find(live, "Low");
+        CHECK(world_area_env(&w, lo, "bad name", &e) < 0 && e.cls == CTL_E_USAGE &&
+              !strcmp(e.text, "bad name: a card's name is letters, digits, - and _"));
+        CHECK(world_area_env(&w, lo, "", &e) < 0 && e.cls == CTL_E_STATE && !strcmp(e.text, "Low has no environment"));
+        undo_begin(&w.undo);
+        CHECK_EQ(world_area_env(&w, lo, "damp-cellar", &e), 0);
+        undo_end(&w.undo);
+        CHECK(!strcmp(live->areas[lo].env, "damp-cellar"));
+        undo_begin(&w.undo);
+        CHECK_EQ(world_area_env(&w, lo, "", &e), 0);
+        undo_end(&w.undo);
+        CHECK(!live->areas[lo].env[0]);
+    }
+
     world_jobs_clear(&w);
     if (w.ctl_scratch) map_free(w.ctl_scratch);
     undo_free(&w.undo);
