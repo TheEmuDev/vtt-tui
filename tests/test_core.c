@@ -1713,7 +1713,8 @@ void test_term_io(void)
                 }
             }
             close(fds[0]);
-            _exit(total == N ? 0 : 1);
+            free(buf);                               /* the child's copy of the parent's: its own to free */
+            child_exit(total == N ? 0 : 1);
         }
 
         close(fds[0]);

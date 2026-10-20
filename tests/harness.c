@@ -5,6 +5,10 @@
 #include "app_priv.h"
 
 #include <dirent.h>
+#include <unistd.h>
+#if defined(__SANITIZE_ADDRESS__)
+#include <sanitizer/lsan_interface.h>
+#endif
 
 int g_checks;
 int g_fails;
@@ -551,4 +555,12 @@ int pump_until_reaped(App *a)
         app_tick(a, now);
     }
     return a->nagents == 0;
+}
+
+void child_exit(int rc)
+{
+#if defined(__SANITIZE_ADDRESS__)
+    __lsan_do_leak_check();
+#endif
+    _exit(rc);
 }

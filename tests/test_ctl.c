@@ -1441,7 +1441,7 @@ void test_ctl_live(void)
                 dup2(o, 2);
                 int rc = ctl_client_main(round ? "bogus" : "status", 0);
                 fflush(stdout);
-                _exit(rc);
+                child_exit(rc);
             }
             int stc[3] = { (int)pid, 0, 0 };
             ctl_pump(&a, ctl_child_done, stc);
@@ -1472,7 +1472,7 @@ void test_ctl_live(void)
             int o = open(out, O_WRONLY | O_CREAT | O_TRUNC, 0600);
             dup2(o, 2);
             int rc = ctl_client_main(req, 0);
-            _exit(rc);
+            child_exit(rc);
         }
         int stc[3] = { (int)pid, 0, 0 };
         ctl_pump(&a, ctl_child_done, stc);
@@ -1495,7 +1495,7 @@ void test_ctl_live(void)
         if (pid == 0) {
             int o = open("/dev/null", O_WRONLY);
             dup2(o, 2);
-            _exit(ctl_client_main("status", 0));
+            child_exit(ctl_client_main("status", 0));
         }
         int stc = 0;
         waitpid(pid, &stc, 0);
@@ -1681,7 +1681,7 @@ void test_ctl_live(void)
                 setenv("VTT_AGENT", N[k].name, 1);
                 int rc = ctl_client_main(N[k].req, 0);
                 fflush(stdout);
-                _exit(rc);
+                child_exit(rc);
             }
             int stc[3] = { (int)pid, 0, 0 };
             ctl_pump(&a, ctl_child_done, stc);
@@ -1758,7 +1758,7 @@ void test_ctl_live(void)
         if (pid == 0) {
             int o = open(errf, O_WRONLY | O_CREAT | O_TRUNC, 0600);
             dup2(o, 2);
-            _exit(ctl_client_main("status", 0));
+            child_exit(ctl_client_main("status", 0));
         }
         int stc[3] = { (int)pid, 0, 0 };
         ctl_pump(&a, ctl_child_done, stc);
@@ -1790,7 +1790,7 @@ void test_ctl_live(void)
             int e = open(errf, O_WRONLY | O_CREAT | O_TRUNC, 0600);
             dup2(e, 2);
             int rc = ctl_apply_open(file, "plan.txt", "tile B2 hazard\n", 15, -1);
-            _exit(rc < 0 ? 99 : rc);
+            child_exit(rc < 0 ? 99 : rc);
         }
         int stc[3] = { (int)pid, 0, 0 };
         ctl_pump(&a, ctl_child_done, stc);
@@ -1835,7 +1835,7 @@ void test_ctl_live(void)
                 dup2(e, 2);
                 int rc = ctl_apply_open(file, "plan.txt", R[k].plan, strlen(R[k].plan), R[k].wait);
                 fflush(stdout);
-                _exit(rc < 0 ? 99 : rc);
+                child_exit(rc < 0 ? 99 : rc);
             }
             int stc[3] = { (int)pid, 0, 0 };
             if (R[k].keys) {
@@ -1883,7 +1883,7 @@ void test_ctl_live(void)
                 dup2(o, 1);
                 dup2(o, 2);
                 int rc = ctl_apply_open(file, name, plan, CTL_PLAN_CAP, -1);
-                _exit(rc < 0 ? 99 : rc);
+                child_exit(rc < 0 ? 99 : rc);
             }
             int stc[3] = { (int)pid, 0, 0 };
             ctl_pump(&a, ctl_child_done, stc);
@@ -1897,7 +1897,7 @@ void test_ctl_live(void)
         CASE("--apply to a file no vtt has open is the file's, as before: nobody holds it");
         fflush(stdout);
         pid_t pid = fork();
-        if (pid == 0) _exit(ctl_apply_open("tests/fixtures/kinds.vtt", "plan.txt", "tile B2 hazard\n", 15, -1) < 0 ? 0 : 1);
+        if (pid == 0) child_exit(ctl_apply_open("tests/fixtures/kinds.vtt", "plan.txt", "tile B2 hazard\n", 15, -1) < 0 ? 0 : 1);
         int stc[3] = { (int)pid, 0, 0 };
         ctl_pump(&a, ctl_child_done, stc);
         CHECK(stc[1] && WIFEXITED(stc[2]) && WEXITSTATUS(stc[2]) == 0);
@@ -1911,7 +1911,7 @@ void test_ctl_live(void)
             dup2(o, 1);
             dup2(o, 2);
             int rc = ctl_apply_open("tests/fixtures/two-rooms.vtt", "plan.txt", "tile B7 hazard\n", 15, 20);
-            _exit(rc < 0 ? 99 : rc);
+            child_exit(rc < 0 ? 99 : rc);
         }
         ctl_pump(&a, waiters_are, &(WaitersAre){ &a, 1 });
         CHECK_EQ(a.world.jobs[0].state, JOB_READY);
@@ -1941,7 +1941,7 @@ void test_ctl_live(void)
         if (pid == 0) {
             int e = open("/dev/null", O_WRONLY);
             dup2(e, 2);
-            _exit(ctl_apply_open("tests/fixtures/kinds.vtt", "plan.txt", "tile B2 hazard\n", 15, -1) & 0xff);
+            child_exit(ctl_apply_open("tests/fixtures/kinds.vtt", "plan.txt", "tile B2 hazard\n", 15, -1) & 0xff);
         }
         int stc = 0;
         waitpid(pid, &stc, 0);
@@ -2002,7 +2002,7 @@ void test_ctl_live(void)
         if (pid == 0) {
             int o = open("/dev/null", O_WRONLY);
             dup2(o, 2);
-            _exit(ctl_client_main("status", 0));
+            child_exit(ctl_client_main("status", 0));
         }
         int stc = 0;
         waitpid(pid, &stc, 0);

@@ -12,7 +12,12 @@ docs/CODEMAP.md; `tests/run.c` is the table of suites (and `SLOW`, the ones `--f
 - `VTT_UPDATE_GOLDEN=1` regenerates golden frames; `VTT_REQUIRE_NODE=1` fails rather than
   skips the page decoder test; `VTT_FOGDIFF_OPS=36000 build/run-tests` is the long fog
   differential run.
-- `make test` ends with `tools/oracle.sh check`: ./vtt's own output (map tools, frames,
+- A forked test child ends with `child_exit(rc)`, never `_exit`: LeakSanitizer never runs
+  at `_exit`, so a leak in the child's code would pass (docs/reviews/2026-10-20-4-memory.md,
+  M5).
+- `make test` ends with `tools/oracle.sh check` (twice: over the release `./vtt`, then over
+  `build/asan/vtt`, the sanitizer build, where a leak or an error fails it; `make test-fast`
+  runs the first only): ./vtt's own output (map tools, frames,
   `--apply` answers) against `tests/oracle/expected`. A difference is a bug or a meant
   change: for the second, `tools/oracle.sh record` and read `git diff` before committing it.
 - A test that expects a channel request's edits to land sets `a.world.ctl_auto = 1` after

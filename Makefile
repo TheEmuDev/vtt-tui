@@ -70,6 +70,18 @@ $(BIN): $(OBJS)
 $(OBJDIR)/%.o: $(SRCDIR)/%.c
 	$(CC) $(BASEFLAGS) $(BUILDFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
 
+# The same vtt built with the sanitizers, for the oracle to run (docs/V2.md,
+# *Memory: the plan*, 1): LeakSanitizer then sees main.c and every path the
+# oracle drives, which the release vtt cannot tell. Objects of its own, so the
+# mode stamp above never wipes them and a change rebuilds only its file.
+ASANDIR   := $(OBJDIR)/asan
+ASANOBJS  := $(SRCS:$(SRCDIR)/%.c=$(ASANDIR)/%.o)
+$(ASANDIR)/vtt: $(ASANOBJS)
+	$(CC) $(ASANOBJS) -o $@ -fsanitize=address,undefined $(LDFLAGS) $(LDLIBS)
+$(ASANDIR)/%.o: $(SRCDIR)/%.c
+	@mkdir -p $(ASANDIR)
+	$(CC) $(BASEFLAGS) $(DBGFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
+
 # The test binary alone, rebuilt every time (no dependency tracking for it):
 # `make test-build && build/run-tests NAME...` while iterating on a suite.
 # The release vtt too: the --apply and channel tests run ./vtt, and a stale
@@ -80,9 +92,11 @@ test-build: all
 	    $(LIBSRCS) $(TESTSRCS) -o $(OBJDIR)/run-tests \
 	    -fsanitize=address,undefined $(LDLIBS)
 
-test: test-build
+test: test-build $(ASANDIR)/vtt
 	@$(OBJDIR)/run-tests
 	@$(MAKE) --no-print-directory test-after
+	@echo "the oracle again, over the sanitizer vtt (a leak or an error is a difference):"
+	@./tools/oracle.sh check $(ASANDIR)/vtt || { echo "the sanitizer vtt differs (a leak exits 23): run a differing command with $(ASANDIR)/vtt to read its report" >&2; exit 1; }
 
 # make test less the suites of real sockets and processes, about 60 s of it
 # (docs/V2.md, ruling 8; run-tests' SLOW list). make test before a commit.
@@ -174,4 +188,4 @@ help:
 	@echo "make clean    remove build artifacts"
 	@echo "make PROF=0   build with profiling instrumentation compiled out"
 
--include $(DEPS)
+-include $(DEPS) $(ASANOBJS:.o=.d)

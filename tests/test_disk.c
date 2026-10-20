@@ -443,7 +443,7 @@ void test_disk(void)
                 int asked = c.modal == MODAL_CONFIRM_HELD && !c.world.map && strstr(c.modal_body, "is open in another vtt") != NULL;
                 press(&c, yes ? "y" : "n");
                 int opened = c.world.map != NULL && c.modal == MODAL_NONE;
-                _exit(asked ? (opened ? 8 : 7) : 1);
+                child_exit(asked ? (opened ? 8 : 7) : 1);
             }
             int st = 0, done = 0;
             for (int spin = 0; spin < 600 && !done; spin++) {
@@ -471,7 +471,7 @@ void test_disk(void)
             app_open_map(&c, path);
             int asked = c.modal == MODAL_CONFIRM_HELD && !c.world.map && strstr(c.modal_body, "did not say whether it has") != NULL;
             press(&c, "y");
-            _exit(asked && c.world.map ? 9 : 1);
+            child_exit(asked && c.world.map ? 9 : 1);
         }
         int st = 0;
         waitpid(pid, &st, 0);
