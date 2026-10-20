@@ -72,12 +72,7 @@ void app_link_mark(App *a)
     l.size = e->link_size;
     l.x[0] = (int16_t)e->link_x; l.y[0] = (int16_t)e->link_y;
     l.x[1] = (int16_t)e->cx;     l.y[1] = (int16_t)e->cy;
-    int rc = num;
-    if (rc > 0) {
-        undo_begin(&a->world.undo);
-        rc = world_link_set(&a->world, &l, &we);
-        undo_end(&a->world.undo);
-    }
+    int rc = num > 0 ? world_link_set(&a->world, &l, &we) : -1;
     if (rc < 0) {
         snprintf(msg, sizeof msg, "%.110s - move and g l again, or esc", we.text);
         app_set_status(a, msg);
@@ -339,9 +334,7 @@ void app_link_command(App *a, const char *rest)
         nl.y[0] = nl.y[1] = (int16_t)e->cy;
         str_lcpy(nl.to_map, to_map, sizeof nl.to_map);
         str_lcpy(nl.to_place, place, sizeof nl.to_place);
-        undo_begin(&a->world.undo);
         int rc = world_link_set(&a->world, &nl, &we);
-        undo_end(&a->world.undo);
         if (rc < 0) { snprintf(msg, sizeof msg, "no link here: %.120s", we.text); app_set_status_gm(a, msg); return; }
         e->link_on = 0;
         char line[160];
@@ -406,9 +399,7 @@ void app_link_command(App *a, const char *rest)
         char name[32];
         link_name(&l, name, sizeof name);
         WorldErr we;
-        undo_begin(&a->world.undo);
         int rc = world_link_remove(&a->world, l.num, &we);
-        undo_end(&a->world.undo);
         if (rc < 0) { app_set_status_gm(a, we.text); return; }
         snprintf(msg, sizeof msg, "%s is gone", name);
         app_note_gm(a, msg);
@@ -439,9 +430,7 @@ void app_link_command(App *a, const char *rest)
         }
     }
     WorldErr we;
-    undo_begin(&a->world.undo);
     int rc = world_link_set(&a->world, &l, &we);
-    undo_end(&a->world.undo);
     if (rc < 0) { app_set_status_gm(a, we.text); return; }
     char line[96];
     link_describe(&l, line, sizeof line);

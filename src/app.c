@@ -961,9 +961,7 @@ static void prompt_accept(App *a)
         if (!*text && !had) { app_set_status(a, "nothing noted"); return; }
         /* Through the log, like a creature's note: u takes it back. */
         WorldErr we;
-        undo_begin(&a->world.undo);
         int rc = world_note_set(&a->world, a->pending_tx, a->pending_ty, text, &we);
-        undo_end(&a->world.undo);
         if (rc < 0) { app_set_status(a, we.text); return; }
         snprintf(msg, sizeof msg, *text ? "noted on %s" : "note taken off %s", at);
         app_note(a, msg);

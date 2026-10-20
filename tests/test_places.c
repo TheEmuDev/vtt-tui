@@ -648,6 +648,11 @@ void test_link_keys(void)
         char *ans = ctl_ask(&a, "link 10 portal\n");
         CHECK(ans && ctl_refused(ans, "conflict", 1) && strstr(ans, "an end is on void"));
         free(ans);
+        int d = a.world.undo.depth;
+        press(&a, ":link 10 remove\r");                     /* the way out: taking it away still works */
+        CHECK(link_find(m, 10) < 0 && a.world.undo.depth == d + 1 && strstr(a.status, "is gone"));
+        press(&a, "u");
+        CHECK(link_find(m, 10) >= 0);
         map_set_tile(m, x, y, TILE_FLOOR);
     }
 

@@ -5,8 +5,9 @@
  * (docs/V2.md, *Step 6*): each one checks, records through the world's log
  * and says why it refused, once, so a limit or a check has one wording on
  * the GM's line and in a refusal. Parsing stays with each side: the GM's
- * command line and keys, the channel's words. None opens or closes an undo
- * batch; the caller has one open. */
+ * command line and keys, the channel's words. Each change is a batch of the
+ * log's own: alone it is one undo step (the GM's), and inside a batch already
+ * open it joins it, since batches nest (a request's edits are one step). */
 
 #include "world.h"
 

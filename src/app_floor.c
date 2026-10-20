@@ -164,9 +164,7 @@ void app_floor_command(App *a, const char *verb, const char *rest)
     }
     WorldErr we;
     if (off) {
-        undo_begin(&a->world.undo);
         int rc = world_floor_off(&a->world, ai, &we);
-        undo_end(&a->world.undo);
         if (rc < 0) { app_set_status_gm(a, we.text); return; }
         snprintf(msg, sizeof msg, "%.40s is no longer a floor", m->areas[ai].name);
         app_note_gm(a, msg);
@@ -174,9 +172,7 @@ void app_floor_command(App *a, const char *verb, const char *rest)
         return;
     }
     if (has_level) {
-        undo_begin(&a->world.undo);
         int rc = world_floor_set(&a->world, ai, level, &we);
-        undo_end(&a->world.undo);
         if (rc < 0) { app_set_status_gm(a, we.text); return; }
         snprintf(msg, sizeof msg, "%.40s is a floor, level %d - [ and ] step between floors", m->areas[ai].name, level);
         app_note_gm(a, msg);

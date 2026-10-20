@@ -702,7 +702,8 @@ end and press `g l` again. `esc` cancels after the first press. Each end is the 
 brush: set `b` to 2 or 3 first for a 2×2 or 3×3 link, such as a wide portal a whole party can
 step onto. Both ends must be on map squares, must not overlap each other, and cannot share a
 square with another link. A map holds up to 64 links. If you later clear ground under an end,
-the link stays, trips onto it are refused, and `--check` reports it.
+the link stays, trips onto it are refused, `:link N` will not change it until the square is
+ground again (`:link N remove` still takes it away), and `--check` reports it.
 
 Each link has a kind, which sets the symbol drawn on its ends: `≡` stairs, `‡` ladder, `□`
 trapdoor, `◎` portal. New links are stairs; `:link portal` changes the kind the next `g l`

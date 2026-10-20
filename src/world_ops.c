@@ -41,8 +41,10 @@ int world_area_fits(const World *w, const char *name, int x0, int y0, int x1, in
 int world_area_set(World *w, const char *name, int x0, int y0, int x1, int y1, WorldErr *e)
 {
     if (world_area_fits(w, name, x0, y0, x1, y1, e) < 0) return -1;
-    if (!undo_set_area(&w->undo, w->map, name, x0, y0, x1, y1))
-        return refuse(e, CTL_E_LIMIT, "no room: a map holds %d named areas", MAP_AREAS_MAX);
+    undo_begin(&w->undo);
+    int ok = undo_set_area(&w->undo, w->map, name, x0, y0, x1, y1);
+    undo_end(&w->undo);
+    if (!ok) return refuse(e, CTL_E_LIMIT, "no room: a map holds %d named areas", MAP_AREAS_MAX);
     return 0;
 }
 
@@ -53,7 +55,9 @@ int world_area_remove(World *w, const char *name, int box[4], WorldErr *e)
     if (ai < 0) return refuse(e, CTL_E_MISSING, "no area called %.40s", name);
     const Area *ar = &w->map->areas[ai];
     box[0] = ar->x0; box[1] = ar->y0; box[2] = ar->x1; box[3] = ar->y1;
+    undo_begin(&w->undo);
     undo_remove_area(&w->undo, w->map, name);
+    undo_end(&w->undo);
     return 0;
 }
 
@@ -62,8 +66,10 @@ int world_area_remove(World *w, const char *name, int box[4], WorldErr *e)
 int world_note_set(World *w, int x, int y, const char *text, WorldErr *e)
 {
     if (strlen(text) >= NOTE_MAX) return refuse(e, CTL_E_LIMIT, "the note is over %d characters", NOTE_MAX - 1);
-    if (!undo_set_note(&w->undo, w->map, x, y, text))
-        return refuse(e, CTL_E_LIMIT, "no room: a map holds %d notes on squares", MAP_NOTES_MAX);
+    undo_begin(&w->undo);
+    int ok = undo_set_note(&w->undo, w->map, x, y, text);
+    undo_end(&w->undo);
+    if (!ok) return refuse(e, CTL_E_LIMIT, "no room: a map holds %d notes on squares", MAP_NOTES_MAX);
     return 0;
 }
 
@@ -80,14 +86,18 @@ int world_link_set(World *w, const Link *l, WorldErr *e)
 {
     const char *why = link_problem(w->map, l);
     if (why) return refuse(e, CTL_E_CONFLICT, "%s", why);
+    undo_begin(&w->undo);
     (void)undo_set_link(&w->undo, w->map, l);
+    undo_end(&w->undo);
     return 0;
 }
 
 int world_link_remove(World *w, int num, WorldErr *e)
 {
     if (link_find(w->map, num) < 0) return refuse(e, CTL_E_MISSING, "there is no link %d", num);
+    undo_begin(&w->undo);
     undo_remove_link(&w->undo, w->map, num);
+    undo_end(&w->undo);
     return 0;
 }
 
@@ -100,7 +110,9 @@ int world_floor_set(World *w, int ai, int level, WorldErr *e)
         return refuse(e, CTL_E_USAGE, "a level is %d to %d", FLOOR_LEVEL_MIN, FLOOR_LEVEL_MAX);
     const char *why = floor_problem(w->map, ai);
     if (why) return refuse(e, CTL_E_CONFLICT, "%.40s cannot be a floor: %s", ar->name, why);
+    undo_begin(&w->undo);
     undo_set_floor(&w->undo, w->map, ar->name, 1, level);
+    undo_end(&w->undo);
     return 0;
 }
 
@@ -108,7 +120,9 @@ int world_floor_off(World *w, int ai, WorldErr *e)
 {
     const Area *ar = &w->map->areas[ai];
     if (!ar->floor) return refuse(e, CTL_E_STATE, "%.40s is not a floor", ar->name);
+    undo_begin(&w->undo);
     undo_set_floor(&w->undo, w->map, ar->name, 0, 0);
+    undo_end(&w->undo);
     return 0;
 }
 
@@ -125,6 +139,8 @@ int world_area_env(World *w, int ai, const char *card, WorldErr *e)
     const Area *ar = &w->map->areas[ai];
     if (card[0] && world_card_name(card, e) < 0) return -1;
     if (!card[0] && !ar->env[0]) return refuse(e, CTL_E_STATE, "%.40s has no environment", ar->name);
+    undo_begin(&w->undo);
     undo_set_area_env(&w->undo, w->map, ar->name, card);
+    undo_end(&w->undo);
     return 0;
 }

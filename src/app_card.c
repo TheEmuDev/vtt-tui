@@ -234,9 +234,7 @@ static void env_set(App *a, EnvAt at, const char *card)
         return;
     }
     if (at.area >= 0) {
-        undo_begin(&a->world.undo);
         int rc = world_area_env(&a->world, at.area, card, &we);
-        undo_end(&a->world.undo);
         if (rc < 0) { app_set_status_gm(a, we.text); return; }
     } else {
         /* The map's own goes round the undo log, as the cards do. */

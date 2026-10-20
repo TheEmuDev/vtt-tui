@@ -644,9 +644,7 @@ static void area_command(App *a, const char *verb, const char *rest)
     int ai = map_area_find(m, name);
     if (off) {
         int box[4];
-        undo_begin(&a->world.undo);
         int rc = world_area_remove(&a->world, name, box, &we);
-        undo_end(&a->world.undo);
         if (rc < 0) { app_set_status_gm(a, we.text); return; }
         snprintf(msg, sizeof msg, "%.40s is no longer named", name);
         app_note_gm(a, msg);
@@ -654,9 +652,7 @@ static void area_command(App *a, const char *verb, const char *rest)
     }
     int bx0, by0, bx1, by1;
     if (app_cmd_vbox(a, &bx0, &by0, &bx1, &by1)) {
-        undo_begin(&a->world.undo);
         int rc = world_area_set(&a->world, name, bx0, by0, bx1, by1, &we);
-        undo_end(&a->world.undo);
         if (rc < 0) { app_set_status_gm(a, we.text); return; }
         ai = map_area_find(m, name);
         map_coord_name(m->areas[ai].x0, m->areas[ai].y0, b0, sizeof b0);
