@@ -802,15 +802,12 @@ static int edit_line(World *world, char w[][CTL_WORD_MAX], int n, Edits *ed, cha
         if (ai < 0) BADC(CTL_E_MISSING, "no area called %.40s - area NAME REGION names one", w[1]);
         const Area *ar = &m->areas[ai];
         if (!strcmp(w[2], "off")) {
-            if (!ar->floor) BADC(CTL_E_STATE, "%.40s is not a floor", w[1]);
-            undo_set_floor(u, m, ar->name, 0, 0);
+            if (world_floor_off(world, ai, &we) < 0) BADC(we.cls, "%s", we.text);
         } else {
             int level;
             if (!word_int(w[2], FLOOR_LEVEL_MIN, FLOOR_LEVEL_MAX, &level))
                 BAD("%.20s: a level is %d to %d, or off", w[2], FLOOR_LEVEL_MIN, FLOOR_LEVEL_MAX);
-            const char *why = floor_problem(m, ai);
-            if (why) BADC(CTL_E_CONFLICT, "%.40s cannot be a floor: %s", w[1], why);
-            undo_set_floor(u, m, ar->name, 1, level);
+            if (world_floor_set(world, ai, level, &we) < 0) BADC(we.cls, "%s", we.text);
         }
         x0 = ar->x0; y0 = ar->y0; x1 = ar->x1; y1 = ar->y1;
     }

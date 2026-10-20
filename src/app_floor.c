@@ -10,6 +10,7 @@
 #include <strings.h>
 
 #include "app_priv.h"
+#include "world_ops.h"
 #include "floor.h"
 #include "prof.h"
 #include "turn.h"
@@ -161,27 +162,22 @@ void app_floor_command(App *a, const char *verb, const char *rest)
         app_set_status_gm(a, msg);
         return;
     }
+    WorldErr we;
     if (off) {
-        if (!m->areas[ai].floor) { snprintf(msg, sizeof msg, "%.40s is not a floor", name); app_set_status_gm(a, msg); return; }
         undo_begin(&a->world.undo);
-        undo_set_floor(&a->world.undo, m, m->areas[ai].name, 0, 0);
+        int rc = world_floor_off(&a->world, ai, &we);
         undo_end(&a->world.undo);
+        if (rc < 0) { app_set_status_gm(a, we.text); return; }
         snprintf(msg, sizeof msg, "%.40s is no longer a floor", m->areas[ai].name);
         app_note_gm(a, msg);
         app_floor_sync(a);
         return;
     }
     if (has_level) {
-        if (level < FLOOR_LEVEL_MIN || level > FLOOR_LEVEL_MAX) {
-            snprintf(msg, sizeof msg, "a level is %d to %d", FLOOR_LEVEL_MIN, FLOOR_LEVEL_MAX);
-            app_set_status_gm(a, msg);
-            return;
-        }
-        const char *why = floor_problem(m, ai);
-        if (why) { snprintf(msg, sizeof msg, "%.40s cannot be a floor: %s", name, why); app_set_status_gm(a, msg); return; }
         undo_begin(&a->world.undo);
-        undo_set_floor(&a->world.undo, m, m->areas[ai].name, 1, level);
+        int rc = world_floor_set(&a->world, ai, level, &we);
         undo_end(&a->world.undo);
+        if (rc < 0) { app_set_status_gm(a, we.text); return; }
         snprintf(msg, sizeof msg, "%.40s is a floor, level %d - [ and ] step between floors", m->areas[ai].name, level);
         app_note_gm(a, msg);
         return;

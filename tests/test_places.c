@@ -942,8 +942,21 @@ void test_floor_view(void)
     press(&a, "v");
     a.ed.cx = 14; a.ed.cy = 3;
     press(&a, ":area Wing\r");
-    press(&a, ":floor Wing 2\r");
-    CHECK(strstr(a.status, "cannot be a floor: it would overlap another floor") != NULL);
+    press(&a, ":floor wing 2\r");                            /* typed in lower case: said as stored */
+    CHECK(!strcmp(a.status, "Wing cannot be a floor: it would overlap another floor") && a.status_gm);
+    {
+        /* The GM's line and the channel's refusal are one operation's words (world_ops.c). */
+        char said[sizeof a.status];
+        str_lcpy(said, a.status, sizeof said);
+        char *ans = ctl_ask(&a, "floor wing 2\n");
+        CHECK(ans && ctl_refused(ans, "conflict", 1) && strstr(ans, said));
+        free(ans);
+        press(&a, ":floor wing off\r");
+        CHECK(!strcmp(a.status, "Wing is not a floor") && a.status_gm);
+        ans = ctl_ask(&a, "floor wing off\n");
+        CHECK(ans && ctl_refused(ans, "state", 1) && strstr(ans, "Wing is not a floor"));
+        free(ans);
+    }
     press(&a, ":floor Upper off\r");
     CHECK_EQ(m->areas[map_area_find(m, "Upper")].floor, 0);
     press(&a, "u");

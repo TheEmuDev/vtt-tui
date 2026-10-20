@@ -89,3 +89,24 @@ int world_link_remove(World *w, int num, WorldErr *e)
     undo_remove_link(&w->undo, w->map, num);
     return 0;
 }
+
+/* ----------------------------------------------------------------- floors */
+
+int world_floor_set(World *w, int ai, int level, WorldErr *e)
+{
+    const Area *ar = &w->map->areas[ai];
+    if (level < FLOOR_LEVEL_MIN || level > FLOOR_LEVEL_MAX)
+        return refuse(e, CTL_E_USAGE, "a level is %d to %d", FLOOR_LEVEL_MIN, FLOOR_LEVEL_MAX);
+    const char *why = floor_problem(w->map, ai);
+    if (why) return refuse(e, CTL_E_CONFLICT, "%.40s cannot be a floor: %s", ar->name, why);
+    undo_set_floor(&w->undo, w->map, ar->name, 1, level);
+    return 0;
+}
+
+int world_floor_off(World *w, int ai, WorldErr *e)
+{
+    const Area *ar = &w->map->areas[ai];
+    if (!ar->floor) return refuse(e, CTL_E_STATE, "%.40s is not a floor", ar->name);
+    undo_set_floor(&w->undo, w->map, ar->name, 0, 0);
+    return 0;
+}

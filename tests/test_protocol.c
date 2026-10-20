@@ -379,6 +379,27 @@ void test_protocol(void)
         while (live->nlinks > had) live->nlinks--;
     }
 
+    CASE("floors on a bare World: made one, refused out of range, overlapping or when not one, made none");
+    {
+        WorldErr e;
+        undo_begin(&w.undo);
+        CHECK_EQ(world_area_set(&w, "Low", 0, 0, 4, 4, &e), 0);
+        CHECK_EQ(world_area_set(&w, "High", 3, 3, 8, 8, &e), 0);
+        undo_end(&w.undo);
+        int lo = map_area_find(live, "Low"), hi = map_area_find(live, "High");
+        CHECK(world_floor_off(&w, lo, &e) < 0 && e.cls == CTL_E_STATE && !strcmp(e.text, "Low is not a floor"));
+        CHECK(world_floor_set(&w, lo, 100, &e) < 0 && e.cls == CTL_E_USAGE && !strcmp(e.text, "a level is -99 to 99"));
+        undo_begin(&w.undo);
+        CHECK_EQ(world_floor_set(&w, lo, -1, &e), 0);
+        undo_end(&w.undo);
+        CHECK(live->areas[lo].floor && live->areas[lo].level == -1);
+        CHECK(world_floor_set(&w, hi, 1, &e) < 0 && e.cls == CTL_E_CONFLICT && !strncmp(e.text, "High cannot be a floor: ", 24));
+        undo_begin(&w.undo);
+        CHECK_EQ(world_floor_off(&w, lo, &e), 0);
+        undo_end(&w.undo);
+        CHECK(!live->areas[lo].floor);
+    }
+
     world_jobs_clear(&w);
     if (w.ctl_scratch) map_free(w.ctl_scratch);
     undo_free(&w.undo);

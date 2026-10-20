@@ -38,4 +38,10 @@ int world_link_num(const World *w, WorldErr *e);
 int world_link_set(World *w, const Link *l, WorldErr *e);
 int world_link_remove(World *w, int num, WorldErr *e);
 
+/* Floors (floor.h): area `ai` made a floor at `level`, refused out of range
+ * or where it would overlap another floor; or made a floor no longer,
+ * refused when it is not one. */
+int world_floor_set(World *w, int ai, int level, WorldErr *e);
+int world_floor_off(World *w, int ai, WorldErr *e);
+
 #endif /* VTT_WORLD_OPS_H */
