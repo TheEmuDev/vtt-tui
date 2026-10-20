@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "app_priv.h"
+#include "world_ops.h"
 #include "prof.h"
 #include "stamp.h"
 
@@ -66,15 +67,16 @@ void app_stamp_lift(App *a)
 /* Puts the stamp in hand down at the cursor. */
 static void place(App *a)
 {
-    char err[160], what[96], at[MAP_COORD_MAX], msg[200];
+    char what[96], at[MAP_COORD_MAX], msg[200];
+    WorldErr we;
     int bx0, by0, bx1, by1;
     grid_bounds(&a->ed.view, a->world.map, &bx0, &by0, &bx1, &by1);
     if (a->ed.view.bounded && (a->ed.cx + a->stamp->w - 1 > bx1 || a->ed.cy + a->stamp->h - 1 > by1)) {
         app_set_status(a, "the stamp runs off the floor - move it, or :floor all");
         return;
     }
-    if (!stamp_place(a->world.map, &a->world.undo, a->stamp, a->ed.cx, a->ed.cy, NULL, err, sizeof err)) {
-        app_set_status(a, err);
+    if (world_stamp_place(&a->world, a->stamp, a->ed.cx, a->ed.cy, &we) < 0) {
+        app_set_status(a, we.text);
         return;
     }
     a->ed.mode = ED_NORMAL;

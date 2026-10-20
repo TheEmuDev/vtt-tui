@@ -8,6 +8,7 @@
 #include "card.h"
 #include "floor.h"
 #include "link.h"
+#include "stamp.h"
 
 static int refuse(WorldErr *e, int cls, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
 static int refuse(WorldErr *e, int cls, const char *fmt, ...)
@@ -44,7 +45,7 @@ int world_area_set(World *w, const char *name, int x0, int y0, int x1, int y1, W
     undo_begin(&w->undo);
     int ok = undo_set_area(&w->undo, w->map, name, x0, y0, x1, y1);
     undo_end(&w->undo);
-    if (!ok) return refuse(e, CTL_E_LIMIT, "no room: a map holds %d named areas", MAP_AREAS_MAX);
+    if (!ok) return refuse(e, CTL_E_LIMIT, MAP_FULL_FMT, MAP_AREAS_MAX, "named areas");
     return 0;
 }
 
@@ -69,7 +70,7 @@ int world_note_set(World *w, int x, int y, const char *text, WorldErr *e)
     undo_begin(&w->undo);
     int ok = undo_set_note(&w->undo, w->map, x, y, text);
     undo_end(&w->undo);
-    if (!ok) return refuse(e, CTL_E_LIMIT, "no room: a map holds %d notes on squares", MAP_NOTES_MAX);
+    if (!ok) return refuse(e, CTL_E_LIMIT, MAP_FULL_FMT, MAP_NOTES_MAX, "notes on squares");
     return 0;
 }
 
@@ -78,7 +79,7 @@ int world_note_set(World *w, int x, int y, const char *text, WorldErr *e)
 int world_link_num(const World *w, WorldErr *e)
 {
     int num = link_free_num(w->map);
-    if (!num) return refuse(e, CTL_E_LIMIT, "no room: a map holds %d links", MAP_LINKS_MAX);
+    if (!num) return refuse(e, CTL_E_LIMIT, MAP_FULL_FMT, MAP_LINKS_MAX, "links");
     return num;
 }
 
@@ -143,4 +144,14 @@ int world_area_env(World *w, int ai, const char *card, WorldErr *e)
     undo_set_area_env(&w->undo, w->map, ar->name, card);
     undo_end(&w->undo);
     return 0;
+}
+
+/* ----------------------------------------------------------------- stamps */
+
+int world_stamp_place(World *w, const Map *s, int x, int y, WorldErr *e)
+{
+    int full;
+    if (stamp_place(w->map, &w->undo, s, x, y, &full, e->text, sizeof e->text)) return 0;
+    e->cls = full ? CTL_E_LIMIT : CTL_E_CONFLICT;
+    return -1;
 }

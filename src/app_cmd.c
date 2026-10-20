@@ -98,7 +98,7 @@ static void clock_command(App *a, const char *rest)
     int had = clock_find(m, name);
     int idx = clock_start(m, name, (int)size, down);
     if (idx < 0) {
-        if (clock_count(m) >= CLOCK_MAX) snprintf(msg, sizeof msg, "no room: a map holds %d clocks", CLOCK_MAX);
+        if (clock_count(m) >= CLOCK_MAX) snprintf(msg, sizeof msg, MAP_FULL_FMT, CLOCK_MAX, "clocks");
         else                             snprintf(msg, sizeof msg, "a clock's name starts with a letter");
         app_set_status(a, msg);
         return;
@@ -322,7 +322,7 @@ static void roll_command(App *a, const char *rest)
         if (idx < 0)
             for (int i = 0; i < ROLL_MAX && idx < 0; i++)
                 if (!m->rolls[i].name[0]) idx = i;
-        if (idx < 0) { snprintf(msg, sizeof msg, "no room: a map holds %d named rolls", ROLL_MAX); app_set_status(a, msg); return; }
+        if (idx < 0) { snprintf(msg, sizeof msg, MAP_FULL_FMT, ROLL_MAX, "named rolls"); app_set_status(a, msg); return; }
         str_lcpy(m->rolls[idx].name, name, sizeof m->rolls[idx].name);
         str_lcpy(m->rolls[idx].expr, expr, sizeof m->rolls[idx].expr);
         map_touch(m);
@@ -567,7 +567,7 @@ static void fog_command(App *a, const char *rest)
     int created = 0;
     if (!id) {
         id = fog_create(m, name);
-        if (id == 0) { snprintf(msg, sizeof msg, "no room: a map holds %d fog patches", FOG_PATCH_MAX); app_set_status(a, msg); return; }
+        if (id == 0) { snprintf(msg, sizeof msg, MAP_FULL_FMT, FOG_PATCH_MAX, "fog patches"); app_set_status(a, msg); return; }
         if (id < 0)  { app_set_status(a, "a fog patch's name is one word, starting with a letter, under 16 characters"); return; }
         created = 1;
     }

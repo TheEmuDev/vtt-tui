@@ -19,6 +19,10 @@
  * two still agree. */
 #define MAP_METRIC_DEFAULT 2
 #define MAP_PATH_MAX 512
+/* What vtt says when a map holds all it can of a thing, the GM's line and a
+ * request's refusal alike: MAP_FULL_FMT with the count and the thing's name,
+ * "no room: a map holds 64 links". */
+#define MAP_FULL_FMT "no room: a map holds %d %s"
 
 /* Clocks: see clock.h. Fixed slots, an empty one has no name. */
 #define CLOCK_MAX      8

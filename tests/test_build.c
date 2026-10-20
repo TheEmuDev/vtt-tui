@@ -1180,8 +1180,11 @@ void test_stamp_keys(void)
         CHECK_EQ(stamp_save(noted, "Noted", serr, sizeof serr), 0);
         map_free(noted);
         t = ctl_ask(&a, "stamp Pool L8\n");
-        CHECK(ctl_refused(t, "conflict", 1));
+        CHECK(ctl_refused(t, "conflict", 1) && strstr(t, "a 2x1 stamp at L8 runs off the map"));
         free(t);
+        a.ed.cx = 11; a.ed.cy = 7;                           /* the GM's :stamp there: the same words */
+        press(&a, ":stamp Pool -f\r");
+        CHECK(!strcmp(a.status, "a 2x1 stamp at L8 runs off the map"));
         Note kept[MAP_NOTES_MAX];
         int  nkept = m->nnotes;
         memcpy(kept, m->notes, sizeof kept);

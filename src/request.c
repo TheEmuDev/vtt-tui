@@ -927,11 +927,10 @@ static int edit_line(World *world, char w[][CTL_WORD_MAX], int n, Edits *ed, cha
         if (!rq_cover(world, (long)st->w * st->h, err, errsz)) { map_free(st); return -1; }
         if (quarters) { Map *t = stamp_turned(st, quarters); map_free(st); st = t; }
         if (mirror)   { Map *t = stamp_mirrored(st); map_free(st); st = t; }
-        int full, ok = stamp_place(m, u, st, x, y, &full, err, errsz);
+        int rc = world_stamp_place(world, st, x, y, &we);
         x0 = x; y0 = y; x1 = x + st->w - 1; y1 = y + st->h - 1;
         map_free(st);
-        /* Refused: something in the way, or the map full of links or notes. */
-        if (!ok) return rq_class(full ? CTL_E_LIMIT : CTL_E_CONFLICT);
+        if (rc < 0) BADC(we.cls, "%s", we.text);
     }
     else if (!strcmp(v, "scene")) {
         /* scene NAME: put it back, one step with the rest of the request. */

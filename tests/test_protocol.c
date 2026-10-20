@@ -417,6 +417,26 @@ void test_protocol(void)
         CHECK(!live->areas[lo].env[0]);
     }
 
+    CASE("stamps on a bare World: put down as one step; off the map a conflict, a map full of notes a limit");
+    {
+        WorldErr e;
+        Map *st = map_new(2, 1, "Pool");
+        map_set_tile(st, 0, 0, TILE_WATER);
+        map_set_tile(st, 1, 0, TILE_WATER);
+        CHECK(world_stamp_place(&w, st, 19, 0, &e) < 0 && e.cls == CTL_E_CONFLICT && strstr(e.text, "runs off the map"));
+        int d = w.undo.depth;
+        CHECK_EQ(world_stamp_place(&w, st, 0, 0, &e), 0);
+        CHECK(map_tile(live, 1, 0) == TILE_WATER && w.undo.depth == d + 1);
+        undo_undo(&w.undo, live);
+        map_note_set(st, 0, 0, "the stamp's");
+        int had = live->nnotes;
+        for (int i = 0; live->nnotes < MAP_NOTES_MAX; i++) map_note_set(live, i % 20, 2 + i / 20, "full");
+        CHECK(world_stamp_place(&w, st, 0, 0, &e) < 0 && e.cls == CTL_E_LIMIT &&
+              !strcmp(e.text, "no room: a map holds 64 notes on squares"));
+        while (live->nnotes > had) live->nnotes--;
+        map_free(st);
+    }
+
     world_jobs_clear(&w);
     if (w.ctl_scratch) map_free(w.ctl_scratch);
     undo_free(&w.undo);

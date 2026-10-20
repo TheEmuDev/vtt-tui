@@ -51,4 +51,9 @@ int world_floor_off(World *w, int ai, WorldErr *e);
 int world_card_name(const char *card, WorldErr *e);
 int world_area_env(World *w, int ai, const char *card, WorldErr *e);
 
+/* Stamps (stamp.h): stamp `s` put down with its top-left on x,y, one step;
+ * refused, as a conflict, when something is in the way, and as a limit when
+ * the map holds all the links or notes it can. */
+int world_stamp_place(World *w, const Map *s, int x, int y, WorldErr *e);
+
 #endif /* VTT_WORLD_OPS_H */

@@ -178,14 +178,14 @@ Map *stamp_mirrored(const Map *s)
 static int stamp_room(const Map *m, const Map *s, int x, int y, char *err, size_t errsz)
 {
     if (s->nlinks > MAP_LINKS_MAX - m->nlinks) {
-        snprintf(err, errsz, "no room: a map holds %d links", MAP_LINKS_MAX);
+        snprintf(err, errsz, MAP_FULL_FMT, MAP_LINKS_MAX, "links");
         return 0;
     }
     int fresh_notes = 0;
     for (int i = 0; i < s->nnotes; i++)
         fresh_notes += map_note_at(m, x + s->notes[i].x, y + s->notes[i].y) == NULL;
     if (m->nnotes + fresh_notes > MAP_NOTES_MAX) {
-        snprintf(err, errsz, "no room: a map holds %d notes on squares", MAP_NOTES_MAX);
+        snprintf(err, errsz, MAP_FULL_FMT, MAP_NOTES_MAX, "notes on squares");
         return 0;
     }
     return 1;
