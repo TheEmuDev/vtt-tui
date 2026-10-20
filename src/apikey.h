@@ -21,6 +21,10 @@ int apikey_ok(const char *key);
  * (a file others can read: the chmod that fixes it). */
 ApiKeySource apikey_find(char *key, size_t sz, char *err, size_t errsz);
 
+/* The stored key alone -- the keyring's, else the file's -- whatever the
+ * environment holds: what :agent key remove would take away. */
+ApiKeySource apikey_find_stored(char *key, size_t sz, char *err, size_t errsz);
+
 /* Stores a key typed in: the keyring, or the file where no keyring answers
  * (then *where says so). An older key file goes when the keyring takes it. */
 int apikey_store(const char *key, ApiKeySource *where, char *err, size_t errsz);

@@ -428,6 +428,9 @@ void app_agent_ask(App *a, const Job *j, const char *asked)
     if (!a->agent_from_env && st->agent == AGENT_KIND_UNSET) {
         app_note_gm(a, asked);
         a->choice_job = j->num;
+        /* Read once, here: the box is drawn every frame, and a lookup is a
+         * keyring round trip (or its unlock window). */
+        a->opt_key = app_agent_key_where(a->opt_key_last4, sizeof a->opt_key_last4);
         snprintf(a->modal_title, sizeof a->modal_title, "How should agents answer :ask?");
         a->modal = MODAL_CHOOSE_AGENT;
         a->dirty = 1;
@@ -444,10 +447,9 @@ void app_agent_ask(App *a, const Job *j, const char *asked)
 int app_agent_choice_rows(const App *a, UiChoice *items, int max)
 {
     if (max < 3) return 0;
-    char last4[8];
-    int  src = app_agent_key_where(last4, sizeof last4);
+    int src = a->opt_key;                        /* read when the box opened: never a lookup a frame */
     if (src == APIKEY_NONE) snprintf(items[0].text, sizeof items[0].text, "c  the Claude API agent  (no key yet - c asks for it)");
-    else snprintf(items[0].text, sizeof items[0].text, "c  the Claude API agent  (key: %s ...%s)", apikey_source_name(src), last4);
+    else snprintf(items[0].text, sizeof items[0].text, "c  the Claude API agent  (key: %s ...%s)", apikey_source_name(src), a->opt_key_last4);
     snprintf(items[1].text, sizeof items[1].text, "m  a command  (Claude Code, a script...)");
     snprintf(items[2].text, sizeof items[2].text, "w  wait for an agent that comes to the channel");
     for (int i = 0; i < 3; i++) items[i].color = a->th->fg;
@@ -582,16 +584,22 @@ void app_agent_key_remove(App *a)
 
 static void key_remove_ask(App *a)
 {
-    char last4[8];
-    int src = app_agent_key_where(last4, sizeof last4);
-    if (src == APIKEY_NONE) { app_set_status_gm(a, "no API key is stored"); return; }
-    if (src == APIKEY_ENV) {
-        app_set_status_gm(a, "the key in use is ANTHROPIC_API_KEY, from the environment: unset it yourself (vtt stores none of it)");
+    char key[APIKEY_MAX], err[600], last4[8] = "";
+    int env = getenv("ANTHROPIC_API_KEY") && *getenv("ANTHROPIC_API_KEY");
+    /* What is stored, whatever the environment holds: a typed key shadowed
+     * by the variable is still the GM's to take away. */
+    ApiKeySource src = apikey_find_stored(key, sizeof key, err, sizeof err);
+    size_t n = strlen(key);
+    if (src != APIKEY_NONE && n >= 4) snprintf(last4, sizeof last4, "%s", key + n - 4);
+    apikey_wipe(key, sizeof key);
+    if (src == APIKEY_NONE) {
+        app_set_status_gm(a, env ? "no API key is stored - the one in use is ANTHROPIC_API_KEY, from the environment: unset it yourself"
+                                 : "no API key is stored");
         return;
     }
     snprintf(a->modal_title, sizeof a->modal_title, "Remove the API key?");
-    snprintf(a->modal_body, sizeof a->modal_body, "The key ending ...%s, from your %s. The Claude agent stops working until a key is given again.",
-             last4, apikey_source_name(src));
+    snprintf(a->modal_body, sizeof a->modal_body, "The key ending ...%s, from your %s%s", last4, apikey_source_name(src),
+             env ? " (ANTHROPIC_API_KEY is used while set)." : ". The Claude agent stops until a key is given again.");
     a->modal = MODAL_CONFIRM_KEY;
     a->dirty = 1;
 }

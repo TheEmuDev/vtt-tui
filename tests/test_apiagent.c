@@ -15,6 +15,7 @@
 #include "apikey.h"
 #include "app_priv.h"
 #include "settings.h"
+#include "slog.h"
 #include "store.h"
 
 #define KEY "sk-test-0123456789abcdefghijKLMN"
@@ -33,6 +34,7 @@ static void fake_curl(const char *dir)
                "for a in \"$@\"; do printf '%%s\\n' \"$a\"; done > \"$d/argv.$n\"\n"
                "cat <&3 > \"$d/fd3.$n\"\n"
                "cat > \"$d/body.$n\"\n"
+               "if [ -f \"$d/answer.$n\" ] && head -c 5 \"$d/answer.$n\" | grep -q '^EXIT '; then exit $(cut -c6- \"$d/answer.$n\"); fi\n"
                "if [ -f \"$d/answer.$n\" ]; then cat \"$d/answer.$n\"; else printf 'HTTP/1.1 500 x\\r\\n\\r\\n{}'; fi\n", dir);
     fclose(f);
     chmod(path, 0755);
@@ -54,6 +56,16 @@ static void answer(int n, const char *head, const char *body)
     snprintf(path, sizeof path, "%s/answer.%d", g_dir, n);
     FILE *f = fopen(path, "w");
     fprintf(f, "%s\r\n\r\n%s", head, body);
+    fclose(f);
+}
+
+/* curl itself failing: exit `code` with nothing printed. */
+static void curl_exits(int n, int code)
+{
+    char path[900];
+    snprintf(path, sizeof path, "%s/answer.%d", g_dir, n);
+    FILE *f = fopen(path, "w");
+    fprintf(f, "EXIT %d", code);
     fclose(f);
 }
 
@@ -234,6 +246,57 @@ void test_api_agent(void)
         const char *t = x ? strstr(x, "\"tool_use_id\":\"t\"") : NULL;
         CHECK(t && strstr(t, "\"content\":\"error ") && strstr(t, "\"is_error\":true"));
         free(x);
+    }
+
+    CASE("curl timed out (exit 28): not sent again -- the API may have answered and billed -- and said so");
+    jobs_reset(&a);
+    fresh();
+    curl_exits(1, 28);
+    answer(2, OK200, "{\"content\":[],\"stop_reason\":\"end_turn\",\"usage\":{}}");
+    agent_cmd(&a, self, "");
+    ask_and_wait(&a, "slow", "failed");
+    CHECK_EQ(calls(), 1);
+    CHECK(strstr(a.status, "did not answer within 300 s (curl timed out) - not sent again") != NULL);
+
+    CASE("curl could not connect (exit 7): the request never reached the API, so it is sent again");
+    jobs_reset(&a);
+    fresh();
+    curl_exits(1, 7);
+    answer(2, OK200, "{\"content\":[{\"type\":\"text\",\"text\":\"x\"}],\"stop_reason\":\"end_turn\",\"usage\":{}}");
+    ask_and_wait(&a, "flaky", "done");
+    CHECK_EQ(calls(), 2);
+
+    CASE("max_tokens: the run ends, saying the answer ran too long");
+    jobs_reset(&a);
+    fresh();
+    answer(1, OK200, "{\"content\":[{\"type\":\"text\",\"text\":\"...\"}],\"stop_reason\":\"max_tokens\",\"usage\":{}}");
+    ask_and_wait(&a, "long", "too long");
+    CHECK(strstr(a.status, "ran past 16,000 tokens") != NULL);
+
+    CASE("a model vtt has no price for: the spend cap is said not to apply, not silently off");
+    jobs_reset(&a);
+    fresh();
+    answer(1, OK200, "{\"content\":[{\"type\":\"text\",\"text\":\"x\"}],\"stop_reason\":\"end_turn\",\"usage\":{}}");
+    agent_cmd(&a, self, " --model claude-opus-4-8 --cap 0.50");
+    ask_and_wait(&a, "older", "done");
+    CHECK(strstr(a.status, "claude-opus-4-8 is not in vtt's price table: the $0.50 cap does not apply, only the 25-call cap") != NULL);
+    agent_cmd(&a, self, "");
+
+    CASE("the session log has the run's lines and never the key");
+    {
+        char lp[900];
+        snprintf(lp, sizeof lp, "%s/session.log", sb.dir);
+        char k2[1000];
+        snprintf(k2, sizeof k2, ":log %s\r", lp);
+        press(&a, k2);
+        CHECK(slog_on(&a.slog));
+        jobs_reset(&a);
+        fresh();
+        answer(1, OK200, "{\"content\":[{\"type\":\"text\",\"text\":\"x\"}],\"stop_reason\":\"end_turn\",\"usage\":{}}");
+        ask_and_wait(&a, "logged", "done");
+        CHECK(file_has(lp, "claude: job 1 done"));
+        CHECK(!file_has(lp, KEY) && !file_has(lp, "KLMN"));
+        press(&a, ":log off\r");
     }
 
     CASE("no key anywhere: the run says so, and calls nothing");
@@ -586,8 +649,30 @@ void test_api_key(void)
     CHECK(strstr(a.status, "each :ask now starts the Claude agent") != NULL);
     CHECK(strstr(a.agent_cmd, KEY) == NULL);
 
-    CASE("a :agent command agent gets no key from vtt: vtt never puts it in the environment");
-    CHECK(getenv("ANTHROPIC_API_KEY") == NULL);
+    CASE("a :agent command agent gets no key from vtt: its real environment, dumped, has none (a key in the keyring)");
+    {
+        char envf[900], c[1200];
+        snprintf(envf, sizeof envf, "%s/agent.env", sb.dir);
+        snprintf(c, sizeof c, ":agent command env > '%s'; echo end-of-env >> '%s'\r", envf, envf);
+        press(&a, c);
+        CHECK(ctl_blank_map(&a, sb.dir, 8, 6));
+        press(&a, ":ask anything\r");
+        CHECK(pump_until_file(&a, envf, "end-of-env"));
+        CHECK(file_has(envf, "VTT_JOB="));                             /* it is the agent's own environment */
+        CHECK(!file_has(envf, "ANTHROPIC_API_KEY") && !file_has(envf, "sk-test") && !file_has(envf, "KLMN"));
+        CHECK(pump_until_reaped(&a));
+    }
+
+    CASE(":agent key remove with the variable set still removes a stored key, saying the variable is the one in use");
+    setenv("ANTHROPIC_API_KEY", KEY, 1);
+    press(&a, ":agent key remove\r");
+    CHECK_EQ(a.modal, MODAL_CONFIRM_KEY);
+    CHECK(frame_has(&a, &r, "from your keyring (ANTHROPIC_API_KEY is used while set)."));
+    press(&a, "y");
+    CHECK(access(secret, F_OK) != 0);
+    press(&a, ":agent key remove\r");
+    CHECK(strstr(a.status, "no API key is stored - the one in use is ANTHROPIC_API_KEY") != NULL);
+    unsetenv("ANTHROPIC_API_KEY");
 
     unsetenv("VTT_CLAUDE_CURL");
     app_free(&a);
@@ -725,6 +810,15 @@ void test_options(void)
         CHECK(frame_has(&a, &r, "about $0.75 over 2 runs, $0.25 this month"));
     }
 
+    CASE("a short terminal: the list scrolls so the selection stays on screen");
+    rnd_resize(&r, 80, 12);
+    press(&a, "G");
+    CHECK(frame_has(&a, &r, "Spent so far"));
+    press(&a, "g");
+    CHECK(frame_has(&a, &r, "Agent  "));
+    CHECK(!frame_has(&a, &r, "Spent so far"));
+    rnd_resize(&r, 100, 30);
+
     CASE("esc and q go back to the menu; the menu has Options before Quit");
     press(&a, "q");
     CHECK_EQ(a.screen, SCREEN_MENU);
@@ -849,11 +943,20 @@ void test_ask_agent(void)
     CHECK_EQ(calls(), 1);
     jobs_reset(&a);
 
-    CASE("claude with its key in the keyring: the box shows it; and once chosen, an :ask just starts it");
+    CASE("claude with its key in the keyring: the box shows it, looked up once when it opens, never a frame");
     a.settings.agent = AGENT_KIND_UNSET;
     app_agent_apply(&a);
     press(&a, ":ask a hall\r");
-    CHECK(frame_has(&a, &r, "the Claude API agent  (key: keyring ...KLMN)"));
+    {
+        char stp[900];
+        snprintf(stp, sizeof stp, "%s/st.argv", sb.dir);
+        char *before = slurp(stp);
+        for (int i = 0; i < 5; i++) CHECK(frame_has(&a, &r, "the Claude API agent  (key: keyring ...KLMN)"));
+        char *after = slurp(stp);
+        CHECK(before && after && !strcmp(before, after));              /* five frames, no secret-tool run */
+        free(before);
+        free(after);
+    }
     press(&a, "\x1b");
     a.settings.agent = AGENT_KIND_CLAUDE;
     app_agent_apply(&a);

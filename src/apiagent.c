@@ -14,6 +14,7 @@
 #include "ctl.h"
 #include "json.h"
 #include "proc.h"
+#include "request.h"
 #include "store.h"
 #include "util.h"
 
@@ -136,9 +137,11 @@ static char *ask_vtt(Run *r, const char *req, size_t *alen, char *err, size_t er
 /* A line on the GM's status line, for an end the GM must hear of. */
 static void tell_gm(Run *r, const char *line)
 {
-    char req[400], q[300];
-    size_t k = 0;
-    for (const char *p = line; *p && k + 2 < sizeof q; p++) {
+    /* One quoted word on the channel: under CTL_WORD_MAX once unescaped, or
+     * the line is refused and the GM hears only the exit status. */
+    char req[600], q[CTL_WORD_MAX * 2];
+    size_t k = 0, plain = 0;
+    for (const char *p = line; *p && k + 2 < sizeof q && plain + 1 < CTL_WORD_MAX; p++, plain++) {
         if (*p == '"' || *p == '\\') q[k++] = '\\';
         q[k++] = *p == '\n' ? ' ' : *p;
     }
@@ -289,7 +292,14 @@ static void read_http(ByteBuf *out, Http *h)
         char *eoh = NULL;
         for (char *q = p; q + 1 < end; q++) {
             if (q[0] == '\n' && (q[1] == '\n' || (q[1] == '\r' && q + 2 < end && q[2] == '\n'))) { eoh = q; break; }
-            if (q[0] == '\n' && !strncasecmp(q + 1, "retry-after:", 12)) h->retry_after = strtol(q + 13, NULL, 10);
+            if (q[0] == '\n' && !strncasecmp(q + 1, "retry-after:", 12)) {
+                /* Seconds, or an HTTP date: a date leaves the backoff its own. */
+                char *e;
+                const char *v = q + 13;
+                while (*v == ' ') v++;
+                long secs = strtol(v, &e, 10);
+                h->retry_after = e > v && (*e == '\r' || *e == '\n') ? secs : -1;
+            }
         }
         if (!eoh) { p = end; break; }
         p = eoh + (eoh[1] == '\n' ? 2 : 3);
@@ -323,10 +333,19 @@ static int call_api(Run *r, const ByteBuf *body, ByteBuf *out, Http *h, char *er
     return 0;
 }
 
+/* curl's exits that mean the request never reached the API: resolving,
+ * connecting, TLS, a connection dropped before an answer began. A timeout
+ * (28) is not one: the API may have answered, and billed, after curl gave
+ * up, so it is never sent again. */
+static int curl_never_reached(int code)
+{
+    return code == 5 || code == 6 || code == 7 || code == 35 || code == 52 || code == 55 || code == 56;
+}
+
 static int retryable(const Http *h)
 {
-    return h->status == 0 || h->status == 429 || h->status == 500 || h->status == 502 ||
-           h->status == 503 || h->status == 529;
+    if (h->status == 0) return curl_never_reached(h->curl);
+    return h->status == 429 || h->status == 500 || h->status == 502 || h->status == 503 || h->status == 529;
 }
 
 static void api_message(const Http *h, char *msg, size_t sz)
@@ -334,7 +353,9 @@ static void api_message(const Http *h, char *msg, size_t sz)
     char err[160];
     JsonVal *doc = h->body_len ? json_parse(h->body, h->body_len, err, sizeof err) : NULL;
     const char *m = doc ? json_text(json_get(json_get(doc, "error"), "message")) : NULL;
-    if (h->status == 0) snprintf(msg, sz, "curl could not reach the API (curl exit %d)", h->curl);
+    if (h->status == 0 && h->curl == 28) snprintf(msg, sz, "the API did not answer within " CURL_TIME_S " s (curl timed out) - not sent again, since it may have been billed");
+    else if (h->status == 0 && h->curl == 127) snprintf(msg, sz, "curl could not be run (exit 127)");
+    else if (h->status == 0) snprintf(msg, sz, "curl could not reach the API (curl exit %d)", h->curl);
     else snprintf(msg, sz, "the API said %d%s%.200s", h->status, m ? ": " : "", m ? m : "");
     json_free(doc);
 }
@@ -478,6 +499,13 @@ int apiagent_main(const ApiAgentCfg *cfg)
     add_user_text(r, prompt);
     free(prompt);
     say_log("job %d: %s, %s effort, key from the %s", r->job, r->cfg.model, r->cfg.effort, apikey_source_name(src));
+    if (r->cfg.cap > 0 && !price_of(r->cfg.model)) {
+        /* Said, not silent: the GM set a cap and believes it holds. */
+        char line[300];
+        snprintf(line, sizeof line, "%.60s is not in vtt's price table: the $%.2f cap does not apply, only the %d-call cap",
+                 r->cfg.model, r->cfg.cap, r->cfg.calls);
+        tell_gm(r, line);
+    }
 
     ByteBuf body, out;
     bb_init(&body, 64 * 1024);

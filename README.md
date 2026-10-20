@@ -1424,7 +1424,7 @@ the Claude agent has spent so far.
 
 | key | does |
 |---|---|
-| `j` `k` | move between the settings |
+| `j` `k` | move between the settings; `g` `G` the first and last |
 | `enter` | change one: the next value, or type one in |
 | `h` `l` | the value before or after, for a setting of a few values |
 | `d` | on the API key: remove the stored key, asking first |

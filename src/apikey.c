@@ -88,7 +88,7 @@ static ApiKeySource from_file(char *key, size_t sz, char *err, size_t errsz)
     }
     if (st.st_mode & 077) {
         close(fd);
-        snprintf(err, errsz, "%s can be read by others - chmod 600 %s", path, path);
+        snprintf(err, errsz, "the key file can be read by others - chmod 600 %s", path);
         return APIKEY_NONE;
     }
     ssize_t n = read(fd, key, sz - 1);
@@ -113,6 +113,13 @@ ApiKeySource apikey_find(char *key, size_t sz, char *err, size_t errsz)
         str_lcpy(key, env, sz);
         return APIKEY_ENV;
     }
+    return apikey_find_stored(key, sz, err, errsz);
+}
+
+ApiKeySource apikey_find_stored(char *key, size_t sz, char *err, size_t errsz)
+{
+    err[0] = '\0';
+    key[0] = '\0';
     ByteBuf out;
     bb_init(&out, 256);
     int st = keyring_run(LOOKUP, NULL, 0, &out);

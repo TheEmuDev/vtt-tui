@@ -255,6 +255,7 @@ void app_options_open(App *a);
 void app_options_key(App *a, Key k);
 void app_options_prompt(App *a, const char *text);
 void app_options_key_changed(App *a);
+int  app_options_visible_rows(const App *a);
 /* Row i's label and value; 1 when it does not apply now (drawn dim). */
 int  app_options_row(const App *a, int row, char *label, size_t lsz, char *value, size_t vsz);
 

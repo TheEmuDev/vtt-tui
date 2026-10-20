@@ -101,11 +101,14 @@ int app_options_row(const App *a, int row, char *label, size_t lsz, char *value,
         break;
     }
     case OPT_EFFORT:    snprintf(value, vsz, "%s", s->effort); dim = !claude; break;
-    case OPT_CAP:
-        if (s->cap > 0) snprintf(value, vsz, "$%.2f a job", s->cap);
+    case OPT_CAP: {
+        const char *id = apiagent_model_id(s->model);
+        int priced = id && apiagent_cost(id, 0, 0, 0, 0) >= 0;
+        if (s->cap > 0) snprintf(value, vsz, "$%.2f a job%s", s->cap, priced ? "" : " - not for this model: its price is not in vtt's table");
         else snprintf(value, vsz, "none");
         dim = !claude;
         break;
+    }
     case OPT_CALLS:     snprintf(value, vsz, "%d a job", s->calls); dim = !claude; break;
     case OPT_FALLBACKS: snprintf(value, vsz, "%s", s->fallbacks ? "on - a declined request is tried on another model" : "off"); dim = !claude; break;
     case OPT_CHANNEL:   snprintf(value, vsz, "%s", s->channel ? "on" : "off - :agent on opens it"); break;
@@ -233,22 +236,29 @@ void app_options_prompt(App *a, const char *text)
     if (row == OPT_COMMAND) app_agent_choice_continue(a);           /* from the choice box: its job */
 }
 
+/* The rows the screen has room for: below the title and the heading, above
+ * the status line and the key bar (draw_options). */
+int app_options_visible_rows(const App *a)
+{
+    return imax(1, (a->rnd ? a->rnd->h : 24) - 6);
+}
+
 void app_options_key(App *a, Key k)
 {
     ListState *st = &a->options;
-    int rows = OPT_COUNT;
+    int rows = OPT_COUNT, vis = app_options_visible_rows(a);
     if (k.kind == KEY_ESC) { a->screen = SCREEN_MENU; return; }
-    if (k.kind == KEY_DOWN) { ui_list_move(st, rows, 1, rows); return; }
-    if (k.kind == KEY_UP)   { ui_list_move(st, rows, -1, rows); return; }
+    if (k.kind == KEY_DOWN) { ui_list_move(st, rows, 1, vis); return; }
+    if (k.kind == KEY_UP)   { ui_list_move(st, rows, -1, vis); return; }
     if (k.kind == KEY_ENTER) { edit(a, st->sel); return; }
     if (k.kind == KEY_RIGHT) { step(a, st->sel, 1); return; }
     if (k.kind == KEY_LEFT)  { step(a, st->sel, -1); return; }
     if (k.kind != KEY_CHAR || k.mods) return;
     switch (k.ch) {
-    case 'j': ui_list_move(st, rows, 1, rows); return;
-    case 'k': ui_list_move(st, rows, -1, rows); return;
-    case 'g': st->sel = 0; return;
-    case 'G': st->sel = rows - 1; return;
+    case 'j': ui_list_move(st, rows, 1, vis); return;
+    case 'k': ui_list_move(st, rows, -1, vis); return;
+    case 'g': ui_list_move(st, rows, -rows, vis); return;
+    case 'G': ui_list_move(st, rows, rows, vis); return;
     case 'l': step(a, st->sel, 1); return;
     case 'h': step(a, st->sel, -1); return;
     case 'd': if (st->sel == OPT_KEY) app_agent_setting(a, "key remove"); return;

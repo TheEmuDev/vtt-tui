@@ -132,7 +132,8 @@ into vtt. A typed key goes to the **system keyring**, not a file and not the env
 
 | what comes back | what the agent does |
 |---|---|
-| 429, 500, 529, or curl could not connect | waits `retry-after` (else 2, 4, 8 s), three tries, then ends the run saying why |
+| 429, 500, 502, 503, 529, or curl could not reach the API (exits 5, 6, 7, 35, 52, 55, 56) | waits `retry-after` in seconds (else, or for a date, 2, 4, 8 s) and sends it again, up to three times (four attempts), then ends the run saying why |
+| curl timed out (exit 28) | ends the run at once: the API may have answered, and billed, after curl gave up, so it is never sent again |
 | 400, 401, 403, 404, 413 | ends the run at once: the API's message on the GM's line (`job N say`), the status in the log |
 | `stop_reason: refusal` (after any fallback) | ends the run: "Claude declined this job (CATEGORY)" |
 | `stop_reason: max_tokens` | ends the run: "the answer ran past 16,000 tokens" |
@@ -437,4 +438,17 @@ Where the code left the plan, and what the build found:
   the map's own save (import.c moved onto it); `stream_read` moved from ctl.c to util.c;
   `ctl_ask_pid` came out of `ctl_client_main`; the test pumps for started agents moved to
   harness.c.
+- **The review (Fable, 2026-10-20), eight findings, all reproduced and fixed:** the choice
+  box looked the key up every frame (now once, when it opens); the test that a command agent
+  gets no key checked the test's own environment (now the agent's, dumped; a planted leak
+  fails it); a curl timeout was sent again up to three times, each perhaps billed (now never,
+  and said; only exits that never reached the API are retried); the spend cap was silently off
+  for a model vtt has no price for (now said at the run's start and on the Options row);
+  `:agent key remove` with the variable set left a stored key (now removes it); a `job N say`
+  past a channel word was refused (now cut to fit; the chmod message names the path once); an
+  HTTP-date `Retry-After` read as 0 s (now the backoff); Options ran off a short terminal (now
+  it scrolls). Of the tests listed above, two took another form: the Options golden frame is
+  the no-key one only (the key row's other values are checked as text), and "a run already
+  going keeps its own" holds by construction (the settings reach a run as its command line
+  when it starts) rather than by a test.
 

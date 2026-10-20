@@ -313,6 +313,7 @@ static const KeyDoc MENU[] = {
 static const KeyDoc OPTIONS[] = {
     GROUP("Options"),
     { "j  k",     "move between the settings",         "j/k", "move" },
+    KEY("g  G",   "first / last"),
     { "enter",    "change it: the next value, or type one in", NULL, "change" },
     KEY("h  l",   "the value before / after, for a setting of a few values"),
     { "d",        "on the API key: remove the stored key, asking first", NULL, "remove key" },
