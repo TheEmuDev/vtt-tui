@@ -38,6 +38,15 @@ typedef enum {
  * prompt, no profiler overlay and no hint that a note exists. */
 typedef enum { VIEW_GM, VIEW_PLAYERS } View;
 
+/* The ? page (app_draw.c): which screen to go back to, which key map to lead
+ * with, and how far down it is scrolled. */
+typedef struct {
+    Screen   from;
+    KeyMapId id;
+    int      top;
+    int      lines;    /* what the last draw measured, for clamping */
+} HelpView;
+
 typedef enum { PCAM_FOLLOW, PCAM_PARTY, PCAM_HOLD } PlayersCamera;
 
 typedef enum {
@@ -330,12 +339,7 @@ typedef struct {
     char     stamp_name[MAP_NAME_MAX];   /* "" for a copy not yet saved */
     int      stamp_turns, stamp_mirrored;
 
-    /* The ? page: which screen to go back to, which key map to lead with, and
-     * how far down it is scrolled. */
-    Screen   help_from;
-    KeyMapId help_id;
-    int      help_top;
-    int      help_lines;   /* what the last draw measured, for clamping */
+    HelpView help;
 
     /* Cards (docs/CARDS.md): the box beside the map is on unless :card off
      * says otherwise; :card's view is scrolled to card_top, and names whose

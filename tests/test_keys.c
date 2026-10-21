@@ -129,8 +129,8 @@ void test_help_page(void)
     CASE("? opens the page and remembers where it came from");
     press(&a, "?");
     CHECK_EQ(a.screen, SCREEN_HELP);
-    CHECK_EQ(a.help_from, SCREEN_PLAY);
-    CHECK_EQ(a.help_id, KEYS_PLAY);
+    CHECK_EQ(a.help.from, SCREEN_PLAY);
+    CHECK_EQ(a.help.id, KEYS_PLAY);
 
     CASE("the page leads with the mode you asked from");
     rnd_begin(&r);
@@ -170,7 +170,7 @@ void test_help_page(void)
     bb_putc(&top, '\0');
 
     press(&a, "\x04");                             /* ctrl-d */
-    CHECK(a.help_top > 0);
+    CHECK(a.help.top > 0);
     rnd_begin(&r);
     app_draw(&a);
     bb_init(&f, 32768);
@@ -186,8 +186,8 @@ void test_help_page(void)
     CASE("a key wider than its column is shown whole, on a line of its own");
     {
         int seen_link = 0, seen_scene = 0, seen_serve = 0;
-        for (int t = 0; t < a.help_lines; t += 10) {
-            a.help_top = t;
+        for (int t = 0; t < a.help.lines; t += 10) {
+            a.help.top = t;
             rnd_begin(&r);
             app_draw(&a);
             bb_init(&f, 32768);
@@ -201,34 +201,34 @@ void test_help_page(void)
         CHECK(seen_link);
         CHECK(seen_scene);
         CHECK(seen_serve);
-        a.help_top = 0;
+        a.help.top = 0;
     }
 
     CASE("j and k scroll, and the top does not go negative");
-    CHECK_EQ(a.help_top, 0);
+    CHECK_EQ(a.help.top, 0);
     press(&a, "k");
-    CHECK_EQ(a.help_top, 0);
+    CHECK_EQ(a.help.top, 0);
     press(&a, "jjj");
-    CHECK_EQ(a.help_top, 3);
+    CHECK_EQ(a.help.top, 3);
     press(&a, "k");
-    CHECK_EQ(a.help_top, 2);
+    CHECK_EQ(a.help.top, 2);
 
     /* A scroll is a request until the page lays out: only the draw knows how
      * long the page is, which is what makes G right on the first keypress. */
     CASE("G goes to the end and stops there");
     press(&a, "G");
     rnd_begin(&r); app_draw(&a);
-    int end = a.help_top;
+    int end = a.help.top;
     CHECK(end > 0);
-    CHECK(end < a.help_lines);                 /* the last line stays on screen */
+    CHECK(end < a.help.lines);                 /* the last line stays on screen */
 
     press(&a, "jjjjj");
     rnd_begin(&r); app_draw(&a);
-    CHECK_EQ(a.help_top, end);
+    CHECK_EQ(a.help.top, end);
 
     CASE("g goes back to the top");
     press(&a, "g");
-    CHECK_EQ(a.help_top, 0);
+    CHECK_EQ(a.help.top, 0);
 
     CASE("q closes it, back to where it was called from");
     press(&a, "q");
@@ -250,13 +250,13 @@ void test_help_page(void)
     press(&a, "\r");
     CHECK_EQ(a.play.grabbed, 1);
     press(&a, "?");
-    CHECK_EQ(a.help_id, KEYS_PLAY_GRABBED);
+    CHECK_EQ(a.help.id, KEYS_PLAY_GRABBED);
     press(&a, "q");
 
     Key f1 = { KEY_F1, 0, 0 };
     app_key(&a, f1);
     press(&a, "?");
-    CHECK_EQ(a.help_id, KEYS_BUILD);
+    CHECK_EQ(a.help.id, KEYS_BUILD);
     press(&a, "q");
     CHECK_EQ(a.screen, SCREEN_EDITOR);
 

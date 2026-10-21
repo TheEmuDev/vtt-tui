@@ -1188,9 +1188,9 @@ KeyMapId app_keymap_id(const App *a)
 
 static void help_open(App *a)
 {
-    a->help_from = a->screen;
-    a->help_id   = app_keymap_id(a);
-    a->help_top  = 0;
+    a->help.from = a->screen;
+    a->help.id   = app_keymap_id(a);
+    a->help.top  = 0;
     a->screen    = SCREEN_HELP;
 }
 
@@ -1199,9 +1199,9 @@ static void help_open(App *a)
 int app_help_order(const App *a, const KeyMap *out[KEYS_COUNT])
 {
     int n = 0;
-    out[n++] = keys_map(a->help_id);
+    out[n++] = keys_map(a->help.id);
     for (int i = 0; i < KEYS_COUNT; i++)
-        if (i != (int)a->help_id) out[n++] = keys_map((KeyMapId)i);
+        if (i != (int)a->help.id) out[n++] = keys_map((KeyMapId)i);
     return n;
 }
 
@@ -1216,23 +1216,23 @@ static void help_key(App *a, Key k)
     int page = imax(1, a->rnd->h - 6);
 
     if (k.kind == KEY_CHAR && (k.mods & MOD_CTRL)) {
-        if (k.ch == 'd') a->help_top += page;
-        if (k.ch == 'u') a->help_top -= page;
-    } else if (k.kind == KEY_DOWN)  a->help_top += 1;
-    else if (k.kind == KEY_UP)      a->help_top -= 1;
-    else if (k.kind == KEY_ESC)     a->screen = a->help_from;
+        if (k.ch == 'd') a->help.top += page;
+        if (k.ch == 'u') a->help.top -= page;
+    } else if (k.kind == KEY_DOWN)  a->help.top += 1;
+    else if (k.kind == KEY_UP)      a->help.top -= 1;
+    else if (k.kind == KEY_ESC)     a->screen = a->help.from;
     else if (k.kind == KEY_CHAR && k.mods == 0) {
         switch (k.ch) {
-        case 'j': a->help_top += 1; break;
-        case 'k': a->help_top -= 1; break;
-        case 'g': a->help_top  = 0; break;
-        case 'G': a->help_top  = HELP_END; break;
-        case 'q': case '?': a->screen = a->help_from; break;
+        case 'j': a->help.top += 1; break;
+        case 'k': a->help.top -= 1; break;
+        case 'g': a->help.top  = 0; break;
+        case 'G': a->help.top  = HELP_END; break;
+        case 'q': case '?': a->screen = a->help.from; break;
         default: break;
         }
     }
 
-    if (a->help_top < 0) a->help_top = 0;
+    if (a->help.top < 0) a->help.top = 0;
 }
 
 /* ---------------------------------------------------------------- input */

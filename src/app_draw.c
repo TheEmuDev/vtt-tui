@@ -59,7 +59,7 @@ static void draw_help(App *a)
     const KeyMap *maps[KEYS_COUNT];
     int n = app_help_order(a, maps);
 
-    a->help_lines = ui_keypage(a->rnd, a->th, maps, n, &a->help_top,
+    a->help.lines = ui_keypage(a->rnd, a->th, maps, n, &a->help.top,
                                a->ascii ? &BOX_ASCII : &BOX_ROUND);
 }
 

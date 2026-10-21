@@ -848,7 +848,7 @@ void test_summon(void)
     CHECK(app_summoning(&a) && pl->range.band == 2);
     press(&a, "?");
     CHECK_EQ(a.screen, SCREEN_HELP);
-    CHECK_EQ(a.help_id, KEYS_PLAY_SUMMON);
+    CHECK_EQ(a.help.id, KEYS_PLAY_SUMMON);
     press(&a, "\x1b");
     CHECK_EQ(a.screen, SCREEN_PLAY);
 
