@@ -115,6 +115,7 @@ tools/embed.sh  after editing web/index.html or docs/AGENTS.md; tools/blit_wasm.
 make install-skill  tools/skill/SKILL.md to ~/.claude/skills/vtt/ (SKILLDIR= elsewhere)
 ./vtt map.vtt --serve 7777      serve; a raw client: printf 'VTT1\n' | nc 127.0.0.1 7777
 ./vtt map --bench keys --bench-clients 4   the frame with four watchers attached
+./vtt map --bench keys --bench-clients 4 --bench-stalled   the last never reads: what vtt queues for it, said at the end
 ./vtt map.vtt --script keys --dump-frame --size 100x30     render one frame as text
 ./vtt map.vtt --script keys --dump-frame --cells --players   the same with every cell's colors (`rnd_dump_cells`), and the players' frame (`app_draw_view`; blank outside play mode, as `app_frame` sends it) in place of the GM's
 ./vtt map.vtt --bench keys --bench-loops 400 --trace t.json  headless timing + Chrome trace

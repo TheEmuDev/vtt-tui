@@ -1720,6 +1720,7 @@ a plain function with the stubs as parameters.
 | `make fuzz` | not a timing tool: libFuzzer on the map loader, the one untrusted input |
 | `tools/sight.sh [bin]` | `fog.sight` per fog scenario, which the zone table cannot show |
 | `--bench-clients N` | attaches N loopback watchers to a bench run, so a row can carry the remote view's cost |
+| `--bench-stalled` | the last of those watchers never reads; the bench prints what vtt queued for it at the end (step 7's lag bound: at most a FULL) |
 | `--bench-names` | those watchers say they are phones P1, P2...: rows for whispers and the names offered |
 | `--bench-record FILE` | saves the stream the first watcher is sent, for `tools/pagebench.js` to replay |
 | `tools/pagebench.sh` | the phone page's table above: records each scenario, verifies it is drawn right, and replays it through the page in node; `PAGE=x.html` to A/B a page before embedding it; exits 1 on any failure |

@@ -347,6 +347,7 @@ run "play, counters"       "$MOB"    80x24  ':play\rtsvhp 9\r><><><><'
 run "play, clocks"         "$MOB"    80x24  ':play\r:clock Dragon 6\r:clock Ritual 8\r:tick Dragon 2\r:tick -2\r'
 run "play, 1 watcher"      "$MOB"    80x24  ':play\rjjllkkhh' "--bench-clients 1"
 run "play, 4 watchers"     "$MOB"    80x24  ':play\rjjllkkhh' "--bench-clients 4"
+run "play, a phone that stops reading" "$MOB" 80x24 ':play\rjjllkkhh' "--bench-clients 4 --bench-stalled"
 run "play, 4 watchers, differing" "$MOB" 80x24 ':play\rtsnhidden\rjjllkkhh' "--bench-clients 4"
 run "play, hidden, 4 watchers" "$HIDMOB" 80x24 ':play\rjjllkkhh' "--bench-clients 4"
 run "play, camera party, 4 watchers" "$MOB" 80x24 ':play\r:player camera party\rt\rllllhhhh\r' "--bench-clients 4"

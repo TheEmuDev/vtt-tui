@@ -40,6 +40,7 @@ typedef struct {
     const char *watch;              /* --watch host:port: be a mirror */
     int         bench_clients;      /* --bench-clients N: loopback watchers on a bench */
     int         bench_names;        /* --bench-names: they say they are P1, P2... as phones do */
+    int         bench_stalled;      /* --bench-stalled: the last of them never reads (docs/V2.md, step 7) */
     const char *bench_record;       /* --bench-record FILE: the first watcher's stream, saved */
     int         serve;              /* --serve: open the remote view at startup */
     int         serve_port;
@@ -93,6 +94,7 @@ static void usage(void)
         "  --no-pings         ignore taps from the phones on that server\n"
         "  --watch HOST:PORT  mirror a serving vtt in this terminal, read-only\n"
         "  --bench-clients N  attach N loopback watchers to a --bench run\n"
+        "  --bench-stalled    the last of them never reads: what vtt queues for it\n"
         "  --bench-names      those watchers are named phones, P1, P2...\n"
         "  --bench-record FILE  save the stream the first watcher is sent (tools/pagebench.sh)\n"
         "  --bench-pings      and have each of them ping every frame\n"
@@ -183,6 +185,7 @@ static int parse_args(Options *o, int argc, char **argv)
         else if (!strcmp(a, "--no-pings"))   o->serve_no_pings = 1;
         else if (!strcmp(a, "--bench-pings")) o->bench_pings = 1;
         else if (!strcmp(a, "--bench-names")) o->bench_names = 1;
+        else if (!strcmp(a, "--bench-stalled")) o->bench_stalled = 1;
         else if (!strcmp(a, "--bench-record") && i + 1 < argc) o->bench_record = argv[++i];
         else if (!strcmp(a, "--agent"))      o->agent = 1;
         else if (!strcmp(a, "--bench-ctl") && i + 1 < argc) o->bench_ctl = argv[++i];
@@ -533,7 +536,7 @@ static int run_headless(const Options *o)
                 if (ncf) {
                     prof_set_net((uint32_t)net_clients(&a.net), a.net.frame_bytes);
                     uint8_t sink[65536];
-                    for (int i = 0; i < ncf; i++) {
+                    for (int i = 0; i < ncf - (o->bench_stalled && ncf > 1); i++) {
                         ssize_t got;
                         while ((got = read(cfd[i], sink, sizeof sink)) > 0)
                             if (i == 0 && recf) fwrite(sink, 1, (size_t)got, recf);
@@ -553,6 +556,19 @@ static int run_headless(const Options *o)
             }
         }
         free(out_bytes);
+        /* What vtt holds for the watcher that never read: its queue, past
+         * what the kernel took (a FULL's worth at most, by the lag bound). */
+        if (o->bench_stalled && ncf > 1) {
+            size_t q = 0;
+            int    behind = 0;
+            for (int i = 0; i < a.net.ncl; i++)
+                if (a.net.cl[i].out_len - a.net.cl[i].out_off >= q) {
+                    q = a.net.cl[i].out_len - a.net.cl[i].out_off;
+                    behind = a.net.cl[i].behind;
+                }
+            fprintf(stderr, "vtt: the stalled watcher: %zu bytes queued by vtt%s, a FULL %zu; %u dropped\n",
+                    q, behind ? ", frames withheld" : "", a.net.full_len, a.net.dropped);
+        }
         for (int i = 0; i < ncf; i++) close(cfd[i]);
         if (recf) fclose(recf);
         free(ctl_req);
