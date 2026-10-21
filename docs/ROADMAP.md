@@ -42,6 +42,16 @@ Item 1 was decided 2026-09-27, the rest 2026-09-29.
   agent: a prompt-injection path), logs leaving the machine, or spending on evaluations
   without the user's go (the first task run folds into 26's live check). A plan first.
 
+- **28. The phone page tested in a real browser** (proposed 2026-10-21, with step 7's plan,
+  after the user asked for phone-side tests). What exists: suite `pagefeed` runs the page's
+  decoder under node, and `pagebench.js VERIFY=1` checks its pixels; nothing runs the page
+  whole (connecting, the name choice, reconnecting, a handout on screen, a turned screen). A
+  node script drives `chromium --headless` over its DevTools protocol (node's own WebSocket,
+  nothing installed) against a sandboxed `:serve`, with a phone's screen size and touch
+  emulated, and checks the canvas against the C decoder's frame. Skipped without Chromium, as
+  `pagefeed` is without node. Not taken: a mock browser in node (a second copy of the browser
+  to keep in step with the page). A plan first.
+
 - **1. Messages marked at the source**, if play testing of hidden creatures (built 2026-09-27)
   asks for it. While any creature is hidden, the players' screens show no status messages --
   safe, but costly when something stays hidden all session (no rolls, rounds or spotlight news
