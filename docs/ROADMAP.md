@@ -40,7 +40,7 @@ Item 1 was decided 2026-09-27, the rest 2026-09-29.
   evaluations, they go through a plan and the user's sign-off, and ship only if no
   evaluation gets worse. Not: an agent editing the guide itself (the guide steers every
   agent: a prompt-injection path), logs leaving the machine, or spending on evaluations
-  without the user's go (the first task run folds into 26's live check). **The plan: docs/AGENTLOOP.md** (written 2026-10-21, awaiting sign-off).
+  without the user's go (the first task run folds into 26's live check). **The plan: docs/AGENTLOOP.md** (signed off 2026-10-21, each question as recommended).
 
 - **28. The phone page tested in a real browser** (proposed 2026-10-21, with step 7's plan,
   after the user asked for phone-side tests). What exists: suite `pagefeed` runs the page's

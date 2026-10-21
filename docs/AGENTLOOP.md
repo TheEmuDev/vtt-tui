@@ -1,6 +1,7 @@
 # The agent features' improvement loop (ROADMAP 27)
 
-**Status:** a plan, written 2026-10-21, awaiting the user's sign-off. Nothing of it is built.
+**Status:** a plan, written 2026-10-21; signed off by the user the same day ("Go with your
+recommendations": counts only, `claude -p` with the skill, Sonnet with N = 3). Nothing of it is built.
 
 The user, 2026-10-21: "a self improvement loop in agent based features". What an agent is
 told (the skill, the guide, the Claude agent's prompt) should get better from evidence, with
@@ -159,7 +160,7 @@ part 3. A Fable review after each part.
 Nothing of this is on a key or a frame: no `PROF_ZONE`, no perf scenario. The evaluation
 run's cost goes in this doc and PERFORMANCE.md once measured.
 
-## Questions for the user
+## Questions for the user (answered 2026-10-21: each as recommended)
 
 1. **What the job record keeps.** Counts only, as above (recommended): the GM's feedback is
    the richest signal, but it is the GM's words about their game. Or also the feedback lines,
