@@ -23,6 +23,6 @@ description: Build or change maps for vtt, the terminal virtual tabletop -- enco
    standard input is the job and the exact calls to make (use those); exit once you have
    proposed, without waiting.
 5. A refusal is exit 1 with `vtt: error CLASS: line N: WHY` on stderr (no `line N` when the
-   request as a whole is refused) and nothing on stdout. `help VERB` shows how a request is
+   request as a whole is refused; a plan's ends `- nothing saved`) and nothing on stdout. `help VERB` shows how a request is
    written: `vtt --ctl 'help VERB'` while a vtt is taking requests, else a plan holding just
    that line (`--apply`, with `--new WxH` if there is no file yet; nothing is written).

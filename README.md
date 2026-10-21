@@ -1683,8 +1683,8 @@ waiting for the GM's review - :review 1
 
 `vtt map.vtt --apply plan.txt` runs the same requests against a map file without a live
 session and saves it (a plan that only reads, such as `dump`, leaves the file untouched);
-`--new WxH` creates an empty map first if the file does not exist. A plan is at most 64,896
-bytes.
+`--new WxH` creates an empty map first if the file does not exist, and removes it again if
+the plan fails or changes nothing. A plan is at most 64,896 bytes.
 If the map is open in a running vtt, the plan goes there instead, as a proposal for you to
 `:review`, and the file is not touched. With the channel off it is refused instead, and says so. `--wait
 SECONDS` then waits for your verdict: it exits 0 when you accept, 3 when the time runs out,
