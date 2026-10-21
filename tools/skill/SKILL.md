@@ -22,5 +22,6 @@ description: Build or change maps for vtt, the terminal virtual tabletop -- enco
    it answers until your job's event comes. If vtt started you (`:agent command`), your
    standard input is the job and the exact calls to make (use those); exit once you have
    proposed, without waiting.
-5. A refusal is exit 1 with `vtt: error CLASS: line N: WHY` on stderr and nothing on stdout;
-   `vtt --ctl 'help VERB'` shows how a request is written.
+5. A refusal is exit 1 with `vtt: error CLASS: line N: WHY` on stderr and nothing on stdout.
+   `help VERB` shows how a request is written: `vtt --ctl 'help VERB'` while a vtt is taking
+   requests, else a plan holding just that line (`--apply`; the file is not touched).
