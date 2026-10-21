@@ -166,6 +166,14 @@ typedef struct {
     int  up;
 } HandoutState;
 
+/* The review (app_job.c): `slot` is the job ED_REVIEW shows (a slot of
+ * World.jobs, -1 for none), and the review's own box (v) is held here, not
+ * in the editor's visual mode: on, and its anchor. */
+typedef struct {
+    int slot;
+    int box, ax, ay;
+} ReviewState;
+
 typedef struct {
     /* The map, its log, the jobs, the events and the request being run: what
      * a request handler is given (world.h). */
@@ -259,11 +267,7 @@ typedef struct {
      * seconds; the GM's screen alone (never the players' frame), and only
      * while until_ms is set. */
     Ping     agent_ring;
-    /* The review (app_job.c): `review` is the job ED_REVIEW shows (a slot of
-     * World.jobs, -1 for none), and the review's own box (v) is held here,
-     * not in the editor's visual mode. */
-    int      review;
-    int      rv_box, rv_ax, rv_ay;
+    ReviewState review;
     /* Another writer of the map's file (app_disk.c): whether the file has
      * changed since vtt last read or wrote it (Map.disk), the change's
      * proposal (`disk_job`), and the file's bytes and identity as last seen,

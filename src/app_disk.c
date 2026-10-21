@@ -112,7 +112,7 @@ static void disk_read(App *a)
                 stuck(a, "the file changed on disk, and there is no room for another change to review");
                 a->disk_full = 1;
             } else {
-                if (a->review == slot) app_review_leave(a);      /* its change set is replaced */
+                if (a->review.slot == slot) app_review_leave(a);      /* its change set is replaced */
                 free(a->disk_new);
                 a->disk_new = now->base;
                 a->disk_new_len = now->base_len;
@@ -213,7 +213,7 @@ void app_disk_saved(App *a, int over)
      * (:w!), or left behind when the map was saved as another file. */
     int slot = a->disk_state == DISK_PROPOSED ? disk_slot(a) : -1;
     if (slot >= 0) {
-        if (a->review == slot) app_review_leave(a);
+        if (a->review.slot == slot) app_review_leave(a);
         a->world.jobs[slot].state = JOB_SCRAPPED;
         world_job_thread_add(&a->world.jobs[slot], '-', over ? "written over by :w!"
                                                      : "left behind: the map was saved as another file");

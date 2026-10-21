@@ -46,7 +46,7 @@ void app_init(App *a, Term *t, Renderer *r)
     a->dirty   = 1;
     a->pending_token = -1;
     a->last_acting   = -1;
-    a->review        = -1;
+    a->review.slot        = -1;
     undo_init(&a->world.undo);
     undo_init(&a->world.ctl_sundo);
     slog_init(&a->slog);
@@ -1703,7 +1703,7 @@ static void app_key_dispatch(App *a, Key k)
             return;
         }
         if (a->ed.mode == ED_VISUAL || a->play.visual || (a->ed.mode == ED_WALL && a->ed.has_anchor) ||
-            a->ruler.active || (a->ed.mode == ED_REVIEW && a->rv_box)) {
+            a->ruler.active || (a->ed.mode == ED_REVIEW && a->review.box)) {
             app_set_status(a, "esc first - the box or the ruler would stretch onto the other floor");
             return;
         }

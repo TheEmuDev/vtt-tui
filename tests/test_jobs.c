@@ -158,7 +158,7 @@ void test_jobs(void)
     CASE("esc drops the box first, then leaves; the change stays waiting");
     press(&a, "v\x1b");
     CHECK_EQ(a.ed.mode, ED_REVIEW);
-    CHECK_EQ(a.rv_box, 0);
+    CHECK_EQ(a.review.box, 0);
     press(&a, "\x1b");
     CHECK_EQ(a.ed.mode, ED_NORMAL);
     CHECK(strstr(a.status, "#1 stays ready") != NULL);
@@ -208,11 +208,11 @@ void test_jobs(void)
     if (s4 < 0) goto out;
     propose_water(&a, s4, 14, 15, 10, "");
     press(&a, ":review 2\r");
-    CHECK_EQ(a.review, s3);
+    CHECK_EQ(a.review.slot, s3);
     press(&a, "n");
-    CHECK_EQ(a.review, s4);
+    CHECK_EQ(a.review.slot, s4);
     press(&a, "N");
-    CHECK_EQ(a.review, s3);
+    CHECK_EQ(a.review.slot, s3);
     press(&a, "\x1b");
 
     CASE(":ask! lands as soon as it comes; in play mode it waits, and lands back in build mode");
@@ -246,19 +246,19 @@ void test_jobs(void)
     press(&a, ":review\r");
     CHECK_EQ(a.ed.mode, ED_REVIEW);
     app_key(&a, f2);
-    CHECK_EQ(a.review, -1);
+    CHECK_EQ(a.review.slot, -1);
     CHECK(a.ed.mode != ED_REVIEW);
     app_key(&a, f1);
     press(&a, ":review\r:play\r");
-    CHECK_EQ(a.review, -1);
+    CHECK_EQ(a.review.slot, -1);
     app_key(&a, f1);
     char rm[32];
     snprintf(rm, sizeof rm, ":review %d\r", a.world.jobs[s7].num);       /* by number: #2 and #3 still wait */
     press(&a, rm);
-    CHECK_EQ(a.review, s7);
+    CHECK_EQ(a.review.slot, s7);
     snprintf(rm, sizeof rm, ":ask %d remove\r", a.world.jobs[s7].num);
     press(&a, rm);
-    CHECK_EQ(a.review, -1);
+    CHECK_EQ(a.review.slot, -1);
     CHECK_EQ(a.ed.mode, ED_NORMAL);
 
     CASE("a : command over a review goes back to it; esc on the feedback prompt keeps it");
@@ -272,7 +272,7 @@ void test_jobs(void)
     char rv[32];
     snprintf(rv, sizeof rv, ":review %d\r", a.world.jobs[s8].num);
     press(&a, rv);
-    CHECK_EQ(a.review, s8);
+    CHECK_EQ(a.review.slot, s8);
     press(&a, ":jobs\r");
     CHECK_EQ(a.ed.mode, ED_REVIEW);
     press(&a, "c\x1b");
@@ -285,7 +285,7 @@ void test_jobs(void)
     press(&a, "[");
     CHECK(strstr(a.status, "esc first") != NULL);
     press(&a, "\x1b");
-    CHECK_EQ(a.rv_box, 0);
+    CHECK_EQ(a.review.box, 0);
 
     CASE("the label says #N in the corner of what the change touches");
     draw(&a, &r);
@@ -306,9 +306,9 @@ void test_jobs(void)
     CHECK(s9 >= 0);
     if (s9 < 0) goto out;
     press(&a, rv);                                          /* s8 again */
-    int under = a.review;
+    int under = a.review.slot;
     propose_water(&a, s9, 6, 8, 9, "");
-    CHECK_EQ(a.review, under);
+    CHECK_EQ(a.review.slot, under);
     CHECK_EQ(a.ed.mode, ED_REVIEW);
     CHECK_EQ(a.world.jobs[s9].state, JOB_READY);
 

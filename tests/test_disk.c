@@ -523,7 +523,7 @@ void test_disk_whole(void)
     press(&a, cmd);
     CHECK(a.world.map && a.world.map->w == 2);
     CHECK_EQ(jobs_used(&a), 0);
-    CHECK_EQ(a.review, -1);
+    CHECK_EQ(a.review.slot, -1);
     CHECK(a.ed.mode != ED_REVIEW);
     CHECK(a.world.event_seq > seq && strstr(a.world.events[a.world.event_seq % EVENT_MAX].text, "map closed: ") != NULL);
     snprintf(cmd, sizeof cmd, ":e %s\r", path);

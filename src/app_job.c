@@ -25,7 +25,7 @@ static int ready_after(const App *a, int from, int dir)
 
 static void review_status(App *a)
 {
-    Job *j = &a->world.jobs[a->review];
+    Job *j = &a->world.jobs[a->review.slot];
     int conflicts = cs_check(&j->cs, a->world.map);
     char msg[256];
     snprintf(msg, sizeof msg, "#%d %.70s: %.110s%s%s", j->num, j->text[0] ? j->text : "an agent's change",
@@ -35,8 +35,8 @@ static void review_status(App *a)
 
 static void review_open(App *a, int slot)
 {
-    a->review = slot;
-    a->rv_box = 0;
+    a->review.slot = slot;
+    a->review.box = 0;
     a->ed.mode = ED_REVIEW;
     review_status(a);
 }
@@ -46,8 +46,8 @@ static void review_open(App *a, int slot)
 void app_review_leave(App *a)
 {
     if (a->ed.mode == ED_REVIEW) a->ed.mode = ED_NORMAL;
-    a->rv_box = 0;
-    a->review = -1;
+    a->review.box = 0;
+    a->review.slot = -1;
 }
 
 static void review_close(App *a, const char *why)
@@ -59,14 +59,14 @@ static void review_close(App *a, const char *why)
 /* After the reviewed job is done with: the next ready one, else out. */
 static void review_next_or_close(App *a)
 {
-    int next = ready_after(a, a->review, 1);
-    if (next >= 0 && next != a->review) review_open(a, next);
+    int next = ready_after(a, a->review.slot, 1);
+    if (next >= 0 && next != a->review.slot) review_open(a, next);
     else app_review_leave(a);
 }
 
 static CsBox rv_box_now(const App *a)
 {
-    CsBox b = { imin(a->rv_ax, a->ed.cx), imin(a->rv_ay, a->ed.cy), imax(a->rv_ax, a->ed.cx), imax(a->rv_ay, a->ed.cy) };
+    CsBox b = { imin(a->review.ax, a->ed.cx), imin(a->review.ay, a->ed.cy), imax(a->review.ax, a->ed.cx), imax(a->review.ay, a->ed.cy) };
     return b;
 }
 
@@ -75,15 +75,15 @@ void app_review_key(App *a, Key k)
     PROF_ZONE("job.review");
     Editor *e = &a->ed;
     Map    *m = a->world.map;
-    if (a->review < 0 || !a->world.jobs[a->review].used || a->world.jobs[a->review].state != JOB_READY) {
+    if (a->review.slot < 0 || !a->world.jobs[a->review.slot].used || a->world.jobs[a->review.slot].state != JOB_READY) {
         review_close(a, "");
         return;
     }
-    Job *j = &a->world.jobs[a->review];
+    Job *j = &a->world.jobs[a->review.slot];
 
     if (k.kind == KEY_ESC) {
         e->count = 0;
-        if (a->rv_box) { a->rv_box = 0; review_status(a); return; }    /* one layer at a time */
+        if (a->review.box) { a->review.box = 0; review_status(a); return; }    /* one layer at a time */
         char msg[96];
         snprintf(msg, sizeof msg, "#%d stays ready - :review %d", j->num, j->num);
         review_close(a, msg);
@@ -92,8 +92,8 @@ void app_review_key(App *a, Key k)
     if (k.kind == KEY_ENTER) {
         e->count = 0;
         CsBox b = rv_box_now(a);
-        world_job_land(&a->world, j, a->rv_box ? &b : NULL);
-        a->rv_box = 0;
+        world_job_land(&a->world, j, a->review.box ? &b : NULL);
+        a->review.box = 0;
         if (j->state != JOB_READY) review_next_or_close(a);
         else review_status(a);
         return;
@@ -118,10 +118,10 @@ void app_review_key(App *a, Key k)
     case 'k': ed_move(e, m,  0, -1, take_count(e)); break;
     case 'j': ed_move(e, m,  0,  1, take_count(e)); break;
     case 'v':
-        a->rv_box = !a->rv_box;
-        a->rv_ax = e->cx;
-        a->rv_ay = e->cy;
-        app_set_status_gm(a, a->rv_box ? "box: move to its far corner, enter accepts what it holds, esc drops it"
+        a->review.box = !a->review.box;
+        a->review.ax = e->cx;
+        a->review.ay = e->cy;
+        app_set_status_gm(a, a->review.box ? "box: move to its far corner, enter accepts what it holds, esc drops it"
                                        : "box dropped");
         break;
     case 'd':
@@ -144,8 +144,8 @@ void app_review_key(App *a, Key k)
         a->prompt.max = JOB_TEXT_MAX - 1;
         break;
     case 'n': case 'N': {
-        int next = ready_after(a, a->review, k.ch == 'n' ? 1 : -1);
-        if (next >= 0 && next != a->review) review_open(a, next);
+        int next = ready_after(a, a->review.slot, k.ch == 'n' ? 1 : -1);
+        if (next >= 0 && next != a->review.slot) review_open(a, next);
         else app_set_status_gm(a, "no other change is waiting");
         break;
     }
@@ -166,8 +166,8 @@ void app_review_key(App *a, Key k)
 /* PROMPT_JOB_FEEDBACK's answer: the change goes back to the agent with it. */
 void app_job_feedback(App *a, const char *text)
 {
-    if (a->review < 0) return;
-    Job *j = &a->world.jobs[a->review];
+    if (a->review.slot < 0) return;
+    Job *j = &a->world.jobs[a->review.slot];
     if (!text[0]) { review_status(a); return; }
     world_job_thread_add(j, 'G', text);
     if (j->has_cs) { cs_free(&j->cs); j->has_cs = 0; }
@@ -203,7 +203,7 @@ void app_ask_command(App *a, const char *verb, const char *rest)
         if (!strcmp(word, "remove")) {
             int i = world_job_find(&a->world, num);
             if (i < 0) { snprintf(msg, sizeof msg, "no job #%d", num); app_set_status_gm(a, msg); return; }
-            if (a->review == i) review_close(a, "");
+            if (a->review.slot == i) review_close(a, "");
             world_job_clear(&a->world, &a->world.jobs[i]);
             world_event(&a->world, CTL_EV_REMOVED, num, NULL);
             snprintf(msg, sizeof msg, "#%d removed", num);
@@ -293,7 +293,7 @@ void app_review_command(App *a, const char *rest)
 /* After a : command typed over a review, back to it if it is still there. */
 void app_review_resume(App *a)
 {
-    if (a->review >= 0 && a->world.jobs[a->review].used && a->world.jobs[a->review].state == JOB_READY &&
+    if (a->review.slot >= 0 && a->world.jobs[a->review.slot].used && a->world.jobs[a->review.slot].state == JOB_READY &&
         a->screen == SCREEN_EDITOR && a->ed.mode == ED_NORMAL)
         a->ed.mode = ED_REVIEW;
     else if (a->ed.mode != ED_REVIEW)               /* the command went elsewhere: :play, :stamp */
@@ -380,7 +380,7 @@ static void app_jobs_overlay(void *ctx, Renderer *r, const Map *m, const GridVie
         } else if (j->state == JOB_READY && j->has_cs && j->cs.w == m->w && j->cs.h == m->h)
             tint_set(r, g, &j->cs, th, vx0, vy0, vx1, vy1);
     }
-    if (a->ed.mode == ED_REVIEW && a->rv_box) {
+    if (a->ed.mode == ED_REVIEW && a->review.box) {
         CsBox b = rv_box_now(a);
         tint_box(r, g, &b, vx0, vy0, vx1, vy1, th->sel_bg);
     }
@@ -417,8 +417,8 @@ void app_jobs_prepare(App *a)
  * suggestion B): only the squares meeting the window. */
 int app_review_show(App *a)
 {
-    if (a->ed.mode != ED_REVIEW || a->review < 0) return 0;
-    Job *j = &a->world.jobs[a->review];
+    if (a->ed.mode != ED_REVIEW || a->review.slot < 0) return 0;
+    Job *j = &a->world.jobs[a->review.slot];
     if (!j->has_cs || j->cs.w != a->world.map->w || j->cs.h != a->world.map->h) return 0;
     int vx0, vy0, vx1, vy1;
     grid_visible_tiles(&a->ed.view, a->world.map, &vx0, &vy0, &vx1, &vy1);
@@ -428,7 +428,7 @@ int app_review_show(App *a)
 
 void app_review_unshow(App *a)
 {
-    cs_unshow(&a->world.jobs[a->review].cs, a->world.map);
+    cs_unshow(&a->world.jobs[a->review.slot].cs, a->world.map);
 }
 
 /* The #N labels, on top of everything on the map. */

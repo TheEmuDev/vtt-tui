@@ -86,7 +86,7 @@ static void host_landed(void *gm, int creatures)
     app_fog_sync(a);
     a->dirty = 1;
 }
-static int  host_reviewing(void *gm) { return ((App *)gm)->review; }
+static int  host_reviewing(void *gm) { return ((App *)gm)->review.slot; }
 static void host_review_leave(void *gm) { app_review_leave(gm); }
 static void host_job_gone(void *gm, int num) { app_agent_forget(gm, num); }
 static int  host_deaf(void *gm) { App *a = gm; return ctl_active(&a->ctl) && !a->world.agent_on; }
