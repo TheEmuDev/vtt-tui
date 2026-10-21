@@ -82,7 +82,7 @@ static void host_landed(void *gm, int creatures)
     /* What the channel's edits did to the live App when they landed
      * straight: the overlay and the selection name creatures by index. */
     if (creatures) app_creatures_renumbered(a);
-    else a->last_acting = turn_acting(a->world.map);     /* an accept starts no turn */
+    else a->players.last_acting = turn_acting(a->world.map);     /* an accept starts no turn */
     app_fog_sync(a);
     a->dirty = 1;
 }

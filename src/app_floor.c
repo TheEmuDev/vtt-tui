@@ -205,29 +205,29 @@ static void name_floor(const Map *m, int f, char *out, size_t sz)
 
 void app_floor_reset(App *a)
 {
-    a->pfloor[0] = a->ppin[0] = a->pview_floor[0] = '\0';
-    a->side_floor[0][0] = a->side_floor[1][0] = '\0';
-    a->last_acting = -1;
-    a->psplit = 0;
+    a->players.floor[0] = a->players.pin[0] = a->players.grid_floor[0] = '\0';
+    a->players.side_floor[0][0] = a->players.side_floor[1][0] = '\0';
+    a->players.last_acting = -1;
+    a->players.split = 0;
     /* A held view is a place on the map put down; party and follow carry
      * on to the next one. */
-    if (a->pcam == PCAM_HOLD) a->pcam = PCAM_FOLLOW;
-    a->pcam_for.map = NULL;
-    a->pcam_pinned  = 0;
+    if (a->players.cam == PCAM_HOLD) a->players.cam = PCAM_FOLLOW;
+    a->players.cam_for.map = NULL;
+    a->players.cam_pinned  = 0;
 }
 
 void app_floor_note_move(App *a, const Token *t)
 {
     if (t->hidden) return;          /* the tie it would break is the players' to see */
     int f = floor_of_token(a->world.map, t);
-    if (f >= 0) name_floor(a->world.map, f, a->side_floor[t->kind == TOKEN_ENEMY], sizeof a->side_floor[0]);
+    if (f >= 0) name_floor(a->world.map, f, a->players.side_floor[t->kind == TOKEN_ENEMY], sizeof a->players.side_floor[0]);
 }
 
 int app_players_floor(App *a)
 {
     Map *m = a->world.map;
     if (!m) return -1;
-    int stored = floor_named(m, a->pfloor);
+    int stored = floor_named(m, a->players.floor);
 
     /* A player creature's turn starting takes the players there, pin or
      * not: the turn is the stronger word. */
@@ -235,13 +235,13 @@ int app_players_floor(App *a)
      * screens, or the players would be taken to where it is. */
     int acting = turn_acting(m);
     int player_turn = acting >= 0 && m->tokens.v[acting].kind == TOKEN_PLAYER && !m->tokens.v[acting].hidden;
-    if (acting != a->last_acting) {
-        a->last_acting = acting;
-        if (player_turn) a->ppin[0] = '\0';
+    if (acting != a->players.last_acting) {
+        a->players.last_acting = acting;
+        if (player_turn) a->players.pin[0] = '\0';
     }
 
     int f;
-    int pin = floor_named(m, a->ppin);
+    int pin = floor_named(m, a->players.pin);
     if (pin >= 0)
         f = pin;
     else if (player_turn)
@@ -249,17 +249,17 @@ int app_players_floor(App *a)
     else if (acting >= 0 || (turn_spotlight_ruleset(m) && m->spotlight == SPOTLIGHT_GM))
         f = stored;                     /* the GM's turn: the players stay where they are */
     else {
-        f = floor_pick(m, TOKEN_PLAYER, stored, floor_named(m, a->side_floor[0]));
+        f = floor_pick(m, TOKEN_PLAYER, stored, floor_named(m, a->players.side_floor[0]));
         if (f < 0) f = stored;
     }
-    name_floor(m, f, a->pfloor, sizeof a->pfloor);
+    name_floor(m, f, a->players.floor, sizeof a->players.floor);
     return f;
 }
 
 int app_players_split(const App *a)
 {
     if (!a->world.map || a->screen != SCREEN_PLAY) return 0;
-    int f = floor_named(a->world.map, a->pfloor);
+    int f = floor_named(a->world.map, a->players.floor);
     int order[MAP_AREAS_MAX];
     if (!floor_order(a->world.map, order)) return 0;
     return f != app_floor_shown(a);
@@ -268,7 +268,7 @@ int app_players_split(const App *a)
 int app_players_own_camera(const App *a)
 {
     if (!a->world.map || a->screen != SCREEN_PLAY) return 0;
-    return a->pcam != PCAM_FOLLOW || app_players_split(a);
+    return a->players.cam != PCAM_FOLLOW || app_players_split(a);
 }
 
 /* A player creature the players can see, on floor f: who their camera
@@ -307,7 +307,7 @@ static void party_frame(App *a, int f)
 {
     PROF_ZONE("camera.party");
     const Map *m = a->world.map;
-    GridView  *g = &a->pview;
+    GridView  *g = &a->players.grid;
     int x0, y0, x1, y1;
     if (!party_box(m, f, &x0, &y0, &x1, &y1)) {
         g->zoom = a->ed.view.zoom;
@@ -359,7 +359,7 @@ static void party_frame(App *a, int f)
 static void center_on_party(App *a, int f)
 {
     const Map *m = a->world.map;
-    GridView  *g = &a->pview;
+    GridView  *g = &a->players.grid;
     long sx = 0, sy = 0, n = 0;
     for (int i = 0; i < m->tokens.n; i++) {
         const Token *t = &m->tokens.v[i];
@@ -373,31 +373,31 @@ static void center_on_party(App *a, int f)
 void app_players_camera(App *a)
 {
     Map *m = a->world.map;
-    int  f = floor_named(m, a->pfloor);
-    GridView *g = &a->pview;
-    if (a->pcam == PCAM_FOLLOW) g->zoom = a->ed.view.zoom;    /* party picks its own; hold keeps it */
+    int  f = floor_named(m, a->players.floor);
+    GridView *g = &a->players.grid;
+    if (a->players.cam == PCAM_FOLLOW) g->zoom = a->ed.view.zoom;    /* party picks its own; hold keeps it */
     g->view = a->ed.view.view;
     g->bounded = f >= 0;
     floor_box(m, f, &g->bx0, &g->by0, &g->bx1, &g->by1);
 
-    if (a->pcam == PCAM_PARTY) {
+    if (a->players.cam == PCAM_PARTY) {
         /* Worked out again only when the map, their floor, the GM's zoom or
          * the screen changed: nothing else moves the party. */
-        if (a->pcam_for.map != m || a->pcam_for.gen != m->gen || a->pcam_for.floor != f ||
-            a->pcam_for.zoom != a->ed.view.zoom || memcmp(&a->pcam_for.view, &g->view, sizeof g->view)) {
-            a->pcam_for.map  = m;
-            a->pcam_for.gen  = m->gen;
-            a->pcam_for.floor = f;
-            a->pcam_for.zoom = a->ed.view.zoom;
-            a->pcam_for.view = g->view;
+        if (a->players.cam_for.map != m || a->players.cam_for.gen != m->gen || a->players.cam_for.floor != f ||
+            a->players.cam_for.zoom != a->ed.view.zoom || memcmp(&a->players.cam_for.view, &g->view, sizeof g->view)) {
+            a->players.cam_for.map  = m;
+            a->players.cam_for.gen  = m->gen;
+            a->players.cam_for.floor = f;
+            a->players.cam_for.zoom = a->ed.view.zoom;
+            a->players.cam_for.view = g->view;
             party_frame(a, f);
         }
-        str_lcpy(a->pview_floor, a->pfloor, sizeof a->pview_floor);
-    } else if (strcmp(a->pview_floor, a->pfloor) != 0) {
+        str_lcpy(a->players.grid_floor, a->players.floor, sizeof a->players.grid_floor);
+    } else if (strcmp(a->players.grid_floor, a->players.floor) != 0) {
         /* Follow on a split floor, and hold: centered on the party when
          * their floor changes, held after that, so their screens do not
          * swim with every step. */
-        str_lcpy(a->pview_floor, a->pfloor, sizeof a->pview_floor);
+        str_lcpy(a->players.grid_floor, a->players.floor, sizeof a->players.grid_floor);
         center_on_party(a, f);
     }
     grid_clamp_camera(g, m);
@@ -414,27 +414,27 @@ void app_players_camera_command(App *a, const char *rest)
     for (int k = 0; k < 3; k++) if (!strcmp(rest, NAME[k])) mode = k;
     if (mode < 0) {
         char msg[128];
-        snprintf(msg, sizeof msg, "the players' camera is on %s - :player camera follow|party|hold", NAME[a->pcam]);
+        snprintf(msg, sizeof msg, "the players' camera is on %s - :player camera follow|party|hold", NAME[a->players.cam]);
         app_set_status_gm(a, msg);
         return;
     }
     /* The pin a hold made goes with it: follow means follow. */
-    if (a->pcam_pinned && mode != PCAM_HOLD) a->ppin[0] = a->pfloor[0] = '\0';
-    a->pcam_pinned = 0;
-    a->pcam = (PlayersCamera)mode;
-    a->pcam_for.map = NULL;
+    if (a->players.cam_pinned && mode != PCAM_HOLD) a->players.pin[0] = a->players.floor[0] = '\0';
+    a->players.cam_pinned = 0;
+    a->players.cam = (PlayersCamera)mode;
+    a->players.cam_for.map = NULL;
     if (mode == PCAM_HOLD) {
         /* Their floor is the one the GM is looking at: the one shown, or,
          * with every floor shown, the one under the cursor. */
         int shown = app_floor_shown(a);
         if (shown < 0 && m) shown = floor_at(m, a->ed.cx, a->ed.cy);
         if (shown >= 0) {
-            str_lcpy(a->ppin, m->areas[shown].name, sizeof a->ppin);
-            str_lcpy(a->pfloor, m->areas[shown].name, sizeof a->pfloor);
-            a->pcam_pinned = 1;
+            str_lcpy(a->players.pin, m->areas[shown].name, sizeof a->players.pin);
+            str_lcpy(a->players.floor, m->areas[shown].name, sizeof a->players.floor);
+            a->players.cam_pinned = 1;
         }
-        a->pview = a->ed.view;
-        str_lcpy(a->pview_floor, a->pfloor, sizeof a->pview_floor);
+        a->players.grid = a->ed.view;
+        str_lcpy(a->players.grid_floor, a->players.floor, sizeof a->players.grid_floor);
     }
     app_set_status_gm(a, mode == PCAM_FOLLOW ? "the players' screens follow yours"
                        : mode == PCAM_PARTY  ? "the players' screens frame the party - :player camera follow returns"
@@ -446,7 +446,7 @@ void app_floor_spotlight(App *a)
     Map *m = a->world.map;
     int  f;
     if (m->spotlight == SPOTLIGHT_PLAYERS) f = app_players_floor(a);
-    else f = floor_pick(m, TOKEN_ENEMY, app_floor_shown(a), floor_named(m, a->side_floor[1]));
+    else f = floor_pick(m, TOKEN_ENEMY, app_floor_shown(a), floor_named(m, a->players.side_floor[1]));
     if (f >= 0) app_floor_show(a, f);
 }
 
@@ -454,10 +454,10 @@ void app_players_pin(App *a, const char *rest)
 {
     Map *m = a->world.map;
     char msg[96];
-    a->pcam_pinned = 0;             /* the GM's own pin, now: it stays past hold */
+    a->players.cam_pinned = 0;             /* the GM's own pin, now: it stays past hold */
     if (!strcmp(rest, "auto")) {
         /* A fresh pick: staying put would keep them where the pin held. */
-        a->ppin[0] = a->pfloor[0] = '\0';
+        a->players.pin[0] = a->players.floor[0] = '\0';
         app_set_status_gm(a, "the players' screens follow the party");
         return;
     }
@@ -467,7 +467,7 @@ void app_players_pin(App *a, const char *rest)
         app_set_status_gm(a, msg);
         return;
     }
-    str_lcpy(a->ppin, m->areas[f].name, sizeof a->ppin);
+    str_lcpy(a->players.pin, m->areas[f].name, sizeof a->players.pin);
     snprintf(msg, sizeof msg, "the players' screens stay on %s until a player's turn - :player floor auto",
              m->areas[f].name);
     app_set_status_gm(a, msg);

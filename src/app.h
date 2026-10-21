@@ -239,6 +239,27 @@ typedef struct {
     Ping agent;
 } Pings;
 
+/* The players' floor (app_floor.c; docs/FLOORS.md), by name like
+ * Editor.floor: the floor their screens show, a pin the GM set, the floor
+ * each side last moved on (the tie-breaker's third step), the creature that
+ * had the turn at the last key (a change is a turn starting), and the camera
+ * their frame is drawn through when their floor is not the GM's. */
+typedef struct {
+    char     floor[AREA_NAME_MAX];
+    char     pin[AREA_NAME_MAX];
+    char     side_floor[2][AREA_NAME_MAX];    /* [0] players, [1] enemies */
+    int      last_acting;
+    GridView grid;
+    char     grid_floor[AREA_NAME_MAX];       /* the floor grid was centered for */
+    int      split;                           /* the players' frame is being drawn through grid */
+    /* The players' camera (docs/CAMERA.md): the GM's (follow), framing the
+     * party, or held where the GM left it. Party's framing is worked out
+     * again only when what it was worked out from changes. */
+    PlayersCamera cam;
+    int      cam_pinned;                      /* hold pinned their floor: undone when it ends */
+    struct { const Map *map; unsigned gen; int floor, zoom; Rect view; } cam_for;
+} PlayersView;
+
 typedef struct {
     /* The map, its log, the jobs, the events and the request being run: what
      * a request handler is given (world.h). */
@@ -280,24 +301,7 @@ typedef struct {
      * editor rather than inside either mode's state. */
     Ruler   ruler;
 
-    /* The players' floor (docs/FLOORS.md), by name like Editor.floor: the
-     * floor their screens show, a pin the GM set, the floor each side last
-     * moved on (the tie-breaker's third step), the creature that had the
-     * turn at the last key (a change is a turn starting), and the camera
-     * their frame is drawn through when their floor is not the GM's. */
-    char     pfloor[AREA_NAME_MAX];
-    char     ppin[AREA_NAME_MAX];
-    char     side_floor[2][AREA_NAME_MAX];    /* [0] players, [1] enemies */
-    int      last_acting;
-    GridView pview;
-    char     pview_floor[AREA_NAME_MAX];      /* the floor pview was centered for */
-    int      psplit;                          /* the players' frame is being drawn through pview */
-    /* The players' camera (docs/CAMERA.md): the GM's (follow), framing the
-     * party, or held where the GM left it. Party's framing is worked out
-     * again only when what it was worked out from changes. */
-    PlayersCamera pcam;
-    int      pcam_pinned;                     /* hold pinned their floor: undone when it ends */
-    struct { const Map *map; unsigned gen; int floor, zoom; Rect view; } pcam_for;
+    PlayersView players;
 
     /* The session log, off until :log. */
     SessionLog slog;
@@ -418,7 +422,7 @@ int  app_players_floor(App *a);
 /* The players are on a floor the GM is not showing: their frame is drawn
  * through its own camera. */
 int  app_players_split(const App *a);
-/* Their frame is drawn through their own camera, pview: on a split floor,
+/* Their frame is drawn through their own camera, players.grid: on a split floor,
  * or with :player camera party or hold. Pings and the frame ask this. */
 int  app_players_own_camera(const App *a);
 void app_key(App *a, Key k);

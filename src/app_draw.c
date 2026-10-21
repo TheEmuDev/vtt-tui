@@ -25,7 +25,7 @@
  * would be announced to the table. */
 static int status_msg_shown(const App *a)
 {
-    return !(a->view == VIEW_PLAYERS && (a->status_gm || a->psplit ||
+    return !(a->view == VIEW_PLAYERS && (a->status_gm || a->players.split ||
                                          (a->world.map && (fog_any(a->world.map) || tokens_any_hidden(&a->world.map->tokens)))));
 }
 
@@ -214,15 +214,15 @@ static void draw_editor(App *a)
     editor_layout(a, &clocks, &turns);
     GridView gm = a->ed.view;
     app_players_camera(a);
-    a->ed.view = a->pview;
-    a->psplit  = 1;
+    a->ed.view = a->players.grid;
+    a->players.split  = 1;
     a->ed.hold_camera = 1;
-    a->ed.hide_cursor = a->pcam == PCAM_HOLD;
+    a->ed.hide_cursor = a->players.cam == PCAM_HOLD;
     draw_editor_body(a);
     a->ed.hold_camera = a->ed.hide_cursor = 0;
-    a->pview   = a->ed.view;
+    a->players.grid   = a->ed.view;
     a->ed.view = gm;
-    a->psplit  = 0;
+    a->players.split  = 0;
 }
 
 /* The card box: over the map's right edge, at most half the view wide and
@@ -275,7 +275,7 @@ static void draw_editor_body(App *a)
      * players' camera, when it is not the GM's, is said to the GM. */
     char right[40];
     snprintf(right, sizeof right, "%s%s%s", a->handout.up ? "HANDOUT  " : "",
-             a->view == VIEW_GM && a->pcam != PCAM_FOLLOW ? (a->pcam == PCAM_PARTY ? "CAM PARTY  " : "CAM HOLD  ") : "",
+             a->view == VIEW_GM && a->players.cam != PCAM_FOLLOW ? (a->players.cam == PCAM_PARTY ? "CAM PARTY  " : "CAM HOLD  ") : "",
              a->screen == SCREEN_PLAY ? "PLAY" : "BUILD");
     ui_titlebar(r, th, left, right);
 
@@ -367,7 +367,7 @@ static void draw_editor_body(App *a)
     /* The ruler's and the range's lines measure from a creature, and name
      * it: with anything hidden the players get the plain line, as over fog. */
     int quiet_players = fog_players || (a->view == VIEW_PLAYERS && tokens_any_hidden(&m->tokens));
-    if (a->psplit)                  status[0] = '\0';
+    if (a->players.split)                  status[0] = '\0';
     /* The template's name is the GM's until the creature is on the map. */
     else if (playing && a->view == VIEW_GM && app_summoning(a))
                                     app_summon_status(a, status, sizeof status);

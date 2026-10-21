@@ -13,22 +13,22 @@ Signed off 2026-10-04 with the recommendations; built the same day.
 There is one players' frame. The phones and a TV running `--watch` (or `:mirror`) all show
 it, so a camera for the TV is a camera for the phones too. Today it looks through the GM's
 camera (`a->ed.view`). There is one exception: when the players are on a floor the GM is not
-showing (`app_players_split`), it uses its own camera, `a->pview`. That camera centers on the
+showing (`app_players_split`), it uses its own camera, `a->players.grid`. That camera centers on the
 party once, when their floor changes, and then holds still (`app_players_camera`,
 src/app_floor.c). The pieces this needs mostly exist already:
 
-- `pview`, swapped in for one draw (`draw_editor`, src/app_draw.c), with `hold_camera` so the
+- `players.grid`, swapped in for one draw (`draw_editor`, src/app_draw.c), with `hold_camera` so the
   GM's cursor does not drag it;
 - `app_view_differs` drawing the players' frame on its own whenever it could differ;
-- the status message held back from the players' frame under `psplit`, because it describes
+- the status message held back from the players' frame under `players.split`, because it describes
   the GM's cursor;
-- a phone's tap mapped through `pview` when their floor is split (`app_ping_cell`).
+- a phone's tap mapped through `players.grid` when their floor is split (`app_ping_cell`).
 
 ## Decisions (my recommendations)
 
 | question | recommendation |
 |---|---|
-| the modes | **follow** (as now: the GM's camera, `pview` only on a split floor); **party**: frames every player creature the players can see on their floor; **hold**: stays where the GM's camera was when the command was given |
+| the modes | **follow** (as now: the GM's camera, `players.grid` only on a split floor); **party**: frames every player creature the players can see on their floor; **hold**: stays where the GM's camera was when the command was given |
 | `:player camera hold` again | takes the GM's view *now*: the GM scouts, finds the room, says hold, and the table sees it. One command for "freeze" and for "show them this" |
 | party: when it moves | not with every step. It recenters only when a player creature comes within 2 squares of the frame's edge, or leaves the frame, the way the GM's cursor scrolls (`grid_ensure_visible` with a margin, applied to the party's box). A screen that swims on every step is worse on a TV than one that jumps now and then |
 | party: zoom | the GM's zoom, unless the party does not fit; then the closest zoom out at which they do, never closer in than the GM's. The GM's zoom keys still set the scale the table sees. If they do not fit even at the farthest zoom, it frames the creature whose turn it is, else the party's middle |
@@ -36,7 +36,7 @@ src/app_floor.c). The pieces this needs mostly exist already:
 | the GM's cursor | **follow**: shown, as now (the GM points at things). **party**: shown when it is inside their frame, because in a fight the GM moves enemies with it and the table should see what moves. **hold**: never, because the GM is scouting and the cursor is the GM's own |
 | the status message | in party and hold, held back from the players' frame, as on a split floor: it describes the GM's cursor, which may be somewhere the players are not looking. Turn and fight lines in the title bar are unchanged |
 | floors | the camera mode applies on every floor. A players' floor change (a player's turn, `:player floor`) recenters on the party there, as now; hold then holds that new spot. In follow, a split floor behaves exactly as today |
-| a phone's tap | mapped through whichever camera drew their frame (`pview` whenever it is not the GM's), so a ping lands where the player pointed |
+| a phone's tap | mapped through whichever camera drew their frame (`players.grid` whenever it is not the GM's), so a ping lands where the player pointed |
 | changing maps, travel | the mode stays for the session; a held spot belongs to its map, so hold becomes follow on another map (said in the GM's status line) |
 | what the GM sees | the title bar says `CAM PARTY` or `CAM HOLD` beside `PLAY`, as it says `HANDOUT`. `:player preview` shows the table's view as always. No key: a command is enough for something set a few times a session. It can get a key later if play asks for one |
 | saved? | no: a table setting for this sitting, like `:player floor` |
@@ -68,9 +68,9 @@ is drawn by the same `VIEW_PLAYERS` path. Two new points:
 
 ## Where it goes
 
-- `app.h`: `CameraMode pcam` (follow, party, hold) and the held map.
+- `app.h`: `PlayersCamera players.cam` (follow, party, hold) and the held map.
 - `app_floor.c`: `app_players_camera` grows the three modes; `app_players_split` is joined by
-  `app_players_own_camera(a)`, "is their frame drawn through `pview`", which `draw_editor`,
+  `app_players_own_camera(a)`, "is their frame drawn through `players.grid`", which `draw_editor`,
   `app_ping_cell`, `status_msg_shown` and `app_view_differs` ask instead of the split test.
 - `app_cmd.c`: `:player camera follow|party|hold` beside `:player floor` and `:player preview`;
   the title bar tag in `app_draw.c`; the cursor rule in `play_draw` (it already takes
@@ -97,7 +97,7 @@ is drawn by the same `VIEW_PLAYERS` path. Two new points:
 
 ## As built
 
-- `App.pcam` (`PCAM_FOLLOW`, `PCAM_PARTY`, `PCAM_HOLD`) and `App.pcam_for`, what party's
+- `App.players.cam` (`PCAM_FOLLOW`, `PCAM_PARTY`, `PCAM_HOLD`) and `App.players.cam_for`, what party's
   framing was last worked out from (the map, `Map.gen`, their floor, the GM's zoom, the
   view). `app_players_own_camera` replaced the split test at all three places that asked it:
   `draw_editor`, `app_ping_cell` and `app_view_differs`.
@@ -129,7 +129,7 @@ The review of ec292fd found, and these fixed:
   the party could be cut off. `editor_layout` (app_draw.c) lays it out before their camera
   is worked out, in every frame;
 - **the pin hold made outlived it**: after `follow` the players stayed on the held floor.
-  `App.pcam_pinned` remembers that hold made it, and leaving hold lifts it; a `:player
+  `App.players.cam_pinned` remembers that hold made it, and leaving hold lifts it; a `:player
   floor` given meanwhile is the GM's own and stays;
 - **party with nobody on their floor** stayed wherever it last was: it shows the floor's
   middle;

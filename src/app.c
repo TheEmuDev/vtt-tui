@@ -45,7 +45,7 @@ void app_init(App *a, Term *t, Renderer *r)
     a->running = 1;
     a->dirty   = 1;
     a->pending_token = -1;
-    a->last_acting   = -1;
+    a->players.last_acting   = -1;
     a->review.slot        = -1;
     undo_init(&a->world.undo);
     undo_init(&a->world.ctl_sundo);
@@ -64,7 +64,7 @@ void app_creatures_renumbered(App *a)
     play_focus(&a->play, -1);
     a->play.visual = 0;
     range_clear(&a->play.range);
-    a->last_acting = turn_acting(a->world.map);
+    a->players.last_acting = turn_acting(a->world.map);
 }
 
 void app_free(App *a)
@@ -444,7 +444,7 @@ int app_ping_cell(App *a, uint32_t who, int sx, int sy)
     if (!a->world.map || a->screen != SCREEN_PLAY) return 0;
     /* Through the camera their frame was drawn with: their own, when they
      * are on a floor the GM is not showing. */
-    const GridView *g = app_players_own_camera(a) ? &a->pview : &a->ed.view;
+    const GridView *g = app_players_own_camera(a) ? &a->players.grid : &a->ed.view;
     if (!rect_contains(g->view, sx, sy)) return 0;
     int tx, ty;
     if (!grid_screen_to_tile(g, a->world.map, sx, sy, &tx, &ty)) return 0;

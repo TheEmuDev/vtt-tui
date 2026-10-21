@@ -1110,10 +1110,10 @@ void test_floor_players(void)
     rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
     {
         int sx, sy, tx, ty;
-        grid_tile_interior(&a.pview, 8, 1, &sx, &sy);
+        grid_tile_interior(&a.players.grid, 8, 1, &sx, &sy);
         Cell *c = rnd_at(&r, sx + 1, sy);
         CHECK(c && c->ch != ' ');                          /* Aria is drawn */
-        CHECK(grid_screen_to_tile(&a.pview, m, sx, sy, &tx, &ty) && tx == 8 && ty == 1);
+        CHECK(grid_screen_to_tile(&a.players.grid, m, sx, sy, &tx, &ty) && tx == 8 && ty == 1);
         CASE("a tap maps through their camera, and the GM hears where");
         a.pings.nrings = 0;
         CHECK_EQ(app_ping_cell(&a, 3, sx, sy), 1);
@@ -1151,7 +1151,7 @@ void test_floor_players(void)
     press(&a, "a");                                        /* Cora's turn */
     CHECK_EQ(app_floor_shown(&a), cellar);
     CHECK_EQ(app_players_floor(&a), cellar);
-    CHECK_EQ(a.ppin[0], '\0');
+    CHECK_EQ(a.players.pin[0], '\0');
     press(&a, ":turns end\r");
 
     CASE("the spotlight: to the GM, the GM's view goes where the enemies are; the players stay");
@@ -1175,11 +1175,11 @@ void test_floor_players(void)
         int ai = -1;
         for (int i = 0; i < m->tokens.n; i++) if (!strcmp(m->tokens.v[i].label, "Aria")) ai = i;
         m->tokens.v[ai].x = 15; m->tokens.v[ai].y = 0;      /* one on each floor: a tie */
-        str_lcpy(a.pfloor, "", sizeof a.pfloor);            /* nowhere to stay */
-        a.side_floor[0][0] = '\0';
+        str_lcpy(a.players.floor, "", sizeof a.players.floor);            /* nowhere to stay */
+        a.players.side_floor[0][0] = '\0';
         CHECK_EQ(app_players_floor(&a), cellar);            /* no last move: the lowest */
-        a.pfloor[0] = '\0';
-        str_lcpy(a.side_floor[0], "Upper", sizeof a.side_floor[0]);
+        a.players.floor[0] = '\0';
+        str_lcpy(a.players.side_floor[0], "Upper", sizeof a.players.side_floor[0]);
         CHECK_EQ(app_players_floor(&a), upper);             /* a player last moved upstairs */
     }
 
@@ -1222,14 +1222,14 @@ void test_floor_big_camera(void)
     for (int i = 0; i < 2; i++) {
         rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
         int x0, y0, x1, y1;
-        grid_visible_tiles(&a.pview, a.world.map, &x0, &y0, &x1, &y1);
+        grid_visible_tiles(&a.players.grid, a.world.map, &x0, &y0, &x1, &y1);
         CHECK(x0 <= 2 && x1 >= 3 && y0 <= 3 && y1 >= 4);
     }
     press(&a, "+");
     rnd_begin(&r); app_draw_view(&a, VIEW_PLAYERS);
     {
         int x0, y0, x1, y1;
-        grid_visible_tiles(&a.pview, a.world.map, &x0, &y0, &x1, &y1);
+        grid_visible_tiles(&a.players.grid, a.world.map, &x0, &y0, &x1, &y1);
         CHECK(x0 <= 2 && x1 >= 3);
     }
     app_free(&a);
