@@ -3,7 +3,7 @@
  * over malloc, calloc, realloc, free and the aligned ones. Where util.c's alloc_calls counts the
  * x* calls only, this sees libc's too -- a raw malloc, open_memstream's
  * buffer, strdup -- and with MCOUNT_TRACE_AFTER=N prints a backtrace for every
- * allocation past the Nth, which says where a count comes from.
+ * allocation past the Nth (0, or unset: none), which says where a count comes from.
  *
  *   make mcount
  *   LD_PRELOAD=build/mcount.so ./vtt MAP --bench KEYS --bench-loops 20
@@ -83,7 +83,7 @@ void *realloc(void *p, size_t n)
 void *memalign(size_t al, size_t n) { void *p = __libc_memalign(al, n); note(p); return p; }
 void *aligned_alloc(size_t al, size_t n)
 {
-    if (al & (al - 1)) { errno = EINVAL; return NULL; }      /* as glibc's own refuses */
+    if (!al || (al & (al - 1))) { errno = EINVAL; return NULL; }   /* as glibc's own refuses */
     void *p = __libc_memalign(al, n);
     note(p);
     return p;
@@ -108,7 +108,7 @@ __attribute__((constructor)) static void mcount_start(void)
     char comm[32] = "";
     FILE *f = fopen("/proc/self/comm", "r");
     if (f) { if (!fgets(comm, sizeof comm, f)) comm[0] = '\0'; fclose(f); }
-    g_vtt = !strncmp(comm, "vtt", 3);
+    g_vtt = !strcmp(comm, "vtt\n");
     g_in = 0;
 }
 
