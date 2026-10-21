@@ -648,9 +648,9 @@ void test_hidden(void)
         play_focus(&a.play, -1);
         a.ed.cx = 4; a.ed.cy = 2;
         press(&a, "\r");
-        a.npings = 0;
+        a.pings.nrings = 0;
         press(&a, "gp");
-        CHECK(a.npings == 1 && a.pings[0].x1 == a.pings[0].x0);
+        CHECK(a.pings.nrings == 1 && a.pings.rings[0].x1 == a.pings.rings[0].x0);
         press(&a, "\x1b");
         m->tokens.v[1].size = 1;
         Key f1b = { KEY_F1, 0, 0 };

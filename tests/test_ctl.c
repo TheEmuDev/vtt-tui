@@ -398,17 +398,17 @@ void test_ctl_marked(void)
     app_tick(&a, 1000);
     a.ed.cx = 2; a.ed.cy = 2;
     press(&a, "gp");
-    CHECK_EQ(a.npings, 1);
+    CHECK_EQ(a.pings.nrings, 1);
     app_ping(&a, 3, 5, 4, 5, 4);
     app_tick(&a, 13500);
-    CHECK_EQ(a.npings, 0);                         /* the rings are down */
+    CHECK_EQ(a.pings.nrings, 0);                         /* the rings are down */
     t = ctl_ask(&a, "marked");
     CHECK(strstr(t, "pinged by the GM at C3, 12 s ago\n") != NULL);
     CHECK(strstr(t, "pinged by phone 3 at F5, 12 s ago\n") != NULL);
     free(t);
     app_tick(&a, 20000);
     press(&a, "gp");                              /* the GM's record moves, not doubles */
-    CHECK_EQ(a.npinged, 2);
+    CHECK_EQ(a.pings.nlast, 2);
     t = ctl_ask(&a, "marked json");
     CHECK(json_valid(t + 3));
     CHECK(strstr(t, "{\"by\":\"gm\",\"phone\":null,\"at\":{\"region\":\"C3\"") != NULL);
@@ -421,7 +421,7 @@ void test_ctl_marked(void)
     app_key(&a, f1);
     press(&a, ":q!\r");
     CHECK(a.world.map == NULL);
-    CHECK_EQ(a.npinged, 0);
+    CHECK_EQ(a.pings.nlast, 0);
 
     app_free(&a);
     rnd_free(&r);
@@ -472,11 +472,11 @@ void test_ctl_edits(void)
     CHECK_EQ(map_hedge(m, 3, 4), EDGE_WALL);
     CHECK(!strncmp(a.status, "#1 accepted: ", 13) && strstr(a.status, " - u takes it back"));
     CHECK_EQ(a.status_gm, 1);
-    CHECK(a.agent_ring.until_ms != 0);
-    CHECK(a.agent_ring.x0 == 1 && a.agent_ring.y0 == 1 && a.agent_ring.x1 == 3 && a.agent_ring.y1 == 3);
+    CHECK(a.pings.agent.until_ms != 0);
+    CHECK(a.pings.agent.x0 == 1 && a.pings.agent.y0 == 1 && a.pings.agent.x1 == 3 && a.pings.agent.y1 == 3);
     CHECK_EQ(app_view_differs(&a), 1);                /* the ring is the GM's */
     app_tick(&a, a.world.now_ms + PING_SHOW_MS);
-    CHECK_EQ(a.agent_ring.until_ms, 0u);
+    CHECK_EQ(a.pings.agent.until_ms, 0u);
 
     CASE("many lines are still one step: u takes all of them back together");
     before = ctl_snapshot(m);

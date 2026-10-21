@@ -156,7 +156,7 @@ never move.
 - **Bounded.** A request records at most `CTL_OPS_MAX` (twice the largest map's squares)
   undo ops; the undo log never trims an open batch, so this is what bounds the memory one
   request can take.
-- **The ring** is `App.agent_ring`, drawn on the GM's screen only; `app_view_differs`
+- **The ring** is `App.pings.agent`, drawn on the GM's screen only; `app_view_differs`
   counts it, so it never reaches the phones even if the GM goes to play mode within the
   two seconds.
 - **Measured** (docs/PERFORMANCE.md): a 40x40 room with a dozen creatures is tens of

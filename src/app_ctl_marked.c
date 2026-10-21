@@ -200,8 +200,8 @@ void app_ctl_marked(App *a, FILE *out, int json)
         } else json_null(&j);
         json_key(&j, "pings");
         json_open(&j, '[');
-        for (int i = 0; i < a->npinged; i++) {
-            const Ping *p = &a->pinged[i];
+        for (int i = 0; i < a->pings.nlast; i++) {
+            const Ping *p = &a->pings.last[i];
             json_open(&j, '{');
             json_kstr(&j, "by", p->who == PING_GM ? "gm" : "phone");
             json_key(&j, "phone");
@@ -260,8 +260,8 @@ void app_ctl_marked(App *a, FILE *out, int json)
         map_coord_name(mk.ruler->cx, mk.ruler->cy, at, sizeof at);
         fprintf(out, " to %s, %s ft\n", at, dist);
     }
-    for (int i = 0; i < a->npinged; i++) {
-        const Ping *p = &a->pinged[i];
+    for (int i = 0; i < a->pings.nlast; i++) {
+        const Ping *p = &a->pings.last[i];
         char who[24];
         map_region_name(p->x0, p->y0, p->x1, p->y1, r, sizeof r);
         fprintf(out, "pinged by %s at %s, %lu s ago\n", ping_source(p->who, who, sizeof who), r,

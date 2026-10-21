@@ -248,9 +248,9 @@ int app_open_map(App *a, const char *path)
     a->screen = SCREEN_EDITOR;
     a->world.seen_gen = m->gen;
     app_autosave_track(a, m->gen);               /* a new map: its own failures are news */
-    a->npings = 0;                 /* squares of the old map mean nothing here */
-    a->npinged = 0;
-    a->agent_ring.until_ms = 0;
+    a->pings.nrings = 0;                 /* squares of the old map mean nothing here */
+    a->pings.nlast = 0;
+    a->pings.agent.until_ms = 0;
     fog_recompute(m);
 
     char msg[400];
@@ -296,8 +296,8 @@ void app_travel_to(App *a, Map *m)
     a->screen = SCREEN_PLAY;
     a->world.seen_gen = m->gen;
     app_autosave_track(a, m->gen);               /* a new map: its own failures are news */
-    a->npings = a->npinged = 0;
-    a->agent_ring.until_ms = 0;
+    a->pings.nrings = a->pings.nlast = 0;
+    a->pings.agent.until_ms = 0;
     world_jobs_clear(&a->world);              /* jobs are the map's */
     a->dirty = 1;
 }
@@ -414,13 +414,13 @@ void app_ping(App *a, uint32_t who, int x0, int y0, int x1, int y1)
 
     /* The same source's ring moves; a new source takes a free slot, or the
      * one closest to going -- only reachable after phones reconnect. */
-    Ping *p = ping_slot(a->pings, &a->npings, who);
+    Ping *p = ping_slot(a->pings.rings, &a->pings.nrings, who);
     p->who = who;
     p->x0 = x0; p->y0 = y0; p->x1 = x1; p->y1 = y1;
     p->until_ms = a->world.now_ms + PING_SHOW_MS;
 
     /* And the record `marked` reads, kept after the ring comes down. */
-    Ping *rec = ping_slot(a->pinged, &a->npinged, who);
+    Ping *rec = ping_slot(a->pings.last, &a->pings.nlast, who);
     *rec = *p;
     rec->until_ms = a->world.now_ms;
 
@@ -461,9 +461,9 @@ int app_ping_cell(App *a, uint32_t who, int sx, int sy)
 
 int app_ping_due(const App *a, uint64_t now_ms)
 {
-    uint64_t at = a->agent_ring.until_ms;
-    for (int i = 0; i < a->npings; i++)
-        if (!at || a->pings[i].until_ms < at) at = a->pings[i].until_ms;
+    uint64_t at = a->pings.agent.until_ms;
+    for (int i = 0; i < a->pings.nrings; i++)
+        if (!at || a->pings.rings[i].until_ms < at) at = a->pings.rings[i].until_ms;
     if (!at) return -1;
     return now_ms >= at ? 0 : (int)(at - now_ms);
 }
@@ -528,12 +528,12 @@ void app_tick(App *a, uint64_t now_ms)
             ctl_answer(&a->ctl, i, ans, ans ? len : 0);     /* none: out of memory, just close */
         }
     }
-    for (int i = 0; i < a->npings; ) {
-        if (a->pings[i].until_ms <= now_ms) { a->pings[i] = a->pings[--a->npings]; a->dirty = 1; }
+    for (int i = 0; i < a->pings.nrings; ) {
+        if (a->pings.rings[i].until_ms <= now_ms) { a->pings.rings[i] = a->pings.rings[--a->pings.nrings]; a->dirty = 1; }
         else i++;
     }
-    if (a->agent_ring.until_ms && a->agent_ring.until_ms <= now_ms) {
-        a->agent_ring.until_ms = 0;
+    if (a->pings.agent.until_ms && a->pings.agent.until_ms <= now_ms) {
+        a->pings.agent.until_ms = 0;
         a->dirty = 1;
     }
     if (a->world.map && a->world.map->gen != a->world.seen_gen) {
@@ -1471,8 +1471,8 @@ void app_close_map(App *a)
     map_free(a->world.map);
     a->world.map = NULL;
     a->file_rows = a->file_rows_ok = 0;
-    a->npings = a->npinged = 0;
-    a->agent_ring.until_ms = 0;
+    a->pings.nrings = a->pings.nlast = 0;
+    a->pings.agent.until_ms = 0;
     world_jobs_clear(&a->world);
     undo_clear(&a->world.undo);
     a->screen = SCREEN_MENU;

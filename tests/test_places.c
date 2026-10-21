@@ -606,7 +606,7 @@ void test_link_keys(void)
     CHECK_EQ(app_view_differs(&a), 1);                    /* so the GM's line is not copied out */
     a.ed.cx = 6; a.ed.cy = 3;
     a.status[0] = 0;
-    a.agent_ring.until_ms = 0;                            /* the channel's ring, from above */
+    a.pings.agent.until_ms = 0;                            /* the channel's ring, from above */
     CHECK_EQ(app_view_differs(&a), 0);
 
     CASE("g o is the cursor's: a creature selected elsewhere stays put");
@@ -1115,9 +1115,9 @@ void test_floor_players(void)
         CHECK(c && c->ch != ' ');                          /* Aria is drawn */
         CHECK(grid_screen_to_tile(&a.pview, m, sx, sy, &tx, &ty) && tx == 8 && ty == 1);
         CASE("a tap maps through their camera, and the GM hears where");
-        a.npings = 0;
+        a.pings.nrings = 0;
         CHECK_EQ(app_ping_cell(&a, 3, sx, sy), 1);
-        CHECK(a.npings == 1 && a.pings[0].x0 == 8 && a.pings[0].y0 == 1);
+        CHECK(a.pings.nrings == 1 && a.pings.rings[0].x0 == 8 && a.pings.rings[0].y0 == 1);
         CHECK(strstr(a.status, "ping on Ground at I2") != NULL);
     }
     CHECK_EQ(app_floor_shown(&a), upper);                  /* the GM's view is untouched */

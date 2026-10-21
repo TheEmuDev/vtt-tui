@@ -120,7 +120,7 @@ static void host_changed(void *gm, int what, int i, int x, int y)
 static void host_ring(void *gm, int x0, int y0, int x1, int y1)
 {
     App  *a = gm;
-    Ping *r = &a->agent_ring;
+    Ping *r = &a->pings.agent;
     r->who = PING_GM;
     r->x0 = x0; r->y0 = y0; r->x1 = x1; r->y1 = y1;
     r->until_ms = a->world.now_ms + PING_SHOW_MS;

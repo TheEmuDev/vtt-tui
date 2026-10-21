@@ -137,8 +137,9 @@ typedef struct {
     RangeOverlay saved_range;   /* the overlay before, shape and all */
 } Summon;
 
-/* The ? page (app_draw.c): which screen to go back to, which key map to lead
- * with, and how far down it is scrolled. */
+/* The ? page (app.c opens and scrolls it, app_draw.c measures it): which
+ * screen to go back to, which key map to lead with, and how far down it is
+ * scrolled. */
 typedef struct {
     Screen   from;
     KeyMapId id;
@@ -221,6 +222,23 @@ typedef struct {
     unsigned   box_gen, box_cards_gen;
 } CardView;
 
+/* Pings (app.c): rings on the table for PING_SHOW_MS, one per source -- the
+ * GM (PING_GM) or a phone, by its connection id -- a newer one from the same
+ * source replacing it. Not the map's: nothing here is saved. */
+typedef struct {
+    Ping rings[PING_MAX];
+    int  nrings;
+    /* The last ping from each source, kept after its ring comes down, for
+     * the control channel's `marked`: "the spot I pinged a minute ago".
+     * until_ms here is when it was made. Cleared with the map. */
+    Ping last[PING_MAX];
+    int  nlast;
+    /* Round what the control channel's last edit changed, for the same two
+     * seconds; the GM's screen alone (never the players' frame), and only
+     * while until_ms is set. */
+    Ping agent;
+} Pings;
+
 typedef struct {
     /* The map, its log, the jobs, the events and the request being run: what
      * a request handler is given (world.h). */
@@ -300,20 +318,7 @@ typedef struct {
     unsigned autosave_gen;   /* the map generation the autosave holds */
     int      autosave_said;  /* a failure is on the GM's line: not again until one works or :w */
 
-    /* Pings: rings on the table for PING_SHOW_MS, one per source -- the
-     * GM (PING_GM) or a phone, by its connection id -- a newer one from the
-     * same source replacing it. Not the map's: nothing here is saved. */
-    Ping     pings[PING_MAX];
-    int      npings;
-    /* The last ping from each source, kept after its ring comes down, for
-     * the control channel's `marked`: "the spot I pinged a minute ago".
-     * until_ms here is when it was made. Cleared with the map. */
-    Ping     pinged[PING_MAX];
-    int      npinged;
-    /* Round what the control channel's last edit changed, for the same two
-     * seconds; the GM's screen alone (never the players' frame), and only
-     * while until_ms is set. */
-    Ping     agent_ring;
+    Pings    pings;
     ReviewState review;
     /* Another writer of the map's file (app_disk.c): whether the file has
      * changed since vtt last read or wrote it (Map.disk), the change's

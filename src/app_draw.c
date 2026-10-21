@@ -321,11 +321,11 @@ static void draw_editor_body(App *a)
     /* Pings, over everything on the map: they are what is being looked at
      * right now. In the players' frame over fog, only round what the
      * players can see. */
-    if (playing && a->npings) {
+    if (playing && a->pings.nrings) {
         PROF_ZONE("ping.draw");
         ClipRect saved = grid_clip_push(r, &a->ed.view, m);
-        for (int i = 0; i < a->npings; i++) {
-            const Ping *p = &a->pings[i];
+        for (int i = 0; i < a->pings.nrings; i++) {
+            const Ping *p = &a->pings.rings[i];
             grid_draw_tile_ring(r, &a->ed.view, m, p->x0, p->y0, p->x1, p->y1, th->ping_bg,
                                 fog_players ? ping_visible : NULL, m);
         }
@@ -338,8 +338,8 @@ static void draw_editor_body(App *a)
     }
 
     /* And the agent's last change, for the GM alone. */
-    if (a->agent_ring.until_ms && a->view == VIEW_GM) {
-        const Ping *p = &a->agent_ring;
+    if (a->pings.agent.until_ms && a->view == VIEW_GM) {
+        const Ping *p = &a->pings.agent;
         ClipRect saved = grid_clip_push(r, &a->ed.view, m);
         grid_draw_tile_ring(r, &a->ed.view, m, p->x0, p->y0, p->x1, p->y1, th->ping_bg, NULL, NULL);
         rnd_clip_restore(r, saved);
@@ -589,7 +589,7 @@ int app_view_differs(const App *a)
     if (a->status_gm && a->status[0]) return 1;
     if (a->screen == SCREEN_PLAY && a->world.map && fog_any(a->world.map)) return 1;
     if (prof_overlay_visible()) return 1;
-    if (a->agent_ring.until_ms) return 1;       /* the GM's alone */
+    if (a->pings.agent.until_ms) return 1;       /* the GM's alone */
     if (app_jobs_shown(a)) return 1;            /* the jobs' tints, likewise */
     if (app_card_shown(a) >= 0) return 1;       /* the card box is the GM's */
     if (app_summoning(a)) return 1;             /* its status line names the template */

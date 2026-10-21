@@ -247,9 +247,9 @@ void test_camera(void)
         free(players_text(&a, &r));
         int sx, sy;
         grid_tile_interior(&a.pview, 6, 6, &sx, &sy);
-        a.npings = 0;
+        a.pings.nrings = 0;
         CHECK_EQ(app_ping_cell(&a, 3, sx, sy), 1);
-        CHECK(a.npings == 1 && a.pings[0].x0 == 6 && a.pings[0].y0 == 6);
+        CHECK(a.pings.nrings == 1 && a.pings.rings[0].x0 == 6 && a.pings.rings[0].y0 == 6);
     }
 
     CASE("hold: the GM's view now, kept while the GM looks elsewhere");
@@ -303,9 +303,9 @@ void test_camera(void)
         free(players_text(&a, &r));
         int sx, sy;
         grid_tile_interior(&a.pview, 7, 6, &sx, &sy);
-        a.npings = 0;
+        a.pings.nrings = 0;
         CHECK_EQ(app_ping_cell(&a, 3, sx, sy), 1);
-        CHECK(a.npings == 1 && a.pings[0].x0 == 7 && a.pings[0].y0 == 6);
+        CHECK(a.pings.nrings == 1 && a.pings.rings[0].x0 == 7 && a.pings.rings[0].y0 == 6);
     }
 
     CASE("follow again: the GM's camera, nothing of their own");

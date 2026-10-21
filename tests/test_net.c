@@ -1247,10 +1247,10 @@ void test_pings(void)
     int sx, sy;
     grid_tile_interior(&a.ed.view, 4, 2, &sx, &sy);
     CHECK_EQ(app_ping_cell(&a, 7, sx, sy), 1);
-    CHECK_EQ(a.npings, 1);
-    CHECK_EQ(a.pings[0].x0, 4);
-    CHECK_EQ(a.pings[0].y0, 2);
-    CHECK_EQ(a.pings[0].who, 7u);
+    CHECK_EQ(a.pings.nrings, 1);
+    CHECK_EQ(a.pings.rings[0].x0, 4);
+    CHECK_EQ(a.pings.rings[0].y0, 2);
+    CHECK_EQ(a.pings.rings[0].who, 7u);
     CHECK(strstr(a.status, "ping at E3") != NULL);
     CHECK_EQ(app_ping_due(&a, now), PING_SHOW_MS);
     rnd_begin(&r); app_draw(&a);
@@ -1265,10 +1265,10 @@ void test_pings(void)
     CASE("expiry: due counts down, and at two seconds the ring is gone");
     CHECK_EQ(app_ping_due(&a, now + 1999), 1);
     app_tick(&a, now + 1999);
-    CHECK_EQ(a.npings, 1);
+    CHECK_EQ(a.pings.nrings, 1);
     a.dirty = 0;
     app_tick(&a, now + 2000);
-    CHECK_EQ(a.npings, 0);
+    CHECK_EQ(a.pings.nrings, 0);
     CHECK_EQ(a.dirty, 1);
     CHECK_EQ(app_ping_due(&a, now + 2000), -1);
     rnd_begin(&r); app_draw(&a);
@@ -1282,47 +1282,47 @@ void test_pings(void)
     CHECK_EQ(app_ping_cell(&a, 7, sx, r.h - 2), 0);         /* the status line */
     CHECK_EQ(app_ping_cell(&a, 7, sx, r.h - 1), 0);         /* the key bar */
     CHECK_EQ(app_ping_cell(&a, 7, r.w - 1, sy), 0);         /* past the map's east edge */
-    CHECK_EQ(a.npings, 0);
+    CHECK_EQ(a.pings.nrings, 0);
 
     CASE("the same phone moves its ring; another phone adds one; the GM's is its own");
     app_ping_cell(&a, 7, sx, sy);
     grid_tile_interior(&a.ed.view, 1, 1, &sx, &sy);
     app_ping_cell(&a, 7, sx, sy);
-    CHECK_EQ(a.npings, 1);
-    CHECK_EQ(a.pings[0].x0, 1);
+    CHECK_EQ(a.pings.nrings, 1);
+    CHECK_EQ(a.pings.rings[0].x0, 1);
     app_ping_cell(&a, 8, sx, sy);
-    CHECK_EQ(a.npings, 2);
+    CHECK_EQ(a.pings.nrings, 2);
     a.ed.cx = 9; a.ed.cy = 3;
     press(&a, "gp");
-    CHECK_EQ(a.npings, 3);
+    CHECK_EQ(a.pings.nrings, 3);
     CHECK(strstr(a.status, "ping at J4") != NULL);
     press(&a, "lgp");
-    CHECK_EQ(a.npings, 3);
+    CHECK_EQ(a.pings.nrings, 3);
     int gm = -1;
-    for (int i = 0; i < a.npings; i++) if (a.pings[i].who == PING_GM) gm = i;
+    for (int i = 0; i < a.pings.nrings; i++) if (a.pings.rings[i].who == PING_GM) gm = i;
     CHECK(gm >= 0);
-    CHECK_EQ(a.pings[gm].x0, 10);
+    CHECK_EQ(a.pings.rings[gm].x0, 10);
 
     CASE("the GM's ping rings the cursor's footprint, or the box");
     press(&a, "2b");
     a.ed.cx = 1; a.ed.cy = 1;
     press(&a, "gp");
-    CHECK_EQ(a.pings[gm].x1 - a.pings[gm].x0, 1);
-    CHECK_EQ(a.pings[gm].y1 - a.pings[gm].y0, 1);
+    CHECK_EQ(a.pings.rings[gm].x1 - a.pings.rings[gm].x0, 1);
+    CHECK_EQ(a.pings.rings[gm].y1 - a.pings.rings[gm].y0, 1);
     CHECK(strstr(a.status, "ping at B2-C3") != NULL);
     press(&a, "1b");
     a.ed.cx = 2; a.ed.cy = 0;
     press(&a, "vlljgp");
-    CHECK_EQ(a.pings[gm].x0, 2);
-    CHECK_EQ(a.pings[gm].x1, 4);
-    CHECK_EQ(a.pings[gm].y1, 1);
+    CHECK_EQ(a.pings.rings[gm].x0, 2);
+    CHECK_EQ(a.pings.rings[gm].x1, 4);
+    CHECK_EQ(a.pings.rings[gm].y1, 1);
     CHECK_EQ(a.play.visual, 0);
 
     CASE("in build mode g p is not a ping, and the rings wait for play");
-    int before = a.npings;
+    int before = a.pings.nrings;
     app_key(&a, f1);
     press(&a, "gp");
-    CHECK_EQ(a.npings, before);
+    CHECK_EQ(a.pings.nrings, before);
     rnd_begin(&r); app_draw(&a);
     CHECK(!ring_at(&r, &a, 2, 0));
     CHECK_EQ(app_ping_cell(&a, 7, sx, sy), 0);              /* the phones' frame is play mode's */
@@ -1331,7 +1331,7 @@ void test_pings(void)
     CASE("fog: a ping into the dark rings for the GM, not for the players, and says nothing to them");
     now += 5000;
     app_tick(&a, now);
-    CHECK_EQ(a.npings, 0);
+    CHECK_EQ(a.pings.nrings, 0);
     press(&a, ":fog on\r");
     a.ed.cx = 9; a.ed.cy = 3;                                /* nobody lights it */
     CHECK_EQ(fog_ground_hidden(m, 9, 3), 1);
@@ -1378,15 +1378,15 @@ void test_pings(void)
     char line[32];
     snprintf(line, sizeof line, "P %d %d\n", sx, sy);
     CHECK(write(w, line, strlen(line)) == (ssize_t)strlen(line));
-    for (int i = 0; i < 20 && a.npings == 0; i++) { net_pump(&a.net, now); app_tick(&a, now); }
-    CHECK_EQ(a.npings, 1);
-    CHECK(a.pings[0].who != PING_GM);
-    CHECK_EQ(a.pings[0].x0, 3);
+    for (int i = 0; i < 20 && a.pings.nrings == 0; i++) { net_pump(&a.net, now); app_tick(&a, now); }
+    CHECK_EQ(a.pings.nrings, 1);
+    CHECK(a.pings.rings[0].who != PING_GM);
+    CHECK_EQ(a.pings.rings[0].x0, 3);
     press(&a, ":serve --no-pings\r");
     CHECK(strstr(a.status, "pings off") != NULL);
     CHECK_EQ(net_pings_on(&a.net), 0);
     press(&a, "gp");                                        /* the GM's own is not a phone's */
-    CHECK_EQ(a.npings, 2);
+    CHECK_EQ(a.pings.nrings, 2);
     press(&a, ":serve --pings\r");
     CHECK_EQ(net_pings_on(&a.net), 1);
     close(w);
@@ -1411,8 +1411,8 @@ void test_pings(void)
     for (int i = 0; i < 20 && !dark; i++) {
         net_pump(&a.net, now);
         app_tick(&a, now);
-        for (int j = 0; j < a.npings; j++)
-            dark |= a.pings[j].who != PING_GM && a.pings[j].x0 == 9 && a.pings[j].y0 == 3;
+        for (int j = 0; j < a.pings.nrings; j++)
+            dark |= a.pings.rings[j].who != PING_GM && a.pings.rings[j].x0 == 9 && a.pings.rings[j].y0 == 3;
     }
     CHECK(dark);
     app_frame(&a, NULL, now);
@@ -1424,24 +1424,24 @@ void test_pings(void)
     now += 10000;
     app_tick(&a, now);
     for (uint32_t i = 1; i <= PING_MAX; i++) { a.world.now_ms = now + i; app_ping(&a, 100 + i, 1, 1, 1, 1); }
-    CHECK_EQ(a.npings, PING_MAX);
+    CHECK_EQ(a.pings.nrings, PING_MAX);
     a.world.now_ms = now + 50;
     app_ping(&a, 999, 2, 2, 2, 2);
-    CHECK_EQ(a.npings, PING_MAX);
+    CHECK_EQ(a.pings.nrings, PING_MAX);
     int evicted = 1;
-    for (int i = 0; i < a.npings; i++) if (a.pings[i].who == 101) evicted = 0;
+    for (int i = 0; i < a.pings.nrings; i++) if (a.pings.rings[i].who == 101) evicted = 0;
     CHECK(evicted);
 
     CASE("closing the map, or opening another, takes every ring down");
     press(&a, ":q!\r");                                    /* app_close_map */
     CHECK(a.world.map == NULL);
-    CHECK_EQ(a.npings, 0);
+    CHECK_EQ(a.pings.nrings, 0);
     CHECK_EQ(app_open_map(&a, path), 0);
     app_key(&a, f2);
     press(&a, "gp");
-    CHECK_EQ(a.npings, 1);
+    CHECK_EQ(a.pings.nrings, 1);
     CHECK_EQ(app_open_map(&a, path), 0);
-    CHECK_EQ(a.npings, 0);
+    CHECK_EQ(a.pings.nrings, 0);
 
     app_free(&a);
     rnd_free(&r);
