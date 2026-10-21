@@ -121,7 +121,7 @@ test-after:
 	@./tools/oracle.sh check ./$(BIN)
 
 # Long sessions and their peak memory, each against a bound (tools/soak.sh):
-# minutes, so not part of make test.
+# about 20 s, so not part of make test.
 soak: all
 	@./tools/soak.sh
 

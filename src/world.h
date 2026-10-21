@@ -165,9 +165,10 @@ void world_events_map_restart(World *w);
 /* The squares the jobs' change sets may hold together, 8 bytes each: 32 MB
  * (docs/V2.md, *Memory: the plan*, 6; HEALTH 44). A plan of rooms is a few
  * thousand. A whole-512x512 tile fill is 262,144, so sixteen (JOB_MAX) come
- * exactly to it; one that changes both edge arrays too is 787,456, and the
- * sixth such set is refused to an agent. The file's own change (another
- * writer's) is never refused: it is counted, and told to the GM as it comes. */
+ * exactly to it. One request changes at most CTL_OPS_MAX, 524,288 things, so
+ * eight of the largest sets an agent can make fill it and the ninth is
+ * refused. The file's own change (another writer's) is never refused: it is
+ * counted, and told to the GM as it comes. */
 #define JOB_CELLS_MAX (4L << 20)
 
 /* Jobs (job.h): the list, a proposal coming in, a landing. */

@@ -28,10 +28,12 @@ extern void *__libc_realloc(void *, size_t);
 extern void  __libc_free(void *);
 extern void *__libc_memalign(size_t, size_t);
 extern void *__libc_valloc(size_t);
+extern void *__libc_pvalloc(size_t);
 
 static unsigned long g_calls, g_frees;
 static unsigned long long g_bytes, g_live, g_live_max;
 static unsigned long g_trace_after;
+static int g_vtt;                             /* this process is a vtt: it traces and reports */
 static int g_in;                              /* inside the shim: backtrace() may allocate */
 
 /* What backtrace() itself allocates (its first call loads a library) is the
@@ -44,7 +46,7 @@ static void note(void *p)
     g_bytes += n;
     g_live  += n;
     if (g_live > g_live_max) g_live_max = g_live;
-    if (g_trace_after && g_calls > g_trace_after && !g_in) {
+    if (g_vtt && g_trace_after && g_calls > g_trace_after) {
         g_in = 1;
         void *bt[16];
         int   k = backtrace(bt, 16);
@@ -79,8 +81,15 @@ void *realloc(void *p, size_t n)
 
 /* Their blocks are freed through free(), so they are counted coming in too. */
 void *memalign(size_t al, size_t n) { void *p = __libc_memalign(al, n); note(p); return p; }
-void *aligned_alloc(size_t al, size_t n) { void *p = __libc_memalign(al, n); note(p); return p; }
+void *aligned_alloc(size_t al, size_t n)
+{
+    if (al & (al - 1)) { errno = EINVAL; return NULL; }      /* as glibc's own refuses */
+    void *p = __libc_memalign(al, n);
+    note(p);
+    return p;
+}
 void *valloc(size_t n) { void *p = __libc_valloc(n); note(p); return p; }
+void *pvalloc(size_t n) { void *p = __libc_pvalloc(n); note(p); return p; }
 int posix_memalign(void **pp, size_t al, size_t n)
 {
     if (al < sizeof(void *) || (al & (al - 1))) return EINVAL;
@@ -95,15 +104,17 @@ __attribute__((constructor)) static void mcount_start(void)
 {
     const char *t = getenv("MCOUNT_TRACE_AFTER");
     g_trace_after = t ? strtoul(t, NULL, 10) : 0;
-}
-
-__attribute__((destructor)) static void mcount_report(void)
-{
     g_in = 1;                                 /* reading comm allocates: the shim's, not the program's */
     char comm[32] = "";
     FILE *f = fopen("/proc/self/comm", "r");
     if (f) { if (!fgets(comm, sizeof comm, f)) comm[0] = '\0'; fclose(f); }
-    if (strncmp(comm, "vtt", 3) != 0) return;
+    g_vtt = !strncmp(comm, "vtt", 3);
+    g_in = 0;
+}
+
+__attribute__((destructor)) static void mcount_report(void)
+{
+    if (!g_vtt) return;
     dprintf(2, "mcount: %lu allocations, %lu frees, %llu bytes allocated, %llu bytes live at most\n",
             g_calls, g_frees, g_bytes, g_live_max);
 }

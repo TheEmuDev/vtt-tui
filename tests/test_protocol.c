@@ -497,6 +497,7 @@ void test_protocol(void)
         t = ask(&w, "tile A1:J1 water");
         CHECK(t && !strncmp(t, "ok\n", 3));
         free(t);
+        CHECK(w.jobs[evict].state == JOB_READY && w.jobs[evict].cs.ncells == 10);   /* the slot the cap skipped */
         for (int i = 0; i < JOB_MAX; i++)
             if (i != evict) { w.jobs[i].cs.ncells = 0; w.jobs[i].has_cs = 0; }
     }
