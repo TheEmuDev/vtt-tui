@@ -990,8 +990,8 @@ static void cmd_card(App *a, const char *verb, const char *rest)
 {
     Map *m = a->world.map;
     if (!strcmp(rest, "on") || !strcmp(rest, "off")) {
-        a->card_box_off = !strcmp(rest, "off");
-        app_set_status(a, a->card_box_off ? "card box off - :card still shows a card whole"
+        a->cards.box_off = !strcmp(rest, "off");
+        app_set_status(a, a->cards.box_off ? "card box off - :card still shows a card whole"
                                            : "card box on - the selected creature's card shows beside the map");
         return;
     }
@@ -1004,9 +1004,9 @@ static void cmd_card(App *a, const char *verb, const char *rest)
         app_set_status_gm(a, msg);
         return;
     }
-    a->card_token = i;
-    a->card_text  = NULL;
-    a->card_top   = 0;
+    a->cards.token = i;
+    a->cards.text  = NULL;
+    a->cards.top   = 0;
     a->modal      = MODAL_CARD;
 }
 
@@ -1025,11 +1025,11 @@ static void cmd_check(App *a, const char *verb, const char *rest)
         maptools_check_open(o, m, 0);
     }
     fclose(o);
-    free(a->card_own);
-    a->card_own  = text;
-    a->card_text = a->card_own;
-    snprintf(a->card_title, sizeof a->card_title, "check: %.38s", m->name);
-    a->card_top  = 0;
+    free(a->cards.own);
+    a->cards.own  = text;
+    a->cards.text = a->cards.own;
+    snprintf(a->cards.title, sizeof a->cards.title, "check: %.38s", m->name);
+    a->cards.top  = 0;
     a->modal     = MODAL_CARD;
 }
 

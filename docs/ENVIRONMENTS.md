@@ -115,7 +115,7 @@ fuzz corpus gains the two lines. Docs: `:env` on the `?` page (src/keys.c), the 
   now shows from anywhere on the floor that no room with one of its own covers.
 - **`:env NAME` with a missing card is allowed** and says so: name it, then `:env edit`
   writes it from the ruleset's block (`Ruleset.env_skeleton`, labels only).
-- **`:env` shows its own copy of the card** (`App.card_own`), since a card's text can be
+- **`:env` shows its own copy of the card** (`App.cards.own`), since a card's text can be
   replaced under an open view.
 - **A change set does carry the map's own** (`env_changed`, beside the round and the
   spotlight), against the plan's *Data*. Without it another program's change to the `env`

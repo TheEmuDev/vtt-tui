@@ -854,9 +854,9 @@ void test_conditions(void)
     map_touch(m);
 
     CASE("what the box kept does not outlive its map");
-    CHECK(a.box_text != NULL);
+    CHECK(a.cards.box_text != NULL);
     app_card_box_forget(&a);
-    CHECK(a.box_text == NULL && a.box_map == NULL);
+    CHECK(a.cards.box_text == NULL && a.cards.box_map == NULL);
     text = app_card_box_text(&a, 0);
     CHECK(text && strstr(text, "Restrained") != NULL);
 
@@ -865,8 +865,8 @@ void test_conditions(void)
     CHECK(strstr(a.status, "conditions: Hidden, Restrained, Vulnerable") != NULL);
     press(&a, ":condition hidden\r");
     CHECK_EQ(a.modal, MODAL_CARD);
-    CHECK(a.card_text && strstr(a.card_text, "Unseen and unlocated: harder to hit.") != NULL);
-    CHECK(strstr(a.card_text, "s h is what keeps a creature off their screens") != NULL);
+    CHECK(a.cards.text && strstr(a.cards.text, "Unseen and unlocated: harder to hit.") != NULL);
+    CHECK(strstr(a.cards.text, "s h is what keeps a creature off their screens") != NULL);
     CHECK(app_view_differs(&a));
     rnd_begin(&r);
     app_draw_view(&a, VIEW_GM);

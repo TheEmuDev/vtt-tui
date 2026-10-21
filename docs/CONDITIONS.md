@@ -100,10 +100,10 @@ Docs: `:condition` on the `?` page (src/keys.c), the README's *Daggerheart*, COD
 - **The key is `s a`**, then the word: `s` alone is the markers' prefix.
 - **A condition goes on once.** `s a vulnerable` on a creature that is Vulnerable is
   refused ("already Vulnerable"); the SRD says the same condition is not applied twice.
-- **`:condition NAME` uses the card's view** (`MODAL_CARD`, through `App.card_text`), a
+- **`:condition NAME` uses the card's view** (`MODAL_CARD`, through `App.cards.text`), a
   box the size of its few lines, so it scrolls and closes as a card does and is the GM's
   by the same test.
-- **The box's text is built once and kept** (`App.box_text`) until the map's `gen`, its
+- **The box's text is built once and kept** (`App.cards.box_text`) until the map's `gen`, its
   cards or the creature under the cursor change: the box is drawn every frame.
 - **`token_find_status`** (token.c) is the one lookup of a marker by its word; the hook
   finds the counter with `counter_find`.

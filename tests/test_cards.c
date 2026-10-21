@@ -223,7 +223,7 @@ void test_card_box(void)
     press(&a, "jjjjjjjjjjjj");
     rnd_begin(&r);
     app_draw(&a);
-    CHECK_EQ(a.card_top, 0);                                   /* a short card does not scroll */
+    CHECK_EQ(a.cards.top, 0);                                   /* a short card does not scroll */
     press(&a, "\x1b");
     CHECK_EQ(a.modal, MODAL_NONE);
 
@@ -284,10 +284,10 @@ void test_card_box(void)
         rnd_begin(&r); app_draw(&a);
         press(&a, "jjj");
         rnd_begin(&r); app_draw(&a);
-        CHECK_EQ(a.card_top, 3);
+        CHECK_EQ(a.cards.top, 3);
         press(&a, "G");
         rnd_begin(&r); app_draw(&a);
-        CHECK(a.card_top > 3 && a.card_top < 60);
+        CHECK(a.cards.top > 3 && a.cards.top < 60);
         press(&a, "\x1b");
     }
 
@@ -918,8 +918,8 @@ void test_env(void)
     a.ed.cx = 3; a.ed.cy = 3;
     press(&a, ":env\r");
     CHECK_EQ(a.modal, MODAL_CARD);
-    CHECK(a.card_text && a.card_text != m->cards[ci].text && strstr(a.card_text, "the dead do not rest") != NULL);
-    CHECK(!strcmp(a.card_title, "Crypt: haunted-crypt"));
+    CHECK(a.cards.text && a.cards.text != m->cards[ci].text && strstr(a.cards.text, "the dead do not rest") != NULL);
+    CHECK(!strcmp(a.cards.title, "Crypt: haunted-crypt"));
     CHECK(app_view_differs(&a));
     rnd_begin(&r);
     app_draw_view(&a, VIEW_GM);

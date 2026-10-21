@@ -54,7 +54,7 @@ typedef enum {
     MODAL_CONFIRM_KEY,       /* :agent key remove: take the stored API key away? */
     MODAL_CHOOSE_AGENT,      /* the first :ask with no agent chosen: how should agents answer? (app_agent.c) */
     MODAL_PICKER,            /* a list filtered as the GM types: App.pick */
-    MODAL_CARD,              /* :card -- a creature's card whole, scrolled by card_top */
+    MODAL_CARD,              /* :card -- a creature's card whole, scrolled by cards.top */
 } ModalKind;
 
 /* A handout's body: 2 KB of text, and its NUL. */
@@ -197,6 +197,29 @@ typedef struct {
     char      name[MAP_NAME_MAX];   /* "" for a copy not yet saved */
     int       turns, mirrored;
 } StampHand;
+
+/* Cards (app_card.c; docs/CARDS.md): the box beside the map is on unless
+ * :card off says otherwise; :card's view is scrolled to `top`, and names
+ * whose card it shows (`token`), the last draw measuring `lines`. */
+typedef struct {
+    int      box_off;
+    int      top;
+    int      token;
+    int      lines;
+    /* :condition's text in the same view, in place of a creature's card;
+     * NULL when the view is a card's. */
+    const char *text;
+    char        title[48];
+    char       *own;          /* :env's copy of a card: the map's may change under the view */
+    char        cond[640];    /* the :condition line text points into */
+    /* The box's text for a creature with a marker the ruleset knows: its
+     * card and what each such marker does, built when what it was built from
+     * changes (app_card_box_text). */
+    char      *box_text;
+    const Map *box_map;
+    int        box_token;
+    unsigned   box_gen, box_cards_gen;
+} CardView;
 
 typedef struct {
     /* The map, its log, the jobs, the events and the request being run: what
@@ -361,26 +384,7 @@ typedef struct {
 
     HelpView help;
 
-    /* Cards (docs/CARDS.md): the box beside the map is on unless :card off
-     * says otherwise; :card's view is scrolled to card_top, and names whose
-     * card it shows (card_token), the last draw measuring card_lines. */
-    int      card_box_off;
-    int      card_top;
-    int      card_token;
-    /* :condition's text in the same view, in place of a creature's card;
-     * NULL when the view is a card's. */
-    const char *card_text;
-    char        card_title[48];
-    char       *card_own;      /* :env's copy of a card: the map's may change under the view */
-    char        cond_modal[640];
-    /* The box's text for a creature with a marker the ruleset knows: its
-     * card and what each such marker does, built when what it was built from
-     * changes (app_card_box_text). */
-    char      *box_text;
-    const Map *box_map;
-    int        box_token;
-    unsigned   box_gen, box_cards_gen;
-    int      card_lines;
+    CardView cards;
     /* The map and generation the phones' names were last offered from
      * (app_whisper.c): rebuilt only when one changes. */
     const Map *offer_map;

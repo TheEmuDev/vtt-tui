@@ -661,9 +661,9 @@ void test_file_findings(void)
     CASE(":check shows the report in the card's view: the file's finding, its stray row folded in");
     press(&a, ":check\r");
     CHECK_EQ(a.modal, MODAL_CARD);
-    CHECK(a.card_text && strstr(a.card_text, "W031 row-extra") != NULL);
-    CHECK(a.card_text && strstr(a.card_text, "W019 stray-row") == NULL);
-    CHECK(a.card_text && strstr(a.card_text, "folded in: W019 x1") != NULL);
+    CHECK(a.cards.text && strstr(a.cards.text, "W031 row-extra") != NULL);
+    CHECK(a.cards.text && strstr(a.cards.text, "W019 stray-row") == NULL);
+    CHECK(a.cards.text && strstr(a.cards.text, "folded in: W019 x1") != NULL);
     CHECK(app_view_differs(&a));
     press(&a, "\x1b");
     CHECK_EQ(a.modal, MODAL_NONE);

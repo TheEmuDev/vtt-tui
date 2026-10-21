@@ -423,11 +423,11 @@ void app_env_command(App *a, const char *rest)
             app_set_status_gm(a, msg);
             return;
         }
-        snprintf(a->card_title, sizeof a->card_title, "%.20s: %.24s", where, at.env);
-        free(a->card_own);
-        a->card_own  = xstrdup(m->cards[ci].text);
-        a->card_text = a->card_own;
-        a->card_top  = 0;
+        snprintf(a->cards.title, sizeof a->cards.title, "%.20s: %.24s", where, at.env);
+        free(a->cards.own);
+        a->cards.own  = xstrdup(m->cards[ci].text);
+        a->cards.text = a->cards.own;
+        a->cards.top  = 0;
         a->modal     = MODAL_CARD;
         return;
     }
@@ -479,9 +479,9 @@ const char *app_card_box_text(App *a, int i)
 
     /* Built once and kept while the map, the creature and the cards are as
      * they were: the box is drawn every frame the cursor rests there. */
-    if (a->box_text && a->box_map == m && a->box_token == i && a->box_gen == m->gen &&
-        a->box_cards_gen == m->cards_gen)
-        return a->box_text;
+    if (a->cards.box_text && a->cards.box_map == m && a->cards.box_token == i && a->cards.box_gen == m->gen &&
+        a->cards.box_cards_gen == m->cards_gen)
+        return a->cards.box_text;
 
     ByteBuf b;
     bb_init(&b, 512);
@@ -497,27 +497,27 @@ const char *app_card_box_text(App *a, int i)
         bb_puts(&b, c->text);
     }
     bb_putc(&b, '\0');
-    free(a->box_text);
-    a->box_text      = b.data;
-    a->box_map       = m;
-    a->box_token     = i;
-    a->box_gen       = m->gen;
-    a->box_cards_gen = m->cards_gen;
-    return a->box_text;
+    free(a->cards.box_text);
+    a->cards.box_text      = b.data;
+    a->cards.box_map       = m;
+    a->cards.box_token     = i;
+    a->cards.box_gen       = m->gen;
+    a->cards.box_cards_gen = m->cards_gen;
+    return a->cards.box_text;
 }
 
 void app_card_box_forget(App *a)
 {
     /* A view of the copy goes with it. */
-    if (a->card_text && a->card_text == a->card_own) {
-        a->card_text = NULL;
+    if (a->cards.text && a->cards.text == a->cards.own) {
+        a->cards.text = NULL;
         if (a->modal == MODAL_CARD) a->modal = MODAL_NONE;
     }
-    free(a->card_own);
-    a->card_own = NULL;
-    free(a->box_text);
-    a->box_text = NULL;
-    a->box_map  = NULL;
+    free(a->cards.own);
+    a->cards.own = NULL;
+    free(a->cards.box_text);
+    a->cards.box_text = NULL;
+    a->cards.box_map  = NULL;
 }
 
 void app_condition_command(App *a, const char *rest)
@@ -545,10 +545,10 @@ void app_condition_command(App *a, const char *rest)
         app_set_status(a, msg);
         return;
     }
-    snprintf(a->cond_modal, sizeof a->cond_modal, "%s%s%s", c->text, c->note ? "\n\n" : "", c->note ? c->note : "");
-    str_lcpy(a->card_title, c->name, sizeof a->card_title);
-    a->card_text = a->cond_modal;
-    a->card_top  = 0;
+    snprintf(a->cards.cond, sizeof a->cards.cond, "%s%s%s", c->text, c->note ? "\n\n" : "", c->note ? c->note : "");
+    str_lcpy(a->cards.title, c->name, sizeof a->cards.title);
+    a->cards.text = a->cards.cond;
+    a->cards.top  = 0;
     a->modal     = MODAL_CARD;
 }
 

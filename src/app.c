@@ -1274,13 +1274,13 @@ static int modal_key(App *a, Key k)
         int half = imax(1, a->rnd->h / 2);
         if (k.kind == KEY_ESC || k.kind == KEY_ENTER || (k.kind == KEY_CHAR && k.ch == 'q' && !k.mods)) {
             a->modal = MODAL_NONE;
-        } else if (k.kind == KEY_DOWN || (k.kind == KEY_CHAR && k.ch == 'j' && !k.mods)) a->card_top++;
-        else if (k.kind == KEY_UP || (k.kind == KEY_CHAR && k.ch == 'k' && !k.mods))     a->card_top--;
-        else if (k.kind == KEY_CHAR && (k.mods & MOD_CTRL) && k.ch == 'd')                a->card_top += half;
-        else if (k.kind == KEY_CHAR && (k.mods & MOD_CTRL) && k.ch == 'u')                a->card_top -= half;
-        else if (k.kind == KEY_CHAR && k.ch == 'g' && !k.mods)                            a->card_top = 0;
-        else if (k.kind == KEY_CHAR && k.ch == 'G' && !k.mods)                            a->card_top = a->card_lines;
-        if (a->card_top < 0) a->card_top = 0;
+        } else if (k.kind == KEY_DOWN || (k.kind == KEY_CHAR && k.ch == 'j' && !k.mods)) a->cards.top++;
+        else if (k.kind == KEY_UP || (k.kind == KEY_CHAR && k.ch == 'k' && !k.mods))     a->cards.top--;
+        else if (k.kind == KEY_CHAR && (k.mods & MOD_CTRL) && k.ch == 'd')                a->cards.top += half;
+        else if (k.kind == KEY_CHAR && (k.mods & MOD_CTRL) && k.ch == 'u')                a->cards.top -= half;
+        else if (k.kind == KEY_CHAR && k.ch == 'g' && !k.mods)                            a->cards.top = 0;
+        else if (k.kind == KEY_CHAR && k.ch == 'G' && !k.mods)                            a->cards.top = a->cards.lines;
+        if (a->cards.top < 0) a->cards.top = 0;
         a->dirty = 1;
         return 1;
     }
