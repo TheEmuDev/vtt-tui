@@ -831,15 +831,18 @@ void test_net_server(void)
     CHECK_EQ(wc.grid[3 * 64 + 1].ch, 'b');
     CHECK_EQ(net_clients(&n), 2);
 
-    CASE("a client that cannot take a frame is dropped, and the GM is never waited for");
-    int ncl = n.ncl;
-    for (int i = 0; i < n.ncl; i++) if (n.cl[i].kind == CL_RAW) n.cl[i].out_len = NET_SEND_CAP - 4;
+    CASE("a client with more than a FULL waiting is sent no frame, kept, and the GM is never waited for");
+    int ncl = n.ncl, raw = -1;
+    for (int i = 0; i < n.ncl; i++) if (n.cl[i].kind == CL_RAW) { raw = i; n.cl[i].out_len = NET_SEND_CAP - 4; }
+    CHECK(raw >= 0);
     n.stale = 1;                                        /* force a full frame out */
     rnd_begin(&r);
     draw_text(&r, 1, 5, "a big change", -1, style(0xD8D8E0, 0x0E0E12, 0));
     net_frame_begin(&n); rnd_flush(&r, NULL); net_frame_end(&n, now);
-    CHECK_EQ(n.ncl, ncl - 1);
-    CHECK_EQ((int)n.dropped, 1);
+    CHECK_EQ(n.ncl, ncl);
+    CHECK_EQ((int)n.dropped, 0);
+    CHECK(raw >= 0 && n.cl[raw].behind);
+    CHECK(raw >= 0 && n.cl[raw].out_len == NET_SEND_CAP - 4);   /* nothing queued after what was there */
     CHECK_EQ(ws_recv_until(&n, s, &wd, &wc, 2, now), 0);   /* the other still gets it */
     CHECK_EQ(wc.grid[5 * 64 + 1].ch, 'a');
 
@@ -2109,33 +2112,9 @@ void test_net_edges(void)
         net_set_handout(&n, "", 0, now);
     }
 
-    CASE("a watcher that never reads is dropped once its queue is full, and counted; the rest are not");
-    {
-        uint32_t before = n.dropped;
-        net_set_live(&n, 1);
-        /* w[7] never reads; the others are read as they go. Every frame
-         * changes every cell, so each is a whole screen's worth. The queue
-         * overflows only once the kernel's buffers between the two are full,
-         * and those are the kernel's size (megabytes): the bound is bytes
-         * sent, far past any of them, not a count of frames. */
-        uint64_t start = n.total_bytes;
-        for (int f = 0; n.dropped == before && n.total_bytes - start < (uint64_t)512 << 20; f++) {
-            rnd_begin(&r);
-            char line[61];
-            for (int y = 0; y < 16; y++) {
-                for (int x = 0; x < 60; x++) line[x] = (char)('a' + (f + x + y) % 26);
-                line[60] = '\0';
-                draw_text(&r, 0, y, line, -1, style(0xD8D8E0, 0x0E0E12, 0));
-            }
-            net_frame_begin(&n);
-            rnd_flush(&r, NULL);
-            net_frame_end(&n, now);
-            net_pump(&n, now);
-            for (int k = 0; k < NET_MAX_CLIENTS - 1; k++) while (drain_ms(w[k], buf, sizeof buf, 0) > 0) { }
-        }
-        CHECK_EQ(n.dropped, before + 1);
-        CHECK_EQ(n.ncl, NET_MAX_CLIENTS - 1);
-    }
+    /* A watcher that never reads: suite netlag (test_netlag.c), through the
+     * fake sockets, exact and quick -- it is kept, never more than a FULL
+     * behind vtt's side of its socket, and caught up when it reads. */
 
     for (int k = 0; k < NET_MAX_CLIENTS; k++) close(w[k]);
     net_stop(&n);

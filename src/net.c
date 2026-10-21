@@ -11,6 +11,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "conn.h"
 #include "prof.h"
 #include "util.h"
 
@@ -180,7 +181,7 @@ int net_start(Net *n, uint16_t port, const Renderer *r, char *err, size_t errsz)
 static void client_close(Net *n, int i)
 {
     NetClient *c = &n->cl[i];
-    if (c->fd >= 0) close(c->fd);
+    if (c->fd >= 0) conn()->close(c->fd);
     c->fd = -1;
     /* Keep the array dense so poll sees no holes. */
     uint8_t *out = c->out, *in = c->in;
@@ -299,7 +300,7 @@ static int client_flush(Net *n, int i, uint64_t now_ms)
 {
     NetClient *c = &n->cl[i];
     while (c->out_off < c->out_len) {
-        ssize_t w = write(c->fd, c->out + c->out_off, c->out_len - c->out_off);
+        ssize_t w = conn()->write(c->fd, c->out + c->out_off, c->out_len - c->out_off);
         if (w > 0) { c->out_off += (size_t)w; c->last_tx_ms = now_ms; continue; }
         if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) return 0;
         if (w < 0 && errno == EINTR) continue;
@@ -345,6 +346,22 @@ static int client_send_synced(Net *n, int i, const uint8_t *frame, size_t len)
 
 static void client_named(Net *n, int i, uint64_t now_ms);
 
+/* A client frames were withheld from, once its queue has drained: one FULL,
+ * the screen as it is now, and it is level again. Nothing while its queue
+ * still holds bytes, or while frames are withheld from everyone (the next
+ * live frame is a FULL for all). Returns -1 when it closed the client. */
+static int client_catch_up(Net *n, int i, uint64_t now_ms)
+{
+    NetClient *c = &n->cl[i];
+    if (c->out_off < c->out_len || !n->live) return 0;
+    wire_enc_full(&n->enc, n->rnd);
+    if (n->enc.overflow) { client_close(n, i); return -1; }
+    n->full_len = n->enc.len;
+    c->behind = 0;
+    if (client_send_synced(n, i, n->enc.buf, n->enc.len) < 0) return -1;
+    return client_flush(n, i, now_ms);
+}
+
 /* The whole screen as it stands, for a client that has just arrived. The
  * shared encoder builds it, which may grow the palette; everyone else is
  * caught up before their next frame by client_send_synced. */
@@ -352,6 +369,7 @@ static void client_send_full(Net *n, int i, uint64_t now_ms)
 {
     wire_enc_full(&n->enc, n->rnd);
     if (n->enc.overflow) { client_close(n, i); return; }
+    n->full_len = n->enc.len;
     if (client_send_synced(n, i, n->enc.buf, n->enc.len) < 0) return;
     n->joined = 1;
     /* The handout always follows, empty when there is none: a phone coming
@@ -748,7 +766,7 @@ static void client_read(Net *n, int i, uint64_t now_ms)
     NetClient *c = &n->cl[i];
     if (c->in_len >= NET_REQ_CAP - 1) { client_close(n, i); return; }
 
-    ssize_t r = read(c->fd, c->in + c->in_len, NET_REQ_CAP - 1 - c->in_len);
+    ssize_t r = conn()->read(c->fd, c->in + c->in_len, NET_REQ_CAP - 1 - c->in_len);
     if (r == 0) { client_close(n, i); return; }
     if (r < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) return;
@@ -825,12 +843,14 @@ static void accept_client(Net *n, uint64_t now_ms)
     PROF_ZONE("net.accept");
     struct sockaddr_in addr;
     socklen_t alen = sizeof addr;
-    int fd = accept(n->listen_fd, (struct sockaddr *)&addr, &alen);
+    int fd = conn()->accept(n->listen_fd, (struct sockaddr *)&addr, &alen);
     if (fd < 0) return;
-    if (n->ncl >= NET_MAX_CLIENTS || fd_nonblock_cloexec(fd) < 0) { close(fd); return; }
+    if (n->ncl >= NET_MAX_CLIENTS || fd_nonblock_cloexec(fd) < 0) { conn()->close(fd); return; }
 
     int one = 1;
-    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);
+    conn()->setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);
+    int sndbuf = NET_SNDBUF;
+    conn()->setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof sndbuf);
 
     NetClient *c = &n->cl[n->ncl++];
     uint8_t *out = c->out, *in = c->in;
@@ -871,7 +891,10 @@ void net_service(Net *n, const struct pollfd *fds, int count, uint64_t now_ms)
         for (int j = 0; j < n->ncl; j++) if (n->cl[j].fd == fd) { i = j; break; }
         if (i < 0) continue;
         if (fds[k].revents & (POLLERR | POLLHUP | POLLNVAL)) { client_close(n, i); continue; }
-        if (fds[k].revents & POLLOUT) client_flush(n, i, now_ms);
+        if (fds[k].revents & POLLOUT) {
+            if (client_flush(n, i, now_ms) < 0) continue;
+            if (n->cl[i].behind && client_catch_up(n, i, now_ms) < 0) continue;
+        }
         if (i < n->ncl && n->cl[i].fd == fd && (fds[k].revents & POLLIN)) client_read(n, i, now_ms);
     }
 
@@ -949,14 +972,26 @@ void net_frame_end(Net *n, uint64_t now_ms)
     if (!full && n->enc.cells == 0) return;           /* nothing changed: nothing sent */
     if (full) { wire_enc_full(&n->enc, n->rnd); n->stale = 0; }
     if (n->enc.overflow) return;
+    if (full) n->full_len = n->enc.len;
 
     /* Only stream clients get frames; one still shaking hands gets a FULL
      * when it finishes. */
+    int behind = 0;
     for (int i = 0; i < n->ncl; i++) {
         NetClient *c = &n->cl[i];
         /* A watcher only once its hello -- and the join code -- is in. */
         if (!stream_client(c)) continue;
+        /* A phone never falls more than a FULL behind: past that, what it
+         * would be sent is worth less than a FULL of the screen when it
+         * reads again. An empty queue always takes the frame. */
+        size_t queued = c->out_len - c->out_off;
+        if (!c->behind && queued > 0 && queued + n->enc.len > n->full_len) c->behind = 1;
+        if (c->behind) { behind = 1; continue; }
         if (client_send_synced(n, i, n->enc.buf, n->enc.len) < 0) { i--; continue; }
         if (client_flush(n, i, now_ms) < 0) i--;
     }
+    /* After every other client has this frame: a catch-up encodes a FULL
+     * over the encoder's buffer. */
+    for (int i = 0; behind && i < n->ncl; i++)
+        if (n->cl[i].behind && client_catch_up(n, i, now_ms) < 0) i--;
 }

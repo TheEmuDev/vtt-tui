@@ -2,6 +2,7 @@
  * the test_*.c files by area; harness.h is what they share. */
 
 #include "harness.h"
+#include "conn.h"
 #include "disk.h"
 
 /* build/run-tests runs every suite; build/run-tests NAME... only the ones
@@ -153,6 +154,7 @@ int main(int argc, char **argv)
         { "damage",     test_loader_damage },
         { "pagefeed",   test_page_feed },
         { "netedges",   test_net_edges },
+        { "netlag",     test_net_lag },
         { "playbox",    test_play_box },
         { "moverules",  test_move_rules },
         { "burst",      test_group_effect },
@@ -217,6 +219,11 @@ int main(int argc, char **argv)
             g_fails++;
             printf("  FAIL %s left a test's disk in use\n", suites[i].name);
             disk_use(NULL);
+        }
+        if (conn() != &CONN_REAL) {          /* nor its phones' sockets */
+            g_fails++;
+            printf("  FAIL %s left a test's sockets in use\n", suites[i].name);
+            conn_use(NULL);
         }
         printf("  %-8s %s\n", suites[i].name, g_fails == before ? "ok" : "FAILED");
     }

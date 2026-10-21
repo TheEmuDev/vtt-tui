@@ -23,6 +23,13 @@
 #define NET_SEND_CAP    (64 * 1024)
 #define NET_REQ_CAP     4096
 #define NET_FRAME_CAP   (128 * 1024)
+/* The kernel's send buffer a phone is given (SO_SNDBUF at accept), so a
+ * phone that stops reading shows in vtt's own queue, where the lag bound
+ * acts, instead of in megabytes the kernel would otherwise take on its
+ * behalf (Linux grows it to tcp_wmem's ceiling, 4 MB here). A LAN's
+ * bandwidth-delay product is about 62 KB (100 Mbit/s, 5 ms): a guess that
+ * Wi-Fi is not slowed by it, to be checked on a phone (tools/phonecheck.sh). */
+#define NET_SNDBUF      (128 * 1024)
 #define NET_CODE_LEN    6
 /* A browser silent this long is sent a WebSocket ping, which browsers answer
  * by themselves, hidden tab or not; a watcher whose line has been quiet this
@@ -60,6 +67,10 @@ typedef struct {
     size_t     in_len;
 
     int        pal_known;     /* palette entries this client has been told */
+    /* Frames are withheld from it: queuing the next would have left more
+     * than a FULL's bytes waiting. When its queue drains it is sent one
+     * FULL, the screen as it is then (docs/V2.md, step 7, item 1). */
+    int        behind;
     uint64_t   last_rx_ms, last_tx_ms;
 
     uint32_t   id;            /* this connection, for as long as it lasts */
@@ -108,6 +119,7 @@ typedef struct {
      * the process, which the operating system sees to. */
     int             stay;
     int             stale;      /* a frame was withheld: next live frame is FULL */
+    size_t          full_len;   /* the last FULL's bytes: how far behind a phone may fall */
     int             no_pings;   /* :serve --no-pings: taps are read and dropped */
 
     /* What the clients have said since the app last looked. Fixed: one
