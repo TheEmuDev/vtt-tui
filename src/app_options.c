@@ -163,7 +163,7 @@ static void step(App *a, int row, int dir)
         }
         s->agent = next;
         s->paused = 0;
-        a->agent_from_env = 0;
+        a->agents.from_env = 0;
         app_settings_changed(a);
         said(a, SET_AGENT, "");
         return;
@@ -231,7 +231,7 @@ void app_options_prompt(App *a, const char *text)
     if (row == OPT_COMMAND) {
         a->settings.agent = AGENT_KIND_COMMAND;
         a->settings.paused = 0;
-        a->agent_from_env = 0;
+        a->agents.from_env = 0;
     }
     app_settings_changed(a);
     said(a, ID[row], row == OPT_COMMAND ? " - each :ask starts it" : " - from the next :ask");

@@ -260,6 +260,20 @@ typedef struct {
     struct { const Map *map; unsigned gen; int floor, zoom; Rect view; } cam_for;
 } PlayersView;
 
+/* :agent command (app_agent.c): what vtt starts for each :ask and each job
+ * sent back, the job on its stdin, and the agent choice box's state. */
+typedef struct {
+    AgentRun run[JOB_MAX];    /* the agents running; nrun of them */
+    int      nrun;
+    int      deadline_ms;     /* AGENT_DEADLINE_MS; a test sets less */
+    int      grace_ms;        /* AGENT_GRACE_MS; likewise */
+    char     cmd[AGENT_LINE_MAX];   /* what an :ask starts now, from the settings (app_agent_apply); empty: none */
+    int      cmd_off;         /* :agent command off: kept, not started */
+    int      from_env;        /* cmd is VTT_AGENT_COMMAND's, for this session */
+    int      key_then;        /* what the key prompt does once a key is stored: KEY_THEN_* */
+    int      choice_job;      /* the job the agent choice box (or what it opened) is for; 0: none */
+} Agents;
+
 typedef struct {
     /* The map, its log, the jobs, the events and the request being run: what
      * a request handler is given (world.h). */
@@ -350,23 +364,13 @@ typedef struct {
     uint64_t disk_checked_ms, disk_key_ms;
     unsigned ctl_refused;       /* the last refusal logged, hashed: a caller repeating itself is one line */
     uint64_t ctl_turn_ns;       /* CTL_TURN_NS; a test sets 0 for one request a turn */
-    /* :agent command (app_agent.c): what vtt starts for each :ask and each
-     * job sent back, the job on its stdin. Empty: none. */
-    AgentRun agents[JOB_MAX];
-    int      nagents;
-    int      agent_deadline_ms; /* AGENT_DEADLINE_MS; a test sets less */
-    int      agent_grace_ms;    /* AGENT_GRACE_MS; likewise */
-    char     agent_cmd[AGENT_LINE_MAX];  /* what an :ask starts now, from the settings (app_agent_apply) */
-    int      agent_cmd_off;     /* :agent command off: kept, not started */
-    int      agent_from_env;    /* agent_cmd is VTT_AGENT_COMMAND's, for this session */
+    Agents   agents;
 
     /* The GM's settings (settings.c; docs/APIAGENT.md): what the Options
      * screen and :agent change. Saved to settings_file on each change; ""
      * (a test, a headless run) keeps them in memory only. */
     Settings settings;
     char     settings_file[1024];
-    int      key_then;          /* what the key prompt does once a key is stored: KEY_THEN_* (app_agent.c) */
-    int      choice_job;        /* the job the agent choice box (or what it opened) is for; 0: none */
     OptionsView options;
 
     TextPrompt prompt;

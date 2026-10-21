@@ -526,7 +526,7 @@ static int run_headless(const Options *o)
                 /* A started agent is the tick's to reap: with one running the
                  * tick is in the frame, as the loop has it, or the runs would
                  * pile up unreaped and `agent.reap` have no row. */
-                if (a.nagents) app_tick(&a, bench_clock_ms);
+                if (a.agents.nrun) app_tick(&a, bench_clock_ms);
                 app_frame(&a, NULL, 0);
                 prof_frame_end();
                 prof_set_counters(r.cells_changed, r.bytes_written);
@@ -648,7 +648,7 @@ static int run_interactive(const Options *o)
         /* VTT_AGENT_COMMAND wins over the settings for the session it
          * starts, and is not saved. */
         const char *cmd = getenv("VTT_AGENT_COMMAND");
-        if (cmd && cmd[0] && strlen(cmd) < AGENT_CMD_MAX) { str_lcpy(a.agent_cmd, cmd, sizeof a.agent_cmd); a.agent_from_env = 1; }
+        if (cmd && cmd[0] && strlen(cmd) < AGENT_CMD_MAX) { str_lcpy(a.agents.cmd, cmd, sizeof a.agents.cmd); a.agents.from_env = 1; }
         else if (cmd && cmd[0]) app_set_status_gm(&a, "VTT_AGENT_COMMAND is over 255 characters - not set; put it in a script");
         app_agent_apply(&a);
     }

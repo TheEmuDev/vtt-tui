@@ -32,8 +32,8 @@ void app_init(App *a, Term *t, Renderer *r)
     a->world.host = &APP_WORLD_HOST;
     a->world.gm   = a;
     a->ctl_turn_ns = CTL_TURN_NS;
-    a->agent_deadline_ms = AGENT_DEADLINE_MS;
-    a->agent_grace_ms    = AGENT_GRACE_MS;
+    a->agents.deadline_ms = AGENT_DEADLINE_MS;
+    a->agents.grace_ms    = AGENT_GRACE_MS;
     settings_default(&a->settings);
     /* A test or a bench has no GM to ask how agents answer: its :ask waits
      * for one on the channel. main starts from the defaults again (unset),
@@ -757,10 +757,10 @@ void app_report_selection(App *a)
 /* A prompt the agent choice box opened ended with nothing chosen (an empty
  * answer, a key that could not be stored): the job still waits, so the box
  * comes back, as esc brings it back. One rule for every way out, rather than
- * each early return clearing App.choice_job. */
+ * each early return clearing App.agents.choice_job. */
 static void back_to_choice(App *a)
 {
-    if (a->choice_job && a->modal == MODAL_NONE && a->settings.agent == AGENT_KIND_UNSET)
+    if (a->agents.choice_job && a->modal == MODAL_NONE && a->settings.agent == AGENT_KIND_UNSET)
         a->modal = MODAL_CHOOSE_AGENT;
 }
 
@@ -1294,10 +1294,10 @@ static int modal_key(App *a, Key k)
             if (secret) ui_prompt_wipe(&a->prompt);
             a->modal       = MODAL_NONE;
             a->prompt_what = PROMPT_NONE;
-            a->key_then    = KEY_THEN_NOTHING;
+            a->agents.key_then    = KEY_THEN_NOTHING;
             a->options.prompt  = -1;
             /* From the agent choice box: back to it, the job still waiting. */
-            if (a->choice_job && (what == PROMPT_API_KEY || what == PROMPT_SETTING)) a->modal = MODAL_CHOOSE_AGENT;
+            if (a->agents.choice_job && (what == PROMPT_API_KEY || what == PROMPT_SETTING)) a->modal = MODAL_CHOOSE_AGENT;
             if (secret) app_set_status_gm(a, "canceled - no key stored");
             else app_set_status(a, "canceled");
         }

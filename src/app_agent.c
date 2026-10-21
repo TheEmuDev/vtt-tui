@@ -92,8 +92,8 @@ void app_agent_prompt(const App *a, const Job *j, FILE *out)
 
 static AgentRun *run_of(App *a, int job)
 {
-    for (int i = 0; i < a->nagents; i++)
-        if (a->agents[i].job == job) return &a->agents[i];
+    for (int i = 0; i < a->agents.nrun; i++)
+        if (a->agents.run[i].job == job) return &a->agents.run[i];
     return NULL;
 }
 
@@ -106,7 +106,7 @@ void app_agent_forget(App *a, int num)
 void app_agent_heard(App *a, const char *who)
 {
     int num = 0;
-    if (!a->nagents || sscanf(who, AGENT_NAME_FMT, &num) != 1 || num < 1) return;
+    if (!a->agents.nrun || sscanf(who, AGENT_NAME_FMT, &num) != 1 || num < 1) return;
     AgentRun *r = run_of(a, num);
     if (r && !r->stopping && r->heard_ms) r->heard_ms = a->world.now_ms ? a->world.now_ms : 1;
 }
@@ -114,13 +114,13 @@ void app_agent_heard(App *a, const char *who)
 int app_agents_due(const App *a, uint64_t now_ms)
 {
     int due = -1;
-    for (int i = 0; i < a->nagents; i++) {
-        const AgentRun *r = &a->agents[i];
+    for (int i = 0; i < a->agents.nrun; i++) {
+        const AgentRun *r = &a->agents.run[i];
         if (!r->heard_ms) return 0;                           /* not yet seen by a tick */
         /* Told to stop and then made to: nothing more to do at any time. Its
          * end wakes the loop (SIGCHLD); one that cannot die must not spin it. */
         if (r->stopping == 2) continue;
-        uint64_t at = r->heard_ms + (uint64_t)(r->stopping ? a->agent_grace_ms : a->agent_deadline_ms);
+        uint64_t at = r->heard_ms + (uint64_t)(r->stopping ? a->agents.grace_ms : a->agents.deadline_ms);
         int      d  = now_ms >= at ? 0 : (int)(at - now_ms);
         if (due < 0 || d < due) due = d;
     }
@@ -151,7 +151,7 @@ static void run_ended(App *a, AgentRun r, int status)
     char own[CTL_NAME_MAX], how[80], msg[480], said[JOB_TEXT_MAX + 8] = "";
     snprintf(own, sizeof own, AGENT_NAME_FMT, j->num);
     if (j->taker[0] && strcmp(j->taker, own) != 0) return;
-    ended_how(&r, status, a->agent_deadline_ms, how, sizeof how);
+    ended_how(&r, status, a->agents.deadline_ms, how, sizeof how);
     /* An agent that says why it stops (job N say, as the API agent does on a
      * refused key) is heard: its last line stays on the GM's. */
     if (j->nthread && j->thread[j->nthread - 1].who == 'A') snprintf(said, sizeof said, ": %.150s", j->thread[j->nthread - 1].text);
@@ -169,15 +169,15 @@ static void run_ended(App *a, AgentRun r, int status)
 
 void app_agents_tick(App *a, uint64_t now_ms)
 {
-    if (!a->nagents) return;
+    if (!a->agents.nrun) return;
     PROF_ZONE("agent.reap");
-    for (int i = 0; i < a->nagents; ) {
-        AgentRun *r = &a->agents[i];
+    for (int i = 0; i < a->agents.nrun; ) {
+        AgentRun *r = &a->agents.run[i];
         int   status = 0;
         pid_t got = waitpid((pid_t)r->pid, &status, WNOHANG);
         if (got == (pid_t)r->pid || (got < 0 && errno == ECHILD)) {
             AgentRun done = *r;
-            *r = a->agents[--a->nagents];
+            *r = a->agents.run[--a->agents.nrun];
             run_ended(a, done, got < 0 ? 0 : status);        /* may start another: the slot is free first */
             continue;
         }
@@ -188,11 +188,11 @@ void app_agents_tick(App *a, uint64_t now_ms)
         snprintf(own, sizeof own, AGENT_NAME_FMT, r->job);
         if (!r->stopping && r->job && ctl_waiter_of(&a->ctl, own, &seq) >= 0) r->heard_ms = now_ms;
         /* Its group: the shell and whatever it started that did not leave it. */
-        if (!r->stopping && now_ms - r->heard_ms >= (uint64_t)a->agent_deadline_ms) {
+        if (!r->stopping && now_ms - r->heard_ms >= (uint64_t)a->agents.deadline_ms) {
             kill((pid_t)-r->pid, SIGTERM);
             r->stopping = 1;
             r->heard_ms = now_ms;
-        } else if (r->stopping == 1 && now_ms - r->heard_ms >= (uint64_t)a->agent_grace_ms) {
+        } else if (r->stopping == 1 && now_ms - r->heard_ms >= (uint64_t)a->agents.grace_ms) {
             kill((pid_t)-r->pid, SIGKILL);
             r->stopping = 2;
         }
@@ -204,9 +204,9 @@ void app_agents_tick(App *a, uint64_t now_ms)
  * a command as it was typed. */
 static void agent_shown(const App *a, char *buf, size_t sz)
 {
-    if (!a->agent_from_env && a->settings.agent == AGENT_KIND_CLAUDE)
+    if (!a->agents.from_env && a->settings.agent == AGENT_KIND_CLAUDE)
         snprintf(buf, sz, "the Claude agent (%s, %s effort)", a->settings.model, a->settings.effort);
-    else snprintf(buf, sz, "%.250s", a->agent_cmd);
+    else snprintf(buf, sz, "%.250s", a->agents.cmd);
 }
 
 int app_agent_start(App *a, const Job *j)
@@ -214,7 +214,7 @@ int app_agent_start(App *a, const Job *j)
     /* For what the GM asked for, and nothing else (decision 1b: "for each
      * :ask"): an agent's own idea, an --apply or the file's change has its
      * maker already, and a second agent on its job would only collide. */
-    if (!a->agent_cmd[0] || a->agent_cmd_off || j->from != JOB_FROM_GM) return 0;
+    if (!a->agents.cmd[0] || a->agents.cmd_off || j->from != JOB_FROM_GM) return 0;
     PROF_ZONE("agent.spawn");
     char msg[AGENT_CMD_MAX + 160], err[CTL_PATH_MAX + 64];
     int  turned_on = 0;
@@ -231,11 +231,11 @@ int app_agent_start(App *a, const Job *j)
      * since nothing of theirs is left to say (a vtt that never ticks -- the
      * bench's key path -- would otherwise fill up on jobs asked and removed).
      * Never reached from inside the tick: it frees a slot before it starts. */
-    for (int i = 0; a->nagents == JOB_MAX && i < a->nagents; ) {
-        if (!a->agents[i].job && waitpid((pid_t)a->agents[i].pid, NULL, WNOHANG) != 0) a->agents[i] = a->agents[--a->nagents];
+    for (int i = 0; a->agents.nrun == JOB_MAX && i < a->agents.nrun; ) {
+        if (!a->agents.run[i].job && waitpid((pid_t)a->agents.run[i].pid, NULL, WNOHANG) != 0) a->agents.run[i] = a->agents.run[--a->agents.nrun];
         else i++;
     }
-    if (a->nagents == JOB_MAX) {
+    if (a->agents.nrun == JOB_MAX) {
         snprintf(msg, sizeof msg, "#%d: %d agents are running already - none started; :ask again when one stops", j->num, JOB_MAX);
         app_note_gm(a, msg);
         return -1;
@@ -293,11 +293,11 @@ int app_agent_start(App *a, const Job *j)
         setenv("VTT_AGENT", who, 1);
         setenv("VTT_PID", pidv, 1);
         if (app_self_path) setenv("VTT", app_self_path, 1);
-        execl("/bin/sh", "sh", "-c", a->agent_cmd, (char *)NULL);
+        execl("/bin/sh", "sh", "-c", a->agents.cmd, (char *)NULL);
         _exit(127);
     }
     close(in[0]);
-    AgentRun *run = &a->agents[a->nagents++];
+    AgentRun *run = &a->agents.run[a->agents.nrun++];
     memset(run, 0, sizeof *run);
     run->pid      = (long)pid;
     run->job      = j->num;
@@ -332,10 +332,10 @@ int app_agent_start(App *a, const Job *j)
 void app_agent_apply(App *a)
 {
     const Settings *st = &a->settings;
-    a->agent_cmd_off = st->paused;
-    if (a->agent_from_env) return;                   /* VTT_AGENT_COMMAND, for this session */
-    if (st->agent == AGENT_KIND_COMMAND) { str_lcpy(a->agent_cmd, st->command, sizeof a->agent_cmd); return; }
-    if (st->agent != AGENT_KIND_CLAUDE) { a->agent_cmd[0] = '\0'; return; }
+    a->agents.cmd_off = st->paused;
+    if (a->agents.from_env) return;                   /* VTT_AGENT_COMMAND, for this session */
+    if (st->agent == AGENT_KIND_COMMAND) { str_lcpy(a->agents.cmd, st->command, sizeof a->agents.cmd); return; }
+    if (st->agent != AGENT_KIND_CLAUDE) { a->agents.cmd[0] = '\0'; return; }
     /* The Claude agent is this vtt again, told what the settings say: it
      * never reads them itself, and the session log shows what a run used. */
     char  *line;
@@ -346,8 +346,8 @@ void app_agent_apply(App *a)
     fprintf(f, " --claude-agent --model %s --effort %s --cap %.2f --calls %d --fallbacks %s",
             model ? model : "claude-opus-5-5", st->effort, st->cap, st->calls, st->fallbacks ? "on" : "off");
     fclose(f);
-    if (len < sizeof a->agent_cmd) str_lcpy(a->agent_cmd, line, sizeof a->agent_cmd);
-    else a->agent_cmd[0] = '\0';
+    if (len < sizeof a->agents.cmd) str_lcpy(a->agents.cmd, line, sizeof a->agents.cmd);
+    else a->agents.cmd[0] = '\0';
     free(line);
 }
 
@@ -363,7 +363,7 @@ void app_agent_describe(const App *a, char *buf, size_t sz)
 {
     const Settings *st = &a->settings;
     const char *paused = st->paused ? " - paused, :agent command on starts it again" : "";
-    if (a->agent_from_env) snprintf(buf, sz, "agent: %.150s (VTT_AGENT_COMMAND, this session)%s", a->agent_cmd, paused);
+    if (a->agents.from_env) snprintf(buf, sz, "agent: %.150s (VTT_AGENT_COMMAND, this session)%s", a->agents.cmd, paused);
     else if (st->agent == AGENT_KIND_CLAUDE) {
         const char *id = apiagent_model_id(st->model);
         char cap[32];
@@ -414,20 +414,20 @@ void app_agent_ask(App *a, const Job *j, const char *asked)
 {
     char msg[1100], why[600], who[96];
     const Settings *st = &a->settings;
-    if (a->agent_cmd_off && a->agent_cmd[0]) {
+    if (a->agents.cmd_off && a->agents.cmd[0]) {
         snprintf(msg, sizeof msg, "%s - the agent is paused (:agent command on starts it); the job waits", asked);
         app_note_gm(a, msg);
         return;
     }
-    if (!a->agent_from_env && st->agent == AGENT_KIND_CLAUDE && !claude_ready(a, why, sizeof why)) {
+    if (!a->agents.from_env && st->agent == AGENT_KIND_CLAUDE && !claude_ready(a, why, sizeof why)) {
         snprintf(msg, sizeof msg, "%s - the Claude agent cannot start: %s; the job waits", asked, why);
         app_note_gm(a, msg);
         return;
     }
-    if (a->agent_cmd[0]) { app_note_gm(a, asked); app_agent_start(a, j); return; }
-    if (!a->agent_from_env && st->agent == AGENT_KIND_UNSET) {
+    if (a->agents.cmd[0]) { app_note_gm(a, asked); app_agent_start(a, j); return; }
+    if (!a->agents.from_env && st->agent == AGENT_KIND_UNSET) {
         app_note_gm(a, asked);
-        a->choice_job = j->num;
+        a->agents.choice_job = j->num;
         /* Read once, here: the box is drawn every frame, and a lookup is a
          * keyring round trip (or its unlock window). */
         a->options.key = app_agent_key_where(a->options.key_last4, sizeof a->options.key_last4);
@@ -458,12 +458,12 @@ int app_agent_choice_rows(const App *a, UiChoice *items, int max)
 
 void app_agent_choice_continue(App *a)
 {
-    int num = a->choice_job;
-    a->choice_job = 0;
+    int num = a->agents.choice_job;
+    a->agents.choice_job = 0;
     int slot = num ? world_job_find(&a->world, num) : -1;
     if (slot < 0) return;
     Job *j = &a->world.jobs[slot];
-    if (j->state == JOB_ASKED && a->agent_cmd[0] && !a->agent_cmd_off) app_agent_start(a, j);
+    if (j->state == JOB_ASKED && a->agents.cmd[0] && !a->agents.cmd_off) app_agent_start(a, j);
 }
 
 void app_agent_choice_key(App *a, Key k)
@@ -471,8 +471,8 @@ void app_agent_choice_key(App *a, Key k)
     if (k.kind == KEY_ESC || (k.kind == KEY_CHAR && k.ch == 'q')) {
         a->modal = MODAL_NONE;
         char msg[160];
-        snprintf(msg, sizeof msg, "#%d waits - no agent chosen yet; the next :ask asks again (or Options, :agent)", a->choice_job);
-        a->choice_job = 0;
+        snprintf(msg, sizeof msg, "#%d waits - no agent chosen yet; the next :ask asks again (or Options, :agent)", a->agents.choice_job);
+        a->agents.choice_job = 0;
         app_set_status_gm(a, msg);
         return;
     }
@@ -485,7 +485,7 @@ void app_agent_choice_key(App *a, Key k)
         a->modal = MODAL_NONE;
         app_agent_setting(a, "claude");          /* asks for a key first when there is none */
         if (a->settings.agent == AGENT_KIND_CLAUDE) app_agent_choice_continue(a);
-        else if (a->modal != MODAL_PROMPT) a->choice_job = 0;   /* refused (no curl): said, nothing waits on it */
+        else if (a->modal != MODAL_PROMPT) a->agents.choice_job = 0;   /* refused (no curl): said, nothing waits on it */
         return;
     }
     if (c == 'm') {
@@ -499,8 +499,8 @@ void app_agent_choice_key(App *a, Key k)
         a->modal = MODAL_NONE;
         a->settings.agent = AGENT_KIND_OFF;
         app_settings_changed(a);
-        int num = a->choice_job;
-        a->choice_job = 0;
+        int num = a->agents.choice_job;
+        a->agents.choice_job = 0;
         if (!a->world.agent_on) app_agent_command(a, "on");
         char msg[200];
         snprintf(msg, sizeof msg, "#%d waits for an agent that comes to the channel - saved; :agent claude or :agent command change it", num);
@@ -531,14 +531,14 @@ void app_agent_key_prompt(App *a, int then, const char *why)
     app_open_prompt(a, PROMPT_API_KEY, "Anthropic API key", hint, "");
     a->prompt.secret = 1;
     a->prompt.max = APIKEY_MAX < UI_PROMPT_MAX ? APIKEY_MAX : UI_PROMPT_MAX;
-    a->key_then = then;
+    a->agents.key_then = then;
 }
 
 void app_agent_key_typed(App *a, const char *key)
 {
     char err[600], msg[1400];
-    int  then = a->key_then;
-    a->key_then = KEY_THEN_NOTHING;
+    int  then = a->agents.key_then;
+    a->agents.key_then = KEY_THEN_NOTHING;
     /* Pasted keys bring white space at the ends; inside, it is not a key. */
     while (*key == ' ' || *key == '\t') key++;
     char k[APIKEY_MAX];
@@ -568,7 +568,7 @@ void app_agent_key_typed(App *a, const char *key)
     if (then == KEY_THEN_CLAUDE) {
         app_agent_setting(a, "claude");
         if (a->settings.agent == AGENT_KIND_CLAUDE) app_agent_choice_continue(a);   /* the job the box was for */
-        else a->choice_job = 0;            /* refused (no curl), and said: nothing waits on the box now */
+        else a->agents.choice_job = 0;            /* refused (no curl), and said: nothing waits on the box now */
     }
 }
 
@@ -648,7 +648,7 @@ int app_agent_setting(App *a, const char *rest)
         }
         a->settings.agent = AGENT_KIND_CLAUDE;
         a->settings.paused = 0;
-        a->agent_from_env = 0;
+        a->agents.from_env = 0;
         app_settings_changed(a);
         char d[400];
         app_agent_describe(a, d, sizeof d);
@@ -683,9 +683,9 @@ void app_agent_command_cmd(App *a, const char *rest)
     if (!*rest) {
         char shown[300];
         agent_shown(a, shown, sizeof shown);
-        if (a->agent_cmd[0] && !a->agent_cmd_off)
+        if (a->agents.cmd[0] && !a->agents.cmd_off)
             snprintf(msg, sizeof msg, "each :ask starts: %s - :agent command off stops that", shown);
-        else if (a->agent_cmd[0])
+        else if (a->agents.cmd[0])
             snprintf(msg, sizeof msg, "the agent command is off (:agent command on): %s", shown);
         else snprintf(msg, sizeof msg, ":agent command CMD starts CMD for each :ask (the job on its stdin); none is set");
         app_set_status_gm(a, msg);
@@ -694,14 +694,14 @@ void app_agent_command_cmd(App *a, const char *rest)
     /* off and on: the command is kept, and on brings it back as it was
      * (KEYS.md rule 9). */
     if (!strcmp(rest, "off")) {
-        if (!a->agent_cmd[0] || a->agent_cmd_off) { app_set_status_gm(a, "no agent command is set"); return; }
+        if (!a->agents.cmd[0] || a->agents.cmd_off) { app_set_status_gm(a, "no agent command is set"); return; }
         a->settings.paused = 1;
         app_settings_changed(a);
         app_note_gm(a, "agent command off - :ask waits for an agent that comes for work; :agent command on brings it back");
         return;
     }
     if (!strcmp(rest, "on")) {
-        if (!a->agent_cmd[0]) { app_set_status_gm(a, "no agent command to switch on - :agent command CMD sets one"); return; }
+        if (!a->agents.cmd[0]) { app_set_status_gm(a, "no agent command to switch on - :agent command CMD sets one"); return; }
         a->settings.paused = 0;
         app_settings_changed(a);
         char shown[300];
@@ -714,8 +714,8 @@ void app_agent_command_cmd(App *a, const char *rest)
     if (settings_set(&a->settings, SET_COMMAND, rest, err, sizeof err) < 0) { app_set_status_gm(a, err); return; }
     a->settings.agent  = AGENT_KIND_COMMAND;
     a->settings.paused = 0;
-    a->agent_from_env  = 0;
+    a->agents.from_env  = 0;
     app_settings_changed(a);
-    snprintf(msg, sizeof msg, "each :ask now starts: %.250s", a->agent_cmd);
+    snprintf(msg, sizeof msg, "each :ask now starts: %.250s", a->agents.cmd);
     app_note_gm(a, msg);
 }

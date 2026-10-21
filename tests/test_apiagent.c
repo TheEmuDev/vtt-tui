@@ -477,7 +477,7 @@ void test_settings(void)
     CHECK(strstr(a.status, "no agent chosen") != NULL);
     press(&a, ":agent command sh agent.sh\r");
     CHECK(strstr(a.status, "each :ask now starts: sh agent.sh") != NULL);
-    CHECK(!strcmp(a.agent_cmd, "sh agent.sh"));
+    CHECK(!strcmp(a.agents.cmd, "sh agent.sh"));
     CHECK(file_has(path, "agent command\ncommand sh agent.sh\n"));
     press(&a, ":agent effort high\r");
     CHECK(strstr(a.status, "effort high - for the Claude agent") != NULL);
@@ -489,7 +489,7 @@ void test_settings(void)
     CHECK(file_has(path, "effort high\ncap 2.50\ncalls 40\nfallbacks off\n"));
     press(&a, ":agent command off\r");
     CHECK(file_has(path, "paused on\n"));
-    CHECK_EQ(a.agent_cmd_off, 1);
+    CHECK_EQ(a.agents.cmd_off, 1);
     press(&a, ":agent command on\r");
     CHECK(file_has(path, "paused off\n"));
 
@@ -504,29 +504,29 @@ void test_settings(void)
     setenv("VTT_CLAUDE_CURL", "/bin/true", 1);
     press(&a, ":agent claude sonnet\r");
     CHECK(strstr(a.status, "each :ask now starts the Claude agent - agent claude: sonnet (claude-sonnet-5-5), high effort, $2.50 and 40 calls a job, fallbacks off") != NULL);
-    CHECK(!strcmp(a.agent_cmd, "'/opt/my vtt/vtt' --claude-agent --model claude-sonnet-5-5 --effort high --cap 2.50 --calls 40 --fallbacks off"));
+    CHECK(!strcmp(a.agents.cmd, "'/opt/my vtt/vtt' --claude-agent --model claude-sonnet-5-5 --effort high --cap 2.50 --calls 40 --fallbacks off"));
     CHECK(file_has(path, "agent claude\n") && file_has(path, "model sonnet\n"));
     CHECK(!file_has(path, KEY));                                       /* the key is never a setting */
     press(&a, ":agent model gpt-5\r");
     CHECK(strstr(a.status, "model is opus, sonnet, haiku, fable") != NULL);
     press(&a, ":agent model haiku\r");
-    CHECK(strstr(a.agent_cmd, "--model claude-haiku-5-5 ") != NULL);
+    CHECK(strstr(a.agents.cmd, "--model claude-haiku-5-5 ") != NULL);
     press(&a, ":agent\r");
     CHECK(strstr(a.status, "agent claude: haiku (claude-haiku-5-5), high effort") != NULL);
     press(&a, ":agent command\r");
     CHECK(strstr(a.status, "each :ask starts: the Claude agent (haiku, high effort)") != NULL);
 
     CASE("VTT_AGENT_COMMAND wins for its session and is not saved; :agent command CMD takes over from it");
-    a.agent_from_env = 1;
-    str_lcpy(a.agent_cmd, "my-env-agent", sizeof a.agent_cmd);
+    a.agents.from_env = 1;
+    str_lcpy(a.agents.cmd, "my-env-agent", sizeof a.agents.cmd);
     press(&a, ":agent effort low\r");
-    CHECK(!strcmp(a.agent_cmd, "my-env-agent"));
+    CHECK(!strcmp(a.agents.cmd, "my-env-agent"));
     CHECK(!file_has(path, "my-env-agent"));
     press(&a, ":agent\r");
     CHECK(strstr(a.status, "my-env-agent (VTT_AGENT_COMMAND, this session)") != NULL);
     press(&a, ":agent command sh other.sh\r");
-    CHECK_EQ(a.agent_from_env, 0);
-    CHECK(!strcmp(a.agent_cmd, "sh other.sh"));
+    CHECK_EQ(a.agents.from_env, 0);
+    CHECK(!strcmp(a.agents.cmd, "sh other.sh"));
 
     CASE("with no settings file (a test, a bench) nothing is written");
     a.settings_file[0] = '\0';
@@ -692,7 +692,7 @@ void test_api_key(void)
     CHECK_EQ(a.settings.agent, AGENT_KIND_CLAUDE);
     CHECK(!strcmp(a.settings.model, "sonnet"));
     CHECK(strstr(a.status, "each :ask now starts the Claude agent") != NULL);
-    CHECK(strstr(a.agent_cmd, KEY) == NULL);
+    CHECK(strstr(a.agents.cmd, KEY) == NULL);
 
     CASE("a :agent command agent gets no key from vtt: its real environment, dumped, has none (a key in the keyring)");
     {
@@ -767,7 +767,7 @@ void test_options(void)
     CHECK_EQ(a.prompt_what, PROMPT_SETTING);
     press(&a, "sh agent.sh\r");
     CHECK_EQ(a.settings.agent, AGENT_KIND_COMMAND);
-    CHECK(!strcmp(a.agent_cmd, "sh agent.sh"));
+    CHECK(!strcmp(a.agents.cmd, "sh agent.sh"));
     CHECK(file_has(path, "agent command\ncommand sh agent.sh\n"));
     CHECK(frame_has(&a, &r, "a command"));
 
@@ -1027,7 +1027,7 @@ void test_ask_agent(void)
     setenv("VTT_CLAUDE_CURL", "/nonexistent/curl", 1);
     press(&a, ":ask a well\r");
     CHECK(strstr(a.status, "asked: a well - the Claude agent cannot start: the Claude agent needs curl") != NULL);
-    CHECK_EQ(a.nagents, 0);
+    CHECK_EQ(a.agents.nrun, 0);
     fake_curl(sb.dir);
 
     CASE("c, a key stored, but no curl: refused and said -- and nothing is left waiting on the box");
@@ -1043,7 +1043,7 @@ void test_ask_agent(void)
         press(&a, ":ask a cistern\r");
         press(&a, "c" KEY "\r");
         CHECK(strstr(a.status, "needs curl") != NULL);
-        CHECK_EQ(a.choice_job, 0);
+        CHECK_EQ(a.agents.choice_job, 0);
         snprintf(cmdx, sizeof cmdx, ":agent key\r\x1b");
         press(&a, cmdx);
         CHECK_EQ(a.modal, MODAL_NONE);                               /* esc does not bring back a box nobody waits on */
@@ -1084,7 +1084,7 @@ void test_ask_agent(void)
         setenv("VTT_SECRET_TOOL", tool, 1);
     }
     press(&a, "\x1b");
-    CHECK_EQ(a.choice_job, 0);
+    CHECK_EQ(a.agents.choice_job, 0);
     press(&a, ":agent key\r\x1b");
     CHECK_EQ(a.modal, MODAL_NONE);
 
@@ -1095,7 +1095,7 @@ void test_ask_agent(void)
     press(&a, ":agent command off\r");
     press(&a, ":ask a gate\r");
     CHECK(strstr(a.status, "the agent is paused (:agent command on starts it)") != NULL);
-    CHECK_EQ(a.nagents, 0);
+    CHECK_EQ(a.agents.nrun, 0);
 
     unsetenv("VTT_CLAUDE_CURL");
     app_self_path = self_was;

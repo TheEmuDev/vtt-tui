@@ -546,7 +546,7 @@ int pump_until_file(App *a, const char *path, const char *needle)
 /* Turns of the loop until no started agent is left to reap, or two seconds. */
 int pump_until_reaped(App *a)
 {
-    for (int spin = 0; spin < 400 && a->nagents; spin++) {
+    for (int spin = 0; spin < 400 && a->agents.nrun; spin++) {
         struct pollfd fds[1 + CTL_SLOTS];
         int n = ctl_pollfds(&a->ctl, fds, 1 + CTL_SLOTS);
         poll(fds, (nfds_t)n, 5);
@@ -554,7 +554,7 @@ int pump_until_reaped(App *a)
         ctl_service(&a->ctl, fds, n, now);
         app_tick(a, now);
     }
-    return a->nagents == 0;
+    return a->agents.nrun == 0;
 }
 
 void child_exit(int rc)

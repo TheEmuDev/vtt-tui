@@ -1242,10 +1242,10 @@ void test_agent_command(void)
         memset(big, 'x', 300);
         big[300] = '\0';
         char had[AGENT_CMD_MAX];
-        str_lcpy(had, a.agent_cmd, sizeof had);
+        str_lcpy(had, a.agents.cmd, sizeof had);
         app_agent_command_cmd(&a, big);
         CHECK(strstr(a.status, "put it in a script") != NULL);
-        CHECK(!strcmp(a.agent_cmd, had));                   /* what was there is left */
+        CHECK(!strcmp(a.agents.cmd, had));                   /* what was there is left */
     }
 
     CASE("a command that cannot run: its job waits as asked again, and the GM's line says exit 127");
@@ -1255,7 +1255,7 @@ void test_agent_command(void)
         press(&a, ":agent command no-such-command-anywhere-xyz\r");
         unsigned s0 = a.world.event_seq;
         press(&a, ":ask a moat\r");
-        CHECK_EQ(a.nagents, 1);
+        CHECK_EQ(a.agents.nrun, 1);
         CHECK(a.world.jobs[0].used && a.world.jobs[0].state == JOB_ASKED);
         CHECK(pump_until_reaped(&a));
         CHECK_EQ(a.world.jobs[0].state, JOB_ASKED);
@@ -1263,7 +1263,7 @@ void test_agent_command(void)
         CHECK(strstr(a.world.events[a.world.event_seq % EVENT_MAX].text, "job 1 asked: its agent stopped (exit 127") != NULL);
         CHECK_EQ(a.world.event_seq, s0 + 2);                       /* asked, and asked again: nothing starts it a second time */
         CHECK(!strcmp(a.world.jobs[0].thread[a.world.jobs[0].nthread - 1].text, "its agent stopped (exit 127: the command could not be run)"));
-        CHECK_EQ(a.nagents, 0);
+        CHECK_EQ(a.agents.nrun, 0);
     }
 
     CASE("an agent that takes its job and dies gives it back: asked, nobody's, with its exit status");
@@ -1271,7 +1271,7 @@ void test_agent_command(void)
         jobs_reset(&a);
         press(&a, ":agent command cat > /dev/null; \"$VTT\" --ctl-pid \"$VTT_PID\" --ctl \"job $VTT_JOB area B2:C3\" > /dev/null; exit 3\r");
         press(&a, ":ask a keep\r");
-        for (int spin = 0; spin < 400 && a.world.jobs[0].state != JOB_WORKING && a.nagents; spin++) {
+        for (int spin = 0; spin < 400 && a.world.jobs[0].state != JOB_WORKING && a.agents.nrun; spin++) {
             struct pollfd fds[1 + CTL_SLOTS];
             int n = ctl_pollfds(&a.ctl, fds, 1 + CTL_SLOTS);
             poll(fds, (nfds_t)n, 5);
@@ -1299,16 +1299,16 @@ void test_agent_command(void)
         snprintf(mark, sizeof mark, "%s/late", sb.dir);
         snprintf(c3, sizeof c3, ":agent command cat > /dev/null; sleep 30; touch %s\r", mark);
         press(&a, c3);
-        a.agent_deadline_ms = 60;
+        a.agents.deadline_ms = 60;
         press(&a, ":ask a tower\r");
-        CHECK_EQ(a.nagents, 1);
-        long pid = a.agents[0].pid;
+        CHECK_EQ(a.agents.nrun, 1);
+        long pid = a.agents.run[0].pid;
         CHECK_EQ(app_agents_due(&a, 5), 0);                    /* not yet seen by a tick: due at once, to be */
         app_tick(&a, prof_now_ns() / 1000000u);
-        CHECK_EQ(app_agents_due(&a, a.agents[0].heard_ms), 60);
-        CHECK_EQ(app_agents_due(&a, a.agents[0].heard_ms + 100), 0);
+        CHECK_EQ(app_agents_due(&a, a.agents.run[0].heard_ms), 60);
+        CHECK_EQ(app_agents_due(&a, a.agents.run[0].heard_ms + 100), 0);
         CHECK(pump_until_reaped(&a));
-        a.agent_deadline_ms = AGENT_DEADLINE_MS;
+        a.agents.deadline_ms = AGENT_DEADLINE_MS;
         CHECK_EQ(app_agents_due(&a, 0), -1);
         CHECK(pid > 0 && kill((pid_t)pid, 0) < 0);            /* gone, and reaped */
         int group_gone = 0;                                   /* and the sleep it started with it (init reaps that one: a moment) */
@@ -1327,7 +1327,7 @@ void test_agent_command(void)
         snprintf(c5, sizeof c5, ":agent command cat > /dev/null; for i in 1 2 3 4 5 6 7 8 9 10 11 12; do \"$VTT\" --ctl-pid \"$VTT_PID\" "
                                 "--ctl status > /dev/null; sleep 0.02; done; echo talked >> %s\r", alive);
         press(&a, c5);
-        a.agent_deadline_ms = 120;
+        a.agents.deadline_ms = 120;
         press(&a, ":ask a bridge\r");
         CHECK(pump_until_reaped(&a));
         CHECK(file_has(alive, "talked") && strstr(a.status, "stopped by vtt") == NULL && strstr(a.status, "(exit 0)") != NULL);
@@ -1336,48 +1336,48 @@ void test_agent_command(void)
         snprintf(c5, sizeof c5, ":agent command cat > /dev/null; \"$VTT\" --ctl-pid \"$VTT_PID\" --ctl 'wait for 1' > /dev/null; "
                                 "echo waited >> %s\r", alive);
         press(&a, c5);
-        a.agent_deadline_ms = 300;
+        a.agents.deadline_ms = 300;
         press(&a, ":ask a gate\r");
         CHECK(pump_until_reaped(&a));
         CHECK(file_has(alive, "waited") && strstr(a.status, "stopped by vtt") == NULL);
         /* Deaf to TERM: told, then made to, and until then nothing is due but the grace. */
         jobs_reset(&a);
         press(&a, ":agent command trap '' TERM; cat > /dev/null; sleep 30\r");
-        a.agent_deadline_ms = 40;
-        a.agent_grace_ms = 150;
+        a.agents.deadline_ms = 40;
+        a.agents.grace_ms = 150;
         press(&a, ":ask a wall\r");
-        long pid = a.agents[0].pid;
+        long pid = a.agents.run[0].pid;
         uint64_t t0 = prof_now_ns() / 1000000u;
         app_tick(&a, t0);
         app_tick(&a, t0 + 50);                               /* past the deadline: TERM, which it does not hear */
-        CHECK(a.nagents == 1 && a.agents[0].stopping == 1);
+        CHECK(a.agents.nrun == 1 && a.agents.run[0].stopping == 1);
         CHECK_EQ(app_agents_due(&a, t0 + 60), 140);           /* the grace, from when it was told */
         poll(NULL, 0, 30);
         app_tick(&a, t0 + 100);
-        CHECK(a.nagents == 1 && kill((pid_t)pid, 0) == 0);    /* still there */
+        CHECK(a.agents.nrun == 1 && kill((pid_t)pid, 0) == 0);    /* still there */
         app_tick(&a, t0 + 250);                              /* KILL */
-        CHECK_EQ(a.agents[0].stopping, 2);
+        CHECK_EQ(a.agents.run[0].stopping, 2);
         CHECK_EQ(app_agents_due(&a, t0 + 9999), -1);          /* nothing more to do: its end wakes the loop */
-        for (int spin = 0; spin < 400 && a.nagents; spin++) { poll(NULL, 0, 5); app_tick(&a, t0 + 260); }
-        CHECK(a.nagents == 0 && strstr(a.status, "stopped by vtt after") != NULL);
-        a.agent_grace_ms = AGENT_GRACE_MS;
+        for (int spin = 0; spin < 400 && a.agents.nrun; spin++) { poll(NULL, 0, 5); app_tick(&a, t0 + 260); }
+        CHECK(a.agents.nrun == 0 && strstr(a.status, "stopped by vtt after") != NULL);
+        a.agents.grace_ms = AGENT_GRACE_MS;
 
         /* Sixteen runs at most: jobs asked and removed leave runs with no job, which make room once they stop. */
         jobs_reset(&a);
         press(&a, ":agent command cat > /dev/null; sleep 5\r");
-        a.agent_deadline_ms = AGENT_DEADLINE_MS;
+        a.agents.deadline_ms = AGENT_DEADLINE_MS;
         for (int k = 0; k < JOB_MAX; k++) {
             press(&a, ":ask more\r");
             char rm[40];
             snprintf(rm, sizeof rm, ":ask %d remove\r", a.world.job_last);
             press(&a, rm);
         }
-        CHECK_EQ(a.nagents, JOB_MAX);
+        CHECK_EQ(a.agents.nrun, JOB_MAX);
         press(&a, ":ask one too many\r");
-        CHECK(a.nagents == JOB_MAX && strstr(a.status, "16 agents are running already") != NULL);
-        a.agent_deadline_ms = 20;                            /* and they are stopped, all of them */
+        CHECK(a.agents.nrun == JOB_MAX && strstr(a.status, "16 agents are running already") != NULL);
+        a.agents.deadline_ms = 20;                            /* and they are stopped, all of them */
         CHECK(pump_until_reaped(&a));
-        a.agent_deadline_ms = AGENT_DEADLINE_MS;
+        a.agents.deadline_ms = AGENT_DEADLINE_MS;
         errno = 0;
         CHECK(waitpid(-1, NULL, WNOHANG) == -1 && errno == ECHILD);
     }
@@ -1397,10 +1397,10 @@ void test_agent_command(void)
         press(&a, c4);
         press(&a, ":ask a pool\r");
         CHECK(pump_until_file(&a, runs, "started"));
-        CHECK(a.world.jobs[0].state == JOB_READY && a.nagents == 1);
+        CHECK(a.world.jobs[0].state == JOB_READY && a.agents.nrun == 1);
         press(&a, ":review 1\rc");
         press(&a, "deeper\r");                               /* the first is still asleep */
-        CHECK(a.nagents == 1 && a.agents[0].again);
+        CHECK(a.agents.nrun == 1 && a.agents.run[0].again);
         CHECK(strstr(a.status, "its agent is still running") != NULL);
         CHECK(!file_has(runs, "stopped"));
         CHECK(pump_until_file(&a, runs, "stopped\nstarted"));  /* the second starts after the first has stopped */
@@ -1415,7 +1415,7 @@ void test_agent_command(void)
         CHECK(pump_until_file(&a, runs, "stopped\nstarted\nstopped\nstarted"));
         press(&a, ":review 1\rc");
         press(&a, "wider still\r");                          /* and feedback on its proposal while it is still asleep */
-        CHECK(a.nagents == 1 && a.agents[0].again);
+        CHECK(a.agents.nrun == 1 && a.agents.run[0].again);
         char *p2 = ctl_ask(&a, "agent job-1\njob 1 propose\ntile C2 water");   /* it proposes late, */
         free(p2);
         press(&a, ":review 1\r");
@@ -1431,7 +1431,7 @@ void test_agent_command(void)
         press(&a, ":agent command cat > /dev/null; sleep 0.2; exit 9\r");
         press(&a, ":ask a ditch\r");
         press(&a, ":ask 1 remove\r");
-        CHECK(a.nagents == 1 && a.agents[0].job == 0);
+        CHECK(a.agents.nrun == 1 && a.agents.run[0].job == 0);
         unsigned s9 = a.world.event_seq;
         CHECK(pump_until_reaped(&a));
         CHECK(strstr(a.status, "its agent stopped") == NULL && a.world.event_seq == s9);
