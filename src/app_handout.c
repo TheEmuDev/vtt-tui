@@ -45,15 +45,15 @@ static int read_handout(const char *name, char *body, size_t bodysz, char *err, 
 /* Sends the kept handout up, or takes it down. */
 static void publish(App *a, int up)
 {
-    a->handout_up = up;
+    a->handout.up = up;
     a->dirty = 1;
     if (!up) { net_set_handout(&a->net, "", 0, a->world.now_ms); return; }
     char   rec[WIRE_HANDOUT_MAX];
-    size_t tl = strlen(a->handout_title), bl = strlen(a->handout_body);
+    size_t tl = strlen(a->handout.title), bl = strlen(a->handout.body);
     if (tl + 1 + bl > sizeof rec) bl = sizeof rec - tl - 1;
-    memcpy(rec, a->handout_title, tl);
+    memcpy(rec, a->handout.title, tl);
     rec[tl] = '\n';
-    memcpy(rec + tl + 1, a->handout_body, bl);
+    memcpy(rec + tl + 1, a->handout.body, bl);
     net_set_handout(&a->net, rec, tl + 1 + bl, a->world.now_ms);
 }
 
@@ -66,8 +66,8 @@ void app_handout_show(App *a, const char *name)
         app_set_status_gm(a, err);
         return;
     }
-    str_lcpy(a->handout_title, name, sizeof a->handout_title);
-    str_lcpy(a->handout_body, body, sizeof a->handout_body);
+    str_lcpy(a->handout.title, name, sizeof a->handout.title);
+    str_lcpy(a->handout.body, body, sizeof a->handout.body);
     free(body);
     publish(a, 1);
     snprintf(msg, sizeof msg, "handout up: %.40s - :handout off takes it down", name);
@@ -105,15 +105,15 @@ void app_handout_command(App *a, const char *rest)
     char msg[200];
     if (!*rest) { app_pick_open(a, PICK_HANDOUT, -1, ""); return; }
     if (!strcmp(rest, "off")) {
-        if (!a->handout_up) { app_set_status_gm(a, "no handout is up"); return; }
+        if (!a->handout.up) { app_set_status_gm(a, "no handout is up"); return; }
         publish(a, 0);
         app_note_gm(a, "handout down - :handout on puts it back up");
         return;
     }
     if (!strcmp(rest, "on")) {
-        if (!a->handout_body[0]) { app_set_status_gm(a, "no handout yet - :handout NAME, or :handout say TEXT"); return; }
+        if (!a->handout.body[0]) { app_set_status_gm(a, "no handout yet - :handout NAME, or :handout say TEXT"); return; }
         publish(a, 1);
-        snprintf(msg, sizeof msg, "handout up again: %.40s", a->handout_title[0] ? a->handout_title : a->handout_body);
+        snprintf(msg, sizeof msg, "handout up again: %.40s", a->handout.title[0] ? a->handout.title : a->handout.body);
         app_note_gm(a, msg);
         return;
     }
@@ -121,8 +121,8 @@ void app_handout_command(App *a, const char *rest)
         const char *text = rest + 3;
         while (*text == ' ') text++;
         if (!*text) { app_set_status_gm(a, ":handout say TEXT puts a line up on the players' screens"); return; }
-        a->handout_title[0] = '\0';
-        str_lcpy(a->handout_body, text, sizeof a->handout_body);
+        a->handout.title[0] = '\0';
+        str_lcpy(a->handout.body, text, sizeof a->handout.body);
         publish(a, 1);
         snprintf(msg, sizeof msg, "handout up: \"%.60s\" - :handout off takes it down", text);
         app_note_gm(a, msg);

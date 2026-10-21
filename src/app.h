@@ -38,26 +38,6 @@ typedef enum {
  * prompt, no profiler overlay and no hint that a note exists. */
 typedef enum { VIEW_GM, VIEW_PLAYERS } View;
 
-/* The ? page (app_draw.c): which screen to go back to, which key map to lead
- * with, and how far down it is scrolled. */
-typedef struct {
-    Screen   from;
-    KeyMapId id;
-    int      top;
-    int      lines;    /* what the last draw measured, for clamping */
-} HelpView;
-
-/* The Options screen (app_options.c): its row, the row a prompt is for, and
- * what was read when it opened (the key's source and last four, the spend). */
-typedef struct {
-    ListState list;
-    int      prompt;
-    int      key;
-    char     key_last4[8];
-    double   spent, spent_month;
-    int      runs, runs_month;
-} OptionsView;
-
 typedef enum { PCAM_FOLLOW, PCAM_PARTY, PCAM_HOLD } PlayersCamera;
 
 typedef enum {
@@ -156,6 +136,35 @@ typedef struct {
     uint8_t      saved_size;    /* the cursor's footprint before */
     RangeOverlay saved_range;   /* the overlay before, shape and all */
 } Summon;
+
+/* The ? page (app_draw.c): which screen to go back to, which key map to lead
+ * with, and how far down it is scrolled. */
+typedef struct {
+    Screen   from;
+    KeyMapId id;
+    int      top;
+    int      lines;    /* what the last draw measured, for clamping */
+} HelpView;
+
+/* The Options screen (app_options.c): its row, the row a prompt is for, and
+ * what was read when it opened (the key's source and last four, the spend). */
+typedef struct {
+    ListState list;
+    int      prompt;
+    int      key;
+    char     key_last4[8];
+    double   spent, spent_month;
+    int      runs, runs_month;
+} OptionsView;
+
+/* The handout (app_handout.c; docs/HANDOUTS.md): the last one shown, kept so
+ * :handout on puts it back, and whether it is up on the players' screens.
+ * The server holds its own copy for phones that join later. */
+typedef struct {
+    char title[64];
+    char body[HANDOUT_BODY_MAX];
+    int  up;
+} HandoutState;
 
 typedef struct {
     /* The map, its log, the jobs, the events and the request being run: what
@@ -303,12 +312,7 @@ typedef struct {
     TextPrompt prompt;
     PromptWhat prompt_what;
 
-    /* The handout (docs/HANDOUTS.md): the last one shown, kept so
-     * :handout on puts it back, and whether it is up on the players'
-     * screens. The server holds its own copy for phones that join later. */
-    char       handout_title[64];
-    char       handout_body[HANDOUT_BODY_MAX];
-    int        handout_up;
+    HandoutState handout;
 
     /* The picker (MODAL_PICKER): the character templates or the stamps, and
      * for a character the side it goes down on, -1 for the side it was

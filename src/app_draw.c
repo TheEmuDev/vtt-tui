@@ -274,7 +274,7 @@ static void draw_editor_body(App *a)
     /* A handout up is true for the whole table, so both views say it; the
      * players' camera, when it is not the GM's, is said to the GM. */
     char right[40];
-    snprintf(right, sizeof right, "%s%s%s", a->handout_up ? "HANDOUT  " : "",
+    snprintf(right, sizeof right, "%s%s%s", a->handout.up ? "HANDOUT  " : "",
              a->view == VIEW_GM && a->pcam != PCAM_FOLLOW ? (a->pcam == PCAM_PARTY ? "CAM PARTY  " : "CAM HOLD  ") : "",
              a->screen == SCREEN_PLAY ? "PLAY" : "BUILD");
     ui_titlebar(r, th, left, right);
@@ -450,8 +450,8 @@ void app_draw(App *a)
     /* The card the phones draw for themselves, for the GM previewing them.
      * Never in the players' frame: app_view_differs keeps it from being
      * copied there. */
-    if (preview && a->handout_up)
-        ui_handout_draw(a->rnd, a->th, a->handout_title, a->handout_body, a->ascii ? &BOX_ASCII : &BOX_ROUND);
+    if (preview && a->handout.up)
+        ui_handout_draw(a->rnd, a->th, a->handout.title, a->handout.body, a->ascii ? &BOX_ASCII : &BOX_ROUND);
 }
 
 void app_draw_view(App *a, View view)
@@ -583,7 +583,7 @@ int app_card_shown(const App *a)
 
 int app_view_differs(const App *a)
 {
-    if (a->preview) return a->handout_up;     /* the GM is already looking at it, but for the card */
+    if (a->preview) return a->handout.up;     /* the GM is already looking at it, but for the card */
     if (a->modal != MODAL_NONE) return 1;
     if (a->ed.mode == ED_COMMAND) return 1;       /* the : line being typed */
     if (a->status_gm && a->status[0]) return 1;

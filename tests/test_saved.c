@@ -572,9 +572,9 @@ void test_handout_keys(void)
     const char *tomb = "Here lies Aldric.\r\n\r\n\tDo not open the door.\r\n\r\n";
     write_text(path, tomb, strlen(tomb));
     press(&a, ":handout tomb\r");
-    CHECK_EQ(a.handout_up, 1);
-    CHECK(!strcmp(a.handout_title, "tomb"));
-    CHECK(!strcmp(a.handout_body, "Here lies Aldric.\n\n Do not open the door."));
+    CHECK_EQ(a.handout.up, 1);
+    CHECK(!strcmp(a.handout.title, "tomb"));
+    CHECK(!strcmp(a.handout.body, "Here lies Aldric.\n\n Do not open the door."));
     CHECK(strstr(a.status, "handout up: tomb") != NULL);
     CHECK_EQ(a.status_gm, 1);
     CHECK((int)a.net.handout_len == (int)strlen("tomb\nHere lies Aldric.\n\n Do not open the door."));
@@ -611,16 +611,16 @@ void test_handout_keys(void)
 
     CASE("off takes it down and keeps it; on puts it back");
     press(&a, ":handout off\r");
-    CHECK_EQ(a.handout_up, 0);
+    CHECK_EQ(a.handout.up, 0);
     CHECK_EQ((int)a.net.handout_len, 0);
     CHECK(strstr(a.status, ":handout on puts it back") != NULL);
     press(&a, ":handout on\r");
-    CHECK_EQ(a.handout_up, 1);
+    CHECK_EQ(a.handout.up, 1);
     CHECK(strstr(a.status, "handout up again: tomb") != NULL);
 
     CASE(":handout say puts a line up with no title");
     press(&a, ":handout say SPEAK, FRIEND\r");
-    CHECK(a.handout_up && !a.handout_title[0] && !strcmp(a.handout_body, "SPEAK, FRIEND"));
+    CHECK(a.handout.up && !a.handout.title[0] && !strcmp(a.handout.body, "SPEAK, FRIEND"));
     CHECK(a.net.handout_len == strlen("\nSPEAK, FRIEND"));
     press(&a, ":handout say\r");
     CHECK(strstr(a.status, ":handout say TEXT") != NULL);
@@ -645,7 +645,7 @@ void test_handout_keys(void)
     CHECK(strstr(a.status, "is empty") != NULL);
     press(&a, ":handout ../tomb\r");
     CHECK(strstr(a.status, "no handout called") != NULL);
-    CHECK(!strcmp(a.handout_body, "SPEAK, FRIEND"));          /* none of those replaced it */
+    CHECK(!strcmp(a.handout.body, "SPEAK, FRIEND"));          /* none of those replaced it */
 
     CASE("what the GM types after : is never in the players' frame");
     press(&a, ":handout say SECRET WORDS");
@@ -664,7 +664,7 @@ void test_handout_keys(void)
     for (int i = 0; i < a.picker.n; i++) if (!strcmp(a.picker.items[i].name, "tomb")) ti = i;
     CHECK(ti >= 0 && !strcmp(a.picker.items[ti].detail, "Here lies Aldric."));
     press(&a, "tom\r");
-    CHECK(!strcmp(a.handout_title, "tomb"));
+    CHECK(!strcmp(a.handout.title, "tomb"));
 
     CASE("the card wraps to its box, keeps line breaks, and says when it is cut short");
     Renderer small;
@@ -687,10 +687,10 @@ void test_handout_keys(void)
     rnd_free(&small);
 
     CASE("closing the map takes the handout down and forgets it");
-    CHECK(a.handout_up);
+    CHECK(a.handout.up);
     press(&a, ":q!\r");
     CHECK(a.world.map == NULL);
-    CHECK(!a.handout_up && !a.handout_body[0] && a.net.handout_len == 0);
+    CHECK(!a.handout.up && !a.handout.body[0] && a.net.handout_len == 0);
 
     app_free(&a);
     rnd_free(&r);

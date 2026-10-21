@@ -275,9 +275,9 @@ void app_travel_to(App *a, Map *m)
 {
     app_summon_end(a);
     app_card_box_forget(a);
-    if (a->handout_up) net_set_handout(&a->net, "", 0, a->world.now_ms);
-    a->handout_up = 0;
-    a->handout_title[0] = a->handout_body[0] = '\0';
+    if (a->handout.up) net_set_handout(&a->net, "", 0, a->world.now_ms);
+    a->handout.up = 0;
+    a->handout.title[0] = a->handout.body[0] = '\0';
     net_clear_kept(&a->net);             /* whispers waiting were the encounter's too */
     drop_autosave(a);
     world_event(&a->world, CTL_EV_CLOSED, 0, "%s - the GM went to %s, and its jobs went with it", a->world.map->name, m->name);
@@ -1458,9 +1458,9 @@ void app_close_map(App *a)
     a->preview = 0;
     /* A handout is the encounter's: it comes down with the map, before a
      * server kept alive carries on to the next one. */
-    if (a->handout_up) net_set_handout(&a->net, "", 0, a->world.now_ms);
-    a->handout_up = 0;
-    a->handout_title[0] = a->handout_body[0] = '\0';
+    if (a->handout.up) net_set_handout(&a->net, "", 0, a->world.now_ms);
+    a->handout.up = 0;
+    a->handout.title[0] = a->handout.body[0] = '\0';
     net_clear_kept(&a->net);             /* whispers waiting were the encounter's too */
     drop_autosave(a);
     close_server_with_map(a);

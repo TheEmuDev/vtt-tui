@@ -1421,7 +1421,7 @@ void test_map_links(void)
     CHECK(arr->x >= 2 && arr->x <= 5 && arr->y >= 2 && arr->y <= 5);
     CHECK(a.ed.cx == arr->x && a.ed.cy == arr->y);
     CHECK(net_active(&a.net));                              /* the phones followed */
-    CHECK(!a.handout_up);
+    CHECK(!a.handout.up);
     CHECK(!a.world.map->modified);                                /* written where they arrived too */
     {
         char cp[700];
