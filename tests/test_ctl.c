@@ -1279,6 +1279,19 @@ void test_apply(void)
         CHECK(access(nm, F_OK) != 0);
     }
 
+    CASE("--new with a plan that changes nothing (help room) prints its answer and leaves no file");
+    {
+        char nm[700], hp[700];
+        snprintf(nm, sizeof nm, "%s/read-only.vtt", sb.dir);
+        snprintf(hp, sizeof hp, "%s/help.txt", sb.dir);
+        f = fopen(hp, "w");
+        fputs("help room\n", f);
+        fclose(f);
+        snprintf(cmd, sizeof cmd, "%s '%s' --apply '%s' --new 10x10 2>&1 | grep -q '^room \\[NAME\\] REGION'", vtt, nm, hp);
+        CHECK_EQ(WEXITSTATUS(system(cmd)), 0);
+        CHECK(access(nm, F_OK) != 0);
+    }
+
     CASE("--apply: a failing plan changes nothing and saves nothing (exit 1)");
     struct stat st0, st1;
     stat(map, &st0);

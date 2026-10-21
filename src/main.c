@@ -726,7 +726,7 @@ static int run_apply(const Options *o)
     int open_rc = ctl_apply_open(o->map_path, base ? base + 1 : o->apply, req, len, o->apply_wait);
     if (open_rc >= 0) { free(req); return open_rc; }
 
-    int made = 0;                   /* this run made the file: a failure takes it away */
+    int made = 0;                   /* this run made the file: a failure, or a plan that changed nothing, takes it away */
     if (access(o->map_path, F_OK) != 0) {
         if (!o->new_w) {
             fprintf(stderr, "vtt: %s is not there - --new WxH makes it\n", o->map_path);
@@ -748,7 +748,7 @@ static int run_apply(const Options *o)
     rnd_init(&r);
     rnd_resize(&r, 80, 24);
     app_init(&a, NULL, &r);
-    int rc = 2;
+    int rc = 2, untouched = 0;
     if (app_open_map(&a, o->map_path) != 0 || !a.world.map) {
         fprintf(stderr, "vtt: cannot open %s\n", o->map_path);
     } else {
@@ -771,6 +771,7 @@ static int run_apply(const Options *o)
                 rc = 1;
             } else if (a.world.map->gen == gen && a.world.map->scenes_gen == sgen && a.world.map->cards_gen == cgen) {
                 rc = 0;
+                untouched = 1;
             } else if (a.file.rows) {
                 /* Saved, the rows would go to disk as read, one off, and the
                  * file's evidence of where with them (as :w asks first). */
@@ -786,7 +787,8 @@ static int run_apply(const Options *o)
     app_free(&a);
     rnd_free(&r);
     free(req);
-    if (rc != 0 && made) unlink(o->map_path);
+    /* The file was not there before: a plan that changed nothing leaves it not there. */
+    if ((rc != 0 || untouched) && made) unlink(o->map_path);
     return rc;
 }
 

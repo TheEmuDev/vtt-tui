@@ -31,16 +31,18 @@ A plan and a live session speak the same language, the one below, and follow the
 the line and why), and **one request is one undo step** for the GM, once accepted.
 
 **Refusals.** The answer's first line is the verdict: `ok`, `busy: WHY` (the GM is part way
-through something: ask again shortly), or `error CLASS: line N: WHY`. The class is one of
+through something: ask again shortly), or `error CLASS: line N: WHY` -- `error CLASS: WHY`,
+with no line, when the request as a whole is refused (a line that must go alone, a nul byte,
+`propose` with no edits after it, a proposal there is no room for). The class is one of
 six words, and says what to do next; the sentence after it says which square or which name.
 
 | class | what to do next |
 |---|---|
 | `usage` | the line is written wrong: `help VERB` shows its form |
 | `missing` | a name in it names nothing: list them (`jobs`, `scenes`, `stamps`, `characters`, `links`, `floors`, `describe`) |
-| `conflict` | what is on the map is in the way (a square taken, a room over another, a label in use, a box off the map): `dump REGION`, then other squares or another name |
+| `conflict` | what is on the map is in the way (a square taken, a floor over another, a label in use, a box off the map): `dump REGION`, then other squares or another name |
 | `state` | the line is fine, but not now or not yours (the channel off, no map open, a job the GM is deciding, nothing to undo): read `status` and `jobs`; do not send it again unchanged |
-| `limit` | over a fixed size (a request over 64 KB, a line over 1023 characters, sixteen proposals waiting, or the GM's kept proposals holding 4,194,304 squares together, reads of more than 300,000 squares of map or edits over more than 524,288 in one request, more lines after an answer has passed 2 MB): split it, or wait for the GM |
+| `limit` | over a fixed size (a request over 64 KB, a line over 1023 characters, sixteen proposals waiting, or the GM's kept proposals holding 4,194,304 squares together, reads of more than 300,000 squares of map or edits over more than 524,288 squares or more than 524,288 changes in one request, more lines after an answer has passed 2 MB): split it, or wait for the GM |
 | `internal` | vtt's own failure: tell the GM |
 
 **Which way.** Either works at any time. `vtt map.vtt --apply plan.txt` asks every running
@@ -213,7 +215,7 @@ can take back, so each goes in a request of its own.
 
    `vtt crypt.vtt --apply plan.txt --new 40x24` makes the file (void to start) and exits 0,
    or 1 with the failing line on stderr and nothing saved (a file `--new` made is taken away
-   again), or 2 when the map cannot be read or written. A map with an autosave newer than it is applied to as saved, with a line on
+   again, as it is when the plan changed nothing), or 2 when the map cannot be read or written. A map with an autosave newer than it is applied to as saved, with a line on
    stderr saying so.
 2. **Read it back.** `vtt crypt.vtt --dump-map` and look: is every room where the
    description puts it, every door in a wall, every creature on the floor?
@@ -339,7 +341,7 @@ feedback. Nothing you send changes the GM's map until then, unless the GM has ty
    (another program wrote it, and the GM reviewed it) is a job too, and `jobs` says `the file
    on disk`. No `map changed` follows an accept.
 
-   An event's text is cut at 240 characters; `jobs` has a job's whole text. The GM undoing
+   An event's text is cut to 239 characters, its `job N kind: ` included; `jobs` has a job's whole text. The GM undoing
    an accepted change with `u` comes as `map changed`, not as a job event.
 
    **What you do yourself is not told to you.** Taking a job, proposing, giving one back
@@ -431,7 +433,10 @@ three times at most. One read's answer is never refused for its size, but once a
 answer has passed 2 MB its next line is: send that in another request. **Its edits cover
 at most 524,288 squares**, whether or not they change them: a `tile` or `fog paint` counts
 its region, a `wall` its outline, a `room` its box, a `stamp` its size. A plan run on a
-file with `--apply` has neither bound.
+file with `--apply` has neither of these bounds. Every request, a plan on a file too, **makes
+at most 524,288 changes** (a square's ground, an edge, a fog square, a creature or a note
+each one; the undo log's bound): three whole-map `tile` fills of a 512x512 map are refused
+at the third.
 
 Each request is still all or nothing, and each accepted proposal is one undo step. A request
 may read before its edits (`jobs` and `job N ...` lines come first, before `propose`) and
