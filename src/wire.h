@@ -61,6 +61,12 @@ typedef struct {
  * about 24 KB of runs. Allocates once. */
 void wire_enc_init(WireEnc *e, size_t cap);
 void wire_enc_free(WireEnc *e);
+/* The buffer made `cap` bytes, larger or smaller (what it holds past cap is
+ * lost); -1, and the buffer as it was, when memory says no. */
+int  wire_enc_resize(WireEnc *e, size_t cap);
+/* The most a FULL of a w x h screen can take: every cell a run of its own
+ * (a 10-byte header and its glyph), plus 'F' with the size and 'E'. */
+static inline size_t wire_full_max(int w, int h) { return (size_t)w * (size_t)h * 12 + 6; }
 
 /* A frame is: begin, then cells in row-major order (any subset), then end.
  * Cells that continue a run cost two bytes; a break costs a header. */

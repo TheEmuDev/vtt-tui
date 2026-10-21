@@ -1054,6 +1054,11 @@ connection, and is hidden otherwise. If a device seems slow, add `&stats` to its
 (`...?k=482913&stats`): the line then shows the screen's size in cells, how long the last
 frame took to draw, and how many cells it changed.
 
+A device that stops reading for a while (a locked screen, a weak Wi-Fi signal) is not waited
+for: vtt holds back what it would have sent, and when the device reads again it is sent the
+whole screen as it is then, so it never plays through a backlog of old screens. If vtt ever
+has to drop a device, the GM's status line says which and why, and the session log keeps it.
+
 **Lifetime.** Closing the map stops the server and disconnects everyone, unless the server was
 started with `--stay-alive`, in which case it carries on into the next map opened. Opening
 another map with `:e` does not stop it.

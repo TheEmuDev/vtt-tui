@@ -5,6 +5,7 @@
  * "how far behind is it" is exact and quick, where a real socket fills megabytes first. */
 
 #include "harness.h"
+#include "app_priv.h"
 #include "conn.h"
 
 #include <errno.h>
@@ -199,6 +200,116 @@ out:
     close(wq);
     net_stop(&n);
     rnd_free(&r);
+    conn_use(NULL);
+    for (int i = 0; i < FK_PHONES; i++) bb_free(&fk[i].got);
+}
+
+/* A greeted local watcher on n, its fake phone, read up to now into d. */
+static FakePhone *lag_watcher(Net *n, int *fd, WireDec *d, uint64_t now)
+{
+    int had = n->ncl;
+    *fd = net_connect(n->port);
+    if (*fd < 0 || write(*fd, "VTT1\n", 5) != 5) return NULL;
+    for (int i = 0; i < 40 && !(n->ncl == had + 1 && n->cl[had].greeted); i++) net_pump(n, now);
+    FakePhone *p = n->ncl == had + 1 ? fk_phone(n->cl[had].fd) : NULL;
+    for (int i = 0; p && i < 400 && (p->got.len > p->read || n->cl[had].out_len > n->cl[had].out_off); i++) {
+        fk_read(p, d);
+        net_pump(n, now);
+    }
+    return p;
+}
+
+void test_net_big(void)
+{
+    Conn table = FK_TABLE;
+    table.read = CONN_REAL.read;
+    for (int i = 0; i < FK_PHONES; i++) { fk[i].fd = -1; bb_init(&fk[i].got, 4096); }
+    conn_use(&table);
+    uint64_t now = 1000;
+
+    CASE("a phone joining a 400x170 window of a color a cell is sent its FULL, and the buffer follows it");
+    {
+        /* Review 3's harness (docs/reviews/, T7): every cell a run of its own,
+         * 12 bytes, so the FULL is 816,006 bytes against a 128 KB buffer. */
+        Renderer r;
+        rnd_init(&r);
+        rnd_resize(&r, 400, 170);
+        rnd_begin(&r);
+        for (int y = 0; y < 170; y++)
+            for (int x = 0; x < 400; x++) {
+                char ch[2] = { (char)('a' + (x + y) % 26), 0 };
+                draw_text(&r, x, y, ch, -1, style(0x101010u * (uint32_t)((x + y) % 7 + 1), 0x0E0E12, 0));
+            }
+        rnd_flush(&r, NULL);
+        Net n;
+        net_init(&n);
+        char err[128];
+        CHECK_EQ(net_start(&n, 0, &r, err, sizeof err), 0);
+        WireCatch c;
+        memset(&c, 0, sizeof c);
+        WireDec d;
+        wire_dec_init(&d, &WC_SINK, &c);
+        int w = -1;
+        FakePhone *p = lag_watcher(&n, &w, &d, now);
+        CHECK(p != NULL);
+        CHECK_EQ(n.ncl, 1);
+        CHECK_EQ(n.dropped, 0u);
+        CHECK_EQ(c.fulls, 1);
+        CHECK_EQ(c.w, 400);
+        CHECK_EQ(c.h, 170);
+        CHECK_EQ(c.ends, 1);
+        CHECK_EQ(n.full_len, wire_full_max(400, 170));
+        CHECK(n.enc.cap >= n.full_len && n.enc.cap <= 2 * n.full_len);
+        if (w >= 0) close(w);
+        net_stop(&n);
+        rnd_free(&r);
+    }
+
+    CASE("a phone vtt has to drop is counted and named on the GM's line, which the players do not see");
+    {
+        Sandbox sb = sandbox_enter("netbig");
+        CHECK_EQ(sb.ok, 1);
+        if (sb.ok) {
+            write_map_file(sb.dir, "fight.vtt");
+            char path[600];
+            snprintf(path, sizeof path, "%s/fight.vtt", sb.dir);
+            Renderer r;
+            App a;
+            rnd_init(&r);
+            rnd_resize(&r, 80, 24);
+            app_init(&a, NULL, &r);
+            CHECK_EQ(app_open_map(&a, path), 0);
+            Key f2 = { KEY_F2, 0, 0 };
+            app_key(&a, f2);
+            press(&a, ":serve\r");
+            CHECK_EQ(net_active(&a.net), 1);
+            WireCatch c;
+            memset(&c, 0, sizeof c);
+            WireDec d;
+            wire_dec_init(&d, &WC_SINK, &c);
+            app_frame(&a, NULL, 0);
+            int w = -1;
+            FakePhone *p = lag_watcher(&a.net, &w, &d, now);
+            CHECK(p != NULL);
+            /* It stops reading; handouts are not frames, so nothing holds
+             * them back, and its queue reaches its limit. */
+            char text[WIRE_HANDOUT_MAX];
+            for (int k = 0; k < 400 && a.net.ncl == 1; k++) {
+                memset(text, 'a' + k % 26, sizeof text);
+                net_set_handout(&a.net, text, sizeof text, now);
+            }
+            CHECK_EQ(a.net.ncl, 0);
+            CHECK_EQ(a.net.dropped, 1u);
+            app_whisper_tick(&a);
+            CHECK(strstr(a.status, "a phone with no name dropped: too far behind to catch up") != NULL);
+            CHECK(app_view_differs(&a));
+            if (w >= 0) close(w);
+            app_free(&a);
+            rnd_free(&r);
+        }
+        sandbox_leave(&sb);
+    }
+
     conn_use(NULL);
     for (int i = 0; i < FK_PHONES; i++) bb_free(&fk[i].got);
 }

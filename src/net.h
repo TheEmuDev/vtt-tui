@@ -15,9 +15,13 @@
  * watcher (`vtt --watch`, the magic "VTT1" on a raw socket). Both receive
  * identical wire frames; a WebSocket client gets them in binary messages.
  *
- * Memory is fixed at net_start: one send buffer per client, one request
- * buffer per client, one frame buffer. A client that cannot take a frame is
- * dropped, never waited for; it reconnects and is resynced with a FULL. */
+ * Memory is allocated at net_start: one send queue per client, one request
+ * buffer per client, one frame buffer. The frame buffer and the queues grow
+ * when a frame of the window does not fit, up to its worst case
+ * (wire_full_max; a queue that plus NET_SEND_CAP), and stay at the largest
+ * used. A client is never waited for: frames are withheld from one that
+ * falls a FULL behind (`behind`), and one vtt has to drop -- no memory, or
+ * past its queue's limit -- is counted and told to the GM (net_take_drop). */
 
 #define NET_MAX_CLIENTS 8
 #define NET_SEND_CAP    (64 * 1024)
@@ -60,8 +64,8 @@ typedef struct {
     ClientKind kind;
     int        local;         /* connected from this machine: no code asked */
 
-    uint8_t   *out;           /* NET_SEND_CAP; bytes [off, len) are pending */
-    size_t     out_len, out_off;
+    uint8_t   *out;           /* out_cap bytes; [off, len) are pending */
+    size_t     out_len, out_off, out_cap;
 
     uint8_t   *in;            /* NET_REQ_CAP; the request, or WebSocket frames */
     size_t     in_len;
@@ -143,6 +147,10 @@ typedef struct {
     int             nseen;
     char            arrived[NET_MAX_CLIENTS][NET_NAME_MAX];
     int             narrived;
+    /* Clients vtt dropped for a reason of its own, for the GM's line: the
+     * name ("" for none) and why. The oldest goes when it is full. */
+    struct { char name[NET_NAME_MAX]; const char *why; } drops[NET_MAX_CLIENTS];
+    int             ndrops;
 
     /* Counters for the profiler: per frame, and over the server's life. */
     uint32_t frame_bytes;
@@ -216,6 +224,10 @@ int  net_name_seen(const Net *n, const char *name);
 /* Hands over the next name to have arrived since the last call: 1, or 0
  * when there are none. */
 int  net_take_arrival(Net *n, char *out, size_t sz);
+/* A client vtt dropped, oldest first: its name ("" for a phone that gave
+ * none, or a watcher) into name and why it went into *why; 0 when there are
+ * no more. */
+int  net_take_drop(Net *n, char *name, size_t sz, const char **why);
 
 /* Who is watching, for :players: "Aria, Brin (2), 1 unnamed, 1 terminal",
  * or "" for no one. */

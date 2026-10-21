@@ -53,7 +53,9 @@ measured against them.
   when the gesture ends. This loop is the one candidate for WebAssembly, if
   measuring ever says so.
 - **A stalled client is dropped, never waited for**, and resynced with a
-  `FULL` on reconnect.
+  `FULL` on reconnect. *Since 2026-10-21 (docs/V2.md, step 7):* a stalled client is
+  no longer dropped; frames are withheld from it once it is a FULL behind, and it is
+  sent one FULL when it reads again. A drop vtt makes is told to the GM.
 - **The watcher is `vtt --watch host:port`**: the same decoder painting into
   the same renderer, at the GM's size, centered or clipped. `q` closes it.
 - **Access.** LAN only, a join code in the URL, at most eight clients,
@@ -98,7 +100,7 @@ own frame time.
 |---|---|
 | server, 2 µs per frame per client | 3.7 µs: the encode is shared, the rest is one `write` syscall per client. Missed by the syscall. Since the players' frame: plus 7 µs once per frame for the copy and second diff, or a second draw of about 27 µs when the views differ -- `docs/PERFORMANCE.md` has the rows. |
 | zero bytes when nothing changed | zero |
-| server memory fixed at `:serve` | 64 KB send and 4 KB request buffer per client, one 128 KB frame buffer, all at start |
+| server memory fixed at `:serve` | 64 KB send and 4 KB request buffer per client, one 128 KB frame buffer, all at start. *Since 2026-10-21 (step 7):* the frame buffer and the send queues grow when a frame of the window does not fit, to its worst case (12 bytes a cell), and stay at the largest used |
 | the page under 12 KB, one request | 11.4 KB (2026-10-04: two copy loops, trailing `//` comments no longer sent), nothing fetched |
 | client memory allocated once | a cell buffer, the atlas, and one WebAssembly memory holding the framebuffer and the tile arena, reallocated only on resize |
 | keystroke frame 0.5 ms on a phone | 0.2-0.5 ms in desktop Chrome for a cursor move; phones to be measured |

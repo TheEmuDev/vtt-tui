@@ -217,6 +217,7 @@ void test_loader_damage(void);
 void test_page_feed(void);
 void test_net_edges(void);
 void test_net_lag(void);
+void test_net_big(void);
 void test_play_box(void);
 void test_move_rules(void);
 void test_group_effect(void);

@@ -88,6 +88,16 @@ void wire_enc_free(WireEnc *e)
     memset(e, 0, sizeof *e);
 }
 
+int wire_enc_resize(WireEnc *e, size_t cap)
+{
+    uint8_t *b = realloc_soft(e->buf, cap);
+    if (!b) return -1;
+    e->buf = b;
+    e->cap = cap;
+    if (e->len > cap) e->len = cap;
+    return 0;
+}
+
 void wire_enc_reset_palette(WireEnc *e)
 {
     memset(e->pal_hash, 0, PAL_BUCKETS);

@@ -173,6 +173,7 @@ int net_start(Net *n, uint16_t port, const Renderer *r, char *err, size_t errsz)
     for (int i = 0; i < NET_MAX_CLIENTS; i++) {
         n->cl[i].fd  = -1;
         n->cl[i].out = xmalloc(NET_SEND_CAP);
+        n->cl[i].out_cap = NET_SEND_CAP;
         n->cl[i].in  = xmalloc(NET_REQ_CAP);
     }
     return 0;
@@ -185,12 +186,14 @@ static void client_close(Net *n, int i)
     c->fd = -1;
     /* Keep the array dense so poll sees no holes. */
     uint8_t *out = c->out, *in = c->in;
+    size_t   out_cap = c->out_cap;
     if (i < n->ncl - 1) memmove(c, c + 1, (size_t)(n->ncl - 1 - i) * sizeof *c);
     n->ncl--;
     NetClient *last = &n->cl[n->ncl];
     memset(last, 0, sizeof *last);
     last->fd  = -1;
     last->out = out;
+    last->out_cap = out_cap;
     last->in  = in;
 
     if (n->ncl == 0) {
@@ -270,20 +273,55 @@ void net_url(const Net *n, char *buf, size_t bufsz)
 
 /* ------------------------------------------------------------ sending */
 
-/* Queues bytes for a client; a client that cannot hold them is gone. */
+/* vtt lets a client go for a reason of its own: counted, and kept for the
+ * GM's line (net_take_drop). The reasons are the client's fault, a hang-up,
+ * bad framing or silence, are not: those are a phone leaving. */
+static void client_drop(Net *n, int i, const char *why)
+{
+    n->dropped++;
+    if (n->ndrops == NET_MAX_CLIENTS) {
+        memmove(&n->drops[0], &n->drops[1], sizeof n->drops[0] * (NET_MAX_CLIENTS - 1));
+        n->ndrops--;
+    }
+    str_lcpy(n->drops[n->ndrops].name, n->cl[i].name, NET_NAME_MAX);
+    n->drops[n->ndrops++].why = why;
+    client_close(n, i);
+}
+
+int net_take_drop(Net *n, char *name, size_t sz, const char **why)
+{
+    if (!n->ndrops) return 0;
+    str_lcpy(name, n->drops[0].name, sz);
+    *why = n->drops[0].why;
+    memmove(&n->drops[0], &n->drops[1], sizeof n->drops[0] * (size_t)(n->ndrops - 1));
+    n->ndrops--;
+    return 1;
+}
+
+/* Queues bytes for a client. The queue grows to hold them, doubling, up to
+ * a FULL of the window at its worst and NET_SEND_CAP beside it: the lag
+ * bound keeps it near a FULL, so past that something is wrong, and the
+ * client goes. Returns -1 when it closed the client. */
 static int client_queue(Net *n, int i, const void *p, size_t len)
 {
     NetClient *c = &n->cl[i];
     if (c->out_off > 0 && c->out_off == c->out_len) c->out_off = c->out_len = 0;
-    if (c->out_len + len > NET_SEND_CAP && c->out_off > 0) {
+    if (c->out_len + len > c->out_cap && c->out_off > 0) {
         memmove(c->out, c->out + c->out_off, c->out_len - c->out_off);
         c->out_len -= c->out_off;
         c->out_off  = 0;
     }
-    if (c->out_len + len > NET_SEND_CAP) {
-        n->dropped++;
-        client_close(n, i);
-        return -1;
+    if (c->out_len + len > c->out_cap) {
+        size_t need  = c->out_len + len;
+        size_t limit = wire_full_max(n->rnd->w, n->rnd->h) + NET_SEND_CAP;
+        if (need > limit) { client_drop(n, i, "too far behind to catch up"); return -1; }
+        size_t cap = c->out_cap;
+        while (cap < need) cap *= 2;
+        if (cap > limit) cap = limit;
+        uint8_t *grown = realloc_soft(c->out, cap);
+        if (!grown) { client_drop(n, i, "no memory for its queue"); return -1; }
+        c->out     = grown;
+        c->out_cap = cap;
     }
     memcpy(c->out + c->out_len, p, len);
     c->out_len     += len;
@@ -346,6 +384,29 @@ static int client_send_synced(Net *n, int i, const uint8_t *frame, size_t len)
 
 static void client_named(Net *n, int i, uint64_t now_ms);
 
+/* A FULL of the screen as it stands, into the encoder, which grows to hold
+ * it: to the window's worst case for the one encode that overflowed, then
+ * down to twice what the FULL took (more than that is memory no frame of
+ * this screen has needed). Records its size, the lag bound. Returns -1 when
+ * memory said no. */
+static int enc_full(Net *n)
+{
+    wire_enc_full(&n->enc, n->rnd);
+    if (n->enc.overflow) {
+        if (wire_enc_resize(&n->enc, wire_full_max(n->rnd->w, n->rnd->h)) < 0) return -1;
+        wire_enc_full(&n->enc, n->rnd);
+        if (n->enc.overflow) return -1;
+        size_t fit = 2 * n->enc.len;
+        if (fit < n->enc.cap) wire_enc_resize(&n->enc, fit);     /* a shrink that fails keeps the larger */
+    }
+    n->full_len = n->enc.len;
+    return 0;
+}
+
+/* Every client that gets the stream, dropped: no frame of this window could
+ * be built. */
+static void drop_stream_clients(Net *n, const char *why);
+
 /* A client frames were withheld from, once its queue has drained: one FULL,
  * the screen as it is now, and it is level again. Nothing while its queue
  * still holds bytes, or while frames are withheld from everyone (the next
@@ -354,9 +415,7 @@ static int client_catch_up(Net *n, int i, uint64_t now_ms)
 {
     NetClient *c = &n->cl[i];
     if (c->out_off < c->out_len || !n->live) return 0;
-    wire_enc_full(&n->enc, n->rnd);
-    if (n->enc.overflow) { client_close(n, i); return -1; }
-    n->full_len = n->enc.len;
+    if (enc_full(n) < 0) { client_drop(n, i, "no memory for a frame of this window"); return -1; }
     c->behind = 0;
     if (client_send_synced(n, i, n->enc.buf, n->enc.len) < 0) return -1;
     return client_flush(n, i, now_ms);
@@ -367,9 +426,7 @@ static int client_catch_up(Net *n, int i, uint64_t now_ms)
  * caught up before their next frame by client_send_synced. */
 static void client_send_full(Net *n, int i, uint64_t now_ms)
 {
-    wire_enc_full(&n->enc, n->rnd);
-    if (n->enc.overflow) { client_close(n, i); return; }
-    n->full_len = n->enc.len;
+    if (enc_full(n) < 0) { client_drop(n, i, "no memory for a frame of this window"); return; }
     if (client_send_synced(n, i, n->enc.buf, n->enc.len) < 0) return;
     n->joined = 1;
     /* The handout always follows, empty when there is none: a phone coming
@@ -449,6 +506,12 @@ int net_name_seen(const Net *n, const char *name)
 static int stream_client(const NetClient *c)
 {
     return c->kind == CL_WS || (c->kind == CL_RAW && c->greeted);
+}
+
+static void drop_stream_clients(Net *n, const char *why)
+{
+    for (int i = 0; i < n->ncl; i++)
+        if (stream_client(&n->cl[i])) client_drop(n, i--, why);
 }
 
 /* A text record -- 'H', 'W', 'N' -- to the stream clients that want it:
@@ -854,8 +917,10 @@ static void accept_client(Net *n, uint64_t now_ms)
 
     NetClient *c = &n->cl[n->ncl++];
     uint8_t *out = c->out, *in = c->in;
+    size_t   out_cap = c->out_cap;
     memset(c, 0, sizeof *c);
     c->out   = out;
+    c->out_cap = out_cap;
     c->in    = in;
     c->fd    = fd;
     c->kind  = CL_NEW;
@@ -970,9 +1035,10 @@ void net_frame_end(Net *n, uint64_t now_ms)
 
     int full = n->stale || n->enc.overflow;
     if (!full && n->enc.cells == 0) return;           /* nothing changed: nothing sent */
-    if (full) { wire_enc_full(&n->enc, n->rnd); n->stale = 0; }
-    if (n->enc.overflow) return;
-    if (full) n->full_len = n->enc.len;
+    if (full) {
+        n->stale = 0;
+        if (enc_full(n) < 0) { drop_stream_clients(n, "no memory for a frame of this window"); return; }
+    }
 
     /* Only stream clients get frames; one still shaking hands gets a FULL
      * when it finishes. */

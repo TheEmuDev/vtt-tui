@@ -54,6 +54,14 @@ void app_whisper_tick(App *a)
         snprintf(msg, sizeof msg, "%s's phone is here", name);
         app_set_status_gm(a, msg);
     }
+    /* Logged: vtt let it go, which the GM should hear of once and be able
+     * to find again. */
+    const char *why;
+    while (net_take_drop(&a->net, name, sizeof name, &why)) {
+        if (name[0]) snprintf(msg, sizeof msg, "phone %s dropped: %s", name, why);
+        else         snprintf(msg, sizeof msg, "a phone with no name dropped: %s", why);
+        app_note_gm(a, msg);
+    }
 }
 
 /* The name a :whisper line starts with: the longest a phone has used (here
