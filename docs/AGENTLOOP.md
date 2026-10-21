@@ -1,0 +1,172 @@
+# The agent features' improvement loop (ROADMAP 27)
+
+**Status:** a plan, written 2026-10-21, awaiting the user's sign-off. Nothing of it is built.
+
+The user, 2026-10-21: "a self improvement loop in agent based features". What an agent is
+told (the skill, the guide, the Claude agent's prompt) should get better from evidence, with
+the GM's hand on every change. This plan says what is measured, where it is kept, who reads
+it, and what must hold before a change ships.
+
+## What exists (read 2026-10-21)
+
+- **What agents are told, three texts.** The skill, `tools/skill/SKILL.md` (28 lines,
+  installed with `make install-skill`). The guide, docs/AGENTS.md (36,156 bytes), embedded by
+  `tools/embed.sh` as `AGENT_GUIDE` and printed by `vtt --agent-guide`. And the Claude agent's
+  own first block, `src/apiagent.c:73-90`, sent before the guide.
+- **Checks of what they say.** Suite `agentguide` compares the embedded guide with
+  docs/AGENTS.md byte for byte; suite `ctltable` checks the guide names exactly the verbs of
+  `REQUESTS[]`. Nothing checks that an agent *succeeds* with them.
+- **What a job leaves behind.**
+  - `Job` (src/job.h) keeps the ask, the taker, a thread of 8 lines (the GM's feedback, the
+    agent's `say`, what came of a proposal) and the change set. It is gone when the map closes.
+  - The session log (`slog.c`) gets a refusal once (`host_refused`, app_ctl.c), but only while
+    the GM has `:log` on, and it holds the map's content (creature names, notes).
+  - The Claude agent appends a line a run to `$XDG_DATA_HOME/vtt/claude-usage.tsv`: the job's
+    number, model, calls, tokens of each kind, dollars, how it ended (`usage_record`,
+    apiagent.c:398). It is the only lasting record of a job today, and only for that agent.
+- **A measurement made once.** The skill's description was tuned 2026-10-19 with
+  skill-creator's trigger loop. Its queries were not kept. The scores of its first rounds were
+  noise: parallel runs stole each other's triggers (memory, *skill-creator serially*).
+
+## The loop
+
+1. **Evaluations in the repo**, run on demand and graded by vtt.
+2. **Each job's outcome on record**, with which texts the agent was given.
+3. **A rollup**, local, of counts.
+4. **A written procedure** that turns the evidence into a change of the texts, through the
+   user's sign-off, shipped only if no evaluation gets worse.
+
+Nothing in the loop changes the texts by itself. The guide steers every agent that reads it,
+so a path by which an agent edits the guide is a prompt-injection path into every later job
+(ROADMAP 27's *Not*).
+
+### 1. Evaluations: `tools/skill/evals/`
+
+**Trigger queries** (`triggers.json`, skill-creator's format): about 20, half that should
+start the skill (make a map, edit a .vtt file, answer a GM's job) and half near misses that
+should not (a TUI question in another project, a D&D rule, a JSON file named map). Run with
+skill-creator's `run_eval --num-workers 1` from a scratch dir with its own `.claude/`
+(memory, *skill-creator serially*). The score is recall and precision; each run is kept as
+`runs/DATE-triggers.json`.
+
+**Tasks** (`tasks/NAME/`), about a dozen, each:
+
+- `prompt.txt`: what a GM would ask, in a GM's words ("a crypt of three rooms off a corridor,
+  a skeleton in the last").
+- `start.vtt` or `size` (a new map's WxH): the map the agent works on. Fixtures written for
+  the evaluations, never a user's map.
+- `expect`: facts vtt can answer, a line each, read by the grader:
+  - `check clean` (`--check --json`: errors and warnings 0);
+  - `rooms >= 3`, `creatures == 1`, `reachable all` (`--describe --json`: `map.rooms`,
+    `map.creatures`, each room's `reachable`);
+  - `area crypt`, `door crypt hall` (an area by name; a door between two areas' rooms);
+  - `creature skeleton in tomb` (a creature whose label matches, in a room of that area);
+  - `requests <= 12`, `refusals <= 2` (from the call log, below).
+
+  A fact a model would have to judge ("it looks like a crypt") is not a line. If a task
+  cannot be graded by vtt's answers, it is not a task.
+- Two kinds: **plan tasks** (the agent writes a plan, `vtt map.vtt --apply plan.txt`; no vtt
+  open) and **live tasks** (a sandboxed vtt with `--agent` and a job asked; the GM's side is a
+  `--script` that accepts whatever is proposed). Plan tasks first; live tasks need a GM's
+  side driven from a script, which the tests do today through a fifo (CODEMAP, *Conventions*).
+
+**The runner**, `tools/agenteval.sh TASK... | all`:
+
+- Each task in a fresh scratch dir under `sandbox_enter`'s rules (its own `XDG_DATA_HOME`,
+  `XDG_CONFIG_HOME`, `XDG_RUNTIME_DIR`, no keyring; CLAUDE.md, *Shell*), the skill installed
+  into the dir's `.claude/skills/vtt/`.
+- `vtt` on the agent's `PATH` is a wrapper that logs each call (its words, exit status,
+  bytes out) and runs the real binary. The call log is where `requests` and `refusals` come
+  from, without a change to vtt.
+- The agent is a command (`EVAL_AGENT`, default `claude -p` with the task's prompt and
+  `--output-format json`, which reports the run's cost; the field's name is checked when it
+  is built). The Claude agent itself runs only in live tasks, as vtt starts it.
+- `N` runs a task (default 3: a model is not deterministic, one run says little). Each run
+  writes `runs/DATE-MODEL-TASK-K/`: the grader's verdict line a fact, the call log, the
+  agent's final answer, tokens and dollars. The maps the agent made are kept for reading.
+- **Nothing runs without the user's go:** every run calls a model and spends money. The
+  runner prints what it will run (tasks × N × model) and the cost of the last such run, and
+  asks; `--yes` is for the user.
+
+**The grader**, `tools/agentgrade.py`: reads `expect`, the run's `--check --json`,
+`--describe --json` and call log, and prints a line a fact, `pass` or `FAIL: what was
+found`. Pure: given the same files, the same lines. It has its own test, a hand-written plan
+as the agent (no model): a passing and a failing case for every kind of fact, run in `make
+test` with the oracle.
+
+### 2. Each job's outcome: `agent-jobs.tsv` (with step 8)
+
+A line a job when it ends (accepted, scrapped, or the map closed under it), appended to
+`$XDG_DATA_HOME/vtt/agent-jobs.tsv` beside `claude-usage.tsv`, mode 600:
+
+| column | what |
+|---|---|
+| when, job | as `claude-usage.tsv`, so the two join on them |
+| guide | a hash of what the agent was told: FNV-1a 64 over `AGENT_GUIDE` (and the Claude agent's first block, for that agent) |
+| agent | `command`, `claude` or `other` (a name an agent chose is its content, not kept) |
+| from | `gm`, `agent`, `apply` |
+| verdict | `accepted`, `accepted-part`, `scrapped`, `closed` |
+| rounds | times sent back with feedback |
+| requests, refusals | counted under the job's name or with `job N` |
+| by class | refusals by class (`usage`, `limit`, `conflict`, the six) |
+| by verb | the three verbs refused most, `verb:count` |
+| changes | the change set's size when the verdict came |
+| seconds | from the ask to the verdict |
+
+**Not kept:** what was asked, the GM's feedback, the agent's `say` lines, names, squares.
+They are the map's content and the GM's secrets (CLAUDE.md, *The players must never see the
+GM's things*; here, nobody else either). The file never leaves the machine.
+
+Step 8 owns the session log and the agent's spawner (V2.md, *Build order*), so this part is
+built with it: the counters are three ints and a small table on `Job`, counted where
+`host_refused` is called today.
+
+### 3. `tools/agentreport`
+
+A local rollup of `agent-jobs.tsv` and `claude-usage.tsv`, by guide hash: jobs, the share
+accepted, sent back, scrapped; refusals a job by class and the verbs refused most; dollars a
+job. Text, a screen of it. It reads counts only, so what it prints can be shown to a reviewer.
+
+### 4. The procedure (docs/AGENTS.md's maintainers' section, written with part 1)
+
+1. Run the evaluations on the current texts (the user's go): the baseline, kept in `runs/`.
+2. A reviewer (a Fable subagent, as every review here) reads the failed runs and the rollup
+   and drafts edits to the skill, the guide or the Claude agent's first block. The runs are of
+   the evaluations' own maps, so nothing of a user's game reaches the reviewer.
+3. The edits go into a plan, with the evidence for each, to the user for sign-off.
+4. Built; the evaluations run again on the same model and N. **It ships only if no
+   evaluation gets worse:** the total passes are not fewer, and no task drops by more than one
+   run of N. Otherwise it goes back to 2 or is dropped, and the plan says which.
+5. The runs of both sides are kept; the commit names them.
+
+## Order
+
+The user's order (ROADMAP 27, V2.md *Next*): step 7 is built next. Then part 1's runner and
+grader, with the grader's test and the procedure (no model is called to build them); its
+first run with the user's go, folded into ROADMAP 26's live check. Part 2 with step 8, then
+part 3. A Fable review after each part.
+
+## Performance considerations
+
+| path | speed of light | expected | the gap |
+|---|---|---|---|
+| a request under a job | nothing new | an int incremented, a refusal's class and verb counted (a table of 8) | none worth a row |
+| a job's end | one line appended, one `write` (about 150 bytes) | `open`, `write`, `close` of a line, once a job | the `open` and `close`: a job ends a few times a session |
+| the guide's hash | 36,156 bytes read once | FNV-1a once a process, at the first job's end (about 36 µs at 1 ns a byte, a guess from FNV's one multiply a byte; measured when built) | none: once a process |
+| an evaluation run | the model's tokens, of which the guide is about 9,000 (36,156 bytes; 4 bytes a token is a rule of thumb, not measured) | tasks × N × a task's tokens | the money is the cost: unknown until the first run measures one task; the runner reports it before asking for the next |
+| the rollup | the two files' bytes | one pass | none |
+
+Nothing of this is on a key or a frame: no `PROF_ZONE`, no perf scenario. The evaluation
+run's cost goes in this doc and PERFORMANCE.md once measured.
+
+## Questions for the user
+
+1. **What the job record keeps.** Counts only, as above (recommended): the GM's feedback is
+   the richest signal, but it is the GM's words about their game. Or also the feedback lines,
+   on this machine only, shown by `tools/agentreport --feedback` to you and never handed to a
+   reviewer without your go.
+2. **Which agent the task evaluations run.** `claude -p` with the skill (recommended: it
+   tests the skill and the guide, the path an outside agent takes), with the Claude agent
+   added in the live tasks; or the Claude agent only.
+3. **The model and N for a run.** Sonnet, N = 3 (recommended: the cost is measured on one
+   task first and put to you before a full run); or the model the GM's Claude agent is set to.
