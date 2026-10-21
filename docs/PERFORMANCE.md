@@ -1412,6 +1412,30 @@ void), one with floor everywhere (262,144 one-square rooms, each a W120).
 | all floor, text | 262,144 findings printed | 0.226 s, 20.4 MB | 0.232 s, 20.4 MB + one help line | 23 ns a finding: the help's lookup and the stretch pass's scan of every finding; kept |
 | all floor, JSON | the same | 0.41 s, 68.0 MB | 0.42 s | the same, and the `codes` object |
 
+### `App` in its parts (2.0, step 6, part B)
+
+Machine: Intel Core i7-8700K @ 3.70GHz (6 cores, 12 threads, 4.7 GHz max, powersave governor),
+16 GB RAM, Samsung SSD 860 EVO 1TB (btrfs), Linux 7.2.8-9-omarchy, gcc 16.2.1 -O2.
+
+Part B moved `App`'s loose fields into eleven parts and the proposal code into its own file:
+no path gained or lost work, so the plan's estimate was "the same". Measured 2026-10-21: the
+build before it (579eda9) against d20eb6a's code, both rebuilt with `-falign-functions=64
+-falign-loops=32`, `tools/perf.sh` three times each, alternating, on the repo's disk; per-row
+medians by `tools/median.py`, side by side by `tools/compare.py`.
+
+- **Frames:** all 100 rows within 5% at p50; the median ratio 1.000. Bytes the same but two
+  rows (`play, named roll` 164 and 165, `profiler overlay` 1,142 and 1,104; my guess, not
+  checked: the overlay prints timings and the roll is random, so their text varies by run).
+- **Cost per call:** 82 rows, median ratio 1.000. The rows that moved past 5% compare different
+  scenarios: the column is each zone's heaviest, and which scenario that is changed between runs
+  (`app.draw`, `mapio.write`, `mapio.load`, `net.accept`, `range.status`, `floor.switch`).
+  `fog.sight.rim` read 4.4 µs before and 6.0 after, with a different scenario named in all three
+  new runs; that scenario alone (`play, fog pings, 4 watchers`), five runs a binary alternating:
+  6.09-6.22 µs before, 6.06-6.26 after, frames 58.8-60.4 and 59.3-61.1 µs. Not the change.
+  `scene.save` (8.0 to 9.1 µs in two of three runs, 8.1 in the third) and `map.copy` (two calls
+  a run) are within what one run's spread shows; my guess is noise, not shown: a rerun of each
+  scenario alone, as for the rim, would settle it.
+
 ## 2.0 against 1.x
 
 Kept current as 2.0 is built (the user, 2026-10-17): after each step's own timing,
