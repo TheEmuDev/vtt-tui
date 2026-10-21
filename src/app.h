@@ -89,7 +89,7 @@ typedef enum {
 typedef enum {
     DISK_NONE,          /* the file is as vtt left it */
     DISK_NOTICED,       /* it changed; not read yet */
-    DISK_PROPOSED,      /* its change waits for :review, as job `disk_job` */
+    DISK_PROPOSED,      /* its change waits for :review, as job `file.job` */
     DISK_STUCK,         /* it changed in a way no proposal can say (unreadable, resized) */
 } DiskState;
 
@@ -274,6 +274,33 @@ typedef struct {
     int      choice_job;      /* the job the agent choice box (or what it opened) is for; 0: none */
 } Agents;
 
+/* The open map's file (app_disk.c): saving it, and another writer of it --
+ * whether the file has changed since vtt last read or wrote it (Map.disk),
+ * the change's proposal (`job`), and the file's bytes and identity as last
+ * seen, which become the map's base once the change is reviewed. */
+typedef struct {
+    int      save_force;        /* :w! -- over a change on disk nobody has reviewed */
+    /* The open map's file as last read had a row added or lost by hand
+     * (W031, E011: maptools_file_finish): its line, 0 for none. A save over
+     * it writes the rows as read and the evidence is gone, so it asks once
+     * (rows_ok); a trip, which saves, refuses. */
+    int      rows, rows_ok;
+    int      save_then_close;   /* :wq, waiting on that question */
+    int      pending_force;
+    char     pending[MAP_PATH_MAX];
+    int      ask_holders;       /* interactive: opening a map asks the other vtts first */
+    int      open_anyway;       /* ... and the GM said yes */
+    int      state;             /* DiskState */
+    int      reread;            /* the file moved again: read it when the keys go quiet */
+    int      job;
+    int      full;              /* DISK_STUCK only for want of a job slot: read again once one is free */
+    MapDisk  seen;
+    char    *new_bytes;
+    size_t   new_len;
+    char     why[160];          /* DISK_STUCK: what cannot be made a proposal */
+    uint64_t checked_ms, key_ms;
+} MapFile;
+
 typedef struct {
     /* The map, its log, the jobs, the events and the request being run: what
      * a request handler is given (world.h). */
@@ -338,30 +365,7 @@ typedef struct {
 
     Pings    pings;
     ReviewState review;
-    /* Another writer of the map's file (app_disk.c): whether the file has
-     * changed since vtt last read or wrote it (Map.disk), the change's
-     * proposal (`disk_job`), and the file's bytes and identity as last seen,
-     * which become the map's base once the change is reviewed. */
-    int      save_force;        /* :w! -- over a change on disk nobody has reviewed */
-    /* The open map's file as last read had a row added or lost by hand
-     * (W031, E011: maptools_file_finish): its line, 0 for none. A save over
-     * it writes the rows as read and the evidence is gone, so it asks once
-     * (file_rows_ok); a trip, which saves, refuses. */
-    int      file_rows, file_rows_ok;
-    int      save_then_close;   /* :wq, waiting on that question */
-    int      save_pending_force;
-    char     save_pending[MAP_PATH_MAX];
-    int      ask_holders;       /* interactive: opening a map asks the other vtts first */
-    int      open_anyway;       /* ... and the GM said yes */
-    int      disk_state;        /* DiskState */
-    int      disk_reread;       /* the file moved again: read it when the keys go quiet */
-    int      disk_job;
-    int      disk_full;         /* DISK_STUCK only for want of a job slot: read again once one is free */
-    MapDisk  disk_seen;
-    char    *disk_new;
-    size_t   disk_new_len;
-    char     disk_why[160];     /* DISK_STUCK: what cannot be made a proposal */
-    uint64_t disk_checked_ms, disk_key_ms;
+    MapFile  file;
     unsigned ctl_refused;       /* the last refusal logged, hashed: a caller repeating itself is one line */
     uint64_t ctl_turn_ns;       /* CTL_TURN_NS; a test sets 0 for one request a turn */
     Agents   agents;

@@ -17,13 +17,13 @@
 
 void app_disk_reset(App *a)
 {
-    free(a->disk_new);
-    a->disk_new = NULL;
-    a->disk_new_len = 0;
-    a->disk_state = DISK_NONE;
-    a->disk_job = 0;
-    a->disk_full = 0;
-    a->disk_why[0] = '\0';
+    free(a->file.new_bytes);
+    a->file.new_bytes = NULL;
+    a->file.new_len = 0;
+    a->file.state = DISK_NONE;
+    a->file.job = 0;
+    a->file.full = 0;
+    a->file.why[0] = '\0';
 }
 
 /* The file's own job, while it waits: found by its number and by being the
@@ -31,7 +31,7 @@ void app_disk_reset(App *a)
  * the next one made, which may be an agent's. -1 for none. */
 static int disk_slot(const App *a)
 {
-    int slot = a->disk_job ? world_job_find(&a->world, a->disk_job) : -1;
+    int slot = a->file.job ? world_job_find(&a->world, a->file.job) : -1;
     if (slot < 0 || a->world.jobs[slot].from != JOB_FROM_DISK || a->world.jobs[slot].state != JOB_READY) return -1;
     return slot;
 }
@@ -41,11 +41,11 @@ static int disk_slot(const App *a)
 static void adopt(App *a)
 {
     Map *m = a->world.map;
-    if (m && a->disk_new) {
+    if (m && a->file.new_bytes) {
         free(m->base);
-        m->base     = a->disk_new;
-        m->base_len = a->disk_new_len;
-        a->disk_new = NULL;
+        m->base     = a->file.new_bytes;
+        m->base_len = a->file.new_len;
+        a->file.new_bytes = NULL;
         /* Another writer's text: what it holds wrong, as an open says it
          * (and a row added or lost there makes :w ask). */
         char tail[200], msg[260];
@@ -54,16 +54,16 @@ static void adopt(App *a)
             app_set_status_gm(a, msg);
         }
     }
-    if (m) m->disk = a->disk_seen;
+    if (m) m->disk = a->file.seen;
     app_disk_reset(a);
 }
 
 static void stuck(App *a, const char *why)
 {
     char msg[220];
-    a->disk_state = DISK_STUCK;
-    a->disk_full = 0;
-    str_lcpy(a->disk_why, why, sizeof a->disk_why);
+    a->file.state = DISK_STUCK;
+    a->file.full = 0;
+    str_lcpy(a->file.why, why, sizeof a->file.why);
     snprintf(msg, sizeof msg, "%s - :e opens the file's, :w! writes yours over it", why);
     app_note_gm(a, msg);
 }
@@ -79,12 +79,12 @@ static void disk_read(App *a)
      * write over. Its identity is kept, so a file put back is seen. */
     MapDisk cur;
     if (mapio_disk_stat(m->path, &cur) < 0) {
-        if (a->disk_state != DISK_PROPOSED) app_disk_reset(a);
+        if (a->file.state != DISK_PROPOSED) app_disk_reset(a);
         return;
     }
     Map *now  = mapio_load_base(m->path, err, sizeof err);
     Map *base = now && m->base ? mapio_load_mem(m->base, m->base_len, err, sizeof err) : NULL;
-    if (now) a->disk_seen = now->disk;
+    if (now) a->file.seen = now->disk;
     if (!now || !base) {
         stuck(a, now ? "the file changed on disk, and what it was before cannot be read back"
                      : "the file on disk is no longer a map vtt can read");
@@ -99,9 +99,9 @@ static void disk_read(App *a)
             /* Written again with nothing changed (a touch, a save of the
              * same map): nothing to review. */
             cs_free(&cs);
-            free(a->disk_new);
-            a->disk_new = now->base;
-            a->disk_new_len = now->base_len;
+            free(a->file.new_bytes);
+            a->file.new_bytes = now->base;
+            a->file.new_len = now->base_len;
             now->base = NULL;
             adopt(a);
         } else {
@@ -110,15 +110,15 @@ static void disk_read(App *a)
             if (slot < 0) {
                 cs_free(&cs);
                 stuck(a, "the file changed on disk, and there is no room for another change to review");
-                a->disk_full = 1;
+                a->file.full = 1;
             } else {
                 if (a->review.slot == slot) app_review_leave(a);      /* its change set is replaced */
-                free(a->disk_new);
-                a->disk_new = now->base;
-                a->disk_new_len = now->base_len;
+                free(a->file.new_bytes);
+                a->file.new_bytes = now->base;
+                a->file.new_len = now->base_len;
                 now->base = NULL;
-                a->disk_state = DISK_PROPOSED;
-                a->disk_job = a->world.jobs[slot].num;
+                a->file.state = DISK_PROPOSED;
+                a->file.job = a->world.jobs[slot].num;
                 world_job_set_proposal(&a->world, slot, &cs, NULL);
             }
         }
@@ -133,20 +133,20 @@ void app_disk_check(App *a, int now_too)
     Map *m = a->world.map;
     if (!m || !m->path[0] || !m->disk.known) return;
     /* A change reviewed, scrapped or sent away: the file is the base now. */
-    if (a->disk_state == DISK_PROPOSED && disk_slot(a) < 0) adopt(a);
+    if (a->file.state == DISK_PROPOSED && disk_slot(a) < 0) adopt(a);
     /* ... and one scrapped, then brought back with :review N, waits again:
      * a save would write over what it holds. */
-    if (a->disk_state == DISK_NONE)
+    if (a->file.state == DISK_NONE)
         for (int i = 0; i < JOB_MAX; i++)
             if (a->world.jobs[i].used && a->world.jobs[i].from == JOB_FROM_DISK && a->world.jobs[i].state == JOB_READY) {
-                a->disk_state = DISK_PROPOSED;
-                a->disk_job   = a->world.jobs[i].num;
-                a->disk_seen  = m->disk;
+                a->file.state = DISK_PROPOSED;
+                a->file.job   = a->world.jobs[i].num;
+                a->file.seen  = m->disk;
             }
     /* Stuck only for want of room, and a job has gone since: read again. */
-    if (a->disk_state == DISK_STUCK && a->disk_full)
+    if (a->file.state == DISK_STUCK && a->file.full)
         for (int i = 0; i < JOB_MAX; i++)
-            if (!a->world.jobs[i].used || a->world.jobs[i].state > JOB_READY) { a->disk_reread = 1; a->disk_full = 0; break; }
+            if (!a->world.jobs[i].used || a->world.jobs[i].state > JOB_READY) { a->file.reread = 1; a->file.full = 0; break; }
     {
         PROF_ZONE("disk.check");
         MapDisk cur;
@@ -155,53 +155,53 @@ void app_disk_check(App *a, int now_too)
              * map back. What was noticed or could not be read went with
              * it. The identity is kept: a file put back by someone else
              * (git checkout away and back) is not the one this map knew. */
-            if (a->disk_state == DISK_NOTICED || a->disk_state == DISK_STUCK) app_disk_reset(a);
-            a->disk_reread = 0;
+            if (a->file.state == DISK_NOTICED || a->file.state == DISK_STUCK) app_disk_reset(a);
+            a->file.reread = 0;
             return;
         }
-        const MapDisk *last = a->disk_state == DISK_NONE ? &m->disk : &a->disk_seen;
+        const MapDisk *last = a->file.state == DISK_NONE ? &m->disk : &a->file.seen;
         if (!mapio_disk_same(&cur, last)) {
-            a->disk_seen = cur;
-            if (a->disk_state != DISK_PROPOSED) a->disk_state = DISK_NOTICED;
-            a->disk_reread = 1;
+            a->file.seen = cur;
+            if (a->file.state != DISK_PROPOSED) a->file.state = DISK_NOTICED;
+            a->file.reread = 1;
             if (!now_too) app_set_status_gm(a, "the file changed on disk - looking at what changed when you pause");
         }
     }
-    if (a->disk_reread && now_too) { a->disk_reread = 0; disk_read(a); }
+    if (a->file.reread && now_too) { a->file.reread = 0; disk_read(a); }
 }
 
 void app_disk_key(App *a)
 {
-    a->disk_key_ms = a->world.now_ms;
+    a->file.key_ms = a->world.now_ms;
     if (!a->world.map) return;
     /* At most once a second, and never on a clock that is not running (the
      * bench's, the tests'): a stat is a syscall a key. */
-    if (a->world.now_ms - a->disk_checked_ms < 1000) return;
-    a->disk_checked_ms = a->world.now_ms;
+    if (a->world.now_ms - a->file.checked_ms < 1000) return;
+    a->file.checked_ms = a->world.now_ms;
     app_disk_check(a, 0);
 }
 
 int app_disk_due(const App *a, uint64_t now_ms)
 {
-    if (!a->world.map || !a->disk_reread) return -1;
-    uint64_t at = a->disk_key_ms + AUTOSAVE_QUIET_MS;
+    if (!a->world.map || !a->file.reread) return -1;
+    uint64_t at = a->file.key_ms + AUTOSAVE_QUIET_MS;
     return now_ms >= at ? 0 : (int)(at - now_ms);
 }
 
 void app_disk_tick(App *a, uint64_t now_ms)
 {
     if (app_disk_due(a, now_ms) != 0) return;
-    a->disk_reread = 0;
+    a->file.reread = 0;
     disk_read(a);
 }
 
 const char *app_disk_blocks(const App *a)
 {
     static char why[200];
-    if (a->disk_state == DISK_NONE) return NULL;
-    if (a->disk_state == DISK_PROPOSED)
-        snprintf(why, sizeof why, "the file changed on disk: :review %d looks at what changed", a->disk_job);
-    else if (a->disk_state == DISK_STUCK) str_lcpy(why, a->disk_why, sizeof why);
+    if (a->file.state == DISK_NONE) return NULL;
+    if (a->file.state == DISK_PROPOSED)
+        snprintf(why, sizeof why, "the file changed on disk: :review %d looks at what changed", a->file.job);
+    else if (a->file.state == DISK_STUCK) str_lcpy(why, a->file.why, sizeof why);
     else str_lcpy(why, "the file changed on disk", sizeof why);
     return why;
 }
@@ -211,7 +211,7 @@ void app_disk_saved(App *a, int over)
     /* The map is saved: mapio_save has made the base the GM's. A change
      * that waited is of a file that no longer matters -- written over
      * (:w!), or left behind when the map was saved as another file. */
-    int slot = a->disk_state == DISK_PROPOSED ? disk_slot(a) : -1;
+    int slot = a->file.state == DISK_PROPOSED ? disk_slot(a) : -1;
     if (slot >= 0) {
         if (a->review.slot == slot) app_review_leave(a);
         a->world.jobs[slot].state = JOB_SCRAPPED;
@@ -219,5 +219,5 @@ void app_disk_saved(App *a, int over)
                                                      : "left behind: the map was saved as another file");
     }
     app_disk_reset(a);
-    a->disk_reread = 0;
+    a->file.reread = 0;
 }

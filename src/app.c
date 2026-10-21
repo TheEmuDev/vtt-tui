@@ -161,7 +161,7 @@ void app_show_message(App *a, const char *title, const char *body)
 }
 
 /* What the open map's file holds wrong, its load told to `fc`: the line
- * search run, a->file_rows set, and the status line's end ("; 1 warning in
+ * search run, a->file.rows set, and the status line's end ("; 1 warning in
  * the file (:check): line 214, ...", the :check with `hint`) into `tail`, or
  * "". Returns the
  * file's warnings and errors; `fc` is freed. */
@@ -173,8 +173,8 @@ int app_file_tail(App *a, MaptoolsFile *fc, const Map *m, int hint, char *tail, 
     int  n = fc ? maptools_file_finish(fc, m, sum, sizeof sum, &rows, &errors)
                 : maptools_file_of(m, sum, sizeof sum, &rows, &errors);
     maptools_file_free(fc);
-    a->file_rows    = rows;
-    a->file_rows_ok = 0;
+    a->file.rows    = rows;
+    a->file.rows_ok = 0;
     tail[0] = '\0';
     if (!n) return 0;
     int warnings = n - errors;
@@ -195,7 +195,7 @@ int app_open_map(App *a, const char *path)
 {
     /* Open in another vtt already: say so first. Both may have it; what
      * either saves then comes to the other as a change to review. */
-    if (a->ask_holders && !a->open_anyway) {
+    if (a->file.ask_holders && !a->file.open_anyway) {
         long silent = 0, pid = ctl_who_holds(path, &silent);
         if (pid || silent) {
             const char *base = strrchr(path, '/');
@@ -603,7 +603,7 @@ static void app_new_map(App *a, const char *name, int w, int h)
     slog_close(&a->slog);
     map_free(a->world.map);
     a->world.map = m;
-    a->file_rows = a->file_rows_ok = 0;
+    a->file.rows = a->file.rows_ok = 0;
     undo_clear(&a->world.undo);
     play_init(&a->play);
     ed_init(&a->ed, m);
@@ -631,7 +631,7 @@ int app_save_map(App *a, const char *path)
     /* Over the map's own file: not while someone else's change to it has
      * not been looked at. Looked for now, not at the last key. */
     int own = a->world.map->path[0] && !strcmp(path, a->world.map->path);
-    if (own && !a->save_force) {
+    if (own && !a->file.save_force) {
         app_disk_check(a, 1);
         const char *why = app_disk_blocks(a);
         if (why) {
@@ -645,14 +645,14 @@ int app_save_map(App *a, const char *path)
     /* Over a file with a row added or lost by hand: the rows go to disk as
      * they were read, one off, and the file's evidence of where with them.
      * Asked once for the map. */
-    if (own && a->file_rows && !a->file_rows_ok) {
-        str_lcpy(a->save_pending, path, sizeof a->save_pending);
-        a->save_pending_force = a->save_force;
+    if (own && a->file.rows && !a->file.rows_ok) {
+        str_lcpy(a->file.pending, path, sizeof a->file.pending);
+        a->file.pending_force = a->file.save_force;
         snprintf(a->modal_title, sizeof a->modal_title, "Save the rows as read?");
         snprintf(a->modal_body, sizeof a->modal_body,
                  "Near line %d the file has a row added or lost by hand: some rows are one off. "
                  "Saving writes them as read, and the file stops showing where (:check). Save anyway?",
-                 a->file_rows);
+                 a->file.rows);
         a->modal = MODAL_CONFIRM_ROWS;
         a->dirty = 1;
         return -1;
@@ -681,7 +681,7 @@ int app_save_map(App *a, const char *path)
     /* Written over, or the map is another file's now: a change waiting from
      * the old one is of a file that no longer matters. */
     app_disk_saved(a, own);
-    a->file_rows = a->file_rows_ok = 0;       /* the map's file is vtt's writing now */
+    a->file.rows = a->file.rows_ok = 0;       /* the map's file is vtt's writing now */
 
     char msg[192];
     snprintf(msg, sizeof msg, "wrote %.170s", path);
@@ -1246,15 +1246,15 @@ static int modal_key(App *a, Key k)
     case MODAL_CONFIRM_ROWS:
         if (k.kind == KEY_CHAR && (k.ch == 'y' || k.ch == 'Y')) {
             char path[MAP_PATH_MAX];
-            str_lcpy(path, a->save_pending, sizeof path);
-            int close = a->save_then_close;
-            a->save_then_close = 0;              /* before the save, which may ask something else */
-            a->save_pending[0] = '\0';
+            str_lcpy(path, a->file.pending, sizeof path);
+            int close = a->file.save_then_close;
+            a->file.save_then_close = 0;              /* before the save, which may ask something else */
+            a->file.pending[0] = '\0';
             a->modal = MODAL_NONE;
-            a->file_rows_ok = 1;
-            a->save_force = a->save_pending_force;
+            a->file.rows_ok = 1;
+            a->file.save_force = a->file.pending_force;
             int rc = app_save_map(a, path);
-            a->save_force = 0;
+            a->file.save_force = 0;
             if (rc == 0 && close) app_close_map(a);
             a->dirty = 1;
             return 1;
@@ -1262,8 +1262,8 @@ static int modal_key(App *a, Key k)
             a->modal = MODAL_NONE;
             app_set_status_gm(a, "not saved - :check says where the file has a row added or lost");
         } else return 1;
-        a->save_then_close = 0;
-        a->save_pending[0] = '\0';
+        a->file.save_then_close = 0;
+        a->file.pending[0] = '\0';
         a->dirty = 1;
         return 1;
 
@@ -1368,9 +1368,9 @@ static int modal_key(App *a, Key k)
             str_lcpy(next, a->pending_file, sizeof next);
             a->pending_file[0] = '\0';
             a->modal = MODAL_NONE;
-            a->open_anyway = 1;
+            a->file.open_anyway = 1;
             app_open_map(a, next);                /* may put up the recovery question */
-            a->open_anyway = 0;
+            a->file.open_anyway = 0;
         } else if (k.kind == KEY_ESC || (k.kind == KEY_CHAR && (k.ch == 'n' || k.ch == 'N'))) {
             a->modal = MODAL_NONE;
             a->pending_file[0] = '\0';
@@ -1470,7 +1470,7 @@ void app_close_map(App *a)
     app_disk_reset(a);
     map_free(a->world.map);
     a->world.map = NULL;
-    a->file_rows = a->file_rows_ok = 0;
+    a->file.rows = a->file.rows_ok = 0;
     a->pings.nrings = a->pings.nlast = 0;
     a->pings.agent.until_ms = 0;
     world_jobs_clear(&a->world);

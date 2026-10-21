@@ -1495,11 +1495,11 @@ void test_map_links(void)
         }
         free(ctext);
         /* ... and this map's own: its save would. */
-        a.file_rows = 7;
+        a.file.rows = 7;
         press(&a, "go");
         CHECK(!strcmp(a.world.map->name, "town"));
         CHECK(strstr(a.status, "this map's file has a row added or lost near line 7") != NULL);
-        a.file_rows = 0;
+        a.file.rows = 0;
 
         /* The other map's file with a line vtt does not know: the trip goes,
          * writes it as read, and says so with the trip -- the GM's. Then back. */

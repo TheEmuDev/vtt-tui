@@ -593,7 +593,7 @@ static int run_interactive(const Options *o)
     app_init(&a, &t, &r);
     a.ascii = o->ascii;
     a.autosave_on = 1;              /* interactive only: a bench would litter */
-    a.ask_holders = 1;              /* a GM is here to be asked */
+    a.file.ask_holders = 1;              /* a GM is here to be asked */
     /* The GM's settings (docs/APIAGENT.md): interactive only, and saved on
      * each change; a bench or a tool keeps the defaults in memory. */
     {
@@ -771,11 +771,11 @@ static int run_apply(const Options *o)
                 rc = 1;
             } else if (a.world.map->gen == gen && a.world.map->scenes_gen == sgen && a.world.map->cards_gen == cgen) {
                 rc = 0;
-            } else if (a.file_rows) {
+            } else if (a.file.rows) {
                 /* Saved, the rows would go to disk as read, one off, and the
                  * file's evidence of where with them (as :w asks first). */
                 fprintf(stderr, "vtt: %s has a row added or lost by hand near line %d (vtt %s --check says where) - nothing saved\n",
-                        o->map_path, a.file_rows, o->map_path);
+                        o->map_path, a.file.rows, o->map_path);
                 rc = 1;
             } else if (mapio_save(a.world.map, o->map_path, err, sizeof err) < 0) {
                 fprintf(stderr, "vtt: %s\n", err);

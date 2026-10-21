@@ -134,16 +134,16 @@ static void travel(App *a, int li)
 
     /* A trip saves both maps: over a file with a row added or lost by hand
      * that writes the rows as read, one off, and the evidence goes. */
-    if (a->file_rows && !a->file_rows_ok)
-        REFUSE("this map's file has a row added or lost near line %d - :check says where; :w asks to save it as read", a->file_rows);
+    if (a->file.rows && !a->file.rows_ok)
+        REFUSE("this map's file has a row added or lost near line %d - :check says where; :w asks to save it as read", a->file.rows);
     MaptoolsFile *fc = maptools_file_new();
     Map *d = mapio_load_base_diag(path, err, sizeof err, maptools_file_sink, fc);
     if (!d) { maptools_file_free(fc); REFUSE("%s leads to %.30s, which is not beside this map", name, l.to_map); }
     char dfile[200];
-    int  keep_rows = a->file_rows, keep_ok = a->file_rows_ok;      /* this map's, until it is left */
-    int  dsaid = app_file_tail(a, fc, d, 0, dfile, sizeof dfile), drows = a->file_rows;
-    a->file_rows = keep_rows;
-    a->file_rows_ok = keep_ok;
+    int  keep_rows = a->file.rows, keep_ok = a->file.rows_ok;      /* this map's, until it is left */
+    int  dsaid = app_file_tail(a, fc, d, 0, dfile, sizeof dfile), drows = a->file.rows;
+    a->file.rows = keep_rows;
+    a->file.rows_ok = keep_ok;
     if (drows) {
         map_free(d);
         REFUSE("%.30s's file has a row added or lost near line %d - :e it and :check, before anyone goes there", l.to_map, drows);
@@ -182,7 +182,7 @@ static void travel(App *a, int li)
     path_stem(m->path, stem, sizeof stem);
 
     app_travel_to(a, d);
-    a->file_rows = a->file_rows_ok = 0;             /* it had none, or nobody went */
+    a->file.rows = a->file.rows_ok = 0;             /* it had none, or nobody went */
     int first = -1;
     char who[160] = "";
     for (int k = 0; k < n; k++) {

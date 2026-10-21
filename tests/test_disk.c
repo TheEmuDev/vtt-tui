@@ -89,7 +89,7 @@ void test_disk(void)
     CHECK(mapio_disk_stat(path, &id) == 0 && mapio_disk_same(&id, &m->disk));
     free(bytes);
     key_then_quiet(&a, &now);
-    CHECK_EQ(a.disk_state, DISK_NONE);
+    CHECK_EQ(a.file.state, DISK_NONE);
     CHECK_EQ(disk_job(&a), -1);
 
     CASE("the file written behind the app: noticed on a key, a proposal from the file once the keys are quiet");
@@ -97,7 +97,7 @@ void test_disk(void)
     now += 2000;
     app_tick(&a, now);
     press(&a, "l");
-    CHECK_EQ(a.disk_state, DISK_NOTICED);
+    CHECK_EQ(a.file.state, DISK_NOTICED);
     CHECK(strstr(a.status, "the file changed on disk") != NULL && a.status_gm);
     CHECK_EQ(disk_job(&a), -1);                            /* not read on the key */
     CHECK_EQ(app_disk_due(&a, now), AUTOSAVE_QUIET_MS);
@@ -109,7 +109,7 @@ void test_disk(void)
     CHECK(dj >= 0);
     if (dj < 0) goto out;
     CHECK_EQ(a.world.jobs[dj].state, JOB_READY);
-    CHECK_EQ(a.disk_state, DISK_PROPOSED);
+    CHECK_EQ(a.file.state, DISK_PROPOSED);
     CHECK(strstr(a.status, "ready: ground in F6") != NULL);
     CHECK_EQ(map_tile(m, 5, 5), TILE_FLOOR);               /* nothing lands by itself */
     CHECK_EQ(app_disk_due(&a, now), -1);
@@ -145,7 +145,7 @@ void test_disk(void)
     CHECK(undo_tag_top(&a.world.undo) == NULL);                           /* not the agent's to take back */
     press(&a, ":w\r");
     CHECK(strstr(a.status, "wrote ") != NULL);
-    CHECK_EQ(a.disk_state, DISK_NONE);
+    CHECK_EQ(a.file.state, DISK_NONE);
     {
         char err[MAPIO_ERR_MAX];
         Map *o = mapio_load(path, err, sizeof err);
@@ -189,7 +189,7 @@ void test_disk(void)
     press(&a, ":w!\r");
     CHECK(strstr(a.status, "wrote ") != NULL);
     CHECK(dj >= 0 && a.world.jobs[dj].state == JOB_SCRAPPED);
-    CHECK_EQ(a.disk_state, DISK_NONE);
+    CHECK_EQ(a.file.state, DISK_NONE);
     {
         char err[MAPIO_ERR_MAX];
         Map *o = mapio_load(path, err, sizeof err);
@@ -203,20 +203,20 @@ void test_disk(void)
     press(&a, "l");                                         /* a look, at this clock */
     outside_edit(path, 3, 3, TILE_BRUSH);
     press(&a, "h");                                         /* the same clock: no second look */
-    CHECK_EQ(a.disk_state, DISK_NONE);
+    CHECK_EQ(a.file.state, DISK_NONE);
     now += 999;
     app_tick(&a, now);
     press(&a, "l");
-    CHECK_EQ(a.disk_state, DISK_NONE);
+    CHECK_EQ(a.file.state, DISK_NONE);
     now += 1;
     app_tick(&a, now);
     press(&a, "h");
-    CHECK_EQ(a.disk_state, DISK_NOTICED);
+    CHECK_EQ(a.file.state, DISK_NOTICED);
 
     CASE("a save looks now, not at the last key: the change it would write over is found and it is refused");
     press(&a, ":w\r");
     CHECK(strstr(a.status, "not saved - the file changed on disk") != NULL);
-    CHECK_EQ(a.disk_state, DISK_PROPOSED);
+    CHECK_EQ(a.file.state, DISK_PROPOSED);
     press(&a, ":review\r\r");                               /* take theirs */
     CHECK_EQ(map_tile(m, 3, 3), TILE_BRUSH);
     press(&a, ":w\r");
@@ -231,7 +231,7 @@ void test_disk(void)
         map_free(o);
     }
     key_then_quiet(&a, &now);
-    CHECK_EQ(a.disk_state, DISK_NONE);
+    CHECK_EQ(a.file.state, DISK_NONE);
     CHECK_EQ(disk_job(&a), -1);
     CHECK(mapio_disk_stat(path, &id) == 0 && mapio_disk_same(&id, &m->disk));
 
@@ -242,13 +242,13 @@ void test_disk(void)
         fclose(f);
     }
     key_then_quiet(&a, &now);
-    CHECK_EQ(a.disk_state, DISK_STUCK);
+    CHECK_EQ(a.file.state, DISK_STUCK);
     CHECK(strstr(a.status, "no longer a map vtt can read") != NULL);
     press(&a, ":w\r");
     CHECK(strstr(a.status, "not saved - the file on disk is no longer a map") != NULL);
     press(&a, ":w!\r");
     CHECK(strstr(a.status, "wrote ") != NULL);
-    CHECK_EQ(a.disk_state, DISK_NONE);
+    CHECK_EQ(a.file.state, DISK_NONE);
 
     CASE("the file resized by someone else: said, not proposed");
     {
@@ -259,7 +259,7 @@ void test_disk(void)
         map_free(o);
     }
     key_then_quiet(&a, &now);
-    CHECK_EQ(a.disk_state, DISK_STUCK);
+    CHECK_EQ(a.file.state, DISK_STUCK);
     CHECK(strstr(a.status, "its size or yours is not what it was") != NULL);
     CHECK_EQ(disk_job(&a), -1);
 
@@ -272,13 +272,13 @@ void test_disk(void)
     press(&a, "y");
     m = a.world.map;
     CHECK(m && m->w == 22 && map_tile(m, 4, 4) == TILE_FLOOR);
-    CHECK_EQ(a.disk_state, DISK_NONE);
+    CHECK_EQ(a.file.state, DISK_NONE);
     CHECK(m && m->base != NULL);
 
     CASE("the file deleted behind the app: nothing to write over, and :w puts it back");
     unlink(path);
     key_then_quiet(&a, &now);
-    CHECK_EQ(a.disk_state, DISK_NONE);
+    CHECK_EQ(a.file.state, DISK_NONE);
     press(&a, ":w\r");
     CHECK(strstr(a.status, "wrote ") != NULL);
     CHECK(access(path, F_OK) == 0);
@@ -316,7 +316,7 @@ void test_disk(void)
         char rm[32];
         int num = a.world.jobs[dj].num;
         snprintf(rm, sizeof rm, ":ask %d remove\r", num);
-        a.disk_checked_ms = a.world.now_ms;                       /* no look between: the same second */
+        a.file.checked_ms = a.world.now_ms;                       /* no look between: the same second */
         press(&a, rm);
         a.world.job_last = num - 1;                               /* as after the numbers have gone round */
         char *t = ctl_ask(&a, "tile A12 water\n");          /* an agent's, taking the number */
@@ -335,11 +335,11 @@ void test_disk(void)
     now += 2000;
     app_tick(&a, now);
     press(&a, "l");
-    CHECK_EQ(a.disk_state, DISK_NOTICED);
+    CHECK_EQ(a.file.state, DISK_NOTICED);
     unlink(path);
     now += AUTOSAVE_QUIET_MS;
     app_tick(&a, now);
-    CHECK_EQ(a.disk_state, DISK_NONE);
+    CHECK_EQ(a.file.state, DISK_NONE);
     press(&a, ":w\r");
     CHECK(strstr(a.status, "wrote ") != NULL);
     {
@@ -348,10 +348,10 @@ void test_disk(void)
         fclose(f);
     }
     key_then_quiet(&a, &now);
-    CHECK_EQ(a.disk_state, DISK_STUCK);
+    CHECK_EQ(a.file.state, DISK_STUCK);
     unlink(path);
     key_then_quiet(&a, &now);
-    CHECK_EQ(a.disk_state, DISK_NONE);
+    CHECK_EQ(a.file.state, DISK_NONE);
     press(&a, ":w\r");
     CHECK(strstr(a.status, "wrote ") != NULL);
 
@@ -372,7 +372,7 @@ void test_disk(void)
     }
     jobs_reset(&a);
     key_then_quiet(&a, &now);
-    if (a.disk_state != DISK_NONE) { press(&a, ":w!\r"); jobs_reset(&a); }
+    if (a.file.state != DISK_NONE) { press(&a, ":w!\r"); jobs_reset(&a); }
 
     CASE("REVIEW 6: a scrapped change brought back with :review N stands in :w's way again");
     outside_edit(path, 4, 5, TILE_BRUSH);
@@ -438,7 +438,7 @@ void test_disk(void)
                 rnd_init(&rc);
                 rnd_resize(&rc, 80, 24);
                 app_init(&c, NULL, &rc);
-                c.ask_holders = 1;
+                c.file.ask_holders = 1;
                 app_open_map(&c, path);
                 int asked = c.modal == MODAL_CONFIRM_HELD && !c.world.map && strstr(c.modal_body, "is open in another vtt") != NULL;
                 press(&c, yes ? "y" : "n");
@@ -467,7 +467,7 @@ void test_disk(void)
             rnd_init(&rc);
             rnd_resize(&rc, 80, 24);
             app_init(&c, NULL, &rc);
-            c.ask_holders = 1;
+            c.file.ask_holders = 1;
             app_open_map(&c, path);
             int asked = c.modal == MODAL_CONFIRM_HELD && !c.world.map && strstr(c.modal_body, "did not say whether it has") != NULL;
             press(&c, "y");
@@ -538,7 +538,7 @@ void test_disk_whole(void)
     CHECK(a.world.map && map_tile(a.world.map, 5, 5) == TILE_HAZARD);
     CHECK_EQ(jobs_used(&a), 0);
     key_then_quiet(&a, &now);
-    CHECK_EQ(a.disk_state, DISK_NONE);
+    CHECK_EQ(a.file.state, DISK_NONE);
     press(&a, ":w\r");
     CHECK(strstr(a.status, "wrote ") != NULL);
     key_then_quiet(&a, &now);
@@ -566,7 +566,7 @@ void test_disk_whole(void)
         t = ctl_ask(&a, cmd);
         CHECK(t && !strncmp(t, "ok\n", 3));
         free(t);
-        CHECK_EQ(a.disk_state, DISK_PROPOSED);
+        CHECK_EQ(a.file.state, DISK_PROPOSED);
         /* The file's job alone is no agent listening: no checkpoint runs for it. */
         a.world.agent_seen_ms = 0;
         app_events_flush(&a, now);
@@ -581,13 +581,13 @@ void test_disk_whole(void)
     CHECK_EQ(jobs_used(&a), JOB_MAX);
     outside_edit(path, 9, 9, TILE_BRUSH);
     key_then_quiet(&a, &now);
-    CHECK_EQ(a.disk_state, DISK_STUCK);
+    CHECK_EQ(a.file.state, DISK_STUCK);
     CHECK_EQ(disk_job(&a), -1);
     snprintf(cmd, sizeof cmd, ":ask %d remove\r", a.world.jobs[0].num);
     press(&a, cmd);
     key_then_quiet(&a, &now);
     CHECK(disk_job(&a) >= 0);
-    CHECK_EQ(a.disk_state, DISK_PROPOSED);
+    CHECK_EQ(a.file.state, DISK_PROPOSED);
     press(&a, ":w!\r");
     jobs_reset(&a);
 
@@ -650,13 +650,13 @@ void test_file_findings(void)
     CHECK_EQ(app_open_map(&a, clean), 0);
     CHECK(strstr(a.status, "opened room") != NULL && strstr(a.status, "in the file") == NULL);
     CHECK_EQ(a.status_gm, 0);
-    CHECK_EQ(a.file_rows, 0);
+    CHECK_EQ(a.file.rows, 0);
 
     CASE("a file with a row added by hand: the open says so, the GM's alone");
     CHECK_EQ(app_open_map(&a, bad), 0);
     CHECK(strstr(a.status, "opened room (10x6, 1 token); 1 warning in the file (:check): line 4, 'tiles' has 7 lines") != NULL);
     CHECK_EQ(a.status_gm, 1);
-    CHECK_EQ(a.file_rows, 4);
+    CHECK_EQ(a.file.rows, 4);
 
     CASE(":check shows the report in the card's view: the file's finding, its stray row folded in");
     press(&a, ":check\r");
@@ -693,7 +693,7 @@ void test_file_findings(void)
     press(&a, "y");
     CHECK_EQ(a.modal, MODAL_NONE);
     CHECK(strstr(a.status, "wrote ") != NULL);
-    CHECK_EQ(a.file_rows, 0);
+    CHECK_EQ(a.file.rows, 0);
     after = file_bytes(bad, &n1);
     CHECK(after && (n0 != n1 || memcmp(before, after, n0)));
     free(after);
@@ -713,7 +713,7 @@ void test_file_findings(void)
     snprintf(cmd, sizeof cmd, ":w %s\r", other);
     press(&a, cmd);
     CHECK_EQ(a.modal, MODAL_NONE);
-    CHECK_EQ(a.file_rows, 0);
+    CHECK_EQ(a.file.rows, 0);
     CHECK(access(other, F_OK) == 0);
 
     CASE("another program writes the file with a line vtt does not know: taken in, its finding said, the GM's");

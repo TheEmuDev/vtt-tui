@@ -683,9 +683,9 @@ static void cmd_w(App *a, const char *verb, const char *rest)
     if (rest[0]) mapio_resolve_path(rest, path, sizeof path);
     else if (m->path[0]) str_lcpy(path, m->path, sizeof path);
     else mapio_resolve_path(m->name, path, sizeof path);
-    a->save_force = verb[strlen(verb) - 1] == '!';
+    a->file.save_force = verb[strlen(verb) - 1] == '!';
     app_save_map(a, path);
-    a->save_force = 0;
+    a->file.save_force = 0;
 }
 
 static void cmd_wq(App *a, const char *verb, const char *rest)
@@ -694,9 +694,9 @@ static void cmd_wq(App *a, const char *verb, const char *rest)
     char path[MAP_PATH_MAX];
     if (m->path[0]) str_lcpy(path, m->path, sizeof path);
     else mapio_resolve_path(m->name, path, sizeof path);
-    a->save_then_close = 1;
+    a->file.save_then_close = 1;
     if (app_save_map(a, path) == 0) app_close_map(a);
-    if (a->modal != MODAL_CONFIRM_ROWS) a->save_then_close = 0;    /* else the question closes it */
+    if (a->modal != MODAL_CONFIRM_ROWS) a->file.save_then_close = 0;    /* else the question closes it */
 }
 
 static void cmd_q(App *a, const char *verb, const char *rest)
