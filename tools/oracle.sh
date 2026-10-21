@@ -25,6 +25,7 @@ trap 'rm -rf "$DIR"' EXIT
 mkdir "$DIR/data" "$DIR/run" "$DIR/config" "$DIR/maps" "$DIR/out" "$DIR/work"
 export XDG_DATA_HOME="$DIR/data" XDG_RUNTIME_DIR="$DIR/run" XDG_CONFIG_HOME="$DIR/config"
 export VTT_SECRET_TOOL=/nonexistent/vtt-oracle/secret-tool
+export VISUAL=true EDITOR=true          # a card key must not start the user's editor and wait
 cp "$ROOT"/tests/fixtures/*.vtt "$ROOT"/tests/fuzz-found/*.vtt "$ROOT"/tests/oracle/maps/*.vtt "$DIR/maps/"
 cd "$DIR/maps"
 

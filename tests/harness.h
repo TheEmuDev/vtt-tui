@@ -71,6 +71,8 @@ typedef struct {
     int  had_cfg;
     char saved_st[1024];            /* VTT_SECRET_TOOL as it was */
     int  had_st;
+    char saved_visual[1024], saved_editor[1024];   /* VISUAL, EDITOR as they were */
+    int  had_visual, had_editor;
     int  ok;
 } Sandbox;
 
@@ -218,6 +220,7 @@ void test_page_feed(void);
 void test_net_edges(void);
 void test_net_lag(void);
 void test_net_big(void);
+void test_privacy(void);
 void test_play_box(void);
 void test_move_rules(void);
 void test_group_effect(void);

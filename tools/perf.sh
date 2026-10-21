@@ -37,7 +37,7 @@ trap 'rm -rf "$DIR"' EXIT
 export XDG_DATA_HOME="$DIR/xdg"
 mkdir -p "$XDG_DATA_HOME"
 # The settings, the key file and the keyring are the user's: never read here.
-export XDG_CONFIG_HOME="$DIR/config" VTT_SECRET_TOOL=/nonexistent/vtt-perf/secret-tool
+export XDG_CONFIG_HOME="$DIR/config" VTT_SECRET_TOOL=/nonexistent/vtt-perf/secret-tool VISUAL=true EDITOR=true
 mkdir -p "$XDG_CONFIG_HOME"
 
 TAB=$(printf '\t')

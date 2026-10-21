@@ -258,6 +258,18 @@ Sandbox sandbox_enter(const char *tag)
     if (st) str_lcpy(s.saved_st, st, sizeof s.saved_st);
     setenv("VTT_SECRET_TOOL", "/nonexistent/vtt-sandbox/secret-tool", 1);
 
+    /* A key that edits a card runs $VISUAL (else $EDITOR) on the terminal and
+     * waits for it: the user's editor would hold the suite until killed. One
+     * that exits at once leaves the card as it was; a test of the editor sets
+     * its own. */
+    const char *vis = getenv("VISUAL"), *edt = getenv("EDITOR");
+    s.had_visual = vis != NULL;
+    if (vis) str_lcpy(s.saved_visual, vis, sizeof s.saved_visual);
+    s.had_editor = edt != NULL;
+    if (edt) str_lcpy(s.saved_editor, edt, sizeof s.saved_editor);
+    setenv("VISUAL", "true", 1);
+    setenv("EDITOR", "true", 1);
+
     s.ok = 1;
     return s;
 }
@@ -298,6 +310,10 @@ void sandbox_leave(Sandbox *s)
     else            unsetenv("XDG_CONFIG_HOME");
     if (s->had_st) setenv("VTT_SECRET_TOOL", s->saved_st, 1);
     else           unsetenv("VTT_SECRET_TOOL");
+    if (s->had_visual) setenv("VISUAL", s->saved_visual, 1);
+    else               unsetenv("VISUAL");
+    if (s->had_editor) setenv("EDITOR", s->saved_editor, 1);
+    else               unsetenv("EDITOR");
     if (!strncmp(s->dir, "/tmp/vtt-", 9)) remove_tree(s->dir);
     s->ok = 0;
 }
