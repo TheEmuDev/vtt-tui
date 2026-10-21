@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <sys/resource.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <fcntl.h>
@@ -555,6 +556,10 @@ static int run_headless(const Options *o)
         free(ctl_req);
         script_free(&sc);
         prof_report();
+        /* The run's peak memory, beside its times (docs/V2.md, *Memory: the
+         * plan*, 3): what a key or a request costs in memory shows as a row. */
+        struct rusage ru;
+        if (getrusage(RUSAGE_SELF, &ru) == 0) fprintf(stderr, "  maxrss_kb %ld\n", (long)ru.ru_maxrss);
     }
 
     app_free(&a);

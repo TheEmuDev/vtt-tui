@@ -9,3 +9,4 @@ core
 .pagebench.*
 !.claude/settings.json
 .vs1x.*
+.soak.*

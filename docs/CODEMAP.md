@@ -97,6 +97,7 @@ tools/pagebench.sh   the phone page's own code per frame (node): --bench-record 
 tools/pageprobe.js   paste into a served page's console, then probe.report(): native costs (putImageData, DOM) node cannot see
 tools/saves.sh  a save flushed and unflushed, three map sizes, on the real disk (PERFORMANCE.md's save table)
 tools/proposals.sh  the proposal, checkpoint and outside-change tables (copy, diff, conflicts, preview, accept; stat, parse, compare) against the release objects
+tools/soak.sh       make soak: long sessions (10,000 loops of play, 28 whole-map fills, 1,500 scene restores, dumps, waits), each against a bound on its peak memory (the bench's maxrss_kb); about 20 s
 tools/oracle.sh record|check [VTT]  what a vtt prints, from outside it, kept under tests/oracle/expected: the map tools and frames over every fixture, tests/fuzz-found and tests/oracle/maps (file versions 3, 4, 5, 10, 11, 12 and codes E001, N105, W024, which no other fixture has), each tests/fuzz-ctl request through `--apply`, checksums for generated maps and for cell dumps (`ORACLE_KEEP=DIR` keeps their text). `make test` ends with `check`; `make oracle` is it alone. `record` after a change meant to alter output, and read the diff. Sandboxed (its own XDG directories, copies of the maps). docs/V2.md, D11
 make test-build  build/run-tests alone, for build/run-tests NAME... (only this and make test rebuild it)
 build/tool-checkbench MAP T.json N   (make build/tool-checkbench) --check N times traced; tools/zones.py T.json each zone's median

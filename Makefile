@@ -54,7 +54,7 @@ DEPS      := $(OBJS:.o=.d)
 LIBSRCS   := $(filter-out $(SRCDIR)/main.c,$(SRCS))
 TESTSRCS  := $(filter-out $(TESTDIR)/fuzz_%.c,$(wildcard $(TESTDIR)/*.c))
 
-.PHONY: all debug test test-fast test-after test-build oracle bench perf fuzz fuzz-ctl fuzz-json install-skill clean help
+.PHONY: all debug test test-fast test-after test-build soak oracle bench perf fuzz fuzz-ctl fuzz-json install-skill clean help
 .DEFAULT_GOAL := all
 
 all: BUILDFLAGS := $(RELFLAGS)
@@ -119,6 +119,11 @@ test-after:
 	    -o $(OBJDIR)/protocol -fsanitize=address,undefined $(LDLIBS)
 	@$(OBJDIR)/protocol
 	@./tools/oracle.sh check ./$(BIN)
+
+# Long sessions and their peak memory, each against a bound (tools/soak.sh):
+# minutes, so not part of make test.
+soak: all
+	@./tools/soak.sh
 
 # What ./vtt prints for a fixed set of maps, keys and requests, against the
 # record under tests/oracle/expected (docs/V2.md, D11). After a change that is

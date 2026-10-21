@@ -119,14 +119,21 @@ def main(paths):
     last = runs[-1]
 
     print(last[0][0])
-    print("|----------------------|--------|-----------|-----------|-------|-------|")
+    print("|----------------------|--------|-----------|-----------|-------|-------|" +
+          ("---------|" if len(rows(last[0])[0]) > 6 else ""))
     idx = [{(r[0].strip(), r[1].strip()): r for r in rows(run[0])[1:]} for run in runs]
     for r in rows(last[0])[1:]:
         k = (r[0].strip(), r[1].strip())
         have = [i[k] for i in idx if k in i]
         p50 = statistics.median(us(h[2]) for h in have)
         p99 = statistics.median(us(h[3]) for h in have)
-        print("|%s|%s| %s | %s |%s|%s|" % (r[0], r[1], fmt(p50, 9), fmt(p99, 9), r[4], r[5]))
+        # The peak is the largest of the runs: a peak does not jitter as a time does
+        # (the user, 2026-10-20).
+        peak = ""
+        if len(r) > 6:
+            got = [int(h[6]) for h in have if len(h) > 6 and h[6].strip().isdigit()]
+            peak = (" %s |" % (str(max(got)) if got else "").rjust(7))
+        print("|%s|%s| %s | %s |%s|%s|%s" % (r[0], r[1], fmt(p50, 9), fmt(p99, 9), r[4], r[5], peak))
 
     print()
     print(last[1][0])

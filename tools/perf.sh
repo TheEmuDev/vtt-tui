@@ -244,9 +244,10 @@ run() {
     awk -v label="$_label" -v size="$_size" '
         /^  frame/           { p50 = $5; p99 = $7 }
         /cells\/frame/       { cells = $3; bytes = $6 }
+        /^  maxrss_kb/       { rss = $2 }
         END {
-            printf "| %-20s | %-6s | %9s | %9s | %5s | %5s |\n",
-                   label, size, p50, p99, cells, bytes
+            printf "| %-20s | %-6s | %9s | %9s | %5s | %5s | %7s |\n",
+                   label, size, p50, p99, cells, bytes, rss
         }
     ' "$DIR/out"
 
@@ -280,8 +281,8 @@ SUMMARIZER
 
 "$(dirname "$0")/machine.sh" "$DIR"
 echo
-echo '| scenario             | size   | frame p50 | frame p99 | cells | bytes |'
-echo '|----------------------|--------|-----------|-----------|-------|-------|'
+echo '| scenario             | size   | frame p50 | frame p99 | cells | bytes | peak KB |'
+echo '|----------------------|--------|-----------|-----------|-------|-------|---------|'
 
 run "build, open"          "$OPEN"   80x24  'jjllkkhh'
 run "build, every edge"    "$WALLED" 80x24  'jjllkkhh'
