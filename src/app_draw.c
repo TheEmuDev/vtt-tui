@@ -605,9 +605,14 @@ int app_view_differs(const App *a)
         if (map_note_at(m, a->ed.cx, a->ed.cy)) return 1;
         if (app_players_own_camera(a)) return 1;  /* their camera is not the GM's */
         if (tokens_any_hidden(&m->tokens)) return 1;
-        /* The GM's status line names a secret link under the cursor. */
-        int li = link_at(m, a->ed.cx, a->ed.cy, NULL);
-        if (li >= 0 && m->links[li].secret) return 1;
+        /* The line that describes the cursor: whatever play_status keeps
+         * from the players -- a secret link, where a link to another map
+         * leads, another floor's name -- is a difference, whichever it is,
+         * so a new GM-only word there needs no line here. */
+        char gm[192], players[192];
+        play_status(pl, m, &a->ed, 1, gm, sizeof gm);
+        play_status(pl, m, &a->ed, 0, players, sizeof players);
+        if (strcmp(gm, players)) return 1;
     }
     return 0;
 }

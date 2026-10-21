@@ -143,6 +143,64 @@ static void press_balanced(const App *a, Key k)
                 g_case, a->world.undo.nest, (int)k.kind, (unsigned)k.ch);
 }
 
+/* Every difference is declared (docs/V2.md, step 7, item 4): when the
+ * players' frame would be the GM's copied across -- play mode, and
+ * app_view_differs says the two cannot differ -- it is drawn by its own
+ * renderer as well and must match the GM's cell by cell. A difference means
+ * a GM-only thing missing from app_view_differs: the copy would send it to
+ * the phones. Checked after every key of every test, a failure only, the
+ * first few said. The renderers are kept from key to key: no allocation a
+ * key once the size is reached. */
+static void press_private(App *a, Key k)
+{
+    if (!a->rnd || !app_remote_live(a) || app_view_differs(a)) return;
+    static Renderer gm, pl;
+    static int ready, told;
+    static const char *told_case;
+    if (!ready) { rnd_init(&gm); rnd_init(&pl); ready = 1; }
+    Renderer *r = a->rnd;
+    View was = a->view;
+    /* A draw lays the view out, which scrolls the camera to the cursor: the
+     * test's own frames, not this check, decide where it ends up. */
+    GridView    view    = a->ed.view;
+    PlayersView players = a->players;
+    rnd_resize(&gm, r->w, r->h);
+    rnd_resize(&pl, r->w, r->h);
+    gm.clear_cell = pl.clear_cell = r->clear_cell;
+    rnd_begin(&gm);
+    a->rnd = &gm;
+    app_draw(a);
+    rnd_begin(&pl);
+    a->rnd = &pl;
+    app_draw_view(a, VIEW_PLAYERS);
+    a->rnd = r;
+    a->view = was;
+    a->ed.view = view;
+    a->players = players;
+    size_t cells = (size_t)r->w * (size_t)r->h;
+    if (!memcmp(gm.back, pl.back, cells * sizeof *gm.back)) return;
+    g_fails++;
+    if (told_case == g_case || told++ >= 40) return;      /* the first of each case */
+    told_case = g_case;
+    for (size_t i = 0; i < cells; i++) {
+        const Cell *g = &gm.back[i], *q = &pl.back[i];
+        if (!memcmp(g, q, sizeof *g)) continue;
+        fprintf(stderr, "  FAIL [%s] after key %d/%u the players' frame differs from the GM's at %zu,%zu "
+                        "(GM U+%04X %06X/%06X %u, players U+%04X %06X/%06X %u) while app_view_differs is 0\n",
+                g_case, (int)k.kind, (unsigned)k.ch, i % (size_t)r->w, i / (size_t)r->w,
+                (unsigned)g->ch, (unsigned)g->fg, (unsigned)g->bg, (unsigned)g->attr,
+                (unsigned)q->ch, (unsigned)q->fg, (unsigned)q->bg, (unsigned)q->attr);
+        size_t y = i / (size_t)r->w;
+        for (int v = 0; v < 2; v++) {
+            const Cell *row = (v ? pl.back : gm.back) + y * (size_t)r->w;
+            fprintf(stderr, "    %s: ", v ? "players" : "GM     ");
+            for (int x = 0; x < r->w; x++) fputc(row[x].ch >= 32 && row[x].ch < 127 ? (int)row[x].ch : row[x].ch ? '?' : ' ', stderr);
+            fputc('\n', stderr);
+        }
+        break;
+    }
+}
+
 void press(App *a, const char *keys)
 {
     InputParser p;
@@ -150,8 +208,8 @@ void press(App *a, const char *keys)
     input_feed(&p, keys, strlen(keys));
 
     Key k;
-    while (input_next(&p, &k)) { app_key(a, k); press_balanced(a, k); }
-    while (input_pending(&p) && input_timeout(&p, &k)) { app_key(a, k); press_balanced(a, k); }
+    while (input_next(&p, &k)) { app_key(a, k); press_balanced(a, k); press_private(a, k); }
+    while (input_pending(&p) && input_timeout(&p, &k)) { app_key(a, k); press_balanced(a, k); press_private(a, k); }
 }
 
 /* The browser reads the working directory AND the user's map directory, so a

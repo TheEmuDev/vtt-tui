@@ -178,8 +178,12 @@ void test_net_lag(void)
         CHECK_EQ(n.cl[1].behind, 0);
     }
 
-    CASE("when it reads again it catches up to the screen as it is now");
+    CASE("when it reads again it catches up to the screen as it is now, with no frame after (review, finding 1)");
     {
+        /* A handout drains its queue by client_flush, not POLLOUT, and the
+         * screen does not change again: the catch-up must still come. */
+        fk_read(p, &d);
+        net_set_handout(&n, "x", 1, now);
         for (int i = 0; i < 10; i++) {
             fk_read(p, &d);
             net_pump(&n, now);
@@ -193,6 +197,37 @@ void test_net_lag(void)
         CHECK_EQ(c.fulls, 2);              /* its first, and the one catch-up */
         CHECK_EQ(n.cl[0].behind, 0);
         CHECK_EQ(n.ncl, 2);
+    }
+
+    CASE("a phone behind when frames stop for everyone takes the next live frame, a FULL, as its catch-up");
+    {
+        for (int f = 451; f <= 700; f++) {
+            lag_frame(&r, f);
+            net_frame_begin(&n);
+            rnd_flush(&r, NULL);
+            net_frame_end(&n, now);
+            net_pump(&n, now);
+            fk_read(q, &dq);
+        }
+        CHECK_EQ(n.cl[0].behind, 1);
+        net_set_live(&n, 0);
+        for (int i = 0; i < 10; i++) { fk_read(p, &d); net_pump(&n, now); }
+        CHECK_EQ(n.cl[0].out_len - n.cl[0].out_off, (size_t)0);
+        CHECK_EQ(n.cl[0].behind, 1);              /* nothing is sent while frames are off */
+        int fulls = c.fulls;
+        net_set_live(&n, 1);
+        lag_frame(&r, 701);
+        net_frame_begin(&n);
+        rnd_flush(&r, NULL);
+        net_frame_end(&n, now);
+        fk_read(p, &d);
+        CHECK_EQ(n.cl[0].behind, 0);
+        CHECK_EQ(c.fulls, fulls + 1);
+        int same = 1;
+        for (int y = 0; y < 16; y++)
+            for (int x = 0; x < 60; x++)
+                if (c.grid[y * 64 + x].ch != r.front[y * 60 + x].ch) same = 0;
+        CHECK(same);
     }
 
 out:

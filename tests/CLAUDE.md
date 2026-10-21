@@ -57,6 +57,11 @@ docs/CODEMAP.md; `tests/run.c` is the table of suites (and `SLOW`, the ones `--f
 - `play_focus` moves the selection, not the cursor; `enter` acts on the cursor.
 - Rendered cells: `rnd_begin(&r); app_draw(&a);` then read `r.back[]`; `rnd_dump` for text.
 - Checks are `CHECK` / `CHECK_EQ` under a `CASE("...")`; failures print `FAIL file:line`.
+- `press` checks two things after every key, a failure each: the undo log is balanced, and
+  (docs/V2.md, step 7, item 4) in play mode, while `app_view_differs` is 0, the players' frame
+  drawn by its own renderer equals the GM's cell by cell -- the copy path would send the GM's
+  frame otherwise. It saves and restores `a->ed.view` and `a->players` round its draws, so a
+  test's camera is its own frames'. A failure prints the row both ways.
 - Golden frames live under `tests/`; regenerate only when the change is intended.
   `golden_bytes(name, data, len)` compares any text (a map tool's report) the same way.
 

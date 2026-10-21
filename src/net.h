@@ -32,7 +32,12 @@
  * acts, instead of in megabytes the kernel would otherwise take on its
  * behalf (Linux grows it to tcp_wmem's ceiling, 4 MB here). A LAN's
  * bandwidth-delay product is about 62 KB (100 Mbit/s, 5 ms): a guess that
- * Wi-Fi is not slowed by it, to be checked on a phone (tools/phonecheck.sh). */
+ * Wi-Fi is not slowed by it, to be checked on a phone (tools/phonecheck.sh).
+ * What setting it does besides (Linux): the kernel doubles it (262,144 read
+ * back), stops growing it for this socket, and clamps it to wmem_max; a
+ * stream's rate is then at most about this over the round trip (20 Mbit/s
+ * at 50 ms). The phone's receive buffer still holds its own share of the
+ * past (docs/V2.md, step 7, item 1). */
 #define NET_SNDBUF      (128 * 1024)
 #define NET_CODE_LEN    6
 /* A browser silent this long is sent a WebSocket ping, which browsers answer

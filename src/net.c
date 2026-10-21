@@ -330,7 +330,12 @@ static int client_queue(Net *n, int i, const void *p, size_t len)
     return 0;
 }
 
+static int client_catch_up(Net *n, int i, uint64_t now_ms);
+
 /* Tries to write what is pending; what will not go now waits for POLLOUT.
+ * A queue that drains here, from whatever wrote to it, is where a client
+ * frames were withheld from is caught up: the one place, so a text record
+ * or a keep-alive that empties it counts as much as POLLOUT does.
  * Returns -1 when the write failed and the client was closed -- which
  * shifts the next client into slot i, so a caller must not touch the slot
  * again as if it were the same client. */
@@ -346,7 +351,7 @@ static int client_flush(Net *n, int i, uint64_t now_ms)
         return -1;
     }
     c->out_off = c->out_len = 0;
-    return 0;
+    return c->behind ? client_catch_up(n, i, now_ms) : 0;
 }
 
 /* A wire frame, in the framing this client speaks. */
@@ -407,12 +412,13 @@ static int enc_full(Net *n)
  * be built. */
 static void drop_stream_clients(Net *n, const char *why);
 
-/* A client frames were withheld from, once its queue has drained: one FULL,
- * the screen as it is now, and it is level again. Nothing while its queue
- * still holds bytes, or while frames are withheld from everyone (the next
- * live frame is a FULL for all). Returns -1 when it closed the client. */
+/* A client frames were withheld from, once its queue has drained (from
+ * client_flush): one FULL, the screen as it is now, and it is level again.
+ * Nothing while frames are withheld from everyone: the next live frame is a
+ * FULL, which net_frame_end gives it. Returns -1 when it closed the client. */
 static int client_catch_up(Net *n, int i, uint64_t now_ms)
 {
+    PROF_ZONE("net.catch_up");
     NetClient *c = &n->cl[i];
     if (c->out_off < c->out_len || !n->live) return 0;
     if (enc_full(n) < 0) { client_drop(n, i, "no memory for a frame of this window"); return -1; }
@@ -956,10 +962,7 @@ void net_service(Net *n, const struct pollfd *fds, int count, uint64_t now_ms)
         for (int j = 0; j < n->ncl; j++) if (n->cl[j].fd == fd) { i = j; break; }
         if (i < 0) continue;
         if (fds[k].revents & (POLLERR | POLLHUP | POLLNVAL)) { client_close(n, i); continue; }
-        if (fds[k].revents & POLLOUT) {
-            if (client_flush(n, i, now_ms) < 0) continue;
-            if (n->cl[i].behind && client_catch_up(n, i, now_ms) < 0) continue;
-        }
+        if ((fds[k].revents & POLLOUT) && client_flush(n, i, now_ms) < 0) continue;
         if (i < n->ncl && n->cl[i].fd == fd && (fds[k].revents & POLLIN)) client_read(n, i, now_ms);
     }
 
@@ -1042,7 +1045,6 @@ void net_frame_end(Net *n, uint64_t now_ms)
 
     /* Only stream clients get frames; one still shaking hands gets a FULL
      * when it finishes. */
-    int behind = 0;
     for (int i = 0; i < n->ncl; i++) {
         NetClient *c = &n->cl[i];
         /* A watcher only once its hello -- and the join code -- is in. */
@@ -1052,12 +1054,11 @@ void net_frame_end(Net *n, uint64_t now_ms)
          * reads again. An empty queue always takes the frame. */
         size_t queued = c->out_len - c->out_off;
         if (!c->behind && queued > 0 && queued + n->enc.len > n->full_len) c->behind = 1;
-        if (c->behind) { behind = 1; continue; }
+        /* Its queue drained while frames were off for everyone: this FULL
+         * is its catch-up. */
+        if (c->behind && full && queued == 0) c->behind = 0;
+        if (c->behind) continue;
         if (client_send_synced(n, i, n->enc.buf, n->enc.len) < 0) { i--; continue; }
         if (client_flush(n, i, now_ms) < 0) i--;
     }
-    /* After every other client has this frame: a catch-up encodes a FULL
-     * over the encoder's buffer. */
-    for (int i = 0; behind && i < n->ncl; i++)
-        if (n->cl[i].behind && client_catch_up(n, i, now_ms) < 0) i--;
 }
