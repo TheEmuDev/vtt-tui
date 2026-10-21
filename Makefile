@@ -54,7 +54,7 @@ DEPS      := $(OBJS:.o=.d)
 LIBSRCS   := $(filter-out $(SRCDIR)/main.c,$(SRCS))
 TESTSRCS  := $(filter-out $(TESTDIR)/fuzz_%.c,$(wildcard $(TESTDIR)/*.c))
 
-.PHONY: all debug test test-fast test-after test-build soak oracle bench perf fuzz fuzz-ctl fuzz-json install-skill clean help
+.PHONY: all debug test test-fast test-after test-build soak mcount oracle bench perf fuzz fuzz-ctl fuzz-json install-skill clean help
 .DEFAULT_GOAL := all
 
 all: BUILDFLAGS := $(RELFLAGS)
@@ -124,6 +124,13 @@ test-after:
 # minutes, so not part of make test.
 soak: all
 	@./tools/soak.sh
+
+# A developer's allocation counter (tools/mcount.c): LD_PRELOAD=build/mcount.so
+# ./vtt ... counts every libc allocation; Linux and glibc only, part of no build.
+mcount: $(OBJDIR)/mcount.so
+$(OBJDIR)/mcount.so: tools/mcount.c
+	@mkdir -p $(OBJDIR)
+	$(CC) -O2 -shared -fPIC -o $@ $< -ldl
 
 # What ./vtt prints for a fixed set of maps, keys and requests, against the
 # record under tests/oracle/expected (docs/V2.md, D11). After a change that is
