@@ -96,7 +96,7 @@ test: test-build $(ASANDIR)/vtt
 	@$(OBJDIR)/run-tests
 	@$(MAKE) --no-print-directory test-after
 	@echo "the oracle again, over the sanitizer vtt (a leak or an error is a difference):"
-	@./tools/oracle.sh check $(ASANDIR)/vtt || { echo "the sanitizer vtt differs (a leak exits 23): run a differing command with $(ASANDIR)/vtt to read its report" >&2; exit 1; }
+	@./tools/oracle.sh check $(ASANDIR)/vtt || { echo "the sanitizer vtt differs (a leak exits 1, with a LeakSanitizer report on stderr): run a differing command with $(ASANDIR)/vtt to read it" >&2; exit 1; }
 
 # make test less the suites of real sockets and processes, about 60 s of it
 # (docs/V2.md, ruling 8; run-tests' SLOW list). make test before a commit.

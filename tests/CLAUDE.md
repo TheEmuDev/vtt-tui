@@ -14,7 +14,12 @@ docs/CODEMAP.md; `tests/run.c` is the table of suites (and `SLOW`, the ones `--f
   differential run.
 - A forked test child ends with `child_exit(rc)`, never `_exit`: LeakSanitizer never runs
   at `_exit`, so a leak in the child's code would pass (docs/reviews/2026-10-20-4-memory.md,
-  M5).
+  M5). Before it, the child frees what it inherited and holds only in a local of the
+  forking function (a buffer the parent `malloc`ed there): at some optimization level the
+  pointer is in no stack slot and reads as a leak. Check a new child at `-O2` once:
+  `make test-build CFLAGS=-O2; build/run-tests SUITE`.
+- A seeded fault must escape the compiler: an unused `malloc` is deleted (gcc keeps no call),
+  so a seeded leak stores to a `volatile` or uses what it allocated.
 - `make test` ends with `tools/oracle.sh check` (twice: over the release `./vtt`, then over
   `build/asan/vtt`, the sanitizer build, where a leak or an error fails it; `make test-fast`
   runs the first only): ./vtt's own output (map tools, frames,

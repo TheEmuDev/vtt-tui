@@ -118,9 +118,11 @@ double contrast(uint32_t a, uint32_t b);
 char *slurp(const char *path);
 /* How a forked test child ends: LeakSanitizer checks it first (it never runs
  * at _exit, so a leak in the child's code would pass), then _exit(rc). A leak
- * ends the child with the sanitizer's code and its report on stderr. What the
- * child got from the parent by the fork is the child's to free: one whose only
- * pointer the parent held in a register reads as a leak (termio's buffer). */
+ * ends the child with exit 1 and its report on stderr. What the child got from
+ * the parent by the fork and holds only in a local of the forking function is
+ * the child's to free before it ends: once the compiler keeps that pointer in
+ * no stack slot, it reads as a leak (termio's buffer at -Og, a plan at -O2).
+ * What is reached through a struct on the stack (an App, a Sandbox) is fine. */
 void child_exit(int rc) __attribute__((noreturn));
 char *tool_text(const Map *m, int x0, int y0, int x1, int y1, size_t *len);
 int json_valid(const char *s);

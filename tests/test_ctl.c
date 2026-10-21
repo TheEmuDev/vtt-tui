@@ -1883,6 +1883,7 @@ void test_ctl_live(void)
                 dup2(o, 1);
                 dup2(o, 2);
                 int rc = ctl_apply_open(file, name, plan, CTL_PLAN_CAP, -1);
+                free(plan);                          /* the child's copy: held in a local, it reads as a leak at -O2 */
                 child_exit(rc < 0 ? 99 : rc);
             }
             int stc[3] = { (int)pid, 0, 0 };
