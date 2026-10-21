@@ -1551,7 +1551,8 @@ doors from the party's starting room is marked `NOT REACHABLE`.
 **`vtt map.vtt --check`** reports mistakes, one per line with a code, and exits 0 when there
 are none, 1 when there are, and 2 when the file cannot be read. Errors (`E`) change what the
 map means, warnings (`W`) are probable mistakes, and notes (`N`) are allowed but worth
-knowing; notes do not affect the exit status.
+knowing; notes do not affect the exit status. A report lists at most 10,000 findings of one
+kind and ends that kind with "and N more, not listed"; the totals count them all.
 
 ```
 E011 section-short     line 29   'hedges' read as vedges row 9 of 9: the section is short
@@ -1646,7 +1647,8 @@ finding, or null), `notes` (the evidence), `span` (the first and last line a fix
 or null), `folded` (what it counts instead of listing, or null) and `confidence` (`certain`,
 `likely` or null). What to do about each kind of finding is said once, in `codes`: an object
 keyed by code (`"W103"`, or `"W028/card-cut"` where a code has two meanings) holding its `help`
-and `note`. The text report says the same once too, under the first finding of each code. `--describe` names each room's floor, lists its link ends and where they lead, and counts a room
+and `note`. Past 10,000 findings of one kind, the rest are counted in `unlisted`, keyed by
+`"CODE/slug"`; with none past it, `unlisted` is not there. The text report says the same once too, under the first finding of each code. `--describe` names each room's floor, lists its link ends and where they lead, and counts a room
 reached only by a link as reachable (a one-way link only in its direction).
 
 ## Control channel (`:agent`, `vtt --ctl`)

@@ -1,5 +1,6 @@
 #include "maptools.h"
 
+#include <stdarg.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
@@ -872,11 +873,17 @@ void maptools_describe_in(FILE *out, const Map *m, int json, const int *box)
 typedef struct {
     char code[8];
     char slug[24];
-    char where[80];         /* a square, a boundary, a room; empty for a file finding */
+    /* Its place (a square, a boundary, a room; "" for a file finding) and its
+     * message, each owned and as long as it is (finding_say, finding_where),
+     * cut where the fixed fields they were cut (FINDING_WHERE_MAX,
+     * FINDING_MSG_MAX): a map with a finding a square holds 262,145, and 336
+     * inline bytes each were most of :check's memory (docs/reviews/
+     * 2026-10-20-4-memory.md, M2). Never NULL once made; finding_free frees. */
+    char *where;
     int  line;              /* 1-based; 0 for a map finding */
     int  col;               /* 0-based column of a file finding, -1 for none */
     int  x, y, edge;        /* 0-based square of a map finding; edge 'v', 'h' or 0 */
-    char msg[256];
+    char *msg;
     int  folded;            /* caused by another finding and counted in it: not listed */
     struct FindingMore *more;   /* what a finding says past its line, when it says more */
 } Finding;
@@ -899,6 +906,55 @@ typedef struct FindingMore {
 
 typedef struct { Finding *v; int n, cap; } Findings;
 
+#define FINDING_MSG_MAX   256      /* what a message is cut to, with its NUL */
+#define FINDING_WHERE_MAX 80
+
+/* What a finding owns, freed; its fields NULL, so a second call is harmless. */
+static void finding_free(Finding *f)
+{
+    free(f->more);
+    free(f->msg);
+    free(f->where);
+    f->more = NULL;
+    f->msg = f->where = NULL;
+}
+
+static char *cut_dup(const char *s, size_t max)
+{
+    size_t n = strnlen(s, max - 1);
+    char  *p = xmalloc(n + 1);
+    memcpy(p, s, n);
+    p[n] = '\0';
+    return p;
+}
+
+static void finding_say(Finding *f, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
+static void finding_say(Finding *f, const char *fmt, ...)
+{
+    char buf[FINDING_MSG_MAX];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof buf, fmt, ap);
+    va_end(ap);
+    free(f->msg);
+    f->msg = cut_dup(buf, sizeof buf);
+}
+
+static void finding_where(Finding *f, const char *where)
+{
+    free(f->where);
+    f->where = cut_dup(where, FINDING_WHERE_MAX);
+}
+
+/* Finding g moved whole into fs: what it owns goes with it, and g keeps none. */
+static void take_finding(Findings *fs, Finding *g)
+{
+    if (fs->n == fs->cap) { fs->cap = fs->cap ? fs->cap * 2 : 16; fs->v = xrealloc(fs->v, (size_t)fs->cap * sizeof *fs->v); }
+    fs->v[fs->n++] = *g;
+    g->more = NULL;
+    g->msg = g->where = NULL;
+}
+
 static Finding *add_finding(Findings *fs, const char *code, const char *slug)
 {
     if (fs->n == fs->cap) { fs->cap = fs->cap ? fs->cap * 2 : 16; fs->v = xrealloc(fs->v, (size_t)fs->cap * sizeof *fs->v); }
@@ -907,6 +963,8 @@ static Finding *add_finding(Findings *fs, const char *code, const char *slug)
     str_lcpy(f->code, code, sizeof f->code);
     str_lcpy(f->slug, slug, sizeof f->slug);
     f->x = f->y = f->col = -1;
+    f->msg   = cut_dup("", 1);
+    f->where = cut_dup("", 1);
     return f;
 }
 
@@ -915,7 +973,7 @@ static void file_finding(void *ctx, int line, int col, const char *code, const c
     Finding *f = add_finding(ctx, code, slug);
     f->line = line;
     f->col  = col;
-    str_lcpy(f->msg, msg, sizeof f->msg);
+    finding_say(f, "%s", msg);
 }
 
 static void map_finding(Findings *fs, const char *code, const char *slug, int x, int y, int edge,
@@ -923,8 +981,8 @@ static void map_finding(Findings *fs, const char *code, const char *slug, int x,
 {
     Finding *f = add_finding(fs, code, slug);
     f->x = x; f->y = y; f->edge = edge;
-    str_lcpy(f->where, where, sizeof f->where);
-    str_lcpy(f->msg, msg, sizeof f->msg);
+    finding_where(f, where);
+    finding_say(f, "%s", msg);
 }
 
 static int void_at(const Map *m, int x, int y) { return !map_in_bounds(m, x, y) || !map_walkable(m, x, y); }
@@ -1288,7 +1346,7 @@ static void group_void_findings(Findings *fs)
             str_lcpy(kind, f->msg, sizeof kind);
             char *sp = strstr(kind, " between");
             if (sp) *sp = '\0';
-            snprintf(f->msg, sizeof f->msg, "%s between two squares that are not map, with %d more boundar%s joined to it on void",
+            finding_say(f, "%s between two squares that are not map, with %d more boundar%s joined to it on void",
                      kind, more, more == 1 ? "y" : "ies");
             FindingMore *mo = finding_more(f);
             mo->nfolded = more;
@@ -1297,13 +1355,13 @@ static void group_void_findings(Findings *fs)
             else if (walls[r])            snprintf(mo->folded, sizeof mo->folded, "W103 x%d", walls[r]);
             else                          snprintf(mo->folded, sizeof mo->folded, "E101 x%d", doors[r] - 1);
         } else {
-            snprintf(f->msg, sizeof f->msg, "%d walls between squares that are not map, joined end to end from %s to %s",
+            finding_say(f, "%d walls between squares that are not map, joined end to end from %s to %s",
                      walls[r], fs->v[idx[first[r]]].where, fs->v[idx[last[r]]].where);
         }
     }
     int kept = 0;
     for (int i = 0; i < fs->n; i++) {
-        if (gone[i]) { free(fs->v[i].more); continue; }
+        if (gone[i]) { finding_free(&fs->v[i]); continue; }
         fs->v[kept++] = fs->v[i];
     }
     fs->n = kept;
@@ -2421,13 +2479,13 @@ static void say_count(const MapioSection *sec, const char *name, int why, const 
     cf->line = sec->header;
     const char *tail = why == 2 ? "with another section wrong too no place is told" : "the map does not show which";
     if (exact)
-        snprintf(cf->msg, sizeof cf->msg, "'%s' has %d lines where the map has %d rows: %s of lines %d-%d %s too many, and %s",
+        finding_say(cf, "'%s' has %d lines where the map has %d rows: %s of lines %d-%d %s too many, and %s",
                  name, n, nr, n - nr == 1 ? "one" : "some", first, last, n - nr == 1 ? "is one" : "are", tail);
     else if (strays == 1)
-        snprintf(cf->msg, sizeof cf->msg, "'%s' has more lines than its %d rows: at least one of lines %d-%d is too many, and %s",
+        finding_say(cf, "'%s' has more lines than its %d rows: at least one of lines %d-%d is too many, and %s",
                  name, nr, first, last, tail);
     else
-        snprintf(cf->msg, sizeof cf->msg, "'%s' has more lines than its %d rows: at least %d of lines %d-%d are too many, and %s",
+        finding_say(cf, "'%s' has more lines than its %d rows: at least %d of lines %d-%d are too many, and %s",
                  name, nr, strays, first, last, tail);
     FindingMore *mo = finding_more(cf);
     static const char *const ev[] = {
@@ -2524,18 +2582,18 @@ static void check_shift(const Map *m, const char *text, size_t len, const char *
                 text_line(text, len, sec->next, swallowed, sizeof swallowed);
                 int header = !strcmp(swallowed, "tiles") || !strcmp(swallowed, "vedges") ||
                              !strcmp(swallowed, "hedges") || !strcmp(swallowed, "fog");
-                snprintf(cut, sizeof pf->msg - (size_t)(cut - pf->msg), ": a '%s' row is missing%s%s%s", name,
-                         header ? ", and '" : "", header ? swallowed : "", header ? "' was not read" : "");
+                finding_say(pf, "%.*s: a '%s' row is missing%s%s%s", (int)(cut - pf->msg), pf->msg, name,
+                            header ? ", and '" : "", header ? swallowed : "", header ? "' was not read" : "");
             }
         } else if (sec->n > 0) {
             pf = add_finding(fs, "E011", "section-short");
             pf->line = sec->v[sec->n - 1].line;
-            snprintf(pf->msg, sizeof pf->msg, "'%s' is one row short: the blank line %d after it was read as its last row",
+            finding_say(pf, "'%s' is one row short: the blank line %d after it was read as its last row",
                      name, pf->line);
         } else {
             pf = add_finding(fs, "E011", "section-short");
             pf->line = sec->header;
-            snprintf(pf->msg, sizeof pf->msg, "'%s' has none of its rows", name);
+            finding_say(pf, "'%s' has none of its rows", name);
         }
     } else {
         pf = add_finding(fs, "W031", "row-extra");
@@ -2552,7 +2610,7 @@ static void check_shift(const Map *m, const char *text, size_t len, const char *
                              name, sh.span0, sh.span1);
         else        snprintf(msg, sizeof msg, "'%s' has one row too many: from line %d down its rows are one lower than the rest of the map",
                              name, sh.fix_line);
-        str_lcpy(pf->msg, msg, sizeof pf->msg);
+        finding_say(pf, "%s", msg);
     }
     int pi = (int)(pf - fs->v);
 
@@ -2569,7 +2627,7 @@ static void check_shift(const Map *m, const char *text, size_t len, const char *
         }
         if (nothers > 1) str_lcpy(which + strlen(which), " or both", sizeof which - strlen(which));
         pf->line = sec->header;
-        snprintf(pf->msg, sizeof pf->msg, "'%s' ends in a blank line after its rows and %s end%s in an empty row: either '%s' has one line too many, or the blank is a separator and %s lost a row; the text cannot tell which",
+        finding_say(pf, "'%s' ends in a blank line after its rows and %s end%s in an empty row: either '%s' has one line too many, or the blank is a separator and %s lost a row; the text cannot tell which",
                  name, others, nothers == 1 ? "s" : "", name, which);
         FindingMore *mo = finding_more(pf);
         snprintf(mo->evidence, sizeof mo->evidence,
@@ -2660,7 +2718,7 @@ static void check_shift(const Map *m, const char *text, size_t len, const char *
             }
             free(keys);
         }
-        for (int i = 0; i < f2.n; i++) free(f2.v[i].more);
+        for (int i = 0; i < f2.n; i++) finding_free(&f2.v[i]);
         free(f2.v);
         free(fixed);
     }
@@ -2776,13 +2834,40 @@ static void check_shift(const Map *m, const char *text, size_t len, const char *
 
 /* Sorts and prints the findings, `file` naming what was checked (NULL for
  * none), and frees them. Returns the exit status. */
+/* A report lists at most this many findings of one code (and slug): a map
+ * with a finding a square has 262,145, and a list nobody can read helps no
+ * one (the user, 2026-10-20; docs/V2.md, *Memory: the plan*, 5). The rest are
+ * counted, after every fold has run, so the count is exact, and the totals
+ * count them all. */
+#define FINDINGS_LISTED_MAX 10000
+
+typedef struct { char code[8], slug[24]; int listed, unlisted; } Listed;
+
+/* Whether finding f is listed, counting it against its code; once the table
+ * of codes is full (it never is: there are fewer codes) everything is. */
+static int listed(Listed *t, int *nt, int cap, const Finding *f)
+{
+    int i = 0;
+    while (i < *nt && (strcmp(t[i].code, f->code) || strcmp(t[i].slug, f->slug))) i++;
+    if (i == *nt) {
+        if (*nt == cap) return 1;
+        str_lcpy(t[i].code, f->code, sizeof t[i].code);
+        str_lcpy(t[i].slug, f->slug, sizeof t[i].slug);
+        t[i].listed = t[i].unlisted = 0;
+        (*nt)++;
+    }
+    if (t[i].listed < FINDINGS_LISTED_MAX) { t[i].listed++; return 1; }
+    t[i].unlisted++;
+    return 0;
+}
+
 static int check_report(FILE *out, Findings *pfs, const char *file, int json)
 {
     Findings fs = *pfs;
     /* What a finding folded is counted in it, not listed, nor counted again. */
     int kept = 0;
     for (int i = 0; i < fs.n; i++) {
-        if (fs.v[i].folded) { free(fs.v[i].more); continue; }
+        if (fs.v[i].folded) { finding_free(&fs.v[i]); continue; }
         fs.v[kept++] = fs.v[i];
     }
     fs.n = kept;
@@ -2797,6 +2882,8 @@ static int check_report(FILE *out, Findings *pfs, const char *file, int json)
     /* Each code's help said once: which rows of the table this report has. */
     enum { NHELP = sizeof CODE_HELP / sizeof CODE_HELP[0] };
     char said[NHELP] = { 0 };
+    Listed lt[64];
+    int    nlt = 0, unlisted = 0;
 
     if (json) {
         Json j;
@@ -2811,6 +2898,7 @@ static int check_report(FILE *out, Findings *pfs, const char *file, int json)
         json_open(&j, '[');
         for (int i = 0; i < fs.n; i++) {
             const Finding *f = &fs.v[i];
+            if (!listed(lt, &nlt, 64, f)) { unlisted++; continue; }
             json_open(&j, '{');
             json_kstr(&j, "code", f->code);
             json_kstr(&j, "slug", f->slug);
@@ -2846,6 +2934,17 @@ static int check_report(FILE *out, Findings *pfs, const char *file, int json)
             if (h) said[h - CODE_HELP] = 1;
         }
         json_close(&j, ']');
+        if (unlisted) {                  /* only when there are: a usual report is as it was */
+            json_key(&j, "unlisted");
+            json_open(&j, '{');
+            for (int k = 0; k < nlt; k++) {
+                if (!lt[k].unlisted) continue;
+                char key[40];
+                snprintf(key, sizeof key, "%.7s/%.23s", lt[k].code, lt[k].slug);
+                json_kint(&j, key, lt[k].unlisted);
+            }
+            json_close(&j, '}');
+        }
         /* What to do about each code in it, once: "CODE", or "CODE/slug" for a
          * code with two meanings. A finding's own help is in the finding. */
         json_key(&j, "codes");
@@ -2868,6 +2967,7 @@ static int check_report(FILE *out, Findings *pfs, const char *file, int json)
     } else {
         for (int i = 0; i < fs.n; i++) {
             const Finding *f = &fs.v[i];
+            if (!listed(lt, &nlt, 64, f)) { unlisted++; continue; }
             char loc[40];
             if (f->line > 0) snprintf(loc, sizeof loc, "line %d", f->line);
             else             str_lcpy(loc, f->where, sizeof loc);
@@ -2895,6 +2995,10 @@ static int check_report(FILE *out, Findings *pfs, const char *file, int json)
             else if (mo->nfolded) fprintf(out, "      = %d finding%s caused by it, folded in: %s\n", mo->nfolded,
                                           mo->nfolded == 1 ? " is" : "s are", mo->folded);
         }
+        for (int k = 0; k < nlt && unlisted; k++)
+            if (lt[k].unlisted)
+                fprintf(out, "%s %-18s and %d more, not listed: the first %d are\n", lt[k].code, lt[k].slug,
+                        lt[k].unlisted, FINDINGS_LISTED_MAX);
         if (!fs.n) fputs("no findings\n", out);
         else {
             fprintf(out, "%d error%s, %d warning%s", errors, errors == 1 ? "" : "s", warnings, warnings == 1 ? "" : "s");
@@ -2903,7 +3007,7 @@ static int check_report(FILE *out, Findings *pfs, const char *file, int json)
         }
     }
     int unreadable = fs.n && !strcmp(fs.v[0].code, "E001");
-    for (int i = 0; i < fs.n; i++) free(fs.v[i].more);
+    for (int i = 0; i < fs.n; i++) finding_free(&fs.v[i]);
     free(fs.v);
     return unreadable ? 2 : errors || warnings ? 1 : 0;
 }
@@ -2917,7 +3021,7 @@ int maptools_check(FILE *out, const char *path, int json)
     Map   *m = text ? mapio_load_text_diag(path, text, len, err, sizeof err, file_finding, &fs) : NULL;
     if (!m) {
         Finding *f = add_finding(&fs, "E001", "unreadable");
-        str_lcpy(f->msg, err, sizeof f->msg);
+        finding_say(f, "%s", err);
     } else {
         check_map(m, &fs);
         check_shift(m, text, len, path, &fs);
@@ -2991,7 +3095,7 @@ int maptools_file_of(const Map *m, char *summary, size_t cap, int *rows, int *er
     Map *bm = m->base ? mapio_load_text_diag(m->path, m->base, m->base_len, err, sizeof err, file_finding, &fs) : NULL;
     int n = file_sum(&fs, bm, m->base, m->base_len, summary, cap, rows, errors);
     map_free(bm);
-    for (int i = 0; i < fs.n; i++) free(fs.v[i].more);
+    for (int i = 0; i < fs.n; i++) finding_free(&fs.v[i]);
     free(fs.v);
     return n;
 }
@@ -2999,7 +3103,7 @@ int maptools_file_of(const Map *m, char *summary, size_t cap, int *rows, int *er
 void maptools_file_free(MaptoolsFile *f)
 {
     if (!f) return;
-    for (int i = 0; i < f->fs.n; i++) free(f->fs.v[i].more);
+    for (int i = 0; i < f->fs.n; i++) finding_free(&f->fs.v[i]);
     free(f->fs.v);
     free(f);
 }
@@ -3072,18 +3176,15 @@ int maptools_check_open(FILE *out, const Map *m, int json)
         for (int i = 0; i < fb.n; i++) {
             Finding *g = &fb.v[i];
             if (g->line <= 0 || g->folded) continue;        /* the base's map findings: the live map's say */
-            Finding *t = add_finding(&fs, g->code, g->slug);
-            *t = *g;
-            g->more = NULL;
+            take_finding(&fs, g);
         }
         for (int i = 0; i < live.n; i++) {
             Finding *g = &live.v[i];
             FoldKey k = fold_key(g);
-            if (nk && bsearch(&k, keys, (size_t)nk, sizeof *keys, foldkey_cmp)) { free(g->more); continue; }
-            Finding *t = add_finding(&fs, g->code, g->slug);
-            *t = *g;
+            if (nk && bsearch(&k, keys, (size_t)nk, sizeof *keys, foldkey_cmp)) { finding_free(g); continue; }
+            take_finding(&fs, g);
         }
-        for (int i = 0; i < fb.n; i++) free(fb.v[i].more);
+        for (int i = 0; i < fb.n; i++) finding_free(&fb.v[i]);
         free(fb.v);
         free(live.v);
         free(keys);

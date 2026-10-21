@@ -293,6 +293,32 @@ void test_map_tools_check(void)
     int    rc;
     size_t n;
 
+    CASE("past 10,000 findings of one code the report lists 10,000 and counts the rest: the totals are all of them");
+    {
+        Map *m = map_new(120, 100, "cells");                  /* every square a walled room of its own */
+        for (int y = 0; y < m->h; y++)
+            for (int x = 0; x < m->w; x++) {
+                map_set_tile(m, x, y, TILE_FLOOR);
+                map_rect_walls(m, x, y, x, y, EDGE_WALL);
+            }
+        char  *text = NULL;
+        size_t len = 0;
+        FILE  *out = open_memstream(&text, &len);
+        maptools_check_map(out, m, 0);
+        fclose(out);
+        int listed = count_of(text, "W120 unreachable-room   room ");
+        CHECK_EQ(listed, 10000);
+        CHECK(strstr(text, "W120 unreachable-room   and 1999 more, not listed: the first 10000 are\n") != NULL);
+        CHECK(strstr(text, "0 errors, 11999 warnings\n") != NULL);
+        free(text);
+        out = open_memstream(&text, &len);
+        maptools_check_map(out, m, 1);
+        fclose(out);
+        CHECK(strstr(text, "\"warnings\":11999") && strstr(text, "\"unlisted\":{\"W120/unreachable-room\":1999}"));
+        free(text);
+        map_free(m);
+    }
+
     CASE("the shipped fixtures are clean: exit 0");
     static const char *const clean[] = { "tests/fixtures/two-rooms.vtt", "tests/fixtures/kinds.vtt",
                                          "tests/fixtures/crowd.vtt" };

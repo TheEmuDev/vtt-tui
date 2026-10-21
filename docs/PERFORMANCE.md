@@ -1233,6 +1233,16 @@ it (it reads text already in memory; `git diff 027fef2` changes no line of it), 
 and p95 moving opposite ways points at two populations of samples whose middle falls on either
 side from run to run; that reading is a guess, not shown.
 
+**`:check` on a map with a finding a square** (review 4's M2; the desktop, 2026-10-20, the
+walled 512x512 of 262,145 one-square rooms, `ru_maxrss`, one run each against the commit
+before): `:check` in the app 255,820 KB before, 85,584 KB after; `--check` 116,536 KB before,
+60,176 KB after, its report 20,385,921 bytes before and 770,265 after. Two changes: a finding's
+message and place are strings of their own length (they were 336 bytes inline in each of the
+262,145), and the report lists 10,000 of a code and counts the rest (the user's choice). The
+review's speed of light is about 30 MB; the gap is two small allocations a finding
+(about 524,000 a `:check`, each with malloc's overhead) and the array's doubling, accepted:
+only a map that is a finding a square pays it, and real maps have tens.
+
 **`:ask` starting an agent** (`:agent command`; the desktop, 2026-10-13): `agent.spawn` is
 92.5 µs at p50 and 175 µs at p99 (`build, :ask starts an agent`, a 200×200 map), once an
 `:ask`. It was 0.36 ms in 1.x, which forked twice and waited for the first child so that

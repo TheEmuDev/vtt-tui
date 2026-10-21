@@ -185,7 +185,7 @@ const char AGENT_GUIDE[] =
     "| `dump key` | what the characters of a dump mean; read it once |\n"
     "| `changes SEQ [REGION]` | the events after `SEQ` (as `wait` gives them), then the map **as it is now, only where they changed it**: a `changed REGION` line and that region's dump for each. After an event, read this and not the map again |\n"
     "| `describe [REGION] [json]` | the rooms walls make, named by their areas, with doors and links and where they lead, and what is in each; with a region (or an area's name), only the rooms that meet it, each whole |\n"
-    "| `check [json]` | mistakes in the map's file, with its line numbers (a row added or lost by hand, a line vtt does not know), as vtt last read or wrote it, then on the map: loose doors, creatures on void, rooms nothing reaches ([codes](../README.md#map-tools---dump-map---check---describe)); what a row out of place breaks is folded into its finding; with `json`, a `codes` object says what to do about each kind of finding, once |\n"
+    "| `check [json]` | mistakes in the map's file, with its line numbers (a row added or lost by hand, a line vtt does not know), as vtt last read or wrote it, then on the map: loose doors, creatures on void, rooms nothing reaches ([codes](../README.md#map-tools---dump-map---check---describe)); what a row out of place breaks is folded into its finding; with `json`, a `codes` object says what to do about each kind of finding, once; past 10,000 of one kind the rest are counted, not listed (`unlisted`, by `CODE/slug`) |\n"
     "| `stamps` | the GM's saved stamps and their sizes |\n"
     "| `characters` | the GM's saved characters: name, label, side, size, counters, rolls |\n"
     "| `scenes` | the map's scenes: name, creatures, round, box |\n"
