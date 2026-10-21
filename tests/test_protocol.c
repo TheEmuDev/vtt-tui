@@ -481,6 +481,21 @@ void test_protocol(void)
         w.jobs[k].has_cs = 0;
     }
 
+    CASE("a job's number is a whole number from 1 to JOB_NUM_MAX: request_int, the one check");
+    {
+        static const char *const BAD[] = { "0", "100", "1x", "-1", "99999999999999999999999" };
+        for (size_t i = 0; i < sizeof BAD / sizeof *BAD; i++) {
+            char req[64];
+            snprintf(req, sizeof req, "job %s take", BAD[i]);
+            t = ask(&w, req);
+            CHECK(t && !strncmp(t, "error usage: ", 13) && strstr(t, "a job's number, from jobs"));
+            free(t);
+        }
+        t = ask(&w, "job 99 take");                                /* a number, but no such job */
+        CHECK(t && !strncmp(t, "error missing: ", 15));
+        free(t);
+    }
+
     CASE("at the cap with every slot a finished job's, a proposal fits: the job it evicts takes its cells along");
     {
         world_jobs_clear(&w);

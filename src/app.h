@@ -504,8 +504,8 @@ int  app_events_due(const App *a, uint64_t now_ms);
  * stopped and stops the ones past their deadline; this is when the next
  * deadline falls, -1 with none running. */
 int  app_agents_due(const App *a, uint64_t now_ms);
-/* The settings (and VTT_AGENT_COMMAND) made what :ask starts: agent_cmd,
- * agent_cmd_off. main calls it once they are read. */
+/* The settings (and VTT_AGENT_COMMAND) made what :ask starts: agents.cmd,
+ * agents.cmd_off. main calls it once they are read. */
 void app_agent_apply(App *a);
 
 /* Another writer of the file (app_disk.c): app_disk_due is the milliseconds
