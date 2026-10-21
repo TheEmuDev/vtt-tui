@@ -8,7 +8,8 @@ IDEAS.md.
 ## Order
 
 **On branch vtt-2.0, decided 2026-10-18:** step 5's second piece, part 3 (docs/V2.md); then
-25; then 26 (its plan first); then the rest of 2.0 (steps 3, 6-9).
+25; then 26 (its plan first); then the rest of 2.0 (steps 3, 6-9). **27** (the user,
+2026-10-21) is planned after step 7's plan; its parts ride on step 8 and on 26's live check.
 
 Suggested, of what is left: 12, 8, 22, 7, 11; then 14 and 15 when play asks for
 them, and 1 if play testing of hidden creatures asks for it.
@@ -22,7 +23,24 @@ Item 1 was decided 2026-09-27, the rest 2026-09-29.
 - **26. A Claude API agent** (the user, 2026-10-17: API credits in hand). An agent option
   that calls the Claude API directly, beside `:agent command CMD`. A written plan first: no
   dependencies beyond libc/POSIX means no TLS in the binary (a helper process, e.g. curl, is
-  the likely shape); the API key is never written into a map, a log or the repo. **The plan: docs/APIAGENT.md** (2026-10-19, waiting for sign-off).
+  the likely shape); the API key is never written into a map, a log or the repo. **The plan: docs/APIAGENT.md** (signed off, built and reviewed 2026-10-20; owed: the live check, held until the user has a key set up).
+
+- **27. The agent features improve themselves, with the GM's hand on it** (the user,
+  2026-10-21: "a self improvement loop in agent based features"). What exists: the guide is
+  checked against the binary (suite `agentguide`), refusals reach the session log, each job
+  keeps the GM's verdict and feedback, the API agent logs its cost; the skill's description
+  was measured once (2026-10-19) but its queries were not kept. The loop, in this order:
+  (1) the evaluations kept in the repo (`tools/skill/evals/`): the trigger queries, and a
+  dozen tasks graded by vtt itself (`--check` clean, `--describe`'s facts, refusals and
+  requests a task), never by a model; (2) each job's outcome logged with the guide's hash
+  (verdict, refusals by class and verb, requests, tokens) -- with step 8, which owns the
+  session log; (3) `tools/agentreport`, a local rollup of the session logs: counts, verbs and
+  classes only, never a map's content (the logs hold the GM's secrets); (4) a written
+  procedure: a reviewer drafts guide or skill edits from the rollup and the failed
+  evaluations, they go through a plan and the user's sign-off, and ship only if no
+  evaluation gets worse. Not: an agent editing the guide itself (the guide steers every
+  agent: a prompt-injection path), logs leaving the machine, or spending on evaluations
+  without the user's go (the first task run folds into 26's live check). A plan first.
 
 - **1. Messages marked at the source**, if play testing of hidden creatures (built 2026-09-27)
   asks for it. While any creature is hidden, the players' screens show no status messages --
