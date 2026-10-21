@@ -87,7 +87,7 @@ void app_free(App *a)
     map_free(a->stamp);
     stamp_show_free(&a->stamp_view);
     a->stamp = NULL;
-    ui_picker_free(&a->picker);
+    ui_picker_free(&a->pick.list);
 }
 
 void app_set_status(App *a, const char *msg)

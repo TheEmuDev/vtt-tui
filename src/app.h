@@ -53,7 +53,7 @@ typedef enum {
     MODAL_CONFIRM_ROWS,      /* the file had a row added or lost: save the rows as read? */
     MODAL_CONFIRM_KEY,       /* :agent key remove: take the stored API key away? */
     MODAL_CHOOSE_AGENT,      /* the first :ask with no agent chosen: how should agents answer? (app_agent.c) */
-    MODAL_PICKER,            /* a list filtered as the GM types: App.picker */
+    MODAL_PICKER,            /* a list filtered as the GM types: App.pick */
     MODAL_CARD,              /* :card -- a creature's card whole, scrolled by card_top */
 } ModalKind;
 
@@ -173,6 +173,19 @@ typedef struct {
     int slot;
     int box, ax, ay;
 } ReviewState;
+
+/* The picker (MODAL_PICKER, app_picker.c): the list, what it is choosing
+ * from, and for a character the side it goes down on, -1 for the side it was
+ * saved on. `only` is the names the character picker is to hold when it is
+ * not to hold them all (:env adversaries), NULL for all; set round
+ * app_pick_open. */
+typedef struct {
+    UiPicker list;
+    PickWhat what;
+    int      kind;
+    char   (*only)[MAP_NAME_MAX];
+    int      nonly;
+} PickerState;
 
 typedef struct {
     /* The map, its log, the jobs, the events and the request being run: what
@@ -318,17 +331,8 @@ typedef struct {
 
     HandoutState handout;
 
-    /* The picker (MODAL_PICKER): the character templates or the stamps, and
-     * for a character the side it goes down on, -1 for the side it was
-     * saved on. */
-    UiPicker   picker;
-    PickWhat   pick_what;
-    int        pick_kind;
-    /* The names the character picker is to hold, when it is not to hold
-     * them all (:env adversaries); NULL for all. Set round app_pick_open. */
-    char     (*pick_only)[MAP_NAME_MAX];
-    int        npick_only;
-    char       pending_name[MAP_NAME_MAX];
+    PickerState pick;
+    char       pending_name[MAP_NAME_MAX];   /* a new map's name, between its two prompts */
 
     /* The file a pending delete or rename acts on, held in full so the
      * question and the action cannot disagree about which one is meant even

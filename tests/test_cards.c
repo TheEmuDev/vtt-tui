@@ -1115,14 +1115,14 @@ void test_env(void)
     int n0 = m->tokens.n;
     press(&a, ":env adversaries\r");
     CHECK_EQ(a.modal, MODAL_PICKER);
-    CHECK_EQ(a.picker.n, 2);                               /* Giant-Rat and Bat; not Wolf, not the missing two */
-    CHECK(!strcmp(a.picker.items[0].name, "Giant-Rat") || !strcmp(a.picker.items[1].name, "Giant-Rat"));
+    CHECK_EQ(a.pick.list.n, 2);                               /* Giant-Rat and Bat; not Wolf, not the missing two */
+    CHECK(!strcmp(a.pick.list.items[0].name, "Giant-Rat") || !strcmp(a.pick.list.items[1].name, "Giant-Rat"));
     CHECK(strstr(a.status, "2 of 4 are saved characters; not saved: Ghoul, Skeleton-Archer") != NULL);
     CHECK_EQ(a.status_gm, 1);
     pf = players_text(&a, &r);                             /* the picker and the names are the GM's */
     CHECK(strstr(pf, "Giant-Rat") == NULL && strstr(pf, "Ghoul") == NULL && strstr(pf, "Character") == NULL);
     free(pf);
-    CHECK(a.pick_only == NULL);
+    CHECK(a.pick.only == NULL);
     a.ed.cx = 4; a.ed.cy = 4;
     press(&a, "bat\r");
     CHECK_EQ(a.modal, MODAL_NONE);
@@ -1134,10 +1134,10 @@ void test_env(void)
     CHECK(card_set(m, "haunted-crypt", "Haunted Crypt\nPotential Adversaries: Beasts (Giant Rat,  Bat), Wolf\n") >= 0);
     press(&a, ":env adversaries\r");
     CHECK_EQ(a.modal, MODAL_PICKER);
-    CHECK_EQ(a.picker.n, 3);
+    CHECK_EQ(a.pick.list.n, 3);
     press(&a, "\x1b");
     press(&a, "ite");                                      /* the picker at large still holds them all */
-    CHECK_EQ(a.picker.n, 3);
+    CHECK_EQ(a.pick.list.n, 3);
     press(&a, "\x1b");
     app_key(&a, (Key){ KEY_F1, 0, 0 });
     press(&a, ":env adversaries\r");
@@ -1264,7 +1264,7 @@ void test_env_import(void)
         if (g) { fputs("Too long\n", g); fclose(g); }
         press(&a, ":env Misty-Bog\r");
         press(&a, ":env pick\r");
-        CHECK_EQ(a.picker.n, 3);                          /* the long one is not there */
+        CHECK_EQ(a.pick.list.n, 3);                          /* the long one is not there */
         press(&a, "remove\r");
         CHECK(!strcmp(m->env, "remove") && card_find(m, "remove") >= 0);
         snprintf(p5, sizeof p5, "%s/remove.txt", dir);
@@ -1310,9 +1310,9 @@ void test_env_import(void)
     a.ed.cx = 1; a.ed.cy = 1;
     press(&a, ":env pick\r");
     CHECK_EQ(a.modal, MODAL_PICKER);
-    CHECK_EQ(a.picker.n, 2);
-    CHECK(!strcmp(a.picker.items[0].name, "Empty-Hall") && !strcmp(a.picker.items[0].detail, "Empty Hall"));
-    CHECK(!strcmp(a.picker.items[1].detail, "Misty Bog - Tier 1 Traversal"));
+    CHECK_EQ(a.pick.list.n, 2);
+    CHECK(!strcmp(a.pick.list.items[0].name, "Empty-Hall") && !strcmp(a.pick.list.items[0].detail, "Empty Hall"));
+    CHECK(!strcmp(a.pick.list.items[1].detail, "Misty Bog - Tier 1 Traversal"));
     CHECK(app_view_differs(&a));
     press(&a, "empty\r");
     CHECK_EQ(a.modal, MODAL_NONE);

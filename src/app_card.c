@@ -364,11 +364,11 @@ static void env_adversaries(App *a, EnvAt at)
         app_set_status_gm(a, none);
         return;
     }
-    a->pick_only  = names;
-    a->npick_only = have;
+    a->pick.only  = names;
+    a->pick.nonly = have;
     app_pick_open(a, PICK_CHARACTER, -1, "");
-    a->pick_only  = NULL;
-    a->npick_only = 0;
+    a->pick.only  = NULL;
+    a->pick.nonly = 0;
     if (missing) app_note_gm(a, msg);
 }
 

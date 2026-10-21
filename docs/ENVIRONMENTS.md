@@ -134,7 +134,7 @@ fuzz corpus gains the two lines. Docs: `:env` on the `?` page (src/keys.c), the 
 - **A group's own word is not a creature.** `Beasts (Bear, Dire Wolf), Bandit` gives Bear,
   Dire Wolf and Bandit: the text before a parenthesis is dropped, each name is made a
   character's with `character_name_from_label`, repeats go, at most 32 are read.
-- **The picker is given names, not a filter** (`App.pick_only`): a name with no character
+- **The picker is given names, not a filter** (`App.pick.only`): a name with no character
   file never reaches it, and is listed on the GM's status line instead.
 - **The whole line is the list** (`card_line`, beside `card_value`): two spaces or a bar
   in it are part of what was written, where on a stat line they start another field.

@@ -481,7 +481,7 @@ void app_draw_view(App *a, View view)
 
     switch (a->modal) {
     case MODAL_PROMPT:  ui_prompt_draw(a->rnd, a->th, &a->prompt, frame); break;
-    case MODAL_PICKER:  ui_picker_draw(a->rnd, a->th, &a->picker, frame); break;
+    case MODAL_PICKER:  ui_picker_draw(a->rnd, a->th, &a->pick.list, frame); break;
     case MODAL_CARD: {
         const Map *m = a->world.map;
         /* A creature's card, or a condition's text (:condition). */

@@ -1132,8 +1132,8 @@ void test_stamp_keys(void)
     a.stamp = NULL;
     press(&a, ":stamp\r");
     CHECK_EQ(a.modal, MODAL_PICKER);
-    CHECK_EQ(a.picker.n, 1);
-    CHECK(!strcmp(a.picker.items[0].name, "Pool") && !strcmp(a.picker.items[0].detail, "2x1"));
+    CHECK_EQ(a.pick.list.n, 1);
+    CHECK(!strcmp(a.pick.list.items[0].name, "Pool") && !strcmp(a.pick.list.items[0].detail, "2x1"));
     press(&a, "\r");                                /* the picker's enter takes it up */
     CHECK_EQ(a.modal, MODAL_NONE);
     CHECK_EQ(a.ed.mode, ED_STAMP);

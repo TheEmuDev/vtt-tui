@@ -96,11 +96,11 @@ static UiPickItem *pick_items(const App *a, PickWhat what, int *count)
     else                        stamp_dir(dir, sizeof dir);
     int n;
     char (*names)[MAP_NAME_MAX];
-    if (what == PICK_CHARACTER && a->pick_only) {
+    if (what == PICK_CHARACTER && a->pick.only) {
         /* A list given: only those are read, not the whole folder. */
-        n = a->npick_only;
+        n = a->pick.nonly;
         names = xmalloc(sizeof *names * (size_t)(n > 0 ? n : 1));
-        memcpy(names, a->pick_only, sizeof *names * (size_t)n);
+        memcpy(names, a->pick.only, sizeof *names * (size_t)n);
     } else {
         names = store_list_all(dir, ".vtt", &n);
     }
@@ -134,9 +134,9 @@ void app_pick_open(App *a, PickWhat what, int kind, const char *initial)
     else if (kind < 0)      snprintf(title, sizeof title, "Character");
     else                    snprintf(title, sizeof title, "Character, as %s %s",
                                      kind == TOKEN_ENEMY ? "an" : "a", token_kind_name((uint8_t)kind));
-    ui_picker_open(&a->picker, title, items, n, initial);
-    a->pick_what = what;
-    a->pick_kind = kind;
+    ui_picker_open(&a->pick.list, title, items, n, initial);
+    a->pick.what = what;
+    a->pick.kind = kind;
     a->modal     = MODAL_PICKER;
     a->dirty     = 1;
     app_set_status(a, "");
@@ -144,20 +144,20 @@ void app_pick_open(App *a, PickWhat what, int kind, const char *initial)
 
 void app_pick_key(App *a, Key k)
 {
-    int r = ui_picker_key(&a->picker, k);
+    int r = ui_picker_key(&a->pick.list, k);
     a->dirty = 1;
     if (!r) return;
-    int  i = ui_picker_chosen(&a->picker);
+    int  i = ui_picker_chosen(&a->pick.list);
     char name[UI_PICK_NAME];
-    str_lcpy(name, i >= 0 ? a->picker.items[i].name : "", sizeof name);
+    str_lcpy(name, i >= 0 ? a->pick.list.items[i].name : "", sizeof name);
     a->modal = MODAL_NONE;
-    ui_picker_free(&a->picker);
+    ui_picker_free(&a->pick.list);
     if (r < 0) { app_set_status(a, "canceled"); return; }
 
-    if (a->pick_what == PICK_STAMP) app_stamp_command(a, name);
-    else if (a->pick_what == PICK_SCENE) { if (a->world.map) app_scene_restore(a, name); }
-    else if (a->pick_what == PICK_HANDOUT) app_handout_show(a, name);
-    else if (a->pick_what == PICK_ENV) { if (a->world.map) app_env_name(a, name); }
-    else if (a->world.map && a->screen == SCREEN_PLAY) app_character_place(a, name, a->pick_kind);
+    if (a->pick.what == PICK_STAMP) app_stamp_command(a, name);
+    else if (a->pick.what == PICK_SCENE) { if (a->world.map) app_scene_restore(a, name); }
+    else if (a->pick.what == PICK_HANDOUT) app_handout_show(a, name);
+    else if (a->pick.what == PICK_ENV) { if (a->world.map) app_env_name(a, name); }
+    else if (a->world.map && a->screen == SCREEN_PLAY) app_character_place(a, name, a->pick.kind);
 }
 

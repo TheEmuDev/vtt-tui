@@ -266,12 +266,12 @@ void test_characters(void)
     CHECK(strstr(a.status, "p as a player") != NULL);
     press(&a, "e");
     CHECK_EQ(a.modal, MODAL_PICKER);
-    CHECK(strstr(a.picker.p.title, "as an enemy") != NULL);
-    CHECK_EQ(a.picker.n, 2);
-    CHECK(strstr(a.picker.items[1].detail, "Crypt Ghoul  enemy 2x2  HP 12, Stress 3") != NULL);
+    CHECK(strstr(a.pick.list.p.title, "as an enemy") != NULL);
+    CHECK_EQ(a.pick.list.n, 2);
+    CHECK(strstr(a.pick.list.items[1].detail, "Crypt Ghoul  enemy 2x2  HP 12, Stress 3") != NULL);
     press(&a, "gh");
-    CHECK_EQ(a.picker.nmatch, 2);                   /* ghoul by name, Crypt-Ghoul by label */
-    CHECK(!strcmp(a.picker.items[a.picker.match[0]].name, "ghoul"));
+    CHECK_EQ(a.pick.list.nmatch, 2);                   /* ghoul by name, Crypt-Ghoul by label */
+    CHECK(!strcmp(a.pick.list.items[a.pick.list.match[0]].name, "ghoul"));
     press(&a, "\r");
     CHECK_EQ(a.modal, MODAL_NONE);
     CHECK_EQ(m->tokens.n, 2);
@@ -305,7 +305,7 @@ void test_characters(void)
     a.ed.cx = 0; a.ed.cy = 6;
     press(&a, ":character ghoul\r");
     CHECK_EQ(a.modal, MODAL_PICKER);
-    CHECK(!strcmp(a.picker.p.buf, "ghoul"));
+    CHECK(!strcmp(a.pick.list.p.buf, "ghoul"));
     press(&a, "\r");
     CHECK_EQ(m->tokens.n, 4);
     CHECK_EQ(m->tokens.v[3].kind, TOKEN_ENEMY);       /* :character: the saved side */
@@ -384,8 +384,8 @@ void test_characters(void)
     CHECK(character_load("pair", err, sizeof err) == NULL);
     CHECK(strstr(err, "holds 2 creatures") != NULL);
     press(&a, ":character\r");
-    CHECK_EQ(a.picker.n, 4);                         /* Crypt-Ghoul, ghoul, pair, pick */
-    CHECK(!strcmp(a.picker.items[2].name, "pair") && !strcmp(a.picker.items[2].detail, "cannot be read"));
+    CHECK_EQ(a.pick.list.n, 4);                         /* Crypt-Ghoul, ghoul, pair, pick */
+    CHECK(!strcmp(a.pick.list.items[2].name, "pair") && !strcmp(a.pick.list.items[2].detail, "cannot be read"));
     press(&a, "pair\r");
     CHECK_EQ(m->tokens.n, 4);
     CHECK(strstr(a.status, "holds 2 creatures") != NULL);
@@ -462,8 +462,8 @@ void test_scene_keys(void)
     CASE(":scene alone is the picker; enter puts the highlighted one back");
     press(&a, ":scene\r");
     CHECK_EQ(a.modal, MODAL_PICKER);
-    CHECK(!strcmp(a.picker.items[0].name, "before the ambush"));
-    CHECK(!strcmp(a.picker.items[0].detail, "2 creatures"));
+    CHECK(!strcmp(a.pick.list.items[0].name, "before the ambush"));
+    CHECK(!strcmp(a.pick.list.items[0].detail, "2 creatures"));
     press(&a, "amb\r");
     CHECK_EQ(a.modal, MODAL_NONE);
     int back = 0;
@@ -659,10 +659,10 @@ void test_handout_keys(void)
     CASE("the picker: every file, its first line beside it; enter puts it up");
     press(&a, ":handout\r");
     CHECK_EQ(a.modal, MODAL_PICKER);
-    CHECK_EQ(a.picker.n, 4);
+    CHECK_EQ(a.pick.list.n, 4);
     int ti = -1;
-    for (int i = 0; i < a.picker.n; i++) if (!strcmp(a.picker.items[i].name, "tomb")) ti = i;
-    CHECK(ti >= 0 && !strcmp(a.picker.items[ti].detail, "Here lies Aldric."));
+    for (int i = 0; i < a.pick.list.n; i++) if (!strcmp(a.pick.list.items[i].name, "tomb")) ti = i;
+    CHECK(ti >= 0 && !strcmp(a.pick.list.items[ti].detail, "Here lies Aldric."));
     press(&a, "tom\r");
     CHECK(!strcmp(a.handout.title, "tomb"));
 
