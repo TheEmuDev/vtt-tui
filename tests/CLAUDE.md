@@ -43,6 +43,9 @@ docs/CODEMAP.md; `tests/run.c` is the table of suites (and `SLOW`, the ones `--f
 - A new suite: a `void test_x(void)` in the file for its area (make it non-static and
   declare it in `harness.h`), then a row in `run.c`'s table. A helper another file needs
   moves its prototype to `harness.h` and loses `static`.
+- Keep a sandbox's `XDG_RUNTIME_DIR` short: the channel's socket path must fit in 107 bytes,
+  and past it the channel refuses to start ("the socket path is too long"), so a script runs
+  with the channel off and may not notice (review 4, M11).
 - `sandbox_enter` sets `XDG_DATA_HOME`, `XDG_RUNTIME_DIR` and `XDG_CONFIG_HOME` to the sandbox,
   and `VTT_SECRET_TOOL` to no program: a test that runs `./vtt` or opens the channel outside
   one reaches the user's own files, settings, API key (their keyring) and running vtts. A test

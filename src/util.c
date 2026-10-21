@@ -53,6 +53,13 @@ void *xcalloc(size_t n, size_t sz)
     return p;
 }
 
+FILE *xmemstream(char **buf, size_t *len)
+{
+    FILE *f = open_memstream(buf, len);
+    if (!f) die("out of memory (a text in memory)");
+    return f;
+}
+
 void *realloc_soft(void *p, size_t n)
 {
     g_allocs++;

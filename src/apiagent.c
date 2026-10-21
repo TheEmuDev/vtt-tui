@@ -173,7 +173,7 @@ static void add_user_text(Run *r, const char *text)
 {
     char  *buf;
     size_t len;
-    FILE  *f = open_memstream(&buf, &len);
+    FILE  *f = xmemstream(&buf, &len);
     Json   j;
     json_init(&j, f);
     json_open(&j, '{');
@@ -190,7 +190,7 @@ static void write_body(Run *r, ByteBuf *body)
 {
     char  *buf;
     size_t len;
-    FILE  *f = open_memstream(&buf, &len);
+    FILE  *f = xmemstream(&buf, &len);
     Json   j;
     json_init(&j, f);
     json_open(&j, '{');
@@ -435,7 +435,7 @@ static int run_tools(Run *r, const JsonVal *content, char *why, size_t whysz)
 {
     char  *buf;
     size_t len;
-    FILE  *f = open_memstream(&buf, &len);
+    FILE  *f = xmemstream(&buf, &len);
     Json   j;
     json_init(&j, f);
     json_open(&j, '{');

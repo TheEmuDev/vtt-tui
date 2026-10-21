@@ -340,7 +340,7 @@ void app_agent_apply(App *a)
      * never reads them itself, and the session log shows what a run used. */
     char  *line;
     size_t len;
-    FILE  *f = open_memstream(&line, &len);
+    FILE  *f = xmemstream(&line, &len);
     sh_quote(f, app_self_path ? app_self_path : "vtt");
     const char *model = apiagent_model_id(st->model);
     fprintf(f, " --claude-agent --model %s --effort %s --cap %.2f --calls %d --fallbacks %s",

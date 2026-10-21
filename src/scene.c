@@ -52,8 +52,10 @@ int scene_save(Map *m, const char *name, const int *box, char *err, size_t errsz
         memset(&m->scenes[i], 0, sizeof m->scenes[i]);
     }
     Scene *sc = &m->scenes[i];
-    tokens_free(&sc->tokens);
+    TokenList kept = sc->tokens;       /* its buffer, kept for a save over it (review 4, M4) */
+    kept.n = 0;
     memset(sc, 0, sizeof *sc);
+    sc->tokens = kept;
     str_lcpy(sc->name, name, sizeof sc->name);
     if (box) {
         sc->boxed = 1;
@@ -63,6 +65,12 @@ int scene_save(Map *m, const char *name, const int *box, char *err, size_t errsz
     if (!box) {                        /* a boxed scene leaves the fight to the map */
         sc->round     = m->round;
         sc->spotlight = m->spotlight;
+    }
+    int need = 0;                      /* sized once, not grown by doubling from 16 */
+    for (int k = 0; k < m->tokens.n; k++) need += in_scene(sc, &m->tokens.v[k]);
+    if (need > sc->tokens.cap) {
+        sc->tokens.v   = xrealloc(sc->tokens.v, (size_t)need * sizeof(Token));
+        sc->tokens.cap = need;
     }
     for (int k = 0; k < m->tokens.n; k++)
         if (in_scene(sc, &m->tokens.v[k])) tokens_add(&sc->tokens, m->tokens.v[k]);

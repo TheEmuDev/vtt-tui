@@ -23,6 +23,9 @@ unsigned long alloc_calls(void);
 /* realloc, counted with the x* calls, but NULL on failure rather than the end
  * of the program: for the few places that fail soft (docs/CODEMAP.md, util.c). */
 void *realloc_soft(void *p, size_t n);
+/* open_memstream that ends the program when it cannot, as xmalloc does: for a
+ * caller that would use the stream without checking. */
+FILE *xmemstream(char **buf, size_t *len);
 
 /* -------------------------------------------------------------- byte buf */
 
