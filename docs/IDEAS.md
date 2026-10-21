@@ -4,6 +4,30 @@ Things worth building that were consciously not built, with the reason, so
 the reason can be re-examined rather than the idea re-invented. Add to the
 top; move an entry to the README when it ships.
 
+## An arena per channel request
+
+*Set aside 2026-10-20, after the memory review* (docs/reviews/2026-10-20-4-memory.md; the
+user asked about custom allocators). A request's temporary memory (its reply buffer, the
+parsed words, a dump's strings) would come from one block, freed all at once when the reply
+is sent, instead of a malloc and free each. Why not: there is almost nothing to save. Counted
+with `alloc_calls` (`--bench --bench-ctl`, 19 loops, 2026-10-20), a request makes about 2
+allocations (`dump all`), 8 (`describe`), 3 (`tile A1:J10 water`) or none (`jobs`), the same
+on a 40x25 map and a 512x512 one: the work scales with the map and the allocations do not.
+And an arena costs what the leak checkers give: ASan and LSan see an arena as one block, so a
+leak or an overrun inside it is invisible unless the arena poisons its own memory by hand.
+What would make it worthy, all three:
+- **A profile showing the cost.** A request row in PERFORMANCE.md where malloc and free are a
+  real share of its time (a `perf record` of the bench, or `tools/mcount.c`'s count times a
+  measured per-call cost against the row's median), say a tenth or more. Today it would be a
+  handful of calls in a request measured in microseconds to milliseconds.
+- **Allocations that grow with the work.** A request whose count rises with the map or the
+  reply (a dump that allocated per creature or per square), where one block replaces
+  thousands of calls. None does today: the counts above do not change with the map's size.
+- **Lifetimes that end with the request.** What escapes it (a proposal's change set, which
+  `World` keeps; an event; a job's thread) stays on malloc, so the arena takes only what dies
+  at the reply. And under `make test` the arena passes each block through to malloc (or
+  poisons with `ASAN_POISON_MEMORY_REGION`), so the sanitizer oracle still sees every leak.
+
 ## Vehicles
 
 *Parked 2026-10-12 with its plan written and reviewed* (docs/VEHICLES.md, roadmap item 24).
