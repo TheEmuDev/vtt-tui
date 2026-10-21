@@ -112,7 +112,7 @@ test-after:
 	@# ... and would not get this far with an app header, whose inlines and
 	@# types need no object file to be reached through.
 	@if grep -n '#include "app' $(SRCDIR)/world.c $(SRCDIR)/world.h $(SRCDIR)/world_ops.c $(SRCDIR)/world_ops.h $(SRCDIR)/request.c \
-	    $(SRCDIR)/request_job.c $(SRCDIR)/request.h $(TESTDIR)/test_protocol.c; then \
+	    $(SRCDIR)/request_job.c $(SRCDIR)/request_propose.c $(SRCDIR)/request.h $(TESTDIR)/test_protocol.c; then \
 	    echo "the World's files must not include an app header (docs/V2.md, D2)" >&2; exit 1; fi
 	@$(CC) $(BASEFLAGS) $(DBGFLAGS) $(CFLAGS) -I$(TESTDIR) $(TESTWARN) -DPROTOCOL_MAIN \
 	    $(filter-out $(SRCDIR)/app%.c $(SRCDIR)/loop.c,$(LIBSRCS)) $(TESTDIR)/test_protocol.c \

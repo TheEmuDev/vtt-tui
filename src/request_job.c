@@ -142,11 +142,8 @@ int request_job(World *world, char w[][CTL_WORD_MAX], int n, FILE *out, char *er
 
     /* job N VERB ... */
     if (n < 3) { snprintf(err, errsz, "job N take, area REGION, say \"...\", propose, drop, undo, conflicts, dump, check or describe"); return -1; }
-    int num = 0;
-    char *end;
-    long v = strtol(w[1], &end, 10);
-    if (*end || v < 1 || v > JOB_NUM_MAX) { snprintf(err, errsz, "%.20s: a job's number, from jobs", w[1]); return -1; }
-    num = (int)v;
+    int num;
+    if (!request_int(w[1], 1, JOB_NUM_MAX, &num)) { snprintf(err, errsz, "%.20s: a job's number, from jobs", w[1]); return -1; }
     int slot = world_job_find(world, num);
     if (slot < 0) { request_class(CTL_E_MISSING), snprintf(err, errsz, "no job #%d - jobs lists them", num); return -1; }
     Job *j = &world->jobs[slot];

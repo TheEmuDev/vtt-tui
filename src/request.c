@@ -136,7 +136,7 @@ static int is_comment(const char *line)
 /* ----------------------------------------------------------------- reads */
 
 /* `own`: this request has edits of its own so far. Asked of the live map
- * and log (live_swap, mid-proposal). */
+ * and log (request_live_swap, mid-proposal). */
 static void do_status(World *world, FILE *out, int own)
 {
     const Map  *m = world->map;
@@ -174,26 +174,6 @@ static int want_json(char w[][CTL_WORD_MAX], int n, int at, char *err, size_t er
 
 /* ----------------------------------------------------------------- edits */
 
-/* What a request's edits have done so far: how many lines, the area they
- * touched (for the GM's ring), and the first line, for the status. */
-typedef struct {
-    int      lines;
-    int      x0, y0, x1, y1;          /* x1 < x0 while nothing is touched */
-    char     first[48];
-    unsigned ops0;                    /* the undo stamp when the first edit began */
-    int      deleted;                 /* a creature went: indices behind it shifted */
-    FILE    *out;                     /* the answer, for what an edit has to say */
-
-    /* A proposal: the edits run on the scratch map, with the live map and
-     * its log set aside here until the request ends. */
-    int      proposal;
-    Map     *live;
-    Undo     live_undo;
-    int      header;                  /* a `propose` or `job N propose` line came */
-    int      from;                    /* JobFrom of a new job: an agent, or --apply */
-    int      job;                     /* the job it answers, or -1 for a new one */
-    char     say[JOB_TEXT_MAX];       /* the line it came with */
-} Edits;
 
 static void touched(Edits *ed, int x0, int y0, int x1, int y1)
 {
@@ -310,7 +290,7 @@ static int boundary(const Map *m, const char *w, int *vertical, int *x, int *y,
     return 1;
 }
 
-static int word_int(const char *w, int lo, int hi, int *out)
+int request_int(const char *w, int lo, int hi, int *out)
 {
     char *end;
     long  v = strtol(w, &end, 10);
@@ -490,7 +470,7 @@ static int room_box(const Map *m, char w[][CTL_WORD_MAX], int n, const char **na
         if (side < 0) { snprintf(err, errsz, "%.20s: a side is north, south, east or west", w[3]); return 0; }
         if (oi < 0) { rq_class(CTL_E_MISSING), snprintf(err, errsz, "no room called %.40s", w[5]); return 0; }
         for (int i = 6; i < n; i++) {
-            if (!strcmp(w[i], "gap") && i + 1 < n && word_int(w[i + 1], 0, MAP_MAX_DIM, &gap)) i++;
+            if (!strcmp(w[i], "gap") && i + 1 < n && request_int(w[i + 1], 0, MAP_MAX_DIM, &gap)) i++;
             else if (!strcmp(w[i], "top") || !strcmp(w[i], "bottom") || !strcmp(w[i], "left") ||
                      !strcmp(w[i], "right") || !strcmp(w[i], "middle")) align = w[i];
             else { snprintf(err, errsz, "%s", USE); return 0; }
@@ -583,7 +563,7 @@ static int token_line(World *world, char w[][CTL_WORD_MAX], int n, Edits *ed, ch
         /* The words between the square and the label, in any order. */
         for (int k = 4; k < n - 1; k++) {
             if (!strcmp(w[k], "hidden")) t.hidden = 1;
-            else if (!strcmp(w[k], "size") && k + 1 < n - 1 && word_int(w[k + 1], 1, 3, &size)) k++;
+            else if (!strcmp(w[k], "size") && k + 1 < n - 1 && request_int(w[k + 1], 1, 3, &size)) k++;
             else if (!strcmp(w[k], "size")) BAD("size is 1, 2 or 3 squares wide, as: size 2");
             else BAD("%.20s: before the label goes size N or hidden", w[k]);
         }
@@ -633,7 +613,7 @@ static int token_line(World *world, char w[][CTL_WORD_MAX], int n, Edits *ed, ch
         }
         else if (!strcmp(w[3], "size")) {
             int size;
-            if (!word_int(w[4], 1, 3, &size)) BAD("size is 1, 2 or 3");
+            if (!request_int(w[4], 1, 3, &size)) BAD("size is 1, 2 or 3");
             if (!fits(m, t.x, t.y, size, i, err, errsz)) return -1;
             t.size = (uint8_t)size;
             touched(ed, t.x, t.y, t.x + size - 1, t.y + size - 1);
@@ -697,7 +677,7 @@ static int edit_line(World *world, char w[][CTL_WORD_MAX], int n, Edits *ed, cha
         if (ib < 0) BADC(CTL_E_MISSING, "no room called %.40s", w[2]);
         if (ia == ib) BAD("a corridor joins two rooms");
         for (int i = 3; i < n; i++) {
-            if (!strcmp(w[i], "width") && i + 1 < n && word_int(w[i + 1], 1, 3, &width)) i++;
+            if (!strcmp(w[i], "width") && i + 1 < n && request_int(w[i + 1], 1, 3, &width)) i++;
             else if ((k = edge_kind(w[i])) < 0) BAD("corridor ROOM ROOM [width 1-3] [KIND]");
         }
         if (k < 0) k = width == 1 ? EDGE_DOOR_CLOSED : EDGE_NONE;
@@ -725,7 +705,7 @@ static int edit_line(World *world, char w[][CTL_WORD_MAX], int n, Edits *ed, cha
         for (int i = 3; i < n; i++) {
             int num;
             if (!strcmp(w[i], "middle")) at = (along - 1) / 2;
-            else if (word_int(w[i], 1, along, &num)) at = num - 1;
+            else if (request_int(w[i], 1, along, &num)) at = num - 1;
             else if ((num = edge_kind(w[i])) >= 0) k = num;
             else BAD("%.20s: a square along the side (1-%d, from the %s), middle, or a kind", w[i], along,
                      side == SIDE_EAST || side == SIDE_WEST ? "top" : "left");
@@ -788,7 +768,7 @@ static int edit_line(World *world, char w[][CTL_WORD_MAX], int n, Edits *ed, cha
         int id;
         if (n != 4 || strcmp(w[1], "paint") != 0) BAD("fog paint REGION N (0 scrubs)");
         if (!region(m, w[2], &x0, &y0, &x1, &y1, err, errsz)) return -1;
-        if (!word_int(w[3], 0, FOG_PATCH_MAX, &id)) BAD("a fog patch is 1 to %d, or 0 to scrub", FOG_PATCH_MAX);
+        if (!request_int(w[3], 0, FOG_PATCH_MAX, &id)) BAD("a fog patch is 1 to %d, or 0 to scrub", FOG_PATCH_MAX);
         if (id && (!m->fog_patches[id - 1].name[0] || m->fog_patches[id - 1].dead))
             BADC(CTL_E_MISSING, "there is no fog patch %d - :fog makes one", id);
         COVER((long)(x1 - x0 + 1) * (y1 - y0 + 1));
@@ -805,7 +785,7 @@ static int edit_line(World *world, char w[][CTL_WORD_MAX], int n, Edits *ed, cha
             if (world_floor_off(world, ai, &we) < 0) BADC(we.cls, "%s", we.text);
         } else {
             int level;
-            if (!word_int(w[2], FLOOR_LEVEL_MIN, FLOOR_LEVEL_MAX, &level))
+            if (!request_int(w[2], FLOOR_LEVEL_MIN, FLOOR_LEVEL_MAX, &level))
                 BAD("%.20s: a level is %d to %d, or off", w[2], FLOOR_LEVEL_MIN, FLOOR_LEVEL_MAX);
             if (world_floor_set(world, ai, level, &we) < 0) BADC(we.cls, "%s", we.text);
         }
@@ -831,7 +811,7 @@ static int edit_line(World *world, char w[][CTL_WORD_MAX], int n, Edits *ed, cha
         for (const char *p = w[1]; *p; p++) isnum &= *p >= '0' && *p <= '9';
         if (isnum) {
             int num, li;
-            if (!word_int(w[1], 1, LINK_NUM_MAX, &num) || (li = link_find(m, num)) < 0)
+            if (!request_int(w[1], 1, LINK_NUM_MAX, &num) || (li = link_find(m, num)) < 0)
                 BADC(CTL_E_MISSING, "there is no link %.10s", w[1]);
             l = m->links[li];
             if (n == 3 && !strcmp(w[2], "off")) BAD("link %d remove takes a link away", num);
@@ -852,7 +832,7 @@ static int edit_line(World *world, char w[][CTL_WORD_MAX], int n, Edits *ed, cha
                 int k = link_kind_from_name(w[i]), sz;
                 if (k >= 0) l.kind = (uint8_t)k;
                 else if (!strcmp(w[i], "secret")) l.secret = 1;
-                else if (!strcmp(w[i], "size") && i + 1 < n && word_int(w[i + 1], 1, LINK_SIZE_MAX, &sz)) { l.size = (uint8_t)sz; i++; }
+                else if (!strcmp(w[i], "size") && i + 1 < n && request_int(w[i + 1], 1, LINK_SIZE_MAX, &sz)) { l.size = (uint8_t)sz; i++; }
                 else BAD("%.20s: after the place goes a kind, size N or secret", w[i]);
             }
             if (strlen(w[4]) >= AREA_NAME_MAX) BADC(CTL_E_LIMIT, "no area has a name that long");
@@ -876,7 +856,7 @@ static int edit_line(World *world, char w[][CTL_WORD_MAX], int n, Edits *ed, cha
             for (int i = 3; i < n; i++) {
                 if (strcmp(w[i], "size") != 0) continue;
                 int sz;
-                if (i + 1 >= n || !word_int(w[i + 1], 1, LINK_SIZE_MAX, &sz))
+                if (i + 1 >= n || !request_int(w[i + 1], 1, LINK_SIZE_MAX, &sz))
                     BAD("size is 1, 2 or 3 squares across, as: size 2");
                 l.size = (uint8_t)sz;
             }
@@ -915,7 +895,7 @@ static int edit_line(World *world, char w[][CTL_WORD_MAX], int n, Edits *ed, cha
         for (int i = 3; i < n; i++) {
             int deg;
             if (!strcmp(w[i], "mirror")) mirror = 1;
-            else if (!strcmp(w[i], "rotate") && i + 1 < n && word_int(w[i + 1], 0, 270, &deg) && deg % 90 == 0) {
+            else if (!strcmp(w[i], "rotate") && i + 1 < n && request_int(w[i + 1], 0, 270, &deg) && deg % 90 == 0) {
                 quarters = deg / 90;
                 i++;
             }
@@ -977,95 +957,6 @@ static int scene_is_edit(char w[][CTL_WORD_MAX], int n)
     return n == 2 && !strcmp(w[0], "scene") && strcmp(w[1], "save") != 0 && strcmp(w[1], "diff") != 0;
 }
 
-/* A proposal's edits run on a copy of the live map with a log of their
- * own: the live map, its log (the GM's redo tail too), `modified` and
- * Map.gen never move for a change nobody has accepted (docs/CONFLICTS.md,
- * "Why not run it live and roll it back"). */
-static void proposal_begin(World *world, Edits *ed)
-{
-    world_scratch_copy(world);
-    ed->proposal  = 1;
-    ed->live      = world->map;
-    ed->live_undo = world->undo;
-    world->undo = world->ctl_sundo;
-    world->map  = world->ctl_scratch;
-    undo_begin(&world->undo);
-    ed->ops0 = world->undo.stamp;
-}
-
-/* A read about the GM's side (status, marked) in the middle of a proposal:
- * the live map and log in for its length, and out again (call it twice). */
-static void live_swap(World *world, Edits *ed)
-{
-    if (!ed->proposal) return;
-    Map *m = world->map;   world->map  = ed->live;      ed->live      = m;
-    Undo u = world->undo;  world->undo = ed->live_undo; ed->live_undo = u;
-}
-
-/* What a request that landed says, and the ring round it on the GM's screen. */
-static void say_changed(World *world, const Edits *ed, FILE *out)
-{
-    char area[2 * MAP_COORD_MAX + 2] = "";
-    if (ed->x1 >= ed->x0) map_region_name(ed->x0, ed->y0, ed->x1, ed->y1, area, sizeof area);
-    fprintf(out, "changed %s: %d line%s, one undo step\n", area, ed->lines, ed->lines == 1 ? "" : "s");
-    if (ed->x1 < ed->x0) return;
-    world->host->ring(world->gm, ed->x0, ed->y0, ed->x1, ed->y1);
-}
-
-/* The live map back, the scratch log kept beside it for the diff. */
-static void proposal_end(World *world, Edits *ed)
-{
-    undo_end(&world->undo);
-    world->ctl_sundo = world->undo;
-    world->undo = ed->live_undo;
-    world->map  = ed->live;
-}
-
-/* The request's edits are in, on the scratch map: their change set becomes a
- * job's proposal, landing at once under :agent accept auto. -1 with why in
- * err when there is no room for it. */
-static int finish_proposal(World *world, Edits *ed, FILE *out, char *err, size_t errsz)
-{
-    ChangeSet cs;
-    cs_init(&cs);
-    int slot = ed->job;
-    {
-        PROF_ZONE("job.propose");
-        if (!cs_diff(&cs, world->map, world->ctl_scratch, &world->ctl_sundo)) {
-            cs_free(&cs);
-            fputs("no change: the map already looked like that\n", out);
-            return 0;
-        }
-        /* What will be held once this is in: a new job's slot may be a finished
-         * job's that world_job_new clears, and its cells go with it. */
-        long held = world_jobs_cells(world, slot >= 0 ? slot : world_job_slot_for_new(world));
-        if (held + cs.ncells > JOB_CELLS_MAX) {
-            int mine = cs.ncells;
-            cs_free(&cs);
-            rq_class(CTL_E_LIMIT), snprintf(err, errsz, "the changes kept for the GM hold %ld squares, and this one's %d would pass the %ld they may hold - jobs lists them; nothing more until some are removed",
-                                           held, mine, JOB_CELLS_MAX);
-            return -1;
-        }
-        /* At once is :agent on's (a request not from the socket is not asked). */
-        int at_once = world->ctl_auto && (world->agent_on || !world->ctl_can_hold);
-        if (slot < 0) slot = world_job_new(world, ed->from, ed->say, NULL, at_once);
-        if (slot < 0) {
-            cs_free(&cs);
-            rq_class(CTL_E_LIMIT), snprintf(err, errsz, "%d changes are waiting for the GM - nothing more until some are reviewed", JOB_MAX);
-            return -1;
-        }
-        Job *j = &world->jobs[slot];
-        if (j->from != JOB_FROM_APPLY) request_job_claim(world, j);    /* --apply's is nobody's: the GM's alone to decide */
-        if (at_once) j->at_once = 1;               /* everything that comes in */
-        world_job_set_proposal(world, slot, &cs, ed->job >= 0 ? ed->say : NULL);
-    }
-    Job *j = &world->jobs[slot];
-    fprintf(out, "proposal #%d: %s\n", j->num, j->summary);
-    if (j->state == JOB_ACCEPTED) say_changed(world, ed, out);
-    else if (j->at_once) fprintf(out, "lands when the GM is back: %s\n", world->host->busy(world->gm));
-    else fprintf(out, "waiting for the GM's review - :review %d\n", j->num);
-    return 0;
-}
 
 /* What every request's handler is given: the app, the line as written and in
  * words, where its report goes, the request's edits so far, and where to say
@@ -1125,44 +1016,11 @@ static int rq_scene_other(RQ_ARGS)
     return 0;
 }
 
+
 static int rq_propose(RQ_ARGS)
 {
     RQ_LOCALS;
-    /* propose ["a line for the GM"], or job N propose [...]: what the
-     * request's edits are. Without one, they are an agent's own idea. */
-    int at = v[0] == 'p' ? 1 : 3, slot = -1, num;
-    /* propose apply "plan.txt": what `vtt map --apply` sends to the vtt
-     * that has the map open. */
-    int from_apply = at == 1 && n == 3 && !strcmp(w[1], "apply");
-    if (from_apply) at = 2;
-    if (n > at + 1) { snprintf(err, errsz, "%s takes one line for the GM after it, in quotes", at == 1 ? "propose" : "job N propose"); return -1; }
-    if (ed->header || ed->lines) { snprintf(err, errsz, "propose comes once, before the request's edits"); return -1; }
-    if (world->ctl_direct) { rq_class(CTL_E_STATE), snprintf(err, errsz, "there is no GM to propose to: --apply changes the file"); return -1; }
-    if (at == 3) {
-        if (!word_int(w[1], 1, JOB_NUM_MAX, &num) || (slot = world_job_find(world, num)) < 0) {
-            rq_class(CTL_E_MISSING), snprintf(err, errsz, "no job #%.10s - jobs lists them", w[1]);
-            return -1;
-        }
-        const Job *j = &world->jobs[slot];
-        if (j->state == JOB_ACCEPTED || j->state == JOB_SCRAPPED) {
-            rq_class(CTL_E_STATE), snprintf(err, errsz, "#%d was %s - propose alone offers a new change", j->num, world_job_state_name(j->state));
-            return -1;
-        }
-        if (world_job_gm_only(j)) {
-            rq_class(CTL_E_STATE), snprintf(err, errsz, "#%d is %s: the GM's to decide - propose alone offers a change of your own", j->num,
-                     j->from == JOB_FROM_DISK ? "what another program wrote to the file" : "an --apply's");
-            return -1;
-        }
-        if (!request_job_mine(world, j, err, errsz)) return -1;
-    }
-    ed->header = 1;
-    ed->job = slot;
-    if (from_apply) {
-        ed->from = JOB_FROM_APPLY;
-        snprintf(ed->say, sizeof ed->say, "--apply %.140s", w[at]);
-    }
-    else str_lcpy(ed->say, n > at ? w[at] : "", sizeof ed->say);
-    return 0;
+    return request_propose(world, w, n, ed, err, errsz);
 }
 
 static int rq_job(RQ_ARGS)
@@ -1177,7 +1035,7 @@ static int rq_job(RQ_ARGS)
 static int rq_edit(RQ_ARGS)
 {
     RQ_LOCALS;
-    if (!ed->lines && !world->ctl_direct) proposal_begin(world, ed);
+    if (!ed->lines && !world->ctl_direct) request_proposal_begin(world, ed);
     else if (!ed->lines) {
         /* Asked once, at the first edit: after it the open batch is
          * this request's own. */
@@ -1281,13 +1139,13 @@ static int rq_wait(RQ_ARGS)
     int      secs = CTL_WAIT_DEFAULT_S, at = 1, k, said = 0;
     if (at < n && strcmp(w[at], "for") != 0) {
         said = 1;
-        if (!word_int(w[at], 0, 0x7fffffff, &k)) { snprintf(err, errsz, "wait [SEQ] [for SECONDS]: %.20s is not an event's number", w[at]); return -1; }
+        if (!request_int(w[at], 0, 0x7fffffff, &k)) { snprintf(err, errsz, "wait [SEQ] [for SECONDS]: %.20s is not an event's number", w[at]); return -1; }
         seq = (unsigned)k;
         at++;
     }
     int timed = at < n;
     if (at < n) {
-        if (at + 2 != n || strcmp(w[at], "for") != 0 || !word_int(w[at + 1], 0, 0x7fffffff, &secs)) {
+        if (at + 2 != n || strcmp(w[at], "for") != 0 || !request_int(w[at + 1], 0, 0x7fffffff, &secs)) {
             snprintf(err, errsz, "wait [SEQ] [for SECONDS], at most %d seconds", CTL_WAIT_MAX_S);
             return -1;
         }
@@ -1318,9 +1176,9 @@ static int rq_status(RQ_ARGS)
 {
     RQ_LOCALS;
     if (n > 1) { snprintf(err, errsz, "status takes nothing after it"); return -1; }
-    live_swap(world, ed);
+    request_live_swap(world, ed);
     do_status(world, out, ed->lines > 0);
-    live_swap(world, ed);
+    request_live_swap(world, ed);
     return 0;
 }
 
@@ -1375,7 +1233,7 @@ static int rq_changes(RQ_ARGS)
 {
     RQ_LOCALS;
     int k, box[4] = { 0, 0, m->w - 1, m->h - 1 };
-    if (n < 2 || n > 3 || !word_int(w[1], 0, 0x7fffffff, &k)) {
+    if (n < 2 || n > 3 || !request_int(w[1], 0, 0x7fffffff, &k)) {
         snprintf(err, errsz, "changes SEQ [REGION], SEQ the number wait or status last gave");
         return -1;
     }
@@ -1579,9 +1437,9 @@ static int rq_marked(RQ_ARGS)
     RQ_LOCALS;
     int j = want_json(w, n, 1, err, errsz);
     if (j < 0) return -1;
-    live_swap(world, ed);                    /* what the GM points at is on the GM's map */
+    request_live_swap(world, ed);                    /* what the GM points at is on the GM's map */
     world->host->marked(world->gm, out, j);
-    live_swap(world, ed);
+    request_live_swap(world, ed);
     return 0;
 }
 
@@ -1815,7 +1673,7 @@ static void finish_edits(World *world, Edits *ed, FILE *out)
         return;
     }
     undo_tag(&world->undo, 0, world->ctl_who);           /* whose step: `undo` takes back the caller's own */
-    say_changed(world, ed, out);
+    request_say_changed(world, ed, out);
     char msg[160];
     if (ed->lines == 1) snprintf(msg, sizeof msg, "agent: %s - u takes it back", ed->first);
     else snprintf(msg, sizeof msg, "agent: %s and %d more - u takes them back", ed->first, ed->lines - 1);
@@ -1916,9 +1774,9 @@ char *request_exec(World *world, const char *req, size_t *len)
 
     if (ed.proposal) {
         /* Anything that failed leaves the scratch map to be copied over. */
-        proposal_end(world, &ed);
+        request_proposal_end(world, &ed);
         char err[200];
-        if (!strcmp(verdict, "ok") && finish_proposal(world, &ed, out, err, sizeof err) < 0)
+        if (!strcmp(verdict, "ok") && request_finish_proposal(world, &ed, out, err, sizeof err) < 0)
             refuse(verdict, sizeof verdict, CTL_E_LIMIT, "%s", err);
         world->host->redraw(world->gm);
     }

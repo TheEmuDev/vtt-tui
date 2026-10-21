@@ -72,7 +72,7 @@ review and the next. The rules (the user, 2026-10-09):
 
 | # | review | item | kind | why it was left | closes when | checked |
 |---|---|---|---|---|---|---|
-| 1 | step 4 (ced6c35) | The proposal code (`propose` parsing, `proposal_begin`/`end`, `finish_proposal`, about 120 lines) sits in `app_ctl.c`, 1,564 lines, though `app_ctl_job.c` (204) now exists for jobs. | organization | It shares `app_ctl.c`'s `Edits` struct, which is private to that file; moving it means exporting the struct or splitting it. Skipped at the time with no reason written down. | `Edits` is exported or split and the three functions move; or `app_ctl.c` is next reorganized | 2026-10-09 |
+| ~~1~~ | *closed, below* | | | | | |
 | ~~2~~ | *closed, below* | | | | | |
 | ~~3~~ | *closed, below* | | | | | |
 | ~~4~~ | *closed, below* | | | | | |
@@ -206,6 +206,7 @@ Rows move here when fixed, with the commit.
 
 | # | item | closed by |
 |---|---|---|
+| 1 | The proposal code sat in the request file (`app_ctl.c`, later `request.c`, 1,952 lines) behind a private `Edits`. | `Edits` in request.h; `propose`/`job N propose`, the scratch swap, `say_changed` and `finish_proposal` in `request_propose.c` (140 lines; request.c 1,810); `request_int` the one whole-number check (step 6 part B, 2026-10-20) |
 | 44 | Nothing bounded the memory of the jobs' change sets (review 4 measured 2.7 MB a waiting whole-map proposal, 49 MB at sixteen). | `JOB_CELLS_MAX`, 4,194,304 squares across every job's set (32 MB): an agent's proposal past it is refused as a limit; the file's own change is never refused (2026-10-20, memory plan item 6; suite `protocol`) |
 | 52 | A failed autosave was never told to the GM, and no test could make a save fail. | the `Disk` seam (disk.c) and `autosave failed: WHY` once on the GM's line; suite `diskfail` fails each call of a save and of an autosave (2026-10-20, the commit that adds disk.c) |
 | 46 | CLAUDE.md did not know the docs' new shape: no *Read on demand* row for docs/README.md, *Progress* called the source of truth, and "A feature is not done" silent on the roadmap's *Built* table, the Status line and the index row. | the docs index's commit (2026-10-10), on the user's word: the three lines are in CLAUDE.md. |

@@ -48,6 +48,43 @@ int  request_read(const World *world, long squares, char *err, size_t errsz);
 /* The class of the refusal being written (ctl.h's CTL_E_*; `usage` unless
  * said). Returns -1, to be returned with it. */
 int  request_class(int cls);
+/* A word that is a whole number from lo to hi, into *out; 0 when it is not. */
+int  request_int(const char *w, int lo, int hi, int *out);
+
+/* What a request's edits have done so far: how many lines, the area they
+ * touched (for the GM's ring), and the first line, for the status. */
+typedef struct {
+    int      lines;
+    int      x0, y0, x1, y1;          /* x1 < x0 while nothing is touched */
+    char     first[48];
+    unsigned ops0;                    /* the undo stamp when the first edit began */
+    int      deleted;                 /* a creature went: indices behind it shifted */
+    FILE    *out;                     /* the answer, for what an edit has to say */
+
+    /* A proposal: the edits run on the scratch map, with the live map and
+     * its log set aside here until the request ends. */
+    int      proposal;
+    Map     *live;
+    Undo     live_undo;
+    int      header;                  /* a `propose` or `job N propose` line came */
+    int      from;                    /* JobFrom of a new job: an agent, or --apply */
+    int      job;                     /* the job it answers, or -1 for a new one */
+    char     say[JOB_TEXT_MAX];       /* the line it came with */
+} Edits;
+
+/* The proposal's side of a request (request_propose.c). request_propose
+ * reads a `propose` or `job N propose` line into ed (0, or -1 with why in
+ * err); begin and end set the live map and its log aside round the edits
+ * and put them back; live_swap swaps them in and out for a read of the GM's
+ * side mid-proposal (call it twice); say_changed is what a request that
+ * landed says, with the ring round it; finish_proposal makes the change set
+ * a job's proposal (-1 with why in err when there is no room for it). */
+int  request_propose(World *world, char w[][CTL_WORD_MAX], int n, Edits *ed, char *err, size_t errsz);
+void request_proposal_begin(World *world, Edits *ed);
+void request_proposal_end(World *world, Edits *ed);
+void request_live_swap(World *world, Edits *ed);
+void request_say_changed(World *world, const Edits *ed, FILE *out);
+int  request_finish_proposal(World *world, Edits *ed, FILE *out, char *err, size_t errsz);
 
 /* The channel's requests, from request.c's one table: the i-th's name (NULL
  * past the last) and what kind it is; and the edit verbs as "room, area, ..."
