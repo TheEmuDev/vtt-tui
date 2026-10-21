@@ -221,6 +221,8 @@ void test_net_edges(void);
 void test_net_lag(void);
 void test_net_big(void);
 void test_privacy(void);
+void page_feed_expect(const WireCatch *c, ByteBuf *want);
+int  page_feed_run(const char *dir, const void *stream, size_t len, ByteBuf *got);
 void test_play_box(void);
 void test_move_rules(void);
 void test_group_effect(void);

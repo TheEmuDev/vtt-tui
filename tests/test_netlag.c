@@ -230,6 +230,25 @@ void test_net_lag(void)
         CHECK(same);
     }
 
+    CASE("the page's own decoder ends a stalled phone's stream -- frames, none, one FULL, more -- where the C decoder does");
+    if (system("command -v node >/dev/null 2>&1") != 0) {
+        CHECK(getenv("VTT_REQUIRE_NODE") == NULL);
+        printf("  (skipped: no node to run the page's decoder)\n");
+    } else {
+        Sandbox sb = sandbox_enter("netlag");
+        CHECK_EQ(sb.ok, 1);
+        if (sb.ok) {
+            ByteBuf want, got;
+            page_feed_expect(&c, &want);
+            CHECK_EQ(page_feed_run(sb.dir, p->got.data, p->got.len, &got), 0);
+            CHECK(c.fulls >= 3);                   /* its first, and two catch-ups */
+            CHECK_EQ(strcmp(got.data, want.data), 0);
+            bb_free(&want);
+            bb_free(&got);
+        }
+        sandbox_leave(&sb);
+    }
+
 out:
     close(w);
     close(wq);

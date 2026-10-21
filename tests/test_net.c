@@ -1830,6 +1830,60 @@ static char *embed_cut(const char *html)
     return out;
 }
 
+/* What the C decoder made of a stream, in tests/page_feed.js's form: the size,
+ * a line a row of glyph.fg.bg.attr, then the last handout, names and whisper.
+ * NUL-ended; the caller frees it. */
+void page_feed_expect(const WireCatch *c, ByteBuf *want)
+{
+    bb_init(want, 1 << 16);
+    char cell[64];
+    snprintf(cell, sizeof cell, "%dx%d\n", c->w, c->h);
+    bb_puts(want, cell);
+    for (int y = 0; y < c->h; y++) {
+        for (int x = 0; x < c->w; x++) {
+            const Cell *g = &c->grid[y * 64 + x];
+            snprintf(cell, sizeof cell, "%s%u.%06x.%06x.%u", x ? " " : "", (unsigned)g->ch,
+                     (unsigned)(g->fg & 0xFFFFFF), (unsigned)(g->bg & 0xFFFFFF), (unsigned)g->attr);
+            bb_puts(want, cell);
+        }
+        bb_putc(want, '\n');
+    }
+    bb_puts(want, "handout:");
+    bb_puts(want, c->handout);
+    bb_puts(want, "\nnames:");
+    bb_puts(want, c->names);
+    bb_puts(want, "\nwhisper:");
+    bb_puts(want, c->whisper);
+    bb_putc(want, '\n');
+    bb_putc(want, '\0');
+}
+
+/* The page as the binary serves it, and a stream, written into dir; the
+ * page's own feed() run over the stream under node; what it printed into got
+ * (NUL-ended; the caller frees it). 0 when node ran it and exited 0. */
+int page_feed_run(const char *dir, const void *stream, size_t len, ByteBuf *got)
+{
+    char page[640], spath[640], cmd[1600];
+    snprintf(page, sizeof page, "%s/page.html", dir);
+    FILE *pg = fopen(page, "w");
+    if (pg) { fwrite(WEBPAGE, 1, WEBPAGE_LEN, pg); fclose(pg); }
+    snprintf(spath, sizeof spath, "%s/stream.bin", dir);
+    FILE *f = fopen(spath, "wb");
+    if (f) { fwrite(stream, 1, len, f); fclose(f); }
+    bb_init(got, 1 << 16);
+    snprintf(cmd, sizeof cmd, "node tests/page_feed.js '%s' '%s'", page, spath);
+    FILE *pp = popen(cmd, "r");
+    int rc = -1;
+    if (pp) {
+        char buf[4096];
+        size_t n;
+        while ((n = fread(buf, 1, sizeof buf, pp)) > 0) bb_put(got, buf, n);
+        rc = pclose(pp);
+    }
+    bb_putc(got, '\0');
+    return rc;
+}
+
 void test_page_feed(void)
 {
     CASE("the page served is web/index.html as tools/embed.sh cuts it: webpage.c is in step");
@@ -1904,15 +1958,6 @@ void test_page_feed(void)
     hn = wire_text(ho, 'W', "The floor is warm", 17);
     bb_put(&stream, ho, hn);
 
-    /* The page as the binary serves it, not the source beside it. */
-    char page[640], spath[640], cmd[1600];
-    snprintf(page, sizeof page, "%s/page.html", sb.dir);
-    FILE *pg = fopen(page, "w");
-    if (pg) { fwrite(WEBPAGE, 1, WEBPAGE_LEN, pg); fclose(pg); }
-    snprintf(spath, sizeof spath, "%s/stream.bin", sb.dir);
-    FILE *f = fopen(spath, "wb");
-    if (f) { fwrite(stream.data, 1, stream.len, f); fclose(f); }
-
     /* What the C decoder makes of the same bytes, in the script's form. */
     WireCatch c;
     memset(&c, 0, sizeof c);
@@ -1920,42 +1965,13 @@ void test_page_feed(void)
     wire_dec_init(&d, &WC_SINK, &c);
     CHECK_EQ((int)wire_dec_feed(&d, (const uint8_t *)stream.data, stream.len), (int)stream.len);
     CHECK_EQ(d.bad, 0);
-    ByteBuf want;
-    bb_init(&want, 1 << 16);
-    char cell[64];
-    snprintf(cell, sizeof cell, "%dx%d\n", c.w, c.h);
-    bb_puts(&want, cell);
-    for (int y = 0; y < c.h; y++) {
-        for (int x = 0; x < c.w; x++) {
-            const Cell *g = &c.grid[y * 64 + x];
-            snprintf(cell, sizeof cell, "%s%u.%06x.%06x.%u", x ? " " : "", (unsigned)g->ch,
-                     (unsigned)(g->fg & 0xFFFFFF), (unsigned)(g->bg & 0xFFFFFF), (unsigned)g->attr);
-            bb_puts(&want, cell);
-        }
-        bb_putc(&want, '\n');
-    }
-    bb_puts(&want, "handout:");
-    bb_puts(&want, c.handout);
-    bb_puts(&want, "\nnames:");
-    bb_puts(&want, c.names);
-    bb_puts(&want, "\nwhisper:");
-    bb_puts(&want, c.whisper);
-    bb_putc(&want, '\n');
-    bb_putc(&want, '\0');
+    ByteBuf want, got;
+    page_feed_expect(&c, &want);
 
     CASE("the page's feed() decodes the stream to the cells the C decoder does");
-    snprintf(cmd, sizeof cmd, "node tests/page_feed.js '%s' '%s'", page, spath);
-    FILE *pp = popen(cmd, "r");
-    CHECK(pp != NULL);
-    ByteBuf got;
-    bb_init(&got, 1 << 16);
-    if (pp) {
-        char buf[4096];
-        size_t n;
-        while ((n = fread(buf, 1, sizeof buf, pp)) > 0) bb_put(&got, buf, n);
-        CHECK_EQ(pclose(pp), 0);
-    }
-    bb_putc(&got, '\0');
+    CHECK_EQ(page_feed_run(sb.dir, stream.data, stream.len, &got), 0);
+    char page[640], cmd[1600];
+    snprintf(page, sizeof page, "%s/page.html", sb.dir);
     CHECK_EQ(c.w, W);
     CHECK_EQ(c.h, H);
     CHECK(strstr(got.data, "handout:Tomb\nHere lies \xc3\x89lan") != NULL);
