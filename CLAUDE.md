@@ -40,7 +40,7 @@ prohibitions only, under 150 lines. Reference lives where it is read on demand.
 - **The phone page stays inside one round trip** (2026-10-04): under 12 KB as sent
   (docs/REMOTE.md). Below the limit spend nothing on shaving bytes; spend it on the page's
   JavaScript being near optimal at run time. Never be complacent: performance slips slowly.
-- **Push only when told** ("push it"). Commit freely.
+- **Push when convenient** (2026-10-20, the user: "We can git push whenever is convenient"; before: only when told). Push a commit only after `make test` passed on it. Commit freely.
 - **Model roles** (2026-09-26): **Opus 5.5** plans (the plan goes to the user for sign-off)
   and implements. A **Fable 5.1** subagent (Agent `model: "fable"`) reviews every finished
   change before it is reported done; verify its findings and fix what holds up. The user

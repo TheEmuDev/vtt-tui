@@ -220,14 +220,19 @@ void world_jobs_clear(World *w)
     w->host->review_leave(w->gm);
 }
 
+int world_job_slot_for_new(const World *w)
+{
+    for (int i = 0; i < JOB_MAX; i++)
+        if (!w->jobs[i].used) return i;
+    /* Full: the oldest finished job makes room, as a log would. */
+    for (int i = 0; i < JOB_MAX; i++)
+        if (w->jobs[i].state == JOB_ACCEPTED || w->jobs[i].state == JOB_SCRAPPED) return i;
+    return -1;
+}
+
 int world_job_new(World *w, int from, const char *text, const CsBox *box, int at_once)
 {
-    int slot = -1;
-    for (int i = 0; i < JOB_MAX && slot < 0; i++)
-        if (!w->jobs[i].used) slot = i;
-    /* Full: the oldest finished job makes room, as a log would. */
-    for (int i = 0; i < JOB_MAX && slot < 0; i++)
-        if (w->jobs[i].state == JOB_ACCEPTED || w->jobs[i].state == JOB_SCRAPPED) slot = i;
+    int slot = world_job_slot_for_new(w);
     if (slot < 0) return -1;
     if (w->host->reviewing(w->gm) == slot) w->host->review_leave(w->gm);
     Job *j = &w->jobs[slot];

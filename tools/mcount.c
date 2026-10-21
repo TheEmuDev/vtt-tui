@@ -1,6 +1,6 @@
 /* Every allocation a vtt makes, counted from outside it (docs/V2.md, *Memory:
  * the plan*, 8; docs/reviews/2026-10-20-4-memory.md, T5): an LD_PRELOAD shim
- * over malloc, calloc, realloc and free. Where util.c's alloc_calls counts the
+ * over malloc, calloc, realloc, free and the aligned ones. Where util.c's alloc_calls counts the
  * x* calls only, this sees libc's too -- a raw malloc, open_memstream's
  * buffer, strdup -- and with MCOUNT_TRACE_AFTER=N prints a backtrace for every
  * allocation past the Nth, which says where a count comes from.
@@ -10,9 +10,11 @@
  *   MCOUNT_TRACE_AFTER=1000 LD_PRELOAD=build/mcount.so ./vtt ...   then addr2line -e vtt
  *
  * Linux and glibc only (__libc_malloc, malloc_usable_size): a developer's
- * tool, not part of any build. It reports at exit, on stderr, and only from a
- * process named vtt (the shell and timeout that start it inherit the preload). */
+ * tool, not part of any build. It reports at exit, on stderr, from each
+ * process named vtt (a --ctl client and the --claude-agent child too, each
+ * its own line), never from the shell and timeout that start it. */
 #define _GNU_SOURCE
+#include <errno.h>
 #include <execinfo.h>
 #include <malloc.h>
 #include <stdio.h>
@@ -24,6 +26,8 @@ extern void *__libc_malloc(size_t);
 extern void *__libc_calloc(size_t, size_t);
 extern void *__libc_realloc(void *, size_t);
 extern void  __libc_free(void *);
+extern void *__libc_memalign(size_t, size_t);
+extern void *__libc_valloc(size_t);
 
 static unsigned long g_calls, g_frees;
 static unsigned long long g_bytes, g_live, g_live_max;
@@ -50,23 +54,41 @@ static void note(void *p)
     }
 }
 
-static void unnote(void *p)
+/* A block of n usable bytes given back. */
+static void unnote_size(size_t n)
 {
-    if (!p || g_in) return;
+    if (g_in) return;
     g_frees++;
-    size_t n = malloc_usable_size(p);
     g_live = g_live > n ? g_live - n : 0;
 }
+
+static void unnote(void *p) { if (p) unnote_size(malloc_usable_size(p)); }
 
 void *malloc(size_t n) { void *p = __libc_malloc(n); note(p); return p; }
 void *calloc(size_t n, size_t sz) { void *p = __libc_calloc(n, sz); note(p); return p; }
 void  free(void *p) { unnote(p); __libc_free(p); }
 void *realloc(void *p, size_t n)
 {
-    unnote(p);
+    size_t old = p ? malloc_usable_size(p) : 0;
     void *q = __libc_realloc(p, n);
+    /* A failed realloc keeps p; realloc(p, 0) frees it (glibc) and gives NULL. */
+    if (p && (q || n == 0)) unnote_size(old);
     note(q);
     return q;
+}
+
+/* Their blocks are freed through free(), so they are counted coming in too. */
+void *memalign(size_t al, size_t n) { void *p = __libc_memalign(al, n); note(p); return p; }
+void *aligned_alloc(size_t al, size_t n) { void *p = __libc_memalign(al, n); note(p); return p; }
+void *valloc(size_t n) { void *p = __libc_valloc(n); note(p); return p; }
+int posix_memalign(void **pp, size_t al, size_t n)
+{
+    if (al < sizeof(void *) || (al & (al - 1))) return EINVAL;
+    void *p = __libc_memalign(al, n);
+    if (!p) return ENOMEM;
+    note(p);
+    *pp = p;
+    return 0;
 }
 
 __attribute__((constructor)) static void mcount_start(void)
@@ -77,6 +99,7 @@ __attribute__((constructor)) static void mcount_start(void)
 
 __attribute__((destructor)) static void mcount_report(void)
 {
+    g_in = 1;                                 /* reading comm allocates: the shim's, not the program's */
     char comm[32] = "";
     FILE *f = fopen("/proc/self/comm", "r");
     if (f) { if (!fgets(comm, sizeof comm, f)) comm[0] = '\0'; fclose(f); }

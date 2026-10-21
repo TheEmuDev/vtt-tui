@@ -1553,7 +1553,8 @@ doors from the party's starting room is marked `NOT REACHABLE`.
 are none, 1 when there are, and 2 when the file cannot be read. Errors (`E`) change what the
 map means, warnings (`W`) are probable mistakes, and notes (`N`) are allowed but worth
 knowing; notes do not affect the exit status. A report lists at most 10,000 findings of one
-kind and ends that kind with "and N more, not listed"; the totals count them all.
+kind; past that, a line near its end says "and N more, not listed" for each such kind, and
+the totals count them all.
 
 ```
 E011 section-short     line 29   'hedges' read as vedges row 9 of 9: the section is short

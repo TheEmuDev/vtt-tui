@@ -1036,7 +1036,9 @@ static int finish_proposal(World *world, Edits *ed, FILE *out, char *err, size_t
             fputs("no change: the map already looked like that\n", out);
             return 0;
         }
-        long held = world_jobs_cells(world, slot);
+        /* What will be held once this is in: a new job's slot may be a finished
+         * job's that world_job_new clears, and its cells go with it. */
+        long held = world_jobs_cells(world, slot >= 0 ? slot : world_job_slot_for_new(world));
         if (held + cs.ncells > JOB_CELLS_MAX) {
             int mine = cs.ncells;
             cs_free(&cs);

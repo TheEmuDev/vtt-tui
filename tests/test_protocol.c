@@ -481,6 +481,26 @@ void test_protocol(void)
         w.jobs[k].has_cs = 0;
     }
 
+    CASE("at the cap with every slot a finished job's, a proposal fits: the job it evicts takes its cells along");
+    {
+        world_jobs_clear(&w);
+        for (int i = 0; i < JOB_MAX; i++) {
+            int s = world_job_new(&w, JOB_FROM_AGENT, "finished", NULL, 0);
+            CHECK(s == i);
+            w.jobs[s].state  = JOB_ACCEPTED;
+            w.jobs[s].has_cs = 1;
+            w.jobs[s].cs.ncells = (int)(JOB_CELLS_MAX / JOB_MAX);   /* counted, never read */
+        }
+        CHECK_EQ(world_jobs_cells(&w, -1), JOB_CELLS_MAX);
+        int evict = world_job_slot_for_new(&w);
+        CHECK(evict >= 0);
+        t = ask(&w, "tile A1:J1 water");
+        CHECK(t && !strncmp(t, "ok\n", 3));
+        free(t);
+        for (int i = 0; i < JOB_MAX; i++)
+            if (i != evict) { w.jobs[i].cs.ncells = 0; w.jobs[i].has_cs = 0; }
+    }
+
     world_jobs_clear(&w);
     if (w.ctl_scratch) map_free(w.ctl_scratch);
     undo_free(&w.undo);

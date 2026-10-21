@@ -946,19 +946,23 @@ static void finding_where(Finding *f, const char *where)
     f->where = cut_dup(where, FINDING_WHERE_MAX);
 }
 
+static Finding *findings_room(Findings *fs)
+{
+    if (fs->n == fs->cap) { fs->cap = fs->cap ? fs->cap * 2 : 16; fs->v = xrealloc(fs->v, (size_t)fs->cap * sizeof *fs->v); }
+    return &fs->v[fs->n++];
+}
+
 /* Finding g moved whole into fs: what it owns goes with it, and g keeps none. */
 static void take_finding(Findings *fs, Finding *g)
 {
-    if (fs->n == fs->cap) { fs->cap = fs->cap ? fs->cap * 2 : 16; fs->v = xrealloc(fs->v, (size_t)fs->cap * sizeof *fs->v); }
-    fs->v[fs->n++] = *g;
+    *findings_room(fs) = *g;
     g->more = NULL;
     g->msg = g->where = NULL;
 }
 
 static Finding *add_finding(Findings *fs, const char *code, const char *slug)
 {
-    if (fs->n == fs->cap) { fs->cap = fs->cap ? fs->cap * 2 : 16; fs->v = xrealloc(fs->v, (size_t)fs->cap * sizeof *fs->v); }
-    Finding *f = &fs->v[fs->n++];
+    Finding *f = findings_room(fs);
     memset(f, 0, sizeof *f);
     str_lcpy(f->code, code, sizeof f->code);
     str_lcpy(f->slug, slug, sizeof f->slug);

@@ -164,14 +164,18 @@ void world_events_map_restart(World *w);
 
 /* The squares the jobs' change sets may hold together, 8 bytes each: 32 MB
  * (docs/V2.md, *Memory: the plan*, 6; HEALTH 44). A plan of rooms is a few
- * thousand; a whole 512x512 is 262,144, so the thirteenth such set waiting is
- * refused to an agent. The file's own change (another writer's) is never
- * refused: it is counted, and told to the GM as it comes. */
+ * thousand. A whole-512x512 tile fill is 262,144, so sixteen (JOB_MAX) come
+ * exactly to it; one that changes both edge arrays too is 787,456, and the
+ * sixth such set is refused to an agent. The file's own change (another
+ * writer's) is never refused: it is counted, and told to the GM as it comes. */
 #define JOB_CELLS_MAX (4L << 20)
 
 /* Jobs (job.h): the list, a proposal coming in, a landing. */
 void world_jobs_clear(World *w);
 int  world_job_new(World *w, int from, const char *text, const CsBox *box, int at_once);
+/* The slot world_job_new would take: a free one, else the oldest finished job,
+ * which it clears (-1: none). */
+int  world_job_slot_for_new(const World *w);
 void world_job_set_proposal(World *w, int slot, ChangeSet *cs, const char *line);
 void world_jobs_land_waiting(World *w);
 int  world_job_find(const World *w, int num);
