@@ -430,7 +430,7 @@ void app_agent_ask(App *a, const Job *j, const char *asked)
         a->choice_job = j->num;
         /* Read once, here: the box is drawn every frame, and a lookup is a
          * keyring round trip (or its unlock window). */
-        a->opt_key = app_agent_key_where(a->opt_key_last4, sizeof a->opt_key_last4);
+        a->options.key = app_agent_key_where(a->options.key_last4, sizeof a->options.key_last4);
         snprintf(a->modal_title, sizeof a->modal_title, "How should agents answer :ask?");
         a->modal = MODAL_CHOOSE_AGENT;
         a->dirty = 1;
@@ -447,9 +447,9 @@ void app_agent_ask(App *a, const Job *j, const char *asked)
 int app_agent_choice_rows(const App *a, UiChoice *items, int max)
 {
     if (max < 3) return 0;
-    int src = a->opt_key;                        /* read when the box opened: never a lookup a frame */
+    int src = a->options.key;                        /* read when the box opened: never a lookup a frame */
     if (src == APIKEY_NONE) snprintf(items[0].text, sizeof items[0].text, "c  the Claude API agent  (no key yet - c asks for it)");
-    else snprintf(items[0].text, sizeof items[0].text, "c  the Claude API agent  (key: %s ...%s)", apikey_source_name(src), a->opt_key_last4);
+    else snprintf(items[0].text, sizeof items[0].text, "c  the Claude API agent  (key: %s ...%s)", apikey_source_name(src), a->options.key_last4);
     snprintf(items[1].text, sizeof items[1].text, "m  a command  (Claude Code, a script...)");
     snprintf(items[2].text, sizeof items[2].text, "w  wait for an agent that comes to the channel");
     for (int i = 0; i < 3; i++) items[i].color = a->th->fg;
@@ -490,7 +490,7 @@ void app_agent_choice_key(App *a, Key k)
     }
     if (c == 'm') {
         a->modal = MODAL_NONE;
-        a->opt_prompt = OPT_COMMAND;
+        a->options.prompt = OPT_COMMAND;
         app_open_prompt(a, PROMPT_SETTING, "Agent command", "started for each :ask, the job on its stdin", "");
         a->prompt.max = SETTINGS_COMMAND_MAX;
         return;

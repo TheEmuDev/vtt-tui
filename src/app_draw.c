@@ -160,13 +160,13 @@ static void draw_options(App *a)
     /* Scrolled to keep the selection in view on a short terminal, the
      * terminal's size as it is now (it may have changed since the last key). */
     int vis = app_options_visible_rows(a);
-    ui_list_move(&a->options, OPT_COUNT, 0, vis);
-    int first = a->options.top;
+    ui_list_move(&a->options.list, OPT_COUNT, 0, vis);
+    int first = a->options.list.top;
     for (int i = first; i < OPT_COUNT && i < first + vis; i++) {
         char label[32], value[256];
         int  dim = app_options_row(a, i, label, sizeof label, value, sizeof value);
         int  y = top + 2 + (i - first);
-        if (i == a->options.sel) {
+        if (i == a->options.list.sel) {
             draw_fill(r, rect(x - 1, y, r->w - 2 * x + 2, 1), ' ', sel);
             draw_text(r, x, y, label, lw, sel);
             draw_text_ellipsis(r, x + lw, y, value, r->w - x - lw - 2, sel);

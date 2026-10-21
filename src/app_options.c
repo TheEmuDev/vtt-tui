@@ -26,8 +26,8 @@ static const char *const EFFORTS[] = { "low", "medium", "high" };
  * all of it, and this month's by the line's date. */
 static void read_spent(App *a)
 {
-    a->opt_spent = a->opt_spent_month = 0;
-    a->opt_runs = a->opt_runs_month = 0;
+    a->options.spent = a->options.spent_month = 0;
+    a->options.runs = a->options.runs_month = 0;
     char dir[1024], path[1100];
     store_dir("", dir, sizeof dir);
     snprintf(path, sizeof path, "%sclaude-usage.tsv", dir);
@@ -52,9 +52,9 @@ static void read_spent(App *a)
         }
         if (n >= 9 && strcmp(f[0], "when") != 0) {
             double d = strtod(f[8], NULL);
-            a->opt_spent += d;
-            a->opt_runs++;
-            if (!strncmp(f[0], month, 7)) { a->opt_spent_month += d; a->opt_runs_month++; }
+            a->options.spent += d;
+            a->options.runs++;
+            if (!strncmp(f[0], month, 7)) { a->options.spent_month += d; a->options.runs_month++; }
         }
         line = nl ? nl + 1 : NULL;
     }
@@ -64,7 +64,7 @@ static void read_spent(App *a)
 void app_options_open(App *a)
 {
     a->screen = SCREEN_OPTIONS;
-    a->opt_key = app_agent_key_where(a->opt_key_last4, sizeof a->opt_key_last4);
+    a->options.key = app_agent_key_where(a->options.key_last4, sizeof a->options.key_last4);
     read_spent(a);
     a->dirty = 1;
 }
@@ -74,7 +74,7 @@ void app_options_key_changed(App *a)
 {
     /* Whoever shows it next (Options, the choice box) shows it as it is: a
      * lookup only when the key changed, never a frame. */
-    a->opt_key = app_agent_key_where(a->opt_key_last4, sizeof a->opt_key_last4);
+    a->options.key = app_agent_key_where(a->options.key_last4, sizeof a->options.key_last4);
 }
 
 int app_options_row(const App *a, int row, char *label, size_t lsz, char *value, size_t vsz)
@@ -116,15 +116,15 @@ int app_options_row(const App *a, int row, char *label, size_t lsz, char *value,
     case OPT_CHANNEL:   snprintf(value, vsz, "%s", s->channel ? "on" : "off - :agent on opens it"); break;
     case OPT_ACCEPT:    snprintf(value, vsz, "%s", s->accept_auto ? "land at once (auto)" : "wait for :review"); break;
     case OPT_KEY:
-        if (a->opt_key == APIKEY_NONE) snprintf(value, vsz, "none - enter types one in");
-        else snprintf(value, vsz, "%s, ending ...%s%s", a->opt_key == APIKEY_ENV ? "ANTHROPIC_API_KEY" :
-                      a->opt_key == APIKEY_KEYRING ? "the keyring" : "a file only you can read",
-                      a->opt_key_last4, a->opt_key == APIKEY_ENV ? "" : "  (d removes)");
+        if (a->options.key == APIKEY_NONE) snprintf(value, vsz, "none - enter types one in");
+        else snprintf(value, vsz, "%s, ending ...%s%s", a->options.key == APIKEY_ENV ? "ANTHROPIC_API_KEY" :
+                      a->options.key == APIKEY_KEYRING ? "the keyring" : "a file only you can read",
+                      a->options.key_last4, a->options.key == APIKEY_ENV ? "" : "  (d removes)");
         break;
     case OPT_SPENT:
-        if (!a->opt_runs) snprintf(value, vsz, "nothing yet");
-        else snprintf(value, vsz, "about $%.2f over %d run%s, $%.2f this month (vtt's price table)", a->opt_spent,
-                      a->opt_runs, a->opt_runs == 1 ? "" : "s", a->opt_spent_month);
+        if (!a->options.runs) snprintf(value, vsz, "nothing yet");
+        else snprintf(value, vsz, "about $%.2f over %d run%s, $%.2f this month (vtt's price table)", a->options.spent,
+                      a->options.runs, a->options.runs == 1 ? "" : "s", a->options.spent_month);
         break;
     default: value[0] = '\0'; break;
     }
@@ -156,7 +156,7 @@ static void step(App *a, int row, int dir)
         int next = ORDER[(i + dir + 3) % 3];
         if (next == AGENT_KIND_CLAUDE) { app_agent_setting(a, "claude"); return; }
         if (next == AGENT_KIND_COMMAND && !s->command[0]) {
-            a->opt_prompt = OPT_COMMAND;
+            a->options.prompt = OPT_COMMAND;
             app_open_prompt(a, PROMPT_SETTING, "Agent command", "started for each :ask, the job on its stdin", "");
             a->prompt.max = SETTINGS_COMMAND_MAX;
             return;
@@ -194,18 +194,18 @@ static void edit(App *a, int row)
     char v[SETTINGS_COMMAND_MAX + 8];
     switch (row) {
     case OPT_COMMAND:
-        a->opt_prompt = OPT_COMMAND;
+        a->options.prompt = OPT_COMMAND;
         app_open_prompt(a, PROMPT_SETTING, "Agent command", "started for each :ask, the job on its stdin", a->settings.command);
         a->prompt.max = SETTINGS_COMMAND_MAX;
         return;
     case OPT_CAP:
         snprintf(v, sizeof v, "%.2f", a->settings.cap);
-        a->opt_prompt = OPT_CAP;
+        a->options.prompt = OPT_CAP;
         app_open_prompt(a, PROMPT_SETTING, "Spend cap", "dollars a job, by vtt's price table; 0 for none", v);
         return;
     case OPT_CALLS:
         snprintf(v, sizeof v, "%d", a->settings.calls);
-        a->opt_prompt = OPT_CALLS;
+        a->options.prompt = OPT_CALLS;
         app_open_prompt(a, PROMPT_SETTING, "Calls cap", "API calls a job, 1 to 200", v);
         return;
     case OPT_KEY:   app_agent_key_prompt(a, KEY_THEN_NOTHING, NULL); return;
@@ -217,8 +217,8 @@ static void edit(App *a, int row)
 void app_options_prompt(App *a, const char *text)
 {
     static const SettingId ID[OPT_COUNT] = { [OPT_COMMAND] = SET_COMMAND, [OPT_CAP] = SET_CAP, [OPT_CALLS] = SET_CALLS };
-    int row = a->opt_prompt;
-    a->opt_prompt = -1;
+    int row = a->options.prompt;
+    a->options.prompt = -1;
     if (row != OPT_COMMAND && row != OPT_CAP && row != OPT_CALLS) return;
     char err[200];
     if (settings_set(&a->settings, ID[row], text, err, sizeof err) < 0) { app_set_status_gm(a, err); return; }
@@ -247,7 +247,7 @@ int app_options_visible_rows(const App *a)
 
 void app_options_key(App *a, Key k)
 {
-    ListState *st = &a->options;
+    ListState *st = &a->options.list;
     int rows = OPT_COUNT, vis = app_options_visible_rows(a);
     if (k.kind == KEY_ESC) { a->screen = SCREEN_MENU; return; }
     if (k.kind == KEY_DOWN) { ui_list_move(st, rows, 1, vis); return; }

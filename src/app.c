@@ -39,7 +39,7 @@ void app_init(App *a, Term *t, Renderer *r)
      * for one on the channel. main starts from the defaults again (unset),
      * so a GM who never chose is asked. */
     a->settings.agent = AGENT_KIND_OFF;
-    a->opt_prompt = -1;
+    a->options.prompt = -1;
     a->th      = &THEME_DARK;
     a->screen  = SCREEN_MENU;
     a->running = 1;
@@ -1295,7 +1295,7 @@ static int modal_key(App *a, Key k)
             a->modal       = MODAL_NONE;
             a->prompt_what = PROMPT_NONE;
             a->key_then    = KEY_THEN_NOTHING;
-            a->opt_prompt  = -1;
+            a->options.prompt  = -1;
             /* From the agent choice box: back to it, the job still waiting. */
             if (a->choice_job && (what == PROMPT_API_KEY || what == PROMPT_SETTING)) a->modal = MODAL_CHOOSE_AGENT;
             if (secret) app_set_status_gm(a, "canceled - no key stored");
