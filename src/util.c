@@ -53,6 +53,12 @@ void *xcalloc(size_t n, size_t sz)
     return p;
 }
 
+void *realloc_soft(void *p, size_t n)
+{
+    g_allocs++;
+    return realloc(p, n ? n : 1);
+}
+
 void *xrealloc(void *p, size_t n)
 {
     g_allocs++;

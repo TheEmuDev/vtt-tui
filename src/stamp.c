@@ -327,25 +327,39 @@ int stamp_list(char (*names)[MAP_NAME_MAX], int max)
 
 /* --------------------------------------------------------------- preview */
 
+/* A kept buffer at least n bytes: 0 when it cannot be had (the preview is
+ * then not drawn; out of memory here fails soft, docs/CODEMAP.md, util.c). */
+static int keep(void *pp, size_t *cap, size_t n)
+{
+    void **p = pp;
+    if (n <= *cap) return 1;
+    void *q = realloc_soft(*p, n);
+    if (!q) return 0;
+    *p = q;
+    *cap = n;
+    return 1;
+}
+
+void stamp_show_free(StampShow *sv)
+{
+    free(sv->tiles); free(sv->vedges); free(sv->hedges); free(sv->both);
+    memset(sv, 0, sizeof *sv);
+}
+
 void stamp_show(Map *m, const Map *s, int x, int y, StampShow *sv)
 {
-    memset(sv, 0, sizeof *sv);
+    sv->shown = 0;
     int x0 = imax(x, 0), y0 = imax(y, 0);
     int x1 = imin(x + s->w - 1, m->w - 1), y1 = imin(y + s->h - 1, m->h - 1);
     if (x1 < x0 || y1 < y0) return;
     sv->x = x0; sv->y = y0; sv->w = x1 - x0 + 1; sv->h = y1 - y0 + 1;
     sv->sx = x0 - x; sv->sy = y0 - y;
 
-    size_t nt = (size_t)sv->w * (size_t)sv->h;
-    sv->tiles  = malloc(nt);
-    sv->vedges = malloc((size_t)(sv->w + 1) * (size_t)sv->h);
-    sv->hedges = malloc((size_t)sv->w * (size_t)(sv->h + 1));
-    sv->both   = malloc(sizeof(Token) * (size_t)(m->tokens.n + s->tokens.n + 1));
-    if (!sv->tiles || !sv->vedges || !sv->hedges || !sv->both) {
-        free(sv->tiles); free(sv->vedges); free(sv->hedges); free(sv->both);
-        memset(sv, 0, sizeof *sv);
+    if (!keep(&sv->tiles, &sv->cap_tiles, (size_t)sv->w * (size_t)sv->h) ||
+        !keep(&sv->vedges, &sv->cap_vedges, (size_t)(sv->w + 1) * (size_t)sv->h) ||
+        !keep(&sv->hedges, &sv->cap_hedges, (size_t)sv->w * (size_t)(sv->h + 1)) ||
+        !keep(&sv->both, &sv->cap_both, sizeof(Token) * (size_t)(m->tokens.n + s->tokens.n + 1)))
         return;
-    }
 
     /* Straight into the arrays: map_set_* would touch the map. */
     for (int yy = 0; yy < sv->h; yy++)
@@ -433,6 +447,5 @@ void stamp_unshow(Map *m, StampShow *sv)
     m->tokens = sv->tokens;
     m->nnotes = sv->nnotes;
     m->nlinks = sv->nlinks;
-    free(sv->tiles); free(sv->vedges); free(sv->hedges); free(sv->both);
-    memset(sv, 0, sizeof *sv);
+    sv->shown = 0;                                   /* the buffers stay, for the next draw */
 }

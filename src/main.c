@@ -561,7 +561,12 @@ static int run_headless(const Options *o)
         /* The run's peak memory, beside its times (docs/V2.md, *Memory: the
          * plan*, 3): what a key or a request costs in memory shows as a row. */
         struct rusage ru;
-        if (getrusage(RUSAGE_SELF, &ru) == 0) fprintf(stderr, "  maxrss_kb %ld\n", (long)ru.ru_maxrss);
+        if (getrusage(RUSAGE_SELF, &ru) == 0) {
+#if defined(__APPLE__)
+            ru.ru_maxrss /= 1024;               /* bytes there; kilobytes on Linux and the BSDs */
+#endif
+            fprintf(stderr, "  maxrss_kb %ld\n", (long)ru.ru_maxrss);
+        }
         if (o->bench_loops > 1)
             fprintf(stderr, "  allocs %lu over loops 2-%d\n", alloc_calls() - allocs0, o->bench_loops);
     }

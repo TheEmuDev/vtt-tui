@@ -49,9 +49,14 @@ int  stamp_list(char (*names)[MAP_NAME_MAX], int max);
 /* The preview: the stamp shown on the map at (x,y) for one draw, without a
  * change to the map -- no undo, no Map.gen, no sight. Swaps the stamp's
  * squares, boundaries, creatures and notes in; stamp_unshow puts the map back
- * exactly. Clipped to the map, so the preview can hang off the edge. */
+ * exactly. Clipped to the map, so the preview can hang off the edge. Its
+ * buffers are kept from one draw to the next and grown only for a larger box
+ * or more creatures, so a frame with a stamp in hand allocates nothing (a
+ * frame or key path allocates nothing: util.c's count); stamp_show_free gives
+ * them back. A StampShow starts zeroed. */
 typedef struct {
     uint8_t  *tiles, *vedges, *hedges;   /* what was there, over the stamp's box */
+    size_t    cap_tiles, cap_vedges, cap_hedges, cap_both;
     int       x, y, w, h;                /* the box on the map, clipped */
     int       sx, sy;                    /* its first square in the stamp */
     TokenList tokens;                    /* the map's own list, set aside */
@@ -63,5 +68,6 @@ typedef struct {
 
 void stamp_show(Map *m, const Map *s, int x, int y, StampShow *sv);
 void stamp_unshow(Map *m, StampShow *sv);
+void stamp_show_free(StampShow *sv);
 
 #endif /* VTT_STAMP_H */

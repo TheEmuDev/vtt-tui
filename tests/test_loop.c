@@ -125,6 +125,20 @@ void test_loop(void)
         CHECK_EQ(g.a.screen, SCREEN_PLAY);
         type(&g, "\x1bOP");                                /* F1: back to build for what follows */
         turn(&g, 1002);
+        int sx = g.a.ed.cx, sy = g.a.ed.cy;
+        type(&g, "v");                                     /* a stamp in hand: its preview drawn each frame */
+        type(&g, "lyp");                                   /* y copies the box, p picks it up */
+        turn(&g, 1002);
+        CHECK(g.a.stamp != NULL && g.a.ed.mode == ED_STAMP);
+        type(&g, "jjllkkhh");
+        turn(&g, 1002);
+        before = alloc_calls();
+        for (int i = 0; i < 100; i++) { type(&g, "jjllkkhh"); turn(&g, 1002); }
+        CHECK_EQ(alloc_calls() - before, 0);               /* the preview keeps its buffers */
+        type(&g, "pu");                                    /* down and taken back: no lone ESC to wait out */
+        turn(&g, 1002);
+        CHECK(g.a.ed.mode == ED_NORMAL);
+        g.a.ed.cx = sx; g.a.ed.cy = sy;                    /* where the cases after expect it */
     }
 
     CASE("a burst longer than one read is all handled in the turn, with one frame after it");

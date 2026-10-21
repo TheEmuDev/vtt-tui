@@ -953,6 +953,7 @@ void test_stamps(void)
         char *before = stamp_text(m);
         unsigned gen = m->gen, shape = m->tokens.shape;
         StampShow sv;
+        memset(&sv, 0, sizeof sv);                       /* its buffers are kept across draws: it starts empty */
         stamp_show(m, s, 8, 6, &sv);                    /* hangs off the corner */
         CHECK_EQ(map_tile(m, 8, 6), TILE_FLOOR);          /* the stamp's corner, clipped */
         CHECK_EQ(map_vedge(m, 8, 7), EDGE_DOOR_CLOSED);
@@ -966,6 +967,12 @@ void test_stamps(void)
         stamp_unshow(m, &sv);
         CHECK(map_note_at(m, 5, 2) == NULL);
         CHECK_EQ(m->nnotes, 0);
+        unsigned long allocs = alloc_calls();             /* a third draw the same size: nothing new */
+        const void *kept = sv.both;
+        stamp_show(m, s, 2, 2, &sv);
+        stamp_unshow(m, &sv);
+        CHECK(alloc_calls() == allocs && sv.both == kept && kept != NULL);
+        stamp_show_free(&sv);
         free(before); free(after);
         map_free(m);
     }

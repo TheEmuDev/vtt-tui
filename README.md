@@ -74,6 +74,7 @@ A first session:
 make debug      # -Og -g3 with ASan and UBSan
 make test       # unit and golden-frame tests
 make perf       # performance measurements (see docs/PERFORMANCE.md)
+make soak       # long sessions, each against a bound on its peak memory (about 20 s)
 make fuzz       # libFuzzer on the map loader (clang); FUZZ_SECONDS=600 for longer
 make fuzz-ctl   # libFuzzer on control-channel requests
 make fuzz-json  # libFuzzer on the JSON reader imports use

@@ -20,6 +20,9 @@ char *xstrdup(const char *s);
 /* How many allocations the x* calls above have made: the frame and key paths
  * allocate through them, and a test asserts a stretch of frames made none. */
 unsigned long alloc_calls(void);
+/* realloc, counted with the x* calls, but NULL on failure rather than the end
+ * of the program: for the few places that fail soft (docs/CODEMAP.md, util.c). */
+void *realloc_soft(void *p, size_t n);
 
 /* -------------------------------------------------------------- byte buf */
 

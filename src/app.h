@@ -14,6 +14,7 @@
 #include "play.h"
 #include "ruler.h"
 #include "slog.h"
+#include "stamp.h"
 #include "render.h"
 #include "settings.h"
 #include "term.h"
@@ -325,6 +326,7 @@ typedef struct {
      * and `mirrored` are only for the status line: the stamp itself is
      * turned each time. */
     Map     *stamp;
+    StampShow stamp_view;                /* the preview's buffers, kept across frames (stamp.h) */
     char     stamp_name[MAP_NAME_MAX];   /* "" for a copy not yet saved */
     int      stamp_turns, stamp_mirrored;
 

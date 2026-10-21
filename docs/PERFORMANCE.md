@@ -99,9 +99,10 @@ the speed of light of the machine it was measured on.
 ## Frame times
 
 What the app costs to use. Each scenario replays a keystroke script, a frame per key,
-400 times. Every figure is the median of three such runs, row by row
+400 times. Every time is the median of three such runs, row by row
 (`tools/median.py`): a single run reliably has one row spiking somewhere, and never the
-same one twice. The runs want the machine to themselves -- editing a file while one was
+same one twice. The `peak KB` column (the run's `ru_maxrss`, from 2026-10-20) is the
+largest of the three, not the median: a peak does not jitter as a time does (the user's rule). The runs want the machine to themselves -- editing a file while one was
 in flight was enough to lift the play rows by a fifth, and an A/B against the previous
 binary is what showed it was the machine and not the code.
 

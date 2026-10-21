@@ -85,6 +85,7 @@ void app_free(App *a)
     net_stop(&a->net);
     ctl_stop(&a->ctl);
     map_free(a->stamp);
+    stamp_show_free(&a->stamp_view);
     a->stamp = NULL;
     ui_picker_free(&a->picker);
 }
