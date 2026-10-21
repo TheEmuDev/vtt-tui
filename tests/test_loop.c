@@ -108,6 +108,25 @@ void test_loop(void)
     CHECK_EQ(g.a.dirty, 0);                        /* the frame went out */
     CHECK(g.r.cells_changed > 0);
 
+    CASE("a frame and a cursor key allocate nothing: 100 turns of each mode's walk, no allocation");
+    {
+        type(&g, "jjllkkhh");                              /* the first pass may grow what it keeps */
+        turn(&g, 1002);
+        unsigned long before = alloc_calls();
+        for (int i = 0; i < 100; i++) { type(&g, "jjllkkhh"); turn(&g, 1002); }
+        CHECK_EQ(alloc_calls() - before, 0);               /* build mode */
+        type(&g, "\x1bOQ");                                /* F2: play */
+        turn(&g, 1002);
+        type(&g, "jjllkkhh");
+        turn(&g, 1002);
+        before = alloc_calls();
+        for (int i = 0; i < 100; i++) { type(&g, "jjllkkhh"); turn(&g, 1002); }
+        CHECK_EQ(alloc_calls() - before, 0);               /* play mode */
+        CHECK_EQ(g.a.screen, SCREEN_PLAY);
+        type(&g, "\x1bOP");                                /* F1: back to build for what follows */
+        turn(&g, 1002);
+    }
+
     CASE("a burst longer than one read is all handled in the turn, with one frame after it");
     {
         char burst[4097];

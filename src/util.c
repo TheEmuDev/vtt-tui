@@ -22,8 +22,16 @@ _Noreturn void die(const char *fmt, ...)
     exit(1);
 }
 
+/* Every allocation through the x* calls, counted: a frame or a key that does
+ * not record allocates nothing, and suite `loop` and the bench say so by this
+ * (docs/V2.md, *Memory: the plan*, 4). One add; nothing on a frame calls it. */
+static unsigned long g_allocs;
+
+unsigned long alloc_calls(void) { return g_allocs; }
+
 void *xmalloc(size_t n)
 {
+    g_allocs++;
     void *p = malloc(n ? n : 1);
     if (!p) die("out of memory (%zu bytes)", n);
     return p;
@@ -39,6 +47,7 @@ char *xstrdup(const char *s)
 
 void *xcalloc(size_t n, size_t sz)
 {
+    g_allocs++;
     void *p = calloc(n ? n : 1, sz ? sz : 1);
     if (!p) die("out of memory (%zu x %zu bytes)", n, sz);
     return p;
@@ -46,6 +55,7 @@ void *xcalloc(size_t n, size_t sz)
 
 void *xrealloc(void *p, size_t n)
 {
+    g_allocs++;
     void *q = realloc(p, n ? n : 1);
     if (!q) die("out of memory (%zu bytes)", n);
     return q;

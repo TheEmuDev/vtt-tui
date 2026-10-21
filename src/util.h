@@ -17,6 +17,9 @@ void *xmalloc(size_t n);
 void *xcalloc(size_t n, size_t sz);
 void *xrealloc(void *p, size_t n);
 char *xstrdup(const char *s);
+/* How many allocations the x* calls above have made: the frame and key paths
+ * allocate through them, and a test asserts a stretch of frames made none. */
+unsigned long alloc_calls(void);
 
 /* -------------------------------------------------------------- byte buf */
 

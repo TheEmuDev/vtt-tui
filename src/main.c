@@ -459,7 +459,9 @@ static int run_headless(const Options *o)
         }
 
         uint64_t bench_clock_ms = 1000;
+        unsigned long allocs0 = 0;          /* the count when the second loop starts: the first is setup */
         for (int loop = 0; loop < o->bench_loops && a.running; loop++) {
+            if (loop == 1) allocs0 = alloc_calls();
             /* Every loop starts alike: its jobs are numbered from 1 again,
              * so a script's `:ask 1 remove` names the job it just made. */
             a.world.job_last = pre_jobs;
@@ -560,6 +562,8 @@ static int run_headless(const Options *o)
          * plan*, 3): what a key or a request costs in memory shows as a row. */
         struct rusage ru;
         if (getrusage(RUSAGE_SELF, &ru) == 0) fprintf(stderr, "  maxrss_kb %ld\n", (long)ru.ru_maxrss);
+        if (o->bench_loops > 1)
+            fprintf(stderr, "  allocs %lu over loops 2-%d\n", alloc_calls() - allocs0, o->bench_loops);
     }
 
     app_free(&a);
