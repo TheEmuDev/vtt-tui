@@ -462,6 +462,25 @@ void test_protocol(void)
               strstr(e.text, "Troll would come back onto Cara"));
     }
 
+    CASE("the jobs' change sets are bounded together: past JOB_CELLS_MAX squares an agent's proposal is a limit");
+    {
+        world_jobs_clear(&w);
+        int k = world_job_new(&w, JOB_FROM_AGENT, "a held set", NULL, 0);
+        CHECK(k >= 0);
+        w.jobs[k].has_cs = 1;
+        w.jobs[k].cs.ncells = (int)(JOB_CELLS_MAX - 5);          /* its cells are counted, never read */
+        t = ask(&w, "tile A1:J1 water");                           /* ten squares: past it */
+        CHECK(t && !strncmp(t, "error limit: ", 13) && strstr(t, "would pass the 4194304 they may hold"));
+        free(t);
+        CHECK_EQ(world_jobs_cells(&w, -1), JOB_CELLS_MAX - 5);     /* nothing came in */
+        w.jobs[k].cs.ncells = (int)(JOB_CELLS_MAX - 10);
+        t = ask(&w, "tile A1:J1 water");                           /* ten: exactly to it */
+        CHECK(t && !strncmp(t, "ok\n", 3));
+        free(t);
+        w.jobs[k].cs.ncells = 0;                                   /* its own, for the clear */
+        w.jobs[k].has_cs = 0;
+    }
+
     world_jobs_clear(&w);
     if (w.ctl_scratch) map_free(w.ctl_scratch);
     undo_free(&w.undo);

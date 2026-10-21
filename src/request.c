@@ -1036,6 +1036,14 @@ static int finish_proposal(World *world, Edits *ed, FILE *out, char *err, size_t
             fputs("no change: the map already looked like that\n", out);
             return 0;
         }
+        long held = world_jobs_cells(world, slot);
+        if (held + cs.ncells > JOB_CELLS_MAX) {
+            int mine = cs.ncells;
+            cs_free(&cs);
+            rq_class(CTL_E_LIMIT), snprintf(err, errsz, "the changes kept for the GM hold %ld squares, and this one's %d would pass the %ld they may hold - jobs lists them; nothing more until some are removed",
+                                           held, mine, JOB_CELLS_MAX);
+            return -1;
+        }
         /* At once is :agent on's (a request not from the socket is not asked). */
         int at_once = world->ctl_auto && (world->agent_on || !world->ctl_can_hold);
         if (slot < 0) slot = world_job_new(world, ed->from, ed->say, NULL, at_once);

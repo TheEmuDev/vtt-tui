@@ -341,6 +341,14 @@ void world_job_set_proposal(World *w, int slot, ChangeSet *cs, const char *line)
     w->host->note(w->gm, msg, 1);
 }
 
+long world_jobs_cells(const World *w, int skip)
+{
+    long n = 0;
+    for (int i = 0; i < JOB_MAX; i++)
+        if (i != skip && w->jobs[i].used && w->jobs[i].has_cs) n += w->jobs[i].cs.ncells;
+    return n;
+}
+
 Map *world_scratch_copy(World *w)
 {
     if (!w->ctl_scratch) w->ctl_scratch = map_new(1, 1, "scratch");

@@ -46,7 +46,7 @@ const char AGENT_GUIDE[] =
     "| `missing` | a name in it names nothing: list them (`jobs`, `scenes`, `stamps`, `characters`, `links`, `floors`, `describe`) |\n"
     "| `conflict` | what is on the map is in the way (a square taken, a room over another, a label in use, a box off the map): `dump REGION`, then other squares or another name |\n"
     "| `state` | the line is fine, but not now or not yours (the channel off, no map open, a job the GM is deciding, nothing to undo): read `status` and `jobs`; do not send it again unchanged |\n"
-    "| `limit` | over a fixed size (a request over 64 KB, a line over 1023 characters, sixteen proposals waiting, reads of more than 300,000 squares of map or edits over more than 524,288 in one request, more lines after an answer has passed 2 MB): split it, or wait for the GM |\n"
+    "| `limit` | over a fixed size (a request over 64 KB, a line over 1023 characters, sixteen proposals waiting, or the GM's kept proposals holding 4,194,304 squares together, reads of more than 300,000 squares of map or edits over more than 524,288 in one request, more lines after an answer has passed 2 MB): split it, or wait for the GM |\n"
     "| `internal` | vtt's own failure: tell the GM |\n"
     "\n"
     "**Which way.** Either works at any time. `vtt map.vtt --apply plan.txt` asks every running\n"

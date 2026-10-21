@@ -162,12 +162,21 @@ void world_event_of_change(World *w, int kind, int job, const char *who, const c
 void world_events_map_flush(World *w);
 void world_events_map_restart(World *w);
 
+/* The squares the jobs' change sets may hold together, 8 bytes each: 32 MB
+ * (docs/V2.md, *Memory: the plan*, 6; HEALTH 44). A plan of rooms is a few
+ * thousand; a whole 512x512 is 262,144, so the thirteenth such set waiting is
+ * refused to an agent. The file's own change (another writer's) is never
+ * refused: it is counted, and told to the GM as it comes. */
+#define JOB_CELLS_MAX (4L << 20)
+
 /* Jobs (job.h): the list, a proposal coming in, a landing. */
 void world_jobs_clear(World *w);
 int  world_job_new(World *w, int from, const char *text, const CsBox *box, int at_once);
 void world_job_set_proposal(World *w, int slot, ChangeSet *cs, const char *line);
 void world_jobs_land_waiting(World *w);
 int  world_job_find(const World *w, int num);
+/* The squares every job's change set holds, but slot `skip`'s (-1: none). */
+long world_jobs_cells(const World *w, int skip);
 int  world_job_gm_only(const Job *j);     /* the file's or an --apply's: not an agent's to take, replace, answer or drop */
 void world_job_thread_add(Job *j, char who, const char *text);
 const char *world_job_state_name(int state);
