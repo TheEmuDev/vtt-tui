@@ -284,9 +284,9 @@ static void draw_editor_body(App *a)
     /* A stamp on the cursor is drawn as if it were down: swapped into the
      * map for this one draw and straight back out, with a ring round the
      * ground it would cover. */
-    StampShow *sv = &a->stamp_view;
-    int stamping = !playing && a->ed.mode == ED_STAMP && a->stamp;
-    if (stamping) { PROF_ZONE("stamp.show"); stamp_show(m, a->stamp, a->ed.cx, a->ed.cy, sv); }
+    StampShow *sv = &a->stamp.view;
+    int stamping = !playing && a->ed.mode == ED_STAMP && a->stamp.map;
+    if (stamping) { PROF_ZONE("stamp.show"); stamp_show(m, a->stamp.map, a->ed.cx, a->ed.cy, sv); }
 
     /* The jobs' tints, and a review's change drawn in place: checked first,
      * since nothing may read the map between the swap in and out. */
@@ -303,8 +303,8 @@ static void draw_editor_body(App *a)
         stamp_unshow(m, sv);
         ClipRect saved = grid_clip_push(r, &a->ed.view, m);
         grid_draw_tile_ring(r, &a->ed.view, m, a->ed.cx, a->ed.cy,
-                            imin(a->ed.cx + a->stamp->w - 1, m->w - 1),
-                            imin(a->ed.cy + a->stamp->h - 1, m->h - 1), th->ping_bg, NULL, NULL);
+                            imin(a->ed.cx + a->stamp.map->w - 1, m->w - 1),
+                            imin(a->ed.cy + a->stamp.map->h - 1, m->h - 1), th->ping_bg, NULL, NULL);
         rnd_clip_restore(r, saved);
     }
 

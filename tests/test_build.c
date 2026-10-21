@@ -1049,7 +1049,7 @@ void test_stamp_keys(void)
     a.ed.cx = 1; a.ed.cy = 1;
     press(&a, "vly");
     CHECK_EQ(a.ed.mode, ED_NORMAL);
-    CHECK(a.stamp && a.stamp->w == 2 && a.stamp->h == 1);
+    CHECK(a.stamp.map && a.stamp.map->w == 2 && a.stamp.map->h == 1);
     CHECK(strstr(a.status, "copied 2x1") != NULL);
     int depth = a.world.undo.depth;
     unsigned gen = m->gen;
@@ -1072,12 +1072,12 @@ void test_stamp_keys(void)
 
     CASE("r and | turn and mirror the stamp in hand; enter places; esc puts it away placing nothing");
     press(&a, "pr");
-    CHECK(a.stamp->w == 1 && a.stamp->h == 2);
+    CHECK(a.stamp.map->w == 1 && a.stamp.map->h == 2);
     CHECK(strstr(a.status, "turned 90") != NULL);
     press(&a, "|");
     CHECK(strstr(a.status, "mirrored") != NULL);
     press(&a, "R");
-    CHECK(a.stamp->w == 2 && a.stamp->h == 1);
+    CHECK(a.stamp.map->w == 2 && a.stamp.map->h == 1);
     press(&a, "\r");
     CHECK_EQ(a.ed.mode, ED_NORMAL);
     CHECK_EQ(a.world.undo.depth, depth + 1);
@@ -1088,24 +1088,24 @@ void test_stamp_keys(void)
 
     CASE("the readout is turned-then-mirrored whatever order the keys came in, as the channel applies it");
     {
-        Map *base = stamp_copy(a.stamp, 0, 0, a.stamp->w - 1, a.stamp->h - 1);
+        Map *base = stamp_copy(a.stamp.map, 0, 0, a.stamp.map->w - 1, a.stamp.map->h - 1);
         static const char *const seqs[] = { "pr|", "p|r", "p|rr|r", "prr|R" };
         for (size_t i = 0; i < sizeof seqs / sizeof *seqs; i++) {
-            map_free(a.stamp);
-            a.stamp = stamp_copy(base, 0, 0, base->w - 1, base->h - 1);
-            a.stamp_turns = a.stamp_mirrored = 0;
+            map_free(a.stamp.map);
+            a.stamp.map = stamp_copy(base, 0, 0, base->w - 1, base->h - 1);
+            a.stamp.turns = a.stamp.mirrored = 0;
             press(&a, seqs[i]);
-            Map *t = stamp_turned(base, a.stamp_turns);
-            Map *want = a.stamp_mirrored ? stamp_mirrored(t) : stamp_copy(t, 0, 0, t->w - 1, t->h - 1);
-            char *x = stamp_text(a.stamp), *y = stamp_text(want);
+            Map *t = stamp_turned(base, a.stamp.turns);
+            Map *want = a.stamp.mirrored ? stamp_mirrored(t) : stamp_copy(t, 0, 0, t->w - 1, t->h - 1);
+            char *x = stamp_text(a.stamp.map), *y = stamp_text(want);
             CHECK_EQ(strcmp(x, y), 0);
             free(x); free(y);
             map_free(t); map_free(want);
             press(&a, "\x1b");
         }
-        map_free(a.stamp);
-        a.stamp = base;
-        a.stamp_turns = a.stamp_mirrored = 0;
+        map_free(a.stamp.map);
+        a.stamp.map = base;
+        a.stamp.turns = a.stamp.mirrored = 0;
     }
 
     CASE(": over a stamp comes back to it: :J6 jumps it there");
@@ -1128,8 +1128,8 @@ void test_stamp_keys(void)
     CHECK(strstr(a.status, "stamp Pool kept") != NULL);
     press(&a, ":stamp save ../x\r");
     CHECK(strstr(a.status, "letters, digits") != NULL);
-    map_free(a.stamp);
-    a.stamp = NULL;
+    map_free(a.stamp.map);
+    a.stamp.map = NULL;
     press(&a, ":stamp\r");
     CHECK_EQ(a.modal, MODAL_PICKER);
     CHECK_EQ(a.pick.list.n, 1);
@@ -1139,8 +1139,8 @@ void test_stamp_keys(void)
     CHECK_EQ(a.ed.mode, ED_STAMP);
     CHECK(strstr(a.status, "Pool 2x1") != NULL);
     press(&a, "\x1b");
-    map_free(a.stamp);
-    a.stamp = NULL;
+    map_free(a.stamp.map);
+    a.stamp.map = NULL;
     press(&a, ":stamp Pool\r");
     CHECK_EQ(a.ed.mode, ED_STAMP);
     CHECK(strstr(a.status, "Pool 2x1") != NULL);

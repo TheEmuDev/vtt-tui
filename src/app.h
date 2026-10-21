@@ -187,6 +187,17 @@ typedef struct {
     int      nonly;
 } PickerState;
 
+/* The stamp in hand (app_stamp.c): what y copied or :stamp picked, ready for
+ * p. Kept across maps, so a piece of one map can go down on another. `turns`
+ * and `mirrored` are only for the status line: the stamp itself is turned
+ * each time. */
+typedef struct {
+    Map      *map;                  /* NULL: none in hand */
+    StampShow view;                 /* the preview's buffers, kept across frames (stamp.h) */
+    char      name[MAP_NAME_MAX];   /* "" for a copy not yet saved */
+    int       turns, mirrored;
+} StampHand;
+
 typedef struct {
     /* The map, its log, the jobs, the events and the request being run: what
      * a request handler is given (world.h). */
@@ -346,14 +357,7 @@ typedef struct {
     int     pending_tx, pending_ty;
     int     pending_token;   /* token a pending status marker hangs on */
 
-    /* The stamp in hand: what y copied or :stamp picked, ready for p. Kept
-     * across maps, so a piece of one map can go down on another. `turns`
-     * and `mirrored` are only for the status line: the stamp itself is
-     * turned each time. */
-    Map     *stamp;
-    StampShow stamp_view;                /* the preview's buffers, kept across frames (stamp.h) */
-    char     stamp_name[MAP_NAME_MAX];   /* "" for a copy not yet saved */
-    int      stamp_turns, stamp_mirrored;
+    StampHand stamp;
 
     HelpView help;
 

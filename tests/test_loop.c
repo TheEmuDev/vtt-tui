@@ -129,7 +129,7 @@ void test_loop(void)
         type(&g, "v");                                     /* a stamp in hand: its preview drawn each frame */
         type(&g, "lyp");                                   /* y copies the box, p picks it up */
         turn(&g, 1002);
-        CHECK(g.a.stamp != NULL && g.a.ed.mode == ED_STAMP);
+        CHECK(g.a.stamp.map != NULL && g.a.ed.mode == ED_STAMP);
         type(&g, "jjllkkhh");
         turn(&g, 1002);
         before = alloc_calls();

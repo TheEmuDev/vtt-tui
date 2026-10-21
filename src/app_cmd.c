@@ -1249,7 +1249,7 @@ void app_command_key(App *a, Key k)
     if (r == 1) app_exec_command(a, a->ed.cmd.buf);
     else        app_set_status(a, "");
     a->ed.cmd_from_visual = 0;
-    if (back && a->stamp && a->world.map && a->screen == SCREEN_EDITOR && a->ed.mode == ED_NORMAL)
+    if (back && a->stamp.map && a->world.map && a->screen == SCREEN_EDITOR && a->ed.mode == ED_NORMAL)
         a->ed.mode = ED_STAMP;
     if (review) app_review_resume(a);
 }

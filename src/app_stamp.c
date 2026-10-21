@@ -13,19 +13,19 @@
 /* The stamp in hand, replaced; the old one freed. */
 static void hold(App *a, Map *s, const char *name)
 {
-    map_free(a->stamp);
-    a->stamp = s;
-    str_lcpy(a->stamp_name, name ? name : "", sizeof a->stamp_name);
-    a->stamp_turns = a->stamp_mirrored = 0;
+    map_free(a->stamp.map);
+    a->stamp.map = s;
+    str_lcpy(a->stamp.name, name ? name : "", sizeof a->stamp.name);
+    a->stamp.turns = a->stamp.mirrored = 0;
 }
 
 /* "Table 3x2, turned 90, mirrored" -- or "the copy" before it has a name. */
 static void describe(const App *a, char *buf, size_t sz)
 {
     char turn[24] = "";
-    if (a->stamp_turns) snprintf(turn, sizeof turn, ", turned %d", a->stamp_turns * 90);
-    snprintf(buf, sz, "%s %dx%d%s%s", a->stamp_name[0] ? a->stamp_name : "the copy",
-             a->stamp->w, a->stamp->h, turn, a->stamp_mirrored ? ", mirrored" : "");
+    if (a->stamp.turns) snprintf(turn, sizeof turn, ", turned %d", a->stamp.turns * 90);
+    snprintf(buf, sz, "%s %dx%d%s%s", a->stamp.name[0] ? a->stamp.name : "the copy",
+             a->stamp.map->w, a->stamp.map->h, turn, a->stamp.mirrored ? ", mirrored" : "");
 }
 
 void app_stamp_yank(App *a)
@@ -56,7 +56,7 @@ void app_stamp_yank(App *a)
 
 void app_stamp_lift(App *a)
 {
-    if (!a->stamp) { app_set_status(a, "nothing to paste - y copies, :stamp picks a saved one"); return; }
+    if (!a->stamp.map) { app_set_status(a, "nothing to paste - y copies, :stamp picks a saved one"); return; }
     a->ed.mode = ED_STAMP;
     char what[96], msg[160];
     describe(a, what, sizeof what);
@@ -71,11 +71,11 @@ static void place(App *a)
     WorldErr we;
     int bx0, by0, bx1, by1;
     grid_bounds(&a->ed.view, a->world.map, &bx0, &by0, &bx1, &by1);
-    if (a->ed.view.bounded && (a->ed.cx + a->stamp->w - 1 > bx1 || a->ed.cy + a->stamp->h - 1 > by1)) {
+    if (a->ed.view.bounded && (a->ed.cx + a->stamp.map->w - 1 > bx1 || a->ed.cy + a->stamp.map->h - 1 > by1)) {
         app_set_status(a, "the stamp runs off the floor - move it, or :floor all");
         return;
     }
-    if (world_stamp_place(&a->world, a->stamp, a->ed.cx, a->ed.cy, &we) < 0) {
+    if (world_stamp_place(&a->world, a->stamp.map, a->ed.cx, a->ed.cy, &we) < 0) {
         app_set_status(a, we.text);
         return;
     }
@@ -89,15 +89,15 @@ static void place(App *a)
 static void turn(App *a, int quarters)
 {
     PROF_ZONE("stamp.turn");
-    Map *t = quarters ? stamp_turned(a->stamp, quarters) : stamp_mirrored(a->stamp);
-    map_free(a->stamp);
-    a->stamp = t;
+    Map *t = quarters ? stamp_turned(a->stamp.map, quarters) : stamp_mirrored(a->stamp.map);
+    map_free(a->stamp.map);
+    a->stamp.map = t;
     /* The readout means turned first, then mirrored -- the order the
      * channel's `stamp NAME SQ rotate N mirror` applies them, so what the
      * GM reads an agent can send. A mirror is last whenever it comes; a
      * turn after a mirror is the opposite turn before it. */
-    if (!quarters) a->stamp_mirrored = !a->stamp_mirrored;
-    else a->stamp_turns = ((a->stamp_turns + (a->stamp_mirrored ? -quarters : quarters)) % 4 + 4) % 4;
+    if (!quarters) a->stamp.mirrored = !a->stamp.mirrored;
+    else a->stamp.turns = ((a->stamp.turns + (a->stamp.mirrored ? -quarters : quarters)) % 4 + 4) % 4;
     char what[96];
     describe(a, what, sizeof what);
     app_set_status(a, what);
@@ -107,7 +107,7 @@ void app_stamp_key(App *a, Key k)
 {
     Editor *e = &a->ed;
     Map    *m = a->world.map;
-    if (!a->stamp) { e->mode = ED_NORMAL; return; }
+    if (!a->stamp.map) { e->mode = ED_NORMAL; return; }
 
     if (k.kind == KEY_ESC)   { e->mode = ED_NORMAL; e->count = 0; app_set_status(a, "stamp put away"); return; }
     if (k.kind == KEY_ENTER) { place(a); return; }
@@ -154,9 +154,9 @@ void app_stamp_command(App *a, const char *rest)
 
     if (!strcmp(w1, "save")) {
         if (nw != 2) { app_set_status(a, ":stamp save NAME keeps the stamp in hand"); return; }
-        if (!a->stamp) { app_set_status(a, "nothing in hand to keep - y copies first"); return; }
-        if (stamp_save(a->stamp, w2, err, sizeof err) < 0) { app_set_status(a, err); return; }
-        str_lcpy(a->stamp_name, w2, sizeof a->stamp_name);
+        if (!a->stamp.map) { app_set_status(a, "nothing in hand to keep - y copies first"); return; }
+        if (stamp_save(a->stamp.map, w2, err, sizeof err) < 0) { app_set_status(a, err); return; }
+        str_lcpy(a->stamp.name, w2, sizeof a->stamp.name);
         snprintf(msg, sizeof msg, "stamp %s kept", w2);
         app_note(a, msg);
         return;

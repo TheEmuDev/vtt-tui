@@ -84,9 +84,9 @@ void app_free(App *a)
     slog_close(&a->slog);
     net_stop(&a->net);
     ctl_stop(&a->ctl);
-    map_free(a->stamp);
-    stamp_show_free(&a->stamp_view);
-    a->stamp = NULL;
+    map_free(a->stamp.map);
+    stamp_show_free(&a->stamp.view);
+    a->stamp.map = NULL;
     ui_picker_free(&a->pick.list);
 }
 
