@@ -284,7 +284,8 @@ function status(m){
 function connect(){
   const k=new URLSearchParams(location.search).get('k')||'';
   /* Each socket's handlers name that socket, not the latest: an error
-   * from one being replaced must not close its successor. */
+   * from one being replaced must not close its successor (reconnect also
+   * drops the old one's handlers). */
   const s=ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws?k='+k+(me?'&n='+encodeURIComponent(me):''));
   s.binaryType='arraybuffer';
   s.onopen=()=>{status('connected');wake()};

@@ -18,7 +18,13 @@ file=$1 old=$2 new=$3
 shift 3
 [ -f "$file" ] || { echo "mutate: no file $file" >&2; exit 2; }
 
-keep=$(mktemp "${TMPDIR:-/tmp}/mutate.XXXXXX") || exit 2
+# The original under a fixed name: a run killed past its traps (SIGKILL)
+# leaves the file mutated, and the next run finds the original and says so.
+keep="${TMPDIR:-/tmp}/mutate.$(printf '%s' "$file" | tr / _).orig"
+if [ -e "$keep" ]; then
+    echo "mutate: a killed run left $file mutated; its original is $keep (cp -p it back, then rm it)" >&2
+    exit 2
+fi
 cp -p "$file" "$keep" || exit 2
 restore() {
     cp -p "$keep" "$file" && rm -f "$keep"

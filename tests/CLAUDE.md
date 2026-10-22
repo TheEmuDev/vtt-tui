@@ -10,7 +10,7 @@ docs/CODEMAP.md; `tests/run.c` is the table of suites (and `SLOW`, the ones `--f
   run.c's `SLOW` list, the five suites of real sockets and processes (about a minute). The
   line search's own counterexample tools are tools/shift/ (README.md).
 - `VTT_UPDATE_GOLDEN=1` regenerates golden frames; `VTT_REQUIRE_NODE=1` fails rather than
-  skips the page decoder test; `VTT_FOGDIFF_OPS=36000 build/run-tests` is the long fog
+  skips the suites that need node (`pagefeed`, `pageconn`, `netlag`'s page check); `VTT_FOGDIFF_OPS=36000 build/run-tests` is the long fog
   differential run.
 - A forked test child ends with `child_exit(rc)`, never `_exit`: LeakSanitizer never runs
   at `_exit`, so a leak in the child's code would pass (docs/reviews/2026-10-20-4-memory.md,

@@ -5,7 +5,8 @@
 // shown, and a screen wake lock that, as the spec says, is released whenever
 // the page is hidden and refused while it is. After every step: at most one
 // live socket, no retry pending while one lives, a lock held whenever the
-// page is visible with its socket open. Prints a line per failure and then
+// page is visible with its socket open, and never neither a socket nor a
+// retry. Prints a line per failure and then
 // "verified N checks", or exits 1 (HEALTH.md B15, B17).
 //
 //   node tests/page_conn.js PAGE
@@ -35,7 +36,8 @@ function world() {
       later(() => { this.readyState = 3; if (was === 0 && this.onerror) this.onerror({}); if (this.onclose) this.onclose({ code: 1006 }); });
     }
   }
-  function later(f) { const id = nextId++; timers.set(id, { at: now, f }); }
+  // A socket's own event, a turn later: not a timer of the page's.
+  function later(f) { const id = nextId++; timers.set(id, { at: now, f, event: true }); }
   const env = {
     WebSocket, document: doc, location: { protocol: 'http:', host: 'h:7793', search: '?k=123456' },
     URLSearchParams, encodeURIComponent, me: null, ws: null, retry: null,
@@ -63,7 +65,8 @@ function world() {
       }
       now = end;
     },
-    pending() { let n = 0; for (const t of timers.values()) if (t.at > now) n++; return n; },
+    // The page's own timers not yet run, one due now included.
+    pending() { let n = 0; for (const t of timers.values()) if (!t.event) n++; return n; },
     live() { return sockets.filter(s => s.readyState < 2 && (s.onclose || s.onopen)); },
     held() { return locks.filter(s => !s.released).length; },
     open(s) { s.readyState = 1; s.onopen && s.onopen(); },
@@ -80,6 +83,8 @@ async function step(w, name) {
   const live = w.live();
   check(live.length <= 1, name + ': one live socket at most, ' + live.length);
   check(live.length === 0 || w.pending() === 0, name + ': no retry pending while a socket lives');
+  // Never given up: a socket lives or a retry is coming.
+  check(live.length + w.pending() === 1, name + ': a socket or a retry, ' + live.length + '+' + w.pending());
   const ws = w.env.ws;
   if (!w.doc.hidden && ws && ws.readyState === 1) check(w.held() >= 1, name + ': visible and open, a lock held');
 }
@@ -136,6 +141,16 @@ async function main() {
     w.show(); await step(w, 'E shown');
     w.open(w.env.ws); await step(w, 'E up');
     check(w.live().length === 1 && w.status === 'connected', 'E: one socket once the server is back');
+  }
+  { // F: vtt down for 20 s, every attempt refused at once: the phone's battery
+    // is not spent on a tight loop (docs/REMOTE.md, the phone's resources)
+    const w = world();
+    for (let t = 0; t < 20000; t += 100) {
+      if (w.env.ws.readyState === 0) { w.env.ws.close(); w.tick(0); }
+      w.tick(100);
+    }
+    await step(w, 'F down 20 s');
+    check(w.sockets.length <= 11, 'F: one attempt every 2 s at most, ' + w.sockets.length + ' in 20 s');
   }
   console.log(failed ? failed + ' of ' + checks + ' checks failed' : 'verified ' + checks + ' checks');
   process.exit(failed ? 1 : 0);
