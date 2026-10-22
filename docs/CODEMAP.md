@@ -196,6 +196,7 @@ The 2026-09-28 check's open items are there, in a proposed order.
 - **The line search's candidate rules are at two**: `shift_search`'s (a line too many only an empty line, a neighbor's copy or the last; a lost row empty or a neighbor's copy; runs once) and `joint_cands`' (any line too many, runs once; a lost row empty or the copy below), and a section read moved is at two: `shift_cand` and `shift_row`'s alt branch. A third reader of a moved section extracts one first.
 - **A place's name refused is at two** (2026-10-20): `world_area_name` (world_ops.c, "an area's name is ...") and `room_box` (request.c, "a room's name is ..."). Step 6 adds a `world_*` check a kind; a third copy of a name's rule makes `room_box` call `world_area_name` first.
 - **Write beside, then rename, is at two**: `write_map` (mapio.c, `PATH.PID.tmp`, flushed) and `import.c`'s card file (`PATH.tmp`). A third extracts one helper first, and with it one naming of the temporary file.
+- **The one-time exact replace is at two** (2026-10-22): tools/mutate.sh and tools/pagemutate.sh each carry the python that counts the old text, refuses unless once, and replaces it. A third mutation tool moves it to one script both call.
 - **Squares and regions are parsed in two places:** `maptools_region` (clips,
   takes a bare row `5:6`) and app_ctl.c's `region` (strict, refuses off-map).
   Two is within the rule of three; a third caller makes them one function

@@ -7,12 +7,18 @@
 #   tools/pagemutate.sh 'old text' 'new text' [PAGE]     (PAGE: web/index.html)
 #
 # The old text must occur exactly once. Prints "caught" with the failing
-# checks, or "SURVIVED"; exits 0 caught, 1 survived, 2 not made. The page is
-# never touched: the mutant is a copy in a temporary directory, removed.
+# checks, or "SURVIVED"; exits 0 caught, 1 survived, 2 not made. A mutant
+# that does not parse, or runs past PAGEMUTATE_TIMEOUT (30 s), is caught too:
+# the page would be broken. The page is never touched: the mutant is a copy
+# in a temporary directory, removed. PAGE is relative to where it is run.
 set -u
-cd "$(dirname "$0")/.."
 [ $# -ge 2 ] || { echo "usage: tools/pagemutate.sh 'old' 'new' [PAGE]" >&2; exit 2; }
-page=${3:-web/index.html}
+if [ $# -ge 3 ]; then
+    [ -f "$3" ] || { echo "pagemutate: no file $3" >&2; exit 2; }
+    page="$(cd "$(dirname "$3")" && pwd -P)/$(basename "$3")"
+fi
+cd "$(dirname "$0")/.."
+page=${page:-web/index.html}
 dir=$(mktemp -d "${TMPDIR:-/tmp}/pagemutate.XXXXXX") || exit 2
 trap 'rm -rf "$dir"' EXIT
 python3 -I -c '
@@ -23,10 +29,12 @@ c = s.count(o)
 if c != 1:
     sys.exit("pagemutate: the old text occurs %d times in %s, not once" % (c, p))
 open(out, "w").write(s.replace(o, n, 1))' "$page" "$1" "$2" "$dir/page.html" || exit 2
-if out=$(node tests/page_conn.js "$dir/page.html" 2>&1); then
+out=$(timeout "${PAGEMUTATE_TIMEOUT:-30}" node tests/page_conn.js "$dir/page.html" 2>&1)
+rc=$?
+if [ $rc = 0 ]; then
     echo "SURVIVED: $(printf '%s\n' "$out" | tail -1)"
     exit 1
 fi
 printf '%s\n' "$out" | awk '/FAIL|Error/' | head -5
-echo "caught"
+[ $rc = 124 ] && echo "caught: the mutant ran past ${PAGEMUTATE_TIMEOUT:-30} s" || echo "caught"
 exit 0
