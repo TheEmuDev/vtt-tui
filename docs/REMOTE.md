@@ -56,6 +56,10 @@ measured against them.
   `FULL` on reconnect. *Since 2026-10-21 (docs/V2.md, step 7):* a stalled client is
   no longer dropped; frames are withheld from it once it is a FULL behind, and it is
   sent one FULL when it reads again. A drop vtt makes is told to the GM.
+  Checked on a phone (2026-10-21, `tools/phonecheck.sh`; docs/PERFORMANCE.md, *A phone that
+  falls behind*): with the screen off it is caught up as built; behind the home screen,
+  Android's Chrome closes the socket within about 5 s and the page reconnects about 5 s
+  after it is shown again (HEALTH.md B15).
 - **The watcher is `vtt --watch host:port`**: the same decoder painting into
   the same renderer, at the GM's size, centered or clipped. `q` closes it.
 - **Access.** LAN only, a join code in the URL, at most eight clients,

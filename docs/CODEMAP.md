@@ -107,8 +107,10 @@ tools/codehelp.py   after a help line changes: rewrites README's code table's wh
 tools/mutate.sh FILE 'old' 'new' SUITE...   a mutation check: the old text once, rebuilt, the suites run, the file always put back; caught or SURVIVED
 tools/sandbox.sh CMD...   a command in sandbox_enter's environment (`. tools/sandbox.sh; sandbox_env DIR` in a script); suite `sandbox` holds the two alike
 tools/sockcap.py [SNDBUF...]   what a socket takes toward a peer that never reads, with and without SO_SNDBUF
+tools/phonecheck.sh   manual: the user's Android phone over USB (adb, Chrome's DevTools socket) and the Wi-Fi: a FULL's time from the socket's open, vtt's SO_SNDBUF against the kernel's, alternating; the screen off (unlocked by hand) and Chrome behind the home screen, then the page's screen against a fresh load's. tools/phonecheck.js drives the phone's Chrome. Needs the port let through a firewall (ufw: from the LAN to port 7793)
 tools/review-brief.md   the standing part of every reviewer's brief; docs/SCRATCH.md the ledger of scratch work and what became a tool
 tools/shift/   the line search's counterexample generators, undamaged-file scan and judge, from its reviews (README.md)
+ONLY='regex' tools/perf.sh   only the scenarios whose label matches: the A/B of a cost-per-call row whose heaviest scenario differs between runs, that scenario alone under both binaries (BIN=...)
 tools/vs1x.sh [REF]  2.0 against 1.x: main's binary (or REF) and this tree's, perf.sh three times each alternating, both on the repo's disk; tools/compare.py prints the shared rows side by side -> PERFORMANCE.md, *2.0 against 1.x*; KEEP=DIR leaves both median tables (new.md is this tree's tables for PERFORMANCE.md, no run of its own)
 tools/machine.sh  the `Machine:` line every published table carries (perf.sh, saves.sh, pagebench.sh print it; median.py keeps it)
 VTT_FOGDIFF_OPS=36000 ./build/run-tests   the long run of the fog differential test
@@ -119,7 +121,7 @@ tools/embed.sh  after editing web/index.html or docs/AGENTS.md; tools/blit_wasm.
 make install-skill  tools/skill/SKILL.md to ~/.claude/skills/vtt/ (SKILLDIR= elsewhere)
 ./vtt map.vtt --serve 7777      serve; a raw client: printf 'VTT1\n' | nc 127.0.0.1 7777
 ./vtt map --bench keys --bench-clients 4   the frame with four watchers attached
-./vtt map --bench keys --bench-clients 4 --bench-stalled   the last never reads: what vtt queues for it, said at the end
+./vtt map --bench keys --bench-clients 4 --bench-stalled   the last reads only once frames are withheld: the most vtt queued for it and its catch-ups, said at the end
 ./vtt map.vtt --script keys --dump-frame --size 100x30     render one frame as text
 ./vtt map.vtt --script keys --dump-frame --cells --players   the same with every cell's colors (`rnd_dump_cells`), and the players' frame (`app_draw_view`; blank outside play mode, as `app_frame` sends it) in place of the GM's
 ./vtt map.vtt --bench keys --bench-loops 400 --trace t.json  headless timing + Chrome trace

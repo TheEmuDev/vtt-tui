@@ -26,6 +26,10 @@ set -eu
 
 BIN=${BIN:-./vtt}
 LOOPS=${LOOPS:-400}
+# ONLY='regex': only the scenarios whose label matches (grep -E). For the
+# A/B of a cost-per-call row whose heaviest scenario differs between runs:
+# that scenario alone, under both binaries (BIN=...), alternating.
+ONLY=${ONLY:-}
 
 [ -x "$BIN" ] || { echo "no $BIN -- run make first" >&2; exit 1; }
 
@@ -225,6 +229,7 @@ PLAN
 # run LABEL MAP SIZE KEYS [EXTRA FLAGS]
 run() {
     _label=$1 _map=$2 _size=$3 _keys=$4 _extra=${5:-}
+    [ -z "$ONLY" ] || printf '%s\n' "$_label" | grep -Eq -- "$ONLY" || return 0
     printf '%s' "$_keys" > "$DIR/keys"
 
     # A map of - is none: the bench starts on the menu.
@@ -344,7 +349,12 @@ run "play, counters"       "$MOB"    80x24  ':play\rtsvhp 9\r><><><><'
 run "play, clocks"         "$MOB"    80x24  ':play\r:clock Dragon 6\r:clock Ritual 8\r:tick Dragon 2\r:tick -2\r'
 run "play, 1 watcher"      "$MOB"    80x24  ':play\rjjllkkhh' "--bench-clients 1"
 run "play, 4 watchers"     "$MOB"    80x24  ':play\rjjllkkhh' "--bench-clients 4"
-run "play, a phone that stops reading" "$MOB" 80x24 ':play\rjjllkkhh' "--bench-clients 4 --bench-stalled"
+# One of the four reads only once frames are withheld from it, then is caught
+# up with a FULL (net.catch_up): at 80x24 the kernel holds ~3,000 frames before
+# the first, so 800 loops, for ten catch-ups within the trace's cap.
+_loops=$LOOPS; LOOPS=800
+run "play, a phone that falls behind" "$MOB" 80x24 ':play\rjjllkkhh' "--bench-clients 4 --bench-stalled"
+LOOPS=$_loops
 run "play, 4 watchers, differing" "$MOB" 80x24 ':play\rtsnhidden\rjjllkkhh' "--bench-clients 4"
 run "play, hidden, 4 watchers" "$HIDMOB" 80x24 ':play\rjjllkkhh' "--bench-clients 4"
 run "play, camera party, 4 watchers" "$MOB" 80x24 ':play\r:player camera party\rt\rllllhhhh\r' "--bench-clients 4"

@@ -94,7 +94,7 @@ static void usage(void)
         "  --no-pings         ignore taps from the phones on that server\n"
         "  --watch HOST:PORT  mirror a serving vtt in this terminal, read-only\n"
         "  --bench-clients N  attach N loopback watchers to a --bench run\n"
-        "  --bench-stalled    the last of them never reads: what vtt queues for it\n"
+        "  --bench-stalled    the last of them reads only once frames are withheld from it\n"
         "  --bench-names      those watchers are named phones, P1, P2...\n"
         "  --bench-record FILE  save the stream the first watcher is sent (tools/pagebench.sh)\n"
         "  --bench-pings      and have each of them ping every frame\n"
@@ -462,6 +462,8 @@ static int run_headless(const Options *o)
         }
 
         uint64_t bench_clock_ms = 1000;
+        unsigned bench_wakes = 0;           /* --bench-stalled: the times its watcher read, */
+        size_t   bench_queued = 0;          /* and the most vtt held for it */
         unsigned long allocs0 = 0;          /* the count when the second loop starts: the first is setup */
         for (int loop = 0; loop < o->bench_loops && a.running; loop++) {
             if (loop == 1) allocs0 = alloc_calls();
@@ -536,10 +538,27 @@ static int run_headless(const Options *o)
                 if (ncf) {
                     prof_set_net((uint32_t)net_clients(&a.net), a.net.frame_bytes);
                     uint8_t sink[65536];
-                    for (int i = 0; i < ncf - (o->bench_stalled && ncf > 1); i++) {
+                    /* The stalled watcher reads its socket dry once vtt
+                     * withholds frames from it, a phone whose screen comes
+                     * back on: vtt drains its queue and catches it up
+                     * (net.catch_up). */
+                    int stalled = o->bench_stalled && ncf > 1, wakes = 0;
+                    for (int i = 0; stalled && i < a.net.ncl; i++) {
+                        wakes |= a.net.cl[i].behind;
+                        size_t q = a.net.cl[i].out_len - a.net.cl[i].out_off;
+                        if (q > bench_queued) bench_queued = q;
+                    }
+                    bench_wakes += (unsigned)wakes;
+                    for (int i = 0; i < ncf - (stalled && !wakes); i++) {
                         ssize_t got;
                         while ((got = read(cfd[i], sink, sizeof sink)) > 0)
                             if (i == 0 && recf) fwrite(sink, 1, (size_t)got, recf);
+                    }
+                    if (wakes) {
+                        struct pollfd fds[1 + NET_MAX_CLIENTS];
+                        int nf = net_pollfds(&a.net, fds, 1 + NET_MAX_CLIENTS);
+                        poll(fds, (nfds_t)nf, 0);
+                        net_service(&a.net, fds, nf, bench_clock_ms);
                     }
                 }
             }
@@ -556,19 +575,11 @@ static int run_headless(const Options *o)
             }
         }
         free(out_bytes);
-        /* What vtt holds for the watcher that never read: its queue, past
-         * what the kernel took (a FULL's worth at most, by the lag bound). */
-        if (o->bench_stalled && ncf > 1) {
-            size_t q = 0;
-            int    behind = 0;
-            for (int i = 0; i < a.net.ncl; i++)
-                if (a.net.cl[i].out_len - a.net.cl[i].out_off >= q) {
-                    q = a.net.cl[i].out_len - a.net.cl[i].out_off;
-                    behind = a.net.cl[i].behind;
-                }
-            fprintf(stderr, "vtt: the stalled watcher: %zu bytes queued by vtt%s, a FULL %zu; %u dropped\n",
-                    q, behind ? ", frames withheld" : "", a.net.full_len, a.net.dropped);
-        }
+        /* The most vtt held for the stalled watcher: its queue, past what
+         * the kernel took (a FULL's worth at most, by the lag bound). */
+        if (o->bench_stalled && ncf > 1)
+            fprintf(stderr, "vtt: the stalled watcher: at most %zu bytes queued by vtt, a FULL %zu; "
+                    "caught up %u times; %u dropped\n", bench_queued, a.net.full_len, bench_wakes, a.net.dropped);
         for (int i = 0; i < ncf; i++) close(cfd[i]);
         if (recf) fclose(recf);
         free(ctl_req);

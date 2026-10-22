@@ -398,6 +398,7 @@ static void client_named(Net *n, int i, uint64_t now_ms);
  * memory said no. */
 static int enc_full(Net *n)
 {
+    PROF_ZONE("net.enc_full");
     wire_enc_full(&n->enc, n->rnd);
     if (n->enc.overflow) {
         if (wire_enc_resize(&n->enc, wire_full_max(n->rnd->w, n->rnd->h)) < 0) return -1;
