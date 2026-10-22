@@ -58,8 +58,8 @@ measured against them.
   sent one FULL when it reads again. A drop vtt makes is told to the GM.
   Checked on a phone (2026-10-21, `tools/phonecheck.sh`; docs/PERFORMANCE.md, *A phone that
   falls behind*): with the screen off it is caught up as built; behind the home screen,
-  Android's Chrome closes the socket within about 5 s and the page reconnects about 5 s
-  after it is shown again (HEALTH.md B15).
+  Android's Chrome closes the socket within about 5 s; the page makes a fresh socket as it is
+  shown again, open within 32-72 ms (5 s before: HEALTH.md B15, closed).
 - **The watcher is `vtt --watch host:port`**: the same decoder painting into
   the same renderer, at the GM's size, centered or clipped. `q` closes it.
 - **Access.** LAN only, a join code in the URL, at most eight clients,

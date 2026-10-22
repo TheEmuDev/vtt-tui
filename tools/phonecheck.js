@@ -30,6 +30,7 @@ const HOOK = `(() => {
   const W = window.WebSocket, pc = window.__pc = { msgs: [], vis: [], opens: [] };
   window.WebSocket = function (u, p) {
     const s = new W(u, p);
+    (pc.made = pc.made || []).push(performance.now());
     s.addEventListener('open', () => pc.opens.push(performance.now()));
     s.addEventListener('close', e => (pc.closes = pc.closes || []).push([performance.now(), e.code]));
     s.addEventListener('message', e => {
@@ -204,6 +205,7 @@ async function lock(tab, url, fifo, key, seconds, away) {
     after_visible: { msgs: after.length, bytes: bytes(after), fulls: after.filter(m => m[2] === FULL).length,
                      ms_to_last: after.length ? +(after[after.length - 1][0] - visible[0]).toFixed(1) : 0 },
     screen: seen, fresh, same: seen !== null && seen === fresh, differ,
+    made: (pc.made || []).map(t => +t.toFixed(0)), open_at: pc.opens.map(t => +t.toFixed(0)),
     opens: pc.opens.length, closes: (pc.closes || []).map(c => [+c[0].toFixed(0), c[1]]),
     reopened_ms: pc.opens.length > 1 ? +(pc.opens[pc.opens.length - 1] - visible[0]).toFixed(1) : null,
     hidden_at: hidden && +hidden[0].toFixed(0), visible_at: +visible[0].toFixed(0),

@@ -88,7 +88,7 @@ const env = {
   WebAssembly: process.env.MODULE === 'js' ? undefined
     : process.env.MODULE === 'plain' ? { Module: WebAssembly.Module, Memory: WebAssembly.Memory, Instance: WebAssembly.Instance, validate: () => false }
     : WebAssembly,
-  document: { getElementById: id => (els[id] ||= id === 'c' ? canvas() : el()), createElement: t => t === 'canvas' ? canvas() : el() },
+  document: { addEventListener() {}, getElementById: id => (els[id] ||= id === 'c' ? canvas() : el()), createElement: t => t === 'canvas' ? canvas() : el() },
 };
 env.window = env;
 

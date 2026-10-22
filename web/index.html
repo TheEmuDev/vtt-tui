@@ -252,7 +252,7 @@ nb.textContent=me||'who?';
 function setMe(v){
   me=v;try{localStorage.setItem('vtt-name',v)}catch(e){}
   q.hidden=true;nb.textContent=v||'who?';
-  if(ws){ws.onclose=ws.onerror=null;ws.close();clearTimeout(retry);connect()}
+  if(ws)reconnect();
 }
 function names(s){
   ql.textContent='';
@@ -292,6 +292,14 @@ function connect(){
   s.onclose=()=>{status('disconnected · retrying');retry=setTimeout(connect,2000)};
   s.onerror=()=>s.close();
 }
+/* Now, not on the retry's timer: the old socket's handlers go first, so it
+ * cannot schedule a second. */
+function reconnect(){ws.onclose=ws.onerror=null;ws.close();clearTimeout(retry);connect()}
+/* Android's Chrome closes a page's socket a few seconds after it goes
+ * behind the home screen; the retry's socket, made while hidden, opened
+ * some 15 s later, 5 s after the page was back (docs/HEALTH.md B15).
+ * Back in view with no open socket, a fresh one at once. */
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&ws&&ws.readyState!==1)reconnect()});
 connect();
 
 /* ---- pointing: a tap names the cell under it, and the GM's vtt decides

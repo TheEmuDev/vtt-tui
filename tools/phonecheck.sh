@@ -7,6 +7,8 @@
 #   tools/phonecheck.sh                 every check below
 #   ONLY=fulls tools/phonecheck.sh      the FULLs only; ONLY=away or ONLY=lock, that one only
 #   LOADS=10 ROUNDS=3 OFF=15 KEYS=+-    loads a turn; turns a buffer; seconds the screen is off; the GM's keys meanwhile
+#   VIA=usb                             the phone reaches vtt over the USB cable (adb reverse), not
+#                                       the Wi-Fi: no firewall rule needed; the times are not the Wi-Fi's
 #
 # fulls: a sandboxed vtt serves a map in a terminal of 200x50 and of 400x170,
 #   first as shipped (SO_SNDBUF 128 KB, src/net.c) and then with the kernel's
@@ -32,6 +34,7 @@ ROUNDS=${ROUNDS:-3}
 OFF=${OFF:-15}           # not SECONDS: bash's own, the seconds since it started
 CDP=${CDP:-9333}
 PORT=${PORT:-7793}
+VIA=${VIA:-wifi}
 [ -x "$BIN" ] || { echo "no $BIN -- run make first" >&2; exit 1; }
 for t in adb node cc ss script curl python3 ip seq; do
     command -v "$t" >/dev/null || { echo "phonecheck needs $t" >&2; exit 1; }
@@ -55,6 +58,7 @@ stop_vtt() {
 cleanup() {
     stop_vtt
     adb forward --remove "tcp:$CDP" >/dev/null 2>&1 || true
+    [ "$VIA" = usb ] && adb reverse --remove "tcp:$PORT" >/dev/null 2>&1
     rm -rf "$DIR"
 }
 trap cleanup EXIT
@@ -64,6 +68,7 @@ sandbox_env "$DIR"
 . tools/genmap.sh
 
 adb forward "tcp:$CDP" localabstract:chrome_devtools_remote >/dev/null
+[ "$VIA" = usb ] && adb reverse "tcp:$PORT" "tcp:$PORT" >/dev/null
 curl -s "http://127.0.0.1:$CDP/json/version" >/dev/null 2>&1 || {
     adb shell am start -n com.android.chrome/com.google.android.apps.chrome.Main >/dev/null
     sleep 3
@@ -106,7 +111,9 @@ start_vtt() {
     done
     VPID=$(ps -o pid= --ppid "$SPID" | awk 'NR == 1 { print $1 }')
     [ -n "$_k" ] && [ -n "$VPID" ] || { echo "vtt did not start serving (its terminal: $DIR/term)" >&2; exit 1; }
-    URL="http://$(ip -4 route get 8.8.8.8 | awk '{ for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1) }'):$PORT/?k=$_k"
+    _ip=127.0.0.1
+    [ "$VIA" = usb ] || _ip=$(ip -4 route get 8.8.8.8 | awk '{ for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1) }')
+    URL="http://$_ip:$PORT/?k=$_k"
     printf ':play\r' > "$DIR/in"
     sleep 0.5
     _h=${URL#http://}; _h=${_h%%/*}
@@ -133,8 +140,12 @@ print("%7.1f ms (%.1f-%.1f), %d loads | %s" % (statistics.median(ms), ms[0], ms[
 
 echo "$(tools/machine.sh "$DIR")"
 echo "Phone: $(adb shell getprop ro.product.model | tr -d '\r'), Android $(adb shell getprop ro.build.version.release | tr -d '\r'), Chrome $(curl -s "http://127.0.0.1:$CDP/json/version" | python3 -c 'import json,sys; print(json.load(sys.stdin)["Browser"].split("/")[-1])')"
-echo "Link: $(adb shell dumpsys wifi | tr -d '\r' | awk '/mWifiInfo/ { print; exit }' | tr ',' '\n' |
-    awk '/^ (Wi-Fi standard|RSSI|Tx Link speed|Rx Link speed|Frequency):/ { sub(/^ /, ""); printf "%s%s", s, $0; s = ", " }')"
+if [ "$VIA" = usb ]; then
+    echo "Link: USB (adb reverse tcp:$PORT)"
+else
+    echo "Link: $(adb shell dumpsys wifi | tr -d '\r' | awk '/mWifiInfo/ { print; exit }' | tr ',' '\n' |
+        awk '/^ (Wi-Fi standard|RSSI|Tx Link speed|Rx Link speed|Frequency):/ { sub(/^ /, ""); printf "%s%s", s, $0; s = ", " }')"
+fi
 echo
 
 if [ "${ONLY:-fulls}" = fulls ] || [ -z "${ONLY:-}" ]; then

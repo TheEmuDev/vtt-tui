@@ -1499,12 +1499,24 @@ cell and color, with the one a fresh load draws:
 - *Chrome behind the home screen, then brought back.* Chrome closes the page's socket about 5 s
   after it goes to the background (`close` 1006, no close frame; the phone's TCP still
   acknowledged vtt's bytes after it). The page reconnected 5.2 s (200x50) and 5.1 s (400x170)
-  after it was visible again, then took a FULL; the same screen. Why 5 s is not shown: the
-  page's retry is a 2 s timer (web/index.html), each run recorded one close and no failed
-  attempt, so my guess is that Chrome resumes the page's timers late; a timeline of the timer's
-  firing (phonecheck's `DEBUG=1`, with the timer hooked) would settle it.
-  Until then it shows the old screen and "disconnected · retrying". A finding: the page could
-  reconnect when it becomes visible rather than wait for the timer; not built (HEALTH.md).
+  after it was visible again, then took a FULL; the same screen. Meanwhile it showed the old
+  screen and "disconnected · retrying" (HEALTH B15).
+- *Why 5 s, and the fix (2026-10-21).* With each socket's making recorded: the close reached the
+  page while hidden, its 2 s retry made a socket at 9.2-9.8 s, still hidden, and that socket
+  opened at 24.5-25.2 s, some 15 s after it was made. My guess, not shown: the background app's
+  connection attempt is held and TCP retries the SYN at 1, 2, 4 and 8 s, which sums to 15. The
+  page now makes a fresh socket when it is shown with none open (web/index.html, 2 bytes more
+  than the first try, 11,790 sent). Over the Wi-Fi, the old page and the new alternated, the
+  same Pixel and link (11ax, 5 GHz, RSSI -50):
+
+  | page | reopened after it was shown | last message after it was shown | runs |
+  |---|---|---|---|
+  | before (be7d103) | 4.9-5.8 s | 4.9-5.6 s | 10 |
+  | after | 32-72 ms | 54-136 ms | 6 |
+
+  Every run ended on the screen a fresh load draws. Over USB (`VIA=usb`, adb reverse, cable or
+  wireless debugging) Chrome never closed the socket: the hidden page took all 150 frames, so
+  this check needs the Wi-Fi.
 
 ## 2.0 against 1.x
 
@@ -1783,7 +1795,7 @@ a plain function with the stubs as parameters.
 | `--bench-loops N` | more repetitions when a number looks noisy |
 | `ONLY='regex' tools/perf.sh` | only the scenarios whose label matches; with `BIN=`, the A/B of one row's scenario under two binaries |
 | `tools/stalled.sh [LOOPS]` | the row `play, a phone that falls behind` once, untimed, in the sandbox: the bench's line, the most vtt held for the stalled watcher, the FULL then, the catch-ups |
-| `tools/phonecheck.sh` | manual: the page on the user's Android phone over the Wi-Fi (adb, Chrome's DevTools socket): a FULL's time, the send buffer A/B, the screen off and Chrome in the background |
+| `tools/phonecheck.sh` | manual: the page on the user's Android phone over the Wi-Fi (adb, Chrome's DevTools socket): a FULL's time, the send buffer A/B, the screen off and Chrome in the background; `VIA=usb` over adb reverse, no firewall rule (Chrome then keeps a background socket open) |
 | `make fuzz` | not a timing tool: libFuzzer on the map loader, the one untrusted input |
 | `tools/sight.sh [bin]` | `fog.sight` per fog scenario, which the zone table cannot show |
 | `--bench-clients N` | attaches N loopback watchers to a bench run, so a row can carry the remote view's cost |
