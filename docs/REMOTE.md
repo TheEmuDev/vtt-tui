@@ -177,3 +177,100 @@ drawing. Zone `net.cmd`; a bench with a scripted client sending steps.
 Model streaming (each phone drawing at its own size) stays out of scope: the
 page fits the GM's frame to the screen well enough, and the players' frame
 gets the privacy without it.
+
+## The page revisited (2026-10-22): the plan
+
+**Status:** written 2026-10-22 for the user's sign-off (docs/V2.md *Next*, item 4); nothing
+built. Asked by the user: "revisit the phone-side code and see if it can be redesigned or
+improved in some way that would give us more to work with"; a phone that opens the address
+without the join code is asked for it; and, made a rule the same day, the page respects the
+phone's CPU, memory and battery (*Budgets*). The byte table and options below are a planning
+agent's, measured with tools/embed.sh's own cut unless marked an estimate.
+
+### Where the 11,816 bytes go (measured)
+
+| part | sent bytes |
+|---|---|
+| HTML head, CSS, DOM | 2,017 |
+| the decoder `feed()` | 1,227 |
+| `layout` | 1,186 |
+| tiles (`tile`, `clearTiles`) | 1,145 |
+| `present`, `schedule`, `touch` | 875 |
+| the connection and the wake lock | 757 |
+| the name sheet | 756 |
+| `blitRow` and its JS copy | 633 |
+| the glyph atlas | 625 |
+| the two WebAssembly modules (base64) | 599 |
+| handout, whisper, status, pointing, globals, the rest | 1,996 |
+
+### The plan, in the recommended order
+
+1. **The palette record stops throwing the tile cache away** (run time; the phone's battery).
+   Today every `P` record (web/index.html:215) runs `clearTiles()` -- a fill of 65,536 slots --
+   and forces a full repaint, so the first time any new color appears mid-session every phone
+   rebuilds its whole screen, and a FULL with N palette entries fills the array N times. Built:
+   a record whose color is the one held changes nothing; a changed one marks the cache stale,
+   and the cache is cleared once at the end of the message. *Speed of light:* a palette record
+   is 4 bytes stored; a clear is owed only when a color a tile was drawn with changed.
+   *Expected:* no clear for a repeated color, one clear a message otherwise. About +40 bytes
+   (estimate). *Measured with:* a `tools/pagebench.sh` scenario of a new color mid-session,
+   before and after; `test_page_feed` keeps the drawing equal.
+2. **The retry backs off while vtt cannot be reached** (the phone's battery). Today a page
+   whose server is gone tries every 2 s without end (docs/REMOTE.md, *Budgets*). Built: 2 s,
+   doubling to a cap (**30 s recommended**; the user's decision), back to 2 s once connected;
+   being shown still reconnects at once (B15), so a long cap never delays a player who looks.
+   *Expected:* attempts at 2, 6, 14, 30 and 60 s -- 5 in the first minute -- then 2 a
+   minute, against 30 a minute today (worked out from the delays). Suite `pageconn`'s scenario F tightened to the backoff. About +30 bytes.
+3. **The join code asked for on a page of its own** (the user's request). Today a phone that
+   opens `http://IP:PORT/` without `?k=` gets a plain-text 403. Built: that 403 becomes a small
+   HTML form -- a number field and a button, `GET /?k=CODE`, no JavaScript -- and a wrong code
+   gets the same form saying so. It is its own response, not part of the 12 KB page (about 300
+   bytes, estimate). **Wrong codes are not limited today** (src/net.c:697-701, checked): with a
+   form inviting typing, the plan adds a limit of wrong codes a minute across all addresses
+   (**10 recommended**; a right code is never held back, so the limit cannot lock out a player
+   with the code; at 10 a minute half the million codes take about 35 days, estimate). Tests:
+   the form served without a code, a wrong code, the limit, a right code past the limit.
+   Related, the user's decision: **a fixed default port** (today a new port at each start
+   unless `:serve PORT`), so a player can bookmark `http://IP:PORT/` and type only the code.
+4. **The page sent compressed** (bytes; the user's decision: the 12 KB rule would mean the
+   bytes a browser receives). gzip -9 takes the page from 11,816 to **5,330 bytes** (measured),
+   freeing about 6.5 KB for whatever comes next. vtt needs no zlib: tools/embed.sh stores a
+   second, pre-compressed constant (python's `gzip.compress(..., mtime=0)`, so the output is
+   the same every time); the server sends it with `Content-Encoding: gzip` and `Vary:
+   Accept-Encoding` when the request accepts gzip (every browser does over http), the raw page
+   otherwise (curl, the tests). *Speed of light:* one write of about 5.5 KB instead of 12 KB;
+   the phone inflates it in about 0.2 ms (estimate: 44 µs here, measured with python's zlib).
+   The binary grows about 5.3 KB. Tests: the budget check moves to the compressed length; node's
+   `zlib.gunzipSync` must give back the page exactly. Once in, "spend nothing shaving bytes"
+   holds again.
+5. **Small run-time fixes** (each a few bytes): the window's `resize` debounced as the
+   visual viewport's already is (line 201: a rotation can lay out, and allocate the wasm
+   memory, several times); `status()` writes `st.hidden` only when it changes (today once a
+   frame); `feed` reuses one `DataView` rather than making one a message. *Measured with:*
+   pagebench, before and after.
+6. **The tile arena's size, measured first.** It is sized for 4,096 tiles (about 3.3 MB at
+   200x50 on the user's phone, estimate) while the code's comment says a frame has a few
+   hundred. Built first: the high-water mark of tiles in use, shown with `&stats`; the size is
+   then the user's decision, on that number.
+7. **The wake lock** (HEALTH B16): the stand-in's screen test is on 2026-10-23; one run each
+   showed 2.5-3x Chrome's idle CPU, against the rule, so it is likely rejected and the README's
+   advice stands.
+
+### Not taken, and why
+
+- Dropping old Safari's plain WebAssembly (267 bytes) or the JS copy (about 216): every player
+  on an old device would pay 20x the copy cost; with compression the bytes do not matter.
+- Deriving the plain module from the SIMD one at load (about 190 bytes): unproven, for the
+  same few devices.
+- Whitespace minification (618 raw, about 146 compressed) and shorter names (about 1.0-1.3 KB):
+  a second minifier in C to keep `embed_cut` alike, and a page no one can read on the phone.
+- Rarely used UI in a second request, or sent over the WebSocket: breaks "one request", or
+  changes the wire, for about 2 KB that compression frees anyway.
+
+### Decisions for the user
+
+1. Compression, and the 12 KB rule redefined as the compressed bytes sent (recommended: yes).
+2. The retry's cap (recommended 30 s).
+3. The wrong-code limit (recommended 10 a minute) and a fixed default port (recommended:
+   yes, 7793 when free, a new one when not).
+4. The arena's size, once item 6 has measured it.
