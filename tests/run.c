@@ -153,6 +153,7 @@ int main(int argc, char **argv)
         { "watchaddr",  test_watch_target },
         { "damage",     test_loader_damage },
         { "pagefeed",   test_page_feed },
+        { "pageconn",   test_page_conn },
         { "netedges",   test_net_edges },
         { "netlag",     test_net_lag },
         { "netbig",     test_net_big },

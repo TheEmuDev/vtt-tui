@@ -2137,3 +2137,36 @@ void test_net_edges(void)
     rnd_free(&r);
 }
 
+
+/* The page's connection code (HEALTH.md B15, B17) under tests/page_conn.js:
+ * a stand-in Chrome's socket, timers, visibility and screen wake lock, the
+ * page's own connect/reconnect/show code run as served. */
+void test_page_conn(void)
+{
+    CASE("the page's connection: one live socket, no stray retry, a fresh socket when shown with none open, the wake lock again on show");
+    if (system("command -v node >/dev/null 2>&1") != 0) {
+        CHECK(getenv("VTT_REQUIRE_NODE") == NULL);
+        printf("  (skipped: no node to run the page's connection code)\n");
+        return;
+    }
+    Sandbox sb = sandbox_enter("pageconn");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) return;
+    char page[640], cmd[1000];
+    snprintf(page, sizeof page, "%s/page.html", sb.dir);
+    FILE *pg = fopen(page, "w");
+    CHECK(pg != NULL);
+    if (pg) { fwrite(WEBPAGE, 1, WEBPAGE_LEN, pg); fclose(pg); }
+    snprintf(cmd, sizeof cmd, "node tests/page_conn.js '%s' 2>&1", page);
+    FILE *pp = popen(cmd, "r");
+    char line[512], last[512] = "";
+    if (pp) {
+        while (fgets(line, sizeof line, pp)) {
+            if (strncmp(line, "verified", 8)) printf("  %s", line);
+            snprintf(last, sizeof last, "%s", line);
+        }
+        CHECK_EQ(pclose(pp), 0);
+    }
+    CHECK(strncmp(last, "verified", 8) == 0);
+    sandbox_leave(&sb);
+}
