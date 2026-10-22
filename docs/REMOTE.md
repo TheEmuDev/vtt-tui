@@ -22,6 +22,7 @@ measured against them.
 | client memory | one cell buffer plus one glyph atlas, both allocated once |
 | client, per keystroke frame | 0.5 ms on a mid-range phone; a full 200×50 frame in 5 ms |
 | latency added by our code | one write per frame per client, sent the moment the GM's frame is |
+| the phone's resources | a rule (the user, 2026-10-22): the page spends the phone's CPU, memory and battery only on what the players see, so they get the best experience we can give. Nothing runs on a timer or a loop of its own while the screen is still (today every timer starts from an event -- a frame, a resize, a close -- except that while vtt cannot be reached the page retries every 2 s without end: a backoff is in the page plan, docs/V2.md *Next*); a feature that costs the phone idle work (HEALTH B16's video stand-in measured 2.5-3x Chrome's idle CPU in one run each) needs that cost measured first and is weighed against this rule |
 
 ## Shape
 

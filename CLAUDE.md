@@ -40,6 +40,7 @@ prohibitions only, under 150 lines. Reference lives where it is read on demand.
 - **The phone page stays inside one round trip** (2026-10-04): under 12 KB as sent
   (docs/REMOTE.md). Below the limit spend nothing on shaving bytes; spend it on the page's
   JavaScript being near optimal at run time. Never be complacent: performance slips slowly.
+  **Respect the phone's resources** (2026-10-22): CPU, memory, battery; the players get the best experience we can give.
 - **Push when convenient** (2026-10-20, the user: "We can git push whenever is convenient"; before: only when told). Push a commit only after `make test` passed on it. Commit freely.
 - **Model roles** (2026-09-26): **Opus 5.5** plans (the plan goes to the user for sign-off)
   and implements. A **Fable 5.1** subagent (Agent `model: "fable"`) reviews every finished
@@ -140,11 +141,10 @@ Code
 
 ## Shell
 
-- Never `pkill -f <pattern>` from a command whose own line contains the pattern (it kills
-  the shell, exit 144), and never kill `vtt` by name: the user may have one open. Record PIDs.
-- `grep` is aliased oddly here: use `awk`, or plain `grep -n` in a subshell.
+- Never `pkill -f <pattern>` from a command whose own line contains the pattern (it kills the shell, exit 144);
+  never kill `vtt` by name (the user may have one open): record PIDs. `grep` is aliased oddly: `awk`, or `grep -n` in a subshell.
 - Scratch: the session scratchpad, never the repo; a dir a task, deleted when done, swept before a
   commit. First check docs/SCRATCH.md (seen twice: a tool in tools/), then add its row. Key scripts: `ESC`+letter is Alt.
 - A test or script that runs `./vtt` or opens the channel sits in a sandbox (`sandbox_enter`; `tools/sandbox.sh` for
   the shell, held to it by suite `sandbox`: XDG dirs, no keyring, editor `true`), or it reaches the user's files, key and vtts.
-- Driving a live vtt from a script (a fifo and `script`): CODEMAP, *Conventions*.
+  Driving a live vtt from a script (a fifo and `script`): CODEMAP, *Conventions*.
