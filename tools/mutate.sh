@@ -20,7 +20,9 @@ shift 3
 
 # The original under a fixed name: a run killed past its traps (SIGKILL)
 # leaves the file mutated, and the next run finds the original and says so.
-keep="${TMPDIR:-/tmp}/mutate.$(printf '%s' "$file" | tr / _).orig"
+# Named from the file's real path, so `./src/x.c` and `src/x.c` are one file.
+real="$(cd "$(dirname "$file")" && pwd -P)/$(basename "$file")"
+keep="${TMPDIR:-/tmp}/mutate.$(printf '%s' "$real" | tr / _).orig"
 if [ -e "$keep" ]; then
     echo "mutate: a killed run left $file mutated; its original is $keep (cp -p it back, then rm it)" >&2
     exit 2

@@ -104,7 +104,8 @@ tools/oracle.sh record|check [VTT]  what a vtt prints, from outside it, kept und
 make test-build  build/run-tests alone, for build/run-tests NAME... (only this and make test rebuild it)
 build/tool-checkbench MAP T.json N   (make build/tool-checkbench) --check N times traced; tools/zones.py T.json each zone's median
 tools/codehelp.py   after a help line changes: rewrites README's code table's what-to-do column from CODE_HELP (checkhelp fails while they disagree)
-tools/mutate.sh FILE 'old' 'new' SUITE...   a mutation check: the old text once, rebuilt, the suites run, the file always put back; caught or SURVIVED
+tools/mutate.sh FILE 'old' 'new' SUITE...   a mutation check: the old text once, rebuilt, the suites run, the file put back (a SIGKILL leaves the original as $TMPDIR/mutate.<real path>.orig, and the next run refuses until it is put back); caught or SURVIVED
+tools/pagemutate.sh 'old' 'new' [PAGE]      a mutation of the phone page's connection code in seconds: a copy of web/index.html run through tests/page_conn.js, no rebuild; caught or SURVIVED
 tools/sandbox.sh CMD...   a command in sandbox_enter's environment (`. tools/sandbox.sh; sandbox_env DIR` in a script); suite `sandbox` holds the two alike
 tools/sockcap.py [SNDBUF...]   what a socket takes toward a peer that never reads, with and without SO_SNDBUF
 tools/stalled.sh [LOOPS]   perf.sh's falling-behind row once, untimed, sandboxed: the most vtt held for the stalled watcher against the FULL then, and the catch-ups (the lag bound holds when the first is at most the second)

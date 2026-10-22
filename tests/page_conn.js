@@ -77,6 +77,9 @@ function world() {
   return w;
 }
 
+// A step is checked after the socket's events have run: a scenario that
+// closes a socket runs `tick(0)` before its step, or a socket closing with
+// its handlers still set reads as neither live nor retrying.
 const settle = () => new Promise(r => setImmediate(r));
 async function step(w, name) {
   await settle();
@@ -150,7 +153,7 @@ async function main() {
       w.tick(100);
     }
     await step(w, 'F down 20 s');
-    check(w.sockets.length <= 11, 'F: one attempt every 2 s at most, ' + w.sockets.length + ' in 20 s');
+    check(w.sockets.length <= 11, 'F: no tight loop, 11 attempts in 20 s at most (one each 2 s), ' + w.sockets.length + ' in 20 s');
   }
   console.log(failed ? failed + ' of ' + checks + ' checks failed' : 'verified ' + checks + ' checks');
   process.exit(failed ? 1 : 0);
