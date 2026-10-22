@@ -33,7 +33,7 @@ OFF=${OFF:-15}           # not SECONDS: bash's own, the seconds since it started
 CDP=${CDP:-9333}
 PORT=${PORT:-7793}
 [ -x "$BIN" ] || { echo "no $BIN -- run make first" >&2; exit 1; }
-for t in adb node cc ss script; do
+for t in adb node cc ss script curl python3 ip seq; do
     command -v "$t" >/dev/null || { echo "phonecheck needs $t" >&2; exit 1; }
 done
 # One phone, by its USB serial (adb may list it twice, over USB and over TLS).

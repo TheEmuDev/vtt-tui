@@ -1448,15 +1448,19 @@ with `tools/phonecheck.sh`.
 **The lag bound holds, and costs nothing a frame.** `play, a phone that falls behind` (four
 watchers, one reading only once vtt withholds frames from it) runs at 38.9 us a frame against
 39.2 us for `play, 4 watchers`. In 800 loops vtt caught that watcher up ten times and never held
-more than 8,038 bytes for it, a FULL (7,966) and one frame. Before 2026-10-21 the row's watcher
-never read at all, and at 80x24 it never fell behind: the kernel took every frame of 3,200
-(about 100 bytes each, under its ~296 KB), so the row measured nothing of the bound.
+more than 8,038 bytes for it, under the bound: the FULL of the screen then, 8,086 (the review
+found the first message paired the peak with the last FULL, 7,966; it prints the FULL at the
+peak now). Before 2026-10-21 the row's watcher never read at all, and at 80x24 it never fell
+behind: 400 loops (3,200 frames of about 100 bytes) ended with nothing queued by vtt, the kernel
+holding them all. How many frames the kernel takes varies: the first fall behind came near
+frame 3,000 in my run and at loop 311 (about 2,490 frames) in the reviewer's, on the same
+machine; `tools/sockcap.py`'s 296,960 bytes is for 4 KB writes.
 
 **A catch-up is a FULL's encode.** `net.catch_up` is 22.9 us (p99 36.3), of which the encode,
 `net.enc_full` (2026-10-21; it covers a join's FULL and a resize's too, untimed before), is 19.1
 us; queueing and the write are the rest. The plan's estimate, one FULL as a joining phone costs,
 holds. The encode itself is a finding: 1,920 cells into 7,966 bytes at about 10 ns a cell. The
-least it could cost is reading the cells (23 KB) and writing 8 KB, about 1 to 2 us (my estimate
+least it could cost is reading the cells (30 KB, 16 bytes a `Cell`) and writing 8 KB, about 1 to 2 us (my estimate
 from memory bandwidth, not measured). A one-entry cache of the last foreground and background in
 `wire_enc_cell` (each cell does two palette hash lookups today) took it from 20.0 to 17.3 us
 (-14%, an A/B of three runs each), so the lookups are not most of it; reverted, as out of this
@@ -1493,8 +1497,11 @@ cell and color, with the one a fresh load draws:
   and the page reconnected as the screen came on. The same screen each time.
 - *Chrome behind the home screen, then brought back.* Chrome closes the page's socket about 5 s
   after it goes to the background (`close` 1006, no close frame; the phone's TCP still
-  acknowledged vtt's bytes after it). The page's retry is a timer, and it reconnected 5.2 s
-  (200x50) and 5.1 s (400x170) after it was visible again, then took a FULL; the same screen.
+  acknowledged vtt's bytes after it). The page reconnected 5.2 s (200x50) and 5.1 s (400x170)
+  after it was visible again, then took a FULL; the same screen. Why 5 s is not shown: the
+  page's retry is a 2 s timer (web/index.html), each run recorded one close and no failed
+  attempt, so my guess is that Chrome resumes the page's timers late; a timeline of the timer's
+  firing (phonecheck's `DEBUG=1`, with the timer hooked) would settle it.
   Until then it shows the old screen and "disconnected · retrying". A finding: the page could
   reconnect when it becomes visible rather than wait for the timer; not built (HEALTH.md).
 
@@ -1773,6 +1780,8 @@ a plain function with the stubs as parameters.
 | `F12` | live overlay: per-zone p50/p99, a frame-time sparkline, cells and bytes |
 | `--trace out.json` | Chrome Tracing profile, every occurrence of every zone; open in perfetto |
 | `--bench-loops N` | more repetitions when a number looks noisy |
+| `ONLY='regex' tools/perf.sh` | only the scenarios whose label matches; with `BIN=`, the A/B of one row's scenario under two binaries |
+| `tools/phonecheck.sh` | manual: the page on the user's Android phone over the Wi-Fi (adb, Chrome's DevTools socket): a FULL's time, the send buffer A/B, the screen off and Chrome in the background |
 | `make fuzz` | not a timing tool: libFuzzer on the map loader, the one untrusted input |
 | `tools/sight.sh [bin]` | `fog.sight` per fog scenario, which the zone table cannot show |
 | `--bench-clients N` | attaches N loopback watchers to a bench run, so a row can carry the remote view's cost |

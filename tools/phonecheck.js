@@ -47,7 +47,7 @@ const HOOK = `(() => {
 // two loads when they draw the same thing. Script-level lets are reachable
 // from the console's scope, which Runtime.evaluate shares.
 const SCREEN = `(() => {
-  if (!gl) return 'none';
+  if (!gl) return null;
   let h = 2166136261 >>> 0;
   const mix = v => { h = Math.imul(h ^ (v >>> 0), 16777619) >>> 0; };
   mix(cols); mix(rows);
@@ -203,7 +203,7 @@ async function lock(tab, url, fifo, key, seconds, away) {
     while_hidden: { msgs: during.length, bytes: bytes(during), fulls: during.filter(m => m[2] === FULL).length },
     after_visible: { msgs: after.length, bytes: bytes(after), fulls: after.filter(m => m[2] === FULL).length,
                      ms_to_last: after.length ? +(after[after.length - 1][0] - visible[0]).toFixed(1) : 0 },
-    screen: seen, fresh, same: seen === fresh, differ,
+    screen: seen, fresh, same: seen !== null && seen === fresh, differ,
     opens: pc.opens.length, closes: (pc.closes || []).map(c => [+c[0].toFixed(0), c[1]]),
     reopened_ms: pc.opens.length > 1 ? +(pc.opens[pc.opens.length - 1] - visible[0]).toFixed(1) : null,
     hidden_at: hidden && +hidden[0].toFixed(0), visible_at: +visible[0].toFixed(0),

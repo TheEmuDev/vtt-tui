@@ -343,6 +343,16 @@ static void script_play(App *a, InputParser *p, const Script *sc,
 /* Renders without a tty. Backs --dump-frame (golden tests) and --bench
  * (deterministic performance baseline): the full draw and diff still run,
  * only the write() to the terminal is skipped. */
+/* The bench's stand-in for the loop's network turn: poll the server's
+ * sockets (WAIT ms at most) and serve what is ready. */
+static void bench_service(Net *n, int wait, uint64_t now_ms)
+{
+    struct pollfd fds[1 + NET_MAX_CLIENTS];
+    int nf = net_pollfds(n, fds, 1 + NET_MAX_CLIENTS);
+    poll(fds, (nfds_t)nf, wait);
+    net_service(n, fds, nf, now_ms);
+}
+
 static int run_headless(const Options *o)
 {
     Renderer r;
@@ -414,12 +424,7 @@ static int run_headless(const Options *o)
                     cfd[ncf++] = fd;
                 }
                 /* Let the hellos arrive and the full frames go out. */
-                for (int i = 0; i < 20; i++) {
-                    struct pollfd fds[1 + NET_MAX_CLIENTS];
-                    int k = net_pollfds(&a.net, fds, 1 + NET_MAX_CLIENTS);
-                    poll(fds, (nfds_t)k, 5);
-                    net_service(&a.net, fds, k, (uint64_t)i);
-                }
+                for (int i = 0; i < 20; i++) bench_service(&a.net, 5, (uint64_t)i);
             }
         }
 
@@ -463,7 +468,8 @@ static int run_headless(const Options *o)
 
         uint64_t bench_clock_ms = 1000;
         unsigned bench_wakes = 0;           /* --bench-stalled: the times its watcher read, */
-        size_t   bench_queued = 0;          /* and the most vtt held for it */
+        size_t   bench_queued = 0;          /* and the most vtt held for it, */
+        size_t   bench_full = 0;            /* and the bound then, a FULL of the screen then */
         unsigned long allocs0 = 0;          /* the count when the second loop starts: the first is setup */
         for (int loop = 0; loop < o->bench_loops && a.running; loop++) {
             if (loop == 1) allocs0 = alloc_calls();
@@ -511,20 +517,14 @@ static int run_headless(const Options *o)
                                             10 + (i * 13 + tick * 7) % 40, 3 + (i * 5 + tick * 3) % 15);
                         (void)!write(cfd[i], line, (size_t)len);
                     }
-                    struct pollfd fds[1 + NET_MAX_CLIENTS];
-                    int nf = net_pollfds(&a.net, fds, 1 + NET_MAX_CLIENTS);
-                    poll(fds, (nfds_t)nf, 0);
-                    net_service(&a.net, fds, nf, bench_clock_ms);
+                    bench_service(&a.net, 0, bench_clock_ms);
                     app_tick(&a, bench_clock_ms);
                     bench_clock_ms += 1000;
                 }
                 /* Named phones: the app's tick runs too, so what it does for
                  * them -- the names offered, the arrivals -- is measured. */
                 if (ncf && o->bench_names && !o->bench_pings) {
-                    struct pollfd fds[1 + NET_MAX_CLIENTS];
-                    int nf = net_pollfds(&a.net, fds, 1 + NET_MAX_CLIENTS);
-                    poll(fds, (nfds_t)nf, 0);
-                    net_service(&a.net, fds, nf, bench_clock_ms);
+                    bench_service(&a.net, 0, bench_clock_ms);
                     app_tick(&a, bench_clock_ms);
                 }
                 prof_frame_begin();
@@ -546,7 +546,7 @@ static int run_headless(const Options *o)
                     for (int i = 0; stalled && i < a.net.ncl; i++) {
                         wakes |= a.net.cl[i].behind;
                         size_t q = a.net.cl[i].out_len - a.net.cl[i].out_off;
-                        if (q > bench_queued) bench_queued = q;
+                        if (q > bench_queued) { bench_queued = q; bench_full = a.net.full_len; }
                     }
                     bench_wakes += (unsigned)wakes;
                     for (int i = 0; i < ncf - (stalled && !wakes); i++) {
@@ -554,12 +554,7 @@ static int run_headless(const Options *o)
                         while ((got = read(cfd[i], sink, sizeof sink)) > 0)
                             if (i == 0 && recf) fwrite(sink, 1, (size_t)got, recf);
                     }
-                    if (wakes) {
-                        struct pollfd fds[1 + NET_MAX_CLIENTS];
-                        int nf = net_pollfds(&a.net, fds, 1 + NET_MAX_CLIENTS);
-                        poll(fds, (nfds_t)nf, 0);
-                        net_service(&a.net, fds, nf, bench_clock_ms);
-                    }
+                    if (wakes) bench_service(&a.net, 0, bench_clock_ms);
                 }
             }
             a.running = 1;      /* a 'q' in the script must not end the bench */
@@ -578,8 +573,8 @@ static int run_headless(const Options *o)
         /* The most vtt held for the stalled watcher: its queue, past what
          * the kernel took (a FULL's worth at most, by the lag bound). */
         if (o->bench_stalled && ncf > 1)
-            fprintf(stderr, "vtt: the stalled watcher: at most %zu bytes queued by vtt, a FULL %zu; "
-                    "caught up %u times; %u dropped\n", bench_queued, a.net.full_len, bench_wakes, a.net.dropped);
+            fprintf(stderr, "vtt: the stalled watcher: at most %zu bytes queued by vtt, under a FULL of %zu then; "
+                    "caught up %u times; %u dropped\n", bench_queued, bench_full, bench_wakes, a.net.dropped);
         for (int i = 0; i < ncf; i++) close(cfd[i]);
         if (recf) fclose(recf);
         free(ctl_req);
