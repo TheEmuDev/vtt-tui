@@ -154,7 +154,7 @@ typedef struct {
     int             narrived;
     /* Clients vtt dropped for a reason of its own, for the GM's line: the
      * name ("" for none) and why. The oldest goes when it is full. */
-    struct { char name[NET_NAME_MAX]; const char *why; } drops[NET_MAX_CLIENTS];
+    struct { char name[NET_NAME_MAX]; int watcher; const char *why; } drops[NET_MAX_CLIENTS];
     int             ndrops;
 
     /* Counters for the profiler: per frame, and over the server's life. */
@@ -229,10 +229,10 @@ int  net_name_seen(const Net *n, const char *name);
 /* Hands over the next name to have arrived since the last call: 1, or 0
  * when there are none. */
 int  net_take_arrival(Net *n, char *out, size_t sz);
-/* A client vtt dropped, oldest first: its name ("" for a phone that gave
- * none, or a watcher) into name and why it went into *why; 0 when there are
- * no more. */
-int  net_take_drop(Net *n, char *name, size_t sz, const char **why);
+/* A client vtt dropped, oldest first: its name ("" for none) into name,
+ * whether it was a watcher (`vtt --watch`) rather than a browser into
+ * *watcher, and why it went into *why; 0 when there are no more. */
+int  net_take_drop(Net *n, char *name, size_t sz, int *watcher, const char **why);
 
 /* Who is watching, for :players: "Aria, Brin (2), 1 unnamed, 1 terminal",
  * or "" for no one. */

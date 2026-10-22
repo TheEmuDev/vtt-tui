@@ -57,9 +57,11 @@ void app_whisper_tick(App *a)
     /* Logged: vtt let it go, which the GM should hear of once and be able
      * to find again. */
     const char *why;
-    while (net_take_drop(&a->net, name, sizeof name, &why)) {
-        if (name[0]) snprintf(msg, sizeof msg, "phone %s dropped: %s", name, why);
-        else         snprintf(msg, sizeof msg, "a phone with no name dropped: %s", why);
+    int         watcher;
+    while (net_take_drop(&a->net, name, sizeof name, &watcher, &why)) {
+        const char *what = watcher ? "watcher" : "phone";
+        if (name[0]) snprintf(msg, sizeof msg, "%s %s dropped: %s", what, name, why);
+        else         snprintf(msg, sizeof msg, "a %s with no name dropped: %s", what, why);
         app_note_gm(a, msg);
     }
 }

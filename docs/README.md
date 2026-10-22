@@ -17,6 +17,7 @@ True of the code today, and changed in the same commit as the code they describe
 | [HEALTH.md](HEALTH.md) | the maintainer and the coding agent | the questions every review asks, the findings left open, and each health check's record |
 | [ROADMAP.md](ROADMAP.md) | the maintainer | features decided on: to build, parked, built |
 | [IDEAS.md](IDEAS.md) | the maintainer | features set aside, each with the reason |
+| [SCRATCH.md](SCRATCH.md) | the coding agent and its reviewers | the kinds of scratch work reviews build, and which became tools (seen twice: a tool) |
 
 ## Design records
 

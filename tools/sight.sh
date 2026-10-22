@@ -11,8 +11,8 @@ BIN=${1:-./vtt}
 [ -x "$BIN" ] || { echo "no $BIN -- run make first" >&2; exit 1; }
 DIR=$(mktemp -d)
 trap 'rm -rf "$DIR"' EXIT
-export XDG_DATA_HOME="$DIR/xdg"
-mkdir -p "$XDG_DATA_HOME"
+. "$(dirname "$0")/sandbox.sh"
+sandbox_env "$DIR"
 
 # genmap moved to tools/genmap.sh; the warren fixture is still written inline in perf.sh.
 . tools/genmap.sh

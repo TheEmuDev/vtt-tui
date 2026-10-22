@@ -44,8 +44,8 @@ prohibitions only, under 150 lines. Reference lives where it is read on demand.
 - **Model roles** (2026-09-26): **Opus 5.5** plans (the plan goes to the user for sign-off)
   and implements. A **Fable 5.1** subagent (Agent `model: "fable"`) reviews every finished
   change before it is reported done; verify its findings and fix what holds up. The user
-  will name different models when that changes. Brief every subagent: stop only PIDs it
-  started, never kill by name.
+  will name different models when that changes. Brief every subagent: stop only PIDs it started,
+  never kill by name. A review's brief: sha, range, what to look at, and `tools/review-brief.md`.
 - **Every review includes the health check's questions** (2026-09-29) beside correctness,
   for the change and what it touches: duplication, organization, performance, test gaps,
   the docs. HEALTH.md's *The questions* is the full list.
@@ -145,6 +145,6 @@ Code
 - `grep` is aliased oddly here: use `awk`, or plain `grep -n` in a subshell.
 - Scratch files go in the session scratchpad, never the repo: one dir a task, deleted when done,
   swept before a commit; a tool worth reuse goes to tools/ instead. Key scripts: `ESC`+letter is Alt.
-- A test or script that runs `./vtt` or opens the channel sits in a sandbox (`sandbox_enter`: its
-  own `XDG_DATA_HOME`/`XDG_RUNTIME_DIR`/`XDG_CONFIG_HOME`, no keyring), or it reaches the user's files, key and vtts.
+- A test or script that runs `./vtt` or opens the channel sits in a sandbox (`sandbox_enter`; `tools/sandbox.sh` for
+  the shell, held to it by suite `sandbox`: XDG dirs, no keyring, editor `true`), or it reaches the user's files, key and vtts.
 - Driving a live vtt from a script (a fifo and `script`): CODEMAP, *Conventions*.

@@ -157,6 +157,7 @@ int main(int argc, char **argv)
         { "netlag",     test_net_lag },
         { "netbig",     test_net_big },
         { "privacy",    test_privacy },
+        { "sandbox",    test_sandbox },
         { "playbox",    test_play_box },
         { "moverules",  test_move_rules },
         { "burst",      test_group_effect },

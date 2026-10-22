@@ -34,11 +34,8 @@ LOOPS=${LOOPS:-400}
 # the save and trip rows would quote a figure no table sees.
 DIR=$(mktemp -d "${PERF_DIR:-.}/.perf.XXXXXX")
 trap 'rm -rf "$DIR"' EXIT
-export XDG_DATA_HOME="$DIR/xdg"
-mkdir -p "$XDG_DATA_HOME"
-# The settings, the key file and the keyring are the user's: never read here.
-export XDG_CONFIG_HOME="$DIR/config" VTT_SECRET_TOOL=/nonexistent/vtt-perf/secret-tool VISUAL=true EDITOR=true
-mkdir -p "$XDG_CONFIG_HOME"
+. "$(dirname "$0")/sandbox.sh"
+sandbox_env "$DIR"
 
 TAB=$(printf '\t')
 

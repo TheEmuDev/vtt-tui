@@ -319,6 +319,38 @@ void test_net_big(void)
         rnd_free(&r);
     }
 
+    CASE("a FULL between the buffer and half the worst case leaves the buffer at twice it, not the worst (review 2, finding 1)");
+    {
+        /* Runs of four cells, 18 bytes each: 4.5 bytes a cell, a FULL of
+         * about 306 KB, so 2x it is under the 816 KB worst case. */
+        Renderer r;
+        rnd_init(&r);
+        rnd_resize(&r, 400, 170);
+        rnd_begin(&r);
+        for (int y = 0; y < 170; y++)
+            for (int x = 0; x < 400; x++) {
+                char ch[2] = { (char)('a' + (x + y) % 26), 0 };
+                draw_text(&r, x, y, ch, -1, style(0x101010u * (uint32_t)((x / 4 + y) % 7 + 1), 0x0E0E12, 0));
+            }
+        rnd_flush(&r, NULL);
+        Net n;
+        net_init(&n);
+        char err[128];
+        CHECK_EQ(net_start(&n, 0, &r, err, sizeof err), 0);
+        WireCatch c;
+        memset(&c, 0, sizeof c);
+        WireDec d;
+        wire_dec_init(&d, &WC_SINK, &c);
+        int w = -1;
+        CHECK(lag_watcher(&n, &w, &d, now) != NULL);
+        CHECK_EQ(c.fulls, 1);
+        CHECK(n.full_len > NET_FRAME_CAP && 2 * n.full_len < wire_full_max(400, 170));
+        CHECK_EQ(n.enc.cap, 2 * n.full_len);
+        if (w >= 0) close(w);
+        net_stop(&n);
+        rnd_free(&r);
+    }
+
     CASE("a phone vtt has to drop is counted and named on the GM's line, which the players do not see");
     {
         Sandbox sb = sandbox_enter("netbig");
@@ -345,18 +377,36 @@ void test_net_big(void)
             int w = -1;
             FakePhone *p = lag_watcher(&a.net, &w, &d, now);
             CHECK(p != NULL);
-            /* It stops reading; handouts are not frames, so nothing holds
-             * them back, and its queue reaches its limit. */
+            /* A phone that says who it is, as `vtt --bench-names` does. */
+            int wn = net_connect(a.net.port);
+            CHECK(wn >= 0 && write(wn, "VTT1 Aria\n", 10) == 10);
+            for (int i = 0; i < 40 && !(a.net.ncl == 2 && a.net.cl[1].greeted); i++) net_pump(&a.net, now);
+            CHECK_EQ(a.net.ncl, 2);
+            CHECK(a.net.ncl == 2 && !strcmp(a.net.cl[1].name, "Aria"));
+            /* Aria stops reading, the other reads on; handouts are not
+             * frames, so nothing holds them back, and Aria's queue reaches
+             * its limit. Then the other stops too. */
             char text[WIRE_HANDOUT_MAX];
+            for (int k = 0; k < 400 && a.net.ncl == 2; k++) {
+                memset(text, 'a' + k % 26, sizeof text);
+                net_set_handout(&a.net, text, sizeof text, now);
+                fk_read(p, &d);
+            }
+            CHECK_EQ(a.net.ncl, 1);
+            CHECK_EQ(a.net.dropped, 1u);
+            app_whisper_tick(&a);
+            CHECK(strstr(a.status, "watcher Aria dropped: too far behind to catch up") != NULL);
+            CHECK(app_view_differs(&a));
             for (int k = 0; k < 400 && a.net.ncl == 1; k++) {
                 memset(text, 'a' + k % 26, sizeof text);
                 net_set_handout(&a.net, text, sizeof text, now);
             }
             CHECK_EQ(a.net.ncl, 0);
-            CHECK_EQ(a.net.dropped, 1u);
+            CHECK_EQ(a.net.dropped, 2u);
             app_whisper_tick(&a);
-            CHECK(strstr(a.status, "a phone with no name dropped: too far behind to catch up") != NULL);
+            CHECK(strstr(a.status, "a watcher with no name dropped: too far behind to catch up") != NULL);
             CHECK(app_view_differs(&a));
+            if (wn >= 0) close(wn);
             if (w >= 0) close(w);
             app_free(&a);
             rnd_free(&r);

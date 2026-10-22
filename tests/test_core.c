@@ -2629,3 +2629,107 @@ void test_gray_marker(void)
     }
     unlink(path);
 }
+
+/* The environment variables whose values differ between two snapshots
+ * (NAME=VALUE lines, any order), as "NAME=new" lines sorted, into out. */
+static void env_changed(char **before, int nb, char **after, int na, ByteBuf *out)
+{
+    char *list[256];
+    int   n = 0;
+    for (int i = 0; i < na && n < 256; i++) {
+        int same = 0;
+        for (int k = 0; k < nb && !same; k++) same = !strcmp(after[i], before[k]);
+        if (!same) list[n++] = after[i];
+    }
+    for (int i = 1; i < n; i++)
+        for (int k = i; k > 0 && strcmp(list[k - 1], list[k]) > 0; k--) { char *t = list[k]; list[k] = list[k - 1]; list[k - 1] = t; }
+    bb_init(out, 1024);
+    for (int i = 0; i < n; i++) { bb_puts(out, list[i]); bb_putc(out, '\n'); }
+    bb_putc(out, '\0');
+}
+
+/* Lines of text into a list (the text is cut in place). */
+static int env_lines(char *text, char **list, int max)
+{
+    int n = 0;
+    for (char *line = strtok(text, "\n"); line && n < max; line = strtok(NULL, "\n")) list[n++] = line;
+    return n;
+}
+
+extern char **environ;
+
+void test_sandbox(void)
+{
+    CASE("tools/sandbox.sh changes the variables sandbox_enter changes, to the same values under its dir");
+    /* The C side: the environment before and after sandbox_enter. */
+    ByteBuf before;
+    bb_init(&before, 1 << 14);
+    for (char **e = environ; *e; e++) { bb_puts(&before, *e); bb_putc(&before, '\n'); }
+    bb_putc(&before, '\0');
+    Sandbox sb = sandbox_enter("sbx");
+    CHECK_EQ(sb.ok, 1);
+    if (!sb.ok) { bb_free(&before); return; }
+    ByteBuf after;
+    bb_init(&after, 1 << 14);
+    for (char **e = environ; *e; e++) { bb_puts(&after, *e); bb_putc(&after, '\n'); }
+    bb_putc(&after, '\0');
+    char *lb[256], *la[256];
+    char *b1 = strdup(before.data), *a1 = strdup(after.data);
+    ByteBuf c_side;
+    env_changed(lb, env_lines(b1, lb, 256), la, env_lines(a1, la, 256), &c_side);
+
+    /* The shell's: env before and after sandbox_env DIR, run from the
+     * environment the test began with. */
+    char dir[1100], cmd[3000];
+    snprintf(dir, sizeof dir, "%s/sh", sb.dir);
+    snprintf(cmd, sizeof cmd, "env -i PATH=\"$PATH\" HOME=\"$HOME\" sh -c 'env > \"%s.b\"; . tools/sandbox.sh; sandbox_env \"%s\"; env > \"%s.a\"'",
+             dir, dir, dir);
+    CHECK_EQ(system(cmd), 0);
+    char pb[1200], pa[1200];
+    snprintf(pb, sizeof pb, "%s.b", dir);
+    snprintf(pa, sizeof pa, "%s.a", dir);
+    char *sb_text = slurp(pb), *sa_text = slurp(pa);
+    CHECK(sb_text != NULL && sa_text != NULL);
+    if (sb_text && sa_text) {
+        char *sl[256], *sl2[256];
+        ByteBuf sh_side;
+        env_changed(sl, env_lines(sb_text, sl, 256), sl2, env_lines(sa_text, sl2, 256), &sh_side);
+        /* Every variable sandbox_enter changed, the script changes too; and
+         * every one the script sets (from a bare environment, so all show)
+         * reads the same here, a path in the sandbox on both sides. Values
+         * the test's own environment already had are not a change on the C
+         * side, so a set inclusion, not equal lists. */
+        char *cv = strdup(c_side.data), *sv = strdup(sh_side.data);
+        char *cl[64], *shl[64];
+        int nc = env_lines(cv, cl, 64), ns = env_lines(sv, shl, 64);
+        for (int i = 0; i < nc; i++) {
+            size_t len = (size_t)(strchr(cl[i], '=') - cl[i]);
+            int found = 0;
+            for (int k = 0; k < ns && !found; k++) found = !strncmp(cl[i], shl[k], len) && shl[k][len] == '=';
+            CHECK(found);
+            if (!found) fprintf(stderr, "    sandbox_enter sets %s; tools/sandbox.sh does not\n", cl[i]);
+        }
+        for (int k = 0; k < ns; k++) {
+            char *eq = strchr(shl[k], '=');
+            if (!eq) continue;
+            *eq = '\0';
+            const char *here = getenv(shl[k]);
+            const char *val = eq + 1;
+            int s_dir = !strncmp(val, dir, strlen(dir));
+            int ok = here && (s_dir ? !strncmp(here, sb.dir, strlen(sb.dir)) : !strcmp(here, val));
+            CHECK(ok);
+            if (!ok) fprintf(stderr, "    tools/sandbox.sh sets %s=%s; the test's sandbox has %s\n", shl[k], val, here ? here : "(unset)");
+        }
+        free(cv);
+        free(sv);
+        bb_free(&sh_side);
+    }
+    free(sb_text);
+    free(sa_text);
+    free(b1);
+    free(a1);
+    bb_free(&c_side);
+    bb_free(&before);
+    bb_free(&after);
+    sandbox_leave(&sb);
+}

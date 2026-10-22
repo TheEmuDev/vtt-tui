@@ -31,8 +31,8 @@ command -v node >/dev/null || { echo "pagebench needs node" >&2; exit 1; }
 
 DIR=$(mktemp -d "${PERF_DIR:-.}/.pagebench.XXXXXX")
 [ "${KEEP:-0}" = 1 ] || trap 'rm -rf "$DIR"' EXIT
-export XDG_DATA_HOME="$DIR/xdg"
-mkdir -p "$XDG_DATA_HOME"
+. "$(dirname "$0")/sandbox.sh"
+sandbox_env "$DIR"
 . tools/genmap.sh
 
 # The page as the binary serves it: src/webpage.c's string, unescaped.

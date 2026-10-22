@@ -170,6 +170,9 @@ static void press_private(App *a, Key k)
     rnd_begin(&gm);
     a->rnd = &gm;
     app_draw(a);
+    /* app_frame asks after the GM's draw (which syncs the floor): so does
+     * this, or the two could disagree on whether the frame is copied. */
+    int differs = app_view_differs(a);
     rnd_begin(&pl);
     a->rnd = &pl;
     app_draw_view(a, VIEW_PLAYERS);
@@ -178,7 +181,7 @@ static void press_private(App *a, Key k)
     a->ed.view = view;
     a->players = players;
     size_t cells = (size_t)r->w * (size_t)r->h;
-    if (!memcmp(gm.back, pl.back, cells * sizeof *gm.back)) return;
+    if (differs || !memcmp(gm.back, pl.back, cells * sizeof *gm.back)) return;
     g_fails++;
     if (told_case == g_case || told++ >= 40) return;      /* the first of each case */
     told_case = g_case;

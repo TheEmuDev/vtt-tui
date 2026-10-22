@@ -15,11 +15,8 @@ BIN=${BIN:-./vtt}
 
 DIR=$(mktemp -d "${SOAK_DIR:-.}/.soak.XXXXXX")
 trap 'rm -rf "$DIR"' EXIT
-export XDG_DATA_HOME="$DIR/xdg" XDG_CONFIG_HOME="$DIR/config" XDG_RUNTIME_DIR="$DIR/run"
-export VTT_SECRET_TOOL=/nonexistent/vtt-soak/secret-tool
-export VISUAL=true EDITOR=true          # a card key must not start the user's editor and wait
-mkdir -p "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_RUNTIME_DIR"
-chmod 700 "$XDG_RUNTIME_DIR"
+. "$(dirname "$0")/sandbox.sh"
+sandbox_env "$DIR"
 . "$(dirname "$0")/genmap.sh"
 
 MOB=$(genmap mob 40 25 0 24)

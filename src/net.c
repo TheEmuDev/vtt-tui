@@ -284,14 +284,16 @@ static void client_drop(Net *n, int i, const char *why)
         n->ndrops--;
     }
     str_lcpy(n->drops[n->ndrops].name, n->cl[i].name, NET_NAME_MAX);
+    n->drops[n->ndrops].watcher = n->cl[i].kind == CL_RAW;
     n->drops[n->ndrops++].why = why;
     client_close(n, i);
 }
 
-int net_take_drop(Net *n, char *name, size_t sz, const char **why)
+int net_take_drop(Net *n, char *name, size_t sz, int *watcher, const char **why)
 {
     if (!n->ndrops) return 0;
     str_lcpy(name, n->drops[0].name, sz);
+    *watcher = n->drops[0].watcher;
     *why = n->drops[0].why;
     memmove(&n->drops[0], &n->drops[1], sizeof n->drops[0] * (size_t)(n->ndrops - 1));
     n->ndrops--;
@@ -315,7 +317,7 @@ static int client_queue(Net *n, int i, const void *p, size_t len)
         size_t need  = c->out_len + len;
         size_t limit = wire_full_max(n->rnd->w, n->rnd->h) + NET_SEND_CAP;
         if (need > limit) { client_drop(n, i, "too far behind to catch up"); return -1; }
-        size_t cap = c->out_cap;
+        size_t cap = c->out_cap ? c->out_cap : NET_SEND_CAP;     /* never 0: the doubling must end */
         while (cap < need) cap *= 2;
         if (cap > limit) cap = limit;
         uint8_t *grown = realloc_soft(c->out, cap);
@@ -408,9 +410,6 @@ static int enc_full(Net *n)
     return 0;
 }
 
-/* Every client that gets the stream, dropped: no frame of this window could
- * be built. */
-static void drop_stream_clients(Net *n, const char *why);
 
 /* A client frames were withheld from, once its queue has drained (from
  * client_flush): one FULL, the screen as it is now, and it is level again.
@@ -514,6 +513,8 @@ static int stream_client(const NetClient *c)
     return c->kind == CL_WS || (c->kind == CL_RAW && c->greeted);
 }
 
+/* Every client that gets the stream, dropped: no frame of this window could
+ * be built. */
 static void drop_stream_clients(Net *n, const char *why)
 {
     for (int i = 0; i < n->ncl; i++)

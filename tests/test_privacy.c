@@ -29,7 +29,10 @@ typedef struct {
  * - the jobs, the GM's modal, `:` line, GM-only message, the agent's ring and the card box.
  * Not scrubbed, each a judgment written down: a hidden creature's place in the turn order and
  * its square (moving it would change what blocks whom); the areas' names (floors are found by
- * them); what fog hides (a wall on a lit square's edge is the players' to see). */
+ * them); what fog hides (a wall on a lit square's edge is the players' to see).
+ * A message is taken out only when it is marked GM-only (`status_gm`): one written with plain
+ * app_note that should have been app_note_gm passes this check and the per-key one alike,
+ * which is CLAUDE.md's rule for the author to keep, not something a frame can tell. */
 static void privacy_scrub(App *a, Scrub *s)
 {
     s->map  = a->world.map;
