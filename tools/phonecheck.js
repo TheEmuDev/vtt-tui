@@ -77,6 +77,13 @@ const adb = (...a) => execFileSync('adb', ['shell', ...a], { stdio: ['ignore', '
 // One connection to the browser; the tab is a target made for the run and
 // attached with a session (Android's Chrome refuses /json/new).
 class Tab {
+  // The browser's socket alone: no tab made, none attached.
+  static async browser(base) {
+    const v = await (await fetch(base + '/json/version')).json();
+    const tab = new Tab();
+    await tab.connect(v.webSocketDebuggerUrl);
+    return tab;
+  }
   static async open(base) {
     const v = await (await fetch(base + '/json/version')).json();
     const tab = new Tab();
@@ -224,17 +231,68 @@ async function lock(tab, url, fifo, key, seconds, away) {
   };
 }
 
+// What keeps the phone's screen on: the window holding it (dumpsys window's
+// mHoldScreenWindow). Not to be trusted alone: it reads Chrome once DevTools
+// has attached to any tab, and read Chrome for the plain page never attached
+// (2026-10-22); the screen going dark under a short timeout is the test
+// (docs/V2.md, *Next*). And Chrome's memory: each of its processes'
+// RSS in KB (this Android lists RSS, not PSS), the renderers among them.
+function holder() {
+  const w = execFileSync('adb', ['shell', 'dumpsys', 'window'], { encoding: 'utf8' });
+  const m = w.match(/mHoldScreenWindow=(\S+(?: \S+)*)/);
+  return m ? m[1].trim() : null;
+}
+function chromeKB() {
+  const m = execFileSync('adb', ['shell', 'dumpsys', 'meminfo'], { encoding: 'utf8', maxBuffer: 1 << 24 });
+  const at = m.search(/Total [PR]SS by process/);
+  const kb = {};
+  for (const l of m.slice(at, m.indexOf('\n\n', at)).split('\n')) {
+    const p = l.match(/([\d,]+)K: (com\.android\.chrome\S*)/);
+    if (p) kb[p[2].replace(/:org\.chromium.*/, '')] = +p[1].replace(/,/g, '');
+  }
+  return kb;
+}
+// Chrome's CPU time so far, in clock ticks (user + system, every process).
+function chromeTicks() {
+  const out = execFileSync('adb', ['shell',
+    'for p in $(ps -A -o PID,NAME | awk \'/com\\.android\\.chrome/ { print $1 }\'); do cat /proc/$p/stat; done'], { encoding: 'utf8' });
+  let t = 0;
+  for (const l of out.split('\n')) {
+    const f = l.slice(l.lastIndexOf(')') + 2).split(' ');
+    if (f.length > 13) t += +f[11] + +f[12];
+  }
+  return t;
+}
+
+// wake: the page opened in a tab DevTools never attaches to until the end
+// (once attached, Chrome holds the screen on until the tab closes); over
+// HOLD_MS (20 s): Chrome's CPU ticks, then who holds the screen and Chrome's
+// memory. Then attached: whether the page drew, and its video's state, if it
+// has one (a build with HEALTH B16's stand-in).
+async function wake(tab, url) {
+  const t0 = chromeTicks();
+  tab.target = (await tab.send('Target.createTarget', { url })).targetId;
+  await sleep(+process.env.HOLD_MS || 20000);
+  const r = { cpu_ticks: chromeTicks() - t0, holder: holder(), chrome_kb: chromeKB() };
+  tab.session = (await tab.send('Target.attachToTarget', { targetId: tab.target, flatten: true })).sessionId;
+  r.page = await tab.eval(`(() => { const v = document.querySelector('video');
+    return { drew: typeof gl !== 'undefined' && gl !== null, secure: isSecureContext,
+             video: v && { paused: v.paused, readyState: v.readyState, time: v.currentTime } } })()`);
+  return r;
+}
+
 async function main(argv) {
   const [mode, port, url] = argv;
   const base = 'http://127.0.0.1:' + port;
-  const tab = await Tab.open(base);
+  const tab = mode === 'wake' ? await Tab.browser(base) : await Tab.open(base);
   try {
+    if (mode === 'wake') { console.log(JSON.stringify(await wake(tab, url))); return; }
     await tab.send('Page.enable');
     await tab.send('Page.addScriptToEvaluateOnNewDocument', { source: HOOK });
     let r;
     if (mode === 'fulls') r = await fulls(tab, url, +argv[3] || 10);
     else if (mode === 'lock' || mode === 'away') r = await lock(tab, url, argv[3], argv[4], +argv[5] || 15, mode === 'away');
-    else throw new Error('mode: fulls, lock or away');
+    else throw new Error('mode: fulls, lock, away or wake');
     console.log(JSON.stringify(r));
   } finally {
     await tab.close();

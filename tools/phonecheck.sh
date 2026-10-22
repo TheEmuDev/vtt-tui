@@ -182,6 +182,15 @@ if [ "${ONLY:-fulls}" = fulls ] || [ -z "${ONLY:-}" ]; then
     echo
 fi
 
+if [ "${ONLY:-}" = wake ]; then
+    # Who keeps the screen on with the page open (BIN= a build with HEALTH
+    # B16's stand-in, to try one), Chrome's CPU and memory meanwhile. Only
+    # when asked.
+    start_vtt 200x50
+    node tools/phonecheck.js wake "$CDP" "$URL"
+    stop_vtt
+fi
+
 for how in away lock; do
     [ -z "${ONLY:-}" ] || [ "$ONLY" = "$how" ] || continue
     for size in 200x50 400x170; do
