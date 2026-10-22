@@ -1447,12 +1447,13 @@ with `tools/phonecheck.sh`.
 
 **The lag bound holds, and costs nothing a frame.** `play, a phone that falls behind` (four
 watchers, one reading only once vtt withholds frames from it) runs at 38.9 us a frame against
-39.2 us for `play, 4 watchers`. In 800 loops vtt caught that watcher up ten times and never held
-more than 8,038 bytes for it, under the bound: the FULL of the screen then, 8,086 (the review
+39.2 us for `play, 4 watchers`. In 800 loops vtt caught that watcher up ten times (the count varies with the kernel: eleven in a
+later run of `tools/stalled.sh`) and never held
+more than 8,038 bytes for it, within the bound: the FULL of the screen then, 8,086 (the review
 found the first message paired the peak with the last FULL, 7,966; it prints the FULL at the
-peak now). Before 2026-10-21 the row's watcher never read at all, and at 80x24 it never fell
-behind: 400 loops (3,200 frames of about 100 bytes) ended with nothing queued by vtt, the kernel
-holding them all. How many frames the kernel takes varies: the first fall behind came near
+peak now). Before 2026-10-21 the row's watcher never read at all, and in my run at 80x24 it did
+not fall behind: 400 loops (3,200 frames of about 100 bytes) ended with nothing queued by vtt,
+the kernel holding them all. How many frames the kernel takes varies: the first fall behind came near
 frame 3,000 in my run and at loop 311 (about 2,490 frames) in the reviewer's, on the same
 machine; `tools/sockcap.py`'s 296,960 bytes is for 4 KB writes.
 
@@ -1781,6 +1782,7 @@ a plain function with the stubs as parameters.
 | `--trace out.json` | Chrome Tracing profile, every occurrence of every zone; open in perfetto |
 | `--bench-loops N` | more repetitions when a number looks noisy |
 | `ONLY='regex' tools/perf.sh` | only the scenarios whose label matches; with `BIN=`, the A/B of one row's scenario under two binaries |
+| `tools/stalled.sh [LOOPS]` | the row `play, a phone that falls behind` once, untimed, in the sandbox: the bench's line, the most vtt held for the stalled watcher, the FULL then, the catch-ups |
 | `tools/phonecheck.sh` | manual: the page on the user's Android phone over the Wi-Fi (adb, Chrome's DevTools socket): a FULL's time, the send buffer A/B, the screen off and Chrome in the background |
 | `make fuzz` | not a timing tool: libFuzzer on the map loader, the one untrusted input |
 | `tools/sight.sh [bin]` | `fog.sight` per fog scenario, which the zone table cannot show |

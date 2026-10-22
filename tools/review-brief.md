@@ -28,6 +28,7 @@ in the brief.
 | line-search counterexamples | tools/shift/ (README.md) |
 | some perf scenarios only (a user's go needed for timing) | `ONLY='regex' tools/perf.sh`, `BIN=` for another binary |
 | the page on the user's phone (manual, the user's go and phone) | `tools/phonecheck.sh` |
+| does the lag bound hold in the bench (untimed) | `tools/stalled.sh [LOOPS]` |
 
 If you build something in scratch that is not in this table, list it at the end of your
 report (see the report format below).

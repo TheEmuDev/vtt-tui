@@ -340,9 +340,6 @@ static void script_play(App *a, InputParser *p, const Script *sc,
 
 /* --------------------------------------------------------------- headless */
 
-/* Renders without a tty. Backs --dump-frame (golden tests) and --bench
- * (deterministic performance baseline): the full draw and diff still run,
- * only the write() to the terminal is skipped. */
 /* The bench's stand-in for the loop's network turn: poll the server's
  * sockets (WAIT ms at most) and serve what is ready. */
 static void bench_service(Net *n, int wait, uint64_t now_ms)
@@ -353,6 +350,9 @@ static void bench_service(Net *n, int wait, uint64_t now_ms)
     net_service(n, fds, nf, now_ms);
 }
 
+/* Renders without a tty. Backs --dump-frame (golden tests) and --bench
+ * (deterministic performance baseline): the full draw and diff still run,
+ * only the write() to the terminal is skipped. */
 static int run_headless(const Options *o)
 {
     Renderer r;

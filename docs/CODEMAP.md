@@ -107,6 +107,7 @@ tools/codehelp.py   after a help line changes: rewrites README's code table's wh
 tools/mutate.sh FILE 'old' 'new' SUITE...   a mutation check: the old text once, rebuilt, the suites run, the file always put back; caught or SURVIVED
 tools/sandbox.sh CMD...   a command in sandbox_enter's environment (`. tools/sandbox.sh; sandbox_env DIR` in a script); suite `sandbox` holds the two alike
 tools/sockcap.py [SNDBUF...]   what a socket takes toward a peer that never reads, with and without SO_SNDBUF
+tools/stalled.sh [LOOPS]   perf.sh's falling-behind row once, untimed, sandboxed: the most vtt held for the stalled watcher against the FULL then, and the catch-ups (the lag bound holds when the first is at most the second)
 tools/phonecheck.sh   manual: the user's Android phone over USB (adb, Chrome's DevTools socket) and the Wi-Fi: a FULL's time from the socket's open, vtt's SO_SNDBUF against the kernel's, alternating; the screen off (unlocked by hand) and Chrome behind the home screen, then the page's screen against a fresh load's. tools/phonecheck.js drives the phone's Chrome. Needs the port let through a firewall (ufw: from the LAN to port 7793)
 tools/review-brief.md   the standing part of every reviewer's brief; docs/SCRATCH.md the ledger of scratch work and what became a tool
 tools/shift/   the line search's counterexample generators, undamaged-file scan and judge, from its reviews (README.md)
