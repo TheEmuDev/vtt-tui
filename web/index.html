@@ -287,7 +287,7 @@ function connect(){
    * from one being replaced must not close its successor. */
   const s=ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws?k='+k+(me?'&n='+encodeURIComponent(me):''));
   s.binaryType='arraybuffer';
-  s.onopen=()=>{status('connected');if(navigator.wakeLock)navigator.wakeLock.request('screen').catch(()=>{})};
+  s.onopen=()=>{status('connected');wake()};
   s.onmessage=e=>feed(new Uint8Array(e.data));
   s.onclose=()=>{status('disconnected · retrying');retry=setTimeout(connect,2000)};
   s.onerror=()=>s.close();
@@ -298,8 +298,10 @@ function reconnect(){ws.onclose=ws.onerror=null;ws.close();clearTimeout(retry);c
 /* Android's Chrome closes a page's socket a few seconds after it goes
  * behind the home screen; the retry's socket, made while hidden, opened
  * some 15 s later, 5 s after the page was back (docs/HEALTH.md B15).
- * Back in view with no open socket, a fresh one at once. */
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&ws&&ws.readyState!==1)reconnect()});
+ * Back in view with no open socket, a fresh one at once; with one, the
+ * screen lock again, since hiding the page released it. */
+function wake(){if(navigator.wakeLock)navigator.wakeLock.request('screen').catch(()=>{})}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)ws.readyState!==1?reconnect():wake()});
 connect();
 
 /* ---- pointing: a tap names the cell under it, and the GM's vtt decides

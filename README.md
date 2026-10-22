@@ -1042,8 +1042,9 @@ GM's machine.
    orientation works best.
 3. The map appears and follows the GM's screen.
 
-The page is served by vtt and needs no internet connection. It scales the map to the screen,
-keeps the screen awake and reconnects automatically. The port and the join code are new
+The page is served by vtt and needs no internet connection. It scales the map to the screen
+and reconnects automatically. It cannot keep a phone's screen awake (browsers allow that only
+on secure pages), so give the phones a long screen timeout for play. The port and the join code are new
 each time the server starts; with `:serve 7777` the port stays the same.
 
 If the device cannot connect, check that the GM machine's firewall allows the port (with a

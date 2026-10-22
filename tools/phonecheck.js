@@ -42,6 +42,16 @@ const HOOK = `(() => {
   window.WebSocket.prototype = W.prototype;
   for (const k of ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED']) window.WebSocket[k] = W[k];
   document.addEventListener('visibilitychange', () => pc.vis.push([performance.now(), document.visibilityState]));
+  // The screen wake lock: only in a secure context (https, or localhost).
+  pc.lock = { secure: window.isSecureContext, api: !!navigator.wakeLock, got: [], released: [] };
+  if (navigator.wakeLock) {
+    const req = navigator.wakeLock.request.bind(navigator.wakeLock);
+    navigator.wakeLock.request = t => req(t).then(s => {
+      pc.lock.got.push(performance.now());
+      s.addEventListener('release', () => pc.lock.released.push(performance.now()));
+      return s;
+    });
+  }
 })()`;
 
 // The screen the page holds, colors resolved through its palette: equal on
@@ -205,6 +215,7 @@ async function lock(tab, url, fifo, key, seconds, away) {
     after_visible: { msgs: after.length, bytes: bytes(after), fulls: after.filter(m => m[2] === FULL).length,
                      ms_to_last: after.length ? +(after[after.length - 1][0] - visible[0]).toFixed(1) : 0 },
     screen: seen, fresh, same: seen !== null && seen === fresh, differ,
+    lock: { ...pc.lock, got: pc.lock.got.map(t => +t.toFixed(0)), released: pc.lock.released.map(t => +t.toFixed(0)) },
     made: (pc.made || []).map(t => +t.toFixed(0)), open_at: pc.opens.map(t => +t.toFixed(0)),
     opens: pc.opens.length, closes: (pc.closes || []).map(c => [+c[0].toFixed(0), c[1]]),
     reopened_ms: pc.opens.length > 1 ? +(pc.opens[pc.opens.length - 1] - visible[0]).toFixed(1) : null,

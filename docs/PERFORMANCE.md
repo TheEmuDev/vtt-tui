@@ -1517,6 +1517,11 @@ cell and color, with the one a fresh load draws:
   Every run ended on the screen a fresh load draws. Over USB (`VIA=usb`, adb reverse, cable or
   wireless debugging) Chrome never closed the socket: the hidden page took all 150 frames, so
   this check needs the Wi-Fi.
+- *The screen wake lock (2026-10-22, B15's review).* phonecheck's hook records it. Over adb
+  reverse the page held a lock, Chrome released it as the page was hidden, and the page never
+  asked again while its socket stayed open; it now asks when shown (taken 6-7 ms after, two
+  runs). Over the Wi-Fi there is no lock to take: the page is not a secure context and
+  `navigator.wakeLock` is absent (HEALTH B16). A Wi-Fi rerun of the reconnect: 27 ms, twice.
 
 ## 2.0 against 1.x
 

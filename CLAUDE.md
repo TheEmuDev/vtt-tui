@@ -143,8 +143,8 @@ Code
 - Never `pkill -f <pattern>` from a command whose own line contains the pattern (it kills
   the shell, exit 144), and never kill `vtt` by name: the user may have one open. Record PIDs.
 - `grep` is aliased oddly here: use `awk`, or plain `grep -n` in a subshell.
-- Scratch files go in the session scratchpad, never the repo: one dir a task, deleted when done,
-  swept before a commit; a tool worth reuse goes to tools/ instead. Key scripts: `ESC`+letter is Alt.
+- Scratch: the session scratchpad, never the repo; a dir a task, deleted when done, swept before a
+  commit. First check docs/SCRATCH.md (seen twice: a tool in tools/), then add its row. Key scripts: `ESC`+letter is Alt.
 - A test or script that runs `./vtt` or opens the channel sits in a sandbox (`sandbox_enter`; `tools/sandbox.sh` for
   the shell, held to it by suite `sandbox`: XDG dirs, no keyring, editor `true`), or it reaches the user's files, key and vtts.
 - Driving a live vtt from a script (a fifo and `script`): CODEMAP, *Conventions*.

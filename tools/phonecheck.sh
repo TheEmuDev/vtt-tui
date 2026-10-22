@@ -58,7 +58,7 @@ stop_vtt() {
 cleanup() {
     stop_vtt
     adb forward --remove "tcp:$CDP" >/dev/null 2>&1 || true
-    [ "$VIA" = usb ] && adb reverse --remove "tcp:$PORT" >/dev/null 2>&1
+    [ "$VIA" = usb ] && adb reverse --remove "tcp:$PORT" >/dev/null 2>&1 || true
     rm -rf "$DIR"
 }
 trap cleanup EXIT
@@ -118,6 +118,7 @@ start_vtt() {
     sleep 0.5
     _h=${URL#http://}; _h=${_h%%/*}
     adb shell "toybox nc -w 3 ${_h%:*} ${_h#*:} < /dev/null" > /dev/null 2>&1 || {
+        [ "$VIA" = usb ] && { echo "the phone cannot reach $_h through adb reverse" >&2; exit 1; }
         echo "the phone cannot reach $_h over the Wi-Fi: a firewall here (ufw: sudo ufw allow from" \
              "$(ip -4 route get 8.8.8.8 | awk '{ for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1) }' | sed 's/[0-9]*$/0/')/24" \
              "to any port $PORT proto tcp), or the network keeps its clients apart" >&2
