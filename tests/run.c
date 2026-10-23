@@ -220,6 +220,7 @@ int main(int argc, char **argv)
         ran++;
         int before = g_fails;
         suites[i].fn();
+        case_begin(NULL);                    /* VTT_CASE_TIMES: its last case's time */
         if (disk() != &DISK_REAL) {          /* a suite's failing disk must not reach the next */
             g_fails++;
             printf("  FAIL %s left a test's disk in use\n", suites[i].name);

@@ -31,6 +31,10 @@ extern const char *g_case;
         }                                                                      \
     } while (0)
 
-#define CASE(name) do { g_case = (name); } while (0)
+/* A case begins: its name for the failures, and with VTT_CASE_TIMES set the
+ * time the one before took, on stderr (docs/TESTSPEED.md: where a suite's
+ * time goes). case_begin(NULL) ends the last one (each suite's end). */
+void case_begin(const char *name);
+#define CASE(name) case_begin(name)
 
 #endif /* VTT_TEST_CHECK_H */

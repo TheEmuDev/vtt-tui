@@ -281,10 +281,17 @@ static int netmsg_ws(Net *n, uint64_t now)
     int fd = ws_connect(n, "");
     if (fd < 0) return -1;
     char buf[65536];
-    for (int i = 0; i < 20; i++) {
+    /* The join drained: the upgrade and the first FULL, then nothing more
+     * waiting. Stopping on quiet, not after a fixed 20 turns, keeps each
+     * client from costing most of a second (docs/TESTSPEED.md). */
+    int got = 0;
+    for (int i = 0; i < 50; i++) {
         net_pump(n, now);
         struct pollfd p = { fd, POLLIN, 0 };
-        if (poll(&p, 1, 20) > 0 && read(fd, buf, sizeof buf) <= 0) break;
+        if (poll(&p, 1, got ? 0 : 20) > 0) {
+            if (read(fd, buf, sizeof buf) <= 0) break;
+            got = 1;
+        } else if (got) break;
     }
     return fd;
 }
@@ -773,8 +780,14 @@ void test_net_server(void)
     CHECK_EQ((int)write(b, req, strlen(req)), (int)strlen(req));
     char resp[4096] = { 0 };
     size_t rl = 0;
-    for (int i = 0; i < 20 && !strstr(resp, "</body>") && !strstr(resp, "vtt: "); i++) {
+    /* Until the headers are in: the checks read only those (the page is
+     * larger than resp, so waiting for its end ran every turn). */
+    for (int i = 0; i < 20 && !strstr(resp, "\r\n\r\n"); i++) {
         net_pump(&n, now);
+        /* Read only what is there: the server answers on its next turn, in
+         * this thread, so a read before it waits out SO_RCVTIMEO (2 s). */
+        struct pollfd p = { b, POLLIN, 0 };
+        if (poll(&p, 1, 20) <= 0) continue;
         ssize_t got = read(b, resp + rl, sizeof resp - 1 - rl);
         if (got > 0) rl += (size_t)got;
     }
@@ -789,6 +802,8 @@ void test_net_server(void)
     memset(resp, 0, sizeof resp); rl = 0;
     for (int i = 0; i < 20 && !strstr(resp, "code"); i++) {
         net_pump(&n, now);
+        struct pollfd p = { b, POLLIN, 0 };
+        if (poll(&p, 1, 20) <= 0) continue;
         ssize_t got = read(b, resp + rl, sizeof resp - 1 - rl);
         if (got > 0) rl += (size_t)got;
     }
@@ -801,6 +816,8 @@ void test_net_server(void)
     memset(resp, 0, sizeof resp); rl = 0;
     for (int i = 0; i < 20 && !strstr(resp, "\r\n\r\n"); i++) {
         net_pump(&n, now);
+        struct pollfd p = { s, POLLIN, 0 };             /* as above: never a read before the answer */
+        if (poll(&p, 1, 20) <= 0) continue;
         ssize_t got = read(s, resp + rl, sizeof resp - 1 - rl);
         if (got > 0) rl += (size_t)got;
     }

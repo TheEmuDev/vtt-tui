@@ -527,6 +527,7 @@ void test_protocol(void)
 #ifdef PROTOCOL_MAIN
 int g_checks, g_fails;
 const char *g_case = "";
+void case_begin(const char *name) { g_case = name ? name : ""; }
 
 int main(void)
 {

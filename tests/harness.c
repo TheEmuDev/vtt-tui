@@ -14,6 +14,19 @@ int g_checks;
 int g_fails;
 const char *g_case = "";
 
+void case_begin(const char *name)
+{
+    static int on = -1;
+    static uint64_t t0;
+    if (on < 0) on = getenv("VTT_CASE_TIMES") != NULL;
+    if (on) {
+        uint64_t now = prof_now_ns();
+        if (t0 && g_case[0]) fprintf(stderr, "  %8.3f s  %s\n", (double)(now - t0) / 1e9, g_case);
+        t0 = name ? now : 0;
+    }
+    g_case = name ? name : "";
+}
+
 void feed(InputParser *p, const char *s)
 {
     input_init(p);

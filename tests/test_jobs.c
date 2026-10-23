@@ -1146,13 +1146,16 @@ void test_agent_command(void)
         CHECK(strstr(body, "--ctl 'help token'\n") != NULL);
         CHECK(strstr(body, " --agent-guide\n") != NULL);
     }
-    pump_until_file(&a, out, "\x01never");                  /* let the second run finish */
+    CHECK(pump_until_reaped(&a));                              /* let the second run finish */
     press(&a, ":agent command off\r");
     CHECK(strstr(a.status, "agent command off") != NULL);
     {
         char *before = slurp(out);
+        int runs = a.agents.nrun;
         press(&a, ":ask and another\r");
-        pump_until_file(&a, out, "Job #2");
+        /* A start is synchronous (app_agent_start, inside the key): no run
+         * now is none ever, with no wait for text that must not come. */
+        CHECK_EQ(a.agents.nrun, runs);
         char *after = slurp(out);
         CHECK(before && after && !strcmp(before, after));
         free(before);
@@ -1169,11 +1172,12 @@ void test_agent_command(void)
         char *t = ctl_ask(&a, "propose \"my own idea\"\ntile A2 water\n");
         free(t);
         CHECK(a.world.jobs[0].used && a.world.jobs[0].from == JOB_FROM_AGENT);
+        int runs = a.agents.nrun;
         press(&a, ":review\rc");
         press(&a, "rougher\r");
         CHECK_EQ(a.world.jobs[0].state, JOB_WORKING);
-        pump_until_file(&a, runs_file, "run-");
-        CHECK(!file_has(runs_file, "run-"));               /* nothing was started */
+        CHECK_EQ(a.agents.nrun, runs);                     /* nothing was started (a start is synchronous) */
+        CHECK(!file_has(runs_file, "run-"));
         jobs_reset(&a);
 
         CASE("REVIEW 4: the channel coming on for the command is said on the GM's line, once");

@@ -1,6 +1,8 @@
 # `make test`, faster: the plan
 
-**Status:** a plan, written 2026-10-23 for the user's sign-off (docs/V2.md *Next*, item 6:
+**Status:** signed off 2026-10-23 (the user: "Yes go with your recommendations": the order as
+written, `run-tests -jN` by default with `-j1` for today's order, `make test-fast` kept until
+step 3 is measured); being built, step by step. Written 2026-10-23 (docs/V2.md *Next*, item 6:
 the user, "These test cases have begun taking a while to run. What can be done to speed it
 up", then "once you complete the current task start working on it"); nothing built.
 
@@ -99,3 +101,27 @@ serial group; each is named when it is measured.
    `make test` passing `-j`.
 3. Whether `make test-fast` is still wanted once `make test` is this fast (recommended: keep it
    until step 3 is measured, then decide).
+
+## As built
+
+**Step 1, 2026-10-23.** `VTT_CASE_TIMES=1 build/run-tests SUITE` now prints each case's own
+time on stderr (tests/check.h `case_begin`; `CASE` is it), which found the waits:
+- `agentcmd` 18.6 s to 3.2 s: three waits for something that must not happen (two
+  `pump_until_file` for text never written, 5 s each at least) became checks that no run was
+  started -- a start is synchronous, inside the key -- and "let the second run finish" became
+  `pump_until_reaped`. The plan's guess at the kill grace was wrong: that case already set
+  it to 150 ms. Two mutations, each removing both guards before a start (the paused check at
+  `:ask` and in `app_agent_start`; feedback's `theirs` and the start's `JOB_FROM_GM`), are
+  caught by the new checks; removing either guard alone is not, by any version of the test,
+  since the other holds.
+- `netmsg` 6.9 s to 1.9 s: `netmsg_ws` drained a new connection for a fixed 20 turns, about
+  0.8 s each; it stops on quiet once the join has come.
+- `netserver` 4.5 s to 0.16 s: a read straight after a pump, before the server's answer,
+  waited out `net_connect`'s 2 s `SO_RCVTIMEO` (the server runs in the test's thread); the
+  loops read only when `poll` says there is something, and the page's loop stops at the end
+  of the headers (it waited for `</body>` in a buffer smaller than the page).
+- Kept, the waits the tests are about: `ctllive` and `disk` each wait out the channel
+  client's 2 s answer time for "a vtt that is there and does not answer"; `apiagent` waits
+  its retry after curl's exit 7.
+
+The suites' phase: **65.8 s to 38.8 s** (two runs, 38.79 and 38.83 s; CPU unchanged, 18.7 s).
