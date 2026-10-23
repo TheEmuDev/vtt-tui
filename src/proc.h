@@ -16,6 +16,7 @@ typedef struct {
     size_t      fd3len;
     int         timeout_ms; /* then it is killed; 0: no limit */
     int         quiet;      /* its stderr to /dev/null: run from the app, whose terminal it would write over */
+    const char *const *env; /* NULL: our environment; else only the variables named here go with it */
 } ProcIn;
 
 /* Runs argv[0] (looked up in PATH) and collects its stdout into *out. The

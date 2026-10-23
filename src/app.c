@@ -1291,7 +1291,7 @@ static int modal_key(App *a, Key k)
         else if (r == -1) {
             int secret = a->prompt.secret;
             PromptWhat what = a->prompt_what;
-            if (secret) ui_prompt_wipe(&a->prompt);
+            if (secret) { ui_prompt_wipe(&a->prompt); apikey_typing(0); }
             a->modal       = MODAL_NONE;
             a->prompt_what = PROMPT_NONE;
             a->agents.key_then    = KEY_THEN_NOTHING;
@@ -1337,6 +1337,13 @@ static int modal_key(App *a, Key k)
 
     case MODAL_CHOOSE_AGENT:
         app_agent_choice_key(a, k);
+        return 1;
+
+    case MODAL_KEY_WHERE:
+        if (k.kind == KEY_ESC || (k.kind == KEY_CHAR && (k.ch == 'r' || k.ch == 's'))) {
+            app_agent_key_where_chosen(a, k.kind == KEY_ESC ? 0 : (int)k.ch);
+            back_to_choice(a);          /* from the agent choice box: back to it when nothing came of it */
+        }
         return 1;
 
     case MODAL_CONFIRM_KEY:

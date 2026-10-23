@@ -99,7 +99,8 @@ typedef struct {
     long        pid;
     int         job;
     char        name[64];
-    char        key[APIKEY_MAX];
+    char        key[APIKEY_MAX];   /* held for the run; empty when the keyring's is looked up a call */
+    ApiKeySource src;
     ByteBuf     msgs;           /* the messages so far, each JSON, comma-separated */
     long        in, cw, cr, out;
     int         calls;
@@ -309,21 +310,46 @@ static void read_http(ByteBuf *out, Http *h)
     h->body_len = (size_t)(end - p);
 }
 
+/* What curl may see of our environment (docs/APIAGENT.md, *The key, made
+ * safer*): where to find programs and home, the locale, the proxies and the
+ * certificates. Never SSLKEYLOGFILE (it would let a capture be decrypted),
+ * nor anything else a config could be steered by. */
+static const char *const CURL_ENV[] = {
+    "PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR",
+    "http_proxy", "https_proxy", "HTTPS_PROXY", "all_proxy", "ALL_PROXY", "no_proxy", "NO_PROXY",
+    "SSL_CERT_FILE", "SSL_CERT_DIR", "CURL_CA_BUNDLE", NULL,
+};
+
 static int call_api(Run *r, const ByteBuf *body, ByteBuf *out, Http *h, char *err, size_t errsz)
 {
+    /* A keyring key is looked up for each call and wiped after it: in this
+     * process only as long as the call. */
+    char key[APIKEY_MAX];
+    if (r->src == APIKEY_KEYRING) {
+        char why[600];
+        if (apikey_find_stored(key, sizeof key, why, sizeof why) != APIKEY_KEYRING) {
+            apikey_wipe(key, sizeof key);
+            snprintf(err, errsz, "the keyring gave no key this time: %.200s", why);
+            return -1;
+        }
+    } else str_lcpy(key, r->key, sizeof key);
     char fd3[APIKEY_MAX + 300];
     const Price *p = price_of(r->cfg.model);
     int  n = snprintf(fd3, sizeof fd3,
                       "header = \"x-api-key: %s\"\nheader = \"anthropic-version: 2023-06-01\"\n"
                       "header = \"content-type: application/json\"\n%s",
-                      r->key, r->cfg.fallbacks && p && p->fallback ? "header = \"anthropic-beta: server-side-fallback-2026-07-01\"\n" : "");
-    static const char *const ARGS[] = { "curl", "-sS", "-i", "--config", "/dev/fd/3", "--data-binary", "@-",
-                                        "--max-time", CURL_TIME_S, "--connect-timeout", "20", API_URL, NULL };
+                      key, r->cfg.fallbacks && p && p->fallback ? "header = \"anthropic-beta: server-side-fallback-2026-07-01\"\n" : "");
+    apikey_wipe(key, sizeof key);
+    /* -q first: no ~/.curlrc (a -v or a --trace there would write the key's
+     * header out); https alone. */
+    static const char *const ARGS[] = { "curl", "-q", "-sS", "-i", "--proto", "=https", "--config", "/dev/fd/3",
+                                        "--data-binary", "@-", "--max-time", CURL_TIME_S, "--connect-timeout", "20",
+                                        API_URL, NULL };
     char *argv[sizeof ARGS / sizeof *ARGS];
     for (size_t i = 0; i < sizeof ARGS / sizeof *ARGS; i++) argv[i] = (char *)ARGS[i];   /* exec's type; never written */
     const char *curl = getenv("VTT_CLAUDE_CURL");
     if (curl && *curl) argv[0] = (char *)curl;
-    ProcIn pi = { body->data, body->len, fd3, (size_t)n, 330 * 1000, 0 };
+    ProcIn pi = { body->data, body->len, fd3, (size_t)n, 330 * 1000, 0, CURL_ENV };
     bb_reset(out);
     int st, rc = proc_run(argv, &pi, out, &st, err, errsz);
     apikey_wipe(fd3, sizeof fd3);
@@ -425,6 +451,7 @@ static int finish(Run *r, int code, const char *how)
             r->job, how, r->calls, r->in, r->cw, r->cr, r->out, cost, r->cfg.model);
     usage_record(r, how);
     apikey_wipe(r->key, sizeof r->key);
+    apikey_drop();
     bb_free(&r->msgs);
     return code;
 }
@@ -503,9 +530,29 @@ int apiagent_main(const ApiAgentCfg *cfg)
     if (tr && *tr) { str_lcpy(r->trace, tr, sizeof r->trace); dir_make(r->trace); }
     bb_init(&r->msgs, 8192);
 
+    /* Not dumpable, for the run: no core file holds the key, no other process
+     * reads this one's memory; curl inherits the core limit. */
+    apikey_harden();
     char err[600];
-    ApiKeySource src = apikey_find(r->key, sizeof r->key, err, sizeof err);
-    if (src == APIKEY_NONE) { tell_gm(r, err); return finish(r, APIAGENT_SETUP, "not started"); }
+    const char *kfd = getenv("VTT_KEY_FD");
+    int given = 0;
+    if (kfd && *kfd) {
+        /* vtt's key -- this session's, or the one it took from its
+         * environment -- down a pipe: never on a command line, never in the
+         * environment. */
+        int fd = atoi(kfd);
+        char k[APIKEY_MAX];
+        ssize_t got = fd > 2 ? read(fd, k, sizeof k - 1) : -1;
+        if (fd > 2) close(fd);
+        k[got > 0 ? got : 0] = '\0';
+        given = apikey_hold(k, APIKEY_SESSION) == 0;
+        apikey_wipe(k, sizeof k);
+        unsetenv("VTT_KEY_FD");
+    }
+    if (!given) apikey_take_env(err, sizeof err);      /* run by hand: the variable, out of curl's way */
+    r->src = apikey_find(r->key, sizeof r->key, err, sizeof err);
+    if (r->src == APIKEY_NONE) { tell_gm(r, err); return finish(r, APIAGENT_SETUP, "not started"); }
+    if (r->src == APIKEY_KEYRING) apikey_wipe(r->key, sizeof r->key);   /* looked up again a call */
     const char *curl = getenv("VTT_CLAUDE_CURL");
     if (!proc_found(curl && *curl ? curl : "curl")) {
         tell_gm(r, "the Claude agent needs curl, and it is not on PATH");
@@ -518,7 +565,8 @@ int apiagent_main(const ApiAgentCfg *cfg)
     utf8_clean(prompt, plen);
     add_user_text(r, prompt);
     free(prompt);
-    say_log("job %d: %s, %s effort, key from the %s", r->job, r->cfg.model, r->cfg.effort, apikey_source_name(src));
+    say_log("job %d: %s, %s effort, key from %s", r->job, r->cfg.model, r->cfg.effort,
+            given ? "vtt" : r->src == APIKEY_KEYRING ? "the keyring, a call at a time" : "the environment");
     if (r->cfg.cap > 0 && !price_of(r->cfg.model)) {
         /* Said, not silent: the GM set a cap and believes it holds. */
         char line[300];

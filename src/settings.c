@@ -9,6 +9,7 @@
 
 static const char *const NAMES[SET_COUNT] = {
     "agent", "command", "model", "effort", "cap", "calls", "fallbacks", "paused", "channel", "accept",
+    "passkey",
 };
 
 static const char *const KINDS[] = { "unset", "off", "command", "claude" };
@@ -78,11 +79,13 @@ int settings_set(Settings *s, SettingId id, const char *v, char *err, size_t err
     }
     case SET_FALLBACKS:
     case SET_PAUSED:
-    case SET_CHANNEL: {
+    case SET_CHANNEL:
+    case SET_PASSKEY: {
         int b;
         if (on_off(v, &b) < 0) { snprintf(err, errsz, "%s is on or off", NAMES[id]); return -1; }
         if (id == SET_FALLBACKS) s->fallbacks = b;
         else if (id == SET_PAUSED) s->paused = b;
+        else if (id == SET_PASSKEY) s->pass_key = b;
         else s->channel = b;
         return 0;
     }
@@ -110,6 +113,7 @@ void settings_value(const Settings *s, SettingId id, char *buf, size_t sz)
     case SET_PAUSED:    snprintf(buf, sz, "%s", s->paused ? "on" : "off"); break;
     case SET_CHANNEL:   snprintf(buf, sz, "%s", s->channel ? "on" : "off"); break;
     case SET_ACCEPT:    snprintf(buf, sz, "%s", s->accept_auto ? "auto" : "review"); break;
+    case SET_PASSKEY:   snprintf(buf, sz, "%s", s->pass_key ? "on" : "off"); break;
     default:            buf[0] = '\0'; break;
     }
 }

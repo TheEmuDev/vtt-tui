@@ -23,6 +23,7 @@
 #include "util.h"
 #include "watch.h"
 #include "apiagent.h"
+#include "apikey.h"
 
 typedef struct {
     const char *trace_path;
@@ -606,6 +607,11 @@ static int run_interactive(const Options *o)
     Renderer r;
     App      a;
 
+    /* Before anything is started: ANTHROPIC_API_KEY into vtt's own keeping
+     * and out of its environment, so no child inherits it (docs/APIAGENT.md,
+     * *The key, made safer*). */
+    char keynote[200];
+    apikey_take_env(keynote, sizeof keynote);
     if (term_init(&t) < 0) {
         die("not a terminal (try --dump-frame or --bench for headless use)");
     }
@@ -614,6 +620,15 @@ static int run_interactive(const Options *o)
     rnd_resize(&r, t.w, t.h);
     app_init(&a, &t, &r);
     a.ascii = o->ascii;
+    {
+        char kf[1100];
+        if (keynote[0]) app_note_gm(&a, keynote);
+        else if (apikey_old_file(kf, sizeof kf)) {
+            char msg[1300];
+            snprintf(msg, sizeof msg, "%s is from an older vtt and is not read now - :agent key types the key in again; then remove the file", kf);
+            app_note_gm(&a, msg);
+        }
+    }
     a.autosave_on = 1;              /* interactive only: a bench would litter */
     a.file.ask_holders = 1;              /* a GM is here to be asked */
     /* The GM's settings (docs/APIAGENT.md): interactive only, and saved on

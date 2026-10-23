@@ -522,6 +522,11 @@ void app_draw_view(App *a, View view)
                  "y  remove the stored key      n / esc  keep it", frame);
         break;
 
+    case MODAL_KEY_WHERE:
+        ui_modal(a->rnd, a->th, a->modal_title, a->modal_body,
+                 "r  remember it in the keyring      s  this session only      esc  neither", frame);
+        break;
+
     case MODAL_CHOOSE_AGENT: {
         UiChoice items[3];
         int n = app_agent_choice_rows(a, items, 3);

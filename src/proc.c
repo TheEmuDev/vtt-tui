@@ -12,6 +12,8 @@
 #include <time.h>
 #include <unistd.h>
 
+extern char **environ;
+
 static long now_ms(void)
 {
     struct timespec ts;
@@ -51,6 +53,23 @@ int proc_run(char *const argv[], const ProcIn *pi, ByteBuf *out, int *status, ch
          * terminal are not the program's business. */
         for (int fd = pi->fd3 ? 4 : 3; fd < 1024; fd++) close(fd);
         signal(SIGPIPE, SIG_DFL);
+        if (pi->env) {
+            /* An environment of its own: only the names kept, as they are
+             * here (curl: no SSLKEYLOGFILE, nothing a config could steer). */
+            static char *keep[64];
+            int n = 0;
+            for (int i = 0; pi->env[i] && n < 63; i++) {
+                const char *v = getenv(pi->env[i]);
+                if (!v) continue;
+                size_t len = strlen(pi->env[i]) + strlen(v) + 2;
+                char *kv = malloc(len);
+                if (!kv) continue;
+                snprintf(kv, len, "%s=%s", pi->env[i], v);
+                keep[n++] = kv;
+            }
+            keep[n] = NULL;
+            environ = keep;
+        }
         execvp(argv[0], argv);
         _exit(127);
     }

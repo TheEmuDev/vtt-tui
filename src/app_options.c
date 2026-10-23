@@ -16,7 +16,7 @@
 
 static const char *const LABELS[OPT_COUNT] = {
     "Agent", "Command", "Model", "Effort", "Spend cap", "Calls cap", "Fallbacks",
-    "Channel at start", "Changes at start", "API key", "Spent so far",
+    "Channel at start", "Changes at start", "API key", "Key to commands", "Spent so far",
 };
 
 static const char *const MODELS[] = { "opus", "sonnet", "haiku", "fable" };
@@ -118,8 +118,13 @@ int app_options_row(const App *a, int row, char *label, size_t lsz, char *value,
     case OPT_KEY:
         if (a->options.key == APIKEY_NONE) snprintf(value, vsz, "none - enter types one in");
         else snprintf(value, vsz, "%s, ending ...%s%s", a->options.key == APIKEY_ENV ? "ANTHROPIC_API_KEY" :
-                      a->options.key == APIKEY_KEYRING ? "the keyring" : "a file only you can read",
+                      a->options.key == APIKEY_KEYRING ? "the keyring" : "this session only",
                       a->options.key_last4, a->options.key == APIKEY_ENV ? "" : "  (d removes)");
+        break;
+    case OPT_PASSKEY:
+        snprintf(value, vsz, "%s", s->pass_key ? "on - agent commands get an exported ANTHROPIC_API_KEY"
+                                               : "off - an exported ANTHROPIC_API_KEY stays with vtt");
+        dim = s->agent != AGENT_KIND_COMMAND;
         break;
     case OPT_SPENT:
         if (!a->options.runs) snprintf(value, vsz, "nothing yet");
@@ -185,6 +190,7 @@ static void step(App *a, int row, int dir)
     case OPT_FALLBACKS: s->fallbacks = !s->fallbacks; app_settings_changed(a); said(a, SET_FALLBACKS, " - from the next :ask"); return;
     case OPT_CHANNEL:   s->channel = !s->channel; app_settings_changed(a); said(a, SET_CHANNEL, " - next time vtt starts"); return;
     case OPT_ACCEPT:    s->accept_auto = !s->accept_auto; app_settings_changed(a); said(a, SET_ACCEPT, " - next time vtt starts"); return;
+    case OPT_PASSKEY:   s->pass_key = !s->pass_key; app_settings_changed(a); said(a, SET_PASSKEY, " - from the next :ask"); return;
     default: return;
     }
 }

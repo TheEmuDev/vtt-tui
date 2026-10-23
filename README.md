@@ -1452,12 +1452,18 @@ vtt can answer an `:ask` itself, through the Claude API, with no other program i
 API to that key; **Options** shows what the jobs have cost, and a cap stops any one job at
 $1.00 unless you change it.
 
-1. **The key.** Either set `ANTHROPIC_API_KEY` in your shell before starting vtt, or type it
-   in: `:agent key` (or the API key row of **Options**) opens a prompt that shows only `*`.
-   A typed key goes to your system keyring (GNOME Keyring, KWallet), or, on a machine with
-   no keyring, to `~/.config/vtt/anthropic-key`, readable by you alone. vtt shows only its
-   last four characters. Only the Claude agent gets the key: programs started with `:agent
-   command` never see it. `:agent key remove` takes a stored key away (asking first).
+1. **The key.** Type it in, or set `ANTHROPIC_API_KEY` in your shell before starting vtt.
+   `:agent key` (or the API key row of **Options**) opens a prompt that shows only `*`; then
+   press `r` to remember it in your system keyring (GNOME Keyring, KWallet), or `s` to keep it
+   for this session only -- in vtt's memory, gone when vtt quits, never written anywhere. On
+   a machine with no keyring it is kept for the session. vtt shows only its last four
+   characters. Only the Claude agent gets the key: programs started with `:agent command`
+   never see it, not even one you exported (unless you turn on `:agent passkey`).
+   `:agent key remove` takes a kept key away (asking first).
+
+   It is good practice to make a key just for vtt in the Claude Console, in a workspace with
+   a spend limit: if it ever leaked, the cost is bounded and you can revoke that one key
+   alone.
 2. **Choose it.** `:agent claude` (or `c` in the box above). With no key yet, it asks for one.
 3. **Ask.** Every `:ask` starts it: Claude reads the guide built into vtt, takes the job, reads
    the map where you drew, proposes, checks its proposal and stops. You review it as any
@@ -1469,7 +1475,8 @@ $1.00 unless you change it.
 | `:agent model M`, `:agent effort low\|medium\|high` | the model, and how hard it thinks (medium by default) |
 | `:agent cap 2.50`, `:agent calls 30` | stop a job past this many dollars (by vtt's price table; 0 for none) or API calls; $1.00 and 25 by default |
 | `:agent fallbacks on\|off` | when Claude declines a request, try it on another model in the same call (on by default) |
-| `:agent key`, `:agent key remove` | type a key in, hidden; take the stored one away |
+| `:agent key`, `:agent key remove` | type a key in, hidden, then `r` (keyring) or `s` (this session only); take the kept one away |
+| `:agent passkey on\|off` | give agent commands an `ANTHROPIC_API_KEY` vtt was started with (off by default) |
 
 What each job cost is in the session log when `:log` is on, and every run adds a line to
 `~/.local/share/vtt/claude-usage.tsv`; **Options** sums it. A job that cannot finish says

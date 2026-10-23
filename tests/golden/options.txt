@@ -12,8 +12,8 @@
   Channel at start  off - :agent on opens it                                              
   Changes at start  wait for :review                                                      
   API key           none - enter types one in                                             
+  Key to commands   off - an exported ANTHROPIC_API_KEY stays with vtt                    
   Spent so far      nothing yet                                                           
-                                                                                          
                                                                                           
                                                                                           
                                                                                           

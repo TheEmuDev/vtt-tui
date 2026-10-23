@@ -235,6 +235,8 @@ enum { KEY_THEN_NOTHING, KEY_THEN_CLAUDE };
 void app_agent_key_prompt(App *a, int then, const char *why);
 void app_agent_key_typed(App *a, const char *key);
 void app_agent_key_remove(App *a);
+/* The GM's word on a key typed in: 'r' the keyring, 's' this session only, else neither. */
+void app_agent_key_where_chosen(App *a, int ch);
 /* Where the key in use is from, and its last four characters ("" with none). */
 int  app_agent_key_where(char *last4, size_t sz);
 
@@ -250,7 +252,7 @@ void app_agent_choice_continue(App *a);
 
 /* The Options screen (app_options.c). */
 enum { OPT_AGENT, OPT_COMMAND, OPT_MODEL, OPT_EFFORT, OPT_CAP, OPT_CALLS, OPT_FALLBACKS,
-       OPT_CHANNEL, OPT_ACCEPT, OPT_KEY, OPT_SPENT, OPT_COUNT };
+       OPT_CHANNEL, OPT_ACCEPT, OPT_KEY, OPT_PASSKEY, OPT_SPENT, OPT_COUNT };
 void app_options_open(App *a);
 void app_options_key(App *a, Key k);
 void app_options_prompt(App *a, const char *text);

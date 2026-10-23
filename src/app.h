@@ -52,6 +52,7 @@ typedef enum {
     MODAL_CONFIRM_HELD,      /* another vtt has this map open: open it here too? */
     MODAL_CONFIRM_ROWS,      /* the file had a row added or lost: save the rows as read? */
     MODAL_CONFIRM_KEY,       /* :agent key remove: take the stored API key away? */
+    MODAL_KEY_WHERE,         /* a key typed in: the keyring, or this session only? */
     MODAL_CHOOSE_AGENT,      /* the first :ask with no agent chosen: how should agents answer? (app_agent.c) */
     MODAL_PICKER,            /* a list filtered as the GM types: App.pick */
     MODAL_CARD,              /* :card -- a creature's card whole, scrolled by cards.top */

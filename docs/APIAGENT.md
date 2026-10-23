@@ -1,6 +1,6 @@
 # The Claude API agent (ROADMAP item 26)
 
-> **Status:** its key's flow is being redone: *The key, made safer: the plan*, signed off 2026-10-23.
+> **Status:** its key's flow redone 2026-10-23: *The key, made safer* (signed off, built; one check waits on the user's go).
 > **Built 2026-10-19 to 20** (887f306, cbd4c99, 46395d8, b98d8c7/a30a55e, e24b7cd,
 > ab97c33), from the plan signed off 2026-10-19 ("yes to the keyring, go with
 > recommendations"). A design record: what is true now is the README (*Working with AI
@@ -555,3 +555,32 @@ curl's arguments and environment), settings.c (the setting), the Options row and
 question; about 150-250 lines with the tests. Docs: the README's key section, this page's *The
 key*, ARCHITECTURE.md's *Agents*, AGENTS.md if anything an agent sees changes, HEALTH B18-B20
 closed by commit.
+
+### As built (2026-10-23)
+
+Built as planned, with these differences, each for a reason:
+- The held key reaches the Claude agent with `VTT_KEY_FD=3` in its environment (the
+  descriptor's number, never the key), not a `--key-fd` flag: the command line is the one
+  `app_agent_apply` builds and the GM sees, and stays as it was.
+- The holder also takes the typed key while the GM chooses (`apikey_pending_*`, its own slot),
+  so choosing `r` with an exported key held does not put that one aside.
+- `apikey_take_env` runs at the top of `run_interactive` (main.c) and of `apiagent_main`
+  when no key came down a pipe; every agent child also loses `ANTHROPIC_API_KEY`
+  explicitly, so a process that never ran the start (a test) is held to the rule too.
+- `mlock` is best effort and its failure silent: the buffers are a page or two, and a limit
+  of 0 locked pages (some containers) must not stop vtt.
+
+Tested (suites `apiagent`, `apikey`, `options`, `askagent`, `settings`; no network, no money,
+the stand-ins): curl's arguments (`-q` first, `--proto =https`), its environment (no
+`SSLKEYLOGFILE`, no key, no `VTT_*`), its core limit 0, and its parent's `/proc/PID/environ`
+closed to it; a keyring key looked up once at start and once a call (3 lookups for 2 calls);
+a session key down `VTT_KEY_FD` with nothing of it on the command line; an old key file not
+read; the variable out of the environment and held; agent commands with no key, and with
+it under `passkey on`; `r`, `s` and esc at the new box, which the phones never see; not
+dumpable while a key is held, dumpable again when it is let go.
+
+Not yet shown, and why: whether systemd-coredump keeps a dump of a process whose core limit
+is 0 (curl's case; the agent and vtt are covered by not being dumpable, which prctl(2)
+documents stops core dumps). It is the crash test of *Tests*, which writes to the system's
+crash store and waits for the user's go (HEALTH B18). The keyring lookup a call is not
+timed: it needs the real keyring, likewise the user's go.

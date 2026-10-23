@@ -10,6 +10,9 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#ifdef __linux__
+#include <sys/prctl.h>
+#endif
 
 #include "apiagent.h"
 #include "apikey.h"
@@ -34,6 +37,8 @@ static void fake_curl(const char *dir)
                "for a in \"$@\"; do printf '%%s\\n' \"$a\"; done > \"$d/argv.$n\"\n"
                "cat <&3 > \"$d/fd3.$n\"\n"
                "cat > \"$d/body.$n\"\n"
+               "env > \"$d/env.$n\"; ulimit -c > \"$d/core.$n\"\n"
+               "cat /proc/$PPID/environ > /dev/null 2>&1; echo $? > \"$d/penv.$n\"\n"
                "if [ -f \"$d/answer.$n\" ] && head -c 5 \"$d/answer.$n\" | grep -q '^EXIT '; then exit $(cut -c6- \"$d/answer.$n\"); fi\n"
                "if [ -f \"$d/answer.$n\" ]; then cat \"$d/answer.$n\"; else printf 'HTTP/1.1 500 x\\r\\n\\r\\n{}'; fi\n"
                "if [ -f \"$d/exit.$n\" ]; then exit $(cat \"$d/exit.$n\"); fi\n", dir);
@@ -46,7 +51,8 @@ static void fake_curl(const char *dir)
 static void fresh(void)
 {
     char cmd[1000];
-    snprintf(cmd, sizeof cmd, "rm -f '%s'/n '%s'/argv.* '%s'/fd3.* '%s'/body.* '%s'/answer.* '%s'/exit.*", g_dir, g_dir, g_dir, g_dir, g_dir, g_dir);
+    snprintf(cmd, sizeof cmd, "rm -f '%s'/n '%s'/argv.* '%s'/fd3.* '%s'/body.* '%s'/answer.* '%s'/exit.* '%s'/env.* '%s'/core.* '%s'/penv.*",
+             g_dir, g_dir, g_dir, g_dir, g_dir, g_dir, g_dir, g_dir, g_dir);
     CHECK_EQ(system(cmd), 0);
     unlink(g_usage);                       /* each run's line is looked for alone */
 }
@@ -116,6 +122,8 @@ static void ask_and_wait(App *a, const char *what, const char *ended)
     CHECK(pump_until_reaped(a));
 }
 
+static void fake_secret_tool(const char *dir, char *path, size_t sz);
+
 static void agent_cmd(App *a, const char *self, const char *extra)
 {
     char cmd[1200];
@@ -125,6 +133,7 @@ static void agent_cmd(App *a, const char *self, const char *extra)
 
 void test_api_agent(void)
 {
+    apikey_drop();                       /* a key held is this process's: none from the suite before */
     Sandbox sb = sandbox_enter("apiagent");
     CHECK_EQ(sb.ok, 1);
     if (!sb.ok) return;
@@ -142,7 +151,16 @@ void test_api_agent(void)
     str_lcpy(g_dir, sb.dir, sizeof g_dir);
     snprintf(g_usage, sizeof g_usage, "%s/vtt/claude-usage.tsv", sb.datadir);
     fake_curl(sb.dir);
+    /* The key as vtt's start takes it: held, out of the environment. These
+     * runs start the agent as a command (:agent command '<vtt>' --claude-agent,
+     * for the flags), and a command gets an exported key only with passkey
+     * on -- the case the agent is run by hand with the variable set. */
+    char note[200];
     setenv("ANTHROPIC_API_KEY", KEY, 1);
+    apikey_take_env(note, sizeof note);
+    CHECK(!getenv("ANTHROPIC_API_KEY") && !note[0]);
+    a.settings.pass_key = 1;
+    setenv("SSLKEYLOGFILE", "/nonexistent/keys.log", 1);          /* must never reach curl */
     a.world.ctl_auto = 0;
 
     CASE("a job done: take, propose with edits, end the turn -- the job ready, as from any agent");
@@ -189,6 +207,17 @@ void test_api_agent(void)
     CHECK(f1 && strstr(f1, "header = \"x-api-key: " KEY "\"\n"));
     CHECK(f1 && strstr(f1, "anthropic-version: 2023-06-01") && strstr(f1, "anthropic-beta: server-side-fallback-2026-07-01"));
     CHECK(a1 && !strstr(a1, KEY) && strstr(a1, "--config\n/dev/fd/3\n"));
+
+    CASE("curl: -q first (no ~/.curlrc), https alone, an environment of its own, no core file; the agent's memory closed to it");
+    CHECK(a1 && !strncmp(a1, "-q\n", 3) && strstr(a1, "--proto\n=https\n"));
+    {
+        char *e1 = got("env", 1), *c1 = got("core", 1), *p1 = got("penv", 1);
+        CHECK(e1 && strstr(e1, "PATH=") && !strstr(e1, "SSLKEYLOGFILE") && !strstr(e1, "ANTHROPIC_API_KEY")
+              && !strstr(e1, "VTT_PID") && !strstr(e1, KEY));
+        CHECK(c1 && !strcmp(c1, "0\n"));
+        if (getuid() != 0) CHECK(p1 && strcmp(p1, "0\n") != 0);    /* the agent is not dumpable: its /proc is closed */
+        free(e1); free(c1); free(p1);
+    }
     CHECK(b1 && !strstr(b1, KEY));
     CHECK(b2 && !strstr(b2, KEY));
     CHECK(!file_has(g_usage, KEY));
@@ -346,44 +375,88 @@ void test_api_agent(void)
 
     CASE("no key anywhere: the run says so, and calls nothing");
     unsetenv("ANTHROPIC_API_KEY");
+    apikey_drop();
     jobs_reset(&a);
     fresh();
     ask_and_wait(&a, "keyless", "not started");
     CHECK_EQ(calls(), 0);
     CHECK(strstr(a.status, "no API key") != NULL);
 
-    CASE("a key file others can read is refused with the chmod; mode 600 is used");
+    CASE("an older vtt's key file is not read, even mode 600: no key, nothing called");
     {
-        char kf[900];
-        apikey_file_path(kf, sizeof kf);
+        char kf[1100];
+        apikey_old_file(kf, sizeof kf);
         CHECK(strncmp(kf, sb.dir, strlen(sb.dir)) == 0);              /* the sandbox's, never the user's */
-        char kd[900];
+        char kd[1100];
         str_lcpy(kd, kf, sizeof kd);
         *strrchr(kd, '/') = '\0';
         dir_make(kd);
         FILE *f = fopen(kf, "w");
         fputs(KEY "\n", f);
         fclose(f);
-        chmod(kf, 0644);
-        jobs_reset(&a);
-        fresh();
-        ask_and_wait(&a, "open key", "not started");
-        CHECK(strstr(a.status, "chmod 600") != NULL);
         chmod(kf, 0600);
+        CHECK_EQ(apikey_old_file(kf, sizeof kf), 1);
         jobs_reset(&a);
         fresh();
-        answer(1, OK200, "{\"content\":[{\"type\":\"text\",\"text\":\"x\"}],\"stop_reason\":\"end_turn\",\"usage\":{}}");
-        ask_and_wait(&a, "file key", "done");
-        char *f3 = got("fd3", 1);
-        CHECK(f3 && strstr(f3, "x-api-key: " KEY "\"") != NULL);     /* the newline after it left behind */
-        free(f3);
+        ask_and_wait(&a, "old file", "not started");
+        CHECK_EQ(calls(), 0);
         unlink(kf);
     }
 
+    CASE("a keyring key is looked up for each call, not held for the run");
+    {
+        char tool[900], sec[900], stv[900];
+        fake_secret_tool(sb.dir, tool, sizeof tool);
+        setenv("VTT_SECRET_TOOL", tool, 1);
+        snprintf(sec, sizeof sec, "%s/secret", sb.dir);
+        FILE *f = fopen(sec, "w");
+        fputs(KEY, f);
+        fclose(f);
+        jobs_reset(&a);
+        fresh();
+        snprintf(stv, sizeof stv, "%s/st.argv", sb.dir);
+        unlink(stv);
+        answer(1, OK200, "{\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"vtt\",\"input\":{\"request\":\"jobs\"}}],\"stop_reason\":\"tool_use\",\"usage\":{}}");
+        answer(2, OK200, "{\"content\":[{\"type\":\"text\",\"text\":\"x\"}],\"stop_reason\":\"end_turn\",\"usage\":{}}");
+        ask_and_wait(&a, "keyring", "done");
+        CHECK_EQ(calls(), 2);
+        char *t = slurp(stv);
+        int lookups = 0;
+        for (const char *q = t; q && (q = strstr(q, "lookup\n")); q++) lookups++;
+        CHECK_EQ(lookups, 3);                                          /* one at its start, one a call */
+        free(t);
+        char *f2 = got("fd3", 2);
+        CHECK(f2 && strstr(f2, "x-api-key: " KEY "\""));
+        free(f2);
+        unlink(sec);
+        unsetenv("VTT_SECRET_TOOL");
+    }
+
+    CASE("the Claude agent given vtt's session key: down a pipe on fd 3 (VTT_KEY_FD), never its command line");
+    {
+        apikey_hold(KEY, APIKEY_SESSION);
+        a.settings.agent = AGENT_KIND_CLAUDE;
+        a.agents.from_env = 0;
+        app_agent_apply(&a);
+        CHECK(a.agents.cmd[0] && !strstr(a.agents.cmd, KEY) && !strstr(a.agents.cmd, "KLMN"));
+        jobs_reset(&a);
+        fresh();
+        answer(1, OK200, "{\"content\":[{\"type\":\"text\",\"text\":\"x\"}],\"stop_reason\":\"end_turn\",\"usage\":{}}");
+        ask_and_wait(&a, "session key", "done");
+        char *k1 = got("fd3", 1), *e1 = got("env", 1);
+        CHECK(k1 && strstr(k1, "x-api-key: " KEY "\""));
+        CHECK(e1 && !strstr(e1, "VTT_KEY_FD") && !strstr(e1, KEY));
+        free(k1); free(e1);
+        apikey_drop();
+        agent_cmd(&a, self, "");
+    }
+
+    unsetenv("SSLKEYLOGFILE");
     unsetenv("VTT_CLAUDE_CURL");
     app_self_path = self_was;
     app_free(&a);
     rnd_free(&r);
+    apikey_drop();
     sandbox_leave(&sb);
 }
 
@@ -415,6 +488,7 @@ void test_api_agent_parts(void)
 /* The settings (settings.c) and the :agent words that change them. */
 void test_settings(void)
 {
+    apikey_drop();                       /* a key held is this process's: none from the suite before */
     Sandbox sb = sandbox_enter("settings");
     CHECK_EQ(sb.ok, 1);
     if (!sb.ok) return;
@@ -501,6 +575,10 @@ void test_settings(void)
     press(&a, "\x1b");
     CHECK_EQ(a.settings.agent, AGENT_KIND_COMMAND);                   /* nothing changed */
     setenv("ANTHROPIC_API_KEY", KEY, 1);
+    {
+        char knote[200];
+        apikey_take_env(knote, sizeof knote);                          /* as vtt's start does */
+    }
     setenv("VTT_CLAUDE_CURL", "/bin/true", 1);
     press(&a, ":agent claude sonnet\r");
     CHECK(strstr(a.status, "each :ask now starts the Claude agent - agent claude: sonnet (claude-sonnet-5-5), high effort, $2.50 and 40 calls a job, fallbacks off") != NULL);
@@ -539,6 +617,7 @@ void test_settings(void)
     app_self_path = self_was;
     app_free(&a);
     rnd_free(&r);
+    apikey_drop();
     sandbox_leave(&sb);
 }
 
@@ -575,6 +654,7 @@ static int frame_has(App *a, Renderer *r, const char *needle)
 
 void test_api_key(void)
 {
+    apikey_drop();                       /* a key held is this process's: none from the suite before */
     Sandbox sb = sandbox_enter("apikey");
     CHECK_EQ(sb.ok, 1);
     if (!sb.ok) return;
@@ -582,7 +662,7 @@ void test_api_key(void)
     char tool[900], secret[900], kf[1200];
     fake_secret_tool(sb.dir, tool, sizeof tool);
     snprintf(secret, sizeof secret, "%s/secret", sb.dir);
-    apikey_file_path(kf, sizeof kf);
+    apikey_old_file(kf, sizeof kf);
     Renderer r;
     App a;
     rnd_init(&r);
@@ -595,7 +675,7 @@ void test_api_key(void)
     press(&a, ":agent key\r");
     CHECK_EQ(a.modal, MODAL_PROMPT);
     CHECK_EQ(a.prompt.secret, 1);
-    CHECK(frame_has(&a, &r, "none yet - it goes to your keyring"));
+    CHECK(frame_has(&a, &r, "none yet - shown as *; then the keyring, or"));   /* wrapped: "this session only" below */
     press(&a, KEY);
     CHECK(frame_has(&a, &r, "Anthropic API key"));
     CHECK(!frame_has(&a, &r, "sk-test"));
@@ -606,8 +686,18 @@ void test_api_key(void)
         free(pl);
     }
 
-    CASE("enter: to the keyring down stdin, no newline, never an argument; the prompt wiped; only the last four said");
+    CASE("enter: where it goes is asked, in a box the players never see; r: to the keyring down stdin, no newline, never an argument; the prompt wiped; only the last four said");
     press(&a, "\r");
+    CHECK_EQ(a.modal, MODAL_KEY_WHERE);
+    CHECK(frame_has(&a, &r, "Keep the API key ending ...KLMN?"));
+    CHECK(frame_has(&a, &r, "s  this session only"));
+    {
+        char *pl = players_text(&a, &r);
+        CHECK(pl && !strstr(pl, "KLMN") && !strstr(pl, "keyring"));
+        free(pl);
+    }
+    CHECK(access(secret, F_OK) != 0);                                 /* nothing stored until the GM says */
+    press(&a, "r");
     CHECK_EQ(a.modal, MODAL_NONE);
     {
         char *sec = slurp(secret);
@@ -625,7 +715,7 @@ void test_api_key(void)
         for (size_t i = 0; i < sizeof a.prompt.buf; i++) clean &= a.prompt.buf[i] == 0;
         CHECK(clean);
     }
-    CHECK(access(kf, F_OK) != 0);                                     /* no file beside the keyring */
+    CHECK(access(kf, F_OK) != 0);                                     /* no file, ever */
 
     CASE("found again: the keyring's, its last four on the prompt's line");
     char last4[8];
@@ -648,6 +738,42 @@ void test_api_key(void)
         free(sec);
     }
 
+    CASE("esc at where it goes: nothing stored, nothing held");
+    press(&a, ":agent key\rsk-test-0123456789abcdefghijWXYZ\r");
+    CHECK_EQ(a.modal, MODAL_KEY_WHERE);
+    press(&a, "\x1b");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK(strstr(a.status, "canceled - no key stored") != NULL);
+    CHECK_EQ(app_agent_key_where(last4, sizeof last4), APIKEY_KEYRING);
+    CHECK(!strcmp(last4, "KLMN"));
+
+    CASE("s: held for this session only -- in use, the keyring not asked to store, no file");
+    {
+        char path[1000];
+        snprintf(path, sizeof path, "%s/st.argv", sb.dir);
+        unlink(path);
+        press(&a, ":agent key\rsk-test-0123456789abcdefghijWXYZ\rs");
+        CHECK(strstr(a.status, "API key ...WXYZ held for this session only - gone when vtt quits") != NULL);
+        CHECK_EQ(app_agent_key_where(last4, sizeof last4), APIKEY_SESSION);
+        CHECK(!strcmp(last4, "WXYZ"));
+        CHECK(!file_has(path, "store"));
+        char *sec = slurp(secret);
+        CHECK(sec && !strcmp(sec, KEY));                               /* the keyring's kept as it was */
+        free(sec);
+        CHECK(access(kf, F_OK) != 0);
+#ifdef __linux__
+        CHECK_EQ(prctl(PR_GET_DUMPABLE, 0, 0, 0, 0), 0);               /* holding one: not dumpable */
+#endif
+        press(&a, ":agent key remove\r");
+        CHECK(frame_has(&a, &r, "held for this session"));
+        press(&a, "y");
+        CHECK(strstr(a.status, "the session's API key is let go") != NULL);
+        CHECK_EQ(app_agent_key_where(last4, sizeof last4), APIKEY_KEYRING);
+#ifdef __linux__
+        CHECK_EQ(prctl(PR_GET_DUMPABLE, 0, 0, 0, 0), 1);               /* none held: dumpable again */
+#endif
+    }
+
     CASE(":agent key remove asks; n keeps it, y takes it from the keyring");
     press(&a, ":agent key remove\r");
     CHECK_EQ(a.modal, MODAL_CONFIRM_KEY);
@@ -660,43 +786,52 @@ void test_api_key(void)
     press(&a, ":agent key remove\r");
     CHECK(strstr(a.status, "no API key is stored") != NULL);
 
-    CASE("no keyring here: the key goes to a file, mode 600, and the GM is told it is a file");
+    CASE("no keyring here: held for this session at once, nothing written, said so");
     setenv("VTT_SECRET_TOOL", "/nonexistent/secret-tool", 1);
     press(&a, ":agent key\r" KEY "\r");
-    {
-        struct stat st;
-        CHECK(stat(kf, &st) == 0 && (st.st_mode & 0777) == 0600);
-        char *t = slurp(kf);
-        CHECK(t && !strcmp(t, KEY "\n"));
-        free(t);
-    }
-    CHECK(strstr(a.status, "readable by you alone (no keyring here)") != NULL);
-    CHECK_EQ(app_agent_key_where(last4, sizeof last4), APIKEY_FILE);
-    press(&a, ":agent key remove\ry");
+    CHECK_EQ(a.modal, MODAL_NONE);
+    CHECK(strstr(a.status, "held for this session only") != NULL);
     CHECK(access(kf, F_OK) != 0);
+    CHECK_EQ(app_agent_key_where(last4, sizeof last4), APIKEY_SESSION);
+    press(&a, ":agent key remove\ry");
+    CHECK_EQ(app_agent_key_where(last4, sizeof last4), APIKEY_NONE);
 
-    CASE("the variable wins, is said, and is the GM's to unset");
-    setenv("ANTHROPIC_API_KEY", KEY, 1);
-    CHECK_EQ(app_agent_key_where(last4, sizeof last4), APIKEY_ENV);
-    press(&a, ":agent key remove\r");
-    CHECK(strstr(a.status, "unset it yourself") != NULL);
-    unsetenv("ANTHROPIC_API_KEY");
+    CASE("ANTHROPIC_API_KEY taken at start: out of the environment, held, in use, and not the GM's to remove");
+    {
+        char note[200];
+        setenv("ANTHROPIC_API_KEY", KEY, 1);
+        apikey_take_env(note, sizeof note);
+        CHECK(!getenv("ANTHROPIC_API_KEY") && !note[0]);
+        CHECK_EQ(app_agent_key_where(last4, sizeof last4), APIKEY_ENV);
+        press(&a, ":agent key remove\r");
+        CHECK(strstr(a.status, "the one in use is ANTHROPIC_API_KEY, from the environment vtt started with") != NULL);
+        apikey_drop();
+        setenv("ANTHROPIC_API_KEY", "not a key", 1);
+        apikey_take_env(note, sizeof note);
+        CHECK(!getenv("ANTHROPIC_API_KEY") && strstr(note, "does not hold a key") != NULL);
+        CHECK_EQ(app_agent_key_where(last4, sizeof last4), APIKEY_NONE);
+    }
 
-    CASE(":agent claude with no key asks for one, and is set once it is stored");
+    CASE(":agent claude with no key asks for one, and is set once it is kept");
     setenv("VTT_SECRET_TOOL", tool, 1);
     setenv("VTT_CLAUDE_CURL", "/bin/true", 1);
     press(&a, ":agent claude sonnet\r");
     CHECK_EQ(a.modal, MODAL_PROMPT);
-    CHECK_EQ(a.settings.agent, AGENT_KIND_OFF);                       /* as it was, until a key is stored */
+    CHECK_EQ(a.settings.agent, AGENT_KIND_OFF);                       /* as it was, until a key is kept */
     press(&a, KEY "\r");
+    CHECK_EQ(a.modal, MODAL_KEY_WHERE);
+    CHECK_EQ(a.settings.agent, AGENT_KIND_OFF);
+    press(&a, "r");
     CHECK_EQ(a.settings.agent, AGENT_KIND_CLAUDE);
     CHECK(!strcmp(a.settings.model, "sonnet"));
     CHECK(strstr(a.status, "each :ask now starts the Claude agent") != NULL);
     CHECK(strstr(a.agents.cmd, KEY) == NULL);
 
-    CASE("a :agent command agent gets no key from vtt: its real environment, dumped, has none (a key in the keyring)");
+    CASE("an agent command never gets an exported key unless passkey is on; then only that one");
     {
-        char envf[900], c[1200];
+        char note[200], envf[900], c[1200];
+        setenv("ANTHROPIC_API_KEY", KEY, 1);
+        apikey_take_env(note, sizeof note);
         snprintf(envf, sizeof envf, "%s/agent.env", sb.dir);
         snprintf(c, sizeof c, ":agent command env > '%s'; echo end-of-env >> '%s'\r", envf, envf);
         press(&a, c);
@@ -705,29 +840,48 @@ void test_api_key(void)
         CHECK(pump_until_file(&a, envf, "end-of-env"));
         CHECK(file_has(envf, "VTT_JOB="));                             /* it is the agent's own environment */
         CHECK(!file_has(envf, "ANTHROPIC_API_KEY") && !file_has(envf, "sk-test") && !file_has(envf, "KLMN"));
+        CHECK(!file_has(envf, "VTT_KEY_FD"));
         CHECK(pump_until_reaped(&a));
+        jobs_reset(&a);
+        unlink(envf);
+        press(&a, ":agent passkey on\r");
+        CHECK(a.settings.pass_key == 1 && strstr(a.status, "passkey on") != NULL);
+        press(&a, ":ask anything\r");
+        CHECK(pump_until_file(&a, envf, "end-of-env"));
+        CHECK(file_has(envf, "ANTHROPIC_API_KEY=" KEY "\n"));
+        CHECK(pump_until_reaped(&a));
+        jobs_reset(&a);
+        press(&a, ":agent passkey off\r");
+        CHECK_EQ(a.settings.pass_key, 0);
+        apikey_drop();
     }
 
-    CASE(":agent key remove with the variable set still removes a stored key, saying the variable is the one in use");
-    setenv("ANTHROPIC_API_KEY", KEY, 1);
-    press(&a, ":agent key remove\r");
-    CHECK_EQ(a.modal, MODAL_CONFIRM_KEY);
-    CHECK(frame_has(&a, &r, "from your keyring (ANTHROPIC_API_KEY is used while set)."));
-    press(&a, "y");
-    CHECK(access(secret, F_OK) != 0);
-    press(&a, ":agent key remove\r");
-    CHECK(strstr(a.status, "no API key is stored - the one in use is ANTHROPIC_API_KEY") != NULL);
-    unsetenv("ANTHROPIC_API_KEY");
+    CASE(":agent key remove with the variable taken still removes a stored key, saying the variable is the one in use");
+    {
+        char note[200];
+        setenv("ANTHROPIC_API_KEY", KEY, 1);
+        apikey_take_env(note, sizeof note);
+        press(&a, ":agent key remove\r");
+        CHECK_EQ(a.modal, MODAL_CONFIRM_KEY);
+        CHECK(frame_has(&a, &r, "from your keyring (ANTHROPIC_API_KEY is used until vtt quits)."));
+        press(&a, "y");
+        CHECK(access(secret, F_OK) != 0);
+        press(&a, ":agent key remove\r");
+        CHECK(strstr(a.status, "no API key is stored - the one in use is ANTHROPIC_API_KEY") != NULL);
+        apikey_drop();
+    }
 
     unsetenv("VTT_CLAUDE_CURL");
     app_free(&a);
     rnd_free(&r);
+    apikey_drop();
     sandbox_leave(&sb);
 }
 
 /* The Options screen (app_options.c): the menu's third row. */
 void test_options(void)
 {
+    apikey_drop();                       /* a key held is this process's: none from the suite before */
     Sandbox sb = sandbox_enter("options");
     CHECK_EQ(sb.ok, 1);
     if (!sb.ok) return;
@@ -816,7 +970,7 @@ void test_options(void)
     CHECK_EQ(a.modal, MODAL_PROMPT);
     CHECK_EQ(a.prompt.secret, 1);
     press(&a, KEY "\r");
-    CHECK(frame_has(&a, &r, "a file only you can read, ending ...KLMN"));
+    CHECK(frame_has(&a, &r, "this session only, ending ...KLMN"));     /* no keyring in the sandbox: held */
     press(&a, "d");
     CHECK_EQ(a.modal, MODAL_CONFIRM_KEY);
     press(&a, "y");
@@ -880,6 +1034,7 @@ void test_options(void)
 
     app_free(&a);
     rnd_free(&r);
+    apikey_drop();
     sandbox_leave(&sb);
 }
 
@@ -887,6 +1042,7 @@ void test_options(void)
  * happens to its job; the first, when none was ever chosen, asks. */
 void test_ask_agent(void)
 {
+    apikey_drop();                       /* a key held is this process's: none from the suite before */
     Sandbox sb = sandbox_enter("askagent");
     CHECK_EQ(sb.ok, 1);
     if (!sb.ok) return;
@@ -990,6 +1146,8 @@ void test_ask_agent(void)
     CHECK_EQ(a.modal, MODAL_CHOOSE_AGENT);
     CHECK_EQ(a.settings.agent, AGENT_KIND_UNSET);
     press(&a, "c" KEY "\r");
+    CHECK_EQ(a.modal, MODAL_KEY_WHERE);
+    press(&a, "r");
     CHECK_EQ(a.settings.agent, AGENT_KIND_CLAUDE);
     CHECK(file_has(path, "agent claude\n"));
     CHECK(pump_until_file(&a, g_usage, "\tdone\n"));
@@ -1041,7 +1199,7 @@ void test_ask_agent(void)
         unlink(sec);                                                 /* no key: c asks for one */
         setenv("VTT_CLAUDE_CURL", "/nonexistent/curl", 1);
         press(&a, ":ask a cistern\r");
-        press(&a, "c" KEY "\r");
+        press(&a, "c" KEY "\rr");
         CHECK(strstr(a.status, "needs curl") != NULL);
         CHECK_EQ(a.agents.choice_job, 0);
         snprintf(cmdx, sizeof cmdx, ":agent key\r\x1b");
@@ -1069,18 +1227,12 @@ void test_ask_agent(void)
         press(&a, "c\r");                                           /* an empty key */
         CHECK_EQ(a.modal, MODAL_CHOOSE_AGENT);
         CHECK(strstr(a.status, "canceled - no key stored") != NULL);
-        /* a key that cannot be stored: no keyring, and the config dir a file */
-        char cfgfile[900], was_cfg[900];
-        snprintf(cfgfile, sizeof cfgfile, "%s/not-a-dir", sb.dir);
-        FILE *f = fopen(cfgfile, "w"); fclose(f);
-        str_lcpy(was_cfg, getenv("XDG_CONFIG_HOME"), sizeof was_cfg);
-        setenv("XDG_CONFIG_HOME", cfgfile, 1);
-        setenv("VTT_SECRET_TOOL", "/nonexistent/secret-tool", 1);
-        press(&a, "c" KEY "\r");
-        CHECK(strstr(a.status, "cannot write") != NULL);
+        /* a key the keyring will not take: said, back to the box, nothing set */
+        setenv("VTT_SECRET_TOOL", "/bin/false", 1);
+        press(&a, "c" KEY "\rr");
+        CHECK(strstr(a.status, "the keyring did not take the key") != NULL);
         CHECK_EQ(a.modal, MODAL_CHOOSE_AGENT);
         CHECK_EQ(a.settings.agent, AGENT_KIND_UNSET);
-        setenv("XDG_CONFIG_HOME", was_cfg, 1);
         setenv("VTT_SECRET_TOOL", tool, 1);
     }
     press(&a, "\x1b");
@@ -1101,5 +1253,6 @@ void test_ask_agent(void)
     app_self_path = self_was;
     app_free(&a);
     rnd_free(&r);
+    apikey_drop();
     sandbox_leave(&sb);
 }

@@ -87,7 +87,10 @@ static void add_tree(Text *t, Text *names, const char *dir)
         struct stat st;
         if (stat(path, &st) != 0) continue;
         if (S_ISDIR(st.st_mode)) {
-            if (strcmp(path, "tests/oracle") && strcmp(path, "tests/fuzz-found")) add_tree(t, names, path);
+            /* Not the oracle's records or the fuzzer's finds, and not the
+             * reviewers' worktrees: whole copies of the repo. */
+            if (strcmp(path, "tests/oracle") && strcmp(path, "tests/fuzz-found") && strcmp(path, ".claude/worktrees"))
+                add_tree(t, names, path);
         } else if (S_ISREG(st.st_mode)) {
             text_add(names, e->d_name, strlen(e->d_name));
             char *s = t && st.st_size < (4 << 20) ? read_all(path) : NULL;
@@ -221,6 +224,7 @@ void test_docs(void)
     add_tree(&code, &names, "tools");
     add_tree(NULL, &names, "web");
     add_tree(NULL, &names, "docs");
+    add_tree(NULL, &names, ".claude");   /* the hooks the repo carries */
     text_add(&names, "Makefile", 8);
     char *mk = read_all("Makefile");
     if (mk) { text_add(&code, mk, strlen(mk)); free(mk); }

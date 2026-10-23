@@ -29,6 +29,7 @@ typedef struct {
     int    paused;                         /* :agent command off: the agent kept, not started */
     int    channel;                        /* the channel on at start-up */
     int    accept_auto;                    /* agents' changes land at once, at start-up */
+    int    pass_key;                       /* an exported ANTHROPIC_API_KEY given to agent commands (off) */
     char   kept[SETTINGS_KEPT_MAX];
 } Settings;
 
@@ -37,7 +38,7 @@ void settings_default(Settings *s);
 /* Each setting by its name in the file and what it takes, for the Options
  * screen's rows and the commands. */
 typedef enum { SET_AGENT, SET_COMMAND, SET_MODEL, SET_EFFORT, SET_CAP, SET_CALLS, SET_FALLBACKS,
-               SET_PAUSED, SET_CHANNEL, SET_ACCEPT, SET_COUNT } SettingId;
+               SET_PAUSED, SET_CHANNEL, SET_ACCEPT, SET_PASSKEY, SET_COUNT } SettingId;
 const char *settings_name(SettingId id);
 
 /* Sets one from its text: 0, or -1 with what it takes in err. */

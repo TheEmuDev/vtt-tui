@@ -219,18 +219,23 @@ arrives, or the time runs out (`app_events_flush` answers it). Map changes are s
   `VTT_PID` and `VTT` set so it can talk back with `vtt --ctl`. It is stopped at its deadline
   (SIGTERM, then SIGKILL, to its group) and reaped by `app_agents_tick`.
 - The Claude agent is the same with vtt's own command: `vtt --claude-agent`. `apiagent_main`
-  reads the key itself (`apikey_find`), sends the job to the Claude API with the agents'
+  gets the key (below), sends the job to the Claude API with the agents'
   guide as its system prompt and one tool, `vtt`, whose calls it runs on the channel
   (`ask_vtt`), and reports how the job ended with `job N say`. Each job's calls, tokens and dollars go
   to a row of `claude-usage.tsv`.
-- **The key.** It is read, in order, from `ANTHROPIC_API_KEY`, the keyring (`secret-tool`,
-  service `vtt` account `anthropic-api-key`), or `$XDG_CONFIG_HOME/vtt/anthropic-key` (this
-  user's, no group or other bits, refused otherwise). A key typed into vtt goes to the keyring down a pipe, or the file
-  where there is no keyring. To curl it goes down descriptor 3 as a config line
-  (`call_api`, through `proc_run`): never on a command line, never in a log or the
-  environment, and wiped after use (`apikey_wipe`). vtt never sets `ANTHROPIC_API_KEY`, so a
-  key typed in never reaches `:agent command` agents; a variable the GM exported themselves
-  is inherited as any variable is (the user's decision, docs/APIAGENT.md).
+- **The key** (docs/APIAGENT.md, *The key, made safer*). It is kept in the keyring
+  (`secret-tool`, service `vtt` account `anthropic-api-key`), or held in vtt's memory: one
+  typed in for this session only, or `ANTHROPIC_API_KEY`, which vtt takes out of its
+  environment at start (`apikey_take_env`) so nothing it starts inherits it. A process
+  holding a key is not dumpable (no core file, its memory closed to other processes); the
+  Claude agent never is (`apikey_harden`), and has a core limit of 0 that curl inherits.
+  A typed key waits in a slot of its own while the GM picks `r` (the keyring, down a pipe)
+  or `s` (held). The Claude agent gets a held key down a pipe on descriptor 3
+  (`VTT_KEY_FD`), and looks a keyring key up itself for each call. To curl it goes down
+  descriptor 3 as a config line (`call_api`, through `proc_run`), curl run with `-q`,
+  `--proto =https` and an environment of its own: never on a command line, in a log or an
+  environment, and wiped after use (`apikey_wipe`). An agent command gets the exported key
+  back only with `:agent passkey on`.
 
 ## The disk
 
@@ -265,7 +270,7 @@ arrives, or the time runs out (`app_events_flush` answers it). Map changes are s
 | environment cards | `.../vtt/environments/NAME.txt` | the import |
 | Claude usage | `.../vtt/claude-usage.tsv` | apiagent.c |
 | settings | `$XDG_CONFIG_HOME/vtt/settings` | settings.c |
-| the API key | the keyring, or `$XDG_CONFIG_HOME/vtt/anthropic-key` | apikey.c |
+| the API key | the keyring, or nowhere (held in memory for the session) | apikey.c |
 | the channel | `$XDG_RUNTIME_DIR/vtt/PID.sock` | ctl.c |
 
 File names a user types go through `store_name_ok`; files other than the map are written
@@ -294,5 +299,5 @@ runs the scenarios and docs/PERFORMANCE.md holds what they measured.
 | an agent to the live map | edits only as a proposal the GM decides | `request_proposal_begin`, `world_job_set_proposal`, `world_job_gm_only` for the disk's |
 | any edit to the map | through the undo log, one step a key or request | the `undo_*` recorders, `undo_balanced`; `cp_note` for a writer round the log |
 | a phone or a watcher to the app | only taps and a name, after the join code | `http_request`, `net_msg`, `net_name_clean` |
-| the API key to anywhere | only curl's descriptor 3 | apikey.c, `call_api` |
+| the API key to anywhere | only the keyring's pipe, the Claude agent's descriptor 3 and curl's; never an environment, a command line, a log or a core file | apikey.c (`apikey_take_env`, `apikey_hold`, `apikey_harden`), `app_agent_start`, `call_api` |
 | a test or a script to the user's files | a sandbox of its own (XDG dirs, no keyring, editor `true`) | `sandbox_enter`, tools/sandbox.sh, suite `sandbox` |

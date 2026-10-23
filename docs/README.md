@@ -8,8 +8,10 @@ its present tense: a design record describes the app as it was when the plan was
 
 True of the code today, and changed in the same commit as the code they describe (CLAUDE.md,
 *A change is not done*). Held to it twice: suite `docs` (tests/test_docs.c) fails when a source
-file has no row in CODEMAP's tables, or a doc names a function or macro with an underscore, a
-file alone, or a path under src/, tests/, tools/, docs/ or web/ the code no longer has; and every
+file has no row in CODEMAP's tables, a code-describing doc (CLAUDE.md, tests/CLAUDE.md, CODEMAP,
+ARCHITECTURE, the review brief) names a function or macro with an underscore or a file alone
+that the code no longer has, or any of these pages names a path under src/, tests/, tools/,
+docs/ or web/ that is gone; and every
 review's *Docs drift* section (tools/review-brief.md) reads these pages where they speak of what
 the change touched, since a sentence gone wrong is beyond any test (the user, 2026-10-23).
 
@@ -55,7 +57,7 @@ source: the column below is a copy, changed in the same commit.
 | [ENVIRONMENTS.md](ENVIRONMENTS.md) | environment cards on a map or an area: `:env`, its adversaries, the import | built 2026-10-12 |
 | [PAGESPEED.md](PAGESPEED.md) | where a frame goes on a phone, and what was done about it | built 2026-10-04 |
 | [CONFLICTS.md](CONFLICTS.md) | proposals, jobs and the review; other writers of the map's file | built 2026-10-08 to 10; *Progress* says what is still owed; decision 5 (an off channel takes proposals) reversed 2026-10-12 by V2.md's ruling 9 |
-| [APIAGENT.md](APIAGENT.md) | the Claude API agent: `:agent claude`, vtt as its own agent through curl; the settings and Options; the first `:ask` | built 2026-10-20; its review, live check and timings owed |
+| [APIAGENT.md](APIAGENT.md) | the Claude API agent: `:agent claude`, vtt as its own agent through curl; the settings and Options; the first `:ask` | built 2026-10-20 (reviewed and timed; the live check owed); its key's flow redone 2026-10-23, *The key, made safer* (one check waits on the user's go) |
 | [AGENTLOOP.md](AGENTLOOP.md) | ROADMAP 27, the agent features' improvement loop: evaluations graded by vtt, each job's outcome on record, a rollup, the procedure | a plan, signed off 2026-10-21; nothing built |
 
 ## Not built
