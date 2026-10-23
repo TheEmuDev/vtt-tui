@@ -790,9 +790,10 @@ map  Two Rooms  16x9  scale 5 ft  metric alt  ruleset none
 
 room 1 (A1)  A1:P9  144 squares
   terrain  floor 144
+  in region  9 squares:  floor 9
   player       C3       Aria
   enemy        K5       Ogre  2x2
-{"map":{"name":"Two Rooms","width":16,"height":9,"scale_ft":5,"metric":"alt","ruleset":null,"round":0,"fog":false,"creatures":2,"rooms":1,"region":"K5","rooms_told":1,"start_room":1},"rooms":[{"id":1,"name":"A1","area":null,"floor":null,"x":0,"y":0,"bounds":"A1:P9","squares":144,"reachable":true,"terrain":{"floor":144},"doors":[],"creatures":[{"label":"Aria","kind":"player","size":1,"at":"C3","x":2,"y":2},{"label":"Ogre","kind":"enemy","size":2,"at":"K5","x":10,"y":4}],"notes":[],"fog":[]}],"areas":[],"floors":[],"links":[],"outside":[]}
+{"map":{"name":"Two Rooms","width":16,"height":9,"scale_ft":5,"metric":"alt","ruleset":null,"round":0,"fog":false,"creatures":2,"rooms":1,"region":"K5","rooms_told":1,"start_room":1},"rooms":[{"id":1,"name":"A1","area":null,"floor":null,"x":0,"y":0,"bounds":"A1:P9","squares":144,"reachable":true,"terrain":{"floor":144},"in_region":{"squares":1,"terrain":{"floor":1}},"doors":[],"creatures":[{"label":"Aria","kind":"player","size":1,"at":"C3","x":2,"y":2},{"label":"Ogre","kind":"enemy","size":2,"at":"K5","x":10,"y":4}],"notes":[],"fog":[]}],"areas":[],"floors":[],"links":[],"outside":[]}
 seq 0
 seq 0
    A B C D E F G H I J K L M N O P
@@ -2465,6 +2466,7 @@ map  Goblin Ambush  16x9  scale 5 ft  metric alt  ruleset daggerheart
 
 room 1 (A1)  A1:P9  144 squares  on Ground
   terrain  floor 144
+  in region  9 squares:  floor 9
   player       C3       Aria  (note)
   enemy        K5       Ogre  2x2  (hidden)
   note         F4       pressure plate
@@ -2474,7 +2476,7 @@ room 1 (A1)  A1:P9  144 squares  on Ground
   portal 2     M7-N8    comes from B7-C8, room 1 (A1)  secret
   stairs 3     H8       leads to town, Gate (another map)
   fog          Crypt    30 squares, 21 seen
-{"map":{"name":"Goblin Ambush","width":16,"height":9,"scale_ft":5,"metric":"alt","ruleset":"daggerheart","round":2,"fog":true,"creatures":2,"rooms":1,"region":"K5","rooms_told":1,"start_room":1},"rooms":[{"id":1,"name":"A1","area":null,"floor":"Ground","x":0,"y":0,"bounds":"A1:P9","squares":144,"reachable":true,"terrain":{"floor":144},"doors":[],"creatures":[{"label":"Aria","kind":"player","size":1,"at":"C3","x":2,"y":2,"note":"wants the amulet"},{"label":"Ogre","kind":"enemy","size":2,"at":"K5","x":10,"y":4,"hidden":true}],"notes":[{"at":"F4","text":"pressure plate"}],"fog":[{"patch":"Crypt","painted":30,"seen":21}]}],"areas":[{"name":"Crypt","bounds":"B2:G5","x0":1,"y0":1,"x1":6,"y1":4},{"name":"Ground","bounds":"A1:P9","x0":0,"y0":0,"x1":15,"y1":8}],"floors":[{"name":"Ground","level":0,"bounds":"A1:P9"}],"links":[{"num":1,"kind":"stairs","size":1,"oneway":false,"secret":false,"ends":[{"at":"F3","x":5,"y":2,"room":1},{"at":"O3","x":14,"y":2,"room":1}]},{"num":2,"kind":"portal","size":2,"oneway":true,"secret":true,"ends":[{"at":"B7-C8","x":1,"y":6,"room":1},{"at":"M7-N8","x":12,"y":6,"room":1}]},{"num":3,"kind":"stairs","size":1,"oneway":false,"secret":false,"to_map":"town","to_place":"Gate","ends":[{"at":"H8","x":7,"y":7,"room":1}]}],"outside":[]}
+{"map":{"name":"Goblin Ambush","width":16,"height":9,"scale_ft":5,"metric":"alt","ruleset":"daggerheart","round":2,"fog":true,"creatures":2,"rooms":1,"region":"K5","rooms_told":1,"start_room":1},"rooms":[{"id":1,"name":"A1","area":null,"floor":"Ground","x":0,"y":0,"bounds":"A1:P9","squares":144,"reachable":true,"terrain":{"floor":144},"in_region":{"squares":1,"terrain":{"floor":1}},"doors":[],"creatures":[{"label":"Aria","kind":"player","size":1,"at":"C3","x":2,"y":2,"note":"wants the amulet"},{"label":"Ogre","kind":"enemy","size":2,"at":"K5","x":10,"y":4,"hidden":true}],"notes":[{"at":"F4","text":"pressure plate"}],"fog":[{"patch":"Crypt","painted":30,"seen":21}]}],"areas":[{"name":"Crypt","bounds":"B2:G5","x0":1,"y0":1,"x1":6,"y1":4},{"name":"Ground","bounds":"A1:P9","x0":0,"y0":0,"x1":15,"y1":8}],"floors":[{"name":"Ground","level":0,"bounds":"A1:P9"}],"links":[{"num":1,"kind":"stairs","size":1,"oneway":false,"secret":false,"ends":[{"at":"F3","x":5,"y":2,"room":1},{"at":"O3","x":14,"y":2,"room":1}]},{"num":2,"kind":"portal","size":2,"oneway":true,"secret":true,"ends":[{"at":"B7-C8","x":1,"y":6,"room":1},{"at":"M7-N8","x":12,"y":6,"room":1}]},{"num":3,"kind":"stairs","size":1,"oneway":false,"secret":false,"to_map":"town","to_place":"Gate","ends":[{"at":"H8","x":7,"y":7,"room":1}]}],"outside":[]}
 seq 0
 seq 0
    A B C D E F G H I J K L M N O P

@@ -60,11 +60,13 @@ command -v python3 >/dev/null || { echo "agenteval: the grader needs python3" >&
 if [ -n "${EVAL_AGENT:-}" ]; then AGENT=$EVAL_AGENT
 else
     # Claude Code with the skill in the map's directory and nothing else of the
-    # user's: project settings only, no session kept, vtt the only command it
-    # may run. What it is given beyond the skill is checked at the first run.
+    # user's: no settings files (--restricted), the file tools confined to the
+    # map's directory, these tools alone, vtt the only command it may run, no
+    # session kept. Read from `claude --help`; what it is given beyond the
+    # skill is checked at the first run (docs/AGENTLOOP.md).
     AGENT="claude -p --model '$MODEL' --output-format json --no-session-persistence \
---setting-sources project --permission-mode dontAsk --max-budget-usd '$BUDGET' \
---allowedTools 'Bash(vtt *)' Read Write Edit Glob Grep Skill"
+--restricted --tools Bash,Read,Write,Edit,Glob,Grep,Skill --permission-mode dontAsk \
+--max-budget-usd '$BUDGET' --allowedTools 'Bash(vtt *)' Read Write Edit Glob Grep Skill"
 fi
 
 # What it will run, and what the last run of each task with this model cost.
@@ -85,7 +87,8 @@ fi
 
 mkdir -p "$RUNS"
 WORK=
-trap 'rm -rf "$WORK"' EXIT
+APID=
+trap '[ -n "$APID" ] && kill "$APID" 2>/dev/null && wait "$APID"; rm -rf "$WORK"' EXIT
 trap 'exit 130' INT TERM
 total=0; good=0
 for t in "$@"; do
@@ -118,10 +121,16 @@ EOF
         start=$(date +%s)
         # The task's directory only to a stand-in: it holds reference.txt, the
         # answer, which a model must not be pointed at.
+        # In the background, so a signal to the runner stops a paid run at once
+        # (the trap kills timeout, which passes it on) rather than after it.
         ( cd "$WORK/map" || exit 2
           if [ -n "${EVAL_AGENT:-}" ]; then EVAL_TASK_DIR=$T; export EVAL_TASK_DIR; fi
-          PATH="$WORK/bin:$PATH" timeout "$TIMEOUT" sh -c "$AGENT" < "$WORK/prompt.txt" > "$WORK/answer" 2> "$WORK/agent.err" )
+          PATH="$WORK/bin:$PATH"
+          exec timeout "$TIMEOUT" sh -c "$AGENT" < "$WORK/prompt.txt" > "$WORK/answer" 2> "$WORK/agent.err" ) &
+        APID=$!
+        wait "$APID"
         rc=$?
+        APID=
         R="$RUNS/$(date +%Y-%m-%d-%H%M%S)-$MODEL-$t-$k"
         mkdir -p "$R"
         cp "$WORK/prompt.txt" "$WORK/calls.tsv" "$WORK/answer" "$WORK/agent.err" "$T/expect" "$R/"

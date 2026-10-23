@@ -1,5 +1,5 @@
 pass: check clean
 pass: reachable all
 pass: creature Ogre
-pass: calls == 1
+pass: calls == 2
 4 of 4 facts

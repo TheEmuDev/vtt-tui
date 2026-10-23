@@ -18,3 +18,16 @@ room Lost 3x3 south of Well gap 6
 token add enemy Crypt "Ghoul"
 token add enemy Crypt "Ghoul 2"
 token add player Hall "Aria"
+# For the edges of the grader's tests: creatures on Hall's corners, a size-2
+# whose top-left is outside Well but two of its squares in it, doors from
+# Cell and Lost to void (no way through), and a trapdoor from Tower to Pit
+# that runs one way.
+token add player B2 "Edge"
+token add player G5 "Corner"
+token add enemy C7 size 2 "Brute"
+door Cell south
+door Lost north
+room Pit 3x3 south of Tower gap 4
+link Tower Pit trapdoor oneway
+# An area over void inside the Hall room's bounds: no room has a square in it.
+area Gap F8:G10

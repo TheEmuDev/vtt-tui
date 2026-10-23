@@ -21,14 +21,15 @@ The facts:
                                    links errors warnings calls refusals; OP == != <= >= < >
     reachable all                  every room reachable
     area NAME                      an area of that name (any case)
-    door A B                       a room meeting area A has a door (of any
-                                   kind but a window) into a room meeting B
-    joined A B                     a way between them: doors as above, open
-                                   ground, links either way
+    door A B                       a room with a square in area A has a door
+                                   (of any kind but a window) into a room
+                                   with a square in B
+    joined A B                     a way from A to B: doors as above, open
+                                   ground, links (a one-way link only its way)
     creature WORD [in AREA]        a creature whose label holds WORD (any
-                                   case), standing in AREA's box when named
+                                   case), a square of it in AREA's box when named
     creatures WORD OP N            how many labels hold WORD
-    terrain AREA KIND              a room meeting AREA has squares of KIND
+    terrain AREA KIND              a square of AREA's box is KIND ground
 """
 import json
 import os
@@ -99,19 +100,21 @@ class Run:
         return self._describe
 
     def area_rooms(self, name):
-        """The ids of the rooms that meet the area, as vtt's `describe AREA`
-        tells them (a room joined to another by open ground is one room, so a
-        bounding box would not do); None when the map has no such area."""
+        """The rooms with a square in the area, as vtt's `describe AREA`
+        tells them: room id -> its `in_region` (those squares and their
+        terrain). None when the map has no such area."""
         key = name.lower()
         if key not in self._area:
             if self.area(name) is None:
                 self._area[key] = None
             else:
                 plan = os.path.join(self.tmp, "q.txt")
-                with open(plan, "w") as f:
-                    f.write("describe %s json\n" % json.dumps(self.area(name)["name"]))
+                with open(plan, "w", encoding="utf-8") as f:   # vtt reads the name's bytes as they are
+                    f.write("describe %s json\n" % json.dumps(self.area(name)["name"], ensure_ascii=False))
                 out, rc = self._vtt("map.vtt", "--apply", "q.txt")
-                self._area[key] = {r["id"] for r in json.loads(out)["rooms"]} if rc == 0 else None
+                if rc != 0:
+                    raise Failed("vtt did not describe area %s (exit %d)" % (name, rc))
+                self._area[key] = {r["id"]: r["in_region"] for r in json.loads(out)["rooms"]}
         return self._area[key]
 
     def area(self, name):
@@ -158,11 +161,12 @@ def graph(run):
                 g[r["id"]].add(door["to"])
                 g.setdefault(door["to"], set()).add(r["id"])
     for link in d["links"]:
-        ends = [e["room"] for e in link["ends"] if e["room"] is not None]
-        for a in ends:
-            for b in ends:
-                if a != b:
-                    g.setdefault(a, set()).add(b)
+        ends = [e["room"] for e in link["ends"]]       # one end for a link to another map
+        if len(ends) != 2 or None in ends or ends[0] == ends[1]:
+            continue
+        g.setdefault(ends[0], set()).add(ends[1])
+        if not link["oneway"]:                         # a one-way link runs from its first end only
+            g.setdefault(ends[1], set()).add(ends[0])
     return g
 
 
@@ -234,7 +238,7 @@ def judge(run, kind, words):
                 if y not in seen:
                     seen.add(y)
                     todo.append(y)
-        if not seen & b:
+        if not seen & set(b):
             raise Failed("no way from %s to %s" % (words[1], words[2]))
     elif kind == "creature":
         hits = [c for c in labels(run) if words[1].lower() in c["label"].lower()]
@@ -244,7 +248,9 @@ def judge(run, kind, words):
             box = run.area(words[3])
             if box is None:
                 raise Failed("no area " + words[3])
-            if not any(box["x0"] <= c["x"] <= box["x1"] and box["y0"] <= c["y"] <= box["y1"] for c in hits):
+            # Any square of its footprint (size 2 and 3 run right and down from x, y).
+            if not any(c["x"] <= box["x1"] and c["x"] + c["size"] - 1 >= box["x0"] and
+                       c["y"] <= box["y1"] and c["y"] + c["size"] - 1 >= box["y0"] for c in hits):
                 raise Failed("at " + " ".join(c["at"] for c in hits))
     elif kind == "label-count":
         f, n = op_number(words, 2)
@@ -253,7 +259,7 @@ def judge(run, kind, words):
             raise Failed("%d labeled with %s" % (got, words[1]))
     elif kind == "terrain":
         rooms = need_area(run, words[1])
-        if not any(r["terrain"].get(words[2], 0) for r in run.describe()["rooms"] if r["id"] in rooms):
+        if not any(part["terrain"].get(words[2], 0) for part in rooms.values()):
             raise Failed("none in " + words[1])
 
 

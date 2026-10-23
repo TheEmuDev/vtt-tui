@@ -59,13 +59,9 @@ skill-creator's `run_eval --num-workers 1` from a scratch dir with its own `.cla
   a skeleton in the last").
 - `start.vtt` or `size` (a new map's WxH): the map the agent works on. Fixtures written for
   the evaluations, never a user's map.
-- `expect`: facts vtt can answer, a line each, read by the grader:
-  - `check clean` (`--check --json`: errors and warnings 0);
-  - `rooms >= 3`, `creatures == 1`, `reachable all` (`--describe --json`: `map.rooms`,
-    `map.creatures`, each room's `reachable`);
-  - `area crypt`, `door crypt hall` (an area by name; a door between two areas' rooms);
-  - `creature skeleton in tomb` (a creature whose label matches, in a room of that area);
-  - `requests <= 12`, `refusals <= 2` (from the call log, below).
+- `expect`: facts vtt can answer, a line each, read by the grader (`check clean`,
+  `reachable all`, counts, an area, a door, a creature in an area; the facts as built are
+  listed once, in `tools/agentgrade.py`'s header).
 
   A fact a model would have to judge ("it looks like a crypt") is not a line. If a task
   cannot be graded by vtt's answers, it is not a task.
@@ -162,11 +158,15 @@ job. Text, a screen of it. It reads counts only, so what it prints can be shown 
 - **The facts and their meaning are the grader's** (`tools/agentgrade.py`'s header is the one
   list). The plan's `requests <= 12` is **`calls`**: every vtt call counts, reads too, since
   the wrapper cannot tell a plan's requests apart without parsing them. Added beside the plan's:
-  `floors` and `links` counts, `creatures WORD OP N`, `terrain AREA KIND` (a room meeting the
-  area has squares of it), `joined A B` (a way through openings and links, where `door A B` is
-  a door between them alone). Which rooms meet an area is vtt's answer, `describe AREA json`
-  through `--apply` (a read: the file's bytes are left), never a bounding box: a wide
-  corridor's open ends make two areas one room. The one opening a party cannot pass is a
+  `floors` and `links` counts, `creatures WORD OP N`, `terrain AREA KIND` (a square of the
+  area is that ground), `joined A B` (a way from A to B through openings and links, a one-way
+  link only its way, where `door A B` is a door between them alone). Which rooms meet an area,
+  and their squares and terrain inside it, is vtt's answer: `describe AREA json` through
+  `--apply` (a read: the file's bytes are left), whose `in_region` the review's fix added. A
+  wide corridor's open ends make two areas one room, so the room's whole terrain would not do;
+  and before the fix `describe REGION` told every room whose *bounds* met the box (an L of
+  ground round a walled room met it with no square inside), against the guide's "only the
+  rooms that meet it". A creature is in an area when a square of its footprint is. The one opening a party cannot pass is a
   window (`edge_passable_kind`); the grader names only that one, so it says nothing of the
   others' names. A line of `expect` that is no fact stops the grader (exit 2) before any is
   judged: with no map every fact fails, and a misspelt one would fail among them unseen.
@@ -181,27 +181,37 @@ job. Text, a screen of it. It reads counts only, so what it prints can be shown 
   when there is no python3): four stand-in tasks (`tests/agenteval/tasks/`, an `agent.sh`
   each, no model) graded against their `want` -- every kind of fact passing (`made`), failing
   on the same map (`missed`), no map at all (`nothing`), a map given and kept (`kept`); the
-  twelve references; a line that is no fact; a run with nobody to ask. Checked by mutation
-  (by hand, 2026-10-23): a window made passable, `joined` reduced to "any room", the area
-  box test dropped, a refusal counted by exit status, `check clean` blind to warnings,
-  a count's comparison dropped, a label matched by case, the closed kind renamed -- each
+  twelve references; a line that is no fact; a run with nobody to ask; the default agent's
+  command line, through a stand-in `claude` first on `PATH` (its words, and that it is not told
+  the task's directory); each exit status the wrapper passes back (the stand-ins check them);
+  and the caller's XDG directories as a canary (nothing written there, and a character planted
+  there never listed). Checked by mutation (by hand, 2026-10-23, and after the review): a window
+  made passable, `joined` reduced to "any room", the area box test dropped and each of its
+  edges moved, a refusal counted by exit status, `check clean` blind to warnings, a count's
+  comparison dropped, a label matched by case, the closed kind renamed, a door to void taken
+  for a room, one-way ignored, terrain read from the whole room, the wrapper's exit status or
+  its sandbox dropped, the task's directory told to every agent, `--restricted` dropped -- each
   caught. One survives: `door A B`'s guard against one room meeting both areas, which only a
-  door inside one room would show.
+  door inside one room would show (HEALTH 95).
 - **The procedure is here (§4), not in docs/AGENTS.md** as the plan said: AGENTS.md is the
   guide every agent is given and pays for in tokens, and a maintainers' procedure is nothing an
   agent should read.
 - **`triggers.json`**: twenty queries, ten that should start the skill and ten near misses.
-- **Not yet known, checked at the first run (the user's go):** the default agent's flags
-  (`claude -p --model sonnet --output-format json --no-session-persistence --setting-sources
-  project --permission-mode dontAsk --max-budget-usd 2 --allowedTools 'Bash(vtt *)' Read Write
-  Edit Glob Grep Skill`) were read from `claude --help`, never run: whether the prompt is taken
-  on stdin, whether `--setting-sources project` keeps the user's own CLAUDE.md and memory out,
-  whether the skill is found and allowed, and the cost field's name. `--bare` would keep them
-  out for certain, but it reads only `ANTHROPIC_API_KEY` (never the login), so with it a run
-  needs the API key. Read and Glob are not confined to the run's directory, so an agent could
-  read files elsewhere (not the reference, which it is not told of); a first run's `answer`
-  says what it read. `--max-budget-usd 2` is a ceiling a run, not an estimate.
-- **Its cost in `make test`:** 1.7 s, run alone (16 runs, each a few vtt calls and a grading),
+- **Not yet known, checked at the first run (the user's go; HEALTH 94):** the default agent's
+  command line (tools/agenteval.sh's one copy) was read from `claude --help`, never run:
+  `--restricted` (no settings files, the file tools confined to the run's directory) with
+  `--tools` naming the seven it may use and `--allowedTools 'Bash(vtt *)'` the one command.
+  Unknown until a run: whether the prompt is taken on stdin, whether the skill is still found
+  under `--restricted`, and the cost field's name. `--bare` would keep the user's CLAUDE.md
+  and memory out for certain, but it reads only `ANTHROPIC_API_KEY` (never the login), so with
+  it a run needs the API key. Confined or not, `vtt` reads any path it is given and the
+  wrapper names the repo, so an agent that looked could reach a `reference.txt`; a first run's
+  call log says what it opened. `--max-budget-usd 2` is a ceiling a run, not an estimate.
+- **A signal to the runner** stops the agent at once: it runs in the background and the exit
+  trap kills its `timeout`, which passes the signal on (the review found a TERM waited for the
+  whole run; checked after: TERM and INT end it in under a second, nothing left running).
+- **Its cost in `make test`:** 1.7 s, run alone (16 runs, each a few vtt calls and a grading;
+  1.8 s after the review's checks),
   of a whole run of 14.7 s (2026-10-23, the desktop, i7-8700K); it runs after `protocol`, one run at a time
   (docs/TESTSPEED.md).
 

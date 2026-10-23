@@ -2501,6 +2501,26 @@ void test_ctl_reads(void)
     free(t);
     t = ctl_ask(&a, "describe A1:H8 json");
     CHECK(t && json_valid(t + 3) && strstr(t, "\"rooms\":2") && strstr(t, "\"rooms_told\":1") && !strstr(t, "Ghoul"));
+    CHECK(t && strstr(t, "\"in_region\":{\"squares\":25,\"terrain\":{\"floor\":25}}"));   /* all of West */
+    free(t);
+
+    CASE("describe REGION: a room whose bounds reach over the box but no square of it is not told; part of one is said");
+    /* An L of ground from H20 down and along to P28, round a walled room
+     * J21:M24 it does not touch: the L's bounds hold the room's box. */
+    t = ctl_ask(&a, "tile H20:H28 water\ntile H28:P28 floor\nroom Shut J21:M24");
+    CHECK(t && !strncmp(t, "ok\n", 3));
+    free(t);
+    t = ctl_ask(&a, "describe Shut json");
+    CHECK(t && json_valid(t + 3) && strstr(t, "\"rooms_told\":1") && !strstr(t, "\"H20\""));
+    free(t);
+    t = ctl_ask(&a, "describe H20:H22");                  /* three squares of the L's 17 */
+    CHECK(t && strstr(t, ": 1 of the 4 rooms\n") && strstr(t, "  in region  3 squares:  water 3\n"));
+    free(t);
+    t = ctl_ask(&a, "describe H20:H22 json");
+    CHECK(t && json_valid(t + 3) && strstr(t, "\"squares\":17") && strstr(t, "\"in_region\":{\"squares\":3,\"terrain\":{\"water\":3}}"));
+    free(t);
+    t = ctl_ask(&a, "tile H20:P28 void");                  /* back as it was for the next case */
+    CHECK(t && !strncmp(t, "ok\n", 3));
     free(t);
 
     CASE("a job's dump is held to the same: none refused on a big map, all and a region taken");

@@ -1,12 +1,12 @@
 # Every kind of fact, holding.
-rooms == 7
+rooms == 8
 rooms >= 7
-creatures == 3
-areas == 7
+creatures == 6
+areas == 9
 floors == 0
-links == 1
+links == 2
 errors == 0
-warnings == 2
+warnings == 4
 calls == 3
 refusals == 1
 refusals <= 1
@@ -19,3 +19,7 @@ creature ghoul in Crypt
 creature Aria
 creatures ghoul == 2
 terrain Well water
+creature Edge in Hall
+creature Corner in Hall
+creature Brute in Well
+joined Tower Pit

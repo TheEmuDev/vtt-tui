@@ -2,4 +2,4 @@
 check clean
 reachable all
 creature Ogre
-calls == 1
+calls == 2

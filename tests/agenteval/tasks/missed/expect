@@ -2,9 +2,9 @@
 check clean
 reachable all
 rooms < 7
-creatures != 3
+creatures != 6
 floors > 0
-links != 1
+links != 2
 calls > 3
 refusals == 0
 area Nave
@@ -16,3 +16,10 @@ creature ghoul in Hall
 creature Skeleton
 creatures ghoul >= 3
 terrain Crypt water
+creature Brute in Hall
+creature Edge in Crypt
+joined Pit Tower
+joined Cell Lost
+joined Hall Gap
+terrain Gap floor
+terrain Hall water

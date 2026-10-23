@@ -542,8 +542,21 @@ void maptools_describe_in(FILE *out, const Map *m, int json, const int *box)
 {
     Rooms r;
     rooms_build(m, &r);
-    /* IN(i): room i is told of. */
-#define IN(i) (!box || (r.v[i].x0 <= box[2] && r.v[i].x1 >= box[0] && r.v[i].y0 <= box[3] && r.v[i].y1 >= box[1]))
+    /* IN(i): room i is told of -- with a region, only when a square of it is
+     * there: a room's bounds may reach over a box its squares never do (an L
+     * of ground round a walled room). inbox[i] counts them, inter[] by kind:
+     * the region's own squares, read once, so the cost is the box's. */
+    int *inbox = NULL, *inter = NULL;
+    if (box) {
+        inbox = xcalloc((size_t)(r.n ? r.n : 1), sizeof *inbox);
+        inter = xcalloc((size_t)(r.n ? r.n : 1) * TILE_COUNT, sizeof *inter);
+        for (int y = box[1]; y <= box[3]; y++)
+            for (int x = box[0]; x <= box[2]; x++) {
+                int ri = map_in_bounds(m, x, y) ? rooms_at(&r, m, x, y) : -1;
+                if (ri >= 0) { inbox[ri]++; inter[ri * TILE_COUNT + map_tile(m, x, y)]++; }
+            }
+    }
+#define IN(i) (!box || inbox[i] > 0)
     int told = 0;
     for (int i = 0; i < r.n; i++) told += IN(i);
     char buf[64], buf2[64];
@@ -603,6 +616,15 @@ void maptools_describe_in(FILE *out, const Map *m, int json, const int *box)
             json_key(&j, "terrain"); json_open(&j, '{');
             for (int t = 1; t < TILE_COUNT; t++) if (terrain[t]) json_kint(&j, tile_name((uint8_t)t), terrain[t]);
             json_close(&j, '}');
+            if (box) {                 /* the room is told whole; this is its part in the region */
+                json_key(&j, "in_region"); json_open(&j, '{');
+                json_kint(&j, "squares", inbox[i]);
+                json_key(&j, "terrain"); json_open(&j, '{');
+                for (int t = 1; t < TILE_COUNT; t++)
+                    if (inter[i * TILE_COUNT + t]) json_kint(&j, tile_name((uint8_t)t), inter[i * TILE_COUNT + t]);
+                json_close(&j, '}');
+                json_close(&j, '}');
+            }
             int no = room_openings(m, &r, i, &op, &opcap);
             json_key(&j, "doors"); json_open(&j, '[');
             for (int k = 0; k < no; k++) {
@@ -789,6 +811,12 @@ void maptools_describe_in(FILE *out, const Map *m, int json, const int *box)
             fputs("  terrain", out);
             for (int t = 1; t < TILE_COUNT; t++) if (terrain[t]) fprintf(out, "  %s %d", tile_name((uint8_t)t), terrain[t]);
             fputc('\n', out);
+            if (box && inbox[i] < rm->squares) {    /* only part of it is in the region */
+                fprintf(out, "  in region  %d square%s:", inbox[i], inbox[i] == 1 ? "" : "s");
+                for (int t = 1; t < TILE_COUNT; t++)
+                    if (inter[i * TILE_COUNT + t]) fprintf(out, "  %s %d", tile_name((uint8_t)t), inter[i * TILE_COUNT + t]);
+                fputc('\n', out);
+            }
             int no = room_openings(m, &r, i, &op, &opcap);
             for (int k = 0; k < no; k++) {
                 maptools_edge_name(m, op[k].vertical, op[k].x, op[k].y, buf, sizeof buf);
@@ -864,6 +892,8 @@ void maptools_describe_in(FILE *out, const Map *m, int json, const int *box)
         }
     }
     free(op);
+    free(inbox);
+    free(inter);
     rooms_free(&r);
 #undef IN
 }

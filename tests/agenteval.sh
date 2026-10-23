@@ -13,8 +13,19 @@ D=$(mktemp -d "${TMPDIR:-/tmp}/agenteval-test.XXXXXX") || exit 2
 trap 'rm -rf "$D"' EXIT
 fail=0
 T=$ROOT/tests/agenteval/tasks
+# The caller's XDG directories are a canary: vtt runs only in the wrapper's
+# sandbox, so nothing may appear under them, and the character planted there
+# is never listed (task kept reads the GM's characters and fails if it is).
+mkdir -p "$D/canary/data/vtt/characters" "$D/canary/config" "$D/canary/run"; chmod 700 "$D/canary/run"
+cp "$T/kept/start.vtt" "$D/canary/data/vtt/characters/canary.vtt"
+find "$D/canary" | sort > "$D/canary.before"
+XDG_DATA_HOME=$D/canary/data XDG_CONFIG_HOME=$D/canary/config XDG_RUNTIME_DIR=$D/canary/run \
 EVAL_TASKS=$T EVAL_RUNS=$D/runs EVAL_MODEL=stub EVAL_AGENT='sh "$EVAL_TASK_DIR/agent.sh"' \
     "$ROOT/tools/agenteval.sh" --yes -n 1 all > "$D/out" 2>&1 || { echo "  FAIL agenteval: the runner exited $?"; cat "$D/out"; fail=1; }
+find "$D/canary" | sort > "$D/canary.after"
+if ! diff "$D/canary.before" "$D/canary.after" > "$D/diff"; then
+    echo "  FAIL agenteval: a vtt call wrote under the caller's XDG directories:"; cat "$D/diff"; fail=1
+fi
 n=0
 for t in $(ls "$T"); do
     v=$(ls -d "$D"/runs/*-stub-"$t"-1 2>/dev/null)
@@ -22,8 +33,32 @@ for t in $(ls "$T"); do
     if ! diff "$T/$t/want" "$v/verdict" > "$D/diff"; then
         echo "  FAIL agenteval: task $t's verdict (< want, > got):"; cat "$D/diff"; fail=1
     fi
+    # The stand-ins check each exit status the wrapper passes back.
+    grep -q '^exit 0,' "$v/agent" || { echo "  FAIL agenteval: task $t's stand-in: $(cat "$v/agent")"; fail=1; }
     n=$((n + 1))
 done
+
+# The default agent, as the runner builds it, run as a stand-in `claude`
+# first on PATH: its words, and that it is not told the task's directory.
+# The real claude must never run here, so the stand-in is found first or
+# nothing runs.
+mkdir -p "$D/bin"
+cat > "$D/bin/claude" <<EOF
+#!/bin/sh
+printf '%s\n' "\$@" > '$D/claude.args'
+echo "task dir: \${EVAL_TASK_DIR-unset}" > '$D/claude.env'
+EOF
+chmod +x "$D/bin/claude"
+if [ "$(PATH="$D/bin:$PATH" command -v claude)" != "$D/bin/claude" ]; then
+    echo "  FAIL agenteval: the stand-in claude is not found first; the default agent not tried"; fail=1
+else
+    ( unset EVAL_AGENT EVAL_MODEL; PATH="$D/bin:$PATH" EVAL_TASKS=$T EVAL_RUNS=$D/dflt \
+        "$ROOT/tools/agenteval.sh" --yes -n 1 nothing > "$D/dflt.out" 2>&1 )
+    for w in -p sonnet --restricted --no-session-persistence 'Bash(vtt *)'; do
+        grep -qxF -- "$w" "$D/claude.args" 2>/dev/null || { echo "  FAIL agenteval: the default agent lacks $w"; fail=1; }
+    done
+    grep -qx 'task dir: unset' "$D/claude.env" 2>/dev/null || { echo "  FAIL agenteval: the default agent was told the task's directory"; fail=1; }
+fi
 
 # Every real task can be met: its reference.txt, a plan written by hand, meets
 # each fact through vtt as it is now (a request or a name vtt changed under a

@@ -1,11 +1,11 @@
-pass: rooms == 7
+pass: rooms == 8
 pass: rooms >= 7
-pass: creatures == 3
-pass: areas == 7
+pass: creatures == 6
+pass: areas == 9
 pass: floors == 0
-pass: links == 1
+pass: links == 2
 pass: errors == 0
-pass: warnings == 2
+pass: warnings == 4
 pass: calls == 3
 pass: refusals == 1
 pass: refusals <= 1
@@ -18,4 +18,8 @@ pass: creature ghoul in Crypt
 pass: creature Aria
 pass: creatures ghoul == 2
 pass: terrain Well water
-20 of 20 facts
+pass: creature Edge in Hall
+pass: creature Corner in Hall
+pass: creature Brute in Well
+pass: joined Tower Pit
+24 of 24 facts
