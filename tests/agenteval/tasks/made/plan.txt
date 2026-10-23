@@ -31,3 +31,5 @@ room Pit 3x3 south of Tower gap 4
 link Tower Pit trapdoor oneway
 # An area over void inside the Hall room's bounds: no room has a square in it.
 area Gap F8:G10
+# A name outside ASCII, read back through describe as its bytes.
+area "Lößt" B17:D19

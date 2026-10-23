@@ -6,7 +6,7 @@ FAIL: floors > 0: floors is 0
 FAIL: links != 2: links is 2
 FAIL: calls > 3: calls is 3
 FAIL: refusals == 0: refusals is 1
-FAIL: area Nave: areas: Hall Crypt Well Vault Cell Tower Lost Pit Gap
+FAIL: area Nave: areas: Hall Crypt Well Vault Cell Tower Lost Pit Gap Lößt
 FAIL: door Hall Crypt: no door between them
 FAIL: door Hall Nave: no area Nave
 FAIL: joined Vault Cell: no way from Vault to Cell

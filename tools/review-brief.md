@@ -18,7 +18,7 @@ in the brief.
 
 | task | tool |
 |---|---|
-| does a test catch this fault? | `tools/mutate.sh FILE 'old' 'new' SUITE...`: the old text must occur once; the file is restored (after a SIGKILL the next run refuses and names the original); prints caught or SURVIVED |
+| does a test catch this fault? | `tools/mutate.sh FILE 'old' 'new' SUITE...`: the old text must occur once; the file is restored (after a SIGKILL the next run refuses and names the original); prints caught or SURVIVED. A script or the grader (no suite): `... --run 'tests/agenteval.sh'`, no rebuild |
 | does suite pageconn catch a fault in the page's connection code? | `tools/pagemutate.sh 'old' 'new'`: seconds, no rebuild, the page untouched |
 | a test that only fails under load? | `tools/loadcheck.sh [ROUNDS]` |
 | several mutations in one go | `tools/mutations.sh LIST SUITE...` (the list's form is in its header) |

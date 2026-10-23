@@ -4,6 +4,11 @@
 # file back whatever happens (an interrupt included), then rebuilds again.
 #
 #   tools/mutate.sh FILE 'old text' 'new text' SUITE...
+#   tools/mutate.sh FILE 'old text' 'new text' --run 'CMD'
+#
+# The second form is for a file no suite covers (a script, the grader): no
+# rebuild, CMD run by sh from the repo, its exit status the verdict (non-zero
+# is caught).
 #
 # The old text must occur exactly once (a mutation that lands twice, or
 # nowhere, proves nothing). Prints "caught" with the failing checks when a
@@ -13,9 +18,14 @@
 # 300 s): a mutation that hangs counts as caught, said so. The suites' names
 # are build/run-tests's (tests/run.c).
 set -u
-[ $# -ge 4 ] || { echo "usage: tools/mutate.sh FILE OLD NEW SUITE..." >&2; exit 2; }
+[ $# -ge 4 ] || { echo "usage: tools/mutate.sh FILE OLD NEW SUITE... | --run CMD" >&2; exit 2; }
 file=$1 old=$2 new=$3
 shift 3
+run=
+if [ "$1" = --run ]; then
+    [ $# = 2 ] || { echo "usage: tools/mutate.sh FILE OLD NEW --run CMD" >&2; exit 2; }
+    run=$2
+fi
 [ -f "$file" ] || { echo "mutate: no file $file" >&2; exit 2; }
 
 # The original under a fixed name: a run killed past its traps (SIGKILL)
@@ -35,7 +45,7 @@ restore() {
     # mutation (2026-10-23: a hardening lost from ./vtt that way).
     cp "$keep" "$file" && rm -f "$keep"
     touch "$file"
-    make -s test-build >/dev/null 2>&1
+    [ -n "$run" ] || make -s test-build >/dev/null 2>&1
 }
 trap 'restore; exit 2' INT TERM HUP
 
@@ -50,6 +60,16 @@ p, o, n = sys.argv[1:4]
 s = open(p).read()
 open(p, "w").write(s.replace(o, n, 1))' "$file" "$old" "$new"
 
+if [ -n "$run" ]; then
+    out=$(timeout "${MUTATE_TIMEOUT:-300}" sh -c "$run" 2>&1)
+    rc=$?
+    restore
+    trap - INT TERM HUP
+    if [ $rc = 0 ]; then echo "SURVIVED: $(printf '%s\n' "$out" | tail -1)"; exit 1; fi
+    printf '%s\n' "$out" | grep 'FAIL' | head -5 | cut -c1-200
+    [ $rc = 124 ] && echo "caught (by a hang: past ${MUTATE_TIMEOUT:-300} s)" || echo "caught: exit $rc"
+    exit 0
+fi
 if ! make -s test-build >/dev/null 2>&1; then
     echo "mutate: the mutation does not compile" >&2
     restore; exit 2
