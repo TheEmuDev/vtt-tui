@@ -1044,8 +1044,9 @@ and it vanished once both binaries were rebuilt with `-falign-functions=64
 -falign-loops=32`. Adding `checkpoint.o` early in the link order had moved the hot loops
 to addresses that happened to run slower. Two lessons for every A/B:
 - Rebuild both sides aligned before believing a gap under about 10% on a tight loop.
-- `make CFLAGS=...` does **not** rebuild, because the Makefile tracks only the
-  release/debug mode. Use `make -B`.
+- A changed `CFLAGS`, `PROF` or compiler rebuilds everything since 2026-10-23 (the
+  Makefile's flag stamps, docs/TESTSPEED.md); before then it did not, and `make -B` was
+  needed. `-B` still does no harm.
 
 ### The jobs' tints
 

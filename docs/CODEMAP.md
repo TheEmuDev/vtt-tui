@@ -140,7 +140,7 @@ Perf runs want the machine to themselves: editing a file during a run lifted row
 by a fifth. When a row moves, A/B the previous commit's binary through the same
 scenario before believing it (`git worktree add /tmp/prev HEAD~1 && make -C /tmp/prev`). A gap under
 about 10% on a tight loop can be code placement alone: rebuild **both** with `make -B
-CFLAGS="-falign-functions=64 -falign-loops=32"` (plain `make CFLAGS=...` does not rebuild)
+CFLAGS="-falign-functions=64 -falign-loops=32"` (a changed `CFLAGS`, `PROF` or `CC` rebuilds everything: the Makefile's flag stamps)
 and A/B again before believing it (docs/PERFORMANCE.md, *The checkpoint*).
 Bench scripts replay whole; no toggles — use loop-neutral pairs (`llllhhhh`,
 `8a8A`) or absolute keys (`3b`, `2R`, `6r`).

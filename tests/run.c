@@ -19,10 +19,12 @@
  * in -j1's one process, or a child's -- fails the run rather than ending it
  * with no word (exit status 0 and no counts, read as a pass). */
 static int g_finished;
+static const char *g_suite = "";
 static void unfinished(void)
 {
     if (g_finished) return;
-    fprintf(stderr, "  FAIL %s: the process ended under it, before its counts\n", g_case[0] ? g_case : "a suite");
+    fprintf(stderr, "  FAIL %s: the process ended under it, before its counts (case: %s)\n",
+            g_suite[0] ? g_suite : "the runner", g_case[0] ? g_case : "none begun");
     fflush(NULL);
     _exit(1);
 }
@@ -30,6 +32,7 @@ static void unfinished(void)
 /* One suite and the checks after it: no test's disk or sockets left in use. */
 static void run_suite(const char *name, void (*fn)(void))
 {
+    g_suite = name;
     fn();
     case_begin(NULL);                    /* VTT_CASE_TIMES: its last case's time */
     if (disk() != &DISK_REAL) {          /* a suite's failing disk must not reach the next */

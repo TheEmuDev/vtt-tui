@@ -54,7 +54,7 @@ endif
 endif
 endef
 
-MODETEXT  := $(BUILDMODE) PROF=$(PROF) $(CFLAGS)
+MODETEXT  := $(BUILDMODE) PROF=$(PROF) CC=$(CC) $(CFLAGS)
 MODEWIPE  := $(OBJDIR)/*.o $(OBJDIR)/*.d $(BIN)
 $(eval $(call STAMP_CHECK,MODEFILE,MODETEXT,MODEWIPE))
 
@@ -94,7 +94,7 @@ ASANOBJS  := $(SRCS:$(SRCDIR)/%.c=$(ASANDIR)/%.o)
 # Checked only for the goals that build them: a plain `make PROF=0` must not
 # throw them away.
 ASANSTAMP := $(ASANDIR)/.flags
-ASANTEXT  := $(DBGFLAGS) $(CFLAGS)
+ASANTEXT  := CC=$(CC) $(DBGFLAGS) $(CFLAGS)
 ASANWIPE  := $(ASANDIR)/*.o $(ASANDIR)/*.d $(ASANDIR)/tests $(OBJDIR)/run-tests $(OBJDIR)/protocol $(ASANDIR)/vtt
 ifneq (,$(filter test test-build test-after $(ASANDIR)/% $(OBJDIR)/run-tests $(OBJDIR)/protocol,$(MAKECMDGOALS)))
 $(eval $(call STAMP_CHECK,ASANSTAMP,ASANTEXT,ASANWIPE))
