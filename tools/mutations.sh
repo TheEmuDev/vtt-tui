@@ -7,8 +7,10 @@
 #
 # LIST holds records; a line `== FILE` starts one, `--- old` and `--- new`
 # start its two texts (any number of lines each, the last newline not part
-# of the text); `#` lines outside a text are comments:
+# of the text). A line beginning `## ` is a comment wherever it is -- a lone
+# `#` cannot be one, since a text may hold `#include`:
 #
+#   ## the lookup's guard
 #   == src/apikey.c
 #   --- old
 #   || pending[0] || looking
@@ -27,7 +29,7 @@ import subprocess, sys
 path, suites = sys.argv[1], sys.argv[2:]
 recs, cur, part = [], None, None
 for line in open(path).read().split('\n'):
-    if part is None and line.startswith('#'):
+    if line.startswith('## '):
         continue
     if line.startswith('== '):
         cur = {'file': line[3:].strip(), 'old': [], 'new': []}
