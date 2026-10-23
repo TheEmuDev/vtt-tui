@@ -276,6 +276,24 @@ static int netmsg_raw(Net *n, uint64_t now)
 }
 
 /* A browser past its upgrade, whatever it was sent read and thrown away. */
+/* Pumps the server and reads fd into buf until needle is in it, 20 turns at
+ * most; reads only what poll says is there -- the server answers on its next
+ * turn, in this thread, so a read before it waits out net_connect's 2 s
+ * SO_RCVTIMEO (docs/TESTSPEED.md, step 1). Its length. */
+static size_t read_until(Net *n, int fd, char *buf, size_t cap, const char *needle, uint64_t now)
+{
+    size_t len = 0;
+    memset(buf, 0, cap);
+    for (int i = 0; i < 20 && !strstr(buf, needle); i++) {
+        net_pump(n, now);
+        struct pollfd p = { fd, POLLIN, 0 };
+        if (poll(&p, 1, 20) <= 0) continue;
+        ssize_t got = read(fd, buf + len, cap - 1 - len);
+        if (got > 0) len += (size_t)got;
+    }
+    return len;
+}
+
 static int netmsg_ws(Net *n, uint64_t now)
 {
     int fd = ws_connect(n, "");
@@ -778,19 +796,10 @@ void test_net_server(void)
     int b = net_connect(n.port);
     const char *req = "GET /?k=000000 HTTP/1.1\r\nHost: x\r\n\r\n";
     CHECK_EQ((int)write(b, req, strlen(req)), (int)strlen(req));
-    char resp[4096] = { 0 };
-    size_t rl = 0;
+    char resp[4096];
     /* Until the headers are in: the checks read only those (the page is
      * larger than resp, so waiting for its end ran every turn). */
-    for (int i = 0; i < 20 && !strstr(resp, "\r\n\r\n"); i++) {
-        net_pump(&n, now);
-        /* Read only what is there: the server answers on its next turn, in
-         * this thread, so a read before it waits out SO_RCVTIMEO (2 s). */
-        struct pollfd p = { b, POLLIN, 0 };
-        if (poll(&p, 1, 20) <= 0) continue;
-        ssize_t got = read(b, resp + rl, sizeof resp - 1 - rl);
-        if (got > 0) rl += (size_t)got;
-    }
+    size_t rl = read_until(&n, b, resp, sizeof resp, "\r\n\r\n", now);
     CHECK(strncmp(resp, "HTTP/1.1 200", 12) == 0);
     CHECK(strstr(resp, "text/html") != NULL);
     close(b);
@@ -799,28 +808,14 @@ void test_net_server(void)
     for (int i = 0; i < n.ncl; i++) if (n.cl[i].kind == CL_NEW) n.cl[i].local = 0;
     const char *bad = "GET / HTTP/1.1\r\nHost: x\r\n\r\n";
     CHECK_EQ((int)write(b, bad, strlen(bad)), (int)strlen(bad));
-    memset(resp, 0, sizeof resp); rl = 0;
-    for (int i = 0; i < 20 && !strstr(resp, "code"); i++) {
-        net_pump(&n, now);
-        struct pollfd p = { b, POLLIN, 0 };
-        if (poll(&p, 1, 20) <= 0) continue;
-        ssize_t got = read(b, resp + rl, sizeof resp - 1 - rl);
-        if (got > 0) rl += (size_t)got;
-    }
+    read_until(&n, b, resp, sizeof resp, "code", now);
     CHECK(strncmp(resp, "HTTP/1.1 403", 12) == 0);
     close(b);
 
     CASE("a WebSocket upgrade is answered with the right key and a full frame in binary messages");
     int s = ws_connect(&n, "");
     CHECK(s >= 0);
-    memset(resp, 0, sizeof resp); rl = 0;
-    for (int i = 0; i < 20 && !strstr(resp, "\r\n\r\n"); i++) {
-        net_pump(&n, now);
-        struct pollfd p = { s, POLLIN, 0 };             /* as above: never a read before the answer */
-        if (poll(&p, 1, 20) <= 0) continue;
-        ssize_t got = read(s, resp + rl, sizeof resp - 1 - rl);
-        if (got > 0) rl += (size_t)got;
-    }
+    rl = read_until(&n, s, resp, sizeof resp, "\r\n\r\n", now);
     CHECK(strncmp(resp, "HTTP/1.1 101", 12) == 0);
     CHECK(strstr(resp, "Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=") != NULL);
     /* Whatever followed the headers is the first message. */

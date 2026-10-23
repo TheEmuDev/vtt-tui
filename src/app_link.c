@@ -343,7 +343,7 @@ void app_link_command(App *a, const char *rest)
         return;
     }
 
-    char words[8][16];
+    char words[8][16] = { "" };      /* `rest` all spaces leaves none written: words[0] reads "" */
     int  nw = 0;
     for (const char *p = rest; *p && nw < 8; ) {
         while (*p == ' ') p++;

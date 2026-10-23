@@ -1,10 +1,8 @@
 # `make test`, faster: the plan
 
-**Status:** signed off 2026-10-23 (the user: "Yes go with your recommendations": the order as
-written, `run-tests -jN` by default with `-j1` for today's order, `make test-fast` kept until
-step 3 is measured); being built, step by step. Written 2026-10-23 (docs/V2.md *Next*, item 6:
-the user, "These test cases have begun taking a while to run. What can be done to speed it
-up", then "once you complete the current task start working on it"); nothing built.
+**Status:** built 2026-10-23, all four steps (*As built*, below, has each measured), from the
+plan signed off the same day (the user: "Yes go with your recommendations"); `make test-fast`
+removed after step 3 (the user). This page owns the test run's times: other docs point here.
 
 ## What a run costs now (measured)
 
@@ -83,8 +81,8 @@ default (my reading of the test; the step's measurement settles it).
    an estimate).
 
 *Expected in all:* about 180 s to about 20-30 s after a one-file change (an estimate; each
-step is measured as it lands, the same way as above, and the table here and in
-PERFORMANCE.md updated).
+step is measured as it lands, the same way as above, and recorded here: this page owns the
+test run's times, and docs/PERFORMANCE.md points here rather than copying them).
 
 ## Speed of light
 
@@ -177,3 +175,21 @@ suites it names side by side. One mutation of src/apikey.c against suite `apikey
 include rebuilds each of them, so seconds, not one. Running several mutants at once would
 need a tree each (they mutate the source in place) and a full build in each: not worth it at
 these times.
+
+**Its review (Fable, 98e49e4..e8205eb), 2026-10-23.** Mutations of what the faster waits test
+(the 403 not sent, the idle drop, a close frame ignored) were all caught; a seeded leak in a
+suite fails it from the child; the README parser finds exactly the 14 pages. Fixed after:
+- a suite whose child ended early (an `exit` under it) passed with no counts: now a failure
+  ("ended before its counts were written"), mutation-checked;
+- `make test-build CFLAGS=-O2` built nothing on an up-to-date tree, or left -O2 objects for
+  every later run: build/asan's objects are stamped with their flags as the mode is, and a
+  change rebuilds them all (checked: -O2 then plain rebuilt 78 back). The -O2 build then
+  showed `words` read uninitialized in `:link` with a blank argument (app_link.c), now zeroed;
+- tools/oracle.sh waited for its jobs without their statuses, so a part that failed under
+  `record` would have been recorded short: each pid is waited for, and a failure stops it
+  (exit 2; checked with a failure planted in a copy);
+- the pump-poll-read loop at three places in test_net.c is `read_until`;
+- `make test` no longer prints the sub-make's "up to date".
+The review timed `make test` at 17.0 s with nothing changed, 29.1 s from `make clean`; here
+three runs after it gave 12.9-13.0 s. Which the machine gives depends on what else it runs.
+`tools/loadcheck.sh` (two whole runs at once, seen twice) is the load check of step 3.

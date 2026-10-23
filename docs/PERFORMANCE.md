@@ -39,6 +39,9 @@ loop runs the whole script. The help page is 14% dearer than before (41 to 46µs
 read it higher):
 a key wider than its column is measured on every line to give it one of its own.
 
+`make test`'s own times -- the build, the suites, the oracle -- are docs/TESTSPEED.md's:
+this page measures vtt, not its tests.
+
 ## The budget
 
 A keystroke has about **16ms** before a person notices. Nothing here is close, and the

@@ -19,7 +19,8 @@ docs/CODEMAP.md; `tests/run.c` is the table of suites and `main`, nothing else.
   M5). Before it, the child frees what it inherited and holds only in a local of the
   forking function (a buffer the parent `malloc`ed there): at some optimization level the
   pointer is in no stack slot and reads as a leak. Check a new child at `-O2` once:
-  `make test-build CFLAGS=-O2; build/run-tests SUITE`.
+  `make test-build CFLAGS=-O2; build/run-tests SUITE` (build/asan is stamped with its flags:
+  the next plain build rebuilds it back).
 - A seeded fault must escape the compiler: an unused `malloc` is deleted (gcc keeps no call),
   so a seeded leak stores to a `volatile` or uses what it allocated.
 - `make test` ends with `tools/oracle.sh check` (twice: over the release `./vtt`, then over

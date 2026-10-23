@@ -119,16 +119,21 @@ generated() (
     done
 )
 
-requests > ../out/requests.txt &
-generated > ../out/generated.txt &
+# Each job's pid kept and waited for by name: a plain `wait` drops their
+# statuses, and a job that failed would leave a short record unsaid.
+FAILED=0
+waitall() { for p in $PIDS; do wait "$p" || FAILED=1; done; PIDS=; }
+requests > ../out/requests.txt & PIDS="$!"
+generated > ../out/generated.txt & PIDS="$PIDS $!"
 n=0
 for f in *.vtt; do
-    one_map "$f" &
+    one_map "$f" & PIDS="$PIDS $!"
     n=$((n + 1))
     # A batch of JOBS at a time (the two parts above count as running).
-    if [ "$n" -ge "$JOBS" ]; then wait; n=0; fi
+    if [ "$n" -ge "$JOBS" ]; then waitall; n=0; fi
 done
-wait
+waitall
+if [ "$FAILED" = 1 ]; then echo "oracle: a part failed to run -- nothing recorded or compared" >&2; exit 2; fi
 
 if [ "$MODE" = record ]; then
     rm -rf "$EXP"; mkdir -p "$EXP"

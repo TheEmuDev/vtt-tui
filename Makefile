@@ -76,6 +76,15 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.c
 # mode stamp above never wipes them and a change rebuilds only its file.
 ASANDIR   := $(OBJDIR)/asan
 ASANOBJS  := $(SRCS:$(SRCDIR)/%.c=$(ASANDIR)/%.o)
+# Its objects are stamped with the flags they were built with, as the mode is
+# above: `make test-build CFLAGS=-O2` rebuilds them all at -O2, and the next
+# build without it rebuilds them back, never mixing the two.
+ASANSTAMP := $(ASANDIR)/.flags
+$(shell mkdir -p $(ASANDIR); \
+        if [ "$$(cat $(ASANSTAMP) 2>/dev/null)" != "$(DBGFLAGS) $(CFLAGS)" ]; then \
+            rm -rf $(ASANDIR)/*.o $(ASANDIR)/*.d $(ASANDIR)/tests $(OBJDIR)/run-tests $(OBJDIR)/protocol $(ASANDIR)/vtt; \
+            echo "$(DBGFLAGS) $(CFLAGS)" > $(ASANSTAMP); \
+        fi)
 $(ASANDIR)/vtt: $(ASANOBJS)
 	$(CC) $(ASANOBJS) -o $@ -fsanitize=address,undefined $(LDFLAGS) $(LDLIBS)
 $(ASANDIR)/%.o: $(SRCDIR)/%.c
@@ -127,7 +136,7 @@ test-after:
 	@if grep -n '#include "app' $(SRCDIR)/world.c $(SRCDIR)/world.h $(SRCDIR)/world_ops.c $(SRCDIR)/world_ops.h $(SRCDIR)/request.c \
 	    $(SRCDIR)/request_job.c $(SRCDIR)/request_propose.c $(SRCDIR)/request.h $(TESTDIR)/test_protocol.c; then \
 	    echo "the World's files must not include an app header (docs/V2.md, D2)" >&2; exit 1; fi
-	@$(MAKE) --no-print-directory -j$(NPROC) $(OBJDIR)/protocol
+	@$(MAKE) -s --no-print-directory -j$(NPROC) $(OBJDIR)/protocol
 	@$(OBJDIR)/protocol
 	@./tools/oracle.sh check ./$(BIN)
 

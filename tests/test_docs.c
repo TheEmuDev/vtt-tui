@@ -37,7 +37,9 @@ static const char *const ID_DOCS[] = {
 static const char *const PLAN_DOCS[] = { "docs/ROADMAP.md", "docs/IDEAS.md" };
 
 #define MAX_DOCS 64
-/* docs/README.md's *Kept current*, as paths from the top: `](X.md)` is
+/* docs/README.md's *Kept current*, as paths from the top (a .md the section
+ * mentions in passing joins the list too: the section is the owner, so a
+ * reworded sentence can add a page, never drop one silently): `](X.md)` is
  * docs/X.md (`](../X.md)` is X.md), a backticked `.md` or a plain one with a
  * slash is as written; docs/README.md itself too. */
 static int kept_current(char docs[][128], int max)

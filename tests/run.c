@@ -292,13 +292,20 @@ int main(int argc, char **argv)
                         while ((n = fread(buf, 1, sizeof buf, out[shown])) > 0) fwrite(buf, 1, n, stdout);
                         fclose(out[shown]);
                     }
+                    int counted = 0;
                     if (res[shown]) {
                         rewind(res[shown]);
-                        if (fscanf(res[shown], "%d %d", &c, &f) != 2) c = f = 0;
+                        counted = fscanf(res[shown], "%d %d", &c, &f) == 2;
                         fclose(res[shown]);
                     }
                     g_checks += c;
                     g_fails += f;
+                    /* No counts: the suite ended its process before its end
+                     * (an exit somewhere under it) -- never a pass. */
+                    if (!counted && status[shown] == 0) {
+                        g_fails++;
+                        printf("  FAIL %s ended before its counts were written\n", suites[shown].name);
+                    }
                     if (status[shown] != 0) {
                         g_fails++;
                         if (status[shown] < 0) printf("  FAIL %s could not be started\n", suites[shown].name);
