@@ -193,3 +193,13 @@ suite fails it from the child; the README parser finds exactly the 14 pages. Fix
 The review timed `make test` at 17.0 s with nothing changed, 29.1 s from `make clean`; here
 three runs after it gave 12.9-13.0 s. Which the machine gives depends on what else it runs.
 `tools/loadcheck.sh` (two whole runs at once, seen twice) is the load check of step 3.
+
+**Its recheck, 2026-10-23.** Each fix above reproduced as working. Fixed after it:
+- under `-j1` a suite that exited the process still passed: an exit hook now fails any run
+  that does not reach its end, one process or a child (mutation-checked in both modes);
+- the flags stamp fired for every goal and on a dry run (`make PROF=0` threw the ASan objects
+  away; `make -n` wiped them), and lost a quote in CFLAGS: both stamps -- the mode's and
+  build/asan's -- are now one `STAMP_CHECK`, written and read by make's `$(file)` so flags are
+  kept as given, skipped on `make -n`, and build/asan's checked only for the goals that build
+  it. The mode's stamp now carries PROF and CFLAGS, so `make PROF=0` rebuilds the release
+  objects, which it silently did not before.

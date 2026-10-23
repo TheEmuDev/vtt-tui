@@ -15,6 +15,18 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+/* Whether this process reached its own end: an `exit` from under a suite --
+ * in -j1's one process, or a child's -- fails the run rather than ending it
+ * with no word (exit status 0 and no counts, read as a pass). */
+static int g_finished;
+static void unfinished(void)
+{
+    if (g_finished) return;
+    fprintf(stderr, "  FAIL %s: the process ended under it, before its counts\n", g_case[0] ? g_case : "a suite");
+    fflush(NULL);
+    _exit(1);
+}
+
 /* One suite and the checks after it: no test's disk or sockets left in use. */
 static void run_suite(const char *name, void (*fn)(void))
 {
@@ -35,6 +47,7 @@ static void run_suite(const char *name, void (*fn)(void))
 int main(int argc, char **argv)
 {
     prof_init();
+    atexit(unfinished);
 
     struct { const char *name; void (*fn)(void); } suites[] = {
         { "util",   test_util },
@@ -276,6 +289,7 @@ int main(int argc, char **argv)
                     run_suite(suites[next].name, suites[next].fn);
                     fprintf(res[next], "%d %d\n", g_checks, g_fails);
                     fflush(NULL);
+                    g_finished = 1;
                     exit(0);                                  /* exit, not _exit: LeakSanitizer runs */
                 }
                 if (pid[next] < 0) { status[next] = -1; done[next] = 1; }
@@ -310,7 +324,7 @@ int main(int argc, char **argv)
                         g_fails++;
                         if (status[shown] < 0) printf("  FAIL %s could not be started\n", suites[shown].name);
                         else if (WIFSIGNALED(status[shown])) printf("  FAIL %s died of signal %d\n", suites[shown].name, WTERMSIG(status[shown]));
-                        else printf("  FAIL %s exited %d (a leak, or a crash its sanitizer caught: above)\n", suites[shown].name, WEXITSTATUS(status[shown]));
+                        else printf("  FAIL %s exited %d (its own output above says why: a leak, a crash, an exit)\n", suites[shown].name, WEXITSTATUS(status[shown]));
                     }
                     printf("  %-8s %s\n", suites[shown].name, g_fails == fails_before ? "ok" : "FAILED");
                     fflush(stdout);
@@ -334,8 +348,9 @@ int main(int argc, char **argv)
         for (size_t i = 0; i < sizeof suites / sizeof *suites && !found; i++) found = !strcmp(argv[k], suites[i].name);
         if (!found) { fprintf(stderr, "no suite called %s\n", argv[k]); unknown = 1; }
     }
-    if (unknown || (argc >= 2 && !ran)) return 2;
+    if (unknown || (argc >= 2 && !ran)) { g_finished = 1; return 2; }
 
     printf("\n%d checks, %d failures\n", g_checks, g_fails);
+    g_finished = 1;
     return g_fails ? 1 : 0;
 }

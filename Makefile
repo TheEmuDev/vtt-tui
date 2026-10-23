@@ -40,11 +40,23 @@ else
 BUILDMODE := release
 endif
 
-$(shell mkdir -p $(OBJDIR); \
-        if [ "$$(cat $(MODEFILE) 2>/dev/null)" != "$(BUILDMODE)" ]; then \
-            rm -f $(OBJDIR)/*.o $(OBJDIR)/*.d $(BIN); \
-            echo "$(BUILDMODE)" > $(MODEFILE); \
-        fi)
+# A stamp, the one check for both sets of objects: the file named by $(1)
+# holds the flags (the variable named by $(2)) its objects were built with,
+# written and compared by make itself so a flag is kept as given, quotes and
+# all; a change removes what $(3) names. Never on a dry run (make -n).
+DRYRUN := $(findstring n,$(firstword -$(MAKEFLAGS)))
+define STAMP_CHECK
+ifeq (,$(DRYRUN))
+ifneq ($$(file <$$($(1))),$$($(2)))
+$$(shell mkdir -p $$(dir $$($(1))); rm -rf $$($(3)))
+$$(file >$$($(1)),$$($(2)))
+endif
+endif
+endef
+
+MODETEXT  := $(BUILDMODE) PROF=$(PROF) $(CFLAGS)
+MODEWIPE  := $(OBJDIR)/*.o $(OBJDIR)/*.d $(BIN)
+$(eval $(call STAMP_CHECK,MODEFILE,MODETEXT,MODEWIPE))
 
 SRCS      := $(wildcard $(SRCDIR)/*.c)
 OBJS      := $(SRCS:$(SRCDIR)/%.c=$(OBJDIR)/%.o)
@@ -79,12 +91,14 @@ ASANOBJS  := $(SRCS:$(SRCDIR)/%.c=$(ASANDIR)/%.o)
 # Its objects are stamped with the flags they were built with, as the mode is
 # above: `make test-build CFLAGS=-O2` rebuilds them all at -O2, and the next
 # build without it rebuilds them back, never mixing the two.
+# Checked only for the goals that build them: a plain `make PROF=0` must not
+# throw them away.
 ASANSTAMP := $(ASANDIR)/.flags
-$(shell mkdir -p $(ASANDIR); \
-        if [ "$$(cat $(ASANSTAMP) 2>/dev/null)" != "$(DBGFLAGS) $(CFLAGS)" ]; then \
-            rm -rf $(ASANDIR)/*.o $(ASANDIR)/*.d $(ASANDIR)/tests $(OBJDIR)/run-tests $(OBJDIR)/protocol $(ASANDIR)/vtt; \
-            echo "$(DBGFLAGS) $(CFLAGS)" > $(ASANSTAMP); \
-        fi)
+ASANTEXT  := $(DBGFLAGS) $(CFLAGS)
+ASANWIPE  := $(ASANDIR)/*.o $(ASANDIR)/*.d $(ASANDIR)/tests $(OBJDIR)/run-tests $(OBJDIR)/protocol $(ASANDIR)/vtt
+ifneq (,$(filter test test-build test-after $(ASANDIR)/% $(OBJDIR)/run-tests $(OBJDIR)/protocol,$(MAKECMDGOALS)))
+$(eval $(call STAMP_CHECK,ASANSTAMP,ASANTEXT,ASANWIPE))
+endif
 $(ASANDIR)/vtt: $(ASANOBJS)
 	$(CC) $(ASANOBJS) -o $@ -fsanitize=address,undefined $(LDFLAGS) $(LDLIBS)
 $(ASANDIR)/%.o: $(SRCDIR)/%.c
