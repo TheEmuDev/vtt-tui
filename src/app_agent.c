@@ -678,11 +678,11 @@ static void key_remove_ask(App *a)
     }
     snprintf(a->modal_title, sizeof a->modal_title, "Remove the API key?");
     if (src == APIKEY_SESSION && stored == APIKEY_KEYRING)
-        snprintf(a->modal_body, sizeof a->modal_body, "The key ending ...%s, held for this session. The keyring's, ending ...%s, is used then.", last4, kept4);
+        snprintf(a->modal_body, sizeof a->modal_body, "The key ending ...%s, held for this session.\nThe keyring's, ending ...%s, is used then.", last4, kept4);
     else if (src == APIKEY_SESSION)
-        snprintf(a->modal_body, sizeof a->modal_body, "The key ending ...%s, held for this session. The Claude agent stops until a key is given again.", last4);
+        snprintf(a->modal_body, sizeof a->modal_body, "The key ending ...%s, held for this session.\nThe Claude agent stops until a key is given again.", last4);
     else snprintf(a->modal_body, sizeof a->modal_body, "The key ending ...%s, from your %s%s", last4, apikey_source_name(src),
-                  env ? " (ANTHROPIC_API_KEY is used until vtt quits)." : ". The Claude agent stops until a key is given again.");
+                  env ? ".\nANTHROPIC_API_KEY is used until vtt quits." : ".\nThe Claude agent stops until a key is given again.");
     a->modal = MODAL_CONFIRM_KEY;
     a->dirty = 1;
 }

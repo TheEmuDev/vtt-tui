@@ -27,8 +27,9 @@ static char         held[APIKEY_MAX];
 static ApiKeySource held_src;
 /* A key typed in, until the GM says where it goes (the keyring, or held). */
 static char         pending[APIKEY_MAX];
-/* hardened: apikey_harden ran, and it is never undone. looking: a keyring
- * lookup's answer is in flight (proc_run's buffer, the ByteBuf). */
+/* hardened: apikey_harden ran, and it is never undone. looking: how many
+ * lookups have a key's answer in flight (proc_run's buffer, the ByteBuf,
+ * apikey_where's copy); they nest. */
 static int          typing, locked, hardened, looking;
 
 /* VTT_SECRET_TOOL names another program in secret-tool's place (the tests). */
@@ -162,21 +163,23 @@ static ApiKeySource last_four(ApiKeySource src, const char *key, char *last4, si
     return src;
 }
 
-ApiKeySource apikey_where(char *last4, size_t sz, char *err, size_t errsz)
+/* The key's source and last four, its copy wiped before the process may be
+ * dumpable again (looking spans the lookup, the last four and the wipe). */
+static ApiKeySource where(int stored, char *last4, size_t sz, char *err, size_t errsz)
 {
     char k[APIKEY_MAX];
-    ApiKeySource src = last_four(apikey_find(k, sizeof k, err, errsz), k, last4, sz);
+    looking++;
+    guard();
+    ApiKeySource src = last_four(stored ? apikey_find_stored(k, sizeof k, err, errsz)
+                                        : apikey_find(k, sizeof k, err, errsz), k, last4, sz);
     apikey_wipe(k, sizeof k);
+    looking--;
+    guard();
     return src;
 }
 
-ApiKeySource apikey_where_stored(char *last4, size_t sz, char *err, size_t errsz)
-{
-    char k[APIKEY_MAX];
-    ApiKeySource src = last_four(apikey_find_stored(k, sizeof k, err, errsz), k, last4, sz);
-    apikey_wipe(k, sizeof k);
-    return src;
-}
+ApiKeySource apikey_where(char *last4, size_t sz, char *err, size_t errsz)        { return where(0, last4, sz, err, errsz); }
+ApiKeySource apikey_where_stored(char *last4, size_t sz, char *err, size_t errsz) { return where(1, last4, sz, err, errsz); }
 
 ApiKeySource apikey_held(char *key, size_t sz)
 {
@@ -224,7 +227,7 @@ ApiKeySource apikey_find_stored(char *key, size_t sz, char *err, size_t errsz)
     key[0] = '\0';
     /* Not dumpable while the answer is in flight; room for any key at once,
      * so the buffer never grows and leaves a copy in freed memory. */
-    looking = 1;
+    looking++;
     guard();
     ByteBuf out;
     bb_init(&out, 2 * APIKEY_MAX);
@@ -236,12 +239,17 @@ ApiKeySource apikey_find_stored(char *key, size_t sz, char *err, size_t errsz)
     }
     apikey_wipe(out.data, out.cap);
     bb_free(&out);
-    looking = 0;
+    ApiKeySource src = APIKEY_KEYRING;
+    if (!key[0] || !apikey_ok(key)) {
+        apikey_wipe(key, sz);
+        snprintf(err, errsz, "no API key: set ANTHROPIC_API_KEY, or :agent key to type one in");
+        src = APIKEY_NONE;
+    }
+    /* A key found is in the caller's hands now: still guarded when the
+     * caller is apikey_where*, which wipes it before it lets go. */
+    looking--;
     guard();
-    if (key[0] && apikey_ok(key)) return APIKEY_KEYRING;
-    apikey_wipe(key, sz);
-    snprintf(err, errsz, "no API key: set ANTHROPIC_API_KEY, or :agent key to type one in");
-    return APIKEY_NONE;
+    return src;
 }
 
 int apikey_store(const char *key, char *err, size_t errsz)

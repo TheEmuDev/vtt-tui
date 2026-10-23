@@ -1439,7 +1439,7 @@ the Claude agent has spent so far.
 | `j` `k` | move between the settings; `g` `G` the first and last |
 | `enter` | change one: the next value, or type one in |
 | `h` `l` | the value before or after, for a setting of a few values |
-| `d` | on the API key: remove the stored key, asking first |
+| `d` | on the API key: remove it (the keyring's, or this session's), asking first |
 | `esc` | back to the menu |
 
 Rows that do not apply to the agent you chose are dim. `:agent` and its words below change the

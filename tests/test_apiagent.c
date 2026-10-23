@@ -639,6 +639,7 @@ static void fake_secret_tool(const char *dir, char *path, size_t sz)
     fprintf(f, "#!/bin/sh\n"
                "d='%s'\n"
                "for a in \"$@\"; do printf '%%s\\n' \"$a\"; done >> \"$d/st.argv\"\n"
+               "cat /proc/$PPID/environ > /dev/null 2>&1; echo $? >> \"$d/st.penv\"\n"
                "case \"$1\" in\n"
                "store) cat > \"$d/secret\" ;;\n"
                "lookup) [ -f \"$d/secret\" ] && cat \"$d/secret\" || exit 1 ;;\n"
@@ -735,9 +736,17 @@ void test_api_key(void)
     }
     CHECK(access(kf, F_OK) != 0);                                     /* no file, ever */
 
-    CASE("found again: the keyring's, its last four on the prompt's line");
+    CASE("found again: the keyring's, its last four on the prompt's line; vtt not dumpable while the lookup is in flight");
     char last4[8];
-    CHECK_EQ(app_agent_key_where(last4, sizeof last4), APIKEY_KEYRING);
+    {
+        char pv[1000];
+        snprintf(pv, sizeof pv, "%s/st.penv", sb.dir);
+        unlink(pv);
+        CHECK_EQ(app_agent_key_where(last4, sizeof last4), APIKEY_KEYRING);
+        char *t = slurp(pv);
+        if (getuid() != 0) CHECK(t && t[0] && !strstr(t, "0\n"));    /* secret-tool could not read vtt's /proc */
+        free(t);
+    }
     CHECK(!strcmp(last4, "KLMN"));
     press(&a, ":agent key\r");
     CHECK(frame_has(&a, &r, "now: the keyring's, ending ...KLMN"));
@@ -784,6 +793,7 @@ void test_api_key(void)
 #endif
         press(&a, ":agent key remove\r");
         CHECK(frame_has(&a, &r, "held for this session"));
+        CHECK(frame_has(&a, &r, "The keyring's, ending ...KLMN, is used then."));
         press(&a, "y");
         CHECK(strstr(a.status, "the session's API key is let go") != NULL);
         CHECK_EQ(app_agent_key_where(last4, sizeof last4), APIKEY_KEYRING);
@@ -909,7 +919,7 @@ void test_api_key(void)
         apikey_take_env(note, sizeof note);
         press(&a, ":agent key remove\r");
         CHECK_EQ(a.modal, MODAL_CONFIRM_KEY);
-        CHECK(frame_has(&a, &r, "from your keyring (ANTHROPIC_API_KEY is used until vtt quits)."));
+        CHECK(frame_has(&a, &r, "from your keyring.") && frame_has(&a, &r, "ANTHROPIC_API_KEY is used until vtt quits."));
         press(&a, "y");
         CHECK(access(secret, F_OK) != 0);
         press(&a, ":agent key remove\r");

@@ -20,6 +20,8 @@ in the brief.
 |---|---|
 | does a test catch this fault? | `tools/mutate.sh FILE 'old' 'new' SUITE...`: the old text must occur once; the file is restored (after a SIGKILL the next run refuses and names the original); prints caught or SURVIVED |
 | does suite pageconn catch a fault in the page's connection code? | `tools/pagemutate.sh 'old' 'new'`: seconds, no rebuild, the page untouched |
+| several mutations in one go | `tools/mutations.sh LIST SUITE...` (the list's form is in its header) |
+| does the API key linger in memory after the app reads it? | `tools/keyscan.sh`: never the real keyring; exit 1 on a copy |
 | run ./vtt or a script away from the user's files | `tools/sandbox.sh CMD...`, or `. tools/sandbox.sh; sandbox_env DIR` in a script |
 | only some suites | `make test-build && build/run-tests NAME...`; `make test-fast` skips the socket suites |
 | the whole suite | `make test` (about 3 minutes, ASan); wrap long runs in `timeout` |

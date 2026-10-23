@@ -24,7 +24,7 @@ shift 3
 real="$(cd "$(dirname "$file")" && pwd -P)/$(basename "$file")"
 keep="${TMPDIR:-/tmp}/mutate.$(printf '%s' "$real" | tr / _).orig"
 if [ -e "$keep" ]; then
-    echo "mutate: a killed run left $file mutated; its original is $keep (cp -p it back, then rm it)" >&2
+    echo "mutate: a killed run left $file mutated; its original is $keep (cp it back, touch the file so make rebuilds it, then rm the copy)" >&2
     exit 2
 fi
 cp -p "$file" "$keep" || exit 2

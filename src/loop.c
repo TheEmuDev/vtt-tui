@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <unistd.h>
 
+#include "apikey.h"
 #include "prof.h"
 
 /* Upper bound on bytes taken from the terminal in one turn, so a flood of
@@ -96,6 +97,9 @@ static int drain_input(Loop *l)
         ssize_t n = read(l->t->in_fd, buf, want);
         if (n > 0) {
             input_feed(&l->in, buf, (size_t)n);
+            /* What was read may be a key pasted into the hidden prompt: no
+             * copy of it left on this stack once the parser has it. */
+            apikey_wipe(buf, (size_t)n);
             drained += (size_t)n;
             while (input_next(&l->in, &k)) app_key(a, k);
             continue;

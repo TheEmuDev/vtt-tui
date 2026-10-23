@@ -588,3 +588,15 @@ is 0 (curl's case; the agent and vtt are covered by not being dumpable, which pr
 documents stops core dumps). It is the crash test of *Tests*, which writes to the system's
 crash store and waits for the user's go (HEALTH B18). The keyring lookup a call is not
 timed: it needs the real keyring, likewise the user's go.
+
+Its two Fable reviews (2026-10-23), each finding reproduced and fixed:
+- *the review of 1f4a2ed:* F1 a keyring key left in `proc_run`'s stack buffer while vtt was
+  dumpable (now wiped, the lookup guarded, its ByteBuf never grows); F2 the agent made dumpable
+  again at its end (`hardened`, never undone); F3 a dumpable gap between enter and the pending
+  slot (`apikey_typing(0)` after it); F4 the remove box's sentence when the keyring's key takes
+  over; tests for each gap its mutations showed.
+- *the recheck of ec8e0d7:* a pasted key left in the loop's read buffer after `r` (loop.c now
+  wipes what it read); a lookup made dumpable before its caller wiped the copy (`looking` spans
+  the copy, and nests); mutate.sh's refusal message; the README's `d` row; tests for the lookup
+  guard and the box's sentence (`tools/mutations.sh`), and `tools/keyscan.sh` for the stack
+  wipe a suite cannot see (its control finds the copy with the wipe removed).
