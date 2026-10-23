@@ -54,7 +54,7 @@ DEPS      := $(OBJS:.o=.d)
 LIBSRCS   := $(filter-out $(SRCDIR)/main.c,$(SRCS))
 TESTSRCS  := $(filter-out $(TESTDIR)/fuzz_%.c,$(wildcard $(TESTDIR)/*.c))
 
-.PHONY: all debug test test-fast test-after test-build soak mcount oracle bench perf fuzz fuzz-ctl fuzz-json install-skill clean help
+.PHONY: all debug test test-after test-build soak mcount oracle bench perf fuzz fuzz-ctl fuzz-json install-skill clean help
 .DEFAULT_GOAL := all
 
 all: BUILDFLAGS := $(RELFLAGS)
@@ -117,13 +117,7 @@ test: test-build
 	@echo "the oracle again, over the sanitizer vtt (a leak or an error is a difference):"
 	@./tools/oracle.sh check $(ASANDIR)/vtt || { echo "the sanitizer vtt differs (a leak exits 1, with a LeakSanitizer report on stderr): run a differing command with $(ASANDIR)/vtt to read it" >&2; exit 1; }
 
-# make test less run-tests' SLOW list, the suites of real sockets and processes
-# (docs/V2.md, ruling 8; run-tests' SLOW list). make test before a commit.
-test-fast: test-build
-	@$(OBJDIR)/run-tests --fast
-	@$(MAKE) --no-print-directory test-after
-
-# What both run after the suites.
+# What make test runs after the suites.
 test-after:
 	@# The seam (docs/V2.md, D2): the protocol's suite again, built with no
 	@# src/app*.c and no loop: a request handler or world.c that reached for
@@ -210,7 +204,6 @@ help:
 	@echo "make debug    -Og -g3 with ASan + UBSan"
 	@echo "make test     build and run the unit/golden test suite"
 	@echo "make test-build   build build/run-tests only, for build/run-tests NAME..."
-	@echo "make test-fast    the suite but run-tests' SLOW list (while iterating)"
 	@echo "make soak     peak memory of long sessions against their bounds (about 20 s)"
 	@echo "make mcount   build/mcount.so: every libc allocation counted (LD_PRELOAD)"
 	@echo "make oracle   compare ./vtt's output with tests/oracle/expected"

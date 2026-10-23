@@ -6,8 +6,7 @@
 #include "disk.h"
 
 /* build/run-tests runs every suite; build/run-tests NAME... only the ones
- * named (see the table), for the one being worked on; build/run-tests --fast
- * all but the slow ones (make test-fast). -jN runs N suites at once, each in a
+ * named (see the table), for the one being worked on. -jN runs N suites at once, each in a
  * forked child of its own (docs/TESTSPEED.md, step 3): the default is a job a
  * core, -j1 the one process and order of before. A child's output is printed
  * whole and in the table's order; a child that crashes, or that
@@ -15,10 +14,6 @@
 
 #include <sys/wait.h>
 #include <unistd.h>
-
-/* The suites of real sockets and processes, most of the run's time (docs/V2.md,
- * ruling 8): skipped by --fast, run by make test. */
-static const char *const SLOW[] = { "netedges", "agentcmd", "netmsg", "netserver", "ctllive" };
 
 /* One suite and the checks after it: no test's disk or sockets left in use. */
 static void run_suite(const char *name, void (*fn)(void))
@@ -37,12 +32,6 @@ static void run_suite(const char *name, void (*fn)(void))
     }
 }
 
-static int slow(const char *name)
-{
-    for (size_t i = 0; i < sizeof SLOW / sizeof *SLOW; i++)
-        if (!strcmp(SLOW[i], name)) return 1;
-    return 0;
-}
 int main(int argc, char **argv)
 {
     prof_init();
@@ -235,8 +224,7 @@ int main(int argc, char **argv)
     };
 
     /* -jN, anywhere among the names, else VTT_JOBS, else a job a core (the
-     * Makefile and tools/oracle.sh read VTT_JOBS too); then --fast alone,
-     * or names. */
+     * Makefile and tools/oracle.sh read VTT_JOBS too); then the names. */
     const char *vj = getenv("VTT_JOBS");
     long jobs = vj && *vj ? atol(vj) : sysconf(_SC_NPROCESSORS_ONLN);
     for (int k = 1; k < argc; k++) {
@@ -247,12 +235,10 @@ int main(int argc, char **argv)
         k--;
     }
     if (jobs < 1) jobs = 1;
-    int fast = argc == 2 && !strcmp(argv[1], "--fast");
-    if (fast) argc = 1;
     enum { NSUITES = sizeof suites / sizeof *suites };
     int want[NSUITES], ran = 0;
     for (size_t i = 0; i < NSUITES; i++) {
-        int wanted = argc < 2 && !(fast && slow(suites[i].name));
+        int wanted = argc < 2;
         for (int k = 1; k < argc && !wanted; k++) wanted = !strcmp(argv[k], suites[i].name);
         want[i] = wanted;
         ran += wanted;

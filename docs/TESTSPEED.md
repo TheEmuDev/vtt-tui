@@ -162,8 +162,18 @@ ASan vtt **27.2 s to 6.7 s**; ten runs clean. Running the two checks at once wou
 under a second more, so they stay one after the other.
 
 **`make test`, all four steps: about 180 s to 13.0-13.5 s** (two runs; the plan's estimate
-was 20-30 s, its speed of light about 10 s). `make test-fast` now saves 0.6 s (its suites
-4.7 s against 5.3 s).
+was 20-30 s, its speed of light about 10 s). `make test-fast` now saved 0.6 s (its suites
+4.7 s against 5.3 s): **removed** (the user, 2026-10-23: "Yeah remove it"), with run-tests'
+`--fast` and its `SLOW` list -- one way to run the tests, nothing to keep in step. Next (the
+user, the same message): the mutation checks made faster too.
 
 One knob for how many at once: `VTT_JOBS`, read by the Makefile (`-j`), run-tests and
 tools/oracle.sh alike (the user, 2026-10-23: nothing built to drift).
+
+**The mutation checks, 2026-10-23** (the user: "Mutant tests also take a while"). Steps 2
+and 3 were the cure: tools/mutate.sh builds only the mutated file and links, then runs the
+suites it names side by side. One mutation of src/apikey.c against suite `apikey`, end to end:
+**about 2.3 minutes before (two one-cc builds) to 1.3 s**. A mutation in a header many files
+include rebuilds each of them, so seconds, not one. Running several mutants at once would
+need a tree each (they mutate the source in place) and a full build in each: not worth it at
+these times.

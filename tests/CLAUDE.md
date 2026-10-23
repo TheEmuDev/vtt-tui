@@ -1,7 +1,7 @@
 # tests/ -- notes for Claude
 
 Loaded when a file under tests/ is read. The suite list by area is the `tests/` row of
-docs/CODEMAP.md; `tests/run.c` is the table of suites (and `SLOW`, the ones `--fast` skips) and `main`, nothing else.
+docs/CODEMAP.md; `tests/run.c` is the table of suites and `main`, nothing else.
 
 - `make test` builds with ASan+UBSan and runs everything. `make test-build` builds what the
   tests need, per object and a job a core (`build/run-tests` links the ASan objects with
@@ -9,8 +9,7 @@ docs/CODEMAP.md; `tests/run.c` is the table of suites (and `SLOW`, the ones `--f
   (suites side by side, each in a child of its own; `-j1` for one process in order, as a
   debugger wants; `VTT_CASE_TIMES=1` prints each case's time)
   runs only the suites named in run.c's table -- use it while iterating, the whole suite
-  before a change is called done. `make test-fast` (`run-tests --fast`) is everything but
-  run.c's `SLOW` list (real sockets and processes; docs/TESTSPEED.md has the times). The
+  before a change is called done (docs/TESTSPEED.md has what each part takes). The
   line search's own counterexample tools are tools/shift/ (README.md).
 - `VTT_UPDATE_GOLDEN=1` regenerates golden frames; `VTT_REQUIRE_NODE=1` fails rather than
   skips the suites that need node (`pagefeed`, `pageconn`, `netlag`'s page check); `VTT_FOGDIFF_OPS=36000 build/run-tests` is the long fog
@@ -24,8 +23,7 @@ docs/CODEMAP.md; `tests/run.c` is the table of suites (and `SLOW`, the ones `--f
 - A seeded fault must escape the compiler: an unused `malloc` is deleted (gcc keeps no call),
   so a seeded leak stores to a `volatile` or uses what it allocated.
 - `make test` ends with `tools/oracle.sh check` (twice: over the release `./vtt`, then over
-  `build/asan/vtt`, the sanitizer build, where a leak or an error fails it; `make test-fast`
-  runs the first only): ./vtt's own output (map tools, frames,
+  `build/asan/vtt`, the sanitizer build, where a leak or an error fails it): ./vtt's own output (map tools, frames,
   `--apply` answers) against `tests/oracle/expected`. A difference is a bug or a meant
   change: for the second, `tools/oracle.sh record` and read `git diff` before committing it.
 - A test that expects a channel request's edits to land sets `a.world.ctl_auto = 1` after

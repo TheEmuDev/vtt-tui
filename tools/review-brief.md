@@ -23,7 +23,7 @@ in the brief.
 | several mutations in one go | `tools/mutations.sh LIST SUITE...` (the list's form is in its header) |
 | does the API key linger in memory after the app reads it? | `tools/keyscan.sh`: never the real keyring; exit 1 on a copy |
 | run ./vtt or a script away from the user's files | `tools/sandbox.sh CMD...`, or `. tools/sandbox.sh; sandbox_env DIR` in a script |
-| only some suites | `make test-build && build/run-tests NAME...`; `make test-fast` skips the socket suites |
+| only some suites | `make test-build && build/run-tests NAME...` (`-j1` for one process, in order; `VTT_CASE_TIMES=1` for each case's time) |
 | the whole suite | `make test` (ASan; docs/TESTSPEED.md has what it takes now); wrap long runs in `timeout` |
 | how much a socket takes toward a peer that never reads | `tools/sockcap.py [SNDBUF...]` |
 | a frame as text, or the players' | `./vtt MAP --script KEYS --dump-frame [--players] --size WxH` |

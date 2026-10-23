@@ -87,7 +87,7 @@ responsibility moves its sentence. Reviews check this (docs/HEALTH.md, *The ques
 
 ```
 make            release build (-O2), profiler compiled in
-make test       ASan+UBSan build, unit + golden-frame tests (VTT_UPDATE_GOLDEN=1 regenerates; VTT_REQUIRE_NODE=1 fails rather than skips the page decoder test), then the oracle over ./vtt and over build/asan/vtt, the sanitizer build, where a leak fails it (make test-fast: the first only)
+make test       ASan+UBSan build, unit + golden-frame tests (VTT_UPDATE_GOLDEN=1 regenerates; VTT_REQUIRE_NODE=1 fails rather than skips the page decoder test), then the oracle over ./vtt and over build/asan/vtt, the sanitizer build, where a leak fails it (docs/TESTSPEED.md: what each part takes)
 make perf       one perf run; publish the per-row MEDIAN of three quiet runs (tools/median.py a b c)
 ./vtt map.vtt --dump-map [--region B2:K12]      the whole map as text in the file's alphabet
 ./vtt map.vtt --describe [--json]    rooms (rooms_build: every door splits), doors, contents
