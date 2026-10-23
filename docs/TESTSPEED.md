@@ -203,3 +203,10 @@ three runs after it gave 12.9-13.0 s. Which the machine gives depends on what el
   kept as given, skipped on `make -n`, and build/asan's checked only for the goals that build
   it. The mode's stamp now carries PROF and CFLAGS, so `make PROF=0` rebuilds the release
   objects, which it silently did not before.
+
+**Added since: the evaluations' test, 2026-10-23** (ROADMAP 27 part 1, docs/AGENTLOOP.md).
+`tests/agenteval.sh` runs in `test-after`, after `protocol`: **1.7 s** alone (16 stand-in
+runs, each a few vtt calls through tools/sandbox.sh and a grading in python), one at a time.
+A whole `make test` after it: **14.7 s** (one run, the desktop, nothing changed). Running its
+runs side by side, or beside the oracle, would take most of the 1.7 s back; not done yet,
+written down here as the gap.

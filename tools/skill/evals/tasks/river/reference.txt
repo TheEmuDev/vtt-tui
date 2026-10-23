@@ -1,0 +1,6 @@
+tile A1:AD20 floor
+area River N1:Q20
+tile River water
+area Bridge N9:Q11
+tile Bridge wood
+token add enemy O10 "Troll"

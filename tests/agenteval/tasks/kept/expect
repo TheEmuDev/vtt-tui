@@ -1,0 +1,5 @@
+# The map given, kept: a clean one.
+check clean
+reachable all
+creature Ogre
+calls == 1

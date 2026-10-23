@@ -1,0 +1,1 @@
+token add enemy Nowhere "Ghast"

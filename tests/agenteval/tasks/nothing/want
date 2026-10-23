@@ -1,0 +1,4 @@
+FAIL: rooms >= 1: no map was made
+FAIL: check clean: no map was made
+pass: calls == 0
+1 of 3 facts

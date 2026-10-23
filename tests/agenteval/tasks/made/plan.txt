@@ -1,0 +1,20 @@
+# A hand-written plan in an agent's place: one of every kind of thing a fact
+# is about. Hall and Well are one room (a wide corridor's open ends); Crypt
+# is reached by a corridor with a door each end; Vault by a door in a shared
+# wall; Tower by stairs; Cell only through a window; Lost not at all.
+room Hall B2 6x4
+room Crypt 8x6 east of Hall gap 3
+room Well 4x3 south of Hall gap 2 left
+corridor Hall Crypt
+corridor Hall Well width 2
+tile Well water
+room Vault 4x4 south of Crypt gap 0
+door Vault north
+room Cell 3x3 south of Vault gap 0
+door Cell north window
+room Tower 4x4 east of Crypt gap 4
+link Crypt Tower
+room Lost 3x3 south of Well gap 6
+token add enemy Crypt "Ghoul"
+token add enemy Crypt "Ghoul 2"
+token add player Hall "Aria"

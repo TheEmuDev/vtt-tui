@@ -1,0 +1,3 @@
+token del Goblin
+token del "Goblin 2"
+token del "Goblin 3"

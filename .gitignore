@@ -8,5 +8,6 @@ core
 .perf.*
 .pagebench.*
 !.claude/settings.json
+!tools/skill/evals/triggers.json
 .vs1x.*
 .soak.*

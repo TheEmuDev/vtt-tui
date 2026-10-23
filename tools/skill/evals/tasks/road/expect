@@ -1,0 +1,8 @@
+check clean
+area Road
+creatures bandit == 4
+creature Aria in Road
+creature Bran in Road
+creature Cole in Road
+creatures == 7
+refusals <= 2

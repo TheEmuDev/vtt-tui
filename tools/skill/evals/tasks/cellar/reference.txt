@@ -1,0 +1,5 @@
+room House B2 8x6
+room Cellar 8x6 south of House gap 4
+link House Cellar trapdoor
+token add enemy Cellar "Giant Spider"
+token add enemy Cellar "Giant Spider 2"

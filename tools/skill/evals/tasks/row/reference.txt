@@ -1,0 +1,10 @@
+room Gate B4 6x6
+room Hall 6x6 east of Gate gap 3
+room Armory 6x6 east of Hall gap 3
+room Shrine 6x6 east of Armory gap 3
+room Throne 8x8 east of Shrine gap 3
+corridor Gate Hall
+corridor Hall Armory
+corridor Armory Shrine
+corridor Shrine Throne
+token add enemy Throne "Lich"

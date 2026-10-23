@@ -1,0 +1,10 @@
+tile A1:AN20 brush
+area Road A9:AN12
+tile Road floor
+token add enemy B5 hidden "Bandit"
+token add enemy J15 hidden "Bandit 2"
+token add enemy T4 hidden "Bandit 3"
+token add enemy AD16 hidden "Bandit 4"
+token add player T10 "Aria"
+token add player U10 "Bran"
+token add player T11 "Cole"

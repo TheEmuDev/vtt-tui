@@ -1,0 +1,10 @@
+check clean
+reachable all
+area Common
+area Kitchen
+area Stable
+door Common Kitchen
+joined Common Stable
+creatures thug == 3
+creature thug in Common
+refusals <= 2

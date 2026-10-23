@@ -1,0 +1,18 @@
+# Every kind of fact, not holding, on the same map.
+check clean
+reachable all
+rooms < 7
+creatures != 3
+floors > 0
+links != 1
+calls > 3
+refusals == 0
+area Nave
+door Hall Crypt
+door Hall Nave
+joined Vault Cell
+joined Hall Lost
+creature ghoul in Hall
+creature Skeleton
+creatures ghoul >= 3
+terrain Crypt water

@@ -1,0 +1,8 @@
+area Ground A1:L10
+area Top O1:Z10
+floor Ground 0
+floor Top 1
+room Guardroom B2 8x6
+room Lookout P2 8x6
+link Guardroom Lookout stairs
+token add enemy Lookout "Sentry"

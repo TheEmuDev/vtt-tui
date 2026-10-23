@@ -59,7 +59,7 @@ source: the column below is a copy, changed in the same commit.
 | [CONFLICTS.md](CONFLICTS.md) | proposals, jobs and the review; other writers of the map's file | built 2026-10-08 to 10; *Progress* says what is still owed; decision 5 (an off channel takes proposals) reversed 2026-10-12 by V2.md's ruling 9 |
 | [APIAGENT.md](APIAGENT.md) | the Claude API agent: `:agent claude`, vtt as its own agent through curl; the settings and Options; the first `:ask` | built 2026-10-20 (reviewed and timed; the live check owed); its key's flow redone 2026-10-23, *The key, made safer* (one check waits on the user's go) |
 | [TESTSPEED.md](TESTSPEED.md) | `make test` faster: the run measured by phase and suite, fixed waits, per-object test builds, suites and the oracle in parallel | built 2026-10-23 |
-| [AGENTLOOP.md](AGENTLOOP.md) | ROADMAP 27, the agent features' improvement loop: evaluations graded by vtt, each job's outcome on record, a rollup, the procedure | a plan, signed off 2026-10-21; nothing built |
+| [AGENTLOOP.md](AGENTLOOP.md) | ROADMAP 27, the agent features' improvement loop: evaluations graded by vtt, each job's outcome on record, a rollup, the procedure | a plan, signed off 2026-10-21; part 1 built 2026-10-23 (the runner, the grader, twelve tasks; no model run yet); parts 2 and 3 not built |
 
 ## Not built
 

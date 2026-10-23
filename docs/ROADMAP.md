@@ -41,6 +41,7 @@ Item 1 was decided 2026-09-27, the rest 2026-09-29.
   evaluation gets worse. Not: an agent editing the guide itself (the guide steers every
   agent: a prompt-injection path), logs leaving the machine, or spending on evaluations
   without the user's go (the first task run folds into 26's live check). **The plan: docs/AGENTLOOP.md** (signed off 2026-10-21, each question as recommended).
+  Part 1 (the evaluations: the runner, the grader, twelve tasks, the procedure) built 2026-10-23; no model run yet.
 
 - **28. The phone page tested in a real browser** (proposed 2026-10-21, with step 7's plan,
   after the user asked for phone-side tests). What exists: suite `pagefeed` runs the page's

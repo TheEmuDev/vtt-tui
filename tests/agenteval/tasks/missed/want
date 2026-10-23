@@ -1,0 +1,18 @@
+FAIL: check clean: 0 errors, 2 warnings (W120)
+FAIL: reachable all: not reachable: Cell (M11) Lost (B17)
+FAIL: rooms < 7: rooms is 7
+FAIL: creatures != 3: creatures is 3
+FAIL: floors > 0: floors is 0
+FAIL: links != 1: links is 1
+FAIL: calls > 3: calls is 3
+FAIL: refusals == 0: refusals is 1
+FAIL: area Nave: areas: Hall Crypt Well Vault Cell Tower Lost
+FAIL: door Hall Crypt: no door between them
+FAIL: door Hall Nave: no area Nave
+FAIL: joined Vault Cell: no way from Vault to Cell
+FAIL: joined Hall Lost: no way from Hall to Lost
+FAIL: creature ghoul in Hall: at N3 O3
+FAIL: creature Skeleton: no creature labeled with Skeleton
+FAIL: creatures ghoul >= 3: 2 labeled with ghoul
+FAIL: terrain Crypt water: none in Crypt
+0 of 17 facts

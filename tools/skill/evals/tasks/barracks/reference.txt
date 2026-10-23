@@ -1,0 +1,10 @@
+room Bunks B10 12x5
+room Mess 10x6 north of Bunks gap 0
+door Bunks north
+room Captain 5x5 east of Mess gap 3
+corridor Mess Captain
+token add enemy Bunks "Orc"
+token add enemy Bunks "Orc 2"
+token add enemy Bunks "Orc 3"
+token add enemy Bunks "Orc 4"
+token add enemy Captain "Orc Captain"

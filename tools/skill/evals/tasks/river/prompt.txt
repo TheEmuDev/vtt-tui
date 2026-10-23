@@ -1,0 +1,1 @@
+Outdoor map: a river running north to south through the middle, with a wooden bridge across it. Call the river area River and the bridge area Bridge. A troll under... well, on the bridge.

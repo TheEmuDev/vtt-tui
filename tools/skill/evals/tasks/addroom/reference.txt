@@ -1,0 +1,3 @@
+room Store 6x4 south of Hall gap 0
+door Store north
+token add enemy Store "Giant Rat"

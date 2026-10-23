@@ -1,0 +1,4 @@
+# No map: every fact of it fails; the call counts still answer.
+rooms >= 1
+check clean
+calls == 0

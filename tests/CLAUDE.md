@@ -23,6 +23,10 @@ docs/CODEMAP.md; `tests/run.c` is the table of suites and `main`, nothing else.
   the next plain build rebuilds it back).
 - A seeded fault must escape the compiler: an unused `malloc` is deleted (gcc keeps no call),
   so a seeded leak stores to a `volatile` or uses what it allocated.
+- `tests/agenteval.sh` (in `make test`, before the oracle) tests ROADMAP 27's runner and grader
+  with stand-in agents, no model: `tests/agenteval/tasks/*/want` is each verdict, and every
+  task of `tools/skill/evals/tasks/` must be met by its `reference.txt`. A task or fact added
+  or changed: run it, read the verdict, then update `want` (docs/AGENTLOOP.md, *Part 1, as built*).
 - `make test` ends with `tools/oracle.sh check` (twice: over the release `./vtt`, then over
   `build/asan/vtt`, the sanitizer build, where a leak or an error fails it): ./vtt's own output (map tools, frames,
   `--apply` answers) against `tests/oracle/expected`. A difference is a bug or a meant

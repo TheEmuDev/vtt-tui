@@ -1,0 +1,22 @@
+[
+  {"query": "make me a vtt map of a goblin cave with three chambers and a pool", "should_trigger": true},
+  {"query": "I'm running a session tonight, can you build an encounter map for vtt: a ruined chapel with skeletons", "should_trigger": true},
+  {"query": "add a secret door between the study and the vault in castle.vtt", "should_trigger": true},
+  {"query": "there's a job waiting for you in my open vtt, the GM asked for a bridge over the river", "should_trigger": true},
+  {"query": "vtt --check says room M11 is unreachable on dungeon.vtt, fix it", "should_trigger": true},
+  {"query": "put four bandits hidden in the brush on ambush.vtt and the party on the road", "should_trigger": true},
+  {"query": "draw a two-storey tower on one .vtt map with stairs between the floors", "should_trigger": true},
+  {"query": "take all the goblins off camp.vtt but keep the chief", "should_trigger": true},
+  {"query": "write a plan file for vtt --apply that makes a tavern with a kitchen and a stable", "should_trigger": true},
+  {"query": "can you propose a layout for the crypt in my live vtt session? I'll review it", "should_trigger": true},
+  {"query": "how do I make a ncurses TUI redraw only the lines that changed?", "should_trigger": false},
+  {"query": "what's the difference between advantage and Hope in Daggerheart?", "should_trigger": false},
+  {"query": "parse this map.json file and list every key in it", "should_trigger": false},
+  {"query": "write a Python script that generates a random dungeon as a PNG image", "should_trigger": false},
+  {"query": "convert my Foundry VTT scene export to Roll20", "should_trigger": false},
+  {"query": "what's a good encounter balance for four level 3 players in D&D 5e?", "should_trigger": false},
+  {"query": "fix the segfault in the terminal renderer's memcmp of rows", "should_trigger": false},
+  {"query": "plot the GPS track in route.gpx on a map", "should_trigger": false},
+  {"query": "rename the variable map to grid across this Rust crate", "should_trigger": false},
+  {"query": "set up a tmux layout with a map of my panes and windows", "should_trigger": false}
+]

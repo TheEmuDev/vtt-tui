@@ -1,0 +1,21 @@
+# Every kind of fact, holding.
+rooms == 7
+rooms >= 7
+creatures == 3
+areas == 7
+floors == 0
+links == 1
+errors == 0
+warnings == 2
+calls == 3
+refusals == 1
+refusals <= 1
+area crypt
+door Crypt Vault
+joined Hall Crypt
+joined Well Crypt
+joined Hall Tower
+creature ghoul in Crypt
+creature Aria
+creatures ghoul == 2
+terrain Well water

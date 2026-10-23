@@ -1,0 +1,9 @@
+room Hall B2 6x4
+room Burial 8x6 east of Hall gap 3
+room Well 4x3 south of Hall gap 2 left
+corridor Hall Burial
+corridor Hall Well
+tile Well water
+token add enemy Burial "Ghoul"
+token add enemy Burial "Ghoul 2"
+token add player Hall "Aria"

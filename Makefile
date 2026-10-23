@@ -152,6 +152,7 @@ test-after:
 	    echo "the World's files must not include an app header (docs/V2.md, D2)" >&2; exit 1; fi
 	@$(MAKE) -s --no-print-directory -j$(NPROC) $(OBJDIR)/protocol
 	@$(OBJDIR)/protocol
+	@./tests/agenteval.sh
 	@./tools/oracle.sh check ./$(BIN)
 
 # Long sessions and their peak memory, each against a bound (tools/soak.sh):

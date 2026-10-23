@@ -1,0 +1,21 @@
+pass: rooms == 7
+pass: rooms >= 7
+pass: creatures == 3
+pass: areas == 7
+pass: floors == 0
+pass: links == 1
+pass: errors == 0
+pass: warnings == 2
+pass: calls == 3
+pass: refusals == 1
+pass: refusals <= 1
+pass: area crypt
+pass: door Crypt Vault
+pass: joined Hall Crypt
+pass: joined Well Crypt
+pass: joined Hall Tower
+pass: creature ghoul in Crypt
+pass: creature Aria
+pass: creatures ghoul == 2
+pass: terrain Well water
+20 of 20 facts

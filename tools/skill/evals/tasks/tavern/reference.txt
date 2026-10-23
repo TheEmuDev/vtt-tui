@@ -1,0 +1,8 @@
+room Common B8 10x8
+room Kitchen 6x4 north of Common gap 0
+door Common north
+room Stable 6x6 east of Common gap 3
+corridor Common Stable
+token add enemy Common "Thug"
+token add enemy Common "Thug 2"
+token add enemy Common "Thug 3"

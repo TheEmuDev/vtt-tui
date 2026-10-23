@@ -1,7 +1,10 @@
 # The agent features' improvement loop (ROADMAP 27)
 
 **Status:** a plan, written 2026-10-21; signed off by the user the same day ("Go with your
-recommendations": counts only, `claude -p` with the skill, Sonnet with N = 3). Nothing of it is built.
+recommendations": counts only, `claude -p` with the skill, Sonnet with N = 3). **Part 1 built
+2026-10-23** (*Part 1, as built*, below: the runner, the grader and its test, twelve tasks, the
+trigger queries, the procedure); no evaluation has run on a model yet, which waits on the user's
+go. Parts 2 and 3 are not built.
 
 The user, 2026-10-21: "a self improvement loop in agent based features". What an agent is
 told (the skill, the guide, the Claude agent's prompt) should get better from evidence, with
@@ -128,9 +131,13 @@ A local rollup of `agent-jobs.tsv` and `claude-usage.tsv`, by guide hash: jobs, 
 accepted, sent back, scrapped; refusals a job by class and the verbs refused most; dollars a
 job. Text, a screen of it. It reads counts only, so what it prints can be shown to a reviewer.
 
-### 4. The procedure (docs/AGENTS.md's maintainers' section, written with part 1)
+### 4. The procedure (kept here, not in docs/AGENTS.md: *Part 1, as built* says why)
 
 1. Run the evaluations on the current texts (the user's go): the baseline, kept in `runs/`.
+   The tasks: `tools/agenteval.sh all` (it prints what it will run and asks). The triggers:
+   skill-creator's `run_eval.py --eval-set tools/skill/evals/triggers.json --skill-path
+   tools/skill --num-workers 1 --model sonnet`, from a scratch directory, its output kept as
+   `tools/skill/evals/runs/DATE-triggers.json`.
 2. A reviewer (a Fable subagent, as every review here) reads the failed runs and the rollup
    and drafts edits to the skill, the guide or the Claude agent's first block. The runs are of
    the evaluations' own maps, so nothing of a user's game reaches the reviewer.
@@ -139,6 +146,64 @@ job. Text, a screen of it. It reads counts only, so what it prints can be shown 
    evaluation gets worse:** the total passes are not fewer, and no task drops by more than one
    run of N. Otherwise it goes back to 2 or is dropped, and the plan says which.
 5. The runs of both sides are kept; the commit names them.
+
+## Part 1, as built (2026-10-23)
+
+- **`tools/agenteval.sh [--yes] [-n N] TASK... | all`**, as planned. Each run is a fresh
+  `/tmp/vtt-eval.*` (short, for the channel's socket) holding the map's directory with the
+  skill in `.claude/skills/vtt/`, and a `bin/vtt` wrapper first on the agent's `PATH`: it runs
+  the real `./vtt` in a sandbox of its own (`tools/sandbox.sh`'s `sandbox_env`) and appends a
+  line a call to `calls.tsv` (exit status, bytes out, the refusal's class from `vtt: error
+  CLASS:`, the words). The agent's own environment is left as it is, so `claude` keeps its
+  login. The run's directory under `tools/skill/evals/runs/` keeps `prompt.txt`, `expect`,
+  `calls.tsv`, `answer` (the agent's stdout), `agent.err`, `agent` (its exit and seconds),
+  `cost` (claude's `total_cost_usd`, when its JSON has one), `map.vtt` and `verdict`. Without
+  `--yes` it asks at a terminal and refuses with none (exit 2).
+- **The facts and their meaning are the grader's** (`tools/agentgrade.py`'s header is the one
+  list). The plan's `requests <= 12` is **`calls`**: every vtt call counts, reads too, since
+  the wrapper cannot tell a plan's requests apart without parsing them. Added beside the plan's:
+  `floors` and `links` counts, `creatures WORD OP N`, `terrain AREA KIND` (a room meeting the
+  area has squares of it), `joined A B` (a way through openings and links, where `door A B` is
+  a door between them alone). Which rooms meet an area is vtt's answer, `describe AREA json`
+  through `--apply` (a read: the file's bytes are left), never a bounding box: a wide
+  corridor's open ends make two areas one room. The one opening a party cannot pass is a
+  window (`edge_passable_kind`); the grader names only that one, so it says nothing of the
+  others' names. A line of `expect` that is no fact stops the grader (exit 2) before any is
+  judged: with no map every fact fails, and a misspelt one would fail among them unseen.
+- **Twelve tasks** (`tools/skill/evals/tasks/`): nine made from nothing (crypt, tavern, tower,
+  row, secret, road, river, cellar, barracks) and three edits of a map given (addroom,
+  fixreach, cull). Each has a **`reference.txt`**, a plan written by hand that meets every
+  fact, not in the plan: `make test` runs each through the runner, so a task that cannot be met,
+  or one vtt changed under, fails there and not in a paid run. The task's directory is told
+  only to a stand-in agent (`EVAL_TASK_DIR`, set only when `EVAL_AGENT` is): the default
+  agent is never pointed at the answer.
+- **The test, `tests/agenteval.sh`** (in `make test`, after `protocol`; skipped with a line
+  when there is no python3): four stand-in tasks (`tests/agenteval/tasks/`, an `agent.sh`
+  each, no model) graded against their `want` -- every kind of fact passing (`made`), failing
+  on the same map (`missed`), no map at all (`nothing`), a map given and kept (`kept`); the
+  twelve references; a line that is no fact; a run with nobody to ask. Checked by mutation
+  (by hand, 2026-10-23): a window made passable, `joined` reduced to "any room", the area
+  box test dropped, a refusal counted by exit status, `check clean` blind to warnings,
+  a count's comparison dropped, a label matched by case, the closed kind renamed -- each
+  caught. One survives: `door A B`'s guard against one room meeting both areas, which only a
+  door inside one room would show.
+- **The procedure is here (§4), not in docs/AGENTS.md** as the plan said: AGENTS.md is the
+  guide every agent is given and pays for in tokens, and a maintainers' procedure is nothing an
+  agent should read.
+- **`triggers.json`**: twenty queries, ten that should start the skill and ten near misses.
+- **Not yet known, checked at the first run (the user's go):** the default agent's flags
+  (`claude -p --model sonnet --output-format json --no-session-persistence --setting-sources
+  project --permission-mode dontAsk --max-budget-usd 2 --allowedTools 'Bash(vtt *)' Read Write
+  Edit Glob Grep Skill`) were read from `claude --help`, never run: whether the prompt is taken
+  on stdin, whether `--setting-sources project` keeps the user's own CLAUDE.md and memory out,
+  whether the skill is found and allowed, and the cost field's name. `--bare` would keep them
+  out for certain, but it reads only `ANTHROPIC_API_KEY` (never the login), so with it a run
+  needs the API key. Read and Glob are not confined to the run's directory, so an agent could
+  read files elsewhere (not the reference, which it is not told of); a first run's `answer`
+  says what it read. `--max-budget-usd 2` is a ceiling a run, not an estimate.
+- **Its cost in `make test`:** 1.7 s, run alone (16 runs, each a few vtt calls and a grading),
+  of a whole run of 14.7 s (2026-10-23, the desktop, i7-8700K); it runs after `protocol`, one run at a time
+  (docs/TESTSPEED.md).
 
 ## Order
 
