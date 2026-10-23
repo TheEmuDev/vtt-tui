@@ -54,6 +54,13 @@ report (see the report format below).
   ran and its output, a test you wrote that fails, or a mutation from `tools/mutate.sh`).
   Say which findings you reproduced and which are reasoning only.
 - Then the health questions, briefly.
+- Then **Docs drift**, required in every review (the user, 2026-10-23): run
+  `build/run-tests docs` (after `make test-build`), then read each kept-current doc
+  (docs/README.md's list: README.md, docs/CODEMAP.md, docs/ARCHITECTURE.md, docs/AGENTS.md,
+  docs/KEYS.md, CLAUDE.md, tests/CLAUDE.md, PERFORMANCE.md's tables) where it speaks of what the
+  change touches, and say for each whether it is still true. A sentence the code now
+  contradicts is a finding like any other: the doc's line, the code's line, the fix. "No drift"
+  is a valid answer only after naming the docs read.
 - Last, **Scratch work**: one line per thing you built in scratch to do the review (a
   harness, a timing program, a script), and whether it would be reused. These lines go into
   docs/SCRATCH.md. A kind of task seen twice becomes a tool.

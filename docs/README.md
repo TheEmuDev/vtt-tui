@@ -6,11 +6,16 @@ its present tense: a design record describes the app as it was when the plan was
 
 ## Kept current
 
-True of the code today, and changed in the same commit as the code they describe.
+True of the code today, and changed in the same commit as the code they describe (CLAUDE.md,
+*A change is not done*). Held to it twice: suite `docs` (tests/test_docs.c) fails when a source
+file has no CODEMAP row, or a doc names a function, file or path the code no longer has; and
+every review's *Docs drift* section (tools/review-brief.md) reads these pages where they speak of
+what the change touched, since a sentence gone wrong is beyond any test (the user, 2026-10-23).
 
 | page | for | what it is |
 |---|---|---|
 | [AGENTS.md](AGENTS.md) | an AI agent building or editing maps for a GM (not the agent working on vtt's code: that is `CLAUDE.md`) | the request language, the three ways in, working live with the GM. Read whole |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | anyone learning how vtt works: the maintainer, the coding agent, a reviewer | the subsystems, how they interact and what data goes where: start-up and the loop, a key to the terminal, the players' frame to the phones and back, the channel and its agents, the disk. Read first; CODEMAP has the detail |
 | [CODEMAP.md](CODEMAP.md) | the coding agent | what each source file owns and its invariants, every command, the conventions, the watch list. Read a row at a time |
 | [KEYS.md](KEYS.md) | anyone binding a key | the nine rules every binding follows |
 | [PERFORMANCE.md](PERFORMANCE.md) | the maintainer and the coding agent | every measured path; *Speed of light* and *Working rules* are what a plan's estimates use |
@@ -54,7 +59,7 @@ source: the column below is a copy, changed in the same commit.
 |---|---|
 | [PICTURES.md](PICTURES.md) | picture handouts: a finished plan, parked 2026-10-03 |
 | [VEHICLES.md](VEHICLES.md) | vehicles (an area that moves, with riders): a reviewed plan, parked 2026-10-12 |
-| [V2.md](V2.md) | vtt 2.0, the rewrite (branch `vtt-2.0`): a plan, its questions answered 2026-10-12; being built (steps 0 to 2 and part of 4: its *Progress*) |
+| [V2.md](V2.md) | vtt 2.0, the rewrite (branch `vtt-2.0`): a plan, its questions answered 2026-10-12; being built: its *Next* is the order of what is owed and its *Progress* what is done (2026-10-23: work through step 7 recorded there, step 3 cut, steps 8 and 9 to come) |
 | [reviews/](reviews/) | the reviews V2.md rests on: agent architecture, performance, testing (2026-10-12, true of e7c58e9), and memory (2026-10-20, true of d66b883; its M1 and M2 reproduced by the planner the same day). Reports as written |
 
 A new page gets a row here in the commit that adds it.

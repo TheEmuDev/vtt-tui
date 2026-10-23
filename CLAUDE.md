@@ -9,7 +9,8 @@ prohibitions only, under 150 lines. Reference lives where it is read on demand.
 
 | when | read |
 |---|---|
-| before touching a source file | its row in docs/CODEMAP.md: `grep -n 'fog\.c' docs/CODEMAP.md` -- what the file owns and the invariants kept there. Never the whole file (42 KB) |
+| before touching a source file | its row in docs/CODEMAP.md: `grep -n 'fog\.c' docs/CODEMAP.md` -- what the file owns and the invariants kept there. Never the whole file (84 KB) |
+| how the parts fit; which subsystems a change crosses, what data goes where | docs/ARCHITECTURE.md, by section |
 | a command not listed below; a convention's reason; the watch list | docs/CODEMAP.md, by heading |
 | writing or running tests | tests/CLAUDE.md (loads itself under tests/) |
 | a Daggerheart rule's wording or page | the SRD 2.0 PDF: its link is in docs/CODEMAP.md's `ruler.c` row. Summarize with the page; never copy its text in |
@@ -46,23 +47,22 @@ prohibitions only, under 150 lines. Reference lives where it is read on demand.
   and implements. A **Fable 5.1** subagent (Agent `model: "fable"`) reviews every finished
   change before it is reported done; verify its findings and fix what holds up. The user
   will name different models when that changes. Brief every subagent: stop only PIDs it started,
-  never kill by name. A review's brief: sha, range, what to look at, and `tools/review-brief.md`.
-- **Every review includes the health check's questions** (2026-09-29) beside correctness,
-  for the change and what it touches: duplication, organization, performance, test gaps,
-  the docs. HEALTH.md's *The questions* is the full list.
-- **Never dismiss a finding without validating it** (2026-10-09): reproduce it or disprove
-  it with a check that was actually run, and say which; "X already handles it" from memory
-  is not a check. Ask the reviewer (SendMessage) for its reproduction when unclear.
+  never kill by name. A review's brief: sha, range, what to look at, and `tools/review-brief.md`
+  (its *Docs drift* section is required: every review checks the docs did not drift, 2026-10-23).
+- **Every review includes the health check's questions** (2026-09-29) beside correctness, for the
+  change and what it touches: duplication, organization, performance, test gaps, the docs (HEALTH.md).
+- **Never dismiss a finding without validating it** (2026-10-09): reproduce or disprove it with a check
+  actually run, and say which; memory is not a check. Ask the reviewer (SendMessage) when unclear.
 - **Every finding not fixed is written down** in HEALTH.md, *Left open by reviews* (why, what would
   close it; a disproved one under *Disproved*, with the check); the report names the rows added.
-- **A feature is not done** until README.md (keys tables, feature sections, *Rulesets*,
-  *File format*; for a user: plain, instructional, no history or design argument),
-  PERFORMANCE.md (tables + a paragraph per finding), `src/keys.c` (the `?` page),
-  docs/CODEMAP.md's rows, the design doc and, for what agents see, docs/AGENTS.md and the
-  agent skill agree with the code; its ROADMAP.md item moves to *Built*; a new design doc has
-  a Status line and a row in docs/README.md. HEALTH.md records each health check, an item
-  fixed says so by commit. Ideas: docs/IDEAS.md. **A decision the user makes goes into its doc
-  the same turn** (the plan, ROADMAP.md, V2.md's *Next*): memory points at it, never holds it.
+- **A change is not done** (2026-10-23: any change) until the kept-current docs (docs/README.md's list)
+  agree with the code, in its commit: README.md (keys, features, *Rulesets*, *File format*; plain, for a user), PERFORMANCE.md (tables + a paragraph per finding), `src/keys.c` (the `?` page),
+  docs/CODEMAP.md's rows, docs/ARCHITECTURE.md (a subsystem, or a path data takes between them),
+  the design doc and, for what agents see, docs/AGENTS.md and the agent skill. Suite `docs` fails
+  on drift it can see (a file with no row, a name or path gone); the rest is every review's. Its
+  ROADMAP.md item moves to *Built*; a new design doc has a Status line and a docs/README.md row.
+  HEALTH.md records each check, a fixed item by commit. Ideas: docs/IDEAS.md. **A decision the user
+  makes goes into its doc the same turn** (plan, ROADMAP.md, V2.md's *Next*); memory only points at it.
 
 ## Commands
 

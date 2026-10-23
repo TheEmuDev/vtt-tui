@@ -154,6 +154,7 @@ int main(int argc, char **argv)
         { "damage",     test_loader_damage },
         { "pagefeed",   test_page_feed },
         { "pageconn",   test_page_conn },
+        { "docs",       test_docs },
         { "netedges",   test_net_edges },
         { "netlag",     test_net_lag },
         { "netbig",     test_net_big },

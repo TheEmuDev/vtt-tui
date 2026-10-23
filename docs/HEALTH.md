@@ -51,8 +51,13 @@ written down.
 
 **Docs**
 - Does the README tell a user how to use the feature, in plain instructional terms?
-- Are CLAUDE.md, docs/CODEMAP.md, docs/KEYS.md (and the `?` page from `src/keys.c`) and the feature's
-  design doc in step with the code?
+- Are CLAUDE.md, docs/CODEMAP.md, docs/ARCHITECTURE.md, docs/KEYS.md (and the `?` page from
+  `src/keys.c`) and the feature's design doc in step with the code?
+- **Has any doc drifted** (the user, 2026-10-23: every review checks it)? For each kept-current doc
+  (docs/README.md's list) that names what the change touches: is every sentence about it still
+  true? A subsystem, a path data takes, a file's ownership, a key, a budget, a command. Suite `docs`
+  catches a file with no row and a name or path gone; a sentence that is wrong it cannot, so the
+  review reads them. Drift found is a finding, with the line and the code that contradicts it.
 - Where would a user get stuck: something undocumented, unexplained or cut off?
 - Is each thing called by one name (creature, the players' view, wall mode)?
 

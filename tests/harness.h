@@ -218,6 +218,7 @@ void test_watch_target(void);
 void test_loader_damage(void);
 void test_page_feed(void);
 void test_page_conn(void);
+void test_docs(void);
 void test_net_edges(void);
 void test_net_lag(void);
 void test_net_big(void);
