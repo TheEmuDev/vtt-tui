@@ -7,11 +7,35 @@
 
 /* build/run-tests runs every suite; build/run-tests NAME... only the ones
  * named (see the table), for the one being worked on; build/run-tests --fast
- * all but the slow ones (make test-fast). */
+ * all but the slow ones (make test-fast). -jN runs N suites at once, each in a
+ * forked child of its own (docs/TESTSPEED.md, step 3): the default is a job a
+ * core, -j1 the one process and order of before. A child's output is printed
+ * whole and in the table's order; a child that crashes, or that
+ * LeakSanitizer fails at its exit, fails its suite and no other. */
+
+#include <sys/wait.h>
+#include <unistd.h>
 
 /* The suites of real sockets and processes, most of the run's time (docs/V2.md,
  * ruling 8): skipped by --fast, run by make test. */
 static const char *const SLOW[] = { "netedges", "agentcmd", "netmsg", "netserver", "ctllive" };
+
+/* One suite and the checks after it: no test's disk or sockets left in use. */
+static void run_suite(const char *name, void (*fn)(void))
+{
+    fn();
+    case_begin(NULL);                    /* VTT_CASE_TIMES: its last case's time */
+    if (disk() != &DISK_REAL) {          /* a suite's failing disk must not reach the next */
+        g_fails++;
+        printf("  FAIL %s left a test's disk in use\n", name);
+        disk_use(NULL);
+    }
+    if (conn() != &CONN_REAL) {          /* nor its phones' sockets */
+        g_fails++;
+        printf("  FAIL %s left a test's sockets in use\n", name);
+        conn_use(NULL);
+    }
+}
 
 static int slow(const char *name)
 {
@@ -210,28 +234,103 @@ int main(int argc, char **argv)
         { "golden", test_golden },
     };
 
+    /* -jN, anywhere among the names, else VTT_JOBS, else a job a core (the
+     * Makefile and tools/oracle.sh read VTT_JOBS too); then --fast alone,
+     * or names. */
+    const char *vj = getenv("VTT_JOBS");
+    long jobs = vj && *vj ? atol(vj) : sysconf(_SC_NPROCESSORS_ONLN);
+    for (int k = 1; k < argc; k++) {
+        if (strncmp(argv[k], "-j", 2)) continue;
+        jobs = atol(argv[k] + 2);
+        for (int m = k; m < argc - 1; m++) argv[m] = argv[m + 1];
+        argc--;
+        k--;
+    }
+    if (jobs < 1) jobs = 1;
     int fast = argc == 2 && !strcmp(argv[1], "--fast");
     if (fast) argc = 1;
-    int ran = 0;
-    for (size_t i = 0; i < sizeof suites / sizeof *suites; i++) {
+    enum { NSUITES = sizeof suites / sizeof *suites };
+    int want[NSUITES], ran = 0;
+    for (size_t i = 0; i < NSUITES; i++) {
         int wanted = argc < 2 && !(fast && slow(suites[i].name));
         for (int k = 1; k < argc && !wanted; k++) wanted = !strcmp(argv[k], suites[i].name);
-        if (!wanted) continue;
-        ran++;
-        int before = g_fails;
-        suites[i].fn();
-        case_begin(NULL);                    /* VTT_CASE_TIMES: its last case's time */
-        if (disk() != &DISK_REAL) {          /* a suite's failing disk must not reach the next */
-            g_fails++;
-            printf("  FAIL %s left a test's disk in use\n", suites[i].name);
-            disk_use(NULL);
+        want[i] = wanted;
+        ran += wanted;
+    }
+
+    if (jobs == 1) {
+        for (size_t i = 0; i < NSUITES; i++) {
+            if (!want[i]) continue;
+            int before = g_fails;
+            run_suite(suites[i].name, suites[i].fn);
+            printf("  %-8s %s\n", suites[i].name, g_fails == before ? "ok" : "FAILED");
         }
-        if (conn() != &CONN_REAL) {          /* nor its phones' sockets */
-            g_fails++;
-            printf("  FAIL %s left a test's sockets in use\n", suites[i].name);
-            conn_use(NULL);
+    } else {
+        /* Each suite's output into a file of its own, its counts into
+         * another; up to `jobs` children at once; printed as soon as every
+         * suite before it in the table is. */
+        FILE *out[NSUITES] = { 0 }, *res[NSUITES] = { 0 };
+        pid_t pid[NSUITES];
+        int   done[NSUITES] = { 0 }, status[NSUITES] = { 0 };
+        size_t next = 0, shown = 0;
+        int running = 0;
+        fflush(NULL);
+        for (;;) {
+            while (running < jobs && next < NSUITES) {
+                if (!want[next]) { done[next] = 1; next++; continue; }
+                out[next] = tmpfile();
+                res[next] = tmpfile();
+                pid[next] = out[next] && res[next] ? fork() : -1;
+                if (pid[next] == 0) {
+                    int fd = fileno(out[next]);
+                    dup2(fd, 1);
+                    dup2(fd, 2);
+                    setvbuf(stdout, NULL, _IONBF, 0);       /* its lines in the order written */
+                    g_checks = g_fails = 0;
+                    run_suite(suites[next].name, suites[next].fn);
+                    fprintf(res[next], "%d %d\n", g_checks, g_fails);
+                    fflush(NULL);
+                    exit(0);                                  /* exit, not _exit: LeakSanitizer runs */
+                }
+                if (pid[next] < 0) { status[next] = -1; done[next] = 1; }
+                else running++;
+                next++;
+            }
+            while (shown < NSUITES && done[shown]) {
+                if (want[shown]) {
+                    int c = 0, f = 0, fails_before = g_fails;
+                    if (out[shown]) {
+                        rewind(out[shown]);
+                        char buf[8192];
+                        size_t n;
+                        while ((n = fread(buf, 1, sizeof buf, out[shown])) > 0) fwrite(buf, 1, n, stdout);
+                        fclose(out[shown]);
+                    }
+                    if (res[shown]) {
+                        rewind(res[shown]);
+                        if (fscanf(res[shown], "%d %d", &c, &f) != 2) c = f = 0;
+                        fclose(res[shown]);
+                    }
+                    g_checks += c;
+                    g_fails += f;
+                    if (status[shown] != 0) {
+                        g_fails++;
+                        if (status[shown] < 0) printf("  FAIL %s could not be started\n", suites[shown].name);
+                        else if (WIFSIGNALED(status[shown])) printf("  FAIL %s died of signal %d\n", suites[shown].name, WTERMSIG(status[shown]));
+                        else printf("  FAIL %s exited %d (a leak, or a crash its sanitizer caught: above)\n", suites[shown].name, WEXITSTATUS(status[shown]));
+                    }
+                    printf("  %-8s %s\n", suites[shown].name, g_fails == fails_before ? "ok" : "FAILED");
+                    fflush(stdout);
+                }
+                shown++;
+            }
+            if (shown == NSUITES) break;
+            int st;
+            pid_t w = wait(&st);
+            if (w < 0) break;
+            for (size_t i = 0; i < NSUITES; i++)
+                if (!done[i] && want[i] && i < next && pid[i] == w) { status[i] = st; done[i] = 1; running--; }
         }
-        printf("  %-8s %s\n", suites[i].name, g_fails == before ? "ok" : "FAILED");
     }
 
     prof_shutdown();

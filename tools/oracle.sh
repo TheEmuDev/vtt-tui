@@ -31,11 +31,13 @@ cd "$DIR/maps"
 # A command's output and exit status, under a heading; `sum` keeps only the
 # output's checksum, for what is too long to keep (ORACLE_KEEP=DIR keeps the
 # text there, named by the checksum, to diff two binaries' by hand).
+# SUMF: the scratch file of the job running it (the jobs run side by side).
+SUMF="$DIR/sum.txt"
 sum() {
-    rc=0; "$VTT" "$@" > "$DIR/sum.txt" 2>&1 || rc=$?
-    c=$(cksum < "$DIR/sum.txt" | tr ' ' '-')
+    rc=0; "$VTT" "$@" > "$SUMF" 2>&1 || rc=$?
+    c=$(cksum < "$SUMF" | tr ' ' '-')
     echo "== $*"; echo "-- cksum $c exit $rc"
-    if [ -n "${ORACLE_KEEP:-}" ]; then mkdir -p "$ORACLE_KEEP"; cp "$DIR/sum.txt" "$ORACLE_KEEP/$c.txt"; fi
+    if [ -n "${ORACLE_KEEP:-}" ]; then mkdir -p "$ORACLE_KEEP"; cp "$SUMF" "$ORACLE_KEEP/$c.txt"; fi
 }
 run() {
     echo "== $*"
@@ -43,10 +45,25 @@ run() {
     echo "-- exit $rc"
 }
 
+# The three parts below, and each map of the first, run side by side, a job a
+# core (docs/TESTSPEED.md, step 4): each writes its own file under out/ from a
+# work directory and a scratch file of its own, and the files are compared
+# whole, so the order they finish in changes nothing.
+JOBS=${VTT_JOBS:-$(nproc 2>/dev/null || echo 4)}     # the Makefile's and run-tests' knob too
+
 # 1. Each map: the tools, then for each key script the GM's frame and the
 #    players' as text, and with every cell's colors at two sizes as checksums.
-for f in *.vtt; do
+one_map() (
+    f=$1
     m=${f%.vtt}
+    # A tree of its own shaped like the one the record was made in -- maps/
+    # beside work/, every map there (a map may link to another, a script may
+    # save) -- so each command and its heading are what they always were.
+    J="$DIR/job-$m"
+    mkdir -p "$J/maps" "$J/work"
+    cp "$DIR"/maps/*.vtt "$J/maps/"
+    cd "$J/maps"
+    SUMF="$J/sum.txt"
     {
         run "$f" --check
         run "$f" --check --json
@@ -55,22 +72,24 @@ for f in *.vtt; do
         run "$f" --dump-map
         run "$f" --dump-map --region B2:F5
         for k in "$ROOT"/tests/oracle/keys/*.keys; do
-            cp "$k" "../work/$(basename "$k")"
-            run "$f" --seed 1 --script "../work/$(basename "$k")" --dump-frame --size 80x24
-            run "$f" --seed 1 --script "../work/$(basename "$k")" --dump-frame --players --size 80x24
+            kk="../work/$(basename "$k")"
+            cp "$k" "$kk"
+            run "$f" --seed 1 --script "$kk" --dump-frame --size 80x24
+            run "$f" --seed 1 --script "$kk" --dump-frame --players --size 80x24
             for size in 80x24 110x34; do
-                sum "$f" --seed 1 --script "../work/$(basename "$k")" --dump-frame --cells --size "$size"
-                sum "$f" --seed 1 --script "../work/$(basename "$k")" --dump-frame --cells --players --size "$size"
+                sum "$f" --seed 1 --script "$kk" --dump-frame --cells --size "$size"
+                sum "$f" --seed 1 --script "$kk" --dump-frame --cells --players --size "$size"
             done
             # A window smaller than the map: the cull.
-            sum "$f" --seed 1 --script "../work/$(basename "$k")" --dump-frame --cells --size 40x12
+            sum "$f" --seed 1 --script "$kk" --dump-frame --cells --size 40x12
         done
-    } > "../out/map-$m.txt"
-done
+    } > "$DIR/out/map-$m.txt"
+)
 
 # 2. The channel's language: each request of the fuzz corpus against a fresh
-#    copy of two maps, with what it answered and the map it left.
-{
+#    copy of two maps, with what it answered and the map it left. One job:
+#    its requests share ../work.
+requests() {
     for base in two-rooms everything; do
         for q in "$ROOT"/tests/fuzz-ctl/*; do
             cp "$base.vtt" ../work/req.vtt
@@ -83,11 +102,13 @@ done
     done
     # A map made from nothing.
     ( cd ../work && rm -f new.vtt && run new.vtt --apply rooms.req --new 30x20 && run new.vtt --dump-map && run new.vtt --check )
-} > ../out/requests.txt
+}
 
 # 3. Big generated maps: checksums only (the text is megabytes).
-(
-    DIR="$DIR/work"          # genmap writes to $DIR; a subshell, so the trap's DIR is untouched
+generated() (
+    SUMF="$DIR/gen-sum.txt"
+    mkdir -p "$DIR/gen"
+    DIR="$DIR/gen"           # genmap writes to $DIR; a subshell, so the trap's DIR is untouched
     . "$ROOT/tools/genmap.sh"
     for spec in "gen-small 40 25 1 24" "gen-wide 200 200 0 500" "gen-turns 60 40 1 60 daggerheart 1" "gen-norules 64 64 0 12 none"; do
         # shellcheck disable=SC2086
@@ -96,7 +117,18 @@ done
         for tool in --check --describe --dump-map; do sum "$(basename "$g")" $tool; done
         sum "$(basename "$g")" --dump-frame --cells --size 120x40
     done
-) > ../out/generated.txt
+)
+
+requests > ../out/requests.txt &
+generated > ../out/generated.txt &
+n=0
+for f in *.vtt; do
+    one_map "$f" &
+    n=$((n + 1))
+    # A batch of JOBS at a time (the two parts above count as running).
+    if [ "$n" -ge "$JOBS" ]; then wait; n=0; fi
+done
+wait
 
 if [ "$MODE" = record ]; then
     rm -rf "$EXP"; mkdir -p "$EXP"

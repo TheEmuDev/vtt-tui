@@ -24,17 +24,62 @@
 #include <string.h>
 #include <sys/stat.h>
 
-/* The docs whose identifiers name the code as it is today. */
+/* Which docs are kept current is docs/README.md's to say (*Kept current*:
+ * its table, and the files outside docs/ under it); the list is read from
+ * there, never kept here as well (CLAUDE.md, *Nothing built to drift*). What
+ * this file names are the exceptions, each of which must be in that list:
+ * the docs whose identifiers name the code as it is today (others quote libc
+ * or plans), and the two whose paths may be of things not built yet. */
 static const char *const ID_DOCS[] = {
     "CLAUDE.md", "tests/CLAUDE.md", "docs/CODEMAP.md", "docs/ARCHITECTURE.md",
     "tools/review-brief.md",
 };
-/* Those and the user-facing kept-current docs, whose paths must exist. */
-static const char *const PATH_DOCS[] = {
-    "CLAUDE.md", "tests/CLAUDE.md", "docs/CODEMAP.md", "docs/ARCHITECTURE.md",
-    "tools/review-brief.md", "README.md", "docs/AGENTS.md", "docs/README.md",
-    "docs/KEYS.md", "docs/PERFORMANCE.md", "docs/HEALTH.md",
-};
+static const char *const PLAN_DOCS[] = { "docs/ROADMAP.md", "docs/IDEAS.md" };
+
+#define MAX_DOCS 64
+/* docs/README.md's *Kept current*, as paths from the top: `](X.md)` is
+ * docs/X.md (`](../X.md)` is X.md), a backticked `.md` or a plain one with a
+ * slash is as written; docs/README.md itself too. */
+static int kept_current(char docs[][128], int max)
+{
+    FILE *f = fopen("docs/README.md", "rb");
+    if (!f) return 0;
+    char line[4096];
+    int in = 0, n = 0;
+    snprintf(docs[n++], 128, "docs/README.md");
+    while (fgets(line, sizeof line, f) && n < max) {
+        if (!strncmp(line, "## ", 3)) { in = !strncmp(line, "## Kept current", 15); continue; }
+        if (!in) continue;
+        for (char *p = line; *p && n < max; p++) {
+            char path[128] = "";
+            if (p[0] == ']' && p[1] == '(') {
+                char *e = strchr(p + 2, ')');
+                if (!e || e - p - 2 >= 100 || strncmp(e - 3, ".md", 3)) continue;
+                if (!strncmp(p + 2, "../", 3)) snprintf(path, sizeof path, "%.*s", (int)(e - p - 5), p + 5);
+                else snprintf(path, sizeof path, "docs/%.*s", (int)(e - p - 2), p + 2);
+            } else if (p[0] == '`' || ((p == line || p[-1] == ' ') && strchr("tsd", p[0]) && strchr(p, '/'))) {
+                char *b = p + (p[0] == '`'), *e = b;
+                while (*e && (isalnum((unsigned char)*e) || strchr("/._-", *e))) e++;
+                while (e > b && e[-1] == '.') e--;            /* a sentence's full stop */
+                if (e - b < 4 || e - b >= 100 || strncmp(e - 3, ".md", 3)) continue;
+                if (p[0] != '`' && !memchr(b, '/', (size_t)(e - b))) continue;
+                snprintf(path, sizeof path, "%.*s", (int)(e - b), b);
+            }
+            if (!path[0]) continue;
+            int dup = 0;
+            for (int i = 0; i < n && !dup; i++) dup = !strcmp(docs[i], path);
+            if (!dup) snprintf(docs[n++], 128, "%s", path);
+        }
+    }
+    fclose(f);
+    return n;
+}
+
+static int in_list(char docs[][128], int n, const char *path)
+{
+    for (int i = 0; i < n; i++) if (!strcmp(docs[i], path)) return 1;
+    return 0;
+}
 
 typedef struct { char *p; size_t n, cap; } Text;
 
@@ -273,6 +318,19 @@ void test_docs(void)
         free(cm);
     }
 
+    char kept[MAX_DOCS][128];
+    int nkept = kept_current(kept, MAX_DOCS);
+    CASE("the kept-current docs are read from docs/README.md, and this file's exceptions are among them");
+    CHECK(nkept >= 10);
+    for (size_t i = 0; i < sizeof ID_DOCS / sizeof ID_DOCS[0]; i++)
+        if (!in_list(kept, nkept, ID_DOCS[i])) { printf("  %s is not in docs/README.md's *Kept current*\n", ID_DOCS[i]); CHECK(0); }
+    for (size_t i = 0; i < sizeof PLAN_DOCS / sizeof PLAN_DOCS[0]; i++)
+        if (!in_list(kept, nkept, PLAN_DOCS[i])) { printf("  %s is not in docs/README.md's *Kept current*\n", PLAN_DOCS[i]); CHECK(0); }
+    for (int i = 0; i < nkept; i++) {
+        struct stat st;
+        if (stat(kept[i], &st) != 0) { printf("  docs/README.md lists %s, which is not there\n", kept[i]); CHECK(0); }
+    }
+
     CASE("every identifier the code-describing docs name in backticks is in the code");
     {
         int bad = 0;
@@ -288,10 +346,13 @@ void test_docs(void)
     CASE("every path the kept-current docs name exists");
     {
         int bad = 0;
-        for (size_t i = 0; i < sizeof PATH_DOCS / sizeof PATH_DOCS[0]; i++) {
-            char *t = read_doc(PATH_DOCS[i], &bad);
+        for (int i = 0; i < nkept; i++) {
+            int plan = 0;
+            for (size_t k = 0; k < sizeof PLAN_DOCS / sizeof PLAN_DOCS[0]; k++) plan |= !strcmp(kept[i], PLAN_DOCS[k]);
+            if (plan) continue;                 /* a path of something not built yet is no drift */
+            char *t = read_doc(kept[i], &bad);
             if (!t) continue;
-            check_paths(PATH_DOCS[i], t, &bad);
+            check_paths(kept[i], t, &bad);
             free(t);
         }
         CHECK_EQ(bad, 0);

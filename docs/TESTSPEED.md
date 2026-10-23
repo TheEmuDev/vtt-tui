@@ -142,3 +142,28 @@ less the app's and the loop with `test_protocol.c` compiled once more under
 Built alone, the ASan objects showed what the one-cc build had hidden with
 `-Wno-format-truncation` for every source: four status lines `-Og`'s analysis says could be
 cut (HEALTH B22), their buffers sized now; a full rebuild has no warnings.
+
+**Step 3, 2026-10-23.** `run-tests -jN` (else `VTT_JOBS`, else a job a core; `-j1` the one
+process and order of before): each suite in a forked child, its output to a file of its own
+and printed whole in the table's order, its counts in another, a crash or a LeakSanitizer
+failure at its exit failing that suite alone. Every test server listens on port 0 and every
+sandbox is its own `mkdtemp` directory and runtime directory, so no two suites meet. The
+suites' phase: **38.8 s to 5.3 s**; ten runs clean. Two full runs at once (twice the load)
+showed two races that load alone finds, in any mode: an agent killed by its TERM before its
+shell had set `trap` (the test now waits for the agent to say its trap is set), and a turn
+of the channel that ran out of time before the second of two requests meant for it (that
+check lifts the turn's limit). After those, five rounds of two at once: clean.
+
+**Step 4, 2026-10-23.** tools/oracle.sh runs the channel's requests, the generated maps and
+each map's block side by side, `VTT_JOBS` at a time, each map in a tree of its own shaped
+like the record's (`maps/` beside `work/`, every map there), so every command and heading is
+what it was: the record is unchanged. The oracle over ./vtt **5.1 s to 0.78 s**, over the
+ASan vtt **27.2 s to 6.7 s**; ten runs clean. Running the two checks at once would save
+under a second more, so they stay one after the other.
+
+**`make test`, all four steps: about 180 s to 13.0-13.5 s** (two runs; the plan's estimate
+was 20-30 s, its speed of light about 10 s). `make test-fast` now saves 0.6 s (its suites
+4.7 s against 5.3 s).
+
+One knob for how many at once: `VTT_JOBS`, read by the Makefile (`-j`), run-tests and
+tools/oracle.sh alike (the user, 2026-10-23: nothing built to drift).

@@ -1660,7 +1660,12 @@ void test_ctl_live(void)
         CHECK(write(o2.fd, "agent scout\nwait for 600\n", 25) == 25);
         shutdown(e1.fd, SHUT_WR); shutdown(o2.fd, SHUT_WR);
         poll(NULL, 0, 20);                                     /* both in the socket before a turn reads either */
+        /* Both in one turn on any machine: a loaded one ran past the turn's
+         * time with the first, and the second waited for the next. */
+        uint64_t turn_was = a.ctl_turn_ns;
+        a.ctl_turn_ns = 60ull * 1000000000ull;
         ctl_pump(&a, ctl_read_some, &o1);
+        a.ctl_turn_ns = turn_was;
         a.world.ctl_auto = 0;
         CHECK_EQ(a.world.event_seq, before + 2);                     /* proposed, and accepted at once */
         char ev[64];

@@ -1346,11 +1346,18 @@ void test_agent_command(void)
         CHECK(file_has(alive, "waited") && strstr(a.status, "stopped by vtt") == NULL);
         /* Deaf to TERM: told, then made to, and until then nothing is due but the grace. */
         jobs_reset(&a);
-        press(&a, ":agent command trap '' TERM; cat > /dev/null; sleep 30\r");
+        /* It says when its trap is set: on a loaded machine the TERM below
+         * could otherwise come before the shell has run its first line. */
+        char deaf[740], c6[1100];
+        snprintf(deaf, sizeof deaf, "%s/deaf", sb.dir);
+        snprintf(c6, sizeof c6, ":agent command trap '' TERM; echo ready > %s; cat > /dev/null; sleep 30\r", deaf);
+        press(&a, c6);
         a.agents.deadline_ms = 40;
         a.agents.grace_ms = 150;
         press(&a, ":ask a wall\r");
         long pid = a.agents.run[0].pid;
+        for (int i = 0; i < 400 && !file_has(deaf, "ready"); i++) poll(NULL, 0, 5);
+        CHECK(file_has(deaf, "ready"));
         uint64_t t0 = prof_now_ns() / 1000000u;
         app_tick(&a, t0);
         app_tick(&a, t0 + 50);                               /* past the deadline: TERM, which it does not hear */

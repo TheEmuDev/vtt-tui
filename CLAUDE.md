@@ -69,7 +69,7 @@ prohibitions only, at most 150 lines. Reference lives where it is read on demand
 ```
 make                 release build (-O2), profiler compiled in
 make test            ASan+UBSan build, unit + golden-frame tests, then tools/oracle.sh check over ./vtt and build/asan/vtt (a leak fails it; `record` after a meant change of output)
-make test-build; build/run-tests NAME...   only the suites named (per object, a job a core: only what changed is rebuilt); `make test-fast` all but the five socket/process suites (while iterating; `make test` before a commit)
+make test-build; build/run-tests NAME...   only the suites named (per object, a job a core: only what changed is rebuilt); `make test-fast` all but run-tests' SLOW list (while iterating; `make test` before a commit)
 make perf            one run; publish the per-row MEDIAN of three quiet runs (tools/median.py a b c)
 make fuzz | fuzz-ctl | fuzz-json    libFuzzer (clang): map loader, channel requests, JSON; FUZZ_SECONDS=600
 tools/embed.sh       after editing web/index.html or docs/AGENTS.md (-> src/webpage.c, src/agentguide.c); tools/blit_wasm.py after the blitter
@@ -97,10 +97,10 @@ Architecture
 - **Rules-agnostic core.** Game behavior lives only behind the `Ruleset` table in `ruler.c`
   (bands, `action_roll`, `spotlight`, `countdown`, `damage`), documented under the README's
   *Rulesets* with a subsection per game. Nothing else may know a game.
-- **One owner per question.** Before writing a check, find its function in CODEMAP: floors
-  go through `floor.c`, line of sight through `sight_walk`, file names through
-  `store_name_ok`, map draws through `grid_clip_push`, fog writes through `map_fog_set`.
+- **One owner per question.** Before writing a check, find its function in CODEMAP: floors go through
+  `floor.c`, sight through `sight_walk`, file names `store_name_ok`, map draws `grid_clip_push`, fog writes `map_fog_set`.
   Two copies are allowed; a third is extracted first (the watch list says which are at two).
+  **Nothing built to drift** (the user, 2026-10-23): a fact -- a list, a count, a time, a policy -- has one owner, and every other place derives it or points at it, never restates it.
 
 The players must never see the GM's things
 - Every frame goes through `app_frame`. Anything GM-only (a modal, prompt, overlay, tint)

@@ -6,9 +6,11 @@ docs/CODEMAP.md; `tests/run.c` is the table of suites (and `SLOW`, the ones `--f
 - `make test` builds with ASan+UBSan and runs everything. `make test-build` builds what the
   tests need, per object and a job a core (`build/run-tests` links the ASan objects with
   `build/asan/tests/*.o`; only what changed is compiled), then `build/run-tests NAME...`
+  (suites side by side, each in a child of its own; `-j1` for one process in order, as a
+  debugger wants; `VTT_CASE_TIMES=1` prints each case's time)
   runs only the suites named in run.c's table -- use it while iterating, the whole suite
   before a change is called done. `make test-fast` (`run-tests --fast`) is everything but
-  run.c's `SLOW` list, the five suites of real sockets and processes (about a minute). The
+  run.c's `SLOW` list (real sockets and processes; docs/TESTSPEED.md has the times). The
   line search's own counterexample tools are tools/shift/ (README.md).
 - `VTT_UPDATE_GOLDEN=1` regenerates golden frames; `VTT_REQUIRE_NODE=1` fails rather than
   skips the suites that need node (`pagefeed`, `pageconn`, `netlag`'s page check); `VTT_FOGDIFF_OPS=36000 build/run-tests` is the long fog

@@ -92,7 +92,9 @@ $(ASANDIR)/%.o: $(SRCDIR)/%.c
 TESTOBJDIR := $(ASANDIR)/tests
 TESTOBJS   := $(TESTSRCS:$(TESTDIR)/%.c=$(TESTOBJDIR)/%.o)
 PROTOOBJS  := $(filter-out $(ASANDIR)/main.o $(ASANDIR)/app%.o $(ASANDIR)/loop.o,$(ASANOBJS))
-NPROC      := $(shell nproc 2>/dev/null || echo 4)
+# How many at once, for the builds, the suites and the oracle alike: VTT_JOBS,
+# else a job a core. run-tests and tools/oracle.sh read the same variable.
+NPROC      := $(or $(VTT_JOBS),$(shell nproc 2>/dev/null || echo 4))
 
 $(TESTOBJDIR)/%.o: $(TESTDIR)/%.c
 	@mkdir -p $(TESTOBJDIR)
@@ -115,7 +117,7 @@ test: test-build
 	@echo "the oracle again, over the sanitizer vtt (a leak or an error is a difference):"
 	@./tools/oracle.sh check $(ASANDIR)/vtt || { echo "the sanitizer vtt differs (a leak exits 1, with a LeakSanitizer report on stderr): run a differing command with $(ASANDIR)/vtt to read it" >&2; exit 1; }
 
-# make test less the suites of real sockets and processes, about 60 s of it
+# make test less run-tests' SLOW list, the suites of real sockets and processes
 # (docs/V2.md, ruling 8; run-tests' SLOW list). make test before a commit.
 test-fast: test-build
 	@$(OBJDIR)/run-tests --fast
@@ -208,7 +210,7 @@ help:
 	@echo "make debug    -Og -g3 with ASan + UBSan"
 	@echo "make test     build and run the unit/golden test suite"
 	@echo "make test-build   build build/run-tests only, for build/run-tests NAME..."
-	@echo "make test-fast    the suite but its five socket/process suites (while iterating)"
+	@echo "make test-fast    the suite but run-tests' SLOW list (while iterating)"
 	@echo "make soak     peak memory of long sessions against their bounds (about 20 s)"
 	@echo "make mcount   build/mcount.so: every libc allocation counted (LD_PRELOAD)"
 	@echo "make oracle   compare ./vtt's output with tests/oracle/expected"
