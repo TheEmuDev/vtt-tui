@@ -1374,7 +1374,7 @@ static void group_void_findings(Findings *fs)
 
 static void check_map(const Map *m, Findings *fs)
 {
-    char where[64], msg[256];
+    char where[64], msg[320];            /* the longest, a link that leads nowhere: 307 */
     Pairs px;
     pairs_build(&px, m);
     /* Every edge of the map, and nearly all are none: the byte is read
@@ -2783,7 +2783,7 @@ static void check_shift(const Map *m, const char *text, size_t len, const char *
         if (sh.more) str_lcpy(mo->note, "there are more lines than rows past this one too: check again once it is fixed", sizeof mo->note);
         if (sh.blank_only) {
             /* Both readings, said: the help as it stands is for one. */
-            char h2[sizeof mo->help];
+            char h2[sizeof mo->help + 160];     /* the whole sentence; cut to the field below, on purpose */
             snprintf(h2, sizeof h2, "if this file keeps a blank line after some of its sections (by hand), that blank is a separator and nothing is wrong here; otherwise: %s", mo->help);
             str_lcpy(mo->help, h2, sizeof mo->help);
         }

@@ -82,17 +82,34 @@ $(ASANDIR)/%.o: $(SRCDIR)/%.c
 	@mkdir -p $(ASANDIR)
 	$(CC) $(BASEFLAGS) $(DBGFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
 
-# The test binary alone, rebuilt every time (no dependency tracking for it):
-# `make test-build && build/run-tests NAME...` while iterating on a suite.
-# The release vtt too: the --apply and channel tests run ./vtt, and a stale
-# one would be tested silently.
-test-build: all
-	@mkdir -p $(OBJDIR)
-	$(CC) $(BASEFLAGS) $(DBGFLAGS) $(CFLAGS) -I$(TESTDIR) $(TESTWARN) \
-	    $(LIBSRCS) $(TESTSRCS) -o $(OBJDIR)/run-tests \
-	    -fsanitize=address,undefined $(LDLIBS)
+# The test binaries link the sanitizer objects above (the same flags: one
+# variable, DBGFLAGS, for both) with the tests' own, each compiled only when
+# it or a header it includes changed, and side by side (docs/TESTSPEED.md,
+# step 2): `make test-build && build/run-tests NAME...` while iterating on a
+# suite. The release vtt too: the --apply and channel tests run ./vtt, and a
+# stale one would be tested silently. protocol is the World's suite again
+# with no src/app*.c and no loop (test-after says why).
+TESTOBJDIR := $(ASANDIR)/tests
+TESTOBJS   := $(TESTSRCS:$(TESTDIR)/%.c=$(TESTOBJDIR)/%.o)
+PROTOOBJS  := $(filter-out $(ASANDIR)/main.o $(ASANDIR)/app%.o $(ASANDIR)/loop.o,$(ASANOBJS))
+NPROC      := $(shell nproc 2>/dev/null || echo 4)
 
-test: test-build $(ASANDIR)/vtt
+$(TESTOBJDIR)/%.o: $(TESTDIR)/%.c
+	@mkdir -p $(TESTOBJDIR)
+	$(CC) $(BASEFLAGS) $(DBGFLAGS) $(CFLAGS) -I$(TESTDIR) $(TESTWARN) -MMD -MP -c $< -o $@
+$(TESTOBJDIR)/protocol_main.o: $(TESTDIR)/test_protocol.c
+	@mkdir -p $(TESTOBJDIR)
+	$(CC) $(BASEFLAGS) $(DBGFLAGS) $(CFLAGS) -I$(TESTDIR) $(TESTWARN) -DPROTOCOL_MAIN -MMD -MP -c $< -o $@
+$(OBJDIR)/run-tests: $(filter-out $(ASANDIR)/main.o,$(ASANOBJS)) $(TESTOBJS)
+	$(CC) $^ -o $@ -fsanitize=address,undefined $(LDFLAGS) $(LDLIBS)
+$(OBJDIR)/protocol: $(PROTOOBJS) $(TESTOBJDIR)/protocol_main.o
+	$(CC) $^ -o $@ -fsanitize=address,undefined $(LDFLAGS) $(LDLIBS)
+
+# Every binary the tests need, built with a job a core.
+test-build:
+	@$(MAKE) --no-print-directory -j$(NPROC) all $(OBJDIR)/run-tests $(OBJDIR)/protocol $(ASANDIR)/vtt
+
+test: test-build
 	@$(OBJDIR)/run-tests
 	@$(MAKE) --no-print-directory test-after
 	@echo "the oracle again, over the sanitizer vtt (a leak or an error is a difference):"
@@ -114,9 +131,7 @@ test-after:
 	@if grep -n '#include "app' $(SRCDIR)/world.c $(SRCDIR)/world.h $(SRCDIR)/world_ops.c $(SRCDIR)/world_ops.h $(SRCDIR)/request.c \
 	    $(SRCDIR)/request_job.c $(SRCDIR)/request_propose.c $(SRCDIR)/request.h $(TESTDIR)/test_protocol.c; then \
 	    echo "the World's files must not include an app header (docs/V2.md, D2)" >&2; exit 1; fi
-	@$(CC) $(BASEFLAGS) $(DBGFLAGS) $(CFLAGS) -I$(TESTDIR) $(TESTWARN) -DPROTOCOL_MAIN \
-	    $(filter-out $(SRCDIR)/app%.c $(SRCDIR)/loop.c,$(LIBSRCS)) $(TESTDIR)/test_protocol.c \
-	    -o $(OBJDIR)/protocol -fsanitize=address,undefined $(LDLIBS)
+	@$(MAKE) --no-print-directory -j$(NPROC) $(OBJDIR)/protocol
 	@$(OBJDIR)/protocol
 	@./tools/oracle.sh check ./$(BIN)
 
@@ -203,4 +218,4 @@ help:
 	@echo "make clean    remove build artifacts"
 	@echo "make PROF=0   build with profiling instrumentation compiled out"
 
--include $(DEPS) $(ASANOBJS:.o=.d)
+-include $(DEPS) $(ASANOBJS:.o=.d) $(TESTOBJS:.o=.d) $(TESTOBJDIR)/protocol_main.d

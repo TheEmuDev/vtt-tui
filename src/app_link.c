@@ -101,7 +101,7 @@ static void travel(App *a, int li)
     PROF_ZONE("link.trip.map");
     Map *m = a->world.map;
     Link l = m->links[li];
-    char name[32], msg[320], why[200], path[MAP_PATH_MAX + 32], err[MAPIO_ERR_MAX];
+    char name[32], msg[512], why[200], path[MAP_PATH_MAX + 32], err[MAPIO_ERR_MAX];
     link_name(&l, name, sizeof name);
     /* Refusals are the GM's: they name files, and the other map's places. */
 #define REFUSE(...) do { snprintf(why, sizeof why, __VA_ARGS__); app_set_status_gm(a, why); return; } while (0)

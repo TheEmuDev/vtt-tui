@@ -3,8 +3,9 @@
 Loaded when a file under tests/ is read. The suite list by area is the `tests/` row of
 docs/CODEMAP.md; `tests/run.c` is the table of suites (and `SLOW`, the ones `--fast` skips) and `main`, nothing else.
 
-- `make test` builds with ASan+UBSan and runs everything. `make test-build` rebuilds
-  `build/run-tests` alone (`make build/run-tests` does not), then `build/run-tests NAME...`
+- `make test` builds with ASan+UBSan and runs everything. `make test-build` builds what the
+  tests need, per object and a job a core (`build/run-tests` links the ASan objects with
+  `build/asan/tests/*.o`; only what changed is compiled), then `build/run-tests NAME...`
   runs only the suites named in run.c's table -- use it while iterating, the whole suite
   before a change is called done. `make test-fast` (`run-tests --fast`) is everything but
   run.c's `SLOW` list, the five suites of real sockets and processes (about a minute). The

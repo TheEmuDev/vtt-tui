@@ -125,3 +125,20 @@ time on stderr (tests/check.h `case_begin`; `CASE` is it), which found the waits
   its retry after curl's exit 7.
 
 The suites' phase: **65.8 s to 38.8 s** (two runs, 38.79 and 38.83 s; CPU unchanged, 18.7 s).
+
+**Step 2, 2026-10-23.** `run-tests` links the ASan objects (`build/asan/*.o` but main.o) with
+the tests' own (`build/asan/tests/*.o`, `-MMD` like the rest); `protocol` links the same
+less the app's and the loop with `test_protocol.c` compiled once more under
+`-DPROTOCOL_MAIN`; `make test-build` builds them all with `-j` a core (`NPROC`). Measured:
+
+| starting point | before | after |
+|---|---|---|
+| one vtt source changed | 64.9 s (+ about 17 for protocol) | 0.6 s, both linked |
+| one test file changed | 64.9 s | 3.2 s |
+| nothing changed | 64.9 s | 0.08 s |
+| everything from clean (`make clean`) | about 82 s and the release and ASan vtts | 16.1 s |
+| **`make test`, one source changed** | **about 180 s** | **72.0 s** |
+
+Built alone, the ASan objects showed what the one-cc build had hidden with
+`-Wno-format-truncation` for every source: four status lines `-Og`'s analysis says could be
+cut (HEALTH B22), their buffers sized now; a full rebuild has no warnings.

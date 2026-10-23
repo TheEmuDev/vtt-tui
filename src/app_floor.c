@@ -453,7 +453,7 @@ void app_floor_spotlight(App *a)
 void app_players_pin(App *a, const char *rest)
 {
     Map *m = a->world.map;
-    char msg[96];
+    char msg[128];                      /* an area name (32) and the sentence */
     a->players.cam_pinned = 0;             /* the GM's own pin, now: it stays past hold */
     if (!strcmp(rest, "auto")) {
         /* A fresh pick: staying put would keep them where the pin held. */
