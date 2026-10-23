@@ -42,8 +42,16 @@ ApiKeySource apikey_held(char *key, size_t sz);
  * key. The process is made not dumpable while it holds one. */
 int apikey_hold(const char *key, ApiKeySource src);
 
-/* Lets the held key go (wiped); the process dumpable again unless typing. */
+/* Lets the held key go (wiped); the process dumpable again unless typing,
+ * looking one up, or hardened. */
 void apikey_drop(void);
+
+/* Where the key in use is from (held first, else the keyring) and its last
+ * four characters, the key itself never handed out; the stored one alone
+ * likewise. And what is held, with no copy. For whatever only shows a key. */
+ApiKeySource apikey_where(char *last4, size_t sz, char *err, size_t errsz);
+ApiKeySource apikey_where_stored(char *last4, size_t sz, char *err, size_t errsz);
+ApiKeySource apikey_held_src(void);
 
 /* A key typed in, waiting for the GM's word on where it goes: to the keyring
  * (apikey_pending_keep), held for this session (apikey_pending_session), or
@@ -67,8 +75,9 @@ int apikey_remove(char *err, size_t errsz);
 /* While a key is being typed (1) and after (0): not dumpable meanwhile. */
 void apikey_typing(int on);
 
-/* The Claude agent's process at its start: not dumpable for its life, and no
- * core file for it or for what it runs (curl inherits the limit). */
+/* The Claude agent's process at its start: not dumpable for its life (never
+ * undone, a key dropped included), and no core file for it or for what it
+ * runs (curl inherits the limit). */
 void apikey_harden(void);
 
 /* Overwrites a copy of the key, so it does not linger in freed memory. */

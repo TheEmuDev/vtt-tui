@@ -519,7 +519,7 @@ void app_draw_view(App *a, View view)
 
     case MODAL_CONFIRM_KEY:
         ui_modal(a->rnd, a->th, a->modal_title, a->modal_body,
-                 "y  remove the stored key      n / esc  keep it", frame);
+                 "y  remove the key      n / esc  keep it", frame);
         break;
 
     case MODAL_KEY_WHERE:

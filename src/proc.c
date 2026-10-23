@@ -124,6 +124,9 @@ int proc_run(char *const argv[], const ProcIn *pi, ByteBuf *out, int *status, ch
         }
     }
     signal(SIGPIPE, was);
+    /* What came through the buffer may be a key (secret-tool's answer):
+     * none of it left on the stack once this returns. */
+    { volatile char *v = buf; for (size_t i = 0; i < sizeof buf; i++) v[i] = 0; }
     if (wfd >= 0) close(wfd);
     close(o[0]);
     if (timed_out) kill(pid, SIGKILL);

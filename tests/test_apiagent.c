@@ -4,6 +4,7 @@
  * 3. The agent is the real ./vtt --claude-agent, started by :agent command. */
 
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include "harness.h"
 
 #include <stdlib.h>
@@ -428,6 +429,14 @@ void test_api_agent(void)
         char *f2 = got("fd3", 2);
         CHECK(f2 && strstr(f2, "x-api-key: " KEY "\""));
         free(f2);
+        if (getuid() != 0) {
+            /* No key held by the agent here: apikey_harden alone keeps its
+             * memory from curl, both calls. */
+            char *p1 = got("penv", 1), *p2 = got("penv", 2);
+            CHECK(p1 && strcmp(p1, "0\n") != 0);
+            CHECK(p2 && strcmp(p2, "0\n") != 0);
+            free(p1); free(p2);
+        }
         unlink(sec);
         unsetenv("VTT_SECRET_TOOL");
     }
@@ -675,6 +684,9 @@ void test_api_key(void)
     press(&a, ":agent key\r");
     CHECK_EQ(a.modal, MODAL_PROMPT);
     CHECK_EQ(a.prompt.secret, 1);
+#ifdef __linux__
+    CHECK_EQ(prctl(PR_GET_DUMPABLE, 0, 0, 0, 0), 0);                   /* typing: not dumpable */
+#endif
     CHECK(frame_has(&a, &r, "none yet - shown as *; then the keyring, or"));   /* wrapped: "this session only" below */
     press(&a, KEY);
     CHECK(frame_has(&a, &r, "Anthropic API key"));
@@ -689,6 +701,9 @@ void test_api_key(void)
     CASE("enter: where it goes is asked, in a box the players never see; r: to the keyring down stdin, no newline, never an argument; the prompt wiped; only the last four said");
     press(&a, "\r");
     CHECK_EQ(a.modal, MODAL_KEY_WHERE);
+#ifdef __linux__
+    CHECK_EQ(prctl(PR_GET_DUMPABLE, 0, 0, 0, 0), 0);                   /* waiting on r or s: still not */
+#endif
     CHECK(frame_has(&a, &r, "Keep the API key ending ...KLMN?"));
     CHECK(frame_has(&a, &r, "s  this session only"));
     {
@@ -699,6 +714,9 @@ void test_api_key(void)
     CHECK(access(secret, F_OK) != 0);                                 /* nothing stored until the GM says */
     press(&a, "r");
     CHECK_EQ(a.modal, MODAL_NONE);
+#ifdef __linux__
+    CHECK_EQ(prctl(PR_GET_DUMPABLE, 0, 0, 0, 0), 1);                   /* in the keyring, nothing held: dumpable */
+#endif
     {
         char *sec = slurp(secret);
         CHECK(sec && !strcmp(sec, KEY));
@@ -800,8 +818,10 @@ void test_api_key(void)
     {
         char note[200];
         setenv("ANTHROPIC_API_KEY", KEY, 1);
+        volatile const char *was = getenv("ANTHROPIC_API_KEY");     /* setenv's copy, which glibc keeps */
         apikey_take_env(note, sizeof note);
         CHECK(!getenv("ANTHROPIC_API_KEY") && !note[0]);
+        CHECK(was && was[0] == 0);                                     /* the environment's copy wiped */
         CHECK_EQ(app_agent_key_where(last4, sizeof last4), APIKEY_ENV);
         press(&a, ":agent key remove\r");
         CHECK(strstr(a.status, "the one in use is ANTHROPIC_API_KEY, from the environment vtt started with") != NULL);
@@ -827,6 +847,21 @@ void test_api_key(void)
     CHECK(strstr(a.status, "each :ask now starts the Claude agent") != NULL);
     CHECK(strstr(a.agents.cmd, KEY) == NULL);
 
+    CASE("hardened stays hardened: a key held and let go does not make the agent's process dumpable again");
+#ifdef __linux__
+    {
+        pid_t pid = fork();
+        if (pid == 0) {
+            apikey_harden();
+            apikey_hold(KEY, APIKEY_SESSION);
+            apikey_drop();
+            child_exit(prctl(PR_GET_DUMPABLE, 0, 0, 0, 0) == 0 ? 0 : 1);
+        }
+        int st = -1;
+        CHECK(pid > 0 && waitpid(pid, &st, 0) == pid && WIFEXITED(st) && WEXITSTATUS(st) == 0);
+    }
+#endif
+
     CASE("an agent command never gets an exported key unless passkey is on; then only that one");
     {
         char note[200], envf[900], c[1200];
@@ -836,6 +871,17 @@ void test_api_key(void)
         snprintf(c, sizeof c, ":agent command env > '%s'; echo end-of-env >> '%s'\r", envf, envf);
         press(&a, c);
         CHECK(ctl_blank_map(&a, sb.dir, 8, 6));
+        /* First a process that never took the variable at its start (as this
+         * test's, until now): the child loses it all the same. */
+        apikey_drop();
+        setenv("ANTHROPIC_API_KEY", KEY, 1);
+        press(&a, ":ask anything\r");
+        CHECK(pump_until_file(&a, envf, "end-of-env"));
+        CHECK(!file_has(envf, "ANTHROPIC_API_KEY") && !file_has(envf, "KLMN"));
+        CHECK(pump_until_reaped(&a));
+        jobs_reset(&a);
+        unlink(envf);
+        apikey_take_env(note, sizeof note);
         press(&a, ":ask anything\r");
         CHECK(pump_until_file(&a, envf, "end-of-env"));
         CHECK(file_has(envf, "VTT_JOB="));                             /* it is the agent's own environment */

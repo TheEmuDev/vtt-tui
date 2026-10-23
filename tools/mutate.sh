@@ -29,7 +29,12 @@ if [ -e "$keep" ]; then
 fi
 cp -p "$file" "$keep" || exit 2
 restore() {
-    cp -p "$keep" "$file" && rm -f "$keep"
+    # The original's text with a time newer than anything built from the
+    # mutant: `cp -p` kept the old time, make took the mutant's objects for
+    # current, and the next build -- the release vtt too -- carried the
+    # mutation (2026-10-23: a hardening lost from ./vtt that way).
+    cp "$keep" "$file" && rm -f "$keep"
+    touch "$file"
     make -s test-build >/dev/null 2>&1
 }
 trap 'restore; exit 2' INT TERM HUP

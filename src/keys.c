@@ -316,7 +316,7 @@ static const KeyDoc OPTIONS[] = {
     KEY("g  G",   "first / last"),
     { "enter",    "change it: the next value, or type one in", NULL, "change" },
     KEY("h  l",   "the value before / after, for a setting of a few values"),
-    { "d",        "on the API key: remove the stored key, asking first", NULL, "remove key" },
+    { "d",        "on the API key: remove it (the keyring's, or this session's), asking first", NULL, "remove key" },
     { "esc",      "back to the menu  (q does too)",    NULL, "back" },
     { "?",        "this page",                         NULL, "keys" },
 };

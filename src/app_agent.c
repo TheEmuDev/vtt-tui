@@ -413,10 +413,8 @@ void app_agent_describe(const App *a, char *buf, size_t sz)
  * is wiped; only where it is from is kept. */
 static int claude_ready(App *a, char *why, size_t whysz)
 {
-    char key[APIKEY_MAX], err[600];
-    ApiKeySource src = apikey_find(key, sizeof key, err, sizeof err);
-    apikey_wipe(key, sizeof key);
-    if (src == APIKEY_NONE) { snprintf(why, whysz, "%s", err); return 0; }
+    char last4[8], err[600];
+    if (apikey_where(last4, sizeof last4, err, sizeof err) == APIKEY_NONE) { snprintf(why, whysz, "%s", err); return 0; }
     const char *curl = getenv("VTT_CLAUDE_CURL");
     if (!proc_found(curl && *curl ? curl : "curl")) { snprintf(why, whysz, "the Claude agent needs curl, and it is not on PATH"); return 0; }
     return 1;
@@ -543,13 +541,8 @@ void app_agent_choice_key(App *a, Key k)
 
 int app_agent_key_where(char *last4, size_t sz)
 {
-    char key[APIKEY_MAX], err[600];
-    ApiKeySource src = apikey_find(key, sizeof key, err, sizeof err);
-    size_t n = strlen(key);
-    if (src != APIKEY_NONE && n >= 4) snprintf(last4, sz, "%s", key + n - 4);
-    else if (sz) last4[0] = '\0';
-    apikey_wipe(key, sizeof key);
-    return src;
+    char err[600];
+    return apikey_where(last4, sz, err, sizeof err);
 }
 
 void app_agent_key_prompt(App *a, int then, const char *why)
@@ -580,9 +573,8 @@ static void key_then(App *a, int then)
 /* Held for this session: in vtt's memory only, gone when it quits. */
 static void key_held(App *a, int then, const char *last4)
 {
-    char k[APIKEY_MAX], msg[300];
-    int was_env = apikey_held(k, sizeof k) == APIKEY_ENV;
-    apikey_wipe(k, sizeof k);
+    char msg[300];
+    int was_env = apikey_held_src() == APIKEY_ENV;
     apikey_pending_session();
     snprintf(msg, sizeof msg, "API key ...%s held for this session only - gone when vtt quits%s", last4,
              was_env ? " (in place of ANTHROPIC_API_KEY's)" : "");
@@ -593,14 +585,20 @@ static void key_held(App *a, int then, const char *last4)
 void app_agent_key_typed(App *a, const char *key)
 {
     int  then = a->agents.key_then;
-    apikey_typing(0);
-    /* Pasted keys bring white space at the ends; inside, it is not a key. */
+    /* Pasted keys bring white space at the ends; inside, it is not a key.
+     * Still "typing" (not dumpable) until the key is in its pending slot. */
     while (*key == ' ' || *key == '\t') key++;
     char k[APIKEY_MAX];
     str_lcpy(k, key, sizeof k);
     size_t n = strlen(k);
     while (n && (k[n - 1] == ' ' || k[n - 1] == '\t' || k[n - 1] == '\r' || k[n - 1] == '\n')) k[--n] = '\0';
-    if (!*k) { apikey_wipe(k, sizeof k); a->agents.key_then = KEY_THEN_NOTHING; app_set_status_gm(a, "canceled - no key stored"); return; }
+    if (!*k) {
+        apikey_wipe(k, sizeof k);
+        apikey_typing(0);
+        a->agents.key_then = KEY_THEN_NOTHING;
+        app_set_status_gm(a, "canceled - no key stored");
+        return;
+    }
     if (!apikey_ok(k)) {
         apikey_wipe(k, sizeof k);
         app_agent_key_prompt(a, then, "not a key: letters, digits, - and _ only - again, or esc");
@@ -610,6 +608,7 @@ void app_agent_key_typed(App *a, const char *key)
     char last4[8];
     snprintf(last4, sizeof last4, "%s", k + n - 4);
     apikey_wipe(k, sizeof k);
+    apikey_typing(0);                   /* the pending slot keeps it not dumpable */
     /* Where it goes is the GM's word; with no keyring there is one answer. */
     if (!apikey_keyring_here()) {
         a->agents.key_then = KEY_THEN_NOTHING;
@@ -629,13 +628,12 @@ void app_agent_key_where_chosen(App *a, int ch)
     int then = a->agents.key_then;
     a->agents.key_then = KEY_THEN_NOTHING;
     a->modal = MODAL_NONE;
-    char last4[8], err[300], msg[400], k[APIKEY_MAX];
+    char last4[8], err[300], msg[400];
     apikey_pending_last4(last4, sizeof last4);
     if (ch == 's') { key_held(a, then, last4); return; }
     if (ch != 'r') { apikey_pending_drop(); app_set_status_gm(a, "canceled - no key stored"); return; }
     if (apikey_pending_keep(err, sizeof err) < 0) { app_set_status_gm(a, err); return; }
-    ApiKeySource h = apikey_held(k, sizeof k);
-    apikey_wipe(k, sizeof k);
+    ApiKeySource h = apikey_held_src();
     if (h == APIKEY_SESSION) apikey_drop();   /* the session's own gives way to the one kept */
     snprintf(msg, sizeof msg, "API key ...%s stored in your keyring%s", last4,
              h == APIKEY_ENV ? " - but ANTHROPIC_API_KEY was set when vtt started, and it is the one used" : "");
@@ -645,13 +643,15 @@ void app_agent_key_where_chosen(App *a, int ch)
 
 void app_agent_key_remove(App *a)
 {
-    char err[600], k[APIKEY_MAX];
-    ApiKeySource h = apikey_held(k, sizeof k);
-    apikey_wipe(k, sizeof k);
+    char err[600], last4[8], msg[200];
+    ApiKeySource h = apikey_held_src();
     if (h == APIKEY_SESSION) {
         apikey_drop();
         app_options_key_changed(a);
-        app_note_gm(a, "the session's API key is let go");
+        if (apikey_where_stored(last4, sizeof last4, err, sizeof err) == APIKEY_KEYRING)
+            snprintf(msg, sizeof msg, "the session's API key is let go - the keyring's, ending ...%s, is used now", last4);
+        else snprintf(msg, sizeof msg, "the session's API key is let go");
+        app_note_gm(a, msg);
         return;
     }
     if (apikey_remove(err, sizeof err) < 0) { app_set_status_gm(a, err); return; }
@@ -662,15 +662,14 @@ void app_agent_key_remove(App *a)
 
 static void key_remove_ask(App *a)
 {
-    char key[APIKEY_MAX], err[600], last4[8] = "";
-    ApiKeySource h = apikey_held(key, sizeof key);
+    char err[600], last4[8] = "", kept4[8] = "";
+    ApiKeySource h = apikey_held_src();
     /* This session's key is the one to let go; else what is stored, whatever
      * the environment held: a typed key behind the variable is still the GM's
      * to take away. */
-    ApiKeySource src = h == APIKEY_SESSION ? h : apikey_find_stored(key, sizeof key, err, sizeof err);
-    size_t n = strlen(key);
-    if (src != APIKEY_NONE && n >= 4) snprintf(last4, sizeof last4, "%s", key + n - 4);
-    apikey_wipe(key, sizeof key);
+    ApiKeySource stored = apikey_where_stored(kept4, sizeof kept4, err, sizeof err);
+    ApiKeySource src = h == APIKEY_SESSION ? apikey_where(last4, sizeof last4, err, sizeof err) : stored;
+    if (src == APIKEY_KEYRING) str_lcpy(last4, kept4, sizeof last4);
     int env = h == APIKEY_ENV;
     if (src == APIKEY_NONE) {
         app_set_status_gm(a, env ? "no API key is stored - the one in use is ANTHROPIC_API_KEY, from the environment vtt started with"
@@ -678,7 +677,9 @@ static void key_remove_ask(App *a)
         return;
     }
     snprintf(a->modal_title, sizeof a->modal_title, "Remove the API key?");
-    if (src == APIKEY_SESSION)
+    if (src == APIKEY_SESSION && stored == APIKEY_KEYRING)
+        snprintf(a->modal_body, sizeof a->modal_body, "The key ending ...%s, held for this session. The keyring's, ending ...%s, is used then.", last4, kept4);
+    else if (src == APIKEY_SESSION)
         snprintf(a->modal_body, sizeof a->modal_body, "The key ending ...%s, held for this session. The Claude agent stops until a key is given again.", last4);
     else snprintf(a->modal_body, sizeof a->modal_body, "The key ending ...%s, from your %s%s", last4, apikey_source_name(src),
                   env ? " (ANTHROPIC_API_KEY is used until vtt quits)." : ". The Claude agent stops until a key is given again.");

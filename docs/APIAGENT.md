@@ -93,6 +93,10 @@ the loop with no network and no money (below).
 
 ## The key
 
+> **Since 2026-10-23** this section is history: there is no key file, the variable is taken
+> out of vtt's environment at start, and a typed key is kept in the keyring or for the session
+> only -- *The key, made safer* below is what is true now.
+
 Both ways are supported (the user, 2026-10-19): the environment variable, and typing the key
 into vtt. A typed key goes to the **system keyring**, not a file and not the environment:
 
