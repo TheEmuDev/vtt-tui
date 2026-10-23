@@ -3,7 +3,7 @@
 A rules-agnostic virtual tabletop for the terminal: C11, nothing beyond libc, POSIX and
 `-lm`. Tested with Daggerheart. The user is the sole maintainer. This file is loaded into
 every session and is what survives a context reset, so keep it true: rules and
-prohibitions only, under 150 lines. Reference lives where it is read on demand.
+prohibitions only, at most 150 lines. Reference lives where it is read on demand.
 
 ## Read on demand
 
@@ -59,7 +59,7 @@ prohibitions only, under 150 lines. Reference lives where it is read on demand.
   agree with the code, in its commit: README.md (keys, features, *Rulesets*, *File format*; plain, for a user), PERFORMANCE.md (tables + a paragraph per finding), `src/keys.c` (the `?` page),
   docs/CODEMAP.md's rows, docs/ARCHITECTURE.md (a subsystem, or a path data takes between them),
   the design doc and, for what agents see, docs/AGENTS.md and the agent skill. Suite `docs` fails
-  on drift it can see (a file with no row, a name or path gone); the rest is every review's. Its
+  on drift it can see (a file with no row; a name, macro, file or path gone); the rest is every review's. Its
   ROADMAP.md item moves to *Built*; a new design doc has a Status line and a docs/README.md row.
   HEALTH.md records each check, a fixed item by commit. Ideas: docs/IDEAS.md. **A decision the user
   makes goes into its doc the same turn** (plan, ROADMAP.md, V2.md's *Next*); memory only points at it.

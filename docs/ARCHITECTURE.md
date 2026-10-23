@@ -3,8 +3,9 @@
 **Status:** kept current (written 2026-10-23 from the code on branch `vtt-2.0`, traced
 function by function). Like docs/CODEMAP.md, this page changes in the same commit as the code
 it describes (CLAUDE.md, *A change is not done*): a new subsystem, a new path data takes
-between two of them, or a boundary moved. Suite `docs` fails when a function, file or path
-named here is gone; every review's *Docs drift* section reads the rest (tools/review-brief.md).
+between two of them, or a boundary moved. Suite `docs` fails when a function or macro with an
+underscore, a file named alone, or a path under src/, tests/, tools/, docs/ or web/ named here
+is gone; every review's *Docs drift* section reads the rest (tools/review-brief.md).
 
 This page is the map of the whole: the subsystems, how they talk, what data crosses each
 boundary and what never may. Each section names the files; docs/CODEMAP.md has the row for
@@ -67,7 +68,7 @@ command. It draws one frame, then loops: `loop_wait`, `poll`, `loop_once`.
   a ping fading, an agent's deadline, a waiting channel request, the file check, a phone's
   keepalive. With none it blocks.
 - `loop_once` runs, in order: `net_service` (phones), `ctl_service` (the channel), `app_tick`
-  (taps, channel requests, autosave, agents, the file), a resize, `drain_input` (keys), the
+  (taps, channel requests, agents, the file, autosave), a resize, `drain_input` (keys), the
   ESC timeout, `app_events_flush` (answers to agents waiting), `term_flush`, and the frame if
   anything marked the app dirty. Many keys in one turn make one frame; a turn reads at most
   64 KB of keys so a flood cannot starve the screen.
@@ -118,10 +119,11 @@ Each frame, after the GM's is drawn, `app_frame` makes the players' -- only in p
 
 - The server holds its own renderer (`net_players_renderer`), blank at start: the phones are
   never sent the GM's renderer.
-- `app_view_differs` is the boundary. When anything GM-only is on screen -- a modal, the
-  command line, a GM-only status, fog, a hidden creature, the profiler, the agents' ring, job
-  tints, a card, a creature's notes or counters, the players on their own camera, a status
-  line that differs -- the players' frame is drawn a second time with `app_draw_view`
+- `app_view_differs` is the boundary, and the function itself is the full list. When anything
+  GM-only is on screen -- among them a modal, the command line, a GM-only status, fog, a
+  hidden creature, the profiler, the agents' ring, job tints, a card, summoning, a creature's
+  notes or counters, a map note under the cursor, the players on their own camera, a status
+  line that differs; under the handout preview, only the handout -- the players' frame is drawn a second time with `app_draw_view`
   (`VIEW_PLAYERS`), which leaves all of those out. Otherwise the GM's cells are copied
   (`rnd_copy_back`). Anything new that is GM-only must be added there (CLAUDE.md).
 - Inside `VIEW_PLAYERS`, "may the players see this creature" is `fog_token_unseen`; an unseen
@@ -179,7 +181,8 @@ connection from this machine skips the join code.
 
 A Unix socket at `$XDG_RUNTIME_DIR/vtt/PID.sock` (else `/tmp/vtt-UID/`), in a directory that
 must be this user's alone, mode 0700, no link (`dir_ours`). An interactive vtt always listens.
-One request a connection, up to 64 KB, four connections at once, a deadline each.
+One request a connection, up to 64 KB, four requests at once and eight `wait`s held beside
+them, a deadline each.
 
 ### A request (request.c, world*.c)
 
@@ -197,8 +200,9 @@ An agent never edits the live map. `request_proposal_begin` copies the map to a 
 and points the request at it; at the end the difference (`cs_diff`) becomes a job's proposal
 through `world_job_set_proposal`. The GM reviews it (`app_review_key`): enter lands it as one
 undo step tagged with the agent (`world_job_land`), `d` scraps it, `c` sends feedback and
-restarts the job's agent. With `:agent accept auto` a proposal lands at once when nothing is
-in the way. Only with no vtt holding the map does `--apply` edit directly, and save.
+restarts the job's agent. With `:agent on` and `:agent accept auto` a proposal lands at once;
+while the GM is part way through something it waits, and lands at their next key
+(`world_jobs_land_waiting`, called from `app_key`). Only with no vtt holding the map does `--apply` edit directly, and save.
 
 ### Events: what agents hear
 
@@ -220,8 +224,8 @@ arrives, or the time runs out (`app_events_flush` answers it). Map changes are s
   (`ask_vtt`), and reports how the job ended with `job N say`. Each job's calls, tokens and dollars go
   to a row of `claude-usage.tsv`.
 - **The key.** It is read, in order, from `ANTHROPIC_API_KEY`, the keyring (`secret-tool`,
-  service `vtt` account `anthropic-api-key`), or `$XDG_CONFIG_HOME/vtt/anthropic-key` (mode
-  600, refused otherwise). A key typed into vtt goes to the keyring down a pipe, or the file
+  service `vtt` account `anthropic-api-key`), or `$XDG_CONFIG_HOME/vtt/anthropic-key` (this
+  user's, no group or other bits, refused otherwise). A key typed into vtt goes to the keyring down a pipe, or the file
   where there is no keyring. To curl it goes down descriptor 3 as a config line
   (`call_api`, through `proc_run`): never on a command line, never in a log or the
   environment, and wiped after use (`apikey_wipe`). vtt never sets `ANTHROPIC_API_KEY`, so a
@@ -254,8 +258,8 @@ arrives, or the time runs out (`app_events_flush` answers it). Map changes are s
 | what | where | written by |
 |---|---|---|
 | maps | `$XDG_DATA_HOME/vtt/maps/NAME.vtt`, or any path given | `write_map` |
-| the autosave | `MAP.autosave` (`.damaged` when cut short) | `app_autosave` |
-| the session log | `MAP.log` beside the map, with `:log` | slog.c |
+| the autosave | `PATH.autosave`, the map's whole path (`.damaged` when cut short) | `app_autosave` |
+| the session log | `STEM.log` beside the map (its path with `.vtt` cut), with `:log` | slog.c |
 | characters, stamps | `.../vtt/characters/`, `.../vtt/stamps/`, each a small map file | character.c, stamp.c |
 | handouts | `.../vtt/handouts/NAME.txt` | the GM, by hand |
 | environment cards | `.../vtt/environments/NAME.txt` | the import |
@@ -267,6 +271,20 @@ arrives, or the time runs out (`app_events_flush` answers it). Map changes are s
 File names a user types go through `store_name_ok`; files other than the map are written
 whole beside and renamed (`file_write_whole`, util.c). Imports read the SRD's JSON
 (`json_parse`) into characters and environment cards.
+
+### The settings
+
+`settings_load` reads `$XDG_CONFIG_HOME/vtt/settings` at start-up, before the map opens;
+the accept mode comes from it (`world.ctl_auto`), and which agent runs -- a command, or the
+Claude agent with its model, effort and limits. The Options
+screen and the `:agent` commands change a setting and write the file back (`settings_save`).
+
+## The profiler
+
+Every drawing and keystroke path is timed by a `PROF_ZONE` (prof.h; compiled out when the
+profiler is off). F12 shows the zones over the screen (`prof_overlay_draw`); `--trace PATH`
+writes a Chrome trace on exit; `--bench` replays keys headless and reports. tools/perf.sh
+runs the scenarios and docs/PERFORMANCE.md holds what they measured.
 
 ## What never crosses which boundary
 

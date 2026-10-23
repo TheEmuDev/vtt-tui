@@ -8,9 +8,14 @@ its present tense: a design record describes the app as it was when the plan was
 
 True of the code today, and changed in the same commit as the code they describe (CLAUDE.md,
 *A change is not done*). Held to it twice: suite `docs` (tests/test_docs.c) fails when a source
-file has no CODEMAP row, or a doc names a function, file or path the code no longer has; and
-every review's *Docs drift* section (tools/review-brief.md) reads these pages where they speak of
-what the change touched, since a sentence gone wrong is beyond any test (the user, 2026-10-23).
+file has no row in CODEMAP's tables, or a doc names a function or macro with an underscore, a
+file alone, or a path under src/, tests/, tools/, docs/ or web/ the code no longer has; and every
+review's *Docs drift* section (tools/review-brief.md) reads these pages where they speak of what
+the change touched, since a sentence gone wrong is beyond any test (the user, 2026-10-23).
+
+This is the whole list of kept-current pages: the table below, and outside this folder the
+[README](../README.md) (the user's manual), `CLAUDE.md` and `tests/CLAUDE.md` (the coding
+agent's rules), `src/keys.c` (the bar and the `?` page), and tools/review-brief.md.
 
 | page | for | what it is |
 |---|---|---|

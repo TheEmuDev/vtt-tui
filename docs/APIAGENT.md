@@ -1,6 +1,7 @@
 # The Claude API agent (ROADMAP item 26)
 
-> **Status: built 2026-10-19 to 20** (887f306, cbd4c99, 46395d8, b98d8c7/a30a55e, e24b7cd,
+> **Status:** its key's flow is being redone: *The key, made safer: the plan*, signed off 2026-10-23.
+> **Built 2026-10-19 to 20** (887f306, cbd4c99, 46395d8, b98d8c7/a30a55e, e24b7cd,
 > ab97c33), from the plan signed off 2026-10-19 ("yes to the keyring, go with
 > recommendations"). A design record: what is true now is the README (*Working with AI
 > agents*) and the files' rows in docs/CODEMAP.md; *As built* at the end says where the code
@@ -468,3 +469,89 @@ Where the code left the plan, and what the build found:
   exit by exit -- any prompt the box opened that ends with nothing chosen brings the box back
   (`back_to_choice`), as `esc` does; only the box's own `esc`, `w` and a choice made clear it.
 
+
+## The key, made safer: the plan (2026-10-23)
+
+**Status:** signed off 2026-10-23 (the user: "Go with your API redesign suggestions, add it to
+the plan"), each decision as recommended; nothing built. From a security review of the key's
+flow the same day, whose findings are HEALTH B18 (a crash can put the key on disk), B19 (curl
+reads `~/.curlrc` and honors `SSLKEYLOGFILE`) and B20 (an exported key reaches every agent
+command). The aim: as few processes hold the key as can, as briefly as they can, and none can
+leak it by accident. Both ways in stay: the Options screen, and in the moment over a map.
+
+### The decisions (each the user's, as recommended)
+
+1. **The key file goes; "this session only" takes its place.** A key is kept in the keyring,
+   or held in vtt's memory for this session alone and gone when vtt quits, or read from
+   `ANTHROPIC_API_KEY`. `$XDG_CONFIG_HOME/vtt/anthropic-key` is no longer written or read; if
+   one is there, vtt says once (GM-only) that it is no longer read, to type the key again and
+   remove the file.
+2. **An exported key no longer reaches agent commands by default.** A setting, *pass the key
+   to agent commands* (off), gives back the behavior of 2026-10-19 to a GM who wants it.
+3. **`ANTHROPIC_API_KEY` stays supported**, and is taken out of vtt's environment at start.
+
+### The ways in
+
+- **The Options screen:** the API key row says where the key comes from (keyring, this
+  session, environment, none) and its last four characters; enter types one, `d` removes it.
+- **In the moment:** `:agent key`, or by itself when `:ask` finds no key -- the same prompt,
+  over the map, and the job goes on after.
+- **The prompt**, both ways: shown as `*`, a modal (so the phones never see it, as today),
+  then one question: **remember it** (the keyring) or **this session only**. Where there is no
+  keyring the first is not offered, and the prompt says why.
+
+### Who holds the key, and for how long
+
+| holder | holds it | protected by |
+|---|---|---|
+| vtt | while it is typed; a session key or an exported one for the session | not dumpable and not readable by other processes (`prctl(PR_SET_DUMPABLE, 0)`) while it holds one, set back once a typed key has gone to the keyring and been wiped, so vtt's other crashes can still be studied; the buffer locked out of swap (`mlock`, best effort) |
+| the Claude agent | a keyring key for each call only (looked up, used, wiped); a session or exported key, sent once down a pipe, for its run | not dumpable for its whole life; the core size limit 0 |
+| curl | one call | the key on descriptor 3 as today; `-q` first, so no `~/.curlrc`; `--proto =https`; an environment of its own (`PATH`, `HOME`, the locale, the proxy variables), so no `SSLKEYLOGFILE`; the core size limit 0, inherited |
+| agent commands, the editor, `:mirror`'s terminal | never | `ANTHROPIC_API_KEY` removed from vtt's environment at start (`unsetenv`), so no child inherits it; the setting puts it back for agent commands alone |
+
+How a session or exported key reaches the Claude agent: `app_agent_start` closes every
+descriptor from 3 up in the child, so after that loop it puts a pipe on descriptor 3 and the
+command line gets `--key-fd 3` (a number, never the key); vtt writes the key into the pipe and
+wipes its copy of that write. A keyring key is not sent at all: the agent looks it up itself.
+
+### What it does not stop
+
+A program running as the user while they are logged in can read the keyring (`secret-tool
+lookup`) and, being the same user, much else. This plan closes the accidental leaks -- a crash
+dump, curl's config, the environment, agents -- not malware in the user's account. Outside vtt,
+the README advises a key made for vtt alone with a spending limit set in the Anthropic Console,
+so a leak is bounded and that key can be revoked on its own.
+
+### Tests (no network, no money, never the user's keyring)
+
+All with the stand-ins (`VTT_SECRET_TOOL`, `VTT_CLAUDE_CURL`) in the sandbox:
+- curl's stand-in reports its arguments (`-q` first, `--proto =https`), its environment (no
+  `SSLKEYLOGFILE`, no `ANTHROPIC_API_KEY`), its core limit (`ulimit -c` is 0), and that it
+  cannot read its parent's `/proc/PPID/environ` (the agent is not dumpable).
+- an agent command that writes its environment shows no `ANTHROPIC_API_KEY`, and does with the
+  setting on; the editor and `:mirror`'s terminal likewise without it.
+- a session key: the keyring's stand-in is never asked to store, no file is written, the agent
+  gets the key through `--key-fd`, and nothing of it is in its command line (`/proc/PID/cmdline`).
+- a keyring key: the stand-in counts one lookup a call.
+- an old key file: not read; the GM is told once.
+- By hand, with the user's go (it writes to the system's crash store): a scratch program that
+  holds a fake key and crashes, with and without `PR_SET_DUMPABLE` 0 and a core limit of 0,
+  then `coredumpctl` -- settles whether systemd-coredump keeps a dump in each case.
+
+### Performance considerations
+
+- **A keyring lookup a call.** *Speed of light:* a fork and exec of `secret-tool` and one D-Bus
+  round trip, a few milliseconds (an estimate, this machine). *Expected:* the same, against a
+  call of seconds to the API: under 1% of a call. Measured only with the user's go (a lookup
+  on the real keyring of a test entry, never the key).
+- **The rest** -- `prctl`, `setrlimit`, `unsetenv`, a pipe of under 200 bytes, `mlock` of one
+  page -- are single system calls at start or per call, nothing on a frame or a key path.
+
+### Code (estimates)
+
+apikey.c (the session source, the file's removal, the one-time note), app_agent.c (the
+environment, the pipe, the setting), apiagent.c (`--key-fd`, the lookup per call, `prctl`,
+curl's arguments and environment), settings.c (the setting), the Options row and the prompt's
+question; about 150-250 lines with the tests. Docs: the README's key section, this page's *The
+key*, ARCHITECTURE.md's *Agents*, AGENTS.md if anything an agent sees changes, HEALTH B18-B20
+closed by commit.

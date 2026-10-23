@@ -1,15 +1,19 @@
-/* The docs that describe the code as it is (CLAUDE.md, *A feature is not
+/* The docs that describe the code as it is (CLAUDE.md, *A change is not
  * done*; docs/README.md, *Kept current*) held to it, so drift fails the
  * build instead of waiting for a reader to trip on it:
- *   - every source file has its row in docs/CODEMAP.md;
- *   - every path they name (src/, tests/, tools/, docs/, web/, globs too)
- *     exists;
- *   - every identifier written alone in backticks with an underscore
- *     (`app_frame`, `world_event()`) is a word somewhere in the code, the
- *     tests, the tools or the Makefile.
+ *   - every source file is named in the first cell of a row of
+ *     docs/CODEMAP.md's tables (a mention elsewhere in a row is not a row);
+ *   - every path they name under src/, tests/, tools/, docs/ or web/ (globs
+ *     too) exists;
+ *   - every identifier written alone in backticks with an underscore --
+ *     lowercase (`app_frame`, `world_event()`) or a macro (`FORMAT_VERSION`)
+ *     -- is a word somewhere in the code, the tests, the tools or the
+ *     Makefile, and every file named alone in backticks (`net.c`, `embed.sh`)
+ *     is a file of the repo's.
  * What is checked is what can be checked without false alarms: a renamed
- * function, a moved file, a file with no row. That a sentence is still true
- * is the review's (docs/HEALTH.md, *The questions*). */
+ * function or macro, a moved file, a file with no row. Not checked: a name
+ * with no underscore (`World`, `Cell`), and whether a sentence is still
+ * true -- that is every review's *Docs drift* (tools/review-brief.md). */
 #include "harness.h"
 
 #include <ctype.h>
@@ -29,6 +33,7 @@ static const char *const ID_DOCS[] = {
 static const char *const PATH_DOCS[] = {
     "CLAUDE.md", "tests/CLAUDE.md", "docs/CODEMAP.md", "docs/ARCHITECTURE.md",
     "tools/review-brief.md", "README.md", "docs/AGENTS.md", "docs/README.md",
+    "docs/KEYS.md", "docs/PERFORMANCE.md", "docs/HEALTH.md",
 };
 
 typedef struct { char *p; size_t n, cap; } Text;
@@ -57,15 +62,20 @@ static char *read_all(const char *path)
     char *buf = malloc(cap);
     while (buf && (got = fread(buf + n, 1, cap - n - 1, f)) > 0) {
         n += got;
-        if (n + 1 == cap) buf = realloc(buf, cap *= 2);
+        if (n + 1 == cap) {
+            char *more = realloc(buf, cap *= 2);
+            if (!more) { free(buf); buf = NULL; }
+            buf = more;
+        }
     }
     fclose(f);
     if (buf) buf[n] = '\0';
     return buf;
 }
 
-/* Every regular file under DIR, recursively, appended to T. */
-static void add_tree(Text *t, const char *dir)
+/* Every regular file under DIR, recursively: its text appended to T (NULL:
+ * not wanted), its name to NAMES, a line each. */
+static void add_tree(Text *t, Text *names, const char *dir)
 {
     DIR *d = opendir(dir);
     if (!d) return;
@@ -77,13 +87,26 @@ static void add_tree(Text *t, const char *dir)
         struct stat st;
         if (stat(path, &st) != 0) continue;
         if (S_ISDIR(st.st_mode)) {
-            if (strcmp(path, "tests/oracle") && strcmp(path, "tests/fuzz-found")) add_tree(t, path);
-        } else if (S_ISREG(st.st_mode) && st.st_size < (4 << 20)) {
-            char *s = read_all(path);
+            if (strcmp(path, "tests/oracle") && strcmp(path, "tests/fuzz-found")) add_tree(t, names, path);
+        } else if (S_ISREG(st.st_mode)) {
+            text_add(names, e->d_name, strlen(e->d_name));
+            char *s = t && st.st_size < (4 << 20) ? read_all(path) : NULL;
             if (s) { text_add(t, s, strlen(s)); free(s); }
         }
     }
     closedir(d);
+}
+
+/* A doc's text; NULL when it is not written yet (no drift), and a failure
+ * counted when it is there but cannot be read (a doc unread is not one
+ * checked). */
+static char *read_doc(const char *path, int *bad)
+{
+    struct stat st;
+    if (stat(path, &st) != 0) return NULL;
+    char *t = read_all(path);
+    if (!t) { printf("  %s is there but could not be read\n", path); (*bad)++; }
+    return t;
 }
 
 /* WORD occurs in T as a whole word. */
@@ -95,22 +118,39 @@ static int has_word(const Text *t, const char *w, size_t n)
     return 0;
 }
 
-/* `name` or `name()`: lowercase, an underscore inside, nothing else. */
+/* `name`, `name()` or `MACRO_NAME`: one case throughout, an underscore
+ * inside, nothing else. */
 static int identifier_span(const char *s, size_t n, size_t *len)
 {
     if (n > 2 && s[n - 2] == '(' && s[n - 1] == ')') n -= 2;
-    if (n < 3 || !islower((unsigned char)s[0])) return 0;
+    if (n < 3 || !isalpha((unsigned char)s[0])) return 0;
+    int (*is_case)(int) = islower((unsigned char)s[0]) ? islower : isupper;
     int under = 0;
     for (size_t i = 0; i < n; i++) {
         if (s[i] == '_') under = 1;
-        else if (!islower((unsigned char)s[i]) && !isdigit((unsigned char)s[i])) return 0;
+        else if (!is_case((unsigned char)s[i]) && !isdigit((unsigned char)s[i])) return 0;
     }
     if (!under || s[n - 1] == '_') return 0;
     *len = n;
     return 1;
 }
 
-static void check_ids(const char *doc, const char *text, const Text *code, int *bad)
+/* `net.c`, `embed.sh`: a file's name alone, with one of the code's
+ * extensions. */
+static int file_span(const char *s, size_t n)
+{
+    static const char *const ext[] = { ".c", ".h", ".sh", ".js", ".py" };
+    if (n < 3 || !islower((unsigned char)s[0])) return 0;
+    for (size_t i = 0; i < n; i++)
+        if (!islower((unsigned char)s[i]) && !isdigit((unsigned char)s[i]) && !strchr("_-.", s[i])) return 0;
+    for (size_t e = 0; e < sizeof ext / sizeof ext[0]; e++) {
+        size_t el = strlen(ext[e]);
+        if (n > el && !memcmp(s + n - el, ext[e], el)) return 1;
+    }
+    return 0;
+}
+
+static void check_ids(const char *doc, const char *text, const Text *code, const Text *names, int *bad)
 {
     int line = 1;
     for (const char *p = text; *p; p++) {
@@ -119,8 +159,15 @@ static void check_ids(const char *doc, const char *text, const Text *code, int *
         const char *q = p + 1;
         while (*q && *q != '`' && *q != '\n') q++;
         if (*q != '`') { p = q - 1; continue; }
-        size_t len;
-        if (identifier_span(p + 1, (size_t)(q - p - 1), &len)) {
+        size_t len, n = (size_t)(q - p - 1);
+        if (file_span(p + 1, n) && n < 120) {
+            char want[128];
+            snprintf(want, sizeof want, "\n%.*s\n", (int)n, p + 1);
+            if (!strstr(names->p, want)) {
+                printf("  %s:%d: `%.*s` is no file of the repo's\n", doc, line, (int)n, p + 1);
+                (*bad)++;
+            }
+        } else if (identifier_span(p + 1, n, &len)) {
             char w[128];
             if (len < sizeof w) {
                 memcpy(w, p + 1, len);
@@ -167,10 +214,14 @@ static void check_paths(const char *doc, const char *text, int *bad)
 
 void test_docs(void)
 {
-    Text code = { 0 };
-    add_tree(&code, "src");
-    add_tree(&code, "tests");
-    add_tree(&code, "tools");
+    Text code = { 0 }, names = { 0 };
+    text_add(&names, "", 0);             /* every name between two newlines */
+    add_tree(&code, &names, "src");
+    add_tree(&code, &names, "tests");
+    add_tree(&code, &names, "tools");
+    add_tree(NULL, &names, "web");
+    add_tree(NULL, &names, "docs");
+    text_add(&names, "Makefile", 8);
     char *mk = read_all("Makefile");
     if (mk) { text_add(&code, mk, strlen(mk)); free(mk); }
 
@@ -178,6 +229,18 @@ void test_docs(void)
     {
         char *cm = read_all("docs/CODEMAP.md");
         CHECK(cm != NULL);
+        /* The first cell of every table row: `| cell | ...`. */
+        Text cells = { 0 };
+        text_add(&cells, "", 0);
+        for (const char *l = cm; l && *l; ) {
+            const char *end = strchr(l, '\n');
+            if (!end) end = l + strlen(l);
+            if (l[0] == '|' && l[1] == ' ') {
+                const char *bar = memchr(l + 2, '|', (size_t)(end - l - 2));
+                if (bar) text_add(&cells, l + 2, (size_t)(bar - l - 2));
+            }
+            l = *end ? end + 1 : end;
+        }
         DIR *d = opendir("src");
         CHECK(d != NULL);
         int bad = 0;
@@ -193,14 +256,16 @@ void test_docs(void)
             struct stat st;
             const char *want = e->d_name;
             if (e->d_name[n - 1] == 'h' && stat(c_name, &st) == 0) continue;
-            /* The name itself, whole: `map.c` is not met by `xmap.c`. */
-            if (!has_word(&(Text){ cm, strlen(cm), 0 }, want, n)) {
+            /* The name itself, whole (`map.c` is not met by `xmap.c`), in
+             * a row's first cell. */
+            if (!has_word(&cells, want, n)) {
                 printf("  src/%s has no row in docs/CODEMAP.md\n", want);
                 bad++;
             }
         }
         if (d) closedir(d);
         CHECK_EQ(bad, 0);
+        free(cells.p);
         free(cm);
     }
 
@@ -208,9 +273,9 @@ void test_docs(void)
     {
         int bad = 0;
         for (size_t i = 0; i < sizeof ID_DOCS / sizeof ID_DOCS[0]; i++) {
-            char *t = read_all(ID_DOCS[i]);
-            if (!t) continue;              /* a doc not written yet is no drift */
-            check_ids(ID_DOCS[i], t, &code, &bad);
+            char *t = read_doc(ID_DOCS[i], &bad);
+            if (!t) continue;
+            check_ids(ID_DOCS[i], t, &code, &names, &bad);
             free(t);
         }
         CHECK_EQ(bad, 0);
@@ -220,7 +285,7 @@ void test_docs(void)
     {
         int bad = 0;
         for (size_t i = 0; i < sizeof PATH_DOCS / sizeof PATH_DOCS[0]; i++) {
-            char *t = read_all(PATH_DOCS[i]);
+            char *t = read_doc(PATH_DOCS[i], &bad);
             if (!t) continue;
             check_paths(PATH_DOCS[i], t, &bad);
             free(t);
@@ -228,4 +293,5 @@ void test_docs(void)
         CHECK_EQ(bad, 0);
     }
     free(code.p);
+    free(names.p);
 }
