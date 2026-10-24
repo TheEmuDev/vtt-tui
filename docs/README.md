@@ -23,7 +23,7 @@ agent's rules), `src/keys.c` (the bar and the `?` page), and tools/review-brief.
 |---|---|---|
 | [AGENTS.md](AGENTS.md) | an AI agent building or editing maps for a GM (not the agent working on vtt's code: that is `CLAUDE.md`) | the request language, the three ways in, working live with the GM. Read whole |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | anyone learning how vtt works: the maintainer, the coding agent, a reviewer | the subsystems, how they interact and what data goes where: start-up and the loop, a key to the terminal, the players' frame to the phones and back, the channel and its agents, the disk. Read first; CODEMAP has the detail |
-| [CODEMAP.md](CODEMAP.md) | the coding agent | what each source file owns and its invariants, every command, the conventions, the watch list. Read a row at a time |
+| [CODEMAP.md](CODEMAP.md) | the coding agent | what each source file owns and its invariants, every command, the conventions, the watch list, the facts kept in more than one place. Read a row at a time |
 | [KEYS.md](KEYS.md) | anyone binding a key | the nine rules every binding follows |
 | [PERFORMANCE.md](PERFORMANCE.md) | the maintainer and the coding agent | every measured path; *Speed of light* and *Working rules* are what a plan's estimates use |
 | [HEALTH.md](HEALTH.md) | the maintainer and the coding agent | the questions every review asks, the findings left open, and each health check's record |

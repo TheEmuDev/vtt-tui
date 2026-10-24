@@ -11,7 +11,7 @@ prohibitions only, at most 150 lines. Reference lives where it is read on demand
 |---|---|
 | before touching a source file | its row in docs/CODEMAP.md: `grep -n 'fog\.c' docs/CODEMAP.md` -- what the file owns and the invariants kept there. Never the whole file (84 KB) |
 | how the parts fit; which subsystems a change crosses, what data goes where | docs/ARCHITECTURE.md, by section |
-| a command not listed below; a convention's reason; the watch list | docs/CODEMAP.md, by heading |
+| a command not listed below; a convention's reason; the watch list; **which files restate a fact you change** | docs/CODEMAP.md, by heading (*Facts kept in more than one place*) |
 | writing or running tests | tests/CLAUDE.md (loads itself under tests/) |
 | a Daggerheart rule's wording or page | the SRD 2.0 PDF: its link is in docs/CODEMAP.md's `ruler.c` row. Summarize with the page; never copy its text in |
 | binding a key | docs/KEYS.md, the nine rules (the ninth: `off` switches off, `remove` destroys) |

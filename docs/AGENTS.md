@@ -1,9 +1,10 @@
 # vtt for agents
 
 Everything an AI agent needs to build and change `vtt` maps for a GM: from a description, in
-a file, or live in the GM's session while they watch. Read this page whole before the first
-map; the README is the reference for the rest of the app. `vtt --agent-guide` prints this
-page as the vtt installed has it, so an agent reads the guide that matches the binary. The
+a file, or live in the GM's session while they watch. Read the sections you need before the
+first map; the README is the reference for the rest of the app. `vtt --agent-guide` prints
+this page as the vtt installed has it, so an agent reads the guide that matches the binary;
+`vtt --agent-guide toc` lists its sections and `vtt --agent-guide "NAME"` prints one. The
 agent skill (`tools/skill/SKILL.md`, installed with `make install-skill` to
 `~/.claude/skills/vtt/`) is a dozen lines that send an agent here.
 

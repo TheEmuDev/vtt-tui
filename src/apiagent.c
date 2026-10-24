@@ -17,9 +17,7 @@
 #include "request.h"
 #include "store.h"
 #include "util.h"
-
-extern const char   AGENT_GUIDE[];
-extern const size_t AGENT_GUIDE_LEN;
+#include "guide.h"
 
 #define API_URL        "https://api.anthropic.com/v1/messages"
 #define MAX_TOKENS     16000

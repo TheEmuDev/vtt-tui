@@ -229,6 +229,40 @@ job. Text, a screen of it. It reads counts only, so what it prints can be shown 
 - **Its cost in `make test`** is docs/TESTSPEED.md's (that page owns the test run's times); it
   runs after `protocol`, one run at a time.
 
+## The guide's size (2026-10-23)
+
+**What an agent can be sent, measured.** Two probes of Claude Code 2.1.306's Bash tool on the
+user's subscription, read from the tool results in the stream-json output (what the model
+was given, not what it said): a command's output of 30,000 bytes arrived whole; 32,000 came
+back as a 2 KB preview and a `<persisted-output>` path under `~/.claude/projects/` (where the
+run's path-scoped `Read(./**)` cannot reach, which is what the first crypt run met). The
+limit lies between the two, so a part of the guide is held to **under 30,000 bytes**. The
+probe that sent 10-32 KB six times cost $0.455: a large output stays in every later turn's
+input, so what is read costs again each turn.
+
+**The decision (the user, 2026-10-23):** first `vtt --agent-guide SECTION`, so an agent reads
+only the parts it needs, each under the limit; then the guide slimmed, once that shows how
+much can be sent. The guide by section (bytes, at 595931f's text): the opening 1,202, *Three ways in*
+4,574, *The request language* 10,562, *From a description to a map* 2,813, *Working live with
+the GM* 13,681, *Checking a map* 832, *Writing the file by hand* 2,602; 36,267 in all.
+
+**The sections, built (2026-10-23):** `vtt --agent-guide toc` (the opening and each
+section's size and command) and `vtt --agent-guide "NAME"` (src/guide.c); the whole guide is
+still `vtt --agent-guide` alone. The skill's first step reads `toc`, then the sections a plan
+needs (*Three ways in*, *The request language*, *From a description to a map*, *Checking a
+map*: about 19 KB) and, live, *Working live with the GM*. Suite `agentguide` holds each part
+under `GUIDE_PART_MAX` and each section the skill names to a heading.
+
+**The cuts measured for the slimming, not made yet:** the opening's notes for maintainers
+(about 1 KB of 1,202); the size limits said three times (the `limit` row 375, the read and edit
+bounds 1,184, the plan's 64,896), which belong to vtt (one sentence and a `help limits`);
+the exit tables (`--wait`'s 671) to a line each; *Who you are* (2,172) to what one agent
+needs, about 700; the live section's item 5 (`wait`, events, `changes`: 5,044) to the loop
+and the events an agent acts on, the event table (1,130) to a `help events`. About 36 KB to
+27-28 KB, an estimate from those counts. *The request language* stays: `help` gives each
+request's form (2,768 bytes for all of them), the guide's tables the rules a map comes out
+right by.
+
 ## Order
 
 The user's order (ROADMAP 27, V2.md *Next*): step 7 is built next. Then part 1's runner and

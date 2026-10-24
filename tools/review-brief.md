@@ -62,7 +62,10 @@ report (see the report format below).
   `build/run-tests docs` (after `make test-build`), then read each kept-current doc
   (the whole list is docs/README.md's *Kept current*: its table and the files outside docs/
   under it) where it speaks of what the
-  change touches, and say for each whether it is still true. A sentence the code now
+  change touches, and say for each whether it is still true. For each fact the change
+  touches, docs/CODEMAP.md's *Facts kept in more than one place* lists every copy: check
+  each, those marked *none* by reading them; a fact restated somewhere not in that table is a
+  finding too (the line to add, or better, a way to derive it). A sentence the code now
   contradicts is a finding like any other: the doc's line, the code's line, the fix. "No drift"
   is a valid answer only after naming the docs read.
 - Last, **Scratch work**: one line per thing you built in scratch to do the review (a

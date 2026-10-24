@@ -24,6 +24,7 @@
 #include "watch.h"
 #include "apiagent.h"
 #include "apikey.h"
+#include "guide.h"
 
 typedef struct {
     const char *trace_path;
@@ -71,10 +72,6 @@ typedef struct {
 
 enum { TOOL_NONE, TOOL_DUMP, TOOL_CHECK, TOOL_DESCRIBE };
 
-/* docs/AGENTS.md, embedded by tools/embed.sh: the guide of the vtt installed. */
-extern const char   AGENT_GUIDE[];
-extern const size_t AGENT_GUIDE_LEN;
-
 static void usage(void)
 {
     fputs(
@@ -109,7 +106,9 @@ static void usage(void)
         "  --ctl [REQUEST]    send a request to the vtt taking them, print the answer\n"
         "                     (no REQUEST, or -: read it from stdin; docs/CONTROL.md)\n"
         "  --ctl-pid N [REQ]  with several running, the one with pid N\n"
-        "  --agent-guide      print the guide for AI agents that build maps (docs/AGENTS.md)\n"
+        "  --agent-guide [toc|SECTION]\n"
+        "                     the guide for AI agents that build maps (docs/AGENTS.md): whole,\n"
+        "                     its list of sections, or the one whose heading holds SECTION\n"
         "  --claude-agent     the Claude API agent itself, as :agent claude starts it (docs/APIAGENT.md);\n"
         "                     --model opus|sonnet|haiku|fable|ID, --effort low|medium|high,\n"
         "                     --cap DOLLARS, --calls N, --fallbacks on|off\n"
@@ -148,7 +147,13 @@ static int parse_args(Options *o, int argc, char **argv)
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
         if (!strcmp(a, "-h") || !strcmp(a, "--help")) { usage(); return 1; }
-        else if (!strcmp(a, "--agent-guide")) { fwrite(AGENT_GUIDE, 1, AGENT_GUIDE_LEN, stdout); return 1; }
+        else if (!strcmp(a, "--agent-guide")) {
+            /* With a word after it, a part (guide.c): the whole is over what an
+             * agent's tool passes whole (GUIDE_PART_MAX). */
+            if (i + 1 < argc && argv[i + 1][0] != '-') exit(guide_print(stdout, stderr, argv[i + 1]));
+            fwrite(AGENT_GUIDE, 1, AGENT_GUIDE_LEN, stdout);
+            return 1;
+        }
         else if (!strcmp(a, "--claude-agent")) o->claude_agent = 1;
         else if (!strcmp(a, "--model") && i + 1 < argc) {
             if (!(o->api.model = apiagent_model_id(argv[++i]))) die("bad --model (opus, sonnet, haiku, fable, or a claude- model id)");

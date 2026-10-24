@@ -2,6 +2,7 @@
 
 #include "link.h"
 #include "card.h"
+#include "guide.h"
 #include "harness.h"
 #include "app_priv.h"
 
@@ -3621,8 +3622,6 @@ void test_ctl_names(void)
  * point at it, and may name only flags and requests that exist. */
 void test_agent_guide(void)
 {
-    extern const char   AGENT_GUIDE[];
-    extern const size_t AGENT_GUIDE_LEN;
     size_t dl = 0, sl = 0;
     char  *doc   = file_read("docs/AGENTS.md", (size_t)1 << 20, &dl, NULL);
     char  *skill = file_read("tools/skill/SKILL.md", (size_t)1 << 16, &sl, NULL);
@@ -3634,9 +3633,50 @@ void test_agent_guide(void)
     CHECK(AGENT_GUIDE_LEN == dl && !memcmp(AGENT_GUIDE, doc, dl));
     CHECK(strstr(doc, "`vtt --agent-guide`") != NULL);
 
-    CASE("the skill has the frontmatter a skill is found by");
+    CASE("the guide's parts: the opening and the sections cover it exactly, each under GUIDE_PART_MAX");
+    {
+        GuidePart open, sec[32];
+        int ns = guide_parts(&open, sec, 32);
+        CHECK(ns >= 6 && ns < 32);
+        size_t at = open.len;
+        CHECK(open.at == AGENT_GUIDE && open.len < GUIDE_PART_MAX);
+        for (int i = 0; i < ns; i++) {
+            CHECK(sec[i].at == AGENT_GUIDE + at && !strncmp(sec[i].at, "## ", 3));
+            if (sec[i].len >= GUIDE_PART_MAX) { printf("    section %d is %zu bytes\n", i + 1, sec[i].len); CHECK(0); }
+            at += sec[i].len;
+        }
+        CHECK_EQ(at, AGENT_GUIDE_LEN);
+        char  *toc = NULL;
+        size_t tl  = 0;
+        FILE  *f   = open_memstream(&toc, &tl);
+        CHECK_EQ(guide_print(f, f, "toc"), 0);
+        fclose(f);
+        CHECK(tl < GUIDE_PART_MAX && strstr(toc, "vtt --agent-guide \"The request language\""));
+        free(toc);
+        f = open_memstream(&toc, &tl);
+        CHECK_EQ(guide_print(f, f, "map"), 2);                /* in five headings: refused, the list given */
+        CHECK_EQ(guide_print(f, f, "no such part"), 2);
+        CHECK_EQ(guide_print(f, f, "checking a map"), 0);     /* a heading named whole, any case */
+        fclose(f);
+        CHECK(strstr(toc, "more than one section") && strstr(toc, "no section") && strstr(toc, "## Checking a map\n"));
+        free(toc);
+    }
+
+    CASE("the skill has the frontmatter a skill is found by, and every section it names is one");
     CHECK(!strncmp(skill, "---\nname: vtt\ndescription: ", 27));
-    CHECK(strstr(skill, "`vtt --agent-guide`") != NULL);
+    CHECK(strstr(skill, "`vtt --agent-guide toc`") != NULL);
+    int named = 0;
+    for (const char *s = strstr(skill, "*"); s; s = strstr(s + 1, "*")) {
+        /* The skill names the sections to read in italics: *The request language*. */
+        const char *e = strchr(s + 1, '*');
+        if (!e || s[1] == '*' || (s > skill && s[-1] == '*') || e[1] == '*' || e - s > 64) continue;
+        char want[96];
+        snprintf(want, sizeof want, "\n## %.*s\n", (int)(e - s - 1), s + 1);
+        if (!strstr(doc, want)) { printf("    not a section: %s", want + 1); CHECK(0); }
+        named++;
+        s = e;
+    }
+    CHECK(named >= 5);
 
     CASE("vtt --agent-guide prints it and exits 0");
     Sandbox sb = sandbox_enter("guide");

@@ -96,7 +96,9 @@ vtt [options] [map.vtt]
   --ctl [REQUEST]    send a request to a running vtt and print the answer
                      (no REQUEST, or -: read it from stdin)
   --ctl-pid N [REQ]  with several vtts running, send to the one with pid N
-  --agent-guide      print the guide for AI agents (docs/AGENTS.md), as this vtt has it
+  --agent-guide [toc|SECTION]
+                     the guide for AI agents (docs/AGENTS.md), as this vtt has it: whole,
+                     its sections (toc), or one
   --claude-agent     the Claude API agent itself; :agent claude starts it for you
   --import-adversaries FILE
                      the Daggerheart SRD's adversaries as characters with cards
@@ -1377,7 +1379,9 @@ version installed.
 
 To point Claude Code at it, install the vtt skill once: `make install-skill` copies
 `tools/skill/SKILL.md` to `~/.claude/skills/vtt/`. The skill is a few lines telling an agent
-when to use vtt and how to start, and it sends the agent to `vtt --agent-guide` for the rest.
+when to use vtt and how to start, and it sends the agent to the guide a section at a time
+(`vtt --agent-guide toc` lists them): the whole guide is longer than Claude Code passes to the
+model from one command.
 Run it again after updating vtt.
 
 ### Asking an agent
