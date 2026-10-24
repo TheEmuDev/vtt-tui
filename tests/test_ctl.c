@@ -3662,21 +3662,25 @@ void test_agent_guide(void)
         free(toc);
     }
 
-    CASE("the skill has the frontmatter a skill is found by, and every section it names is one");
+    CASE("every section says who reads it (`<!-- read for: ... -->`), and some are for plans, some live");
+    {
+        GuidePart open, sec[32];
+        int ns = guide_parts(&open, sec, 32), plan = 0, live = 0;
+        for (int i = 0; i < ns; i++) {
+            const char *who = NULL;
+            size_t wl = guide_read_for(&sec[i], &who);
+            if (!wl) { printf("    section %d has no read-for line\n", i + 1); CHECK(0); continue; }
+            char w[64];
+            snprintf(w, sizeof w, "%.*s", (int)wl, who);
+            plan += strstr(w, "plan") != NULL;
+            live += strstr(w, "live") != NULL;
+        }
+        CHECK(plan >= 3 && live >= 3);
+    }
+
+    CASE("the skill has the frontmatter a skill is found by, and sends an agent to the toc");
     CHECK(!strncmp(skill, "---\nname: vtt\ndescription: ", 27));
     CHECK(strstr(skill, "`vtt --agent-guide toc`") != NULL);
-    int named = 0;
-    for (const char *s = strstr(skill, "*"); s; s = strstr(s + 1, "*")) {
-        /* The skill names the sections to read in italics: *The request language*. */
-        const char *e = strchr(s + 1, '*');
-        if (!e || s[1] == '*' || (s > skill && s[-1] == '*') || e[1] == '*' || e - s > 64) continue;
-        char want[96];
-        snprintf(want, sizeof want, "\n## %.*s\n", (int)(e - s - 1), s + 1);
-        if (!strstr(doc, want)) { printf("    not a section: %s", want + 1); CHECK(0); }
-        named++;
-        s = e;
-    }
-    CHECK(named >= 5);
 
     CASE("vtt --agent-guide prints it and exits 0");
     Sandbox sb = sandbox_enter("guide");

@@ -22,6 +22,10 @@ typedef struct { const char *at; size_t len; } GuidePart;
  * spans of AGENT_GUIDE; returns how many sections, at most max. */
 int guide_parts(GuidePart *opening, GuidePart *sections, int max);
 
+/* Who a section is for, from the `<!-- read for: plan, live -->` line under its
+ * heading: its length, *who set to it; 0 when the section has none. */
+size_t guide_read_for(const GuidePart *section, const char **who);
+
 /* `vtt --agent-guide ARG`: "toc" prints the opening and the sections with their
  * sizes; anything else prints the one section whose heading holds it (any
  * case). 0 printed; 2 no section or more than one, said on err. */

@@ -54,12 +54,30 @@ static int holds(const char *hay, size_t hn, const char *needle)
     return 0;
 }
 
+/* Who reads a section, from the line under its heading, `<!-- read for: plan,
+ * live -->`: the guide says it once, and the skill sends an agent to `toc`
+ * rather than naming sections itself. */
+#define READ_FOR "<!-- read for: "
+size_t guide_read_for(const GuidePart *p, const char **who)
+{
+    const char *name;
+    size_t      hl = heading(p, &name);
+    const char *s = name + hl + 1, *end = p->at + p->len;
+    size_t      rl = strlen(READ_FOR);
+    if (s >= end || (size_t)(end - s) < rl || memcmp(s, READ_FOR, rl)) return 0;
+    *who = s + rl;
+    const char *c = memchr(*who, '\n', (size_t)(end - *who));
+    if (!c || c - *who < 4 || memcmp(c - 4, " -->", 4)) return 0;
+    return (size_t)(c - 4 - *who);
+}
+
 static void list(FILE *out, const GuidePart *sec, int n)
 {
     for (int i = 0; i < n; i++) {
-        const char *name;
+        const char *name, *who = "";
         int hl = (int)heading(&sec[i], &name);
-        fprintf(out, "  %-30.*s %6zu bytes   vtt --agent-guide \"%.*s\"\n", hl, name, sec[i].len, hl, name);
+        int wl = (int)guide_read_for(&sec[i], &who);
+        fprintf(out, "  %-30.*s %-12.*s %6zu bytes   vtt --agent-guide \"%.*s\"\n", hl, name, wl, who, sec[i].len, hl, name);
     }
 }
 
@@ -69,8 +87,9 @@ int guide_print(FILE *out, FILE *err, const char *arg)
     int n = guide_parts(&open, sec, GUIDE_SECTIONS_MAX);
     if (!strcmp(arg, "toc")) {
         fwrite(open.at, 1, open.len, out);
-        fprintf(out, "## Sections\n\nEach under %d bytes; the whole guide, %zu, is `vtt --agent-guide` alone.\n\n",
-                GUIDE_PART_MAX, AGENT_GUIDE_LEN);
+        fprintf(out, "## Sections\n\nRead the ones marked for your work: `plan` for a map from a description or a file,\n"
+                     "`live` for the GM's open session. Each under %d bytes; the whole guide, %zu, is\n"
+                     "`vtt --agent-guide` alone.\n\n", GUIDE_PART_MAX, AGENT_GUIDE_LEN);
         list(out, sec, n);
         return 0;
     }

@@ -231,23 +231,20 @@ Where one fact is written in several files on purpose (a copy embedded in the bi
 summary for users, a test that names what it checks). A change to any copy changes every
 copy in the same commit. "Checked" names what fails when they part; where it says *none*,
 only a review's *Docs drift* section (tools/review-brief.md) catches it, so read this list
-there. A new place a fact is restated gets its line here the same commit (the user,
-2026-10-23); better still, make it derived and take the line away (CLAUDE.md, *Nothing built
-to drift*).
+there. The user, 2026-10-23: "If we can remove the duplications, that is preferable. If not,
+they should be listed" -- so a copy is first made derived (generated, read from its owner, or
+pointed at) and only one that cannot be goes here, the same commit, with why it stays.
 
 | fact | its owner | restated in | checked |
 |---|---|---|---|
 | the agents' guide | docs/AGENTS.md | src/agentguide.c (tools/embed.sh) | suite `agentguide`, byte for byte |
 | the phone page | web/index.html | src/webpage.c (tools/embed.sh) | suite `pagefeed` reads the embedded page |
-| the guide's section names | docs/AGENTS.md's `## ` headings | tools/skill/SKILL.md (each in italics); docs/AGENTLOOP.md's sizes (a dated record) | suite `agentguide`: each italic name in the skill is a heading |
 | a guide part's limit, 30,000 bytes | `GUIDE_PART_MAX` (guide.h) | docs/AGENTLOOP.md, *The guide's size* (the probe it rests on) | suite `agentguide` holds every part under it; the limit itself, Claude Code's, only by probing again |
 | the request verbs and their forms | `REQUESTS[]` (request.c), `help` | docs/AGENTS.md's tables; the skill's examples | suite `ctltable` (the guide names exactly the verbs), `agentguide` (the skill's) |
 | the flags | `usage()` (main.c) | README.md's options block, a summary in plainer words | *none*: read both when a flag changes |
 | a finding's what-to-do | `CODE_HELP` (maptools.c) | README.md's code table | suite `checkhelp`; `tools/codehelp.py` rewrites the column |
 | keys | src/keys.c | the bar and the `?` page (both from it); README.md's key lists | the bar and page by construction; README *none* |
 | the sandbox's settings | `sandbox_enter` (tests/harness.c) | tools/sandbox.sh | suite `sandbox` |
-| the kept-current docs | docs/README.md, *Kept current* | suite `docs` reads that list (no copy) | -- |
-| the test run's times | docs/TESTSPEED.md | other docs point there, never quote | *none* |
 | the default evaluation agent's command line | tools/agenteval.sh | tests/agenteval.sh's expected flags and values; docs/AGENTLOOP.md, *Part 1, as built* | tests/agenteval.sh (the flags); AGENTLOOP *none* |
 | the evaluation facts | tools/agentgrade.py's header | each task's `expect`; tests/agenteval/tasks/*/want | tests/agenteval.sh (a `want` differing fails; regenerate after a meant change and read the diff) |
 | the opening a party cannot pass, `window` | `edge_name` and `edge_passable_kind` (maptools.c, map.c) | tools/agentgrade.py's `CLOSED` | tests/agenteval.sh (task `missed`'s window) |

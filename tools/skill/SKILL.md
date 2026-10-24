@@ -6,10 +6,8 @@ description: Build or change maps for vtt, the terminal virtual tabletop -- enco
 # vtt: maps for a GM
 
 1. **Read the guide first, every session**, as the vtt installed has it, a part at a time:
-   `vtt --agent-guide toc` lists its sections, then `vtt --agent-guide "NAME"` prints one.
-   A plan needs *Three ways in*, *The request language*, *From a description to a map* and
-   *Checking a map*; live work adds *Working live with the GM*. What follows is only the
-   opening move.
+   `vtt --agent-guide toc` lists its sections and which ones a plan and live work need;
+   `vtt --agent-guide "NAME"` prints one. What follows is only the opening move.
 2. **Is the GM there?** `vtt --ctl status`. Exit 2 with `no vtt is taking requests` on
    stderr: work on the file with a plan. Exit 2 with a list of `--ctl-pid` lines: several
    vtts are listening; add `--ctl-pid N` for the GM's to every call. Otherwise it names the

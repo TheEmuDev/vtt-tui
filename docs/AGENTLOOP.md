@@ -248,10 +248,10 @@ the GM* 13,681, *Checking a map* 832, *Writing the file by hand* 2,602; 36,267 i
 
 **The sections, built (2026-10-23):** `vtt --agent-guide toc` (the opening and each
 section's size and command) and `vtt --agent-guide "NAME"` (src/guide.c); the whole guide is
-still `vtt --agent-guide` alone. The skill's first step reads `toc`, then the sections a plan
-needs (*Three ways in*, *The request language*, *From a description to a map*, *Checking a
-map*: about 19 KB) and, live, *Working live with the GM*. Suite `agentguide` holds each part
-under `GUIDE_PART_MAX` and each section the skill names to a heading.
+still `vtt --agent-guide` alone. The skill's first step reads `toc` and the sections it marks
+for the work: each section says who reads it on a `<!-- read for: plan, live -->` line under
+its heading, which `toc` prints, so the skill names no section (about 19 KB for a plan).
+Suite `agentguide` holds each part under `GUIDE_PART_MAX` and every section to a read-for line.
 
 **The cuts measured for the slimming, not made yet:** the opening's notes for maintainers
 (about 1 KB of 1,202); the size limits said three times (the `limit` row 375, the read and edit

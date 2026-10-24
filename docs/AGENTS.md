@@ -20,6 +20,7 @@ squares, creatures (players and enemies, 1-3 squares wide), notes the players ne
 fog.
 
 ## Three ways in
+<!-- read for: plan, live -->
 
 | way | when | how |
 |---|---|---|
@@ -80,6 +81,7 @@ leads to must sit beside the map the link is on. The GM's stamps and characters 
 rather than opening the files.
 
 ## The request language
+<!-- read for: plan, live -->
 
 One request is lines. Words are separated by spaces; `"..."` is one word (`\"` and `\\`
 inside); blank lines and lines starting with `#` are skipped. Lines run in order, so a read
@@ -196,6 +198,7 @@ can take back, so each goes in a request of its own.
 | `undo` | live only, alone in its request: take back your last change to land, once, while nothing has happened since |
 
 ## From a description to a map
+<!-- read for: plan -->
 
 1. **Name every place first**, then place the rest by name. A description is rooms and how
    they join; so is the plan:
@@ -254,6 +257,7 @@ can take back, so each goes in a request of its own.
   ```
 
 ## Working live with the GM
+<!-- read for: live -->
 
 **If vtt started you** (`:agent command`): your standard input is one job -- what the GM
 asked, the box they drew, the job's history with any feedback last -- and the `vtt --ctl`
@@ -458,6 +462,7 @@ The channel never saves; saving is the GM's (`:w`). It never takes away the crea
 turn it is in a fight: the fight is the GM's.
 
 ## Checking a map
+<!-- read for: plan, live -->
 
 `vtt map.vtt --dump-map` prints the lattice: squares at odd positions, boundaries between,
 a wall's corners drawn as its line (`-` or `|`, never `+`, so a `+` is always a door),
@@ -470,6 +475,7 @@ read; the codes that matter most are `W104 door-loose` (a door with no wall at e
 `E110`/`E111` (a creature on void or off the edge) and `W120` (a room nothing leads to).
 
 ## Writing the file by hand
+<!-- read for: by hand -->
 
 A last resort, when you must write or repair the file itself. The file is plain text; the
 README's *File format* section is the full reference.
