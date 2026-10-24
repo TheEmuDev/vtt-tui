@@ -6,6 +6,10 @@
 #
 #   tools/phonecheck.sh                 every check below
 #   ONLY=fulls tools/phonecheck.sh      the FULLs only; ONLY=away or ONLY=lock, that one only
+#   ONLY=load OLDBIN=old/vtt            the page's load and first FULL, OLDBIN's against BIN's,
+#                                       alternating (only when asked: the gzip page's A/B)
+#   ONLY=arena                          the tile arena's high-water mark after a session of
+#                                       panning (only when asked; docs/REMOTE.md item 6)
 #   LOADS=10 ROUNDS=3 OFF=15 KEYS=+-    loads a turn; turns a buffer; seconds the screen is off; the GM's keys meanwhile
 #   VIA=usb                             the phone reaches vtt over the USB cable (adb reverse), not
 #                                       the Wi-Fi: no firewall rule needed; the times are not the Wi-Fi's
@@ -180,6 +184,44 @@ if [ "${ONLY:-fulls}" = fulls ] || [ -z "${ONLY:-}" ]; then
         done
     done
     echo
+fi
+
+if [ "${ONLY:-}" = load ]; then
+    # The page's load, OLDBIN (the raw page) against BIN (gzip), ROUNDS turns
+    # of LOADS loads, alternating; the phone's own navigation timing.
+    [ -x "${OLDBIN:-}" ] || { echo "ONLY=load needs OLDBIN=the other vtt" >&2; exit 1; }
+    : > "$DIR/l-old"; : > "$DIR/l-new"
+    r=0
+    while [ "$r" -lt "$ROUNDS" ]; do
+        for how in old new; do
+            _bin=$BIN; [ "$how" = old ] && BIN=$OLDBIN
+            start_vtt 200x50
+            node tools/phonecheck.js load "$CDP" "$URL" "$LOADS" >> "$DIR/l-$how"
+            stop_vtt
+            BIN=$_bin
+        done
+        r=$((r + 1))
+    done
+    printf '| page  | bytes over the wire | response, median (range) | load event | first FULL after navigating |\n'
+    printf '|-------|---------------------|--------------------------|------------|-----------------------------|\n'
+    for how in old new; do
+        python3 -c '
+import json, statistics, sys
+d = [l for line in open(sys.argv[1]) if line.strip() for l in json.loads(line)["loads"]]
+m = lambda k: statistics.median(x[k] for x in d)
+lo = lambda k: min(x[k] for x in d); hi = lambda k: max(x[k] for x in d)
+print("| %-5s | %19d | %6.1f ms (%.1f-%.1f) | %7.1f ms | %8.1f ms (%.1f-%.1f), %d loads |" % (sys.argv[2],
+      m("wire"), m("response"), lo("response"), hi("response"), m("load"), m("full"), lo("full"), hi("full"), len(d)))' "$DIR/l-$how" "$how"
+    done
+    echo
+fi
+
+if [ "${ONLY:-}" = arena ]; then
+    for size in 200x50 400x170; do
+        start_vtt "$size"
+        echo "arena, $size, ${OFF:-30} s of ${KEYS:-lllllllljjjj}: $(node tools/phonecheck.js arena "$CDP" "$URL" "$DIR/in" "${KEYS:-lllllllljjjj}" "${OFF:-30}")"
+        stop_vtt
+    done
 fi
 
 if [ "${ONLY:-}" = wake ]; then

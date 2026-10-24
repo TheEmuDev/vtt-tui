@@ -16,6 +16,15 @@
 //       then what arrived after: messages, bytes, FULLs, the time from
 //       visible to the last of them; and whether the screen the page ends on
 //       is the one a fresh load draws. JSON on stdout.
+//   node tools/phonecheck.js load CDP URL N
+//       load the page N times after a warm-up; per load, from the browser's
+//       navigation entry: bytes over the wire, the response's time, the load
+//       event, and the first FULL's arrival after the navigation began (what
+//       a player waits for). JSON on stdout.
+//   node tools/phonecheck.js arena CDP URL FIFO KEYS SECONDS
+//       load the page with &stats, write KEYS into vtt's FIFO a character ten
+//       times a second for SECONDS, then the page's tile arena: the most tiles
+//       held, the most bytes used, its size, and the screen it was sized for.
 //   node tools/phonecheck.js away CDP URL FIFO KEYS SECONDS
 //       the same with Chrome sent behind the home screen and brought back
 //       (no unlock: it can run with nobody at the phone).
@@ -155,6 +164,30 @@ async function fulls(tab, url, n) {
   return { first: out[0], loads: out.slice(1) };
 }
 
+async function pageload(tab, url, n) {
+  const out = [];
+  for (let k = 0; k <= n; k++) {
+    await tab.load(url);
+    const i = await untilFull(tab, 0, 15000);
+    out.push(await tab.eval(`(() => { const e = performance.getEntriesByType('navigation')[0];
+      return { wire: e.transferSize, body: e.encodedBodySize, page: e.decodedBodySize,
+               response: +(e.responseEnd - e.requestStart).toFixed(1), load: +e.loadEventEnd.toFixed(1),
+               full: +__pc.msgs[${i}][0].toFixed(1) }; })()`));
+  }
+  return { first: out[0], loads: out.slice(1) };
+}
+
+async function arena(tab, url, fifo, keys, seconds) {
+  await tab.load(url + (url.includes('?') ? '&' : '?') + 'stats');
+  await untilFull(tab, 0, 15000);
+  const fd = fs.openSync(fifo, 'w');
+  for (let t = 0; t < seconds * 10; t++) { fs.writeSync(fd, keys[t % keys.length]); await sleep(100); }
+  fs.closeSync(fd);
+  await sleep(1000);
+  return tab.eval(`({ tiles: tmax, used: tbytes, arena: tilesEnd - tilesAt, cols, rows, cw, ch,
+                      dpr: devicePixelRatio, w: innerWidth, h: innerHeight })`);
+}
+
 // Messages arriving after the page was visible again, until none for 2 s.
 async function settle(tab, ms) {
   let last = -1, quiet = 0;
@@ -291,8 +324,10 @@ async function main(argv) {
     await tab.send('Page.addScriptToEvaluateOnNewDocument', { source: HOOK });
     let r;
     if (mode === 'fulls') r = await fulls(tab, url, +argv[3] || 10);
+    else if (mode === 'load') r = await pageload(tab, url, +argv[3] || 10);
+    else if (mode === 'arena') r = await arena(tab, url, argv[3], argv[4], +argv[5] || 30);
     else if (mode === 'lock' || mode === 'away') r = await lock(tab, url, argv[3], argv[4], +argv[5] || 15, mode === 'away');
-    else throw new Error('mode: fulls, lock, away or wake');
+    else throw new Error('mode: fulls, load, arena, lock, away or wake');
     console.log(JSON.stringify(r));
   } finally {
     await tab.close();

@@ -328,6 +328,21 @@ agent's, measured with tools/embed.sh's own cut unless marked an estimate.
 **Timed 2026-10-23** (the user's go; `tools/pagebench.sh`, three runs each page, alternating;
 docs/PERFORMANCE.md, *The phone page*): decode 4.1-4.2 µs to 0.8-1.7 a frame (pan 33.3 to 24.6),
 present a little less, and `carry`'s and `pan`'s pixels a frame fewer (165,367 to 159,742;
-1,045,987 to 1,037,361): the clears that forced a full repaint are gone. Not measured: a FULL's
-time with the page compressed, on the phone (the phone is not part of this go).
+1,045,987 to 1,037,361): the clears that forced a full repaint are gone.
+
+**On the user's phone (2026-10-23, Pixel 8 Pro, Android 17, Chrome 156; `tools/phonecheck.sh`
+ONLY=load and ONLY=arena, new modes):**
+- *The page compressed*, over the Wi-Fi (11ax, 5 GHz, RSSI -59), 30 loads each, the old binary
+  (raw) and the new (gzip) alternating: 12,116 bytes over the wire against 5,834; the response
+  10.1 ms against 10.3 (median), the load event 30.2 against 30.9 ms, the first FULL 73.8 ms
+  (60.1-207.9) against 78.2 (60.0-305.3) after the navigation began. No time saved: both
+  already arrive in TCP's first flight, which the 12 KB rule was for; the 4 ms is within the
+  loads' spread (noise, by the ranges; not proven). What compression bought is bytes: about
+  6.5 KB of the budget freed.
+- *The tile arena* (item 6), over USB, 20 s of panning a 512x512 walled map with a crowd:
+  **203 tiles at the most**, 25,984 bytes of the 524,288 the arena had, at 200x50 and at
+  400x170 alike. The phone was upright (448x843 CSS px at 2.25), so cells were the minimum,
+  4x8 px, and the arena was its 4,096 tiles' worth at that size; held sideways, cells and the
+  arena are larger and the tile count is not expected to change (it is the distinct glyphs in
+  their colors on the screen; not measured sideways). The size is the user's decision.
 
