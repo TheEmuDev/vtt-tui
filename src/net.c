@@ -168,8 +168,7 @@ int net_start(Net *n, uint16_t port, const Renderer *r, char *err, size_t errsz)
     n->total_bytes = 0;
     n->dropped     = 0;
     n->idle_dropped = 0;
-    make_code(n->code);
-    n->wrong = 0; n->wrong_since = 0; n->nknown = 0;    /* a new code: who knew the old one is no one */
+    make_code(n->code);                 /* a new code: who knew the old one is no one (net_stop's net_init cleared Net.known) */
     wire_enc_init(&n->enc, NET_FRAME_CAP);
 
     /* All the memory the server will ever use, up front. */
@@ -709,15 +708,19 @@ static const char *header_value(const char *req, const char *name, char *out, si
 static int code_check(Net *n, const NetClient *c, const char *given, uint64_t now_ms)
 {
     if (c->local) return 1;
-    if (now_ms - n->wrong_since >= NET_WRONG_MS) { n->wrong = 0; n->wrong_since = now_ms; }
+    if (now_ms - n->wrong_since >= NET_WRONG_MS) { n->wrong = 0; n->nwrong_by = 0; n->wrong_since = now_ms; }
     int known = 0;
     for (int k = 0; k < n->nknown; k++) known |= n->known[k] == c->addr;
-    if (!known && n->wrong >= NET_WRONG_MAX) return -1;
+    int by = -1;
+    for (int k = 0; k < n->nwrong_by; k++) if (n->wrong_by[k].addr == c->addr) by = k;
+    if (!known && (n->wrong >= NET_WRONG_MAX || (by >= 0 && n->wrong_by[by].n >= NET_WRONG_ADDR))) return -1;
     if (strcmp(given, n->code) == 0) {
         if (!known && n->nknown < NET_KNOWN_MAX) n->known[n->nknown++] = c->addr;
         return 1;
     }
     n->wrong++;
+    if (by < 0 && n->nwrong_by < NET_WRONG_ADDRS) { by = n->nwrong_by++; n->wrong_by[by].addr = c->addr; n->wrong_by[by].n = 0; }
+    if (by >= 0) n->wrong_by[by].n++;
     return 0;
 }
 
@@ -735,6 +738,23 @@ static void code_form(Net *n, int i, int status, const char *say, uint64_t now_m
     http_respond(n, i, status, "text/html; charset=utf-8", body, (size_t)bl, now_ms);
 }
 
+/* Does an Accept-Encoding value take gzip? A `gzip` token whose q is not 0
+ * (RFC 9110: q=0 is "not acceptable"); `x-gzip` and `*` are not asked for. */
+static int accepts_gzip(const char *v)
+{
+    for (const char *t = v; *t; ) {
+        while (*t == ' ' || *t == ',') t++;
+        size_t tl = strcspn(t, ",");
+        if (!strncasecmp(t, "gzip", 4) && (tl == 4 || t[4] == ';' || t[4] == ' ')) {
+            const char *q = strstr(t, "q=");
+            if (!q || q >= t + tl) return 1;
+            return strtod(q + 2, NULL) > 0;
+        }
+        t += tl;
+    }
+    return 0;
+}
+
 static void http_request(Net *n, int i, uint64_t now_ms)
 {
     NetClient *c = &n->cl[i];
@@ -749,20 +769,14 @@ static void http_request(Net *n, int i, uint64_t now_ms)
     char code[NET_CODE_LEN + 1] = "";
     int  given = query_code(target, code);
     int  ok    = c->local ? 1 : given ? code_check(n, c, code, now_ms) : 0;
-    if (ok != 1) {
-        int page = strcmp(target, "/") == 0 || strncmp(target, "/?", 2) == 0;
-        if (!page) http_respond(n, i, 403, "text/plain", "vtt: this needs the join code from the GM's screen\n", 52, now_ms);
-        else if (ok < 0) code_form(n, i, 429, "Too many wrong codes just now: try again in a minute.", now_ms);
-        else if (given)  code_form(n, i, 403, "That is not this table's code. The join code from the GM's screen:", now_ms);
-        else             code_form(n, i, 403, "The join code from the GM's screen:", now_ms);
-        return;
-    }
-
+    int  page  = strcmp(target, "/") == 0 || strncmp(target, "/?", 2) == 0;
     char upgrade[32], key[64];
-    if (strncmp(target, "/ws", 3) == 0 &&
-        header_value((char *)c->in, "Upgrade", upgrade, sizeof upgrade) &&
-        strcasecmp(upgrade, "websocket") == 0 &&
-        header_value((char *)c->in, "Sec-WebSocket-Key", key, sizeof key)) {
+    int  ws    = strncmp(target, "/ws", 3) == 0 &&
+                 header_value((char *)c->in, "Upgrade", upgrade, sizeof upgrade) &&
+                 strcasecmp(upgrade, "websocket") == 0 &&
+                 header_value((char *)c->in, "Sec-WebSocket-Key", key, sizeof key);
+
+    if (ws) {
         char accept[32];
         net_ws_accept(key, accept);
         char hdr[256];
@@ -770,6 +784,17 @@ static void http_request(Net *n, int i, uint64_t now_ms)
                            "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n"
                            "Connection: Upgrade\r\nSec-WebSocket-Accept: %s\r\n\r\n", accept);
         if (client_queue(n, i, hdr, (size_t)hl) < 0) return;
+        if (ok != 1) {
+            /* Refused after the upgrade, with a close code of vtt's own, since a
+             * refused upgrade looks to the page like vtt away (1006) and it
+             * would retry for ever, each a wrong code: 4001 the code is not
+             * this table's (the page goes to the form), 4002 held back past
+             * the limit (the page tries again later). */
+            uint8_t cf[2 + 2] = { 0x88, 2, 0x0f, ok < 0 ? 0xa2 : 0xa1 };   /* 4001 = 0x0fa1, 4002 = 0x0fa2 */
+            if (client_queue(n, i, cf, sizeof cf) < 0) return;
+            if (client_flush(n, i, now_ms) == 0) client_close(n, i);
+            return;
+        }
         /* "n=Aria" in the query: who this phone says it is. A name that
          * does not pass is no name, not a refusal. */
         const char *q = strchr(target, '?');
@@ -785,11 +810,19 @@ static void http_request(Net *n, int i, uint64_t now_ms)
         return;
     }
 
-    if (strcmp(target, "/") == 0 || strncmp(target, "/?", 2) == 0) {
+    if (ok != 1) {
+        if (!page)       http_respond(n, i, 403, "text/plain", "vtt: this needs the join code from the GM's screen\n", 52, now_ms);
+        else if (ok < 0) code_form(n, i, 429, "Too many wrong codes just now: try again in a minute.", now_ms);
+        else if (given)  code_form(n, i, 403, "That is not this table's code. The join code from the GM's screen:", now_ms);
+        else             code_form(n, i, 403, "The join code from the GM's screen:", now_ms);
+        return;
+    }
+
+    if (page) {
         /* Compressed to a browser that takes it -- every browser over http;
          * the raw page to the rest (curl, the tests). */
         char enc[160];
-        int  gz = header_value((char *)c->in, "Accept-Encoding", enc, sizeof enc) && strstr(enc, "gzip");
+        int  gz = header_value((char *)c->in, "Accept-Encoding", enc, sizeof enc) && accepts_gzip(enc);
         if (gz) http_respond_x(n, i, 200, "text/html; charset=utf-8", WEBPAGE_GZ, WEBPAGE_GZ_LEN,
                                "Content-Encoding: gzip\r\nVary: Accept-Encoding\r\n", now_ms);
         else    http_respond_x(n, i, 200, "text/html; charset=utf-8", WEBPAGE, WEBPAGE_LEN, "Vary: Accept-Encoding\r\n", now_ms);

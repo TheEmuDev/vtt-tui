@@ -896,16 +896,27 @@ void test_net_server(void)
         phone_get(&n, 0x0a000005, page, resp, sizeof resp, now);
         CHECK(!strncmp(resp, "HTTP/1.1 200", 12));
 
-        CASE("past ten wrong codes in a minute no code is checked from an address not yet in; one that was is let in");
-        for (int k = 0; k < NET_WRONG_MAX - 1; k++) phone_get(&n, 0x0a000009, wrong, resp, sizeof resp, now);
-        CHECK(!strncmp(resp, "HTTP/1.1 403", 12));        /* ten wrong in all, the one above with them */
+        CASE("one address spends three wrong codes a minute, then is held back; the others are still checked");
+        for (int k = 0; k < NET_WRONG_ADDR; k++) phone_get(&n, 0x0a000009, wrong, resp, sizeof resp, now);
+        CHECK(!strncmp(resp, "HTTP/1.1 403", 12));        /* three wrong from it, each checked */
         phone_get(&n, 0x0a000009, wrong, resp, sizeof resp, now);
         CHECK(!strncmp(resp, "HTTP/1.1 429", 12) && strstr(resp, "try again in a minute"));
+        phone_get(&n, 0x0a000009, page, resp, sizeof resp, now);   /* even the right code, from it */
+        CHECK(!strncmp(resp, "HTTP/1.1 429", 12));
+        phone_get(&n, 0x0a00000a, wrong, resp, sizeof resp, now);  /* another address: checked */
+        CHECK(!strncmp(resp, "HTTP/1.1 403", 12));
+
+        CASE("past ten wrong codes a minute from all, no code is checked from an address not yet in; one that was is let in");
+        for (int k = 0; k < NET_WRONG_ADDR - 1; k++) phone_get(&n, 0x0a00000a, wrong, resp, sizeof resp, now);
+        for (int k = 0; k < NET_WRONG_ADDR; k++) phone_get(&n, 0x0a00000b, wrong, resp, sizeof resp, now);
+        CHECK_EQ(n.wrong, 10);                             /* 1 + 3 + 3 + 3 */
         phone_get(&n, 0x0a000007, page, resp, sizeof resp, now);   /* the right code, a new address */
         CHECK(!strncmp(resp, "HTTP/1.1 429", 12));
         phone_get(&n, 0x0a000005, page, resp, sizeof resp, now);   /* the player already in */
         CHECK(!strncmp(resp, "HTTP/1.1 200", 12));
         phone_get(&n, 0x0a000007, page, resp, sizeof resp, now + NET_WRONG_MS);   /* a minute on */
+        CHECK(!strncmp(resp, "HTTP/1.1 200", 12));
+        phone_get(&n, 0x0a000009, page, resp, sizeof resp, now + NET_WRONG_MS);   /* the capped one too */
         CHECK(!strncmp(resp, "HTTP/1.1 200", 12));
         n.wrong = 0;                                       /* the rest of the suite's phones */
     }
@@ -964,10 +975,69 @@ void test_net_server(void)
     CHECK_EQ(n.enc.npal, 0);
     CHECK(r.observer == NULL);
 
-    CASE("stop closes everything and can start again");
+    CASE("a refused code on /ws: the upgrade, then a close of vtt's own -- 4001 wrong, 4002 held back");
+    {
+        /* As a phone at an address: the upgrade and the close frame after it. */
+        uint8_t got[600];
+        size_t  gl = 0;
+#define WS_AS(A_, T_) do {                                                      \
+            int ph = net_connect(n.port);                                              \
+            net_pump(&n, now);                                                         \
+            for (int k = 0; k < n.ncl; k++)                                            \
+                if (n.cl[k].kind == CL_NEW) { n.cl[k].local = 0; n.cl[k].addr = (A_); }   \
+            char rq[400];                                                              \
+            snprintf(rq, sizeof rq, "GET %s HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\n"     \
+                     "Connection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"  \
+                     "Sec-WebSocket-Version: 13\r\n\r\n", (T_));                          \
+            if (write(ph, rq, strlen(rq)) < 0) { }                                     \
+            gl = 0;                                                                    \
+            for (int k = 0; k < 50; k++) {                                             \
+                net_pump(&n, now);                                                     \
+                struct pollfd pf = { ph, POLLIN, 0 };                                  \
+                if (poll(&pf, 1, 10) <= 0) continue;                                   \
+                ssize_t r1 = read(ph, got + gl, sizeof got - gl);                      \
+                if (r1 <= 0) break;                                                    \
+                gl += (size_t)r1;                                                      \
+            }                                                                          \
+            close(ph);                                                                 \
+        } while (0)
+        char wr[48];
+        snprintf(wr, sizeof wr, "/ws?k=%06d", (atoi(n.code) + 1) % 1000000);
+        int wrong0 = n.wrong;
+        WS_AS(0x0a000021, wr);
+        CHECK(gl > 4 && !memcmp(got, "HTTP/1.1 101", 12));
+        CHECK(gl >= 4 && got[gl - 4] == 0x88 && got[gl - 3] == 2 && got[gl - 2] == 0x0f && got[gl - 1] == 0xa1);
+        CHECK_EQ(n.wrong, wrong0 + 1);                     /* counted once: the page stops there */
+        n.wrong = NET_WRONG_MAX;                           /* the minute's spent */
+        WS_AS(0x0a000022, wr);
+        CHECK(gl >= 4 && got[gl - 4] == 0x88 && got[gl - 1] == 0xa2);
+        CHECK_EQ(n.wrong, NET_WRONG_MAX);                  /* held back: not counted */
+        n.wrong = 0;
+#undef WS_AS
+    }
+
+    CASE("a gzip with q=0 is not taken; gzip with a q is; identity alone is not");
+    {
+        static const char *const ae[] = { "gzip;q=0", "identity", "gzip;q=0.5, deflate", "deflate, GZIP" };
+        static const int want[] = { 0, 0, 1, 1 };
+        for (int t = 0; t < 4; t++) {
+            int g = net_connect(n.port);
+            char rq[200];
+            snprintf(rq, sizeof rq, "GET /?k=000000 HTTP/1.1\r\nHost: x\r\nAccept-Encoding: %s\r\n\r\n", ae[t]);
+            CHECK_EQ((int)write(g, rq, strlen(rq)), (int)strlen(rq));
+            read_until(&n, g, resp, sizeof resp, "\r\n\r\n", now);
+            if ((strstr(resp, "Content-Encoding: gzip") != NULL) != want[t]) { printf("    Accept-Encoding: %s\n", ae[t]); CHECK(0); }
+            close(g);
+        }
+    }
+
+    CASE("stop closes everything and can start again; a new code forgets who knew the old one");
+    CHECK(n.nknown > 0);
     net_stop(&n);
     CHECK_EQ(net_active(&n), 0);
     CHECK_EQ(net_start(&n, 0, &r, err, sizeof err), 0);
+    CHECK_EQ(n.nknown, 0);
+    CHECK_EQ(n.nwrong_by, 0);
     net_stop(&n);
     rnd_free(&r);
 }

@@ -299,7 +299,10 @@ function connect(){
   s.onmessage=e=>feed(new Uint8Array(e.data));
   /* 2 s, doubling to 30 s while vtt cannot be reached (the phone's battery);
    * being shown again still tries at once. */
-  s.onclose=()=>{status('disconnected · retrying');retry=setTimeout(connect,back);back=Math.min(back*2,30000)};
+  /* 4001: vtt refused the code -- a new one since the page was opened: to the
+   * form, rather than retrying a refused code (each a wrong one). */
+  s.onclose=e=>{if(e&&e.code===4001){status('the join code has changed');location.replace('/');return}
+    status('disconnected · retrying');retry=setTimeout(connect,back);back=Math.min(back*2,30000)};
   s.onerror=()=>s.close();
 }
 /* Now, not on the retry's timer: the old socket's handlers go first, so it

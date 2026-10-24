@@ -1049,8 +1049,9 @@ The page is served by vtt and needs no internet connection. It scales the map to
 and reconnects automatically. It cannot keep a phone's screen awake (browsers allow that only
 on secure pages), so give the phones a long screen timeout for play. The join code is new
 each time the server starts; the port is 7793 unless that is taken (then another), or the one
-`:serve 7777` names. After ten wrong codes in a minute the page stops taking codes for the rest
-of that minute, except from a phone that has already joined.
+`:serve 7777` names. After ten wrong codes in a minute (three at most from one device) the page
+stops taking codes for the rest of that minute, except from a phone that has already joined. A
+page left open after `:serve` was restarted has the old code: it goes back to asking for one.
 
 If the device cannot connect, check that the GM machine's firewall allows the port (allow
 7793, or the port `:serve PORT` names), and that

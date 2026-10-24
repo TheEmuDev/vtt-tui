@@ -1736,15 +1736,26 @@ What the page's own code costs a phone per frame, from `tools/pagebench.sh`: eac
 is played headless with `vtt --bench --bench-record`, which saves the stream a phone is
 sent, and the stream is replayed through the page as the binary serves it, in node, on a
 phone's screen (915×412 CSS pixels at 2.625, held sideways; `VIEW=` sets another). Median
-of three runs (`tools/median.py`), as above. Measured 2026-10-04, after the bands, the quiet
-status line and the SIMD copy loop (docs/PAGESPEED.md).
+of three runs (`tools/median.py`), as above. Measured 2026-10-23, after the page plan's items
+1-6 (docs/REMOTE.md, *The page revisited*), against the page before them (aee6d84's), the two
+alternating, three runs each, the machine to itself.
+Machine: Intel Core i7-8700K @ 3.70GHz (6 cores, 12 threads, 4.7 GHz max, powersave governor), 16 GB RAM, Samsung SSD 860 EVO 1TB (btrfs), Linux 7.2.8-9-omarchy, gcc 16.2.1, node v26.12.0
 
 | scenario             | frames |   decode |  present |     copy | px/frame |
 |----------------------|--------|----------|----------|----------|----------|
-| cursor walk          |   1610 |    9.4us |   19.2us |   16.3us |    20893 |
-| cursor, walls        |   1610 |    7.7us |   33.7us |   31.4us |    83859 |
-| carry                |   2400 |    6.7us |   53.4us |   51.1us |   165367 |
-| pan 200x200          |    410 |   52.4us |  515.2us |  501.6us |  1045987 |
+| cursor walk          |   1610 |    0.8us |    9.9us |    8.8us |    20893 |
+| cursor, walls        |   1610 |    0.8us |   20.3us |   18.6us |    83859 |
+| carry                |   2400 |    1.7us |   32.4us |   30.8us |   159742 |
+| pan 200x200          |    410 |   24.6us |  348.4us |  342.1us |  1037361 |
+
+The page before them, the same day: decode 4.2, 4.1, 4.1 and 33.3 µs; present 9.9, 22.0, 35.8
+and 357.6 µs; px/frame 20,893, 83,859, 165,367 and 1,045,987. **Decode is a quarter to three
+quarters less:** `feed()` makes no `DataView` a message, and a palette record clears the tiles
+only when a color a tile was drawn with changed (the old page cleared them for every record,
+so a new color mid-session meant every tile drawn again). **`carry` and `pan` push fewer
+pixels:** those clears forced a full repaint. The 2026-10-04 table (cursor walk 9.4 µs decode,
+19.2 present; pan 52.4 and 515.2) is not comparable to these: the old page runs faster today
+too (4.2 and 9.9), so node or the machine moved in between (not checked which).
 
 `decode` is `feed()`, the records into the cell arrays; `present` puts the frame together,
 nearly all of it `copy` (`blitRow`: glyph tiles copied into the framebuffer by the
@@ -1754,8 +1765,8 @@ real browser: on a cursor step over a busy 120×40 map in Chrome the push was 39
 684 µs frame, and the status line's HTML 121 µs (docs/PAGESPEED.md has the measurements
 and the plan they led to).
 
-**The page is not slow to decode.** 9 µs for a cursor step, 57 µs for a frame that redraws
-nearly everything. The copy loop and the push to the canvas are where a frame goes.
+**The page is not slow to decode.** Under 1 µs for a cursor step, 25 µs for a frame that
+redraws nearly everything (2026-10-23). The copy loop and the push to the canvas are where a frame goes.
 
 **A cursor step pushes about five rows.** Its dirty rows -- the column letters, the three
 round the cursor, the status line -- span the screen top to bottom; until 2026-10-04 the

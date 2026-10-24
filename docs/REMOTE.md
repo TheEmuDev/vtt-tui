@@ -22,7 +22,7 @@ measured against them.
 | client memory | one cell buffer plus one glyph atlas, both allocated once |
 | client, per keystroke frame | 0.5 ms on a mid-range phone; a full 200×50 frame in 5 ms |
 | latency added by our code | one write per frame per client, sent the moment the GM's frame is |
-| the phone's resources | a rule (the user, 2026-10-22): the page spends the phone's CPU, memory and battery only on what the players see, so they get the best experience we can give. Nothing runs on a timer or a loop of its own while the screen is still (today every timer starts from an event -- a frame, a resize, a close -- except that while vtt cannot be reached the page retries every 2 s without end: a backoff is in the page plan, docs/V2.md *Next*); a feature that costs the phone idle work (HEALTH B16's video stand-in measured 2.5-3x Chrome's idle CPU in one run each) needs that cost measured first and is weighed against this rule |
+| the phone's resources | a rule (the user, 2026-10-22): the page spends the phone's CPU, memory and battery only on what the players see, so they get the best experience we can give. Nothing runs on a timer or a loop of its own while the screen is still (today every timer starts from an event -- a frame, a resize, a close -- and while vtt cannot be reached the page retries at 2 s doubling to 30 s); a feature that costs the phone idle work (HEALTH B16's video stand-in measured 2.5-3x Chrome's idle CPU in one run each) needs that cost measured first and is weighed against this rule |
 
 ## Shape
 
@@ -299,8 +299,16 @@ agent's, measured with tools/embed.sh's own cut unless marked an estimate.
    unchecked. Built: past 10 wrong codes in a minute, from any address, no code is checked
    for the rest of the minute (429, "try again in a minute"), except from an address that has
    given the right code since the server started (`Net.known`, 16): the players in are never
-   locked out, and a new one waits at most a minute while someone guesses. A watcher's hello
-   goes through the same `code_check`. **The port:** `:serve`, `--serve` and `:watch`'s own
+   locked out. **After its review:** no one address spends more than 3 of the 10 (its further
+   codes held back, uncounted); and a refused code on `/ws` gets the upgrade and then a close
+   of vtt's own -- 4001 not this table's code, 4002 held back -- since a refused upgrade looked
+   to the page like vtt away and it retried for ever, each a wrong code: a page left open
+   through a restart (a new code) spent the minute's ten in two tabs and kept new players out
+   for good. On 4001 the page goes to the form and stops; on 4002 it retries as before. What
+   holds: one guesser, or one stale page, cannot keep anyone out; four addresses guessing
+   without stop can keep new addresses out for as long as they keep going (the players
+   already in are let in all the while). A watcher's hello goes through the same
+   `code_check`. **The port:** `:serve`, `--serve` and `:watch`'s own
    server take 7793 (`NET_DEFAULT_PORT`), another when it is taken; `VTT_SERVE_PORT` overrides
    it, and the tests set it to 0 (run.c's main and both sandboxes), so no suite takes the port
    the user's vtt may want. Suite `netserver`: the form both ways, the limit, a right code from
@@ -317,6 +325,9 @@ agent's, measured with tools/embed.sh's own cut unless marked an estimate.
 6. **The arena's high-water mark:** the most tiles held and arena bytes used, shown with
    `&stats` (`tiles N, U of A KB`). Its size is the user's decision once a phone has shown it.
 
-Not yet measured: the before-and-after timings items 1 and 5 call for (`tools/pagebench.sh`),
-and the time of a FULL with the page compressed on the phone: they wait on the user's go.
+**Timed 2026-10-23** (the user's go; `tools/pagebench.sh`, three runs each page, alternating;
+docs/PERFORMANCE.md, *The phone page*): decode 4.1-4.2 µs to 0.8-1.7 a frame (pan 33.3 to 24.6),
+present a little less, and `carry`'s and `pan`'s pixels a frame fewer (165,367 to 159,742;
+1,045,987 to 1,037,361): the clears that forced a full repaint are gone. Not measured: a FULL's
+time with the page compressed, on the phone (the phone is not part of this go).
 

@@ -35,11 +35,16 @@ function world() {
       this.readyState = 2;
       later(() => { this.readyState = 3; if (was === 0 && this.onerror) this.onerror({}); if (this.onclose) this.onclose({ code: 1006 }); });
     }
+    // The server closing an opened socket with a code of its own (4001: the code refused).
+    refuse(code) {
+      this.readyState = 3;
+      later(() => { if (this.onclose) this.onclose({ code }); });
+    }
   }
   // A socket's own event, a turn later: not a timer of the page's.
   function later(f) { const id = nextId++; timers.set(id, { at: now, f, event: true }); }
   const env = {
-    WebSocket, document: doc, location: { protocol: 'http:', host: 'h:7793', search: '?k=123456' },
+    WebSocket, document: doc, location: { protocol: 'http:', host: 'h:7793', search: '?k=123456', replace(u) { w.went = u; } },
     URLSearchParams, encodeURIComponent, me: null, ws: null, retry: null, back: 2000,
     status(m) { w.status = m; },
     feed() {},
@@ -86,8 +91,10 @@ async function step(w, name) {
   const live = w.live();
   check(live.length <= 1, name + ': one live socket at most, ' + live.length);
   check(live.length === 0 || w.pending() === 0, name + ': no retry pending while a socket lives');
-  // Never given up: a socket lives or a retry is coming.
-  check(live.length + w.pending() === 1, name + ': a socket or a retry, ' + live.length + '+' + w.pending());
+  // Never given up: a socket lives or a retry is coming -- unless the page has
+  // gone to the join form (its code refused), with neither left behind.
+  if (w.went) check(live.length + w.pending() === 0, name + ': gone to the form, nothing left trying');
+  else check(live.length + w.pending() === 1, name + ': a socket or a retry, ' + live.length + '+' + w.pending());
   const ws = w.env.ws;
   if (!w.doc.hidden && ws && ws.readyState === 1) check(w.held() >= 1, name + ': visible and open, a lock held');
 }
@@ -172,6 +179,21 @@ async function main() {
     w.tick(1900); const early = w.sockets.length;
     w.tick(200); await step(w, 'G retry');
     check(early === n && w.sockets.length === n + 1, 'G: after a connection the first retry is at 2 s again, ' + (early - n) + ' then ' + (w.sockets.length - n));
+  }
+  { // H: vtt refuses the code (started again since the page was opened, a new code):
+    // the page goes to the join form and stops trying, so a stale page spends
+    // one wrong code, not one each retry (docs/REMOTE.md, *As built*, item 3)
+    const w = world();
+    w.open(w.sockets[0]); await step(w, 'H up');
+    w.sockets[0].refuse(4001); w.tick(0); await step(w, 'H refused');
+    check(w.went === '/' && w.pending() === 0, 'H: to the form, no retry, ' + w.went + ' ' + w.pending());
+    w.tick(120000); await step(w, 'H later');
+    check(w.sockets.length === 1, 'H: no socket after, ' + w.sockets.length);
+  }
+  { // I: any other close (4002: held back past the wrong-code limit) is retried as before
+    const w = world();
+    w.open(w.sockets[0]); w.sockets[0].refuse(4002); w.tick(0); await step(w, 'I closed');
+    check(!w.went && w.pending() === 1, 'I: a retry pending, no form');
   }
   console.log(failed ? failed + ' of ' + checks + ' checks failed' : 'verified ' + checks + ' checks');
   process.exit(failed ? 1 : 0);

@@ -139,8 +139,10 @@ Each frame, after the GM's is drawn, `app_frame` makes the players' -- only in p
   six-digit join code from /dev/urandom, the address shown as `http://IP:PORT/?k=CODE`.
 - A connection's first bytes decide its kind: `GET ` is HTTP, `VTT1` a raw watcher. HTTP
   (`http_request`) serves the page (`/` and `/?...`, from src/webpage.c, embedded from
-  web/index.html), upgrades `/ws` to a WebSocket, and refuses with 403 any request from off
-  this machine without the join code. A `n=` in the address is the phone's name, cleaned by
+  web/index.html; gzip to a browser that takes it), upgrades `/ws` to a WebSocket, and from off
+  this machine asks for the join code: the page's address gets a small form (403, or 429 past
+  the wrong-code limit), `/ws` a close of its own (4001, 4002), the rest a plain 403; every
+  code is judged by `code_check`. A `n=` in the address is the phone's name, cleaned by
   `net_name_clean`.
 - The frame goes out as records (wire.c): `F` a whole picture's header, `R` a run of cells
   with their colors, `P` a palette entry, `E` the end of a frame, `Z` a keepalive, and three

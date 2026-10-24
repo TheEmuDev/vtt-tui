@@ -41,7 +41,7 @@
 #define NET_SNDBUF      (128 * 1024)
 #define NET_CODE_LEN    6
 /* Wrong join codes (docs/REMOTE.md, *The page revisited*, item 3): past
- * NET_WRONG_MAX in a minute, from any address, no code is checked for the
+ * NET_WRONG_MAX in a minute, from all addresses, no code is checked for the
  * rest of that minute -- a right one included, or the limit would only slow a
  * guesser, never stop one -- except from an address that has given the right
  * code since the server started (NET_KNOWN_MAX of them), so the players
@@ -49,6 +49,11 @@
 #define NET_WRONG_MAX   10
 #define NET_WRONG_MS    60000
 #define NET_KNOWN_MAX   16
+/* And no one address spends more than NET_WRONG_ADDR of them (its further
+ * codes held back, uncounted): one guesser, or one stale page, cannot keep
+ * the rest out; it takes four addresses guessing to (docs/REMOTE.md). */
+#define NET_WRONG_ADDR  3
+#define NET_WRONG_ADDRS 16
 /* The port :serve and --serve take when none is given, so a player can keep
  * the address; another when it is taken. VTT_SERVE_PORT overrides it (the
  * tests' sandbox sets 0: a port of their own each time). */
@@ -125,6 +130,8 @@ typedef struct {
     int       wrong;         /* wrong codes since wrong_since (NET_WRONG_MAX) */
     uint64_t  wrong_since;
     uint32_t  known[NET_KNOWN_MAX];   /* addresses that gave the right code */
+    struct { uint32_t addr; int n; } wrong_by[NET_WRONG_ADDRS];   /* this minute's, by address */
+    int       nwrong_by;
     int       nknown;
 
     NetClient cl[NET_MAX_CLIENTS];
