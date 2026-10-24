@@ -119,7 +119,8 @@ GM's things*; here, nobody else either). The file never leaves the machine.
 
 Step 8 owns the session log and the agent's spawner (V2.md, *Build order*), so this part is
 built with it: the counters are three ints and a small table on `Job`, counted where
-`host_refused` is called today.
+`host_refused` is called today. How it is built, and one change to the join put to the user:
+V2.md, *Step 8, the session log and the job record: the plan* (S5, question 4; 2026-10-24).
 
 ### 3. `tools/agentreport`
 
