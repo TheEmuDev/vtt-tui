@@ -363,6 +363,9 @@ passed with the sections too: $0.086 in 8 turns then, $0.060 in 9 now. By §4's 
 no task that passed fails (addroom and cull, the baseline's two, pass again). N = 1 each side:
 a single run says little of a task's spread; N = 3 is the plan's for a change to the texts.
 
+**After the review's fixes (2026-10-23, `runs/2026-10-23-2137*`..`2140*`): 12 of 12 again**,
+$0.739 in all (cache writes 123,946, output 13,442), $0.054-0.070 a task.
+
 ## Order
 
 The user's order (ROADMAP 27, V2.md *Next*): step 7 is built next. Then part 1's runner and

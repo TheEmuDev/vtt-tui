@@ -1,0 +1,3 @@
+An orc barracks: a long bunk room (Bunks) 12 by 5, a mess hall (Mess) north of it, and the captain's quarters (Captain) east of the mess. Bunks and Mess share a wall with a door in it; the captain's room is down a corridor from the mess. Four orcs in the bunks, the orc captain in his quarters.
+
+Make the map as map.vtt in the current directory, 40x24 squares (it is not there yet).

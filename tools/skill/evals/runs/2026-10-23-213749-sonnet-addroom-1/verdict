@@ -1,0 +1,12 @@
+pass: check clean
+pass: reachable all
+pass: area Store
+pass: areas == 3
+pass: joined Hall Store
+pass: creature rat in Store
+pass: creature Aria
+pass: creature Bran
+pass: creature Cook
+pass: creatures == 4
+pass: refusals <= 2
+11 of 11 facts

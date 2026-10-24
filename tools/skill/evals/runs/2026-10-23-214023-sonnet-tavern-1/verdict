@@ -1,0 +1,11 @@
+pass: check clean
+pass: reachable all
+pass: area Common
+pass: area Kitchen
+pass: area Stable
+pass: door Common Kitchen
+pass: joined Common Stable
+pass: creatures thug == 3
+pass: creature thug in Common
+pass: refusals <= 2
+10 of 10 facts

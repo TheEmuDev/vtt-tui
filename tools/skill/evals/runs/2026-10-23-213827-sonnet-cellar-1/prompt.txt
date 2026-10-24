@@ -1,0 +1,3 @@
+A farmhouse with a cellar under it, on one map: the house is one room (House), the cellar (Cellar) is reached by a trapdoor from the house. Two giant spiders in the cellar.
+
+Make the map as map.vtt in the current directory, 40x24 squares (it is not there yet).

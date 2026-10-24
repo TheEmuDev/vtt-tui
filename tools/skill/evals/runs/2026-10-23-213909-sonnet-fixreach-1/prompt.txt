@@ -1,0 +1,3 @@
+vtt's check says one of the rooms on this map can't be reached. Fix it so the party can get in -- don't remove anything.
+
+The map is map.vtt, in the current directory.

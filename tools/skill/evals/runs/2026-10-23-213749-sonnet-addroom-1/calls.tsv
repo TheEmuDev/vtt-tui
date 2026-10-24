@@ -1,0 +1,7 @@
+0	2763	-	--agent-guide
+0	11121	-	--agent-guide plan
+0	530	-	map.vtt --describe
+0	1128	-	map.vtt --dump-map
+0	39	-	map.vtt --apply plan.txt
+0	12	-	map.vtt --check
+0	997	-	map.vtt --dump-map --region A2:L14

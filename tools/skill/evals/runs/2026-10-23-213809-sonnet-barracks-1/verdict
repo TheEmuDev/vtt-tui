@@ -1,0 +1,11 @@
+pass: check clean
+pass: reachable all
+pass: area Bunks
+pass: area Mess
+pass: area Captain
+pass: door Bunks Mess
+pass: joined Mess Captain
+pass: creatures orc == 5
+pass: creature captain in Captain
+pass: refusals <= 2
+10 of 10 facts
