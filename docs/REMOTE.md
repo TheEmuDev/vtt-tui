@@ -61,7 +61,7 @@ measured against them.
   falls behind*): with the screen off it is caught up as built; behind the home screen,
   Android's Chrome closes the socket within about 5 s; the page makes a fresh socket as it is
   shown again, open within 32-72 ms (5 s before: HEALTH.md B15, closed).
-- **The watcher is `vtt --watch host:port`**: the same decoder painting into
+- **The watcher is `vtt --watch host:port`** (`host:port?k=code` from another machine: only a loopback watcher needs no code): the same decoder painting into
   the same renderer, at the GM's size, centered or clipped. `q` closes it.
 - **Access.** LAN only, a join code in the URL, at most eight clients,
   a request-size limit. No TLS, deliberately.
@@ -88,7 +88,7 @@ measured against them.
 | `:serve off` | close it and drop every client |
 | `:mirror` | serve if needed, then open a detached terminal window running the watcher, via `$TERMINAL` |
 | `:player preview` | the players' frame on the GM's own screen; `q` returns |
-| `vtt --watch host:port` | the watcher, for scripts, tests and other machines |
+| `vtt --watch host:port` | the watcher, for scripts and tests on the same machine; from another machine `host:port?k=code` |
 
 ## Instrumentation
 

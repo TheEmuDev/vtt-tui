@@ -454,14 +454,27 @@ void test_docs(void)
             CHECK(t != NULL);
             if (t && !strstr(t, port)) { printf("  %s does not say port %s\n", PORT_DOCS[i], port); CHECK(0); }
             /* And no stale copy beside it: every "port N" and ":N" (an
-             * address's port; 4-5 digits) is this one. `:serve 7777`, a port
-             * the GM names, is neither form. */
+             * address's port; 4-5 digits) is this one, but for two that are
+             * not the default: a file's line (`net.c:1050`, letters after a
+             * dot before the colon; a host here ends in digits or is `host`)
+             * and a port the doc itself has the GM name (`:serve 7777`). The
+             * bare copies ("the port is 7793") are not read: CODEMAP's facts
+             * row says *none* for them. */
             for (const char *p = t; p && *p; p++) {
                 const char *d = !strncmp(p, "port ", 5) ? p + 5 : *p == ':' ? p + 1 : NULL;
                 if (!d) continue;
                 size_t n = 0;
                 while (isdigit((unsigned char)d[n])) n++;
                 if (n < 4 || n > 5 || isalnum((unsigned char)d[n])) continue;
+                if (*p == ':') {
+                    const char *b = p;
+                    while (b > t && isalpha((unsigned char)b[-1])) b--;
+                    if (b < p && b > t && b[-1] == '.') continue;
+                }
+                char named[24];
+                snprintf(named, sizeof named, ":serve %.*s", (int)n, d);
+                const char *s = strstr(t, named);
+                if (s && !isdigit((unsigned char)s[strlen(named)])) continue;
                 if (n != strlen(port) || strncmp(d, port, n)) {
                     printf("  %s says %.*s, the default port is %s\n", PORT_DOCS[i], (int)(d - p) + (int)n, p, port);
                     CHECK(0);
