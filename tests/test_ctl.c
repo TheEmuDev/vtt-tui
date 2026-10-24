@@ -135,7 +135,7 @@ void test_ctl(void)
     CHECK(ctl_refused(t, "usage", 1) && strstr(t, "yaml is not a square"));
     free(t);
     t = ctl_ask(&a, "frobnicate\n");
-    CHECK_EQ(strcmp(t, "error usage: line 1: unknown request frobnicate\n"), 0);
+    CHECK_EQ(strcmp(t, "error usage: line 1: unknown request frobnicate - help lists them\n"), 0);
     free(t);
     t = ctl_ask(&a, "status now\n");
     CHECK(strncmp(t, "error usage: line 1: status takes nothing", 41) == 0);
@@ -2310,6 +2310,15 @@ void test_ctl_table(void)
         t = ctl_ask(&a, "token move Nobody C3");
         CHECK(t && !strncmp(t, "error ", 6) && !strstr(t, "(help "));
         free(t);
+        t = ctl_ask(&a, "help a b");                       /* its own words name help: no second */
+        CHECK(t && ctl_refused(t, "usage", 1) && !strstr(t, "(help help)"));
+        free(t);
+        t = ctl_ask(&a, "frob B2");                        /* no such request: help lists them */
+        CHECK(t && ctl_refused(t, "usage", 1) && strstr(t, "help lists them"));
+        free(t);
+        t = ctl_ask(&a, "link A1 to crypt.vtt Entrance");  /* the file's name, not the map's */
+        CHECK(t && ctl_refused(t, "usage", 1) && strstr(t, "without .vtt"));
+        free(t);
     }
 
     CASE("help lists every request; help VERB says how one is written; an unknown one is refused");
@@ -3633,7 +3642,7 @@ void test_agent_guide(void)
     CASE("the embedded guide is docs/AGENTS.md byte for byte (run tools/embed.sh)");
     CHECK_EQ(AGENT_GUIDE_LEN, dl);
     CHECK(AGENT_GUIDE_LEN == dl && !memcmp(AGENT_GUIDE, doc, dl));
-    CHECK(strstr(doc, "`vtt --agent-guide plan`") != NULL);
+    CHECK(strstr(doc, "`vtt --agent-guide limits`") != NULL);
 
     CASE("the guide's parts: the opening and the sections cover it exactly");
     GuidePart open, sec[32];
@@ -3722,6 +3731,16 @@ void test_agent_guide(void)
     }
     free(core);
 
+    CASE("a request's rules read as a sentence after its line of what it does");
+    {
+        char *h = NULL; size_t hl = 0;
+        FILE *f = open_memstream(&h, &hl);
+        request_help_verb(f, "corridor");
+        fclose(f);
+        CHECK(strstr(h, "opening at each end. Straight when"));
+        free(h);
+    }
+
     CASE("the limits the guide gives are the code's");
     {
         char *g = NULL; size_t gl = 0;
@@ -3759,6 +3778,11 @@ void test_agent_guide(void)
         CHECK(n == al && got && !memcmp(got, all, al));
         free(got);
         free(all);
+        p = popen("./vtt --agent-guide --x 2>&1", "r");   /* a flag after it is no topic: the core */
+        char head[32] = "";
+        if (p && fgets(head, sizeof head, p)) { }
+        CHECK_EQ(p ? WEXITSTATUS(pclose(p)) : -1, 0);
+        CHECK(!strncmp(head, "# vtt for agents", 16));
         p = popen("./vtt --help", "r");
         help = calloc(1, 16384);
         if (p && help) fread(help, 1, 16383, p);

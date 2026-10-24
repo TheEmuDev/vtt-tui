@@ -5,7 +5,5 @@ description: Build or change maps for vtt, the terminal virtual tabletop -- enco
 
 # vtt: maps for a GM
 
-Run `vtt --agent-guide` first, every session: it is the guide of the vtt installed, says how
-to start, and names the one topic to read next (`vtt --agent-guide plan` for a map or a file,
-`vtt --agent-guide live` for the GM's open session). Run each `vtt` command on its own, with
-no shell around it.
+Run `vtt --agent-guide` first, every session, and do what it says: it is the guide of the vtt
+installed, and it names what to read next.

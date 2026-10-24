@@ -85,8 +85,8 @@ void app_agent_prompt(const App *a, const Job *j, FILE *out)
     fputs(".\n    ", out);
     sh_quote(out, vtt); fprintf(out, "%s 'help token'\n", call);
     fputs("    how one of them is written; help alone lists every request.\n", out);
-    sh_quote(out, vtt); fputs(" --agent-guide\n", out);
-    fputs("    the whole guide for agents: rooms, corridors, creatures, links, the file format.\n"
+    sh_quote(out, vtt); fputs(" --agent-guide live\n", out);
+    fputs("    the guide for this work, in one call: every request with its rules, building a map, the live steps.\n"
           "Propose once, read it back, then stop. The verdict is the GM's; feedback starts you again with this job.\n", out);
 }
 

@@ -51,6 +51,8 @@ tool sends a channel request as `job-N`; the job's text shows shell lines -- sen
 request part; take the job, read the box, propose once, read it back, then end your turn
 with one line for the GM; never `wait`), then the agents' guide itself, `AGENT_GUIDE` (item
 25: the guide of this binary, 35 KB, about 10k tokens), with a cache breakpoint after it.
+(Since 2026-10-23 that block is the guide's `live` topic, about 16 KB: docs/AGENTLOOP.md, *The
+guide redesigned*.)
 The tool list and the system prompt never change within a run or between runs of one vtt,
 so the guide is written to the cache once and read from it on every later call.
 
@@ -366,7 +368,7 @@ The work is the network's and the model's: a call is seconds; nothing local come
 |---|---|---|---|
 | `:agent claude` typed | a `stat` of the key file (0.9 µs) and a search of `PATH` for curl (a `stat` a directory, about ten) | the same, then `:agent command`'s path | none |
 | starting the run | `:agent command`'s: one `fork` and `exec` (92.5 µs at p50, PERFORMANCE.md) | unchanged | none |
-| a call, locally | writing the request: its bytes (the guide 35 KB, the history up to a few hundred KB) at memory speed, tens of µs; reading the answer, under 100 KB | the same, plus one `fork`/`exec` of curl (about 1-2 ms) and curl's TLS handshake (about 100 ms on the network) | the handshake, once a call: no connection is kept between calls because each is its own curl. About 1 s over a job of eight calls against 30-90 s of model time; accepted. A long-lived helper holding the connection is the fix, if the live check says it matters |
+| a call, locally | writing the request: its bytes (the guide 35 KB -- its live topic, about 16 KB, since 2026-10-23 -- the history up to a few hundred KB) at memory speed, tens of µs; reading the answer, under 100 KB | the same, plus one `fork`/`exec` of curl (about 1-2 ms) and curl's TLS handshake (about 100 ms on the network) | the handshake, once a call: no connection is kept between calls because each is its own curl. About 1 s over a job of eight calls against 30-90 s of model time; accepted. A long-lived helper holding the connection is the fix, if the live check says it matters |
 | a call, in tokens | the guide read from the cache (11k tokens at 0.05x), the history read from the cache, only the newest turn written | that | measured: the cache's share of input tokens per call goes in the usage log and the table below |
 | the channel's work for the agent | as for any agent's requests | unchanged | none |
 | the Options screen drawn | its dozen rows: a few hundred bytes to the terminal | a list drawn as the menu is | none; a `PROF_ZONE` and a `tools/perf.sh` scenario, as every new drawing path gets |

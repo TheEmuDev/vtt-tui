@@ -16,7 +16,8 @@ enemies, 1-3 squares wide), notes the players never see, and fog.
   yet). It is safe on a map the GM has open: it goes to the GM as a proposal instead.
 - **Live** -- the GM has the map open and typed `:agent on`: `vtt --ctl` with the request on
   stdin or as one argument; each change is a proposal the GM reviews. `vtt --ctl status`
-  says which (exit 2: no vtt is taking requests -- use a plan).
+  says which (exit 2: no vtt is taking requests -- use a plan; or a list of vtts listening:
+  add `--ctl-pid N` for the GM's to every call).
 
 Run each `vtt` command on its own, with no shell around it (no `cat >`, no `&&`): an agent's
 permissions often allow `vtt ...` and nothing else.
@@ -28,16 +29,16 @@ which line and why. Accepted, one request is one undo step for the GM.
 `--describe` (the rooms the walls make and how they join), `--dump-map` -- and fix with
 another plan against the same file.
 
-**A refusal** is exit 1 with `vtt: error CLASS: line N: WHY` on stderr, and nothing on stdout.
-`usage`: written wrong (its `help` is named). `missing`: a name names nothing -- list them
-(`describe`, `jobs`, `stamps`, `characters`, `links`, `floors`). `conflict`: something on the
-map is in the way -- `dump` there, then other squares or another name. `state`: fine, but not
-now or not yours -- read `status` and `jobs`, do not resend unchanged. `limit`: too big --
-split it (`vtt --agent-guide limits`). `internal`: tell the GM.
+## Refusals
+<!-- read for: core, live -->
 
-**Read next, each in one call:** `vtt --agent-guide plan` (a map from a description or a file)
-or `vtt --agent-guide live` (the GM's open session); `vtt --agent-guide VERB` for one request
-(`room`, `corridor`, `token`, ...).
+A refusal is exit 1 with `vtt: error CLASS: line N: WHY` on stderr (over the channel, the
+answer's first line), and nothing on stdout. `usage`: written wrong (its `help` is named).
+`missing`: a name names nothing -- list them (`describe`, `jobs`, `stamps`, `characters`,
+`links`, `floors`). `conflict`: something on the map is in the way -- `dump` there, then other
+squares or another name. `state`: fine, but not now or not yours -- read `status` and `jobs`,
+do not resend unchanged. `limit`: too big -- split it (`vtt --agent-guide limits`).
+`internal`: tell the GM.
 
 ## The request language
 <!-- read for: plan, live -->
@@ -83,14 +84,8 @@ The requests, each as `help VERB` gives it -- its forms, what it does, its rules
    note Crypt "the sarcophagus lid is loose"
    ```
 
-   `vtt crypt.vtt --apply plan.txt --new 40x24` makes the file (void to start) and exits 0,
-   or 1 with the failing line on stderr and nothing saved (a file `--new` made is taken away
-   again, as it is when the plan changed nothing), or 2 when the map cannot be read or written. A map with an autosave newer than it is applied to as saved, with a line on
-   stderr saying so.
-2. **Read it back.** `vtt crypt.vtt --dump-map` and look: is every room where the
-   description puts it, every door in a wall, every creature on the floor?
-   `vtt crypt.vtt --describe` says what rooms the walls make and how they join -- a room
-   `NOT REACHABLE` is a missing door (or link). `vtt crypt.vtt --check` must say
+2. **Read it back:** is every room where the description puts it, every door in a wall,
+   every creature on the floor? `describe` names a room nothing reaches; `check` must say
    `no findings`.
 3. **Fix with another plan** against the same file (it opens what is there), not by
    rewriting the first. To move a room, clear it first, then draw it again:
@@ -126,7 +121,9 @@ The requests, each as `help VERB` gives it -- its forms, what it does, its rules
 <!-- read for: plan -->
 
 `vtt map.vtt --apply plan.txt` exits 0 done, 1 when a line failed (nothing saved, the line on
-stderr), 2 when the file cannot be read or written, or a running vtt did not answer. A plan
+stderr), 2 when the file cannot be read or written, or a running vtt did not answer. `--new
+WxH` makes the file, void to start; a file it made is taken away again when the plan fails or
+changes nothing. A map with an autosave newer than it is applied to as saved (stderr says so). A plan
 has no `propose` line of its own; one that only reads leaves the file as it was.
 
 When a running vtt has the file open, the plan goes to its GM as a proposal and the file is
@@ -146,14 +143,10 @@ changed to the GM as a change to review.
 ## Checking a map
 <!-- read for: plan, live -->
 
-`vtt map.vtt --dump-map` prints the lattice: squares at odd positions, boundaries between,
-a wall's corners drawn as its line (`-` or `|`, never `+`, so a `+` is always a door),
-creatures as `1`-`9` `a`-`z` `A`-`Z` listed underneath, then the notes and named areas.
-`--region B2:K12` prints part of a big map. `--describe` lists the rooms, each named by its
-area when one holds its first square (`room 2 Crypt (J3)`), with its extent, terrain, doors
-and windows and the room each leads to, and the creatures, notes and fog in it; `--json`
-gives the same as JSON. `--check` exits 0 clean, 1 with findings, 2 when the file cannot be
-read; the codes that matter most are `W104 door-loose` (a door with no wall at either end),
+`--dump-map`, `--describe` and `--check` are the `dump`, `describe` and `check` requests run on
+the file (`--region B2:K12` for part of a big map, `--json` for JSON). In a dump a wall's
+corners are drawn as its line, so a `+` is always a door. `--check` exits 0 clean, 1 with
+findings, 2 when the file cannot be read; the codes that matter most are `W104 door-loose` (a door with no wall at either end),
 `E110`/`E111` (a creature on void or off the edge) and `W120` (a room nothing leads to).
 
 ## Working live with the GM

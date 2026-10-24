@@ -1144,7 +1144,7 @@ void test_agent_command(void)
         CHECK(strstr(body, "The lines that change a map: room, area, ") != NULL);
         CHECK(strstr(body, ", env, ") != NULL);
         CHECK(strstr(body, "--ctl 'help token'\n") != NULL);
-        CHECK(strstr(body, " --agent-guide\n") != NULL);
+        CHECK(strstr(body, " --agent-guide live\n") != NULL);
     }
     CHECK(pump_until_reaped(&a));                              /* let the second run finish */
     press(&a, ":agent command off\r");

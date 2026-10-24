@@ -1515,7 +1515,8 @@ static const Request REQUESTS[] = {
       "refused when they share fewer; one bend when they are apart both ways, leaving the first room's side "
       "and entering the second's. Walled along; a door at each end when 1 wide, open ends when wider (which "
       "joins the two rooms into one space: describe then tells them as one room). Rooms sharing a wall just get "
-      "the doorway. Ground, or a room not either of the two, in the way refuses it" },
+      "the doorway. Ground in the way refuses it, and so does an area holding one of the two rooms but not "
+      "both (an area holding both, a floor, is passed through)" },
     { "tile",     E, rq_edit, "tile REGION void|floor|water|rough|brush|wood|hazard", "the ground of every square in the region", "" },
     { "wall",     E, rq_edit, "wall REGION [wall|door|open|window|secret|opensecret|none]", "the region's outline",
       "open is an open door, opensecret an open secret door, none clears; walls sit on the boundaries between squares" },
@@ -1535,7 +1536,8 @@ static const Request REQUESTS[] = {
       "numbered the lowest free. An end is a room's name (the free ground nearest its middle) or a square (its "
       "top-left). KIND stairs (default), ladder, trapdoor, portal; size 3 makes each end 3x3; oneway runs from "
       "the first end only; secret hides it from the players. Both ends on ground, apart, on no other link. To "
-      "another map: MAP.vtt beside this one, PLACE an area or square there; taking it is the GM's" },
+      "another map: MAP the other file's name without .vtt, the file beside this one; PLACE an area or a "
+      "square there; taking it is the GM's" },
     { "token",    E, rq_edit, "token add player|enemy PLACE [size 1-3] [hidden] \"LABEL\"\ntoken add player|enemy PLACE from CHARACTER [hidden]\ntoken move WHO SQUARE\ntoken del WHO\ntoken set WHO label \"...\"|size N|note \"...\"|hidden on|off",
       "put down, move, remove or change a creature",
       "PLACE a square or a room's name (the free square nearest its middle); every square of it on ground and on "
@@ -1707,7 +1709,7 @@ static int run_line(RQ_ARGS)
 {
     const Request *r = rq_find(w[0]);
     if (!r) {
-        snprintf(err, errsz, "unknown request %.40s", w[0]);
+        snprintf(err, errsz, "unknown request %.40s - help lists them", w[0]);
         return -1;
     }
     return r->run(RQ_PASS);

@@ -311,7 +311,11 @@ const char *link_map_check(const Map *m, const char *to_map, const char *place, 
     int  none;
     if (!kind) kind = &none;
     *kind = LINK_MAP_FINE;
-    if (!link_map_name_ok(to_map)) {
+    /* A name ending .vtt is the file's, not the map's: refused as written
+     * wrong, rather than "no map crypt.vtt beside this one" with crypt.vtt
+     * there. Only here, where a link is made: the loader keeps what it reads. */
+    size_t tl = strlen(to_map);
+    if (!link_map_name_ok(to_map) || (tl >= 4 && !strcmp(to_map + tl - 4, ".vtt"))) {
         snprintf(buf, sz, "%.30s: a map's name is its file's without .vtt, under %d characters", to_map, LINK_MAP_MAX);
         *kind = LINK_MAP_NAME;
         return buf;

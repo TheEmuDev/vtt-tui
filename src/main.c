@@ -108,7 +108,7 @@ static void usage(void)
         "  --ctl-pid N [REQ]  with several running, the one with pid N\n"
         "  --agent-guide [TOPIC|VERB]\n"
         "                     the guide for AI agents that build maps (docs/AGENTS.md): where to\n"
-        "                     start and its topics, a topic (plan, live, ..., all), or one request\n"
+        "                     start and its topics, a topic, or one request\n"
         "  --claude-agent     the Claude API agent itself, as :agent claude starts it (docs/APIAGENT.md);\n"
         "                     --model opus|sonnet|haiku|fable|ID, --effort low|medium|high,\n"
         "                     --cap DOLLARS, --calls N, --fallbacks on|off\n"

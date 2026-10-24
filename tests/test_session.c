@@ -169,7 +169,7 @@ void test_session_log(void)
         free(ctl_ask(&a, "token move Nobody C3"));
         free(ctl_ask(&a, "status"));                    /* and a request taken writes nothing */
         text = slurp(logpath);
-        CHECK(text && strstr(text, "] agent refused: error usage: line 1: unknown request frobnicate\n") != NULL);
+        CHECK(text && strstr(text, "] agent refused: error usage: line 1: unknown request frobnicate - help lists them\n") != NULL);
         if (text) { CHECK_EQ(count_lines(text), 6); free(text); }
     }
 

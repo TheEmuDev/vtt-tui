@@ -327,6 +327,10 @@ VERB`; every verb in `plan` or `live`; the topic list in the core names every to
 names only `--agent-guide`. A `usage` refusal ends with its `help`. The API agent's prompt
 holds the live bundle (suite `apiagent`). The oracle records the refusals' new ends.
 
+**After its review (2026-10-23, HEALTH B23):** the core 2,763 bytes, `plan` 11,121, `live` 15,795
+(it now holds the refusal classes, in a section of their own the core shares), `all` 24,117;
+docs/AGENTS.md 16,144. The figures below are 26ba513's.
+
 **As built (2026-10-23).** As planned, with these facts:
 - **Sizes** (bytes, `vtt --agent-guide ... | wc -c`): the core 2,859 (with the topic list);
   `plan` 11,648; `live` 15,935 (with *From a description to a map*, which a live agent
@@ -373,7 +377,7 @@ part 3. A Fable review after each part.
 | a request under a job | nothing new | an int incremented, a refusal's class and verb counted (a table of 8) | none worth a row |
 | a job's end | one line appended, one `write` (about 150 bytes) | `open`, `write`, `close` of a line, once a job | the `open` and `close`: a job ends a few times a session |
 | the guide's hash | 36,156 bytes read once | FNV-1a once a process, at the first job's end (about 36 µs at 1 ns a byte, a guess from FNV's one multiply a byte; measured when built) | none: once a process |
-| an evaluation run | the model's tokens, of which the guide is about 9,000 (36,156 bytes; 4 bytes a token is a rule of thumb, not measured) | tasks × N × a task's tokens | the money is the cost: unknown until the first run measures one task; the runner reports it before asking for the next |
+| an evaluation run (the plan's figures, 2026-10-21; measured since: *The guide redesigned*, *As built*) | the model's tokens, of which the guide is about 9,000 (36,156 bytes; 4 bytes a token is a rule of thumb, not measured) | tasks × N × a task's tokens | the money is the cost: unknown until the first run measures one task; the runner reports it before asking for the next |
 | the rollup | the two files' bytes | one pass | none |
 
 Nothing of this is on a key or a frame: no `PROF_ZONE`, no perf scenario. The evaluation
