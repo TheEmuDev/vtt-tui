@@ -708,6 +708,29 @@ void test_net_msg(void)
     rnd_free(&r);
 }
 
+/* A request as a phone at ADDR (not this machine): connect, mark the new
+ * client so, send, read the answer's headers and body start into resp. */
+static void phone_get(Net *n, uint32_t addr, const char *target, char *resp, size_t cap, uint64_t now)
+{
+    int b = net_connect(n->port);
+    net_pump(n, now);
+    for (int i = 0; i < n->ncl; i++) if (n->cl[i].kind == CL_NEW) { n->cl[i].local = 0; n->cl[i].addr = addr; }
+    char req[256];
+    snprintf(req, sizeof req, "GET %s HTTP/1.1\r\nHost: x\r\n\r\n", target);
+    if (write(b, req, strlen(req)) < 0) { }
+    /* To the end: every answer here is followed by the server's close. */
+    size_t len = 0;
+    memset(resp, 0, cap);
+    for (int k = 0; k < 50; k++) {
+        net_pump(n, now);
+        struct pollfd p = { b, POLLIN, 0 };
+        if (poll(&p, 1, 10) <= 0) continue;
+        ssize_t got = read(b, resp + len, cap - 1 - len);
+        if (got <= 0 || (len += (size_t)got) >= cap - 1) break;
+    }
+    close(b);
+}
+
 void test_net_server(void)
 {
     Renderer r;
@@ -730,6 +753,33 @@ void test_net_server(void)
     net_url(&n, url, sizeof url);
     CHECK(strstr(url, "http://") != NULL && strstr(url, "/?k=") != NULL);
     CHECK_EQ(net_clients(&n), 0);
+
+    CASE("with no port given, the server takes VTT_SERVE_PORT's (7793 unset), or one of its own when it is taken");
+    {
+        int blk = socket(AF_INET, SOCK_STREAM, 0);
+        struct sockaddr_in sa;
+        memset(&sa, 0, sizeof sa);
+        sa.sin_family = AF_INET;
+        sa.sin_addr.s_addr = htonl(INADDR_ANY);
+        socklen_t sl = sizeof sa;
+        CHECK(blk >= 0 && bind(blk, (struct sockaddr *)&sa, sizeof sa) == 0 && listen(blk, 1) == 0 &&
+              getsockname(blk, (struct sockaddr *)&sa, &sl) == 0);
+        unsigned taken = ntohs(sa.sin_port);
+        char pv[16];
+        snprintf(pv, sizeof pv, "%u", taken);
+        setenv("VTT_SERVE_PORT", pv, 1);
+        Net d;
+        net_init(&d);
+        CHECK_EQ(net_start_default(&d, &r, err, sizeof err), 0);   /* taken: another */
+        CHECK(d.port > 0 && d.port != taken);
+        net_stop(&d);
+        close(blk);
+        CHECK_EQ(net_start_default(&d, &r, err, sizeof err), 0);   /* free now: that one */
+        CHECK_EQ(d.port, taken);
+        net_stop(&d);
+
+        setenv("VTT_SERVE_PORT", "0", 1);                  /* as run.c's main left it */
+    }
 
     CASE("a watcher says hello and is sent the whole screen");
     int w = net_connect(n.port);
@@ -811,6 +861,54 @@ void test_net_server(void)
     read_until(&n, b, resp, sizeof resp, "code", now);
     CHECK(strncmp(resp, "HTTP/1.1 403", 12) == 0);
     close(b);
+
+    CASE("the page goes compressed to a browser that accepts gzip, raw to one that does not");
+    {
+        extern const size_t WEBPAGE_GZ_LEN;
+        int g = net_connect(n.port);
+        const char *gq = "GET /?k=000000 HTTP/1.1\r\nHost: x\r\nAccept-Encoding: gzip, deflate\r\n\r\n";
+        CHECK_EQ((int)write(g, gq, strlen(gq)), (int)strlen(gq));
+        read_until(&n, g, resp, sizeof resp, "\r\n\r\n", now);
+        char want[64];
+        snprintf(want, sizeof want, "Content-Length: %zu\r\n", WEBPAGE_GZ_LEN);
+        CHECK(!strncmp(resp, "HTTP/1.1 200", 12) && strstr(resp, "Content-Encoding: gzip\r\n") &&
+              strstr(resp, "Vary: Accept-Encoding\r\n") && strstr(resp, want));
+        close(g);
+        g = net_connect(n.port);
+        const char *rq = "GET /?k=000000 HTTP/1.1\r\nHost: x\r\n\r\n";
+        CHECK_EQ((int)write(g, rq, strlen(rq)), (int)strlen(rq));
+        read_until(&n, g, resp, sizeof resp, "\r\n\r\n", now);
+        CHECK(!strncmp(resp, "HTTP/1.1 200", 12) && !strstr(resp, "Content-Encoding") && strstr(resp, "Vary: Accept-Encoding\r\n"));
+        close(g);
+    }
+
+    CASE("a phone without the code is asked for it on a form; a wrong one is told so; a right one gets the page");
+    {
+        char page[640];
+        snprintf(page, sizeof page, "/?k=%s", n.code);
+        char wrong[32];
+        snprintf(wrong, sizeof wrong, "/?k=%06d", (atoi(n.code) + 1) % 1000000);
+        phone_get(&n, 0x0a000005, "/", resp, sizeof resp, now);
+        CHECK(!strncmp(resp, "HTTP/1.1 403", 12) && strstr(resp, "text/html") && strstr(resp, "<form>") &&
+              strstr(resp, "name=k") && strstr(resp, "The join code from the GM's screen:") && !strstr(resp, "not this table"));
+        phone_get(&n, 0x0a000005, wrong, resp, sizeof resp, now);
+        CHECK(!strncmp(resp, "HTTP/1.1 403", 12) && strstr(resp, "not this table's code"));
+        phone_get(&n, 0x0a000005, page, resp, sizeof resp, now);
+        CHECK(!strncmp(resp, "HTTP/1.1 200", 12));
+
+        CASE("past ten wrong codes in a minute no code is checked from an address not yet in; one that was is let in");
+        for (int k = 0; k < NET_WRONG_MAX - 1; k++) phone_get(&n, 0x0a000009, wrong, resp, sizeof resp, now);
+        CHECK(!strncmp(resp, "HTTP/1.1 403", 12));        /* ten wrong in all, the one above with them */
+        phone_get(&n, 0x0a000009, wrong, resp, sizeof resp, now);
+        CHECK(!strncmp(resp, "HTTP/1.1 429", 12) && strstr(resp, "try again in a minute"));
+        phone_get(&n, 0x0a000007, page, resp, sizeof resp, now);   /* the right code, a new address */
+        CHECK(!strncmp(resp, "HTTP/1.1 429", 12));
+        phone_get(&n, 0x0a000005, page, resp, sizeof resp, now);   /* the player already in */
+        CHECK(!strncmp(resp, "HTTP/1.1 200", 12));
+        phone_get(&n, 0x0a000007, page, resp, sizeof resp, now + NET_WRONG_MS);   /* a minute on */
+        CHECK(!strncmp(resp, "HTTP/1.1 200", 12));
+        n.wrong = 0;                                       /* the rest of the suite's phones */
+    }
 
     CASE("a WebSocket upgrade is answered with the right key and a full frame in binary messages");
     int s = ws_connect(&n, "");
@@ -1561,11 +1659,14 @@ void test_serve_commands(void)
 
 void test_webpage(void)
 {
-    extern const char   WEBPAGE[];
-    extern const size_t WEBPAGE_LEN;
+    extern const char          WEBPAGE[];
+    extern const size_t        WEBPAGE_LEN;
+    extern const unsigned char WEBPAGE_GZ[];
+    extern const size_t        WEBPAGE_GZ_LEN;
 
-    CASE("the page is one request under 12 KB, with nothing fetched from anywhere");
-    CHECK((int)WEBPAGE_LEN < 12288);
+    CASE("the page is one request under 12 KB as sent (compressed), with nothing fetched from anywhere");
+    CHECK((int)WEBPAGE_GZ_LEN < 12288);
+    CHECK(WEBPAGE_GZ_LEN > 18 && WEBPAGE_GZ[0] == 0x1f && WEBPAGE_GZ[1] == 0x8b);   /* a gzip stream */
     CHECK(strstr(WEBPAGE, "<!doctype html") != NULL);
     CHECK(strstr(WEBPAGE, "new WebSocket(") != NULL);
     CHECK(strstr(WEBPAGE, "WebAssembly.Module") != NULL);
@@ -1576,6 +1677,28 @@ void test_webpage(void)
     CASE("a tap sends the cell under it, a line the server reads as a ping");
     CHECK(strstr(WEBPAGE, "addEventListener('click'") != NULL);
     CHECK(strstr(WEBPAGE, "ws.send('P '+x+' '+y)") != NULL);
+
+    CASE("the compressed page is the page: what a browser inflates is WEBPAGE byte for byte");
+    if (system("command -v node >/dev/null 2>&1") != 0) {
+        CHECK(getenv("VTT_REQUIRE_NODE") == NULL);
+        printf("  (skipped: no node to inflate the page)\n");
+    } else {
+        Sandbox sb = sandbox_enter("webgz");
+        CHECK_EQ(sb.ok, 1);
+        if (sb.ok) {
+            char gz[1200], raw[1200], cmd[2600];
+            snprintf(gz, sizeof gz, "%s/page.gz", sb.dir);
+            snprintf(raw, sizeof raw, "%s/page.html", sb.dir);
+            FILE *f = fopen(gz, "wb");
+            if (f) { fwrite(WEBPAGE_GZ, 1, WEBPAGE_GZ_LEN, f); fclose(f); }
+            f = fopen(raw, "wb");
+            if (f) { fwrite(WEBPAGE, 1, WEBPAGE_LEN, f); fclose(f); }
+            snprintf(cmd, sizeof cmd, "node -e \"const fs=require('fs'),z=require('zlib');"
+                     "process.exit(Buffer.compare(z.gunzipSync(fs.readFileSync('%s')),fs.readFileSync('%s'))===0?0:1)\"", gz, raw);
+            CHECK_EQ(system(cmd), 0);
+            sandbox_leave(&sb);
+        }
+    }
 
     CASE("the embedded wasm module is the one tools/blit_wasm.py assembles");
     const char *w = strstr(WEBPAGE, "const WASM='");
@@ -1873,7 +1996,7 @@ void page_feed_expect(const WireCatch *c, ByteBuf *want)
 /* The page as the binary serves it, and a stream, written into dir; the
  * page's own feed() run over the stream under node; what it printed into got
  * (NUL-ended; the caller frees it). 0 when node ran it and exited 0. */
-int page_feed_run(const char *dir, const void *stream, size_t len, ByteBuf *got)
+static int page_feed_mode(const char *dir, const void *stream, size_t len, ByteBuf *got, const char *mode)
 {
     char page[640], spath[640], cmd[1600];
     snprintf(page, sizeof page, "%s/page.html", dir);
@@ -1883,7 +2006,7 @@ int page_feed_run(const char *dir, const void *stream, size_t len, ByteBuf *got)
     FILE *f = fopen(spath, "wb");
     if (f) { fwrite(stream, 1, len, f); fclose(f); }
     bb_init(got, 1 << 16);
-    snprintf(cmd, sizeof cmd, "node tests/page_feed.js '%s' '%s'", page, spath);
+    snprintf(cmd, sizeof cmd, "node tests/page_feed.js '%s' '%s' %s", page, spath, mode);
     FILE *pp = popen(cmd, "r");
     int rc = -1;
     if (pp) {
@@ -1894,6 +2017,11 @@ int page_feed_run(const char *dir, const void *stream, size_t len, ByteBuf *got)
     }
     bb_putc(got, '\0');
     return rc;
+}
+
+int page_feed_run(const char *dir, const void *stream, size_t len, ByteBuf *got)
+{
+    return page_feed_mode(dir, stream, len, got, "");
 }
 
 void test_page_feed(void)
@@ -1969,6 +2097,23 @@ void test_page_feed(void)
     bb_put(&stream, ho, hn);
     hn = wire_text(ho, 'W', "The floor is warm", 17);
     bb_put(&stream, ho, hn);
+
+    /* A palette record clears the page's tile cache only when it changes a
+     * color, and once a message however many it changes: a reconnect after
+     * the last phone left (the server's palette starts again) sends changed
+     * colors; a repeated one costs nothing. */
+    {
+        CASE("a palette record repeating a color keeps the page's tiles; changed ones clear them once");
+        const uint8_t same[] = { 'P', 3, 0, 0, 0, 'P', 3, 0, 0, 0 };          /* index 3 is 000000 already */
+        const uint8_t two[]  = { 'P', 3, 0x11, 0x22, 0x33, 'P', 4, 0x44, 0x55, 0x66 };
+        ByteBuf got1, got2;
+        CHECK_EQ(page_feed_mode(sb.dir, same, sizeof same, &got1, "clears"), 0);
+        CHECK(got1.data && !strcmp((char *)got1.data, "clears:0\n"));
+        CHECK_EQ(page_feed_mode(sb.dir, two, sizeof two, &got2, "clears"), 0);
+        CHECK(got2.data && !strcmp((char *)got2.data, "clears:1\n"));
+        bb_free(&got1);
+        bb_free(&got2);
+    }
 
     /* What the C decoder makes of the same bytes, in the script's form. */
     WireCatch c;

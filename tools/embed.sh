@@ -26,6 +26,14 @@ s = re.sub(r"[ \t]+$", "", s, flags=re.M)
 out = "".join(l for l in s.splitlines(True) if l.strip())
 sys.stdout.write(out if len(sys.argv) < 2 else str(len(out.encode())))'
 
+GZ='import gzip, sys
+d = gzip.compress(sys.stdin.buffer.read(), 9, mtime=0)
+if len(sys.argv) > 1:
+    print(len(d))
+else:
+    for i in range(0, len(d), 16):
+        print("    " + "".join("0x%02x," % b for b in d[i:i + 16]))'
+
 {
     echo '/* Generated from web/index.html by tools/embed.sh -- edit the HTML, not this. */'
     echo '#include <stddef.h>'
@@ -41,9 +49,18 @@ sys.stdout.write(out if len(sys.argv) < 2 else str(len(out.encode())))'
     echo '    ;'
     echo
     echo 'const size_t WEBPAGE_LEN = sizeof WEBPAGE - 1;'
+    echo
+    echo '/* The same page compressed (gzip -9, no time stamp, so the bytes are the'
+    echo ' * same each run): what a browser that accepts gzip is sent, and what the'
+    echo ' * 12 KB budget counts (docs/REMOTE.md). vtt needs no zlib to send it. */'
+    echo 'const unsigned char WEBPAGE_GZ[] = {'
+    python3 -c "$SENT" < web/index.html | python3 -c "$GZ"
+    echo '};'
+    echo 'const size_t WEBPAGE_GZ_LEN = sizeof WEBPAGE_GZ;'
 } > src/webpage.c
 
-printf 'src/webpage.c: %s bytes of page as sent (%s in web/index.html)\n' \
+printf 'src/webpage.c: %s bytes of page as sent compressed (%s uncompressed, %s in web/index.html)\n' \
+    "$(python3 -c "$SENT" < web/index.html | python3 -c "$GZ" count)" \
     "$(python3 -c "$SENT" count < web/index.html)" \
     "$(wc -c < web/index.html)"
 

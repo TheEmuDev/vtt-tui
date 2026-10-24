@@ -662,7 +662,8 @@ static int run_interactive(const Options *o)
 
     if (o->serve) {
         char err[128];
-        if (net_start(&a.net, (uint16_t)o->serve_port, &r, err, sizeof err) < 0)
+        if ((o->serve_port ? net_start(&a.net, (uint16_t)o->serve_port, &r, err, sizeof err)
+                           : net_start_default(&a.net, &r, err, sizeof err)) < 0)
             app_set_status(&a, err);
         else {
             char url[160], msg[256];

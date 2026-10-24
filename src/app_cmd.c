@@ -432,7 +432,8 @@ static void serve_command(App *a, const char *rest)
     }
 
     char err[128];
-    if (net_start(net, (uint16_t)port, a->rnd, err, sizeof err) < 0) { app_set_status(a, err); return; }
+    if ((have_port ? net_start(net, (uint16_t)port, a->rnd, err, sizeof err)
+                   : net_start_default(net, a->rnd, err, sizeof err)) < 0) { app_set_status(a, err); return; }
     net_set_stay(net, stay > 0);
     net_set_pings(net, pings != 0);
     net_set_live(net, app_remote_live(a));
@@ -964,7 +965,7 @@ static void cmd_mirror(App *a, const char *verb, const char *rest)
     Net *net = &a->net;
     if (!net_active(net)) {
         char err[128];
-        if (net_start(net, 0, a->rnd, err, sizeof err) < 0) { app_set_status(a, err); return; }
+        if (net_start_default(net, a->rnd, err, sizeof err) < 0) { app_set_status(a, err); return; }
         net_set_live(net, app_remote_live(a));
     }
     char msg[192];

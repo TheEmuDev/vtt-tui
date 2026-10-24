@@ -15,8 +15,10 @@
 #include "prof.h"
 #include "util.h"
 
-extern const char   WEBPAGE[];
-extern const size_t WEBPAGE_LEN;
+extern const char          WEBPAGE[];
+extern const size_t        WEBPAGE_LEN;
+extern const unsigned char WEBPAGE_GZ[];   /* the same, gzip: tools/embed.sh */
+extern const size_t        WEBPAGE_GZ_LEN;
 
 /* ------------------------------------------------------------- sha1/b64 */
 
@@ -167,6 +169,7 @@ int net_start(Net *n, uint16_t port, const Renderer *r, char *err, size_t errsz)
     n->dropped     = 0;
     n->idle_dropped = 0;
     make_code(n->code);
+    n->wrong = 0; n->wrong_since = 0; n->nknown = 0;    /* a new code: who knew the old one is no one */
     wire_enc_init(&n->enc, NET_FRAME_CAP);
 
     /* All the memory the server will ever use, up front. */
@@ -177,6 +180,16 @@ int net_start(Net *n, uint16_t port, const Renderer *r, char *err, size_t errsz)
         n->cl[i].in  = xmalloc(NET_REQ_CAP);
     }
     return 0;
+}
+
+int net_start_default(Net *n, const Renderer *r, char *err, size_t errsz)
+{
+    const char *env = getenv("VTT_SERVE_PORT");
+    long port = env && *env ? strtol(env, NULL, 10) : NET_DEFAULT_PORT;
+    if (port < 0 || port > 65535) port = NET_DEFAULT_PORT;
+    if (net_start(n, (uint16_t)port, r, err, errsz) == 0) return 0;
+    if (port == 0) return -1;
+    return net_start(n, 0, r, err, errsz);          /* taken: a port of its own, as before */
 }
 
 static void client_close(Net *n, int i)
@@ -639,18 +652,25 @@ void net_who(const Net *n, char *buf, size_t sz)
 
 /* -------------------------------------------------------------- reading */
 
-static void http_respond(Net *n, int i, int status, const char *type, const char *body, size_t len,
-                         uint64_t now_ms)
+/* extra: header lines of the answer's own, each ending \r\n, or "". */
+static void http_respond_x(Net *n, int i, int status, const char *type, const void *body, size_t len,
+                           const char *extra, uint64_t now_ms)
 {
-    char hdr[256];
+    char hdr[320];
     int  hl = snprintf(hdr, sizeof hdr,
-                       "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length: %zu\r\n"
+                       "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length: %zu\r\n%s"
                        "Cache-Control: no-store\r\nConnection: close\r\n\r\n",
-                       status, status == 200 ? "OK" : status == 403 ? "Forbidden" : "Not Found",
-                       type, len);
+                       status, status == 200 ? "OK" : status == 403 ? "Forbidden" : status == 429 ? "Too Many Requests" : "Not Found",
+                       type, len, extra);
     if (client_queue(n, i, hdr, (size_t)hl) < 0) return;
     if (client_queue(n, i, body, len) < 0) return;
     if (client_flush(n, i, now_ms) == 0) client_close(n, i);
+}
+
+static void http_respond(Net *n, int i, int status, const char *type, const char *body, size_t len,
+                         uint64_t now_ms)
+{
+    http_respond_x(n, i, status, type, body, len, "", now_ms);
 }
 
 /* The join code in a request target's query, if any. */
@@ -683,6 +703,38 @@ static const char *header_value(const char *req, const char *name, char *out, si
     return NULL;
 }
 
+/* Is the code given this table's? 1 yes (the address is known from now on),
+ * 0 no (counted), -1 not checked: the minute's wrong codes are spent and the
+ * address has not given the right one before (net.h, NET_WRONG_MAX). */
+static int code_check(Net *n, const NetClient *c, const char *given, uint64_t now_ms)
+{
+    if (c->local) return 1;
+    if (now_ms - n->wrong_since >= NET_WRONG_MS) { n->wrong = 0; n->wrong_since = now_ms; }
+    int known = 0;
+    for (int k = 0; k < n->nknown; k++) known |= n->known[k] == c->addr;
+    if (!known && n->wrong >= NET_WRONG_MAX) return -1;
+    if (strcmp(given, n->code) == 0) {
+        if (!known && n->nknown < NET_KNOWN_MAX) n->known[n->nknown++] = c->addr;
+        return 1;
+    }
+    n->wrong++;
+    return 0;
+}
+
+/* The page's door for a phone with no code, a wrong one, or one held back:
+ * a form that asks for it and sends the phone back here with ?k=. No script,
+ * its own small response, not part of the page. */
+static void code_form(Net *n, int i, int status, const char *say, uint64_t now_ms)
+{
+    char body[640];
+    int  bl = snprintf(body, sizeof body,
+                       "<!doctype html><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\">"
+                       "<title>vtt</title><style>body{font:1.2em sans-serif;margin:2em}input,button{font:inherit}</style>"
+                       "<form><p>%s<p><input name=k inputmode=numeric pattern=\"[0-9]{%d}\" maxlength=%d required autofocus> "
+                       "<button>Join</button></form>\n", say, NET_CODE_LEN, NET_CODE_LEN);
+    http_respond(n, i, status, "text/html; charset=utf-8", body, (size_t)bl, now_ms);
+}
+
 static void http_request(Net *n, int i, uint64_t now_ms)
 {
     NetClient *c = &n->cl[i];
@@ -695,9 +747,14 @@ static void http_request(Net *n, int i, uint64_t now_ms)
     }
 
     char code[NET_CODE_LEN + 1] = "";
-    int  has_code = query_code(target, code) && strcmp(code, n->code) == 0;
-    if (!c->local && !has_code) {
-        http_respond(n, i, 403, "text/plain", "vtt: this needs the join code from the GM's screen\n", 52, now_ms);
+    int  given = query_code(target, code);
+    int  ok    = c->local ? 1 : given ? code_check(n, c, code, now_ms) : 0;
+    if (ok != 1) {
+        int page = strcmp(target, "/") == 0 || strncmp(target, "/?", 2) == 0;
+        if (!page) http_respond(n, i, 403, "text/plain", "vtt: this needs the join code from the GM's screen\n", 52, now_ms);
+        else if (ok < 0) code_form(n, i, 429, "Too many wrong codes just now: try again in a minute.", now_ms);
+        else if (given)  code_form(n, i, 403, "That is not this table's code. The join code from the GM's screen:", now_ms);
+        else             code_form(n, i, 403, "The join code from the GM's screen:", now_ms);
         return;
     }
 
@@ -729,7 +786,13 @@ static void http_request(Net *n, int i, uint64_t now_ms)
     }
 
     if (strcmp(target, "/") == 0 || strncmp(target, "/?", 2) == 0) {
-        http_respond(n, i, 200, "text/html; charset=utf-8", WEBPAGE, WEBPAGE_LEN, now_ms);
+        /* Compressed to a browser that takes it -- every browser over http;
+         * the raw page to the rest (curl, the tests). */
+        char enc[160];
+        int  gz = header_value((char *)c->in, "Accept-Encoding", enc, sizeof enc) && strstr(enc, "gzip");
+        if (gz) http_respond_x(n, i, 200, "text/html; charset=utf-8", WEBPAGE_GZ, WEBPAGE_GZ_LEN,
+                               "Content-Encoding: gzip\r\nVary: Accept-Encoding\r\n", now_ms);
+        else    http_respond_x(n, i, 200, "text/html; charset=utf-8", WEBPAGE, WEBPAGE_LEN, "Vary: Accept-Encoding\r\n", now_ms);
         return;
     }
     http_respond(n, i, 404, "text/plain", "vtt: not found\n", 15, now_ms);
@@ -872,7 +935,7 @@ static void client_read(Net *n, int i, uint64_t now_ms)
                 *sp = '\0';
                 net_name_clean(sp + 1, strlen(sp + 1), 0, c->name);
             }
-            if (!c->local && strcmp((char *)c->in + 4, n->code) != 0) { client_close(n, i); return; }
+            if (code_check(n, c, (char *)c->in + 4, now_ms) != 1) { client_close(n, i); return; }
             memmove(c->in, nl + 1, rest);
             c->in_len  = rest;
             c->greeted = 1;
@@ -932,7 +995,8 @@ static void accept_client(Net *n, uint64_t now_ms)
     c->in    = in;
     c->fd    = fd;
     c->kind  = CL_NEW;
-    c->local = (ntohl(addr.sin_addr.s_addr) >> 24) == 127;
+    c->addr  = ntohl(addr.sin_addr.s_addr);
+    c->local = (c->addr >> 24) == 127;
     c->last_rx_ms = c->last_tx_ms = now_ms;
     c->id    = ++n->next_id;
 }

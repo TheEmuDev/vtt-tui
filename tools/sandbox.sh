@@ -16,6 +16,7 @@ sandbox_env() {
     export XDG_DATA_HOME="$1/data" XDG_CONFIG_HOME="$1/config" XDG_RUNTIME_DIR="$1/run"
     export VTT_SECRET_TOOL=/nonexistent/vtt-sandbox/secret-tool   # no keyring
     export VISUAL=true EDITOR=true          # a card key runs the editor and waits for it
+    export VTT_SERVE_PORT=0                 # a server of its own port, never the default 7793
 }
 
 if [ "${0##*/}" = sandbox.sh ]; then

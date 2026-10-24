@@ -4,25 +4,30 @@
 // otherwise only ever be checked by eye.
 //
 //   node tests/page_feed.js PAGE STREAM      (PAGE: the page as served)
+//   node tests/page_feed.js PAGE STREAM clears  -> only "clears:N", how many
+//                                    times feed() threw the tile cache away
 //
 // Prints "WxH", then a line per row: each cell as glyph.fg.bg.attr (colors
 // as RRGGBB through the palette), then "handout:", "names:" and "whisper:"
 // and the last of each.
 'use strict';
 const fs = require('fs');
-const [page, stream] = process.argv.slice(2);
+const [page, stream, mode] = process.argv.slice(2);
 const html = fs.readFileSync(page, 'utf8');
 const at0 = html.indexOf('function feed(u8){');
 const at1 = html.indexOf('\n}\n', at0);
 if (at0 < 0 || at1 < 0) { console.error('no feed() in the page'); process.exit(2); }
-const src = html.slice(at0, at1 + 2);
+// feed() and the field reader it calls, both the page's own.
+const u0 = html.indexOf('function u16(');
+if (u0 < 0) { console.error('no u16() in the page'); process.exit(2); }
+const src = html.slice(u0, html.indexOf('\n', u0) + 1) + html.slice(at0, at1 + 2);
 
-let lastHandout = '(none)', lastNames = '', lastWhisper = '';
+let lastHandout = '(none)', lastNames = '', lastWhisper = '', clears = 0;
 const env = {
   cols: 0, rows: 0, gl: null, fg: null, bg: null, at: null,
   pal: new Uint32Array(256), rd: null, rx0: null, rx1: null, dirtyAll: false,
   dec: new TextDecoder(),
-  layout() {}, touch() {}, schedule() {}, clearTiles() {},
+  layout() {}, touch() {}, schedule() {}, clearTiles() { clears++; },
   handout(s) { lastHandout = s; },
   names(s) { lastNames = s; },
   whisper(s) { lastWhisper = s; },
@@ -34,6 +39,7 @@ const run = new Function('env', 'u8',
 // but nothing in feed() depends on it.
 const bytes = new Uint8Array(fs.readFileSync(stream));
 run(env, bytes);
+if (mode === 'clears') { process.stdout.write('clears:' + clears + '\n'); process.exit(0); }
 
 const hex = v => v.toString(16).padStart(6, '0');
 const out = [env.cols + 'x' + env.rows];

@@ -51,6 +51,9 @@ int main(int argc, char **argv)
 {
     prof_init();
     atexit(unfinished);
+    /* No suite's server takes the default port, sandboxed or not (net.h,
+     * NET_DEFAULT_PORT): the user's vtt may want it. */
+    setenv("VTT_SERVE_PORT", "0", 1);
 
     struct { const char *name; void (*fn)(void); } suites[] = {
         { "util",   test_util },

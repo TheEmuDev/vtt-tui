@@ -1025,7 +1025,7 @@ fogged areas). While the GM is in build mode or a menu, the players' view keeps 
 
 | command | action |
 |---------|--------|
-| `:serve` | start serving on a free port; the status line shows the address and join code. Typed again while serving, it shows them again without restarting |
+| `:serve` | start serving on port 7793 (another when 7793 is taken); the status line shows the address and join code. Typed again while serving, it shows them again without restarting |
 | `:serve 7777` | serve on a fixed port, the same every session; if already serving on 7777, show the address again. A different port restarts the server, with a new join code |
 | `:serve --stay-alive` | keep serving after the map closes; `--no-stay-alive` reverts |
 | `:serve --no-pings` | ignore taps from phones; `--pings` accepts them again |
@@ -1039,18 +1039,21 @@ fogged areas). While the GM is in build mode or a menu, the players' view keeps 
 GM's machine.
 
 1. Open the map, press `F2`, and type `:serve`. The status line shows an address such as
-   `http://192.168.1.10:41873/?k=482913`.
-2. Open that address, including the `?k=` join code, in the device's browser. Landscape
-   orientation works best.
+   `http://192.168.1.10:7793/?k=482913`.
+2. Open that address in the device's browser. Without the `?k=` join code the page asks for
+   it, so a player can keep `http://192.168.1.10:7793/` as a bookmark and type only the code.
+   Landscape orientation works best.
 3. The map appears and follows the GM's screen.
 
 The page is served by vtt and needs no internet connection. It scales the map to the screen
 and reconnects automatically. It cannot keep a phone's screen awake (browsers allow that only
-on secure pages), so give the phones a long screen timeout for play. The port and the join code are new
-each time the server starts; with `:serve 7777` the port stays the same.
+on secure pages), so give the phones a long screen timeout for play. The join code is new
+each time the server starts; the port is 7793 unless that is taken (then another), or the one
+`:serve 7777` names. After ten wrong codes in a minute the page stops taking codes for the rest
+of that minute, except from a phone that has already joined.
 
-If the device cannot connect, check that the GM machine's firewall allows the port (with a
-firewall, use a fixed port such as `:serve 7777` and allow that one), and that
+If the device cannot connect, check that the GM machine's firewall allows the port (allow
+7793, or the port `:serve PORT` names), and that
 the network does not isolate wireless clients from each other (common on guest networks).
 The join code keeps out other devices on the network; the connection is not encrypted.
 

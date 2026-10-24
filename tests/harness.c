@@ -286,6 +286,13 @@ Sandbox sandbox_enter(const char *tag)
     setenv("VISUAL", "true", 1);
     setenv("EDITOR", "true", 1);
 
+    /* A server started with no port takes NET_DEFAULT_PORT (7793): a suite
+     * takes a port of its own, never the one the user's vtt may want. */
+    const char *pt = getenv("VTT_SERVE_PORT");
+    s.had_port = pt != NULL;
+    if (pt) str_lcpy(s.saved_port, pt, sizeof s.saved_port);
+    setenv("VTT_SERVE_PORT", "0", 1);
+
     s.ok = 1;
     return s;
 }
@@ -330,6 +337,8 @@ void sandbox_leave(Sandbox *s)
     else               unsetenv("VISUAL");
     if (s->had_editor) setenv("EDITOR", s->saved_editor, 1);
     else               unsetenv("EDITOR");
+    if (s->had_port) setenv("VTT_SERVE_PORT", s->saved_port, 1);
+    else             unsetenv("VTT_SERVE_PORT");
     if (!strncmp(s->dir, "/tmp/vtt-", 9)) remove_tree(s->dir);
     s->ok = 0;
 }

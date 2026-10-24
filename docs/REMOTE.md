@@ -18,7 +18,7 @@ measured against them.
 |---|---|
 | server, per frame per client | 2 µs, and zero bytes when nothing changed |
 | server memory | fixed at `:serve`: one 64 KB send buffer per client, eight clients, no heap after that |
-| the page | one request, under 12 KB as sent (tools/embed.sh drops its block comments), no fonts or scripts fetched, no framework. **Why 12 KB:** the page and its HTTP headers must arrive in TCP's first flight -- Linux sends 10 segments before it waits for an acknowledgement, about 14.4 KB on Wi-Fi -- so a load is one round trip. Past that every load costs another round trip (two at ~29 KB, three at ~58 KB). 12 KB keeps a margin for headers and segment size. The limit is hard: every millisecond matters, and performance slips away a little at a time. Below it, shaving bytes buys nothing; the effort goes into the JavaScript being close to optimal at run time (2026-10-04) |
+| the page | one request, under 12 KB as sent -- since 2026-10-23 the gzip a browser receives (tools/embed.sh drops its comments, then compresses it; about 5.4 KB) -- no fonts or scripts fetched, no framework. While vtt cannot be reached the page retries at 2 s doubling to 30 s. **Why 12 KB:** the page and its HTTP headers must arrive in TCP's first flight -- Linux sends 10 segments before it waits for an acknowledgement, about 14.4 KB on Wi-Fi -- so a load is one round trip. Past that every load costs another round trip (two at ~29 KB, three at ~58 KB). 12 KB keeps a margin for headers and segment size. The limit is hard: every millisecond matters, and performance slips away a little at a time. Below it, shaving bytes buys nothing; the effort goes into the JavaScript being close to optimal at run time (2026-10-04) |
 | client memory | one cell buffer plus one glyph atlas, both allocated once |
 | client, per keystroke frame | 0.5 ms on a mid-range phone; a full 200×50 frame in 5 ms |
 | latency added by our code | one write per frame per client, sent the moment the GM's frame is |
@@ -180,8 +180,9 @@ gets the privacy without it.
 
 ## The page revisited (2026-10-22): the plan
 
-**Status:** written 2026-10-22 for the user's sign-off (docs/V2.md *Next*, item 4); nothing
-built. Asked by the user: "revisit the phone-side code and see if it can be redesigned or
+**Status:** written 2026-10-22; signed off 2026-10-23 ("Go with recommendations"); items 1-6
+built 2026-10-23 (*As built*, below); their timings wait on the user's go; item 6's size is the
+user's once a phone reports its high-water mark; item 7 not yet (the user). Asked by the user: "revisit the phone-side code and see if it can be redesigned or
 improved in some way that would give us more to work with"; a phone that opens the address
 without the join code is asked for it; and, made a rule the same day, the page respects the
 phone's CPU, memory and battery (*Budgets*). The byte table and options below are a planning
@@ -274,3 +275,46 @@ agent's, measured with tools/embed.sh's own cut unless marked an estimate.
 3. The wrong-code limit (recommended 10 a minute) and a fixed default port (recommended:
    yes, 7793 when free, a new one when not).
 4. The arena's size, once item 6 has measured it.
+
+### As built (2026-10-23)
+
+1. **The palette record:** a repeated color changes nothing; a changed one marks the tiles
+   stale, and they are cleared once at the end of the message. The changed color arrives in
+   practice after a reconnect: when the last phone leaves, the server's palette starts again
+   (net.c, `wire_enc_reset_palette`) and a page that reconnects without reloading is sent its
+   new indices. tests/page_feed.js counts the page's clears (`clears` mode); suite `pagefeed`
+   holds a repeated color to none and two changed ones in a message to one (mutation-checked:
+   it had no case where a stale tile could show, and still would not, since the tile cache is
+   stubbed there).
+2. **The retry** backs off 2 s doubling to 30 s, back to 2 s once a socket opens; being shown
+   still reconnects at once. Suite `pageconn`: F, two minutes down, 8 attempts (0, 2, 6, 14,
+   30, 60, 90, 120 s; 61 before); G, the wait back at 2 s after a connection. The doubling,
+   the cap and the reset each mutation-caught.
+3. **The join-code form:** the page's request with no code, or a wrong one, is answered by a
+   small form of its own (403; `code_form`), no script, `GET /?k=`. **Changed from the plan:**
+   the plan said a right code is never held back, but then the limit only slows a guesser,
+   never stops one -- the plan's own 35-day estimate assumed codes past the limit go
+   unchecked. Built: past 10 wrong codes in a minute, from any address, no code is checked
+   for the rest of the minute (429, "try again in a minute"), except from an address that has
+   given the right code since the server started (`Net.known`, 16): the players in are never
+   locked out, and a new one waits at most a minute while someone guesses. A watcher's hello
+   goes through the same `code_check`. **The port:** `:serve`, `--serve` and `:watch`'s own
+   server take 7793 (`NET_DEFAULT_PORT`), another when it is taken; `VTT_SERVE_PORT` overrides
+   it, and the tests set it to 0 (run.c's main and both sandboxes), so no suite takes the port
+   the user's vtt may want. Suite `netserver`: the form both ways, the limit, a right code from
+   a new address held back, the known one let in, a minute on; the default port and its
+   fallback. Each rule mutation-caught.
+4. **Compression:** tools/embed.sh writes `WEBPAGE_GZ`, python's `gzip.compress(..., 9,
+   mtime=0)` of the cut page: **5,443 bytes against 12,032** uncompressed (at this commit,
+   items 5 and 6 in). Sent with `Content-Encoding: gzip` and `Vary: Accept-Encoding` to a
+   request that accepts gzip; the raw page otherwise. The 12 KB budget is now the compressed
+   bytes (suite `webpage`, which also inflates it under node and compares with the page).
+5. **The small fixes:** the window's `resize` debounced with the viewport's (one `relayout`);
+   `status()` writes `st.hidden` only when it changes; `feed()` reads 16-bit fields with
+   `u16()` and makes no `DataView` a message (tests/page_feed.js lifts `u16` from the page).
+6. **The arena's high-water mark:** the most tiles held and arena bytes used, shown with
+   `&stats` (`tiles N, U of A KB`). Its size is the user's decision once a phone has shown it.
+
+Not yet measured: the before-and-after timings items 1 and 5 call for (`tools/pagebench.sh`),
+and the time of a FULL with the page compressed on the phone: they wait on the user's go.
+

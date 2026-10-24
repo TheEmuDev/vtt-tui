@@ -40,7 +40,7 @@ function world() {
   function later(f) { const id = nextId++; timers.set(id, { at: now, f, event: true }); }
   const env = {
     WebSocket, document: doc, location: { protocol: 'http:', host: 'h:7793', search: '?k=123456' },
-    URLSearchParams, encodeURIComponent, me: null, ws: null, retry: null,
+    URLSearchParams, encodeURIComponent, me: null, ws: null, retry: null, back: 2000,
     status(m) { w.status = m; },
     feed() {},
     setTimeout(f, ms) { const id = nextId++; timers.set(id, { at: now + ms, f }); return id; },
@@ -145,15 +145,33 @@ async function main() {
     w.open(w.env.ws); await step(w, 'E up');
     check(w.live().length === 1 && w.status === 'connected', 'E: one socket once the server is back');
   }
-  { // F: vtt down for 20 s, every attempt refused at once: the phone's battery
-    // is not spent on a tight loop (docs/REMOTE.md, the phone's resources)
+  { // F: vtt down for two minutes, every attempt refused at once: the retry
+    // backs off, 2 s doubling to 30 s (docs/REMOTE.md, *The page revisited*,
+    // item 2): attempts at 0, 2, 6, 14, 30, 60, 90 and 120 s -- 8, not 61
     const w = world();
-    for (let t = 0; t < 20000; t += 100) {
+    let at20 = 0;
+    for (let t = 0; t <= 120000; t += 100) {
+      if (w.env.ws.readyState === 0) { w.env.ws.close(); w.tick(0); }
+      if (t === 20000) at20 = w.sockets.length;
+      w.tick(100);
+    }
+    await step(w, 'F down 120 s');
+    check(at20 === 4, 'F: 4 attempts in the first 20 s (0, 2, 6, 14 s), ' + at20);
+    check(w.sockets.length === 8, 'F: 8 attempts in two minutes, the cap 30 s, ' + w.sockets.length);
+  }
+  { // G: back up, then down again: the wait starts over at 2 s
+    const w = world();
+    for (let t = 0; t < 30000; t += 100) {               // down long enough to back off
       if (w.env.ws.readyState === 0) { w.env.ws.close(); w.tick(0); }
       w.tick(100);
     }
-    await step(w, 'F down 20 s');
-    check(w.sockets.length <= 11, 'F: no tight loop, 11 attempts in 20 s at most (one each 2 s), ' + w.sockets.length + ' in 20 s');
+    w.tick(30000);                                         // the next attempt made, and it opens
+    w.open(w.env.ws); await step(w, 'G up');
+    const n = w.sockets.length;
+    w.env.ws.close(); w.tick(0);                           // vtt goes away again
+    w.tick(1900); const early = w.sockets.length;
+    w.tick(200); await step(w, 'G retry');
+    check(early === n && w.sockets.length === n + 1, 'G: after a connection the first retry is at 2 s again, ' + (early - n) + ' then ' + (w.sockets.length - n));
   }
   console.log(failed ? failed + ' of ' + checks + ' checks failed' : 'verified ' + checks + ' checks');
   process.exit(failed ? 1 : 0);

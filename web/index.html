@@ -58,7 +58,7 @@ const b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 const wmod=typeof WebAssembly!=='undefined'?new WebAssembly.Module(WebAssembly.validate(b64(WASM_SIMD))?b64(WASM_SIMD):b64(WASM)):null;
 let mem=null,wblit=null,tilesAt=0,tilesEnd=0,tnext=0,ptrsAt=0,ptrs=null,tu32=null;
 let rd=null,rx0=null,rx1=null,dirtyAll=false;               // dirty span per row, in cells
-let ms=0,frames=0,ws=null,retry=null;
+let ms=0,frames=0,ws=null,retry=null,back=2000;
 
 /* ---- glyph atlas: alpha masks, keyed by glyph and bold, made on demand */
 const atlas=new Map();
@@ -85,7 +85,7 @@ function mask(g,bold,wide){
  * frame has a few hundred of; every cell after that is native row copies. */
 /* Two levels, so every key is a small integer: the glyph indexes an array,
  * the colors and attributes key a map beneath it. */
-const tiles=new Array(65536);let ntiles=0;
+const tiles=new Array(65536);let ntiles=0,tmax=0,tbytes=0;     // the most held, for &stats (the arena's size, REMOTE.md item 6)
 function tile(g,f,b,a,wide){
   let byc=tiles[g];
   if(!byc)byc=tiles[g]=new Map();
@@ -102,6 +102,7 @@ function tile(g,f,b,a,wide){
   const need=w*ch;
   if(tnext+need*4>tilesEnd){clearTiles();}
   const off=tnext;tnext+=need*4;
+  if(ntiles>tmax)tmax=ntiles;if(tnext-tilesAt>tbytes)tbytes=tnext-tilesAt;
   const buf=tu32.subarray(off>>2,(off>>2)+need);
   for(let k=0;k<buf.length;k++){
     const al=ma[k];
@@ -198,36 +199,42 @@ function layout(){
   schedule();
 }
 let lz=0;
-addEventListener('resize',layout);
-if(window.visualViewport)window.visualViewport.addEventListener('resize',()=>{clearTimeout(lz);lz=setTimeout(layout,150)});
+/* One layout a burst: a rotation fires several resizes, each a layout and a
+ * new wasm memory. */
+const relayout=()=>{clearTimeout(lz);lz=setTimeout(layout,150)};
+addEventListener('resize',relayout);
+if(window.visualViewport)window.visualViewport.addEventListener('resize',relayout);
 
 /* ---- the wire: records, little-endian, no text */
+/* A little-endian 16-bit field: no DataView made a message. */
+function u16(u8,q){return u8[q]|u8[q+1]<<8}
 function feed(u8){
-  const dv=new DataView(u8.buffer,u8.byteOffset,u8.byteLength);
-  let p=0;const n=u8.byteLength;
+  let p=0,stale=false;const n=u8.byteLength;
   while(p<n){
     const t=u8[p];
     if(t===0x46){                                          // 'F' w h
-      const w=dv.getUint16(p+1,true),h=dv.getUint16(p+3,true);p+=5;
+      const w=u16(u8,p+1),h=u16(u8,p+3);p+=5;
       if(w!==cols||h!==rows){cols=w;rows=h;gl=new Uint16Array(w*h);fg=new Uint8Array(w*h);bg=new Uint8Array(w*h);at=new Uint8Array(w*h);
         rd=new Uint8Array(h);rx0=new Int32Array(h).fill(1e9);rx1=new Int32Array(h).fill(-1);layout()}
       dirtyAll=true;
-    }else if(t===0x50){pal[u8[p+1]]=u8[p+2]<<16|u8[p+3]<<8|u8[p+4];p+=5;clearTiles();dirtyAll=true}   // 'P'
+    }else if(t===0x50){const c=u8[p+2]<<16|u8[p+3]<<8|u8[p+4];   // 'P': a tile drawn in a color that changed is stale
+      if(pal[u8[p+1]]!==c){pal[u8[p+1]]=c;stale=true}p+=5}
     else if(t===0x52){                                     // 'R' x y n fg bg attr, glyphs
-      const x=dv.getUint16(p+1,true),y=dv.getUint16(p+3,true),k=dv.getUint16(p+5,true);
+      const x=u16(u8,p+1),y=u16(u8,p+3),k=u16(u8,p+5);
       const f=u8[p+7],b=u8[p+8],a=u8[p+9];p+=10;
       if(y<rows){let i=y*cols+x;
-        for(let j=0;j<k&&x+j<cols;j++,i++){gl[i]=dv.getUint16(p+2*j,true);fg[i]=f;bg[i]=b;at[i]=a}
+        for(let j=0;j<k&&x+j<cols;j++,i++){gl[i]=u16(u8,p+2*j);fg[i]=f;bg[i]=b;at[i]=a}
         touch(Math.max(0,x-1),y,Math.min(cols-1,x+k))}     // a neighbor, for a wide glyph's half
       p+=2*k;
     }else if(t===0x45){p++;schedule()}                     // 'E': present
     else if(t===0x5a){p++}                                 // 'Z': keep-alive
     else if(t===0x48||t===0x57||t===0x4e){                 // 'H' handout, 'W' whisper, 'N' names: n text
-      const k=dv.getUint16(p+1,true),s=dec.decode(u8.subarray(p+3,p+3+k));p+=3+k;
+      const k=u16(u8,p+1),s=dec.decode(u8.subarray(p+3,p+3+k));p+=3+k;
       (t===0x48?handout:t===0x57?whisper:names)(s);
     }
     else break;
   }
+  if(stale)clearTiles();                                   // once a message, not once a color
 }
 
 /* ---- the handout: the GM's to put up and take down; a player may close it
@@ -277,9 +284,9 @@ wb.onclick=()=>{wd.hidden=false;wb.hidden=true};
 const stats=/[?&]stats/.test(location.search);let shown=0;
 function status(m){
   if(m){st.textContent=m;st.hidden=false;return}
-  if(!stats){st.hidden=true;return}
+  if(!stats){if(!st.hidden)st.hidden=true;return}            // once, not once a frame
   const t=performance.now();if(t-shown<500)return;shown=t;
-  st.hidden=false;st.textContent=cols+'×'+rows+' '+ms.toFixed(2)+' ms · '+last+' cells · '+frames;
+  st.hidden=false;st.textContent=cols+'×'+rows+' '+ms.toFixed(2)+' ms · '+last+' cells · '+frames+' · tiles '+tmax+', '+(tbytes>>10)+' of '+((tilesEnd-tilesAt)>>10)+' KB';
 }
 function connect(){
   const k=new URLSearchParams(location.search).get('k')||'';
@@ -288,9 +295,11 @@ function connect(){
    * drops the old one's handlers). */
   const s=ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws?k='+k+(me?'&n='+encodeURIComponent(me):''));
   s.binaryType='arraybuffer';
-  s.onopen=()=>{status('connected');wake()};
+  s.onopen=()=>{back=2000;status('connected');wake()};
   s.onmessage=e=>feed(new Uint8Array(e.data));
-  s.onclose=()=>{status('disconnected · retrying');retry=setTimeout(connect,2000)};
+  /* 2 s, doubling to 30 s while vtt cannot be reached (the phone's battery);
+   * being shown again still tries at once. */
+  s.onclose=()=>{status('disconnected · retrying');retry=setTimeout(connect,back);back=Math.min(back*2,30000)};
   s.onerror=()=>s.close();
 }
 /* Now, not on the retry's timer: the old socket's handlers go first, so it

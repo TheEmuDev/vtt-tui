@@ -2661,6 +2661,9 @@ extern char **environ;
 void test_sandbox(void)
 {
     CASE("tools/sandbox.sh changes the variables sandbox_enter changes, to the same values under its dir");
+    /* run.c's main sets VTT_SERVE_PORT for every suite; here it is cleared,
+     * so both sides start from an environment without it, and put back. */
+    unsetenv("VTT_SERVE_PORT");
     /* The C side: the environment before and after sandbox_enter. */
     ByteBuf before;
     bb_init(&before, 1 << 14);
@@ -2732,4 +2735,5 @@ void test_sandbox(void)
     bb_free(&before);
     bb_free(&after);
     sandbox_leave(&sb);
+    setenv("VTT_SERVE_PORT", "0", 1);                   /* as run.c's main left it */
 }

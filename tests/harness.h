@@ -73,6 +73,8 @@ typedef struct {
     int  had_st;
     char saved_visual[1024], saved_editor[1024];   /* VISUAL, EDITOR as they were */
     int  had_visual, had_editor;
+    char saved_port[16];                           /* VTT_SERVE_PORT as it was */
+    int  had_port;
     int  ok;
 } Sandbox;
 

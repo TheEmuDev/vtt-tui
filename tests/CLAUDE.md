@@ -54,7 +54,8 @@ docs/CODEMAP.md; `tests/run.c` is the table of suites and `main`, nothing else.
   with the channel off and may not notice (review 4, M11).
 - `sandbox_enter` sets `XDG_DATA_HOME`, `XDG_RUNTIME_DIR` and `XDG_CONFIG_HOME` to the sandbox,
   `VISUAL` and `EDITOR` to `true` (a card key runs the editor and waits: the user's `nvim` held
-  a run until killed, 2026-10-21), and `VTT_SECRET_TOOL` to no program: a test that runs `./vtt` or opens the channel outside
+  a run until killed, 2026-10-21), `VTT_SERVE_PORT` to 0 (a server of its own port, never the default 7793; run.c's main sets it
+  for every suite too), and `VTT_SECRET_TOOL` to no program: a test that runs `./vtt` or opens the channel outside
   one reaches the user's own files, settings, API key (their keyring) and running vtts. A test
   of the keyring sets `VTT_SECRET_TOOL` to a stand-in of its own; of curl, `VTT_CLAUDE_CURL`.
   To check: `XDG_RUNTIME_DIR=/some/canary build/run-tests` must leave the canary untouched.

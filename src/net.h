@@ -40,6 +40,19 @@
  * past (docs/V2.md, step 7, item 1). */
 #define NET_SNDBUF      (128 * 1024)
 #define NET_CODE_LEN    6
+/* Wrong join codes (docs/REMOTE.md, *The page revisited*, item 3): past
+ * NET_WRONG_MAX in a minute, from any address, no code is checked for the
+ * rest of that minute -- a right one included, or the limit would only slow a
+ * guesser, never stop one -- except from an address that has given the right
+ * code since the server started (NET_KNOWN_MAX of them), so the players
+ * already in are never locked out. */
+#define NET_WRONG_MAX   10
+#define NET_WRONG_MS    60000
+#define NET_KNOWN_MAX   16
+/* The port :serve and --serve take when none is given, so a player can keep
+ * the address; another when it is taken. VTT_SERVE_PORT overrides it (the
+ * tests' sandbox sets 0: a port of their own each time). */
+#define NET_DEFAULT_PORT 7793
 /* A browser silent this long is sent a WebSocket ping, which browsers answer
  * by themselves, hidden tab or not; a watcher whose line has been quiet this
  * long is sent a 'Z' record. A browser silent for NET_IDLE_MS -- three
@@ -68,6 +81,7 @@ typedef struct {
     int        fd;
     ClientKind kind;
     int        local;         /* connected from this machine: no code asked */
+    uint32_t   addr;          /* its IPv4 address, host order */
 
     uint8_t   *out;           /* out_cap bytes; [off, len) are pending */
     size_t     out_len, out_off, out_cap;
@@ -108,6 +122,10 @@ typedef struct {
     int       listen_fd;
     uint16_t  port;
     char      code[NET_CODE_LEN + 1];
+    int       wrong;         /* wrong codes since wrong_since (NET_WRONG_MAX) */
+    uint64_t  wrong_since;
+    uint32_t  known[NET_KNOWN_MAX];   /* addresses that gave the right code */
+    int       nknown;
 
     NetClient cl[NET_MAX_CLIENTS];
     int       ncl;
@@ -171,6 +189,8 @@ void net_init(Net *n);
 /* Opens the listener on `port` (0 for any free one) and makes up a join
  * code. Returns 0, or -1 with the reason in err. */
 int  net_start(Net *n, uint16_t port, const Renderer *r, char *err, size_t errsz);
+/* net_start on NET_DEFAULT_PORT (or VTT_SERVE_PORT), or a port of its own when that is taken. */
+int  net_start_default(Net *n, const Renderer *r, char *err, size_t errsz);
 void net_stop(Net *n);
 
 static inline int net_active(const Net *n)  { return n->listen_fd >= 0; }
