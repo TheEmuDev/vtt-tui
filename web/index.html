@@ -85,6 +85,10 @@ function mask(g,bold,wide){
  * frame has a few hundred of; every cell after that is native row copies. */
 /* Two levels, so every key is a small integer: the glyph indexes an array,
  * the colors and attributes key a map beneath it. */
+/* The most tiles held before the arena starts again: 203 at the most in a session of panning a
+ * walled map with a crowd on the user's phone, upright and sideways (docs/REMOTE.md, item 6); the
+ * user's choice, 2026-10-23, five times that. */
+const TILES_MAX=1024;
 const tiles=new Array(65536),used=new Uint8Array(256);let ntiles=0,tmax=0,tbytes=0;     // the most held, for &stats (the arena's size, REMOTE.md item 6)
 function tile(g,f,b,a,wide){
   let byc=tiles[g];
@@ -92,7 +96,7 @@ function tile(g,f,b,a,wide){
   const key=(a<<17|f<<9|b<<1|(wide?1:0));
   let t=byc.get(key);
   if(t)return t;
-  if(++ntiles>4096)clearTiles();
+  if(++ntiles>TILES_MAX)clearTiles();
   let fc=pal[f],bc=pal[b];used[f]=used[b]=1;                 // a tile drawn with these: a change of either is a clear
   if(a&8){const q=fc;fc=bc;bc=q}                              // reverse
   if(a&2)fc=((fc>>1)&0x7f7f7f)+((bc>>1)&0x7f7f7f);            // dim: halfway to the background
@@ -183,9 +187,9 @@ function layout(){
   cv.width=cols*cw;cv.height=rows*ch;
   cv.style.width=(cv.width/dpr)+'px';cv.style.height=(cv.height/dpr)+'px';
   /* One block of memory for everything: the framebuffer, the tile list for
-   * a row, and an arena of rendered tiles, sized for a few thousand and never
+   * a row, and an arena of rendered tiles, room for TILES_MAX and never
    * less than two rows' worth, so a row always fits after a clear. */
-  const fbBytes=cv.width*cv.height*4,arena=Math.max(Math.min(4096*cw*ch*4,8<<20),2*cols*cw*ch*4);
+  const fbBytes=cv.width*cv.height*4,arena=Math.max(Math.min(TILES_MAX*cw*ch*4,8<<20),2*cols*cw*ch*4);
   ptrsAt=fbBytes;tilesAt=fbBytes+cols*8;tilesEnd=tilesAt+arena;
   const pages=Math.ceil(tilesEnd/65536)+1;
   let buf;

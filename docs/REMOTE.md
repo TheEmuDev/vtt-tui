@@ -348,5 +348,6 @@ ONLY=load and ONLY=arena, new modes):**
   day; 899x364 CSS px): at 200x50 cells of 8x16 px, **203 tiles again**, 103,936 bytes of a
   2,097,152-byte arena; at 400x170 the 4x8 minimum, as upright. So 4,096 tiles' room is about 20
   times a session's need; 1,024 would be 524,288 bytes at 200x50 sideways, freeing about 1.5 MB a
-  phone. The size is the user's decision (recommended: 1,024).
+  phone. **The user, 2026-10-23: "Go with the recommendation": 1,024 tiles** (`TILES_MAX`,
+  web/index.html; built the same day).
 
