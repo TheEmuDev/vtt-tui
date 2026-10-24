@@ -197,16 +197,32 @@ job. Text, a screen of it. It reads counts only, so what it prints can be shown 
   guide every agent is given and pays for in tokens, and a maintainers' procedure is nothing an
   agent should read.
 - **`triggers.json`**: twenty queries, ten that should start the skill and ten near misses.
-- **Not yet known, checked at the first run (the user's go; HEALTH 94):** the default agent's
-  command line (tools/agenteval.sh's one copy) was read from `claude --help`, never run:
-  `--restricted` (no settings files, the file tools confined to the run's directory) with
-  `--tools` naming the seven it may use and `--allowedTools 'Bash(vtt *)'` the one command.
-  Unknown until a run: whether the prompt is taken on stdin, whether the skill is still found
-  under `--restricted`, and the cost field's name. `--bare` would keep the user's CLAUDE.md
-  and memory out for certain, but it reads only `ANTHROPIC_API_KEY` (never the login), so with
-  it a run needs the API key. Confined or not, `vtt` reads any path it is given and the
-  wrapper names the repo, so an agent that looked could reach a `reference.txt`; a first run's
-  call log says what it opened. `--max-budget-usd 2` is a ceiling a run, not an estimate.
+- **The default agent, probed on the user's subscription (2026-10-23, the user's go; three
+  probes about $0.02 each, read from each run's `init` event and its permission denials):**
+  - `--restricted`, as first written, **drops the project's skills**: the `init` event listed
+    no `vtt` skill, so a run would never have seen what it tests. Replaced by
+    `--setting-sources project` (the `vtt` skill listed; the model said no line of the user's
+    CLAUDE.md was in its context) with **path-scoped allow rules** (`Read(./**)` and the like)
+    under `dontAsk`: a Read of the repo's CLAUDE.md was denied and recorded as a denial.
+  - `--strict-mcp-config` with no config: no MCP servers (the user's connectors were there
+    otherwise).
+  - Auto-memory made an empty `memory` folder under `~/.claude/projects` for each new working
+    directory; `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` stops it (checked: none made).
+  - The prompt is taken on stdin; the login is used (`apiKeySource: none`); the cost field is
+    `total_cost_usd`.
+  - Left as any Claude Code user has them: the built-in skills and plugins, and the user's own
+    `context-bar` plugin. No flag drops those and keeps the project's skill (`--safe-mode`
+    drops every skill). `--bare` is Claude Code's flag for none of this, but it reads only
+    `ANTHROPIC_API_KEY`, never the login, so it is not used.
+  - `vtt` still reads any path it is given and the wrapper names the repo (HEALTH 94).
+    `--max-budget-usd 2` is a ceiling a run, not an estimate.
+- **The first run (crypt, N = 1, 2026-10-23, `runs/2026-10-23-200205-sonnet-crypt-1`):** 13 s,
+  $0.046, five turns, no map (1 of 12 facts). The agent ran `vtt --agent-guide`; the 36 KB
+  guide came back cut short (its words; my guess, not checked: the Bash tool's output limit,
+  about 30,000 characters); it tried `vtt --agent-guide > /tmp/guide.txt`, which `Bash(vtt *)`
+  does not allow (a redirect), was refused, and stopped saying why. A GM at a terminal would be
+  asked and could allow it; the cut would happen there too. **How the guide is read is the
+  first thing the evidence says to change** -- through §4's procedure, the user's call.
 - **A signal to the runner** stops the agent at once: it runs in the background and the exit
   trap kills its `timeout`, which passes the signal on (the review found a TERM waited for the
   whole run; checked after: TERM and INT end it in under a second, nothing left running).

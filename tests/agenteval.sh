@@ -47,6 +47,7 @@ cat > "$D/bin/claude" <<EOF
 #!/bin/sh
 printf '%s\n' "\$@" > '$D/claude.args'
 echo "task dir: \${EVAL_TASK_DIR-unset}" > '$D/claude.env'
+echo "auto memory: \${CLAUDE_CODE_DISABLE_AUTO_MEMORY-unset}" >> '$D/claude.env'
 EOF
 chmod +x "$D/bin/claude"
 if [ "$(PATH="$D/bin:$PATH" command -v claude)" != "$D/bin/claude" ]; then
@@ -54,16 +55,17 @@ if [ "$(PATH="$D/bin:$PATH" command -v claude)" != "$D/bin/claude" ]; then
 else
     ( unset EVAL_AGENT EVAL_MODEL; PATH="$D/bin:$PATH" EVAL_TASKS=$T EVAL_RUNS=$D/dflt \
         "$ROOT/tools/agenteval.sh" --yes -n 1 nothing > "$D/dflt.out" 2>&1 )
-    for w in -p --restricted --no-session-persistence 'Bash(vtt *)'; do
+    for w in -p --strict-mcp-config --no-session-persistence 'Bash(vtt *)' 'Read(./**)' 'Write(./**)' 'Edit(./**)'; do
         grep -qxF -- "$w" "$D/claude.args" 2>/dev/null || { echo "  FAIL agenteval: the default agent lacks $w"; fail=1; }
     done
     # Each flag with its value next: the money cap, the tools, no prompts.
     for fv in '--model sonnet' '--max-budget-usd 2' '--output-format json' '--permission-mode dontAsk' \
-              '--tools Bash,Read,Write,Edit,Glob,Grep,Skill'; do
+              '--tools Bash,Read,Write,Edit,Glob,Grep,Skill' '--setting-sources project'; do
         awk -v f="${fv%% *}" -v v="${fv#* }" 'p == f && $0 == v { ok = 1 } { p = $0 } END { exit !ok }' "$D/claude.args" 2>/dev/null ||
             { echo "  FAIL agenteval: the default agent lacks $fv"; fail=1; }
     done
     grep -qx 'task dir: unset' "$D/claude.env" 2>/dev/null || { echo "  FAIL agenteval: the default agent was told the task's directory"; fail=1; }
+    grep -qx 'auto memory: 1' "$D/claude.env" 2>/dev/null || { echo "  FAIL agenteval: the default agent runs with auto-memory on"; fail=1; }
 fi
 
 # Every real task can be met: its reference.txt, a plan written by hand, meets

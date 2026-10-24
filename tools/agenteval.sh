@@ -60,13 +60,16 @@ command -v python3 >/dev/null || { echo "agenteval: the grader needs python3" >&
 if [ -n "${EVAL_AGENT:-}" ]; then AGENT=$EVAL_AGENT
 else
     # Claude Code with the skill in the map's directory and nothing else of the
-    # user's: no settings files (--restricted), the file tools confined to the
-    # map's directory, these tools alone, vtt the only command it may run, no
-    # session kept. Read from `claude --help`; what it is given beyond the
-    # skill is checked at the first run (docs/AGENTLOOP.md).
-    AGENT="claude -p --model '$MODEL' --output-format json --no-session-persistence \
---restricted --tools Bash,Read,Write,Edit,Glob,Grep,Skill --permission-mode dontAsk \
---max-budget-usd '$BUDGET' --allowedTools 'Bash(vtt *)' Read Write Edit Glob Grep Skill"
+    # user's (probed 2026-10-23, docs/AGENTLOOP.md): the project's settings and
+    # skills only (not --restricted, which drops the project's skills too, nor
+    # --bare, which takes no login), no MCP servers, no auto-memory (it made a
+    # memory folder under ~/.claude/projects a directory), no session kept;
+    # these tools alone, the file tools allowed only under the map's directory
+    # and everything else refused (dontAsk), vtt the only command.
+    AGENT="CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 claude -p --model '$MODEL' --output-format json \
+--no-session-persistence --setting-sources project --strict-mcp-config \
+--tools Bash,Read,Write,Edit,Glob,Grep,Skill --permission-mode dontAsk --max-budget-usd '$BUDGET' \
+--allowedTools 'Bash(vtt *)' 'Read(./**)' 'Write(./**)' 'Edit(./**)' 'Glob(./**)' 'Grep(./**)' Skill"
 fi
 
 # What it will run, and what the last run of each task with this model cost.

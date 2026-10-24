@@ -1,0 +1,13 @@
+FAIL: check clean: no map was made
+FAIL: reachable all: no map was made
+FAIL: area Hall: no map was made
+FAIL: area Burial: no map was made
+FAIL: area Well: no map was made
+FAIL: joined Hall Burial: no map was made
+FAIL: joined Hall Well: no map was made
+FAIL: terrain Well water: no map was made
+FAIL: creatures ghoul == 2: no map was made
+FAIL: creature ghoul in Burial: no map was made
+FAIL: creature Aria in Hall: no map was made
+pass: refusals <= 2
+1 of 12 facts
