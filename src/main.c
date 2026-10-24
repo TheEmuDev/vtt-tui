@@ -39,7 +39,7 @@ typedef struct {
     const char *map_path;           /* positional argument */
     uint64_t    seed;
     int         seeded;
-    const char *watch;              /* --watch host:port: be a mirror */
+    const char *watch;              /* --watch ADDRESS (host:port?k=code): be a mirror */
     int         bench_clients;      /* --bench-clients N: loopback watchers on a bench */
     int         bench_names;        /* --bench-names: they say they are P1, P2... as phones do */
     int         bench_stalled;      /* --bench-stalled: the last of them never reads (docs/V2.md, step 7) */

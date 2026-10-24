@@ -72,7 +72,7 @@ static const KeyDoc PLAY[] = {
     KEY(":clock", "list them   :clock Dragon remove drops one"),
 
     GROUP("Remote view"),
-    KEY(":serve",  "let players watch from a browser, on port " STR(NET_DEFAULT_PORT) " unless taken; the status line shows the URL"),
+    KEY(":serve",  "players' browser view at the URL shown; port " STR(NET_DEFAULT_PORT) " if free"),
     KEY(":serve 7777", "serve on a fixed port; on the port already serving, shows the URL"),
     KEY(":serve --stay-alive", "keep that server, and its join code, when the map closes"),
     KEY(":serve --no-pings", "ignore taps from the phones; --pings takes them again"),

@@ -7,11 +7,8 @@ its present tense: a design record describes the app as it was when the plan was
 ## Kept current
 
 True of the code today, and changed in the same commit as the code they describe (CLAUDE.md,
-*A change is not done*). Held to it twice: suite `docs` (tests/test_docs.c) fails when a source
-file has no row in CODEMAP's tables, a code-describing doc (CLAUDE.md, tests/CLAUDE.md, CODEMAP,
-ARCHITECTURE, the review brief) names a function or macro with an underscore or a file alone
-that the code no longer has, or any of these pages names a path under src/, tests/, tools/,
-docs/ or web/ that is gone; and every
+*A change is not done*). Held to it twice: suite `docs` fails on the drift its header lists
+(tests/test_docs.c: rows, names, paths, and facts kept in more than one place); and every
 review's *Docs drift* section (tools/review-brief.md) reads these pages where they speak of what
 the change touched, since a sentence gone wrong is beyond any test (the user, 2026-10-23).
 

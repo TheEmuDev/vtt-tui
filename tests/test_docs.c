@@ -406,7 +406,11 @@ void test_docs(void)
         const char *blk = rd ? strstr(rd, "\nvtt [options]") : NULL;
         CHECK(blk != NULL);
         Text u = { 0 }, r = { 0 };
-        if (mc) flag_args(mc, 1, &u);
+        /* usage()'s body only: another "  --x" string in main.c is not the help. */
+        char *ub = mc ? strstr(mc, "\nstatic void usage(void)") : NULL;
+        char *ue = ub ? strstr(ub, "\n}") : NULL;
+        CHECK(ue != NULL);
+        if (ue) { *ue = '\0'; flag_args(ub, 1, &u); }
         if (blk) {
             const char *fence = strstr(blk, "\n```");
             size_t n = fence ? (size_t)(fence - blk) : strlen(blk);
@@ -449,6 +453,20 @@ void test_docs(void)
             char *t = read_all(PORT_DOCS[i]);
             CHECK(t != NULL);
             if (t && !strstr(t, port)) { printf("  %s does not say port %s\n", PORT_DOCS[i], port); CHECK(0); }
+            /* And no stale copy beside it: every "port N" and ":N" (an
+             * address's port; 4-5 digits) is this one. `:serve 7777`, a port
+             * the GM names, is neither form. */
+            for (const char *p = t; p && *p; p++) {
+                const char *d = !strncmp(p, "port ", 5) ? p + 5 : *p == ':' ? p + 1 : NULL;
+                if (!d) continue;
+                size_t n = 0;
+                while (isdigit((unsigned char)d[n])) n++;
+                if (n < 4 || n > 5 || isalnum((unsigned char)d[n])) continue;
+                if (n != strlen(port) || strncmp(d, port, n)) {
+                    printf("  %s says %.*s, the default port is %s\n", PORT_DOCS[i], (int)(d - p) + (int)n, p, port);
+                    CHECK(0);
+                }
+            }
             free(t);
         }
     }
