@@ -21,6 +21,7 @@ in the brief.
 | does a test catch this fault? | `tools/mutate.sh FILE 'old' 'new' SUITE...`: the old text must occur once; the file is restored (after a SIGKILL the next run refuses and names the original); prints caught or SURVIVED. A script or the grader (no suite): `... --run 'tests/agenteval.sh'`, no rebuild |
 | does suite pageconn catch a fault in the page's connection code? | `tools/pagemutate.sh 'old' 'new'`: seconds, no rebuild, the page untouched |
 | a test that only fails under load? | `tools/loadcheck.sh [ROUNDS]` |
+| what does the evaluations' grader say of this map? | a task directory of your own (prompt.txt, size, expect), then `EVAL_TASKS=DIR EVAL_RUNS=SCRATCH EVAL_MODEL=stub EVAL_AGENT='vtt map.vtt --apply PLAN --new WxH' tools/agenteval.sh --yes -n 1 TASK`: never without `EVAL_AGENT` (the default calls a paid model) |
 | several mutations in one go | `tools/mutations.sh LIST SUITE...` (the list's form is in its header) |
 | does the API key linger in memory after the app reads it? | `tools/keyscan.sh`: never the real keyring; exit 1 on a copy |
 | run ./vtt or a script away from the user's files | `tools/sandbox.sh CMD...`, or `. tools/sandbox.sh; sandbox_env DIR` in a script |

@@ -1,7 +1,7 @@
 pass: rooms == 8
 pass: rooms >= 7
-pass: creatures == 6
-pass: areas == 10
+pass: creatures == 7
+pass: areas == 11
 pass: floors == 0
 pass: links == 2
 pass: errors == 0
@@ -23,4 +23,5 @@ pass: creature Corner in Hall
 pass: creature Brute in Well
 pass: joined Tower Pit
 pass: terrain Lößt floor
-25 of 25 facts
+pass: creature Lurker in Nook
+26 of 26 facts

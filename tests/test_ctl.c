@@ -72,7 +72,7 @@ void test_ctl(void)
         CHECK(ctl_refused(t, "usage", 1) && strstr(t, "dump takes one region"));
         free(t);
 
-        /* describe REGION: the rooms that meet it, whole; the map's lines always. */
+        /* describe REGION: the rooms with a square in it, whole; the map's lines always. */
         f = open_memstream(&want, &wn);
         maptools_describe(f, a.world.map, 0);
         fclose(f);
@@ -2477,7 +2477,7 @@ void test_ctl_reads(void)
     CHECK(t && !strncmp(t, "ok\n", 3) && strstr(t, "\nregion A1:D4\n") && !strstr(t, "\n5 |"));
     free(t);
 
-    CASE("describe REGION tells the rooms that meet it, whole, and says how many of how many");
+    CASE("describe REGION tells the rooms with a square in it, whole, and says how many of how many");
     a.world.ctl_auto = 1;
     t = ctl_ask(&a, "tile A1:CB60 void\nroom West B2:F6\nroom East BT50:BX54\ntoken add enemy BU51 \"Ghoul\"\ntoken add player C3 \"Aria\"");
     CHECK(t && !strncmp(t, "ok\n", 3));
@@ -2488,6 +2488,7 @@ void test_ctl_reads(void)
     t = ctl_ask(&a, "describe A1:H8");
     CHECK(t && strstr(t, "  region A1:H8: 1 of the 2 rooms\n") && strstr(t, "B2:F6") && strstr(t, "Aria"));
     CHECK(t && !strstr(t, "BT50:BX54") && !strstr(t, "Ghoul"));
+    CHECK(t && !strstr(t, "in region"));                   /* all of West is in the box: no part to say */
     CHECK(t && strstr(t, "2 creatures, 2 rooms"));          /* the map's own line is the whole map's */
     free(t);
     t = ctl_ask(&a, "describe West");                      /* an area's name is a region */

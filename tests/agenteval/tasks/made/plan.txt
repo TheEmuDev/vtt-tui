@@ -33,3 +33,6 @@ link Tower Pit trapdoor oneway
 area Gap F8:G10
 # A name outside ASCII, read back through describe as its bytes.
 area "Lößt" B17:D19
+# A size-2 whose left column is outside Nook and right column in it.
+area Nook D4:G5
+token add enemy C4 size 2 "Lurker"

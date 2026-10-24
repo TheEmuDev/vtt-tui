@@ -1,8 +1,8 @@
 # Every kind of fact, holding.
 rooms == 8
 rooms >= 7
-creatures == 6
-areas == 10
+creatures == 7
+areas == 11
 floors == 0
 links == 2
 errors == 0
@@ -24,3 +24,4 @@ creature Corner in Hall
 creature Brute in Well
 joined Tower Pit
 terrain Lößt floor
+creature Lurker in Nook

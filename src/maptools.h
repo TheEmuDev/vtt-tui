@@ -72,7 +72,7 @@ void maptools_edge_name(const Map *m, int vertical, int x, int y, char *buf, siz
  * extent, terrain, doors and where they lead, creatures, fog and notes;
  * text, or JSON with `json`. */
 void maptools_describe(FILE *out, const Map *m, int json);
-/* The same for the rooms that meet a box (x0, y0, x1, y1; NULL for all): the
+/* The same for the rooms with a square in a box (x0, y0, x1, y1; NULL for all): the
  * map's own lines are always there, and a line says how many rooms of how
  * many. A room is whole or absent, never cut. */
 void maptools_describe_in(FILE *out, const Map *m, int json, const int *box);

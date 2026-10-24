@@ -1,12 +1,12 @@
 FAIL: check clean: 0 errors, 4 warnings (W102 W120)
 FAIL: reachable all: not reachable: Cell (M11) Lost (B17)
 FAIL: rooms < 7: rooms is 8
-FAIL: creatures != 6: creatures is 6
+FAIL: creatures != 7: creatures is 7
 FAIL: floors > 0: floors is 0
 FAIL: links != 2: links is 2
 FAIL: calls > 3: calls is 3
 FAIL: refusals == 0: refusals is 1
-FAIL: area Nave: areas: Hall Crypt Well Vault Cell Tower Lost Pit Gap Lößt
+FAIL: area Nave: areas: Hall Crypt Well Vault Cell Tower Lost Pit Gap Lößt Nook
 FAIL: door Hall Crypt: no door between them
 FAIL: door Hall Nave: no area Nave
 FAIL: joined Vault Cell: no way from Vault to Cell
@@ -22,4 +22,5 @@ FAIL: joined Cell Lost: no way from Cell to Lost
 FAIL: joined Hall Gap: no way from Hall to Gap
 FAIL: terrain Gap floor: none in Gap
 FAIL: terrain Hall water: none in Hall
-0 of 24 facts
+FAIL: creature Lurker in Well: at C4
+0 of 25 facts
