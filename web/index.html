@@ -58,7 +58,7 @@ const b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 const wmod=typeof WebAssembly!=='undefined'?new WebAssembly.Module(WebAssembly.validate(b64(WASM_SIMD))?b64(WASM_SIMD):b64(WASM)):null;
 let mem=null,wblit=null,tilesAt=0,tilesEnd=0,tnext=0,ptrsAt=0,ptrs=null,tu32=null;
 let rd=null,rx0=null,rx1=null,dirtyAll=false;               // dirty span per row, in cells
-let ms=0,frames=0,ws=null,retry=null,back=2000;
+let ms=0,frames=0,ws=null,retry=null,back=2000,gone=false;
 
 /* ---- glyph atlas: alpha masks, keyed by glyph and bold, made on demand */
 const atlas=new Map();
@@ -301,7 +301,7 @@ function connect(){
    * being shown again still tries at once. */
   /* 4001: vtt refused the code -- a new one since the page was opened: to the
    * form, rather than retrying a refused code (each a wrong one). */
-  s.onclose=e=>{if(e&&e.code===4001){status('the join code has changed');location.replace('/');return}
+  s.onclose=e=>{if(e&&e.code===4001){gone=true;status('the join code has changed');location.replace('/');return}
     status('disconnected · retrying');retry=setTimeout(connect,back);back=Math.min(back*2,30000)};
   s.onerror=()=>s.close();
 }
@@ -314,7 +314,7 @@ function reconnect(){ws.onclose=ws.onerror=null;ws.close();clearTimeout(retry);c
  * Back in view with no open socket, a fresh one at once; with one, the
  * screen lock again, since hiding the page released it. */
 function wake(){if(navigator.wakeLock)navigator.wakeLock.request('screen').catch(()=>{})}
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)ws.readyState!==1?reconnect():wake()});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!gone)ws.readyState!==1?reconnect():wake()});   // gone: on its way to the form
 connect();
 
 /* ---- pointing: a tap names the cell under it, and the GM's vtt decides

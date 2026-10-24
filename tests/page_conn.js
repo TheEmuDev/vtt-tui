@@ -45,7 +45,7 @@ function world() {
   function later(f) { const id = nextId++; timers.set(id, { at: now, f, event: true }); }
   const env = {
     WebSocket, document: doc, location: { protocol: 'http:', host: 'h:7793', search: '?k=123456', replace(u) { w.went = u; } },
-    URLSearchParams, encodeURIComponent, me: null, ws: null, retry: null, back: 2000,
+    URLSearchParams, encodeURIComponent, me: null, ws: null, retry: null, back: 2000, gone: false,
     status(m) { w.status = m; },
     feed() {},
     setTimeout(f, ms) { const id = nextId++; timers.set(id, { at: now + ms, f }); return id; },
@@ -187,6 +187,8 @@ async function main() {
     w.open(w.sockets[0]); await step(w, 'H up');
     w.sockets[0].refuse(4001); w.tick(0); await step(w, 'H refused');
     check(w.went === '/' && w.pending() === 0, 'H: to the form, no retry, ' + w.went + ' ' + w.pending());
+    w.hide(); w.show(); await step(w, 'H shown on the way');   // before the form's page has come
+    check(w.sockets.length === 1, 'H: no socket with the old code when shown meanwhile, ' + w.sockets.length);
     w.tick(120000); await step(w, 'H later');
     check(w.sockets.length === 1, 'H: no socket after, ' + w.sockets.length);
   }

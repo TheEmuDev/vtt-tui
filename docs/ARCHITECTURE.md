@@ -166,8 +166,8 @@ Each frame, after the GM's is drawn, `app_frame` makes the players' -- only in p
 ### The page (web/index.html)
 
 One request under 12 KB as sent, gzip to a browser that takes it (docs/REMOTE.md). It connects
-to `/ws`, reconnects after a close (2 s doubling to 30 s while vtt is away) and at once when
-shown again, decodes the records in `feed()`, and draws through a glyph atlas
+to `/ws`, reconnects after a close (2 s doubling to 30 s while vtt is away; a 4001, its code
+refused, sends it to the join form instead) and at once when shown again, decodes the records in `feed()`, and draws through a glyph atlas
 and colored tiles copied into the canvas by a small WebAssembly loop (SIMD where it compiles).
 A tap sends `P x y`. The name sheet sends `n=`. The suites `pagefeed` and `pageconn` run its
 decoder and its connection code under node.

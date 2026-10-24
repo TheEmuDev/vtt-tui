@@ -251,6 +251,7 @@ pointed at) and only one that cannot be goes here, the same commit, with why it 
 | the opening a party cannot pass, `window` | `edge_name` and `edge_passable_kind` (maptools.c, map.c) | tools/agentgrade.py's `CLOSED` | tests/agenteval.sh (task `missed`'s window) |
 | the default port, 7793 | `NET_DEFAULT_PORT` (net.h) | README.md's *Players' view*, docs/REMOTE.md, tests/CLAUDE.md; tools/phonecheck.sh picks 7793 itself (its firewall rule's port) | *none* |
 | the wrong-code limit (10 a minute, 3 an address) | `NET_WRONG_MAX`, `NET_WRONG_ADDR` (net.h) | README.md's *Players' view*, docs/REMOTE.md | suite `netserver` (by the constants); the docs *none* |
+| the refusal close codes, 4001 wrong code / 4002 held back | src/net.c, `http_request` | web/index.html `connect()`, docs/REMOTE.md, docs/ARCHITECTURE.md, CODEMAP's net row | suite `netserver` (the bytes), `pageconn` (H, I); the docs *none* |
 | the page's retry, 2 s doubling to 30 s | web/index.html, `connect()` | docs/ARCHITECTURE.md, docs/REMOTE.md | suite `pageconn` (F, G); the docs *none* |
 | the page's budget, 12 KB as sent | suite `webpage` (12288, against `WEBPAGE_GZ_LEN`) | CLAUDE.md, docs/REMOTE.md, docs/ARCHITECTURE.md, docs/HEALTH.md, CODEMAP's web row | *none* |
 | what vtt prints | the code | tests/oracle/expected; golden frames under tests/ | `make test`; `tools/oracle.sh record` / `VTT_UPDATE_GOLDEN=1` after a meant change |
