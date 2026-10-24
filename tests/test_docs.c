@@ -455,8 +455,8 @@ void test_docs(void)
             if (t && !strstr(t, port)) { printf("  %s does not say port %s\n", PORT_DOCS[i], port); CHECK(0); }
             /* And no stale copy beside it: every "port N" and ":N" (an
              * address's port; 4-5 digits) is this one, but for two that are
-             * not the default: a file's line (`net.c:1050`, letters after a
-             * dot before the colon; a host here ends in digits or is `host`)
+             * not the default: a file's line (`net.c:1050`, a source
+             * extension before the colon; `gm.local:7794` is still read)
              * and a port the doc itself has the GM name (`:serve 7777`). The
              * bare copies ("the port is 7793") are not read: CODEMAP's facts
              * row says *none* for them. */
@@ -467,9 +467,14 @@ void test_docs(void)
                 while (isdigit((unsigned char)d[n])) n++;
                 if (n < 4 || n > 5 || isalnum((unsigned char)d[n])) continue;
                 if (*p == ':') {
+                    /* A source file's extension, not a dotted host's last label. */
+                    static const char *const EXT[] = { "c", "h", "sh", "py", "js", "md", "html", "txt" };
                     const char *b = p;
                     while (b > t && isalpha((unsigned char)b[-1])) b--;
-                    if (b < p && b > t && b[-1] == '.') continue;
+                    int file = 0;
+                    for (size_t e = 0; b < p && b > t && b[-1] == '.' && e < sizeof EXT / sizeof EXT[0]; e++)
+                        file |= (size_t)(p - b) == strlen(EXT[e]) && !strncmp(b, EXT[e], (size_t)(p - b));
+                    if (file) continue;
                 }
                 char named[24];
                 snprintf(named, sizeof named, ":serve %.*s", (int)n, d);
