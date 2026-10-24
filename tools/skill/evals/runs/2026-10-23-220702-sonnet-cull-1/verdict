@@ -1,0 +1,8 @@
+pass: check clean
+pass: creatures goblin == 1
+pass: creature chief
+pass: creature wolf
+pass: creature Aria
+pass: creatures == 3
+pass: refusals <= 2
+7 of 7 facts

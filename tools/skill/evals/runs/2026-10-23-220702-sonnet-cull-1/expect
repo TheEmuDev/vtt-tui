@@ -1,0 +1,7 @@
+check clean
+creatures goblin == 1
+creature chief
+creature wolf
+creature Aria
+creatures == 3
+refusals <= 2

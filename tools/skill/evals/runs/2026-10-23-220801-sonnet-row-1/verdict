@@ -1,0 +1,14 @@
+pass: check clean
+pass: reachable all
+pass: area Gate
+pass: area Hall
+pass: area Armory
+pass: area Shrine
+pass: area Throne
+pass: joined Gate Hall
+pass: joined Hall Armory
+pass: joined Armory Shrine
+pass: joined Shrine Throne
+pass: creature lich in Throne
+pass: refusals <= 2
+13 of 13 facts

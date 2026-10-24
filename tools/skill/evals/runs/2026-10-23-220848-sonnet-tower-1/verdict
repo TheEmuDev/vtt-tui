@@ -1,0 +1,12 @@
+pass: check clean
+pass: reachable all
+pass: area Ground
+pass: area Top
+pass: area Guardroom
+pass: area Lookout
+pass: floors == 2
+pass: links >= 1
+pass: joined Guardroom Lookout
+pass: creature sentry in Lookout
+pass: refusals <= 2
+11 of 11 facts

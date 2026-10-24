@@ -1,0 +1,10 @@
+pass: check clean
+pass: reachable all
+pass: area House
+pass: area Cellar
+pass: links >= 1
+pass: joined House Cellar
+pass: creatures spider == 2
+pass: creature spider in Cellar
+pass: refusals <= 2
+9 of 9 facts

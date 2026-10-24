@@ -1,0 +1,8 @@
+pass: check clean
+pass: area River
+pass: area Bridge
+pass: terrain River water
+pass: terrain Bridge wood
+pass: creature troll in Bridge
+pass: refusals <= 2
+7 of 7 facts

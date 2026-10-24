@@ -366,6 +366,12 @@ a single run says little of a task's spread; N = 3 is the plan's for a change to
 **After the review's fixes (2026-10-23, `runs/2026-10-23-2137*`..`2140*`): 12 of 12 again**,
 $0.739 in all (cache writes 123,946, output 13,442), $0.054-0.070 a task.
 
+**Short answers (the user, 2026-10-23: yes; `runs/2026-10-23-22*`):** the core asks an agent to
+end in a line or two, by square and name. 12 of 12 again; the final answer 442 characters on
+average against 616 (-28%), but output tokens 12,903 against 13,442 (-4%) and $0.731 against
+$0.739: most of what an agent writes is its plan, its calls and its thinking, not the answer.
+The gain is the GM's reading, not money.
+
 ## Order
 
 The user's order (ROADMAP 27, V2.md *Next*): step 7 is built next. Then part 1's runner and

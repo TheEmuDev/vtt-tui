@@ -29,6 +29,10 @@ which line and why. Accepted, one request is one undo step for the GM.
 `--describe` (the rooms the walls make and how they join), `--dump-map` -- and fix with
 another plan against the same file.
 
+**When done, answer in a line or two:** what changed, by square and name (`Crypt K2:R7, door
+J4, two ghouls`), and anything left undone. No description of the map, no repeat of the plan:
+the GM has the map in front of them.
+
 ## Refusals
 <!-- read for: core, live -->
 
