@@ -104,8 +104,9 @@ static int bent(const Area *a, const Area *b, int w, int across_first, Corridor 
     return 1;
 }
 
-/* Every square of the corridor is void and in no named area: a corridor
- * is dug through nothing, never through a room or ground already there. */
+/* Every square of the corridor is void, and in no named area but one that
+ * holds both rooms whole (a floor): a corridor is dug through nothing, never
+ * through a room or ground already there. */
 static int clear_of(const Map *m, const Corridor *c, char *err, size_t errsz)
 {
     for (int i = 0; i < c->nleg; i++)

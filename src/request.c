@@ -1515,8 +1515,8 @@ static const Request REQUESTS[] = {
       "refused when they share fewer; one bend when they are apart both ways, leaving the first room's side "
       "and entering the second's. Walled along; a door at each end when 1 wide, open ends when wider (which "
       "joins the two rooms into one space: describe then tells them as one room). Rooms sharing a wall just get "
-      "the doorway. Ground in the way refuses it, and so does an area holding one of the two rooms but not "
-      "both (an area holding both, a floor, is passed through)" },
+      "the doorway. Ground in the way refuses it, and so does any area in the way unless it holds both "
+      "rooms (a floor, passed through)" },
     { "tile",     E, rq_edit, "tile REGION void|floor|water|rough|brush|wood|hazard", "the ground of every square in the region", "" },
     { "wall",     E, rq_edit, "wall REGION [wall|door|open|window|secret|opensecret|none]", "the region's outline",
       "open is an open door, opensecret an open secret door, none clears; walls sit on the boundaries between squares" },
