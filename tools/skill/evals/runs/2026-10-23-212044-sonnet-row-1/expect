@@ -1,0 +1,13 @@
+check clean
+reachable all
+area Gate
+area Hall
+area Armory
+area Shrine
+area Throne
+joined Gate Hall
+joined Hall Armory
+joined Armory Shrine
+joined Shrine Throne
+creature lich in Throne
+refusals <= 2

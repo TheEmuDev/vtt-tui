@@ -1,0 +1,6 @@
+0	2859	-	--agent-guide
+0	11648	-	--agent-guide plan
+1	0	usage	map.vtt --apply plan.txt --new 30x20
+0	39	-	map.vtt --apply plan.txt --new 30x20
+0	12	-	map.vtt --check
+0	1455	-	map.vtt --dump-map

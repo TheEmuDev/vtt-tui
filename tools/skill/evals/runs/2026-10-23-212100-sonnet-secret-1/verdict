@@ -1,0 +1,7 @@
+pass: check clean
+pass: area Study
+pass: area Vault
+pass: joined Study Vault
+pass: creature mimic in Vault
+pass: refusals <= 2
+6 of 6 facts

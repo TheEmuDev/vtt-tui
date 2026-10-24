@@ -1,0 +1,3 @@
+A wizard's study (Study) with a hidden vault (Vault) behind a secret door. Put a mimic in the vault.
+
+Make the map as map.vtt in the current directory, 30x20 squares (it is not there yet).

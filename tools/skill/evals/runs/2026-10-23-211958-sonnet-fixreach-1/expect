@@ -1,0 +1,6 @@
+check clean
+reachable all
+areas == 3
+creature Guard in Barracks
+creatures == 1
+refusals <= 2

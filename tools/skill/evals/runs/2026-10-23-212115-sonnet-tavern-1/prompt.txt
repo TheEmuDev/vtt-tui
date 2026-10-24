@@ -1,0 +1,3 @@
+Make me a roadside tavern. A common room (call it Common) about 10 by 8, a kitchen (Kitchen) right behind it to the north sharing a wall with a door between, and a stable (Stable) off to the east down a short passage. Three thugs drinking in the common room.
+
+Make the map as map.vtt in the current directory, 40x24 squares (it is not there yet).

@@ -1,0 +1,6 @@
+check clean
+area Study
+area Vault
+joined Study Vault
+creature mimic in Vault
+refusals <= 2

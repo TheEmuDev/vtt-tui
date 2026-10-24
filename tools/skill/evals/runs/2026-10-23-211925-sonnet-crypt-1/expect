@@ -1,0 +1,12 @@
+check clean
+reachable all
+area Hall
+area Burial
+area Well
+joined Hall Burial
+joined Hall Well
+terrain Well water
+creatures ghoul == 2
+creature ghoul in Burial
+creature Aria in Hall
+refusals <= 2

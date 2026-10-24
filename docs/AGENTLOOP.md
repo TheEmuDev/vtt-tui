@@ -350,6 +350,15 @@ shell command (`cat > /tmp/plan.txt <<E ... E && vtt ...`): refused by the run's
 `Bash(vtt *)`, it stopped and said so. So the baseline measures the permissions an agent meets
 as much as the guide; the redesign's core answers it in the text an agent reads first.
 
+**The redesign's run (2026-10-23, the same twelve once, `runs/2026-10-23-2118*`..`2121*`):
+12 of 12 met every fact** (the baseline 2), $0.776 in all against $0.953 (-19%): cache writes
+128,862 tokens against 164,890 (-22%), output 13,940 against 19,938 (-30%), cache reads
+1,209,492 against 937,659 (more turns: the work is now done, where the baseline's agents mostly
+stopped after reading the guide). Per task $0.060-0.077, 9-14 turns. Crypt, the one task that
+passed with the sections too: $0.086 in 8 turns then, $0.060 in 9 now. By §4's rule it ships:
+no task that passed fails (addroom and cull, the baseline's two, pass again). N = 1 each side:
+a single run says little of a task's spread; N = 3 is the plan's for a change to the texts.
+
 ## Order
 
 The user's order (ROADMAP 27, V2.md *Next*): step 7 is built next. Then part 1's runner and

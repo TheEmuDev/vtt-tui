@@ -1,0 +1,9 @@
+0	2859	-	--agent-guide
+0	11648	-	--agent-guide plan
+1	265	-	/tmp/vtt-eval.KjDlXP/map/map.vtt --check
+0	580	-	/tmp/vtt-eval.KjDlXP/map/map.vtt --describe
+2	0	-	/tmp/vtt-eval.KjDlXP/map/map.vtt --apply /tmp/plan.txt
+1	265	-	/tmp/vtt-eval.KjDlXP/map/map.vtt --check
+0	1341	-	/tmp/vtt-eval.KjDlXP/map/map.vtt --dump-map
+0	38	-	/tmp/vtt-eval.KjDlXP/map/map.vtt --apply /tmp/vtt-eval.KjDlXP/map/plan.txt
+0	12	-	/tmp/vtt-eval.KjDlXP/map/map.vtt --check

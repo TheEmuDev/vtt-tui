@@ -1,0 +1,9 @@
+pass: check clean
+pass: area Road
+pass: creatures bandit == 4
+pass: creature Aria in Road
+pass: creature Bran in Road
+pass: creature Cole in Road
+pass: creatures == 7
+pass: refusals <= 2
+8 of 8 facts

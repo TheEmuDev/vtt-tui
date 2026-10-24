@@ -1,0 +1,3 @@
+A two-storey watchtower on one map. Ground floor is a guardroom (Guardroom), the top floor a lookout (Lookout); stairs between them. Make each storey a floor, called Ground and Top. One sentry in the lookout.
+
+Make the map as map.vtt in the current directory, 50x20 squares (it is not there yet).

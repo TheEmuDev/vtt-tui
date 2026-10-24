@@ -1,0 +1,9 @@
+check clean
+reachable all
+area House
+area Cellar
+links >= 1
+joined House Cellar
+creatures spider == 2
+creature spider in Cellar
+refusals <= 2

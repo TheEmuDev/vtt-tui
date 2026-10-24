@@ -1,0 +1,7 @@
+pass: check clean
+pass: reachable all
+pass: areas == 3
+pass: creature Guard in Barracks
+pass: creatures == 1
+pass: refusals <= 2
+6 of 6 facts
