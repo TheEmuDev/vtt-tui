@@ -253,6 +253,12 @@ for the work: each section says who reads it on a `<!-- read for: plan, live -->
 its heading, which `toc` prints, so the skill names no section (about 19 KB for a plan).
 Suite `agentguide` holds each part under `GUIDE_PART_MAX` and every section to a read-for line.
 
+**The crypt task again, with the sections (2026-10-23, `runs/2026-10-23-202241-sonnet-crypt-1`):**
+12 of 12 facts, 17 s, $0.086. The agent read `toc`, then the four sections it marks `plan`
+(18,895 bytes), wrote one plan through `--apply` from stdin, then `--check`, `--dump-map` and
+`--describe`; ten vtt calls, no refusal; nothing left under `~/.claude/projects`. Against the
+first run (no map, $0.046), the guide's reading was the whole difference.
+
 **The cuts measured for the slimming, not made yet:** the opening's notes for maintainers
 (about 1 KB of 1,202); the size limits said three times (the `limit` row 375, the read and edit
 bounds 1,184, the plan's 64,896), which belong to vtt (one sentence and a `help limits`);

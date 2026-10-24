@@ -1,0 +1,13 @@
+pass: check clean
+pass: reachable all
+pass: area Hall
+pass: area Burial
+pass: area Well
+pass: joined Hall Burial
+pass: joined Hall Well
+pass: terrain Well water
+pass: creatures ghoul == 2
+pass: creature ghoul in Burial
+pass: creature Aria in Hall
+pass: refusals <= 2
+12 of 12 facts
