@@ -2,7 +2,7 @@
 check clean
 reachable all
 rooms < 7
-creatures != 7
+creatures != 8
 floors > 0
 links != 2
 calls > 3
@@ -24,3 +24,4 @@ joined Hall Gap
 terrain Gap floor
 terrain Hall water
 creature Lurker in Well
+creature Skulker in Crypt

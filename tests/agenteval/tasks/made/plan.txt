@@ -36,3 +36,6 @@ area "Lößt" B17:D19
 # A size-2 whose left column is outside Nook and right column in it.
 area Nook D4:G5
 token add enemy C4 size 2 "Lurker"
+# A size-2 running past a one-square area's east and south edges.
+area Ledge E3:E3
+token add enemy E3 size 2 "Skulker"

@@ -165,8 +165,8 @@ job. Text, a screen of it. It reads counts only, so what it prints can be shown 
   `--apply` (a read: the file's bytes are left), whose `in_region` the review's fix added. A
   wide corridor's open ends make two areas one room, so the room's whole terrain would not do;
   and before the fix `describe REGION` told every room whose *bounds* met the box (an L of
-  ground round a walled room met it with no square inside), against the guide's "only the
-  rooms that meet it". A creature is in an area when a square of its footprint is. The one opening a party cannot pass is a
+  ground round a walled room met it with no square inside), against the guide's words then,
+  "only the rooms that meet it" (now "with a square in it"). A creature is in an area when a square of its footprint is. The one opening a party cannot pass is a
   window (`edge_passable_kind`); the grader names only that one, so it says nothing of the
   others' names. A line of `expect` that is no fact stops the grader (exit 2) before any is
   judged: with no map every fact fails, and a misspelt one would fail among them unseen.
@@ -210,10 +210,8 @@ job. Text, a screen of it. It reads counts only, so what it prints can be shown 
 - **A signal to the runner** stops the agent at once: it runs in the background and the exit
   trap kills its `timeout`, which passes the signal on (the review found a TERM waited for the
   whole run; checked after: TERM and INT end it in under a second, nothing left running).
-- **Its cost in `make test`:** 1.7 s, run alone (16 runs, each a few vtt calls and a grading;
-  1.8 s after the review's checks),
-  of a whole run of 14.7 s (2026-10-23, the desktop, i7-8700K); it runs after `protocol`, one run at a time
-  (docs/TESTSPEED.md).
+- **Its cost in `make test`** is docs/TESTSPEED.md's (that page owns the test run's times); it
+  runs after `protocol`, one run at a time.
 
 ## Order
 

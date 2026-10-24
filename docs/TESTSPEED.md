@@ -210,3 +210,6 @@ runs, each a few vtt calls through tools/sandbox.sh and a grading in python), on
 A whole `make test` after it: **14.7 s** (one run, the desktop, nothing changed). Running its
 runs side by side, or beside the oracle, would take most of the 1.7 s back; not done yet,
 written down here as the gap.
+After its reviews (da0df8e and the fixes after it) it is **2.08 s** alone (three runs, 2078-2082
+ms, the desktop): the stand-in claude, the canary, and the TERM check, whose two 0.1 s polls
+wait for the stand-in agent to start and for the runner to end.

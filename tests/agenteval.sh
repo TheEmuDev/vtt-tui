@@ -95,13 +95,18 @@ fi
 EVAL_TASKS=$T EVAL_RUNS=$D/sig EVAL_MODEL=stub EVAL_AGENT="echo \$\$ > '$D/agent.pid'; exec sleep 20" \
     "$ROOT/tools/agenteval.sh" --yes -n 1 nothing > "$D/sig.out" 2>&1 &
 rp=$!
-i=0; while [ ! -s "$D/agent.pid" ] && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
+i=0; while [ ! -s "$D/agent.pid" ] && kill -0 "$rp" 2>/dev/null && [ $i -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
 ap=$(cat "$D/agent.pid" 2>/dev/null)
-kill -TERM "$rp"
-i=0; while kill -0 "$rp" 2>/dev/null && [ $i -lt 20 ]; do sleep 0.1; i=$((i + 1)); done
-if kill -0 "$rp" 2>/dev/null || { [ -n "$ap" ] && kill -0 "$ap" 2>/dev/null; } || [ -z "$ap" ]; then
-    echo "  FAIL agenteval: a TERM to the runner left it or its agent running (agent pid ${ap:-never written})"; fail=1
-    kill "$rp" ${ap:+"$ap"} 2>/dev/null
+if [ -z "$ap" ]; then
+    echo "  FAIL agenteval: the TERM check's agent never started:"; cat "$D/sig.out"; fail=1
+    kill "$rp" 2>/dev/null
+else
+    kill -TERM "$rp" 2>/dev/null
+    i=0; while kill -0 "$rp" 2>/dev/null && [ $i -lt 20 ]; do sleep 0.1; i=$((i + 1)); done
+    if kill -0 "$rp" 2>/dev/null || kill -0 "$ap" 2>/dev/null; then
+        echo "  FAIL agenteval: a TERM to the runner left it or its agent (pid $ap) running"; fail=1
+        kill "$rp" "$ap" 2>/dev/null
+    fi
 fi
 wait "$rp" 2>/dev/null
 
