@@ -47,7 +47,7 @@ and the disk meet in it.
 | started as | what runs | talks to |
 |---|---|---|
 | `vtt [MAP]` | `run_interactive`: the terminal app, its loop, the channel socket always, the server with `--serve` | everything below |
-| `vtt --watch HOST:PORT` | `watch_main` (watch.c): a terminal showing the players' frame | a vtt's server, as a raw watcher |
+| `vtt --watch ADDRESS` (`host:port?k=code`, as `:serve` shows it) | `watch_main` (watch.c): a terminal showing the players' frame | a vtt's server, as a raw watcher |
 | `vtt --ctl [--ctl-pid N]` | `ctl_client_main`: one request to a running vtt, the answer on stdout | the channel socket |
 | `vtt MAP --apply plan.txt` | `run_apply`: a plan proposed to the vtt that holds the map, or run in-process and saved when none does | the channel, or the file |
 | `vtt --claude-agent ...` | `apiagent_main` (apiagent.c): vtt as its own agent, calling the Claude API through curl | the channel, curl, the key |
