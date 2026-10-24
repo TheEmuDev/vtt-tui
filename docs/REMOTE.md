@@ -88,7 +88,7 @@ measured against them.
 | `:serve off` | close it and drop every client |
 | `:mirror` | serve if needed, then open a detached terminal window running the watcher, via `$TERMINAL` |
 | `:player preview` | the players' frame on the GM's own screen; `q` returns |
-| `vtt --watch host:port` | the watcher, for scripts and tests over loopback (127.0.0.1); from any other address `host:port?k=code` |
+| `vtt --watch host:port` | the watcher, for scripts and tests over loopback (any 127.x address); from any other address `host:port?k=code` |
 
 ## Instrumentation
 

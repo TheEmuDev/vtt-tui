@@ -455,8 +455,8 @@ void test_docs(void)
             if (t && !strstr(t, port)) { printf("  %s does not say port %s\n", PORT_DOCS[i], port); CHECK(0); }
             /* And no stale copy beside it: every "port N" and ":N" (an
              * address's port; 4-5 digits) is this one, but for two that are
-             * not the default: a file's line (`net.c:1050`, a source
-             * extension before the colon; `gm.local:7794` is still read)
+             * not the default: a file's line (`net.c:1050`: a name the repo
+             * has before the colon; `gm.local:7794` and `gm.sh:7794` are read)
              * and a port the doc itself has the GM name (`:serve 7777`). The
              * bare copies ("the port is 7793") are not read: CODEMAP's facts
              * row says *none* for them. */
@@ -467,14 +467,16 @@ void test_docs(void)
                 while (isdigit((unsigned char)d[n])) n++;
                 if (n < 4 || n > 5 || isalnum((unsigned char)d[n])) continue;
                 if (*p == ':') {
-                    /* A source file's extension, not a dotted host's last label. */
-                    static const char *const EXT[] = { "c", "h", "sh", "py", "js", "md", "html", "txt" };
+                    /* A file the repo has (its name after the last '/'), not a host. */
                     const char *b = p;
-                    while (b > t && isalpha((unsigned char)b[-1])) b--;
-                    int file = 0;
-                    for (size_t e = 0; b < p && b > t && b[-1] == '.' && e < sizeof EXT / sizeof EXT[0]; e++)
-                        file |= (size_t)(p - b) == strlen(EXT[e]) && !strncmp(b, EXT[e], (size_t)(p - b));
-                    if (file) continue;
+                    while (b > t && !strchr(" `(\t\n|/", b[-1])) b--;
+                    char base[128];
+                    size_t bl = (size_t)(p - b);
+                    if (bl && bl < sizeof base) {
+                        memcpy(base, b, bl);
+                        base[bl] = '\0';
+                        if (has_word(&names, base, bl)) continue;
+                    }
                 }
                 char named[24];
                 snprintf(named, sizeof named, ":serve %.*s", (int)n, d);
