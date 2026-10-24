@@ -721,7 +721,7 @@ int app_agent_setting(App *a, const char *rest)
         }
         if (settings_set(&a->settings, SET_PASSKEY, arg, err, sizeof err) < 0) { app_set_status_gm(a, err); return 1; }
         app_settings_changed(a);
-        app_note_gm(a, a->settings.pass_key ? "passkey on - agent commands get ANTHROPIC_API_KEY when vtt was started with it"
+        app_note_gm(a, a->settings.pass_key ? "passkey on - agent commands get ANTHROPIC_API_KEY when vtt was started with it (a crash of one can leave it in the system's crash log)"
                                             : "passkey off - an exported ANTHROPIC_API_KEY stays with vtt and the Claude agent");
         return 1;
     }

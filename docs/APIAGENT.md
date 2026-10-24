@@ -585,10 +585,15 @@ read; the variable out of the environment and held; agent commands with no key, 
 it under `passkey on`; `r`, `s` and esc at the new box, which the phones never see; not
 dumpable while a key is held, dumpable again when it is let go.
 
-Not yet shown, and why: whether systemd-coredump keeps a dump of a process whose core limit
-is 0 (curl's case; the agent and vtt are covered by not being dumpable, which prctl(2)
-documents stops core dumps). It is the crash test of *Tests*, which writes to the system's
-crash store and waits for the user's go (HEALTH B18). The keyring lookup a call is not
+**The crash test (2026-10-23, the user's go: "don't break anything"):** scratch programs
+holding a made-up key, crashed under this machine's systemd-coredump. With the core limit at
+0 (curl's case) the crash is logged and no core is stored; the same program at the normal limit
+stores a core that holds the key, so the limit is what keeps it off disk. A non-dumpable
+process (vtt holding a key, the Claude agent) leaves no entry at all. `apikey_take_env`'s wipe
+in place leaves no trace in a crash's recorded environment. But the journal does record a
+crashing process's environment whether or not a core is kept: with `:agent passkey on` an
+agent command holds the key there, so its crash can put it in the journal (HEALTH 98; the
+setting's note and the README now say so). HEALTH B18 closed. The keyring lookup a call is not
 timed: it needs the real keyring, likewise the user's go.
 
 Its two Fable reviews (2026-10-23), each finding reproduced and fixed:

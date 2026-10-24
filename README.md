@@ -1478,7 +1478,7 @@ $1.00 unless you change it.
 | `:agent cap 2.50`, `:agent calls 30` | stop a job past this many dollars (by vtt's price table; 0 for none) or API calls; $1.00 and 25 by default |
 | `:agent fallbacks on\|off` | when Claude declines a request, try it on another model in the same call (on by default) |
 | `:agent key`, `:agent key remove` | type a key in, hidden, then `r` (keyring) or `s` (this session only); take the kept one away |
-| `:agent passkey on\|off` | give agent commands an `ANTHROPIC_API_KEY` vtt was started with (off by default) |
+| `:agent passkey on\|off` | give agent commands an `ANTHROPIC_API_KEY` vtt was started with (off by default). An agent command that then crashes can leave the key in the system's crash log, as any program holding it in its environment can |
 
 What each job cost is in the session log when `:log` is on, and every run adds a line to
 `~/.local/share/vtt/claude-usage.tsv`; **Options** sums it. A job that cannot finish says
