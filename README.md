@@ -96,9 +96,9 @@ vtt [options] [map.vtt]
   --ctl [REQUEST]    send a request to a running vtt and print the answer
                      (no REQUEST, or -: read it from stdin)
   --ctl-pid N [REQ]  with several vtts running, send to the one with pid N
-  --agent-guide [toc|SECTION]
-                     the guide for AI agents (docs/AGENTS.md), as this vtt has it: whole,
-                     its sections (toc), or one
+  --agent-guide [TOPIC|VERB]
+                     the guide for AI agents, as this vtt has it: where to start, a topic
+                     (plan, live, ..., all), or one request
   --claude-agent     the Claude API agent itself; :agent claude starts it for you
   --import-adversaries FILE
                      the Daggerheart SRD's adversaries as characters with cards
@@ -1373,15 +1373,13 @@ use, and how `:dmg` marks HP. Available: `none`, `daggerheart`.
 
 An AI agent can build and edit maps for the GM, either by writing a plan file and running it
 with `--apply`, or live in the GM's session through the control channel.
-[docs/AGENTS.md](docs/AGENTS.md) is the complete guide for an agent, including the request
-language; `vtt --agent-guide` prints the copy built into your vtt, so it always matches the
-version installed.
+`vtt --agent-guide` prints the guide for an agent, built into your vtt so it always matches the
+version installed: where to start, then one topic (`plan` or `live`) with every request it uses,
+and `vtt --agent-guide room` (any request) for one. The prose is [docs/AGENTS.md](docs/AGENTS.md).
 
 To point Claude Code at it, install the vtt skill once: `make install-skill` copies
 `tools/skill/SKILL.md` to `~/.claude/skills/vtt/`. The skill is a few lines telling an agent
-when to use vtt and how to start, and it sends the agent to the guide a section at a time
-(`vtt --agent-guide toc` lists them): the whole guide is longer than Claude Code passes to the
-model from one command.
+when to use vtt, and it sends the agent to `vtt --agent-guide`.
 Run it again after updating vtt.
 
 ### Asking an agent
@@ -1716,7 +1714,7 @@ single undo step when accepted. Under `:agent accept auto` a request lands at on
 summary on the status line and a highlight around the changed squares; if you are in play
 mode or in the middle of something (typing a command, drawing a wall), it lands at your next
 key once you are back. `vtt --ctl undo` takes back the calling agent's last accepted change,
-once, while nothing has happened since; `vtt --ctl 'job N undo'` takes back job N's. The full request language is in [docs/AGENTS.md](docs/AGENTS.md).
+once, while nothing has happened since; `vtt --ctl 'job N undo'` takes back job N's. Every request, with its rules: `vtt --agent-guide all`, or `help` over the channel.
 
 ## File format
 

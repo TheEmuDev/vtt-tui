@@ -84,7 +84,7 @@ static const char ROLE[] =
     "proposal back (job N check, job N dump) and fix it if it is wrong, then end your turn with "
     "one short line saying what you proposed. The GM reviews it; you are started again if they "
     "send it back. Never use wait. Read small regions rather than the whole map. The guide that "
-    "follows is the whole of the request language and how to build a map: follow it.\n";
+    "follows is the request language, each request with its rules, and how to build a map: follow it.\n";
 
 static const char TOOL_DESC[] =
     "Send one request to the vtt the GM has open, as this job's agent, and get its answer. The "
@@ -204,7 +204,18 @@ static void write_body(Run *r, ByteBuf *body)
     json_open(&j, '{');
     json_kstr(&j, "type", "text");
     json_key(&j, "text");
-    json_str(&j, AGENT_GUIDE);
+    {
+        /* The guide's live topic, not the whole: what a job needs (the
+         * requests with their rules, the live steps, building a map); the
+         * same bytes every call, so it is read from the cache. */
+        char  *g;
+        size_t gl;
+        FILE  *gf = xmemstream(&g, &gl);
+        guide_compose(gf, "live");
+        fclose(gf);
+        json_str(&j, g);
+        free(g);
+    }
     json_key(&j, "cache_control");
     json_open(&j, '{');
     json_kstr(&j, "type", "ephemeral");

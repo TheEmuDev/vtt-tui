@@ -1,0 +1,10 @@
+FAIL: check clean: no map was made
+FAIL: reachable all: no map was made
+FAIL: area House: no map was made
+FAIL: area Cellar: no map was made
+FAIL: links >= 1: no map was made
+FAIL: joined House Cellar: no map was made
+FAIL: creatures spider == 2: no map was made
+FAIL: creature spider in Cellar: no map was made
+pass: refusals <= 2
+1 of 9 facts

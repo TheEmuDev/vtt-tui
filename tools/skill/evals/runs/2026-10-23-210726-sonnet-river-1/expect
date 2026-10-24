@@ -1,0 +1,7 @@
+check clean
+area River
+area Bridge
+terrain River water
+terrain Bridge wood
+creature troll in Bridge
+refusals <= 2

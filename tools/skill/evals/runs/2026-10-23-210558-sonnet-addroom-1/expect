@@ -1,0 +1,11 @@
+check clean
+reachable all
+area Store
+areas == 3
+joined Hall Store
+creature rat in Store
+creature Aria
+creature Bran
+creature Cook
+creatures == 4
+refusals <= 2

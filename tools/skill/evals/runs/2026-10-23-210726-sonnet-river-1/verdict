@@ -1,0 +1,8 @@
+FAIL: check clean: no map was made
+FAIL: area River: no map was made
+FAIL: area Bridge: no map was made
+FAIL: terrain River water: no map was made
+FAIL: terrain Bridge wood: no map was made
+FAIL: creature troll in Bridge: no map was made
+pass: refusals <= 2
+1 of 7 facts

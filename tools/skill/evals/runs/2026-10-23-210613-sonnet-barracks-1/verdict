@@ -1,0 +1,11 @@
+FAIL: check clean: no map was made
+FAIL: reachable all: no map was made
+FAIL: area Bunks: no map was made
+FAIL: area Mess: no map was made
+FAIL: area Captain: no map was made
+FAIL: door Bunks Mess: no map was made
+FAIL: joined Mess Captain: no map was made
+FAIL: creatures orc == 5: no map was made
+FAIL: creature captain in Captain: no map was made
+pass: refusals <= 2
+1 of 10 facts

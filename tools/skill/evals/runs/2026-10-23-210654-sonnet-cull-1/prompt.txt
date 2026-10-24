@@ -1,0 +1,3 @@
+Take all the regular goblins off this map, but keep the chief and everyone else.
+
+The map is map.vtt, in the current directory.

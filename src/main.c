@@ -106,9 +106,9 @@ static void usage(void)
         "  --ctl [REQUEST]    send a request to the vtt taking them, print the answer\n"
         "                     (no REQUEST, or -: read it from stdin; docs/CONTROL.md)\n"
         "  --ctl-pid N [REQ]  with several running, the one with pid N\n"
-        "  --agent-guide [toc|SECTION]\n"
-        "                     the guide for AI agents that build maps (docs/AGENTS.md): whole,\n"
-        "                     its list of sections, or the one whose heading holds SECTION\n"
+        "  --agent-guide [TOPIC|VERB]\n"
+        "                     the guide for AI agents that build maps (docs/AGENTS.md): where to\n"
+        "                     start and its topics, a topic (plan, live, ..., all), or one request\n"
         "  --claude-agent     the Claude API agent itself, as :agent claude starts it (docs/APIAGENT.md);\n"
         "                     --model opus|sonnet|haiku|fable|ID, --effort low|medium|high,\n"
         "                     --cap DOLLARS, --calls N, --fallbacks on|off\n"
@@ -148,11 +148,9 @@ static int parse_args(Options *o, int argc, char **argv)
         const char *a = argv[i];
         if (!strcmp(a, "-h") || !strcmp(a, "--help")) { usage(); return 1; }
         else if (!strcmp(a, "--agent-guide")) {
-            /* With a word after it, a part (guide.c): the whole is over what an
-             * agent's tool passes whole (GUIDE_PART_MAX). */
-            if (i + 1 < argc && argv[i + 1][0] != '-') exit(guide_print(stdout, stderr, argv[i + 1]));
-            fwrite(AGENT_GUIDE, 1, AGENT_GUIDE_LEN, stdout);
-            return 1;
+            /* The core, or the topic or request named after it (guide.c): each
+             * under what an agent's tool passes whole (GUIDE_PART_MAX). */
+            exit(guide_print(stdout, stderr, i + 1 < argc && argv[i + 1][0] != '-' ? argv[i + 1] : NULL));
         }
         else if (!strcmp(a, "--claude-agent")) o->claude_agent = 1;
         else if (!strcmp(a, "--model") && i + 1 < argc) {

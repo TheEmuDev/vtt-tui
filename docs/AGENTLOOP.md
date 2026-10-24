@@ -269,6 +269,87 @@ and the events an agent acts on, the event table (1,130) to a `help events`. Abo
 request's form (2,768 bytes for all of them), the guide's tables the rules a map comes out
 right by.
 
+## The guide redesigned: the plan (2026-10-23; the user, the same day: "Do the redesign")
+
+**What a run costs, and why the shape matters.** The passing crypt run (8 turns, $0.086):
+14,896 tokens written to the cache (Claude Code's own part about 6-8k, by the first run's
+8,413 with only a 2 KB preview of the guide), 99,116 read from it (the context again each
+turn, at a tenth), 1,639 out. Bytes read in count most, then turns, then what the agent
+writes. Five of the eight turns fetched the guide (`toc`, then four sections).
+
+**What an agent needs, in three tiers.** (1) Always: what a map is, the two ways in, all or
+nothing, the loop (plan, apply, check, describe), the refusal classes -- about 3 KB. (2) For
+the work: the grammar, a worked example, the rules a map comes out right by (placement,
+corridors, rooms over rooms) -- about 6 KB for a plan, plus the requests themselves. (3) Only
+when it is needed: a request's exact edge rules, the limits, exit codes, events, several
+agents' names. Today the third is read with the first two, and the request tables restate
+`help`.
+
+**The decisions.**
+1. **One entry, topics:** `vtt --agent-guide [TOPIC]`. No topic: tier 1 and the list of
+   topics, each with its size (replaces `toc`; the whole guide is `all`). `plan` and `live`:
+   each a whole bundle in one call -- the concepts, the requests it uses with their rules,
+   the prose for that work. `file`: the file by hand. `VERB` (`room`, `corridor`): that
+   request alone, as `help VERB` gives it. `limits`, `events`: reference. Each under
+   `GUIDE_PART_MAX`.
+2. **Each request's rules are `REQUESTS[]`'s** (request.c), a `rules` field beside `use` and
+   `doc`: `help VERB` prints all three, and the bundles print the rows they need from the table.
+   docs/AGENTS.md loses its request tables and keeps the concepts and the prose; nothing is
+   written twice. This reverses the table's comment ("Nothing longer belongs here: the page is
+   AGENTS.md"). No generated copy is kept in docs/: a reader runs `vtt --agent-guide VERB`.
+3. **A refusal of class `usage` ends with `(help VERB)`**, its line's verb, at the one place a
+   line's refusal is written (request.c, after `run_line`). The guide's class table shrinks to
+   a line each: the detail comes when the agent errs.
+4. **The skill is its trigger and one line:** run `vtt --agent-guide`, which says what to read
+   next; steps 2-5 (status, plans, live, refusals) move into the topics they belong to.
+5. **The Claude API agent's prompt is the `live` bundle**, not the whole guide (apiagent.c
+   sends `AGENT_GUIDE` today, about 9,000 tokens a cache write).
+6. **The slimming measured before** goes in with it: the size limits said once (`limits`, from
+   the code's constants), the events to `events`, the maintainers' notes out, *Who you are*
+   to what one agent needs.
+7. **Not now:** asking agents for short answers (the user has not decided; it is the GM's
+   experience too).
+
+**Shipping rule (§4):** the baseline is all twelve tasks once on the current guide
+(2026-10-23); the redesign runs the same twelve once on the same model. It ships if no task
+that passed fails (a task that changes is run twice more on both, to tell noise from a
+loss), and the report gives each task's tokens, turns and dollars both ways.
+
+**Performance considerations.** The bundles are composed when asked: a few hundred lines
+copied from two tables in memory, once a call (speed of light: the bytes written, 10-20 KB;
+expected tens of microseconds, nothing on a key or frame). An agent's cost, estimated from the
+four-bytes-a-token rule of thumb (the two crypt runs fit it: 6,483 tokens more for about 24 KB
+more read), not measured: a plan task's guide from about 19 KB in 5 calls to about 12 KB in 1,
+about 5,000 tokens to about 3,000 and two to four turns fewer. Measured by the evaluations.
+
+**Tests.** Suite `agentguide`: each topic under `GUIDE_PART_MAX`; `--agent-guide VERB` is `help
+VERB`; every verb in `plan` or `live`; the topic list in the core names every topic; the skill
+names only `--agent-guide`. A `usage` refusal ends with its `help`. The API agent's prompt
+holds the live bundle (suite `apiagent`). The oracle records the refusals' new ends.
+
+**As built (2026-10-23).** As planned, with these facts:
+- **Sizes** (bytes, `vtt --agent-guide ... | wc -c`): the core 2,859 (with the topic list);
+  `plan` 11,648; `live` 15,935 (with *From a description to a map*, which a live agent
+  building a map needs too); `events` 1,795; `limits` 966; `file` 2,602; `all` 24,740
+  -- the whole now under the limit (it was 36,524). A plan task reads the core and `plan`,
+  about 14.5 KB in two calls, against 21 KB in five with the sections.
+- docs/AGENTS.md is 16,860 bytes of prose; `REQUESTS[]` carries each request's rules; suite
+  `ctltable` fails if AGENTS.md's language section grows a request row again.
+- The core says to write a plan with the file tool and run each `vtt` command alone: the
+  baseline's agents wrote `cat > plan.txt <<EOF ... && vtt ...`, which `Bash(vtt *)` refuses
+  (10 of 12 tasks, below).
+- `toc` is still taken, as the core. `--agent-guide` alone is the core, no longer the whole.
+- Checked by mutation: the topic filter of `request_reference`, the refusal's `(help VERB)`,
+  the `<!-- requests -->` expansion -- each caught. One equivalent survives: `for_topic`'s
+  test that a tag word ends where the topic does; no topic is a prefix of another's tag.
+
+**The baseline (2026-10-23, all twelve once on the sectioned guide, `runs/2026-10-23-21*`):**
+2 of 12 met every fact (addroom, cull), $0.95 in all ($0.064-0.148 a task, 6-14 turns). In
+the other ten the agent read the guide, wrote a plan that looks right, then ran it as one
+shell command (`cat > /tmp/plan.txt <<E ... E && vtt ...`): refused by the run's
+`Bash(vtt *)`, it stopped and said so. So the baseline measures the permissions an agent meets
+as much as the guide; the redesign's core answers it in the text an agent reads first.
+
 ## Order
 
 The user's order (ROADMAP 27, V2.md *Next*): step 7 is built next. Then part 1's runner and

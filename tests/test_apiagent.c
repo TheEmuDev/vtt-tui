@@ -188,7 +188,7 @@ void test_api_agent(void)
     CASE("the first request: the model, the effort, the guide cached, the one strict tool, the job");
     char *b1 = got("body", 1), *b2 = got("body", 2), *b3 = got("body", 3);
     CHECK(b1 && strstr(b1, "\"model\":\"claude-opus-5-5\"") && strstr(b1, "\"effort\":\"medium\""));
-    CHECK(b1 && strstr(b1, "\"text\":\"# vtt for agents\\n"));
+    CHECK(b1 && strstr(b1, "\"text\":\"## The request language\\n"));   /* the guide's live topic */
     CHECK(b1 && strstr(b1, "\"cache_control\":{\"type\":\"ephemeral\"}"));
     CHECK(b1 && strstr(b1, "\"fallbacks\":\"default\"") && strstr(b1, "\"strict\":true"));
     CHECK(b1 && strstr(b1, "Job #1: a pool"));

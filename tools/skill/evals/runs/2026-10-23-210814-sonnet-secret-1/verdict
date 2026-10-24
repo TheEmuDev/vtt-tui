@@ -1,0 +1,7 @@
+FAIL: check clean: no map was made
+FAIL: area Study: no map was made
+FAIL: area Vault: no map was made
+FAIL: joined Study Vault: no map was made
+FAIL: creature mimic in Vault: no map was made
+pass: refusals <= 2
+1 of 6 facts

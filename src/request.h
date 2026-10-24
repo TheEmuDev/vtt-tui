@@ -95,8 +95,17 @@ enum {
     CTL_RQ_ALONE = 4,       /* must be the only line of its request */
     CTL_RQ_LIVE  = 8,       /* means something only to a running vtt */
     CTL_RQ_NOMAP = 16,      /* answered with no map open */
+    CTL_RQ_PLAN  = 32,      /* in the agents' guide for a plan (`vtt --agent-guide plan`) */
+    CTL_RQ_FORLIVE = 64,    /* ... and for live work (`live`) */
 };
 const char *request_verb(int i, unsigned *flags);
 void        request_edit_verbs(FILE *out);
+/* How a request is written and its rules, as `help VERB` says it: 0, or -1
+ * when there is no such request. */
+int  request_help_verb(FILE *out, const char *verb);
+/* Every request whose flags hold any of `topic` (CTL_RQ_PLAN, CTL_RQ_FORLIVE),
+ * in the table's order, each as `help VERB` says it: the guide's reference,
+ * written once, here. */
+void request_reference(FILE *out, unsigned topic);
 
 #endif /* VTT_REQUEST_H */

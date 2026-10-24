@@ -1,0 +1,9 @@
+FAIL: check clean: no map was made
+FAIL: area Road: no map was made
+FAIL: creatures bandit == 4: no map was made
+FAIL: creature Aria in Road: no map was made
+FAIL: creature Bran in Road: no map was made
+FAIL: creature Cole in Road: no map was made
+FAIL: creatures == 7: no map was made
+pass: refusals <= 2
+1 of 8 facts

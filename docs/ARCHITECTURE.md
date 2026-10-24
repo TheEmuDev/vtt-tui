@@ -191,8 +191,10 @@ first line `agent NAME` saying who asks, each line to its verb's handler. The ve
 (room, area, door, corridor, tile, wall, edge, stamp, note, fog, floor, env, link, token,
 scene), reads (dump, changes, describe, check, status and others), jobs (propose, `job N ...`,
 jobs) and control (agent, wait, undo, holds, help). The answer is a verdict line -- `ok`,
-`busy: ...`, `error CLASS: line N: ...` -- then the body. docs/AGENTS.md is the language in
-full, and is embedded as the agents' guide (src/agentguide.c, `vtt --agent-guide`).
+`busy: ...`, `error CLASS: line N: ...` -- then the body. Each request's form and rules are
+`REQUESTS[]`'s (request.c), printed by `help VERB`; the agents' guide (docs/AGENTS.md, embedded as
+src/agentguide.c) is the concepts and the steps, and `vtt --agent-guide TOPIC` prints a topic with the
+table's rows for it (guide.c).
 
 ### Edits arrive as proposals
 

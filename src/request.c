@@ -1481,64 +1481,118 @@ static int rq_agent(RQ_ARGS)
 static int rq_help(RQ_ARGS);
 
 /* Every request the channel takes, one row each: the one place a verb is
- * named. The dispatcher, what an off channel takes, what must go alone in
- * its request, `help`, the agent's prompt (request_edit_verbs) and the test
- * that docs/AGENTS.md lists exactly these all read it. `use` is how the line
- * is written, one form a line; `doc` one line of what it does. Nothing longer
- * belongs here: the page is AGENTS.md. */
+ * named, and the one place it is described. The dispatcher, what an off
+ * channel takes, what must go alone in its request, `help`, the agents' guide
+ * (`vtt --agent-guide plan|live|VERB` prints these rows: guide.c), the agent's
+ * prompt (request_edit_verbs) all read it. `use` is how the line is written,
+ * one form a line; `doc` one line of what it does; `rules` what an agent
+ * must know to get it right, or "" -- docs/AGENTS.md keeps the concepts and
+ * says none of this again. */
 typedef struct {
     const char *name;
     unsigned    flags;          /* CTL_RQ_* (request.h) */
     int       (*run)(RQ_ARGS);
     const char *use;
     const char *doc;
+    const char *rules;
 } Request;
 
-#define E CTL_RQ_EDIT
+#define E (CTL_RQ_EDIT | CTL_RQ_PLAN | CTL_RQ_FORLIVE)
+#define P (CTL_RQ_PLAN | CTL_RQ_FORLIVE)     /* a read for a plan and live work */
+#define L CTL_RQ_FORLIVE                       /* a read or a step of live work */
 static const Request REQUESTS[] = {
     { "room",     E, rq_edit, "room [NAME] REGION\nroom NAME SQUARE WxH\nroom NAME WxH east|west|north|south of ROOM [gap N] [top|middle|bottom|left|right]",
-      "a room: floor with a wall round it, named as an area when NAME is given" },
-    { "area",     E, rq_edit, "area NAME REGION\narea NAME remove", "name a box without drawing anything, or take the name off" },
-    { "door",     E, rq_edit, "door ROOM north|south|east|west [N|middle] [KIND]", "a door (or window, secret door, opening) in a room's side" },
-    { "corridor", E, rq_edit, "corridor ROOM ROOM [width 1-3] [KIND]", "dug between two named rooms through void, with an opening at each end" },
-    { "tile",     E, rq_edit, "tile REGION void|floor|water|rough|brush|wood|hazard", "the ground of every square in the region" },
-    { "wall",     E, rq_edit, "wall REGION [wall|door|open|window|secret|opensecret|none]", "the region's outline" },
-    { "edge",     E, rq_edit, "edge BOUNDARY KIND", "one boundary between two squares" },
-    { "stamp",    E, rq_edit, "stamp NAME SQUARE [rotate 90|180|270] [mirror]", "one of the GM's saved stamps, its top-left on SQUARE" },
-    { "note",     E, rq_edit, "note SQUARE \"text\"\nnote SQUARE", "a note only the GM sees on a square, or take it off" },
-    { "fog",      E, rq_edit, "fog paint REGION N", "paint the region into fog patch N (0 scrubs)" },
-    { "floor",    E, rq_edit, "floor AREA LEVEL\nfloor AREA off", "the named area is a floor at that level (-99 to 99), or no longer one" },
-    { "env",      E, rq_edit, "env AREA CARD\nenv AREA remove", "the named area's environment is the card of that name, or it has none" },
+      "a room: floor with a wall round it, named as an area when NAME is given",
+      "beside another room: gap squares between (0: they share one wall), lined up on its middle unless told; "
+      "north/south line up left/middle/right. A room floors its whole box and walls its outline, so one drawn "
+      "over another's ground takes it: plan rooms apart and join them" },
+    { "area",     E, rq_edit, "area NAME REGION\narea NAME remove", "name a box without drawing anything, or take the name off",
+      "for a floor, or a region drawn by hand. An area may hold others: a square is in the smallest that holds it" },
+    { "door",     E, rq_edit, "door ROOM north|south|east|west [N|middle] [KIND]", "a door (or window, secret door, opening) in a room's side",
+      "N counts squares along the side from the top or left (middle by default); KIND as wall's, a door by default" },
+    { "corridor", E, rq_edit, "corridor ROOM ROOM [width 1-3] [KIND]", "dug between two named rooms through void, with an opening at each end",
+      "straight when one room is beside or above the other and they share at least width rows (or columns), "
+      "refused when they share fewer; one bend when they are apart both ways, leaving the first room's side "
+      "and entering the second's. Walled along; a door at each end when 1 wide, open ends when wider (which "
+      "joins the two rooms into one space: describe then tells them as one room). Rooms sharing a wall just get "
+      "the doorway. Ground, or a room not either of the two, in the way refuses it" },
+    { "tile",     E, rq_edit, "tile REGION void|floor|water|rough|brush|wood|hazard", "the ground of every square in the region", "" },
+    { "wall",     E, rq_edit, "wall REGION [wall|door|open|window|secret|opensecret|none]", "the region's outline",
+      "open is an open door, opensecret an open secret door, none clears; walls sit on the boundaries between squares" },
+    { "edge",     E, rq_edit, "edge BOUNDARY KIND", "one boundary between two squares", "KIND as wall's" },
+    { "stamp",    E, rq_edit, "stamp NAME SQUARE [rotate 90|180|270] [mirror]", "one of the GM's saved stamps, its top-left on SQUARE",
+      "void and blank boundaries in a stamp leave the map as it was; stamps lists them" },
+    { "note",     E, rq_edit, "note SQUARE \"text\"\nnote SQUARE", "a note only the GM sees on a square, or take it off",
+      "a note on a room's name goes on its middle square" },
+    { "fog",      E, rq_edit, "fog paint REGION N", "paint the region into fog patch N (0 scrubs)", "the GM makes patches" },
+    { "floor",    E, rq_edit, "floor AREA LEVEL\nfloor AREA off", "the named area is a floor at that level (-99 to 99), or no longer one",
+      "-1 a basement, 0 the ground, 1 upstairs; floors may not overlap. The GM steps between them with [ ]; the "
+      "players' screens show the party's floor" },
+    { "env",      E, rq_edit, "env AREA CARD\nenv AREA remove", "the named area's environment is the card of that name, or it has none",
+      "CARD is letters, digits, - and _; the card is the GM's to write" },
     { "link",     E, rq_edit, "link FROM TO [KIND] [size 2|3] [oneway] [secret]\nlink FROM to MAP PLACE [KIND] [size N] [secret]\nlink N KIND|oneway|twoway|reverse|secret|seen|remove",
-      "stairs, a ladder, a trapdoor or a portal joining two places, or a change to link N" },
+      "stairs, a ladder, a trapdoor or a portal joining two places, or a change to link N",
+      "numbered the lowest free. An end is a room's name (the free ground nearest its middle) or a square (its "
+      "top-left). KIND stairs (default), ladder, trapdoor, portal; size 3 makes each end 3x3; oneway runs from "
+      "the first end only; secret hides it from the players. Both ends on ground, apart, on no other link. To "
+      "another map: MAP.vtt beside this one, PLACE an area or square there; taking it is the GM's" },
     { "token",    E, rq_edit, "token add player|enemy PLACE [size 1-3] [hidden] \"LABEL\"\ntoken add player|enemy PLACE from CHARACTER [hidden]\ntoken move WHO SQUARE\ntoken del WHO\ntoken set WHO label \"...\"|size N|note \"...\"|hidden on|off",
-      "put down, move, remove or change a creature" },
+      "put down, move, remove or change a creature",
+      "PLACE a square or a room's name (the free square nearest its middle); every square of it on ground and on "
+      "nobody; labels unique; hidden keeps it off the players' screens. from CHARACTER: one of the GM's saved "
+      "characters (characters lists them), its label numbered to stay unique, as the answer says. WHO is a "
+      "label (any case) or a square it stands on" },
     { "scene",    E, rq_scene, "scene \"NAME\"\nscene save \"NAME\" [REGION]\nscene \"NAME\" remove\nscene diff \"NAME\"",
-      "put a saved scene's creatures back (an edit); save or remove one (alone in its request); or say what changed since" },
+      "put a saved scene's creatures back (an edit); save or remove one (alone in its request); or say what changed since",
+      "a scene is the creatures as they stand, with the round and spotlight; saved with a region, putting it "
+      "back replaces only the creatures in its box" },
 
-    { "dump",       0, rq_dump, "dump [REGION|all|key]", "the map as text: a region of it, or all of it; key says what its characters mean" },
-    { "changes",    0, rq_changes, "changes SEQ [REGION]", "the events after SEQ, then the map as it is now where they changed it: read this, not the map again" },
-    { "describe",   0, rq_describe, "describe [REGION] [json]", "the rooms walls make, their doors and links, and what is in each" },
-    { "check",      0, rq_check, "check [json]", "mistakes in the file (line numbers, a row added or lost) and on the map: loose doors, creatures on void, rooms nothing reaches" },
-    { "stamps",     0, rq_stamps, "stamps", "the GM's saved stamps and their sizes" },
-    { "characters", 0, rq_characters, "characters", "the GM's saved characters" },
-    { "scenes",     0, rq_scenes, "scenes", "the map's scenes" },
-    { "links",      0, rq_links, "links [json]", "every link: number, kind, ends, size, one-way, secret" },
-    { "floors",     0, rq_floors, "floors", "the floors, top first, and which the GM is looking at" },
-    { "agent",      CTL_RQ_NOMAP, rq_agent, "agent NAME", "who is asking, as a request's first line (vtt --ctl writes it from $VTT_AGENT): a job is its taker's, and undo is your own" },
-    { "status",     CTL_RQ_LIVE | CTL_RQ_NOMAP, rq_status, "status", "the map, the GM's screen and floor, whether edits are taken now" },
-    { "marked",     CTL_RQ_LIVE, rq_marked, "marked [json]", "what the GM is pointing at: cursor, box, selection, ruler, pings" },
+    { "dump",       P, rq_dump, "dump [REGION|all|key]", "the map as text: a region of it, or all of it; key says what its characters mean",
+      "squares in the file's characters, boundaries between, creatures as 1-9 a-z A-Z, then the creatures, notes, "
+      "areas and links there. With no region it is refused on a big map (vtt --agent-guide limits): name a "
+      "region, or say all. Read key once" },
+    { "changes",    L, rq_changes, "changes SEQ [REGION]", "the events after SEQ, then the map as it is now where they changed it: read this, not the map again",
+      "a changed REGION line and its dump for each (coarse: 16x16 pieces); more: REGIONS when it is over 16 KB "
+      "(dump each); also: for what is on no square (describe has it). Before a request's edits, never after" },
+    { "describe",   P, rq_describe, "describe [REGION] [json]", "the rooms walls make, their doors and links, and what is in each",
+      "rooms are what walls divide, named by their areas; NOT REACHABLE is a missing door or link. With a "
+      "region (or an area's name), only the rooms with a square in it, each whole, with its squares and terrain "
+      "inside (in_region in json; an in region line when only part of it is)" },
+    { "check",      P, rq_check, "check [json]", "mistakes in the file (line numbers, a row added or lost) and on the map: loose doors, creatures on void, rooms nothing reaches",
+      "a clean map says no findings; json adds, once per code, what to do about it" },
+    { "stamps",     P, rq_stamps, "stamps", "the GM's saved stamps and their sizes", "" },
+    { "characters", P, rq_characters, "characters", "the GM's saved characters", "name, label, side, size, counters, rolls" },
+    { "scenes",     P, rq_scenes, "scenes", "the map's scenes", "" },
+    { "links",      P, rq_links, "links [json]", "every link: number, kind, ends, size, one-way, secret", "" },
+    { "floors",     P, rq_floors, "floors", "the floors, top first, and which the GM is looking at", "" },
+    { "agent",      CTL_RQ_NOMAP | L, rq_agent, "agent NAME", "who is asking, as a request's first line (vtt --ctl writes it from $VTT_AGENT): a job is its taker's, and undo is your own",
+      "set VTT_AGENT once (letters, digits, - and _; 31 at most) rather than typing it; with none you are cli" },
+    { "status",     CTL_RQ_LIVE | CTL_RQ_NOMAP | L, rq_status, "status", "the map, the GM's screen and floor, whether edits are taken now",
+      "and seq, the newest event's number, for a first wait" },
+    { "marked",     CTL_RQ_LIVE | L, rq_marked, "marked [json]", "what the GM is pointing at: cursor, box, selection, ruler, pings",
+      "when the GM says here or this room, work from what it names" },
 
-    { "propose",  CTL_RQ_LIVE, rq_propose, "propose [\"a line for the GM\"]", "first line of a request: its edits are a proposal for the GM to review" },
-    { "job",      0, rq_job_any, "job N take|drop\njob N area REGION\njob N say \"a line for the GM\"\njob N dump [REGION|all|key]|check|describe\njob N conflicts\njob N undo\njob N propose [\"a line for the GM\"]",
-      "one job: take it or give it up, show the GM where you work, tell the GM a line, read its proposal back, list what changed under it, take its landing back, or answer it with this request's edits" },
-    { "jobs",     0, rq_job, "jobs [json]", "every job and where it stands" },
-    { "wait",     CTL_RQ_ALONE | CTL_RQ_NOMAP, rq_wait, "wait [SEQ] [for SECONDS]", "every event after SEQ; a running vtt holds the answer until there is one or the time is up" },
-    { "undo",     CTL_RQ_ALONE | CTL_RQ_LIVE, rq_undo, "undo", "take back the last change to land, when it is yours and nothing has happened since (job N undo: that job's)" },
-    { "holds",    CTL_RQ_OFF | CTL_RQ_NOMAP, rq_holds, "holds DEVICE INODE", "whether that file is the map open here (--apply asks)" },
-    { "help",     CTL_RQ_NOMAP, rq_help, "help [VERB|json]", "these requests, or how one is written" },
+    { "propose",  CTL_RQ_LIVE | L, rq_propose, "propose [\"a line for the GM\"]", "first line of a request: its edits are a proposal for the GM to review",
+      "a job of your own; edits sent alone make one too" },
+    { "job",      L, rq_job_any, "job N take|drop\njob N area REGION\njob N say \"a line for the GM\"\njob N dump [REGION|all|key]|check|describe\njob N conflicts\njob N undo\njob N propose [\"a line for the GM\"]",
+      "one job: take it or give it up, show the GM where you work, tell the GM a line, read its proposal back, list what changed under it, take its landing back, or answer it with this request's edits",
+      "propose replaces a waiting proposal; dump, check and describe read the map as accepting it would make it; "
+      "conflicts gives the first 64 squares the GM changed since (when proposed, now): propose again from them; "
+      "undo goes alone, and only while its change is the last thing done. A job you took, or proposed, is yours "
+      "alone to change. A change from the map's file or from --apply is the GM's alone to decide" },
+    { "jobs",     L, rq_job, "jobs [json]", "every job and where it stands", "with its thread (the GM's words, yours, what came of each proposal) and its conflicts counted" },
+    { "wait",     CTL_RQ_ALONE | CTL_RQ_NOMAP | L, rq_wait, "wait [SEQ] [for SECONDS]", "every event after SEQ; a running vtt holds the answer until there is one or the time is up",
+      "pass each answer's seq to the next wait; wait 0 answers at once (a read: never in a loop); 60 seconds "
+      "unsaid, 600 at most. One wait a name: a second takes the first's place" },
+    { "undo",     CTL_RQ_ALONE | CTL_RQ_LIVE | L, rq_undo, "undo", "take back the last change to land, when it is yours and nothing has happened since (job N undo: that job's)",
+      "never to repair a change by undoing the GM's own work: else ask them to press u" },
+    { "holds",    CTL_RQ_OFF | CTL_RQ_NOMAP, rq_holds, "holds DEVICE INODE", "whether that file is the map open here (--apply asks)", "" },
+    { "help",     CTL_RQ_NOMAP | P, rq_help, "help [VERB|json]", "these requests, or how one is written",
+      "the list vtt works from; vtt --agent-guide VERB gives the same with no vtt running" },
 };
 #undef E
+#undef P
+#undef L
 #define NREQUESTS ((int)(sizeof REQUESTS / sizeof *REQUESTS))
 
 static const Request *rq_find(const char *v)
@@ -1566,6 +1620,31 @@ static const char *rq_kind(const Request *r)
     return r->flags & CTL_RQ_EDIT ? "edit" : "read";
 }
 
+/* One request as `help VERB` and the guide say it: its forms, what it does
+ * (with the two rules of the table's flags), and its rules. */
+static void help_row(FILE *out, const Request *r)
+{
+    fprintf(out, "%s\n  %s%s%s", r->use, r->doc,
+            r->flags & CTL_RQ_ALONE ? "; alone in its request" : "",
+            r->flags & CTL_RQ_LIVE ? "; of a running vtt only" : "");
+    if (r->rules[0]) fprintf(out, ". %c%s", toupper((unsigned char)r->rules[0]), r->rules + 1);
+    fputc('\n', out);
+}
+
+int request_help_verb(FILE *out, const char *verb)
+{
+    const Request *r = rq_find(verb);
+    if (!r) return -1;
+    help_row(out, r);
+    return 0;
+}
+
+void request_reference(FILE *out, unsigned topic)
+{
+    for (int i = 0; i < NREQUESTS; i++)
+        if (REQUESTS[i].flags & topic) help_row(out, &REQUESTS[i]);
+}
+
 static int rq_help(RQ_ARGS)
 {
     RQ_LOCALS;
@@ -1590,12 +1669,9 @@ static int rq_help(RQ_ARGS)
         return 0;
     }
     if (n == 2) {
-        const Request *r = rq_find(w[1]);
-        if (!r) { rq_class(CTL_E_MISSING), snprintf(err, errsz, "no request called %.40s - help lists them", w[1]); return -1; }
-        fprintf(out, "%s\n  %s%s%s\n", r->use, r->doc,
-                r->flags & CTL_RQ_ALONE ? "; alone in its request" : "",
-                r->flags & CTL_RQ_LIVE ? "; of a running vtt only" : "");
-        return 0;
+        if (request_help_verb(out, w[1]) == 0) return 0;
+        rq_class(CTL_E_MISSING), snprintf(err, errsz, "no request called %.40s - help lists them", w[1]);
+        return -1;
     }
     for (int i = 0; i < NREQUESTS; i++) fprintf(out, "%-10s  %s\n", REQUESTS[i].name, REQUESTS[i].doc);
     fputs("help VERB says how one is written; edits in one request are all or nothing\n", out);
@@ -1768,7 +1844,11 @@ char *request_exec(World *world, const char *req, size_t *len)
         int rc = err[0] ? -1 : run_line(world, line, w, n, out, &ed, err, sizeof err);
         if (rc == 0) continue;
         if (rc == -2) snprintf(verdict, sizeof verdict, "busy: %s", err);
-        else          refuse(verdict, sizeof verdict, g_class, "line %d: %s", lineno, err);
+        /* A line written wrong names its help: the form and its rules come to
+         * the agent when it errs, not in the guide it read first. */
+        else if (g_class == CTL_E_USAGE && n > 0 && rq_find(w[0]) && !strstr(err, "help"))
+            refuse(verdict, sizeof verdict, g_class, "line %d: %s (help %s)", lineno, err, w[0]);
+        else refuse(verdict, sizeof verdict, g_class, "line %d: %s", lineno, err);
         break;
     }
 

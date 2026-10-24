@@ -1,0 +1,10 @@
+check clean
+reachable all
+area Bunks
+area Mess
+area Captain
+door Bunks Mess
+joined Mess Captain
+creatures orc == 5
+creature captain in Captain
+refusals <= 2

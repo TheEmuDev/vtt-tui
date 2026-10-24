@@ -1,7 +1,9 @@
 #include "guide.h"
 
-#include <ctype.h>
+#include <stdlib.h>
 #include <string.h>
+
+#include "request.h"
 
 #define GUIDE_SECTIONS_MAX 32
 
@@ -43,20 +45,8 @@ static size_t heading(const GuidePart *p, const char **name)
     return nl ? (size_t)(nl - *name) : p->len - 3;
 }
 
-static int holds(const char *hay, size_t hn, const char *needle)
-{
-    size_t nn = strlen(needle);
-    for (size_t i = 0; nn && i + nn <= hn; i++) {
-        size_t k = 0;
-        while (k < nn && tolower((unsigned char)hay[i + k]) == tolower((unsigned char)needle[k])) k++;
-        if (k == nn) return 1;
-    }
-    return 0;
-}
-
 /* Who reads a section, from the line under its heading, `<!-- read for: plan,
- * live -->`: the guide says it once, and the skill sends an agent to `toc`
- * rather than naming sections itself. */
+ * live -->`: the guide says it once, and the skill names no section. */
 #define READ_FOR "<!-- read for: "
 size_t guide_read_for(const GuidePart *p, const char **who)
 {
@@ -71,39 +61,93 @@ size_t guide_read_for(const GuidePart *p, const char **who)
     return (size_t)(c - 4 - *who);
 }
 
-static void list(FILE *out, const GuidePart *sec, int n)
+/* Does the section's read-for line name this topic, as a word? */
+static int for_topic(const GuidePart *p, const char *topic)
 {
-    for (int i = 0; i < n; i++) {
-        const char *name, *who = "";
-        int hl = (int)heading(&sec[i], &name);
-        int wl = (int)guide_read_for(&sec[i], &who);
-        fprintf(out, "  %-30.*s %-12.*s %6zu bytes   vtt --agent-guide \"%.*s\"\n", hl, name, wl, who, sec[i].len, hl, name);
+    const char *who;
+    size_t wl = guide_read_for(p, &who), tl = strlen(topic);
+    for (size_t i = 0; i + tl <= wl; i++)
+        if (!memcmp(who + i, topic, tl) && (i == 0 || who[i - 1] == ' ') &&
+            (i + tl == wl || who[i + tl] == ','))
+            return 1;
+    return 0;
+}
+
+/* A section as an agent reads it: without its read-for line, and with the
+ * `<!-- requests -->` line replaced by the table's rows for the topic. */
+#define REQUESTS_MARK "<!-- requests -->"
+static void put_section(FILE *out, const GuidePart *p, unsigned rows)
+{
+    for (const char *s = p->at, *end = p->at + p->len; s < end;) {
+        const char *nl = memchr(s, '\n', (size_t)(end - s));
+        const char *e = nl ? nl + 1 : end;
+        size_t      l = (size_t)(e - s) - (nl != NULL);
+        if (l > strlen(READ_FOR) && !memcmp(s, READ_FOR, strlen(READ_FOR))) { }
+        else if (l == strlen(REQUESTS_MARK) && !memcmp(s, REQUESTS_MARK, l)) request_reference(out, rows);
+        else fwrite(s, 1, (size_t)(e - s), out);
+        s = e;
     }
+}
+
+/* The topics, each the sections that name it; the core is the opening and
+ * its own sections, then this list. */
+static const struct { const char *name; unsigned rows; const char *what; } TOPICS[] = {
+    { "plan",   CTL_RQ_PLAN,    "a map from a description, or changes to a file" },
+    { "live",   CTL_RQ_FORLIVE, "the GM's open session: jobs, proposals, the verdict" },
+    { "events", 0,              "what `wait` answers, each event" },
+    { "limits", 0,              "the sizes a request may not pass" },
+    { "file",   0,              "the map's file, written by hand: a last resort" },
+};
+#define NTOPICS ((int)(sizeof TOPICS / sizeof *TOPICS))
+
+int guide_compose(FILE *out, const char *topic)
+{
+    GuidePart open, sec[GUIDE_SECTIONS_MAX];
+    int n = guide_parts(&open, sec, GUIDE_SECTIONS_MAX);
+    int all = !strcmp(topic, "all");
+    unsigned rows = all ? CTL_RQ_PLAN | CTL_RQ_FORLIVE : 0;
+    int known = all || !strcmp(topic, "core");
+    for (int t = 0; t < NTOPICS; t++)
+        if (!strcmp(topic, TOPICS[t].name)) { rows = TOPICS[t].rows; known = 1; }
+    if (!known) return -1;
+    if (all || !strcmp(topic, "core")) fwrite(open.at, 1, open.len, out);
+    for (int i = 0; i < n; i++)
+        if (all || for_topic(&sec[i], topic)) put_section(out, &sec[i], rows);
+    return 0;
+}
+
+static size_t topic_size(const char *topic)
+{
+    char  *buf = NULL;
+    size_t len = 0;
+    FILE  *f   = open_memstream(&buf, &len);
+    if (!f) return 0;
+    guide_compose(f, topic);
+    fclose(f);
+    free(buf);
+    return len;
+}
+
+static void topic_list(FILE *out)
+{
+    fputs("**The topics** (`vtt --agent-guide TOPIC`, each in one call):\n\n", out);
+    for (int t = 0; t < NTOPICS; t++)
+        fprintf(out, "- `%s` (%zu bytes): %s\n", TOPICS[t].name, topic_size(TOPICS[t].name), TOPICS[t].what);
+    fputs("- a request's name (`room`, `corridor`, `token`, ...): that request alone\n", out);
+    fprintf(out, "- `all` (%zu bytes): everything, for a reader with no limit on what one command may print\n",
+            topic_size("all"));
 }
 
 int guide_print(FILE *out, FILE *err, const char *arg)
 {
-    GuidePart open, sec[GUIDE_SECTIONS_MAX];
-    int n = guide_parts(&open, sec, GUIDE_SECTIONS_MAX);
-    if (!strcmp(arg, "toc")) {
-        fwrite(open.at, 1, open.len, out);
-        fprintf(out, "## Sections\n\nRead the ones marked for your work: `plan` for a map from a description or a file,\n"
-                     "`live` for the GM's open session. Each under %d bytes; the whole guide, %zu, is\n"
-                     "`vtt --agent-guide` alone.\n\n", GUIDE_PART_MAX, AGENT_GUIDE_LEN);
-        list(out, sec, n);
+    if (!arg || !strcmp(arg, "core") || !strcmp(arg, "toc")) {
+        guide_compose(out, "core");
+        topic_list(out);
         return 0;
     }
-    /* A heading named whole wins; else the one heading that holds the words. */
-    int hit = -1, hits = 0;
-    for (int i = 0; i < n && hits != -1; i++) {
-        const char *name;
-        size_t hl = heading(&sec[i], &name);
-        if (hl == strlen(arg) && holds(name, hl, arg)) { hit = i; hits = -1; }
-        else if (holds(name, hl, arg)) { hit = i; hits++; }
-    }
-    if (hits == -1) hits = 1;
-    if (hits == 1) { fwrite(sec[hit].at, 1, sec[hit].len, out); return 0; }
-    fprintf(err, "vtt: %s section of the guide is named by \"%s\"; the sections:\n", hits ? "more than one" : "no", arg);
-    list(err, sec, n);
+    if (guide_compose(out, arg) == 0) return 0;
+    if (request_help_verb(out, arg) == 0) return 0;
+    fprintf(err, "vtt: the guide has no topic or request called \"%s\"\n", arg);
+    topic_list(err);
     return 2;
 }

@@ -134,7 +134,7 @@ N105 door-off-map       -|A2      door leads off the map: a way out?
 -- exit 0
    file: written
 == req.vtt --apply floors.req
-vtt: error usage: line 3: R6 is not a square on this map (A1 to P9), nor a room's name - nothing saved
+vtt: error usage: line 3: R6 is not a square on this map (A1 to P9), nor a room's name (help area) - nothing saved
 -- exit 1
    (on two-rooms)
 == req.vtt --dump-map
@@ -255,7 +255,7 @@ token add player|enemy PLACE from CHARACTER [hidden]
 token move WHO SQUARE
 token del WHO
 token set WHO label "..."|size N|note "..."|hidden on|off
-  put down, move, remove or change a creature
+  put down, move, remove or change a creature. PLACE a square or a room's name (the free square nearest its middle); every square of it on ground and on nobody; labels unique; hidden keeps it off the players' screens. from CHARACTER: one of the GM's saved characters (characters lists them), its label numbered to stay unique, as the answer says. WHO is a label (any case) or a square it stands on
 -- exit 0
    (on two-rooms)
 == req.vtt --dump-map
@@ -1370,7 +1370,7 @@ N105 door-off-map       -|A2      door leads off the map: a way out?
 -- exit 1
    file: written
 == req.vtt --apply floors.req
-vtt: error usage: line 3: R6 is not a square on this map (A1 to P9), nor a room's name - nothing saved
+vtt: error usage: line 3: R6 is not a square on this map (A1 to P9), nor a room's name (help area) - nothing saved
 -- exit 1
    (on everything)
 == req.vtt --dump-map
@@ -1551,7 +1551,7 @@ token add player|enemy PLACE from CHARACTER [hidden]
 token move WHO SQUARE
 token del WHO
 token set WHO label "..."|size N|note "..."|hidden on|off
-  put down, move, remove or change a creature
+  put down, move, remove or change a creature. PLACE a square or a room's name (the free square nearest its middle); every square of it on ground and on nobody; labels unique; hidden keeps it off the players' screens. from CHARACTER: one of the GM's saved characters (characters lists them), its label numbered to stay unique, as the answer says. WHO is a label (any case) or a square it stands on
 -- exit 0
    (on everything)
 == req.vtt --dump-map

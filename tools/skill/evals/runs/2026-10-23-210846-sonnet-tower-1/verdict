@@ -1,0 +1,12 @@
+FAIL: check clean: no map was made
+FAIL: reachable all: no map was made
+FAIL: area Ground: no map was made
+FAIL: area Top: no map was made
+FAIL: area Guardroom: no map was made
+FAIL: area Lookout: no map was made
+FAIL: floors == 2: no map was made
+FAIL: links >= 1: no map was made
+FAIL: joined Guardroom Lookout: no map was made
+FAIL: creature sentry in Lookout: no map was made
+pass: refusals <= 2
+1 of 11 facts

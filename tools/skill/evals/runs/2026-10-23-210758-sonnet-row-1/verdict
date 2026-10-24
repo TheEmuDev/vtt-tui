@@ -1,0 +1,14 @@
+FAIL: check clean: no map was made
+FAIL: reachable all: no map was made
+FAIL: area Gate: no map was made
+FAIL: area Hall: no map was made
+FAIL: area Armory: no map was made
+FAIL: area Shrine: no map was made
+FAIL: area Throne: no map was made
+FAIL: joined Gate Hall: no map was made
+FAIL: joined Hall Armory: no map was made
+FAIL: joined Armory Shrine: no map was made
+FAIL: joined Shrine Throne: no map was made
+FAIL: creature lich in Throne: no map was made
+pass: refusals <= 2
+1 of 13 facts

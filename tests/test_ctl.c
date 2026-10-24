@@ -3,6 +3,7 @@
 #include "link.h"
 #include "card.h"
 #include "guide.h"
+#include "job.h"
 #include "harness.h"
 #include "app_priv.h"
 
@@ -2280,35 +2281,36 @@ void test_ctl_table(void)
     CHECK(doc != NULL);
     if (!doc) return;
 
-    CASE("every request in the table is in docs/AGENTS.md, written as code");
-    int nverbs = 0;
+    CASE("docs/AGENTS.md restates no request: the rows are REQUESTS[]'s, printed by the guide");
     unsigned fl;
+    int nverbs = 0;
+    /* In the language's section (the events table's `job N asked` is an event). */
+    const char *lang = strstr(doc, "## The request language");
+    const char *lend = lang ? strstr(lang + 1, "\n## ") : NULL;
+    CHECK(lang && lend);
+    size_t llen = lang && lend ? (size_t)(lend - lang) : 0;
+    char  *sect = strndup(lang ? lang : "", llen);
     for (const char *v; (v = request_verb(nverbs, &fl)) != NULL; nverbs++) {
-        if (!strcmp(v, "holds")) continue;          /* --apply's own question, not an agent's */
-        char a1[48], a2[48];                        /* a table's row, not a mention in passing */
+        char a1[48], a2[48];
         snprintf(a1, sizeof a1, "\n| `%s ", v);
         snprintf(a2, sizeof a2, "\n| `%s`", v);
-        if (!strstr(doc, a1) && !strstr(doc, a2)) { printf("    no row in AGENTS.md: %s\n", v); CHECK(0); }
+        if (strstr(sect, a1) || strstr(sect, a2)) { printf("    AGENTS.md has a row for %s: say it in REQUESTS[]\n", v); CHECK(0); }
+        if (strcmp(v, "holds") && !(fl & (CTL_RQ_PLAN | CTL_RQ_FORLIVE))) { printf("    %s is in no topic\n", v); CHECK(0); }
     }
     CHECK(nverbs > 25);
+    CHECK(strstr(doc, "\n<!-- requests -->\n") != NULL);   /* where the guide prints them */
+    free(sect);
 
-    CASE("every row of AGENTS.md's request tables starts with a request in the table");
-    const char *from = strstr(doc, "## The request language"), *to = from ? strstr(from, "## From a description") : NULL;
-    CHECK(from && to);
-    int rows = 0;
-    for (const char *p = from; p && p < to; p = strchr(p + 1, '\n')) {
-        if (strncmp(p, "\n| `", 4) != 0) continue;
-        char word[32];
-        size_t k = strcspn(p + 4, " `");
-        if (k >= sizeof word) { CHECK(0); continue; }
-        memcpy(word, p + 4, k);
-        word[k] = '\0';
-        int known = 0;
-        for (int i = 0; request_verb(i, NULL); i++) known |= !strcmp(request_verb(i, NULL), word);
-        if (!known) { printf("    AGENTS.md has a row for `%s`, which is no request\n", word); CHECK(0); }
-        rows++;
+    CASE("a line written wrong names its help; a refusal of another class does not");
+    {
+        a.world.ctl_auto = 1;
+        char *t = ctl_ask(&a, "corridor Nowhere");
+        CHECK(t && ctl_refused(t, "usage", 1) && strstr(t, " (help corridor)\n"));
+        free(t);
+        t = ctl_ask(&a, "token move Nobody C3");
+        CHECK(t && !strncmp(t, "error ", 6) && !strstr(t, "(help "));
+        free(t);
     }
-    CHECK(rows > 30);
 
     CASE("help lists every request; help VERB says how one is written; an unknown one is refused");
     char *h = ctl_ask(&a, "help");
@@ -2424,7 +2426,7 @@ void test_ctl_table(void)
                                                          "taken", "proposed", "undone" };
         char row[48];
         for (int k = 0; k < CTL_E_COUNT; k++) {
-            snprintf(row, sizeof row, "\n| `%s` |", CLS[k]);
+            snprintf(row, sizeof row, "`%s`: ", CLS[k]);          /* the core's line for it */
             CHECK(!strcmp(ctl_class_name(k), CLS[k]) && strstr(doc, row));
         }
         for (int k = 0; k < CTL_EV_COUNT; k++) {
@@ -3631,69 +3633,132 @@ void test_agent_guide(void)
     CASE("the embedded guide is docs/AGENTS.md byte for byte (run tools/embed.sh)");
     CHECK_EQ(AGENT_GUIDE_LEN, dl);
     CHECK(AGENT_GUIDE_LEN == dl && !memcmp(AGENT_GUIDE, doc, dl));
-    CHECK(strstr(doc, "`vtt --agent-guide`") != NULL);
+    CHECK(strstr(doc, "`vtt --agent-guide plan`") != NULL);
 
-    CASE("the guide's parts: the opening and the sections cover it exactly, each under GUIDE_PART_MAX");
+    CASE("the guide's parts: the opening and the sections cover it exactly");
+    GuidePart open, sec[32];
+    int ns = guide_parts(&open, sec, 32);
     {
-        GuidePart open, sec[32];
-        int ns = guide_parts(&open, sec, 32);
         CHECK(ns >= 6 && ns < 32);
         size_t at = open.len;
-        CHECK(open.at == AGENT_GUIDE && open.len < GUIDE_PART_MAX);
+        CHECK(open.at == AGENT_GUIDE);
         for (int i = 0; i < ns; i++) {
             CHECK(sec[i].at == AGENT_GUIDE + at && !strncmp(sec[i].at, "## ", 3));
-            if (sec[i].len >= GUIDE_PART_MAX) { printf("    section %d is %zu bytes\n", i + 1, sec[i].len); CHECK(0); }
             at += sec[i].len;
         }
         CHECK_EQ(at, AGENT_GUIDE_LEN);
-        char  *toc = NULL;
-        size_t tl  = 0;
-        FILE  *f   = open_memstream(&toc, &tl);
-        CHECK_EQ(guide_print(f, f, "toc"), 0);
-        fclose(f);
-        CHECK(tl < GUIDE_PART_MAX && strstr(toc, "vtt --agent-guide \"The request language\""));
-        free(toc);
-        f = open_memstream(&toc, &tl);
-        CHECK_EQ(guide_print(f, f, "map"), 2);                /* in five headings: refused, the list given */
-        CHECK_EQ(guide_print(f, f, "no such part"), 2);
-        CHECK_EQ(guide_print(f, f, "checking a map"), 0);     /* a heading named whole, any case */
-        fclose(f);
-        CHECK(strstr(toc, "more than one section") && strstr(toc, "no section") && strstr(toc, "## Checking a map\n"));
-        free(toc);
     }
 
-    CASE("every section says who reads it (`<!-- read for: ... -->`), and some are for plans, some live");
-    {
-        GuidePart open, sec[32];
-        int ns = guide_parts(&open, sec, 32), plan = 0, live = 0;
-        for (int i = 0; i < ns; i++) {
-            const char *who = NULL;
-            size_t wl = guide_read_for(&sec[i], &who);
-            if (!wl) { printf("    section %d has no read-for line\n", i + 1); CHECK(0); continue; }
-            char w[64];
-            snprintf(w, sizeof w, "%.*s", (int)wl, who);
-            plan += strstr(w, "plan") != NULL;
-            live += strstr(w, "live") != NULL;
+    CASE("every section names its topics (`<!-- read for: ... -->`), each one the guide knows");
+    for (int i = 0; i < ns; i++) {
+        const char *who = NULL;
+        size_t wl = guide_read_for(&sec[i], &who);
+        if (!wl) { printf("    section %d has no read-for line\n", i + 1); CHECK(0); continue; }
+        char w[64];
+        snprintf(w, sizeof w, "%.*s", (int)wl, who);
+        for (char *t = strtok(w, ", "); t; t = strtok(NULL, ", ")) {
+            char *probe = NULL; size_t pl = 0;
+            FILE *f = open_memstream(&probe, &pl);
+            int rc = guide_compose(f, t);
+            fclose(f);
+            free(probe);
+            if (rc != 0) { printf("    section %d names %s, no topic\n", i + 1, t); CHECK(0); }
         }
-        CHECK(plan >= 3 && live >= 3);
     }
 
-    CASE("the skill has the frontmatter a skill is found by, and sends an agent to the toc");
-    CHECK(!strncmp(skill, "---\nname: vtt\ndescription: ", 27));
-    CHECK(strstr(skill, "`vtt --agent-guide toc`") != NULL);
+    CASE("each topic, and the core with its list, under GUIDE_PART_MAX; the core names every topic");
+    static const char *const topics[] = { "plan", "live", "events", "limits", "file", "all" };
+    char  *core = NULL;
+    size_t cl   = 0;
+    {
+        FILE *f = open_memstream(&core, &cl);
+        CHECK_EQ(guide_print(f, f, NULL), 0);
+        fclose(f);
+        CHECK(cl < GUIDE_PART_MAX && strstr(core, "## Start here"));
+    }
+    for (size_t t = 0; t < sizeof topics / sizeof *topics; t++) {
+        char *g = NULL; size_t gl = 0;
+        FILE *f = open_memstream(&g, &gl);
+        CHECK_EQ(guide_compose(f, topics[t]), 0);
+        fclose(f);
+        if (gl >= GUIDE_PART_MAX || gl < 500) { printf("    topic %s is %zu bytes\n", topics[t], gl); CHECK(0); }
+        char want[32];
+        snprintf(want, sizeof want, "- `%s` (", topics[t]);
+        if (!strstr(core, want)) { printf("    the core does not list %s\n", topics[t]); CHECK(0); }
+        CHECK(!strstr(g, "<!--"));                         /* the tags and the mark are the guide's, not the reader's */
+        free(g);
+    }
 
-    CASE("vtt --agent-guide prints it and exits 0");
+    CASE("every request a topic is for is in it, as help VERB says it; a request named alone is help VERB");
+    {
+        char *plan = NULL, *live = NULL; size_t pl = 0, ll = 0;
+        FILE *f = open_memstream(&plan, &pl); guide_compose(f, "plan"); fclose(f);
+        f = open_memstream(&live, &ll); guide_compose(f, "live"); fclose(f);
+        unsigned fl;
+        for (int i = 0; request_verb(i, &fl); i++) {
+            char *h = NULL; size_t hl = 0;
+            f = open_memstream(&h, &hl);
+            CHECK_EQ(request_help_verb(f, request_verb(i, NULL)), 0);
+            fclose(f);
+            if ((fl & CTL_RQ_PLAN) && !strstr(plan, h)) { printf("    plan lacks %s\n", request_verb(i, NULL)); CHECK(0); }
+            if (!(fl & CTL_RQ_PLAN) && strstr(plan, h)) { printf("    plan has %s, not a plan's\n", request_verb(i, NULL)); CHECK(0); }
+            if ((fl & CTL_RQ_FORLIVE) && !strstr(live, h)) { printf("    live lacks %s\n", request_verb(i, NULL)); CHECK(0); }
+            char *g = NULL; size_t gl = 0;
+            f = open_memstream(&g, &gl);
+            CHECK_EQ(guide_print(f, f, request_verb(i, NULL)), 0);
+            fclose(f);
+            CHECK(gl == hl && !memcmp(g, h, hl));
+            free(g);
+            free(h);
+        }
+        free(plan);
+        free(live);
+        char *e = NULL; size_t el = 0;
+        f = open_memstream(&e, &el);
+        CHECK_EQ(guide_print(f, f, "no such thing"), 2);
+        fclose(f);
+        CHECK(strstr(e, "no topic or request called") && strstr(e, "- `plan` ("));
+        free(e);
+    }
+    free(core);
+
+    CASE("the limits the guide gives are the code's");
+    {
+        char *g = NULL; size_t gl = 0;
+        FILE *f = open_memstream(&g, &gl); guide_compose(f, "limits"); fclose(f);
+        char n[48];
+        const long lim[] = { CTL_REQ_CAP, CTL_PLAN_CAP, CTL_WORD_MAX - 1, CTL_READ_SQUARES, CTL_EDIT_SQUARES, CTL_DUMP_SQUARES, JOB_MAX };
+        for (size_t i = 0; i < sizeof lim / sizeof *lim; i++) {
+            long v = lim[i];                               /* written as the guide writes numbers: 65,536 */
+            if (v >= 1000000) snprintf(n, sizeof n, "%ld,%03ld,%03ld", v / 1000000, v / 1000 % 1000, v % 1000);
+            else if (v >= 1000) snprintf(n, sizeof n, "%ld,%03ld", v / 1000, v % 1000);
+            else snprintf(n, sizeof n, "%ld", v);
+            if (!strstr(g, n)) { printf("    the limits do not say %s\n", n); CHECK(0); }
+        }
+        snprintf(n, sizeof n, "%d MB", CTL_ANSWER_CAP >> 20);
+        CHECK(strstr(g, n) != NULL);
+        free(g);
+    }
+
+    CASE("the skill has the frontmatter a skill is found by, and sends an agent to the guide");
+    CHECK(!strncmp(skill, "---\nname: vtt\ndescription: ", 27));
+    CHECK(strstr(skill, "`vtt --agent-guide`") != NULL);
+
+    CASE("vtt --agent-guide all prints the whole, composed; exits 0");
     Sandbox sb = sandbox_enter("guide");
     CHECK_EQ(sb.ok, 1);
     char *help = NULL;
     if (sb.ok) {
-        FILE *p = popen("./vtt --agent-guide", "r");
+        char *all = NULL; size_t al = 0;
+        FILE *f = open_memstream(&all, &al); guide_compose(f, "all"); fclose(f);
+        FILE *p = popen("./vtt --agent-guide all", "r");
         CHECK(p != NULL);
-        char  *got = malloc(dl + 2);
-        size_t n   = p && got ? fread(got, 1, dl + 1, p) : 0;
+        char  *got = malloc(al + 2);
+        size_t n   = p && got ? fread(got, 1, al + 1, p) : 0;
         CHECK_EQ(p ? WEXITSTATUS(pclose(p)) : -1, 0);
-        CHECK(n == dl && got && !memcmp(got, doc, dl));
+        CHECK(n == al && got && !memcmp(got, all, al));
         free(got);
+        free(all);
         p = popen("./vtt --help", "r");
         help = calloc(1, 16384);
         if (p && help) fread(help, 1, 16383, p);
@@ -3753,9 +3818,9 @@ void test_agent_guide(void)
         }
         s = strchr(e + 1, '`');
     }
-    CHECK(flags > 8);
-    CHECK(verbs > 5);
-    CHECK(subs >= 3);
+    CHECK(flags >= 1);                                  /* a one-line skill: it names --agent-guide */
+    (void)verbs;                                        /* (it names no request now; any it named are held to the table) */
+    (void)subs;
     free(hjob);
     app_free(&a);
     rnd_free(&r);
