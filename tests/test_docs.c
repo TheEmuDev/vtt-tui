@@ -9,7 +9,10 @@
  *     lowercase (`app_frame`, `world_event()`) or a macro (`FORMAT_VERSION`)
  *     -- is a word somewhere in the code, the tests, the tools or the
  *     Makefile, and every file named alone in backticks (`net.c`, `embed.sh`)
- *     is a file of the repo's.
+ *     is a file of the repo's;
+ *   - a flag README.md's options block names takes the argument usage() gives
+ *     it, and the docs that state the default port state NET_DEFAULT_PORT
+ *     (docs/CODEMAP.md, *Facts kept in more than one place*).
  * What is checked is what can be checked without false alarms: a renamed
  * function or macro, a moved file, a file with no row. Not checked: a name
  * with no underscore (`World`, `Cell`), and whether a sentence is still
@@ -262,6 +265,38 @@ static void check_paths(const char *doc, const char *text, int *bad)
     }
 }
 
+/* The flags a usage line names, "--flag ARG" (ARG "" when the next word is
+ * prose, not an upper-case or bracketed argument), one a line of `out`:
+ * from main.c's usage() strings when `quoted`, else from README.md's
+ * options block. Only lines that begin with the flag are read. */
+static void flag_args(const char *text, int quoted, Text *out)
+{
+    for (const char *l = text; l && *l; ) {
+        const char *end = strchr(l, '\n');
+        if (!end) end = l + strlen(l);
+        const char *p = l;
+        while (p < end && *p == ' ') p++;
+        if (quoted && *p == '"') p++;
+        if (p + 4 < end && p[0] == ' ' && p[1] == ' ' && p[2] == '-' && p[3] == '-') p += 2;
+        else if (quoted || p != l + 2) p = NULL;
+        if (p && p[0] == '-' && p[1] == '-') {
+            const char *f = p;
+            while (p < end && *p != ' ' && *p != '\\' && *p != '"') p++;
+            size_t fl = (size_t)(p - f);
+            while (p < end && *p == ' ') p++;
+            const char *a = p;
+            if (p < end && (isupper((unsigned char)*p) || *p == '[')) while (p < end && *p != ' ' && *p != '\\' && *p != '"') p++;
+            char line[128];
+            int n = snprintf(line, sizeof line, "%.*s %.*s", (int)fl, f, (int)(p - a), a);
+            if (n > 0 && n < (int)sizeof line) text_add(out, line, (size_t)n);
+        }
+        l = *end ? end + 1 : end;
+    }
+}
+
+/* The length of the flag that opens a line of flag_args ("--flag ARG"). */
+static size_t flag_len(const char *s) { const char *sp = strchr(s, ' '); return sp ? (size_t)(sp - s) : strlen(s); }
+
 void test_docs(void)
 {
     Text code = { 0 }, names = { 0 };
@@ -358,6 +393,64 @@ void test_docs(void)
             free(t);
         }
         CHECK_EQ(bad, 0);
+    }
+
+    /* README's options block is a summary of usage() in plainer words
+     * (CODEMAP, *Facts kept in more than one place*): the words may differ,
+     * a flag's argument may not. --watch HOST:PORT outlived the join code
+     * there (CODEMAP, *Drift found*, 2026-10-24). */
+    CASE("a flag README.md's options block names takes the argument usage() gives it");
+    {
+        char *mc = read_all("src/main.c"), *rd = read_all("README.md");
+        CHECK(mc != NULL && rd != NULL);
+        const char *blk = rd ? strstr(rd, "\nvtt [options]") : NULL;
+        CHECK(blk != NULL);
+        Text u = { 0 }, r = { 0 };
+        if (mc) flag_args(mc, 1, &u);
+        if (blk) {
+            const char *fence = strstr(blk, "\n```");
+            size_t n = fence ? (size_t)(fence - blk) : strlen(blk);
+            char *b = malloc(n + 1);
+            memcpy(b, blk, n);
+            b[n] = '\0';
+            flag_args(b, 0, &r);
+            free(b);
+        }
+        int bad = 0, both = 0;
+        for (const char *x = r.p; x && *x; x = strchr(x, '\n') + 1) {
+            size_t xl = (size_t)(strchr(x, '\n') - x), fl = flag_len(x);
+            for (const char *y = u.p; y && *y; y = strchr(y, '\n') + 1) {
+                size_t yl = (size_t)(strchr(y, '\n') - y);
+                if (flag_len(y) != fl || memcmp(x, y, fl)) continue;
+                both++;
+                if (xl != yl || memcmp(x, y, xl)) {
+                    printf("  README.md has `%.*s`, usage() `%.*s`\n", (int)xl, x, (int)yl, y);
+                    bad++;
+                }
+                break;
+            }
+        }
+        CHECK(both >= 20);                    /* the parse found the flags */
+        CHECK_EQ(bad, 0);
+        free(u.p);
+        free(r.p);
+        free(mc);
+        free(rd);
+    }
+
+    /* The default port is NET_DEFAULT_PORT's; the docs that say it must say
+     * this one (CODEMAP, *Facts kept in more than one place*). */
+    CASE("the docs that state the default port state NET_DEFAULT_PORT");
+    {
+        static const char *const PORT_DOCS[] = { "README.md", "docs/REMOTE.md", "tests/CLAUDE.md" };
+        char port[16];
+        snprintf(port, sizeof port, "%d", NET_DEFAULT_PORT);
+        for (size_t i = 0; i < sizeof PORT_DOCS / sizeof PORT_DOCS[0]; i++) {
+            char *t = read_all(PORT_DOCS[i]);
+            CHECK(t != NULL);
+            if (t && !strstr(t, port)) { printf("  %s does not say port %s\n", PORT_DOCS[i], port); CHECK(0); }
+            free(t);
+        }
     }
     free(code.p);
     free(names.p);

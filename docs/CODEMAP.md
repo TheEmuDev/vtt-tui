@@ -242,16 +242,30 @@ pointed at) and only one that cannot be goes here, the same commit, with why it 
 | the phone page | web/index.html | src/webpage.c (tools/embed.sh) | suite `pagefeed` reads the embedded page |
 | a guide part's limit, 30,000 bytes | `GUIDE_PART_MAX` (guide.h) | docs/AGENTLOOP.md, *The guide's size* (the probe it rests on) | suite `agentguide` holds every part under it; the limit itself, Claude Code's, only by probing again |
 | the limits | ctl.h's constants (`CTL_REQ_CAP`, `CTL_READ_SQUARES`, ...), `JOB_MAX` | docs/AGENTS.md, *Limits*, in words an agent reads | suite `agentguide`: each number the code's (the line's 1,023, the changes' 524,288 and the kept squares' 4,194,304 have no constant: *none*) |
-| the flags | `usage()` (main.c) | README.md's options block, a summary in plainer words | *none*: read both when a flag changes |
+| the flags | `usage()` (main.c) | README.md's options block, a summary in plainer words; docs/ARCHITECTURE.md's entry points | suite `docs`: a flag in both takes the same argument word; the wording and ARCHITECTURE *none* |
 | a finding's what-to-do | `CODE_HELP` (maptools.c) | README.md's code table | suite `checkhelp`; `tools/codehelp.py` rewrites the column |
 | keys | src/keys.c | the bar and the `?` page (both from it); README.md's key lists | the bar and page by construction; README *none* |
 | the sandbox's settings | `sandbox_enter` (tests/harness.c) | tools/sandbox.sh | suite `sandbox` |
 | the default evaluation agent's command line | tools/agenteval.sh | tests/agenteval.sh's expected flags and values; docs/AGENTLOOP.md, *Part 1, as built* | tests/agenteval.sh (the flags); AGENTLOOP *none* |
 | the evaluation facts | tools/agentgrade.py's header | each task's `expect`; tests/agenteval/tasks/*/want | tests/agenteval.sh (a `want` differing fails; regenerate after a meant change and read the diff) |
 | the opening a party cannot pass, `window` | `edge_name` and `edge_passable_kind` (maptools.c, map.c) | tools/agentgrade.py's `CLOSED` | tests/agenteval.sh (task `missed`'s window) |
-| the default port, 7793 | `NET_DEFAULT_PORT` (net.h) | README.md's *Players' view*, docs/REMOTE.md, tests/CLAUDE.md; tools/phonecheck.sh picks 7793 itself (its firewall rule's port) | *none* |
+| the default port, 7793 | `NET_DEFAULT_PORT` (net.h) | README.md's *Players' view*, docs/REMOTE.md, tests/CLAUDE.md; tools/phonecheck.sh picks 7793 itself (its firewall rule's port). The `?` page derives it (`STR(NET_DEFAULT_PORT)`, keys.c) | suite `docs`: the three docs say `NET_DEFAULT_PORT`'s number; phonecheck.sh *none* |
 | the wrong-code limit (10 a minute, 3 an address) | `NET_WRONG_MAX`, `NET_WRONG_ADDR` (net.h) | README.md's *Players' view*, docs/REMOTE.md | suite `netserver` (by the constants); the docs *none* |
 | the refusal close codes, 4001 wrong code / 4002 held back | src/net.c, `http_request` | web/index.html `connect()`, docs/REMOTE.md, docs/ARCHITECTURE.md, CODEMAP's net row | suite `netserver` (the bytes), `pageconn` (H, I); the docs *none* |
 | the page's retry, 2 s doubling to 30 s | web/index.html, `connect()` | docs/ARCHITECTURE.md, docs/REMOTE.md | suite `pageconn` (F, G); the docs *none* |
 | the page's budget, 12 KB as sent | suite `webpage` (12288, against `WEBPAGE_GZ_LEN`) | CLAUDE.md, docs/REMOTE.md, docs/ARCHITECTURE.md, docs/HEALTH.md, CODEMAP's web row | *none* |
 | what vtt prints | the code | tests/oracle/expected; golden frames under tests/ | `make test`; `tools/oracle.sh record` / `VTT_UPDATE_GOLDEN=1` after a meant change |
+
+## Drift found
+
+Every drift found, by anyone, gets a row here in the commit that fixes it (the user,
+2026-10-24: "Keep this updated each time we find new instances of drift. We want to learn
+from our mistakes"). A row says what disagreed, since when, why nothing caught it, and what
+now does. The table above lists the copies; this one is how copies went wrong. Read it
+for the patterns before writing a doc from another doc, or adding a copy.
+
+| found | what disagreed | since | why it was missed | what now stops it |
+|---|---|---|---|---|
+| 2026-10-24, asked by the user | `vtt --help` said `--watch HOST:PORT`. README.md and watch.c's own refusal want the address `:serve` shows, `host:port?k=code` | 15acc91, 2026-09-19: the commit that read `?k=CODE` wrote the help without it | the flags row was *none*. No review compared `usage()` with README word for word | suite `docs`: a flag in both takes the same argument word (shown failing on `HOST:PORT` put back) |
+| 2026-10-24, the same check | docs/ARCHITECTURE.md's entry points said `vtt --watch HOST:PORT` | dd0f3ec, 2026-10-23: written from `--help`, and so copied its error | a doc was written from another copy, not from the code (`watch_parse_target`) | the row above fixes the source it copied. ARCHITECTURE is now in the flags row. The pattern: **write a fact from its owner, never from a copy of it** |
+| 2026-10-24, the same check | the `?` page's `:serve` gave no port. README.md said 7793 | 2a94630, 2026-10-23: 7793 became the default. The `?` page was not touched | the default port's row, added in that commit, listed the copies in docs but not the one in src/keys.c | the `?` page derives the port from `NET_DEFAULT_PORT`. Suite `docs` holds the three docs to it (shown failing on 7794). The pattern: **look for a fact's copies in the code's strings too (`?` page, `--help`, messages), not only in docs** |

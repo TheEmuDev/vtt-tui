@@ -67,7 +67,10 @@ report (see the report format below).
   each, those marked *none* by reading them; a fact restated somewhere not in that table is a
   finding too (the line to add, or better, a way to derive it). A sentence the code now
   contradicts is a finding like any other: the doc's line, the code's line, the fix. "No drift"
-  is a valid answer only after naming the docs read.
+  is a valid answer only after naming the docs read. Read CODEMAP's *Drift found* first: its
+  patterns are where drift has hidden before (a copy in the code's strings, a doc written from
+  a copy). Each drift you find is reported with what its *Drift found* row would say (since
+  when, why it was missed, what would stop it). The fixer adds that row.
 - Last, **Scratch work**: one line per thing you built in scratch to do the review (a
   harness, a timing program, a script), and whether it would be reused. These lines go into
   docs/SCRATCH.md. A kind of task seen twice becomes a tool.
