@@ -267,7 +267,7 @@ agent's, measured with tools/embed.sh's own cut unless marked an estimate.
 - Rarely used UI in a second request, or sent over the WebSocket: breaks "one request", or
   changes the wire, for about 2 KB that compression frees anyway.
 
-### Decisions for the user
+### Decisions for the user (answered 2026-10-23, the user: "Go with recommendations": 1-3 as recommended; 4 after item 6 measures it)
 
 1. Compression, and the 12 KB rule redefined as the compressed bytes sent (recommended: yes).
 2. The retry's cap (recommended 30 s).
