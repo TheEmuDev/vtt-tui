@@ -279,7 +279,9 @@ agent's, measured with tools/embed.sh's own cut unless marked an estimate.
 ### As built (2026-10-23)
 
 1. **The palette record:** a repeated color changes nothing; a changed one marks the tiles
-   stale, and they are cleared once at the end of the message. The changed color arrives in
+   stale only if a tile was drawn with that index (`used`, marked in `tile()`), and they are
+   cleared once at the end of the message. So a new color mid-session -- a new index -- clears
+   nothing (first built, it still cleared: a new index changes from 0). The changed color arrives in
    practice after a reconnect: when the last phone leaves, the server's palette starts again
    (net.c, `wire_enc_reset_palette`) and a page that reconnects without reloading is sent its
    new indices. tests/page_feed.js counts the page's clears (`clears` mode); suite `pagefeed`

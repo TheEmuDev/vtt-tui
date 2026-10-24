@@ -5,7 +5,9 @@
 //
 //   node tests/page_feed.js PAGE STREAM      (PAGE: the page as served)
 //   node tests/page_feed.js PAGE STREAM clears  -> only "clears:N", how many
-//                                    times feed() threw the tile cache away
+//                                    times feed() threw the tile cache away, on a
+//                                    page that has drawn with every color;
+//                                    clears-fresh: with none yet
 //
 // Prints "WxH", then a line per row: each cell as glyph.fg.bg.attr (colors
 // as RRGGBB through the palette), then "handout:", "names:" and "whisper:"
@@ -25,7 +27,7 @@ const src = html.slice(u0, html.indexOf('\n', u0) + 1) + html.slice(at0, at1 + 2
 let lastHandout = '(none)', lastNames = '', lastWhisper = '', clears = 0;
 const env = {
   cols: 0, rows: 0, gl: null, fg: null, bg: null, at: null,
-  pal: new Uint32Array(256), rd: null, rx0: null, rx1: null, dirtyAll: false,
+  pal: new Uint32Array(256), used: new Uint8Array(256).fill(mode === 'clears' ? 1 : 0), rd: null, rx0: null, rx1: null, dirtyAll: false,
   dec: new TextDecoder(),
   layout() {}, touch() {}, schedule() {}, clearTiles() { clears++; },
   handout(s) { lastHandout = s; },
@@ -39,7 +41,7 @@ const run = new Function('env', 'u8',
 // but nothing in feed() depends on it.
 const bytes = new Uint8Array(fs.readFileSync(stream));
 run(env, bytes);
-if (mode === 'clears') { process.stdout.write('clears:' + clears + '\n'); process.exit(0); }
+if (mode === 'clears' || mode === 'clears-fresh') { process.stdout.write('clears:' + clears + '\n'); process.exit(0); }
 
 const hex = v => v.toString(16).padStart(6, '0');
 const out = [env.cols + 'x' + env.rows];

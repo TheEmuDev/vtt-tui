@@ -85,7 +85,7 @@ function mask(g,bold,wide){
  * frame has a few hundred of; every cell after that is native row copies. */
 /* Two levels, so every key is a small integer: the glyph indexes an array,
  * the colors and attributes key a map beneath it. */
-const tiles=new Array(65536);let ntiles=0,tmax=0,tbytes=0;     // the most held, for &stats (the arena's size, REMOTE.md item 6)
+const tiles=new Array(65536),used=new Uint8Array(256);let ntiles=0,tmax=0,tbytes=0;     // the most held, for &stats (the arena's size, REMOTE.md item 6)
 function tile(g,f,b,a,wide){
   let byc=tiles[g];
   if(!byc)byc=tiles[g]=new Map();
@@ -93,7 +93,7 @@ function tile(g,f,b,a,wide){
   let t=byc.get(key);
   if(t)return t;
   if(++ntiles>4096)clearTiles();
-  let fc=pal[f],bc=pal[b];
+  let fc=pal[f],bc=pal[b];used[f]=used[b]=1;                 // a tile drawn with these: a change of either is a clear
   if(a&8){const q=fc;fc=bc;bc=q}                              // reverse
   if(a&2)fc=((fc>>1)&0x7f7f7f)+((bc>>1)&0x7f7f7f);            // dim: halfway to the background
   const m=mask(g,(a&1)!==0,wide),w=m.w,ma=m.a;
@@ -115,7 +115,7 @@ function tile(g,f,b,a,wide){
   t={off,wb:w*4};byc.set(key,t);
   return t;
 }
-function clearTiles(){tiles.fill(undefined);ntiles=0;tnext=tilesAt;dirtyAll=true;tgen++}
+function clearTiles(){tiles.fill(undefined);used.fill(0);ntiles=0;tnext=tilesAt;dirtyAll=true;tgen++}
 let tgen=0;
 
 /* ---- a row's dirty span into the framebuffer: list the tiles, one call */
@@ -217,8 +217,8 @@ function feed(u8){
       if(w!==cols||h!==rows){cols=w;rows=h;gl=new Uint16Array(w*h);fg=new Uint8Array(w*h);bg=new Uint8Array(w*h);at=new Uint8Array(w*h);
         rd=new Uint8Array(h);rx0=new Int32Array(h).fill(1e9);rx1=new Int32Array(h).fill(-1);layout()}
       dirtyAll=true;
-    }else if(t===0x50){const c=u8[p+2]<<16|u8[p+3]<<8|u8[p+4];   // 'P': a tile drawn in a color that changed is stale
-      if(pal[u8[p+1]]!==c){pal[u8[p+1]]=c;stale=true}p+=5}
+    }else if(t===0x50){const i=u8[p+1],c=u8[p+2]<<16|u8[p+3]<<8|u8[p+4];   // 'P': only a tile drawn in a color that changed is stale
+      if(pal[i]!==c){pal[i]=c;if(used[i])stale=true}p+=5}
     else if(t===0x52){                                     // 'R' x y n fg bg attr, glyphs
       const x=u16(u8,p+1),y=u16(u8,p+3),k=u16(u8,p+5);
       const f=u8[p+7],b=u8[p+8],a=u8[p+9];p+=10;

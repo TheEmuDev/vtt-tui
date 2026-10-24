@@ -2103,7 +2103,7 @@ void test_page_feed(void)
      * the last phone left (the server's palette starts again) sends changed
      * colors; a repeated one costs nothing. */
     {
-        CASE("a palette record repeating a color keeps the page's tiles; changed ones clear them once");
+        CASE("a palette record clears the page's tiles only when it changes a color a tile was drawn with, once a message");
         const uint8_t same[] = { 'P', 3, 0, 0, 0, 'P', 3, 0, 0, 0 };          /* index 3 is 000000 already */
         const uint8_t two[]  = { 'P', 3, 0x11, 0x22, 0x33, 'P', 4, 0x44, 0x55, 0x66 };
         ByteBuf got1, got2;
@@ -2113,6 +2113,10 @@ void test_page_feed(void)
         CHECK(got2.data && !strcmp((char *)got2.data, "clears:1\n"));
         bb_free(&got1);
         bb_free(&got2);
+        /* A new color mid-session -- an index no tile was drawn with -- clears nothing. */
+        CHECK_EQ(page_feed_mode(sb.dir, two, sizeof two, &got1, "clears-fresh"), 0);
+        CHECK(got1.data && !strcmp((char *)got1.data, "clears:0\n"));
+        bb_free(&got1);
     }
 
     /* What the C decoder makes of the same bytes, in the script's form. */
